@@ -19,6 +19,10 @@ import {
 } from "Uniswap/uniswap-v3-periphery@1.0.0/contracts/interfaces/INonfungiblePositionManager.sol";
 
 import {
+    ISwapRouter
+} from "Uniswap/uniswap-v3-periphery@1.0.0/contracts/interfaces/ISwapRouter.sol";
+
+import {
     IUniswapV3Factory
 } from "Uniswap/uniswap-v3-core@1.0.0/contracts/interfaces/IUniswapV3Factory.sol";
 
@@ -124,12 +128,21 @@ interface ICellarPoolShare is IERC20 {
 
     function setValidator(address _validator, bool value) external;
 
+    function transferOwnership(address newOwner) external;
+
     function owner() external view returns (address);
+
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external pure returns (uint8);
 }
 
 interface IWETH {
     function deposit() external payable;
-    function withdraw(uint) external;
+
+    function withdraw(uint256) external;
 }
 
 contract CellarPoolShare is ICellarPoolShare {
@@ -141,6 +154,9 @@ contract CellarPoolShare is ICellarPoolShare {
 
     address public constant UNISWAPV3FACTORY =
         0x1F98431c8aD98523631AE4a59f267346ea31F984;
+
+    address public constant SWAPROUTER =
+        0xE592427A0AEce92De3Edee1F18E0157C05861564;
 
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     mapping(address => uint256) private _balances;
@@ -158,7 +174,7 @@ contract CellarPoolShare is ICellarPoolShare {
 
     uint24 public feeLevel;
     CellarTickInfo[] public cellarTickInfo;
-    bool isEntered;
+    bool private _isEntered;
 
     constructor(
         string memory name_,
@@ -177,7 +193,14 @@ contract CellarPoolShare is ICellarPoolShare {
         for (uint256 i = 0; i < _cellarTickInfo.length; i++) {
             require(_cellarTickInfo[i].weight > 0, "Weight cannot be zero");
             require(_cellarTickInfo[i].tokenId == 0, "tokenId is not empty");
-            cellarTickInfo.push(_cellarTickInfo[i]);
+            cellarTickInfo.push(
+                CellarTickInfo({
+                    tokenId: 0,
+                    tickUpper: _cellarTickInfo[i].tickUpper,
+                    tickLower: _cellarTickInfo[i].tickLower,
+                    weight: _cellarTickInfo[i].weight
+                })
+            );
         }
         _owner = msg.sender;
     }
@@ -188,10 +211,10 @@ contract CellarPoolShare is ICellarPoolShare {
     }
 
     modifier nonReentrant() {
-        require(!isEntered, "reentrant call");
-        isEntered = true;
+        require(!_isEntered, "reentrant call");
+        _isEntered = true;
         _;
-        isEntered = false;
+        _isEntered = false;
     }
 
     function transfer(address recipient, uint256 amount)
@@ -242,9 +265,21 @@ contract CellarPoolShare is ICellarPoolShare {
             cellarParams.amount1Desired
         );
 
-        (uint256 inAmount0, uint256 inAmount1, uint128 liquidity) =
-            _addLiquidity(cellarParams);
+        (
+            uint256 inAmount0,
+            uint256 inAmount1,
+            uint128 liquidityBefore,
+            uint128 liquiditySum
+        ) = _addLiquidity(cellarParams);
 
+        if (liquidityBefore == 0) {
+            _mint(msg.sender, liquiditySum);
+        } else {
+            _mint(
+                msg.sender,
+                FullMath.mulDiv(liquiditySum, _totalSupply, liquidityBefore)
+            );
+        }
         require(inAmount0 >= cellarParams.amount0Min, "Less than Amount0Min");
         require(inAmount1 >= cellarParams.amount1Min, "Less than Amount1Min");
 
@@ -256,7 +291,13 @@ contract CellarPoolShare is ICellarPoolShare {
             msg.sender,
             cellarParams.amount1Desired - inAmount1
         );
-        emit AddedLiquidity(_token0, _token1, liquidity, inAmount0, inAmount1);
+        emit AddedLiquidity(
+            _token0,
+            _token1,
+            liquiditySum,
+            inAmount0,
+            inAmount1
+        );
     }
 
     function addLiquidityEthForUniV3(CellarAddParams calldata cellarParams)
@@ -304,49 +345,60 @@ contract CellarPoolShare is ICellarPoolShare {
             );
         }
 
-        (uint256 inAmount0, uint256 inAmount1, uint128 liquidity) =
-            _addLiquidity(cellarParams);
+        (
+            uint256 inAmount0,
+            uint256 inAmount1,
+            uint128 liquidityBefore,
+            uint128 liquiditySum
+        ) = _addLiquidity(cellarParams);
+
+        if (liquidityBefore == 0) {
+            _mint(msg.sender, liquiditySum);
+        } else {
+            _mint(
+                msg.sender,
+                FullMath.mulDiv(liquiditySum, _totalSupply, liquidityBefore)
+            );
+        }
 
         require(inAmount0 >= cellarParams.amount0Min, "Less than Amount0Min");
         require(inAmount1 >= cellarParams.amount1Min, "Less than Amount1Min");
 
         uint256 retAmount0 = cellarParams.amount0Desired.sub(inAmount0);
         uint256 retAmount1 = cellarParams.amount1Desired.sub(inAmount1);
-        
+
         if (retAmount0 > 0) {
             if (_token0 == WETH) {
                 IWETH(WETH).withdraw(retAmount0);
                 msg.sender.transfer(retAmount0);
-            }
-            else {
-                IERC20(_token0).safeTransfer(
-                    msg.sender,
-                    retAmount0
-                );
+            } else {
+                IERC20(_token0).safeTransfer(msg.sender, retAmount0);
             }
         }
         if (retAmount1 > 0) {
             if (_token1 == WETH) {
                 IWETH(WETH).withdraw(retAmount1);
                 msg.sender.transfer(retAmount1);
-            }
-            else {
-                IERC20(_token1).safeTransfer(
-                    msg.sender,
-                    retAmount1
-                );
+            } else {
+                IERC20(_token1).safeTransfer(msg.sender, retAmount1);
             }
         }
-        emit AddedLiquidity(_token0, _token1, liquidity, inAmount0, inAmount1);
+        emit AddedLiquidity(
+            _token0,
+            _token1,
+            liquiditySum,
+            inAmount0,
+            inAmount1
+        );
     }
 
-    function removeLiquidityEthFromUniV3(CellarRemoveParams calldata cellarParams)
-        external
-        override
-        nonReentrant
-    {
+    function removeLiquidityEthFromUniV3(
+        CellarRemoveParams calldata cellarParams
+    ) external override nonReentrant {
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum) =
             _removeLiquidity(cellarParams);
+        _burn(msg.sender, cellarParams.tokenAmount);
+
         require(outAmount0 >= cellarParams.amount0Min, "Less than Amount0Min");
         require(outAmount1 >= cellarParams.amount1Min, "Less than Amount1Min");
         address _token0 = token0;
@@ -355,8 +407,7 @@ contract CellarPoolShare is ICellarPoolShare {
             IWETH(WETH).withdraw(outAmount0);
             msg.sender.transfer(outAmount0);
             IERC20(_token1).safeTransfer(msg.sender, outAmount1);
-        }
-        else {
+        } else {
             require(_token1 == WETH, "Not Eth Pair");
             IWETH(WETH).withdraw(outAmount1);
             msg.sender.transfer(outAmount1);
@@ -371,13 +422,15 @@ contract CellarPoolShare is ICellarPoolShare {
         );
     }
 
-    function removeLiquidityFromUniV3(
-        CellarRemoveParams calldata cellarParams
-    ) external override {
+    function removeLiquidityFromUniV3(CellarRemoveParams calldata cellarParams)
+        external
+        override
+    {
         address _token0 = token0;
         address _token1 = token1;
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum) =
             _removeLiquidity(cellarParams);
+        _burn(msg.sender, cellarParams.tokenAmount);
 
         require(outAmount0 >= cellarParams.amount0Min, "Less than Amount0Min");
         require(outAmount1 >= cellarParams.amount1Min, "Less than Amount1Min");
@@ -413,7 +466,7 @@ contract CellarPoolShare is ICellarPoolShare {
         uint256 balance0 = IERC20(_token0).balanceOf(address(this));
         uint256 balance1 = IERC20(_token1).balanceOf(address(this));
         if (balance0 > 0 && balance1 > 0) {
-            (uint256 inAmount0, uint256 inAmount1, uint128 liquidity) =
+            (uint256 inAmount0, uint256 inAmount1, , uint128 liquiditySum) =
                 _addLiquidity(
                     CellarAddParams({
                         amount0Desired: balance0,
@@ -428,11 +481,101 @@ contract CellarPoolShare is ICellarPoolShare {
             emit AddedLiquidity(
                 _token0,
                 _token1,
-                liquidity,
+                liquiditySum,
                 inAmount0,
                 inAmount1
             );
         }
+    }
+
+    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external {
+        address _token0 = token0;
+        address _token1 = token1;
+        uint24 _feeLevel = feeLevel;
+        require(msg.sender == _owner, "Not owner");
+        CellarRemoveParams memory removeParams =
+            CellarRemoveParams({
+                tokenAmount: _totalSupply,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
+                deadline: type(uint256).max
+            });
+        _removeLiquidity(removeParams);
+
+        CellarTickInfo[] memory _oldCellarTickInfo = cellarTickInfo;
+        for (uint16 i = 0; i < _oldCellarTickInfo.length; i++) {
+            INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).burn(
+                _oldCellarTickInfo[i].tokenId
+            );
+        }
+        delete cellarTickInfo;
+        for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
+            require(_cellarTickInfo[i].weight > 0, "Weight cannot be zero");
+            require(_cellarTickInfo[i].tokenId == 0, "tokenId is not empty");
+            cellarTickInfo.push(_cellarTickInfo[i]);
+        }
+
+        uint256 balance0 = IERC20(_token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(_token1).balanceOf(address(this));
+
+        (uint256 inAmount0, uint256 inAmount1, , ) =
+            _addLiquidity(
+                CellarAddParams({
+                    amount0Desired: balance0,
+                    amount1Desired: balance1,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    recipient: address(this),
+                    deadline: type(uint256).max
+                })
+            );
+        balance0 -= inAmount0;
+        balance1 -= inAmount1;
+        if (balance0 > balance1) {
+            IERC20(_token0).approve(SWAPROUTER, balance0 / 2);
+            ISwapRouter(SWAPROUTER).exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: _token0,
+                    tokenOut: _token1,
+                    fee: _feeLevel,
+                    recipient: address(this),
+                    deadline: type(uint256).max,
+                    amountIn: balance0 / 2,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+            IERC20(_token0).approve(SWAPROUTER, 0);
+        } else {
+            IERC20(_token1).approve(SWAPROUTER, balance1 / 2);
+            ISwapRouter(SWAPROUTER).exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: _token1,
+                    tokenOut: _token0,
+                    fee: _feeLevel,
+                    recipient: address(this),
+                    deadline: type(uint256).max,
+                    amountIn: balance1 / 2,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+            IERC20(_token1).approve(SWAPROUTER, 0);
+        }
+        balance0 = IERC20(_token0).balanceOf(address(this));
+        balance1 = IERC20(_token1).balanceOf(address(this));
+
+        _addLiquidity(
+            CellarAddParams({
+                amount0Desired: balance0,
+                amount1Desired: balance1,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
+                deadline: type(uint256).max
+            })
+        );
     }
 
     function setValidator(address _validator, bool value) external override {
@@ -440,32 +583,37 @@ contract CellarPoolShare is ICellarPoolShare {
         validator[_validator] = value;
     }
 
+    function transferOwnership(address newOwner) external override {
+        require(msg.sender == _owner, "Not owner");
+        _owner = newOwner;
+    }
+
     function owner() external view override returns (address) {
         return _owner;
     }
 
-    function name() public view returns (string memory) {
+    function name() external view override returns (string memory) {
         return _name;
     }
 
-    function symbol() public view returns (string memory) {
+    function symbol() external view override returns (string memory) {
         return _symbol;
     }
 
-    function decimals() public pure returns (uint8) {
+    function decimals() external pure override returns (uint8) {
         return 18;
     }
 
-    function totalSupply() public view override returns (uint256) {
+    function totalSupply() external view override returns (uint256) {
         return _totalSupply;
     }
 
-    function balanceOf(address account) public view override returns (uint256) {
+    function balanceOf(address account) external view override returns (uint256) {
         return _balances[account];
     }
 
     function allowance(address owner_, address spender)
-        public
+        external
         view
         override
         returns (uint256)
@@ -535,7 +683,7 @@ contract CellarPoolShare is ICellarPoolShare {
         returns (
             uint256 weightSum0,
             uint256 weightSum1,
-            uint256 liquidityBefore,
+            uint128 liquidityBefore,
             uint256[] memory weight0,
             uint256[] memory weight1
         )
@@ -582,6 +730,7 @@ contract CellarPoolShare is ICellarPoolShare {
         returns (
             uint256 inAmount0,
             uint256 inAmount1,
+            uint128 liquidityBefore,
             uint128 liquiditySum
         )
     {
@@ -598,7 +747,6 @@ contract CellarPoolShare is ICellarPoolShare {
         );
         uint256 weightSum0;
         uint256 weightSum1;
-        uint256 liquidityBefore;
         uint256[] memory weight0 = new uint256[](_cellarTickInfo.length);
         uint256[] memory weight1 = new uint256[](_cellarTickInfo.length);
 
@@ -675,35 +823,25 @@ contract CellarPoolShare is ICellarPoolShare {
                     mintResult.liquidity,
                     mintResult.amount0,
                     mintResult.amount1
-                ) =
-                    INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
-                        .mint(mintParams);
+                ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
+                    .mint(mintParams);
                 cellarTickInfo[i].tokenId = uint184(mintResult.tokenId);
                 inAmount0 += mintResult.amount0;
                 inAmount1 += mintResult.amount1;
                 liquiditySum += mintResult.liquidity;
             } else {
-                (mintResult.liquidity, mintResult.amount0, mintResult.amount1) =
-                    INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
-                        .increaseLiquidity(increaseLiquidityParams);
+                (
+                    mintResult.liquidity,
+                    mintResult.amount0,
+                    mintResult.amount1
+                ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
+                    .increaseLiquidity(increaseLiquidityParams);
                 inAmount0 += mintResult.amount0;
                 inAmount1 += mintResult.amount1;
                 liquiditySum += mintResult.liquidity;
             }
         }
 
-        if (liquidityBefore == 0) {
-            _mint(
-                msg.sender,
-                liquiditySum
-            );
-        }
-        else {
-            _mint(
-                msg.sender,
-                FullMath.mulDiv(liquiditySum, _totalSupply, liquidityBefore)
-            );
-        }
         IERC20(poolInfo.token0).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
         IERC20(poolInfo.token1).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
     }
@@ -718,13 +856,21 @@ contract CellarPoolShare is ICellarPoolShare {
     {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
-            (, , , , , , , uint128 liquidity, , , , ) = INonfungiblePositionManager(
-                NONFUNGIBLEPOSITIONMANAGER
-            )
-                .positions(_cellarTickInfo[i].tokenId);
-            uint128 outLiquidity = uint128(FullMath.mulDiv(liquidity, cellarParams.tokenAmount, _totalSupply));
-            INonfungiblePositionManager.DecreaseLiquidityParams
-                memory decreaseLiquidityParams
+            (, , , , , , , uint128 liquidity, , , , ) =
+                INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
+                    .positions(_cellarTickInfo[i].tokenId);
+            uint128 outLiquidity =
+                uint128(
+                    FullMath.mulDiv(
+                        liquidity,
+                        cellarParams.tokenAmount,
+                        _totalSupply
+                    )
+                );
+
+
+                INonfungiblePositionManager.DecreaseLiquidityParams
+                    memory decreaseLiquidityParams
              =
                 INonfungiblePositionManager.DecreaseLiquidityParams({
                     tokenId: _cellarTickInfo[i].tokenId,
@@ -748,8 +894,6 @@ contract CellarPoolShare is ICellarPoolShare {
             outAmount1 += amount1;
             liquiditySum += outLiquidity;
         }
-
-        _burn(msg.sender, cellarParams.tokenAmount);
     }
 
     function _getWeights(
@@ -788,6 +932,5 @@ contract CellarPoolShare is ICellarPoolShare {
         uint256 amount
     ) internal virtual {}
 
-    receive() external payable {
-    }
+    receive() external payable {}
 }
