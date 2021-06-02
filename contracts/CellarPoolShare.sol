@@ -169,10 +169,10 @@ contract CellarPoolShare is ICellarPoolShare {
     string private _name;
     string private _symbol;
 
-    address public token0;
-    address public token1;
+    address public immutable token0;
+    address public immutable token1;
 
-    uint24 public feeLevel;
+    uint24 public immutable feeLevel;
     CellarTickInfo[] public cellarTickInfo;
     bool private _isEntered;
 
@@ -251,15 +251,13 @@ contract CellarPoolShare is ICellarPoolShare {
         external
         override
     {
-        address _token0 = token0;
-        address _token1 = token1;
-        IERC20(_token0).safeTransferFrom(
+        IERC20(token0).safeTransferFrom(
             msg.sender,
             address(this),
             cellarParams.amount0Desired
         );
 
-        IERC20(_token1).safeTransferFrom(
+        IERC20(token1).safeTransferFrom(
             msg.sender,
             address(this),
             cellarParams.amount1Desired
@@ -283,17 +281,17 @@ contract CellarPoolShare is ICellarPoolShare {
         require(inAmount0 >= cellarParams.amount0Min, "Less than Amount0Min");
         require(inAmount1 >= cellarParams.amount1Min, "Less than Amount1Min");
 
-        IERC20(_token0).safeTransfer(
+        IERC20(token0).safeTransfer(
             msg.sender,
             cellarParams.amount0Desired - inAmount0
         );
-        IERC20(_token1).safeTransfer(
+        IERC20(token1).safeTransfer(
             msg.sender,
             cellarParams.amount1Desired - inAmount1
         );
         emit AddedLiquidity(
-            _token0,
-            _token1,
+            token0,
+            token1,
             liquiditySum,
             inAmount0,
             inAmount1
@@ -306,9 +304,7 @@ contract CellarPoolShare is ICellarPoolShare {
         override
         nonReentrant
     {
-        address _token0 = token0;
-        address _token1 = token1;
-        if (_token0 == WETH) {
+        if (token0 == WETH) {
             if (msg.value > cellarParams.amount0Desired) {
                 payable(msg.sender).transfer(
                     msg.value - cellarParams.amount0Desired
@@ -320,13 +316,13 @@ contract CellarPoolShare is ICellarPoolShare {
                 );
             }
             IWETH(WETH).deposit{value: cellarParams.amount0Desired}();
-            IERC20(_token1).safeTransferFrom(
+            IERC20(token1).safeTransferFrom(
                 msg.sender,
                 address(this),
                 cellarParams.amount1Desired
             );
         } else {
-            require(_token1 == WETH, "Not Eth Pair");
+            require(token1 == WETH, "Not Eth Pair");
             if (msg.value > cellarParams.amount1Desired) {
                 payable(msg.sender).transfer(
                     msg.value - cellarParams.amount1Desired
@@ -338,7 +334,7 @@ contract CellarPoolShare is ICellarPoolShare {
                 );
             }
             IWETH(WETH).deposit{value: cellarParams.amount1Desired}();
-            IERC20(_token0).safeTransferFrom(
+            IERC20(token0).safeTransferFrom(
                 msg.sender,
                 address(this),
                 cellarParams.amount0Desired
@@ -368,24 +364,24 @@ contract CellarPoolShare is ICellarPoolShare {
         uint256 retAmount1 = cellarParams.amount1Desired.sub(inAmount1);
 
         if (retAmount0 > 0) {
-            if (_token0 == WETH) {
+            if (token0 == WETH) {
                 IWETH(WETH).withdraw(retAmount0);
                 msg.sender.transfer(retAmount0);
             } else {
-                IERC20(_token0).safeTransfer(msg.sender, retAmount0);
+                IERC20(token0).safeTransfer(msg.sender, retAmount0);
             }
         }
         if (retAmount1 > 0) {
-            if (_token1 == WETH) {
+            if (token1 == WETH) {
                 IWETH(WETH).withdraw(retAmount1);
                 msg.sender.transfer(retAmount1);
             } else {
-                IERC20(_token1).safeTransfer(msg.sender, retAmount1);
+                IERC20(token1).safeTransfer(msg.sender, retAmount1);
             }
         }
         emit AddedLiquidity(
-            _token0,
-            _token1,
+            token0,
+            token1,
             liquiditySum,
             inAmount0,
             inAmount1
@@ -401,21 +397,20 @@ contract CellarPoolShare is ICellarPoolShare {
 
         require(outAmount0 >= cellarParams.amount0Min, "Less than Amount0Min");
         require(outAmount1 >= cellarParams.amount1Min, "Less than Amount1Min");
-        address _token0 = token0;
-        address _token1 = token1;
-        if (_token0 == WETH) {
+
+        if (token0 == WETH) {
             IWETH(WETH).withdraw(outAmount0);
             msg.sender.transfer(outAmount0);
-            IERC20(_token1).safeTransfer(msg.sender, outAmount1);
+            IERC20(token1).safeTransfer(msg.sender, outAmount1);
         } else {
-            require(_token1 == WETH, "Not Eth Pair");
+            require(token1 == WETH, "Not Eth Pair");
             IWETH(WETH).withdraw(outAmount1);
             msg.sender.transfer(outAmount1);
-            IERC20(_token0).safeTransfer(msg.sender, outAmount0);
+            IERC20(token0).safeTransfer(msg.sender, outAmount0);
         }
         emit RemovedLiquidity(
-            _token0,
-            _token1,
+            token0,
+            token1,
             liquiditySum,
             outAmount0,
             outAmount1
@@ -426,8 +421,6 @@ contract CellarPoolShare is ICellarPoolShare {
         external
         override
     {
-        address _token0 = token0;
-        address _token1 = token1;
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum) =
             _removeLiquidity(cellarParams);
         _burn(msg.sender, cellarParams.tokenAmount);
@@ -435,11 +428,11 @@ contract CellarPoolShare is ICellarPoolShare {
         require(outAmount0 >= cellarParams.amount0Min, "Less than Amount0Min");
         require(outAmount1 >= cellarParams.amount1Min, "Less than Amount1Min");
 
-        IERC20(_token0).safeTransfer(msg.sender, outAmount0);
-        IERC20(_token1).safeTransfer(msg.sender, outAmount1);
+        IERC20(token0).safeTransfer(msg.sender, outAmount0);
+        IERC20(token1).safeTransfer(msg.sender, outAmount1);
         emit RemovedLiquidity(
-            _token0,
-            _token1,
+            token0,
+            token1,
             liquiditySum,
             outAmount0,
             outAmount1
@@ -461,10 +454,8 @@ contract CellarPoolShare is ICellarPoolShare {
                 })
             );
         }
-        address _token0 = token0;
-        address _token1 = token1;
-        uint256 balance0 = IERC20(_token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(_token1).balanceOf(address(this));
+        uint256 balance0 = IERC20(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(token1).balanceOf(address(this));
         if (balance0 > 0 && balance1 > 0) {
             (uint256 inAmount0, uint256 inAmount1, , uint128 liquiditySum) =
                 _addLiquidity(
@@ -479,8 +470,8 @@ contract CellarPoolShare is ICellarPoolShare {
                 );
 
             emit AddedLiquidity(
-                _token0,
-                _token1,
+                token0,
+                token1,
                 liquiditySum,
                 inAmount0,
                 inAmount1
@@ -489,9 +480,6 @@ contract CellarPoolShare is ICellarPoolShare {
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external {
-        address _token0 = token0;
-        address _token1 = token1;
-        uint24 _feeLevel = feeLevel;
         require(msg.sender == _owner, "Not owner");
         CellarRemoveParams memory removeParams =
             CellarRemoveParams({
@@ -516,8 +504,8 @@ contract CellarPoolShare is ICellarPoolShare {
             cellarTickInfo.push(_cellarTickInfo[i]);
         }
 
-        uint256 balance0 = IERC20(_token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(_token1).balanceOf(address(this));
+        uint256 balance0 = IERC20(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(token1).balanceOf(address(this));
 
         (uint256 inAmount0, uint256 inAmount1, , ) =
             _addLiquidity(
@@ -533,12 +521,12 @@ contract CellarPoolShare is ICellarPoolShare {
         balance0 -= inAmount0;
         balance1 -= inAmount1;
         if (balance0 > balance1) {
-            IERC20(_token0).approve(SWAPROUTER, balance0 / 2);
+            IERC20(token0).approve(SWAPROUTER, balance0 / 2);
             ISwapRouter(SWAPROUTER).exactInputSingle(
                 ISwapRouter.ExactInputSingleParams({
-                    tokenIn: _token0,
-                    tokenOut: _token1,
-                    fee: _feeLevel,
+                    tokenIn: token0,
+                    tokenOut: token1,
+                    fee: feeLevel,
                     recipient: address(this),
                     deadline: type(uint256).max,
                     amountIn: balance0 / 2,
@@ -546,14 +534,14 @@ contract CellarPoolShare is ICellarPoolShare {
                     sqrtPriceLimitX96: 0
                 })
             );
-            IERC20(_token0).approve(SWAPROUTER, 0);
+            IERC20(token0).approve(SWAPROUTER, 0);
         } else {
-            IERC20(_token1).approve(SWAPROUTER, balance1 / 2);
+            IERC20(token1).approve(SWAPROUTER, balance1 / 2);
             ISwapRouter(SWAPROUTER).exactInputSingle(
                 ISwapRouter.ExactInputSingleParams({
-                    tokenIn: _token1,
-                    tokenOut: _token0,
-                    fee: _feeLevel,
+                    tokenIn: token1,
+                    tokenOut: token0,
+                    fee: feeLevel,
                     recipient: address(this),
                     deadline: type(uint256).max,
                     amountIn: balance1 / 2,
@@ -561,10 +549,10 @@ contract CellarPoolShare is ICellarPoolShare {
                     sqrtPriceLimitX96: 0
                 })
             );
-            IERC20(_token1).approve(SWAPROUTER, 0);
+            IERC20(token1).approve(SWAPROUTER, 0);
         }
-        balance0 = IERC20(_token0).balanceOf(address(this));
-        balance1 = IERC20(_token1).balanceOf(address(this));
+        balance0 = IERC20(token0).balanceOf(address(this));
+        balance1 = IERC20(token1).balanceOf(address(this));
 
         _addLiquidity(
             CellarAddParams({
@@ -743,7 +731,7 @@ contract CellarPoolShare is ICellarPoolShare {
         );
         IERC20(poolInfo.token1).safeApprove(
             NONFUNGIBLEPOSITIONMANAGER,
-            cellarParams.amount0Desired
+            cellarParams.amount1Desired
         );
         uint256 weightSum0;
         uint256 weightSum1;
