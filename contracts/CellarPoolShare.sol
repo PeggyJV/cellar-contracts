@@ -762,7 +762,6 @@ contract CellarPoolShare is ICellarPoolShare {
                     deadline: cellarParams.deadline
                 });
 
-
                 INonfungiblePositionManager.IncreaseLiquidityParams
                     memory increaseLiquidityParams
              =

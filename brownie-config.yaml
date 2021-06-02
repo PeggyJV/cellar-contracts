@@ -5,7 +5,7 @@ reports:
     - SafeMath
 
 networks:
-  default: forkedmain
+  default: mainnet-fork
 
 compiler:
   solc:
