@@ -10,21 +10,6 @@ Sommelier Ethereum Cellars Work in Progress
 
 The contracts are compiled using [Vyper](https://github.com/vyperlang/vyper), however, installation of the required Vyper versions is handled by Brownie.
 
-### Brownie PM setting
-```bash
-brownie pm install OpenZeppelin/openzeppelin-contracts@3.4.1-solc-0.7-2
-brownie pm install Uniswap/uniswap-v3-core@1.0.0
-brownie pm install Uniswap/uniswap-v3-periphery@1.0.0
-```
-
-### Python package path dependencies
-After that, replace all Dependencies in `~/.brownie/packages/Uniswap`
-
-`@uniswap/v3-core/contracts` -> `Uniswap/uniswap-v3-core@1.0.0/contracts`
-
-`@openzeppelin/contracts` -> `OpenZeppelin/openzeppelin-contracts@3.4.1-solc-0.7-2/contracts`
-
-
 ### Running the Tests
 
 ```bash
