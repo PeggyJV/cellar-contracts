@@ -2,45 +2,434 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import {
-    IERC20
-} from "OpenZeppelin/openzeppelin-contracts@3.4.1-solc-0.7-2/contracts/token/ERC20/IERC20.sol";
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount)
+        external
+        returns (bool);
+    function allowance(address owner, address spender)
+        external
+        view
+        returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+}
 
-import {
-    SafeERC20
-} from "OpenZeppelin/openzeppelin-contracts@3.4.1-solc-0.7-2/contracts/token/ERC20/SafeERC20.sol";
+library SafeMath {
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b <= a, "SafeMath: subtraction overflow");
+        return a - b;
+    }
+}
 
-import {
-    SafeMath
-} from "OpenZeppelin/openzeppelin-contracts@3.4.1-solc-0.7-2/contracts/math/SafeMath.sol";
+library Address {
+    function isContract(address account) internal view returns (bool) {
+        uint256 size;
+        assembly {
+            size := extcodesize(account)
+        }
+        return size > 0;
+    }
 
-import {
-    INonfungiblePositionManager
-} from "Uniswap/uniswap-v3-periphery@1.0.0/contracts/interfaces/INonfungiblePositionManager.sol";
+    function functionCall(address target, bytes memory data)
+        internal
+        returns (bytes memory)
+    {
+        return functionCall(target, data, "Address: low-level call failed");
+    }
 
-import {
-    ISwapRouter
-} from "Uniswap/uniswap-v3-periphery@1.0.0/contracts/interfaces/ISwapRouter.sol";
+    function functionCall(
+        address target,
+        bytes memory data,
+        string memory errorMessage
+    ) internal returns (bytes memory) {
+        return functionCallWithValue(target, data, 0, errorMessage);
+    }
 
-import {
-    IUniswapV3Factory
-} from "Uniswap/uniswap-v3-core@1.0.0/contracts/interfaces/IUniswapV3Factory.sol";
+    function functionCallWithValue(
+        address target,
+        bytes memory data,
+        uint256 value
+    ) internal returns (bytes memory) {
+        return
+            functionCallWithValue(
+                target,
+                data,
+                value,
+                "Address: low-level call with value failed"
+            );
+    }
 
-import {
-    IUniswapV3Pool
-} from "Uniswap/uniswap-v3-core@1.0.0/contracts/interfaces/IUniswapV3Pool.sol";
+    function functionCallWithValue(
+        address target,
+        bytes memory data,
+        uint256 value,
+        string memory errorMessage
+    ) internal returns (bytes memory) {
+        require(
+            address(this).balance >= value,
+            "Address: insufficient balance for call"
+        );
+        require(isContract(target), "Address: call to non-contract");
 
-import {
-    FixedPoint96
-} from "Uniswap/uniswap-v3-core@1.0.0/contracts/libraries/FixedPoint96.sol";
+        (bool success, bytes memory returndata) =
+            target.call{value: value}(data);
+        return _verifyCallResult(success, returndata, errorMessage);
+    }
 
-import {
-    FullMath
-} from "Uniswap/uniswap-v3-core@1.0.0/contracts/libraries/FullMath.sol";
+    function _verifyCallResult(
+        bool success,
+        bytes memory returndata,
+        string memory errorMessage
+    ) private pure returns (bytes memory) {
+        if (success) {
+            return returndata;
+        } else {
+            if (returndata.length > 0) {
 
-import {
-    TickMath
-} from "Uniswap/uniswap-v3-core@1.0.0/contracts/libraries/TickMath.sol";
+                assembly {
+                    let returndata_size := mload(returndata)
+                    revert(add(32, returndata), returndata_size)
+                }
+            } else {
+                revert(errorMessage);
+            }
+        }
+    }
+}
+
+library SafeERC20 {
+    using Address for address;
+
+    function safeTransfer(
+        IERC20 token,
+        address to,
+        uint256 value
+    ) internal {
+        _callOptionalReturn(
+            token,
+            abi.encodeWithSelector(token.transfer.selector, to, value)
+        );
+    }
+
+    function safeTransferFrom(
+        IERC20 token,
+        address from,
+        address to,
+        uint256 value
+    ) internal {
+        _callOptionalReturn(
+            token,
+            abi.encodeWithSelector(token.transferFrom.selector, from, to, value)
+        );
+    }
+
+    function safeApprove(
+        IERC20 token,
+        address spender,
+        uint256 value
+    ) internal {
+        require(
+            (value == 0) || (token.allowance(address(this), spender) == 0),
+            "SafeERC20: approve from non-zero to non-zero allowance"
+        );
+        _callOptionalReturn(
+            token,
+            abi.encodeWithSelector(token.approve.selector, spender, value)
+        );
+    }
+
+    function _callOptionalReturn(IERC20 token, bytes memory data) private {
+        bytes memory returndata =
+            address(token).functionCall(
+                data,
+                "SafeERC20: low-level call failed"
+            );
+        if (returndata.length > 0) {
+            require(
+                abi.decode(returndata, (bool)),
+                "SafeERC20: ERC20 operation did not succeed"
+            );
+        }
+    }
+}
+
+
+interface INonfungiblePositionManager
+{
+    function positions(uint256 tokenId)
+        external
+        view
+        returns (
+            uint96 nonce,
+            address operator,
+            address token0,
+            address token1,
+            uint24 fee,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            uint256 feeGrowthInside0LastX128,
+            uint256 feeGrowthInside1LastX128,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        );
+
+    struct MintParams {
+        address token0;
+        address token1;
+        uint24 fee;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        address recipient;
+        uint256 deadline;
+    }
+
+    function mint(MintParams calldata params)
+        external
+        payable
+        returns (
+            uint256 tokenId,
+            uint128 liquidity,
+            uint256 amount0,
+            uint256 amount1
+        );
+
+    struct IncreaseLiquidityParams {
+        uint256 tokenId;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        uint256 deadline;
+    }
+
+    function increaseLiquidity(IncreaseLiquidityParams calldata params)
+        external
+        payable
+        returns (
+            uint128 liquidity,
+            uint256 amount0,
+            uint256 amount1
+        );
+
+    struct DecreaseLiquidityParams {
+        uint256 tokenId;
+        uint128 liquidity;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        uint256 deadline;
+    }
+
+    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
+        external
+        payable
+        returns (uint256 amount0, uint256 amount1);
+
+    struct CollectParams {
+        uint256 tokenId;
+        address recipient;
+        uint128 amount0Max;
+        uint128 amount1Max;
+    }
+
+    function collect(CollectParams calldata params)
+        external
+        payable
+        returns (uint256 amount0, uint256 amount1);
+
+    function burn(uint256 tokenId) external payable;
+}
+
+interface ISwapRouter {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 deadline;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata params)
+        external
+        payable
+        returns (uint256 amountOut);
+}
+
+interface IUniswapV3Factory {
+    function getPool(
+        address tokenA,
+        address tokenB,
+        uint24 fee
+    ) external view returns (address pool);
+}
+
+interface IUniswapV3Pool {
+    function slot0()
+        external
+        view
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            uint8 feeProtocol,
+            bool unlocked
+        );
+}
+
+library FixedPoint96 {
+    uint256 internal constant Q96 = 0x1000000000000000000000000;
+}
+
+library FullMath {
+    function mulDiv(
+        uint256 a,
+        uint256 b,
+        uint256 denominator
+    ) internal pure returns (uint256 result) {
+        uint256 prod0; // Least significant 256 bits of the product
+        uint256 prod1; // Most significant 256 bits of the product
+        assembly {
+            let mm := mulmod(a, b, not(0))
+            prod0 := mul(a, b)
+            prod1 := sub(sub(mm, prod0), lt(mm, prod0))
+        }
+
+        if (prod1 == 0) {
+            require(denominator > 0);
+            assembly {
+                result := div(prod0, denominator)
+            }
+            return result;
+        }
+
+        require(denominator > prod1);
+
+        uint256 remainder;
+        assembly {
+            remainder := mulmod(a, b, denominator)
+        }
+        assembly {
+            prod1 := sub(prod1, gt(remainder, prod0))
+            prod0 := sub(prod0, remainder)
+        }
+
+        uint256 twos = -denominator & denominator;
+
+        assembly {
+            denominator := div(denominator, twos)
+        }
+
+        assembly {
+            prod0 := div(prod0, twos)
+        }
+
+        assembly {
+            twos := add(div(sub(0, twos), twos), 1)
+        }
+        prod0 |= prod1 * twos;
+
+        uint256 inv = (3 * denominator) ^ 2;
+
+        inv *= 2 - denominator * inv; // inverse mod 2**8
+        inv *= 2 - denominator * inv; // inverse mod 2**16
+        inv *= 2 - denominator * inv; // inverse mod 2**32
+        inv *= 2 - denominator * inv; // inverse mod 2**64
+        inv *= 2 - denominator * inv; // inverse mod 2**128
+        inv *= 2 - denominator * inv; // inverse mod 2**256
+
+        result = prod0 * inv;
+        return result;
+    }
+}
+
+library TickMath {
+    int24 internal constant MIN_TICK = -887272;
+    int24 internal constant MAX_TICK = -MIN_TICK;
+
+    uint160 internal constant MIN_SQRT_RATIO = 4295128739;
+    uint160 internal constant MAX_SQRT_RATIO =
+        1461446703485210103287273052203988822378723970342;
+
+    function getSqrtRatioAtTick(int24 tick)
+        internal
+        pure
+        returns (uint160 sqrtPriceX96)
+    {
+        uint256 absTick =
+            tick < 0 ? uint256(-int256(tick)) : uint256(int256(tick));
+        require(absTick <= uint256(MAX_TICK), "T");
+
+        uint256 ratio =
+            absTick & 0x1 != 0
+                ? 0xfffcb933bd6fad37aa2d162d1a594001
+                : 0x100000000000000000000000000000000;
+        if (absTick & 0x2 != 0)
+            ratio = (ratio * 0xfff97272373d413259a46990580e213a) >> 128;
+        if (absTick & 0x4 != 0)
+            ratio = (ratio * 0xfff2e50f5f656932ef12357cf3c7fdcc) >> 128;
+        if (absTick & 0x8 != 0)
+            ratio = (ratio * 0xffe5caca7e10e4e61c3624eaa0941cd0) >> 128;
+        if (absTick & 0x10 != 0)
+            ratio = (ratio * 0xffcb9843d60f6159c9db58835c926644) >> 128;
+        if (absTick & 0x20 != 0)
+            ratio = (ratio * 0xff973b41fa98c081472e6896dfb254c0) >> 128;
+        if (absTick & 0x40 != 0)
+            ratio = (ratio * 0xff2ea16466c96a3843ec78b326b52861) >> 128;
+        if (absTick & 0x80 != 0)
+            ratio = (ratio * 0xfe5dee046a99a2a811c461f1969c3053) >> 128;
+        if (absTick & 0x100 != 0)
+            ratio = (ratio * 0xfcbe86c7900a88aedcffc83b479aa3a4) >> 128;
+        if (absTick & 0x200 != 0)
+            ratio = (ratio * 0xf987a7253ac413176f2b074cf7815e54) >> 128;
+        if (absTick & 0x400 != 0)
+            ratio = (ratio * 0xf3392b0822b70005940c7a398e4b70f3) >> 128;
+        if (absTick & 0x800 != 0)
+            ratio = (ratio * 0xe7159475a2c29b7443b29c7fa6e889d9) >> 128;
+        if (absTick & 0x1000 != 0)
+            ratio = (ratio * 0xd097f3bdfd2022b8845ad8f792aa5825) >> 128;
+        if (absTick & 0x2000 != 0)
+            ratio = (ratio * 0xa9f746462d870fdf8a65dc1f90e061e5) >> 128;
+        if (absTick & 0x4000 != 0)
+            ratio = (ratio * 0x70d869a156d2a1b890bb3df62baf32f7) >> 128;
+        if (absTick & 0x8000 != 0)
+            ratio = (ratio * 0x31be135f97d08fd981231505542fcfa6) >> 128;
+        if (absTick & 0x10000 != 0)
+            ratio = (ratio * 0x9aa508b5b7a84e1c677de54f3e99bc9) >> 128;
+        if (absTick & 0x20000 != 0)
+            ratio = (ratio * 0x5d6af8dedb81196699c329225ee604) >> 128;
+        if (absTick & 0x40000 != 0)
+            ratio = (ratio * 0x2216e584f5fa1ea926041bedfe98) >> 128;
+        if (absTick & 0x80000 != 0)
+            ratio = (ratio * 0x48a170391f7dc42444e8fa2) >> 128;
+
+        if (tick > 0) ratio = type(uint256).max / ratio;
+
+        sqrtPriceX96 = uint160(
+            (ratio >> 32) + (ratio % (1 << 32) == 0 ? 0 : 1)
+        );
+    }
+}
 
 interface ICellarPoolShare is IERC20 {
     struct MintParams {
@@ -521,7 +910,7 @@ contract CellarPoolShare is ICellarPoolShare {
         balance0 -= inAmount0;
         balance1 -= inAmount1;
         if (balance0 > balance1) {
-            IERC20(token0).approve(SWAPROUTER, balance0 / 2);
+            IERC20(token0).safeApprove(SWAPROUTER, balance0 / 2);
             ISwapRouter(SWAPROUTER).exactInputSingle(
                 ISwapRouter.ExactInputSingleParams({
                     tokenIn: token0,
@@ -534,9 +923,9 @@ contract CellarPoolShare is ICellarPoolShare {
                     sqrtPriceLimitX96: 0
                 })
             );
-            IERC20(token0).approve(SWAPROUTER, 0);
+            IERC20(token0).safeApprove(SWAPROUTER, 0);
         } else {
-            IERC20(token1).approve(SWAPROUTER, balance1 / 2);
+            IERC20(token1).safeApprove(SWAPROUTER, balance1 / 2);
             ISwapRouter(SWAPROUTER).exactInputSingle(
                 ISwapRouter.ExactInputSingleParams({
                     tokenIn: token1,
@@ -549,7 +938,7 @@ contract CellarPoolShare is ICellarPoolShare {
                     sqrtPriceLimitX96: 0
                 })
             );
-            IERC20(token1).approve(SWAPROUTER, 0);
+            IERC20(token1).safeApprove(SWAPROUTER, 0);
         }
         balance0 = IERC20(token0).balanceOf(address(this));
         balance1 = IERC20(token1).balanceOf(address(this));
