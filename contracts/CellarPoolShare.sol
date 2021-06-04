@@ -3,27 +3,163 @@ pragma solidity ^0.7.6;
 pragma abicoder v2;
 
 interface IERC20 {
-    function totalSupply() external view returns (uint256);
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount)
-        external
-        returns (bool);
-    function allowance(address owner, address spender)
-        external
-        view
-        returns (uint256);
-    function approve(address spender, uint256 amount) external returns (bool);
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(
         address indexed owner,
         address indexed spender,
         uint256 value
     );
+
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    function transfer(address recipient, uint256 amount)
+        external
+        returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    function allowance(address owner, address spender)
+        external
+        view
+        returns (uint256);
+
+    function balanceOf(address account) external view returns (uint256);
+
+    function totalSupply() external view returns (uint256);
+}
+
+interface INonfungiblePositionManager {
+    struct MintParams {
+        address token0;
+        address token1;
+        uint24 fee;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        address recipient;
+        uint256 deadline;
+    }
+
+    struct IncreaseLiquidityParams {
+        uint256 tokenId;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        uint256 deadline;
+    }
+
+    struct DecreaseLiquidityParams {
+        uint256 tokenId;
+        uint128 liquidity;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        uint256 deadline;
+    }
+
+    struct CollectParams {
+        uint256 tokenId;
+        address recipient;
+        uint128 amount0Max;
+        uint128 amount1Max;
+    }
+
+    function mint(MintParams calldata params)
+        external
+        payable
+        returns (
+            uint256 tokenId,
+            uint128 liquidity,
+            uint256 amount0,
+            uint256 amount1
+        );
+
+    function increaseLiquidity(IncreaseLiquidityParams calldata params)
+        external
+        payable
+        returns (
+            uint128 liquidity,
+            uint256 amount0,
+            uint256 amount1
+        );
+
+    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
+        external
+        payable
+        returns (uint256 amount0, uint256 amount1);
+
+    function collect(CollectParams calldata params)
+        external
+        payable
+        returns (uint256 amount0, uint256 amount1);
+
+    function burn(uint256 tokenId) external payable;
+
+    function positions(uint256 tokenId)
+        external
+        view
+        returns (
+            uint96 nonce,
+            address operator,
+            address token0,
+            address token1,
+            uint24 fee,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            uint256 feeGrowthInside0LastX128,
+            uint256 feeGrowthInside1LastX128,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        );
+}
+
+interface ISwapRouter {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 deadline;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata params)
+        external
+        payable
+        returns (uint256 amountOut);
+}
+
+interface IUniswapV3Factory {
+    function getPool(
+        address tokenA,
+        address tokenB,
+        uint24 fee
+    ) external view returns (address pool);
+}
+
+interface IUniswapV3Pool {
+    function slot0()
+        external
+        view
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            uint8 feeProtocol,
+            bool unlocked
+        );
 }
 
 library SafeMath {
@@ -34,14 +170,6 @@ library SafeMath {
 }
 
 library Address {
-    function isContract(address account) internal view returns (bool) {
-        uint256 size;
-        assembly {
-            size := extcodesize(account)
-        }
-        return size > 0;
-    }
-
     function functionCall(address target, bytes memory data)
         internal
         returns (bytes memory)
@@ -79,13 +207,21 @@ library Address {
     ) internal returns (bytes memory) {
         require(
             address(this).balance >= value,
-            "Address: insufficient balance for call"
+            "insufficient balance for call"
         );
         require(isContract(target), "Address: call to non-contract");
 
         (bool success, bytes memory returndata) =
             target.call{value: value}(data);
         return _verifyCallResult(success, returndata, errorMessage);
+    }
+
+    function isContract(address account) internal view returns (bool) {
+        uint256 size;
+        assembly {
+            size := extcodesize(account)
+        }
+        return size > 0;
     }
 
     function _verifyCallResult(
@@ -97,7 +233,6 @@ library Address {
             return returndata;
         } else {
             if (returndata.length > 0) {
-
                 assembly {
                     let returndata_size := mload(returndata)
                     revert(add(32, returndata), returndata_size)
@@ -142,7 +277,7 @@ library SafeERC20 {
     ) internal {
         require(
             (value == 0) || (token.allowance(address(this), spender) == 0),
-            "SafeERC20: approve from non-zero to non-zero allowance"
+            "approve non-zero to non-zero"
         );
         _callOptionalReturn(
             token,
@@ -159,142 +294,10 @@ library SafeERC20 {
         if (returndata.length > 0) {
             require(
                 abi.decode(returndata, (bool)),
-                "SafeERC20: ERC20 operation did not succeed"
+                "ERC20 operation did not succeed"
             );
         }
     }
-}
-
-
-interface INonfungiblePositionManager
-{
-    function positions(uint256 tokenId)
-        external
-        view
-        returns (
-            uint96 nonce,
-            address operator,
-            address token0,
-            address token1,
-            uint24 fee,
-            int24 tickLower,
-            int24 tickUpper,
-            uint128 liquidity,
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
-        );
-
-    struct MintParams {
-        address token0;
-        address token1;
-        uint24 fee;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        address recipient;
-        uint256 deadline;
-    }
-
-    function mint(MintParams calldata params)
-        external
-        payable
-        returns (
-            uint256 tokenId,
-            uint128 liquidity,
-            uint256 amount0,
-            uint256 amount1
-        );
-
-    struct IncreaseLiquidityParams {
-        uint256 tokenId;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        uint256 deadline;
-    }
-
-    function increaseLiquidity(IncreaseLiquidityParams calldata params)
-        external
-        payable
-        returns (
-            uint128 liquidity,
-            uint256 amount0,
-            uint256 amount1
-        );
-
-    struct DecreaseLiquidityParams {
-        uint256 tokenId;
-        uint128 liquidity;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        uint256 deadline;
-    }
-
-    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
-        external
-        payable
-        returns (uint256 amount0, uint256 amount1);
-
-    struct CollectParams {
-        uint256 tokenId;
-        address recipient;
-        uint128 amount0Max;
-        uint128 amount1Max;
-    }
-
-    function collect(CollectParams calldata params)
-        external
-        payable
-        returns (uint256 amount0, uint256 amount1);
-
-    function burn(uint256 tokenId) external payable;
-}
-
-interface ISwapRouter {
-    struct ExactInputSingleParams {
-        address tokenIn;
-        address tokenOut;
-        uint24 fee;
-        address recipient;
-        uint256 deadline;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-        uint160 sqrtPriceLimitX96;
-    }
-
-    function exactInputSingle(ExactInputSingleParams calldata params)
-        external
-        payable
-        returns (uint256 amountOut);
-}
-
-interface IUniswapV3Factory {
-    function getPool(
-        address tokenA,
-        address tokenB,
-        uint24 fee
-    ) external view returns (address pool);
-}
-
-interface IUniswapV3Pool {
-    function slot0()
-        external
-        view
-        returns (
-            uint160 sqrtPriceX96,
-            int24 tick,
-            uint16 observationIndex,
-            uint16 observationCardinality,
-            uint16 observationCardinalityNext,
-            uint8 feeProtocol,
-            bool unlocked
-        );
 }
 
 library FixedPoint96 {
@@ -519,6 +522,8 @@ interface ICellarPoolShare is IERC20 {
 
     function transferOwnership(address newOwner) external;
 
+    function setFee(uint16 newFee) external;
+
     function owner() external view returns (address);
 
     function name() external view returns (string memory);
@@ -548,6 +553,9 @@ contract CellarPoolShare is ICellarPoolShare {
         0xE592427A0AEce92De3Edee1F18E0157C05861564;
 
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+
+    uint16 public constant FEEDOMINATOR = 10000;
+
     mapping(address => uint256) private _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
@@ -560,10 +568,10 @@ contract CellarPoolShare is ICellarPoolShare {
 
     address public immutable token0;
     address public immutable token1;
-
     uint24 public immutable feeLevel;
     CellarTickInfo[] public cellarTickInfo;
     bool private _isEntered;
+    uint16 public fee = 1000;
 
     constructor(
         string memory name_,
@@ -670,21 +678,19 @@ contract CellarPoolShare is ICellarPoolShare {
         require(inAmount0 >= cellarParams.amount0Min, "Less than Amount0Min");
         require(inAmount1 >= cellarParams.amount1Min, "Less than Amount1Min");
 
-        IERC20(token0).safeTransfer(
-            msg.sender,
-            cellarParams.amount0Desired - inAmount0
-        );
-        IERC20(token1).safeTransfer(
-            msg.sender,
-            cellarParams.amount1Desired - inAmount1
-        );
-        emit AddedLiquidity(
-            token0,
-            token1,
-            liquiditySum,
-            inAmount0,
-            inAmount1
-        );
+        if (cellarParams.amount0Desired > inAmount0) {
+            IERC20(token0).safeTransfer(
+                msg.sender,
+                cellarParams.amount0Desired - inAmount0
+            );
+        }
+        if (cellarParams.amount1Desired > inAmount1) {
+            IERC20(token1).safeTransfer(
+                msg.sender,
+                cellarParams.amount1Desired - inAmount1
+            );
+        }
+        emit AddedLiquidity(token0, token1, liquiditySum, inAmount0, inAmount1);
     }
 
     function addLiquidityEthForUniV3(CellarAddParams calldata cellarParams)
@@ -768,13 +774,7 @@ contract CellarPoolShare is ICellarPoolShare {
                 IERC20(token1).safeTransfer(msg.sender, retAmount1);
             }
         }
-        emit AddedLiquidity(
-            token0,
-            token1,
-            liquiditySum,
-            inAmount0,
-            inAmount1
-        );
+        emit AddedLiquidity(token0, token1, liquiditySum, inAmount0, inAmount1);
     }
 
     function removeLiquidityEthFromUniV3(
@@ -831,20 +831,33 @@ contract CellarPoolShare is ICellarPoolShare {
     function reinvest() external override onlyValidator {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
         uint256 weightSum;
+        uint256 balance0;
+        uint256 balance1;
         for (uint256 index = 0; index < _cellarTickInfo.length; index++) {
             require(_cellarTickInfo[index].tokenId != 0, "NFLP doesnot exist");
             weightSum += _cellarTickInfo[index].weight;
-            INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).collect(
-                INonfungiblePositionManager.CollectParams({
-                    tokenId: _cellarTickInfo[index].tokenId,
-                    recipient: address(this),
-                    amount0Max: type(uint128).max,
-                    amount1Max: type(uint128).max
-                })
-            );
+            (uint256 amount0, uint256 amount1) =
+                INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).collect(
+                    INonfungiblePositionManager.CollectParams({
+                        tokenId: _cellarTickInfo[index].tokenId,
+                        recipient: address(this),
+                        amount0Max: type(uint128).max,
+                        amount1Max: type(uint128).max
+                    })
+                );
+            balance0 += amount0;
+            balance1 += amount1;
         }
-        uint256 balance0 = IERC20(token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(token1).balanceOf(address(this));
+        uint256 fee0 = (balance0 * fee) / FEEDOMINATOR;
+        uint256 fee1 = (balance1 * fee) / FEEDOMINATOR;
+        if (fee0 > 0) {
+            IERC20(token0).safeTransfer(_owner, fee0);
+        }
+        if (fee1 > 0) {
+            IERC20(token1).safeTransfer(_owner, fee1);
+        }
+        balance0 = IERC20(token0).balanceOf(address(this));
+        balance1 = IERC20(token1).balanceOf(address(this));
         if (balance0 > 0 && balance1 > 0) {
             (uint256 inAmount0, uint256 inAmount1, , uint128 liquiditySum) =
                 _addLiquidity(
@@ -965,6 +978,11 @@ contract CellarPoolShare is ICellarPoolShare {
         _owner = newOwner;
     }
 
+    function setFee(uint16 newFee) external override {
+        require(msg.sender == _owner, "Not owner");
+        fee = newFee;
+    }
+
     function owner() external view override returns (address) {
         return _owner;
     }
@@ -985,7 +1003,12 @@ contract CellarPoolShare is ICellarPoolShare {
         return _totalSupply;
     }
 
-    function balanceOf(address account) external view override returns (uint256) {
+    function balanceOf(address account)
+        external
+        view
+        override
+        returns (uint256)
+    {
         return _balances[account];
     }
 
@@ -1151,6 +1174,7 @@ contract CellarPoolShare is ICellarPoolShare {
                     deadline: cellarParams.deadline
                 });
 
+
                 INonfungiblePositionManager.IncreaseLiquidityParams
                     memory increaseLiquidityParams
              =
@@ -1231,6 +1255,8 @@ contract CellarPoolShare is ICellarPoolShare {
         )
     {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
+        uint256 fee0;
+        uint256 fee1;
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
             (, , , , , , , uint128 liquidity, , , , ) =
                 INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
@@ -1258,17 +1284,28 @@ contract CellarPoolShare is ICellarPoolShare {
             (uint256 amount0, uint256 amount1) =
                 INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
                     .decreaseLiquidity(decreaseLiquidityParams);
-            INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).collect(
-                INonfungiblePositionManager.CollectParams({
-                    tokenId: _cellarTickInfo[i].tokenId,
-                    recipient: address(this),
-                    amount0Max: type(uint128).max,
-                    amount1Max: type(uint128).max
-                })
-            );
+            (uint256 collectAmount0, uint256 collectAmount1) =
+                INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).collect(
+                    INonfungiblePositionManager.CollectParams({
+                        tokenId: _cellarTickInfo[i].tokenId,
+                        recipient: address(this),
+                        amount0Max: type(uint128).max,
+                        amount1Max: type(uint128).max
+                    })
+                );
+            fee0 += collectAmount0 - amount0;
+            fee1 += collectAmount1 - amount1;
             outAmount0 += amount0;
             outAmount1 += amount1;
             liquiditySum += outLiquidity;
+        }
+        fee0 = (fee0 * fee) / FEEDOMINATOR;
+        fee1 = (fee1 * fee) / FEEDOMINATOR;
+        if (fee0 > 0) {
+            IERC20(token0).safeTransfer(_owner, fee0);
+        }
+        if (fee1 > 0) {
+            IERC20(token1).safeTransfer(_owner, fee1);
         }
     }
 
