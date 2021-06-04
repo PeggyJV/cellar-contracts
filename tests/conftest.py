@@ -3,13 +3,14 @@
 import pytest, math
 from brownie import accounts, CellarPoolShare, Contract
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def CellarPoolShareContract(USDC, WETH):
     name = "Cellar Pool Share Token"
     symbol = "CPS"
     token0 = USDC
     token1 = WETH
-    cellarTickInfo = [[0, 870000, -870000, 1]]
+    # cellarTickInfo = [[0, 870000, -870000, 1]]
+    cellarTickInfo = [[0, 240000, 210000, 1], [0, 210000, 180000, 5], [0, 180000, 150000, 2]]
     return CellarPoolShare.deploy(name, symbol, token0, token1, 3000, cellarTickInfo, {'from':accounts[0]})
 
 @pytest.fixture(scope="session")
