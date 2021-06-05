@@ -1,0 +1,19 @@
+{
+  "name": "cellar_hardhat_compile",
+  "version": "1.0.0",
+  "description": "Compile Cellar contract with hardhat",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VolumeFi/cellars.git"
+  },
+  "author": "Ukpai Ugochi",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/VolumeFi/cellars/issues"
+  },
+  "homepage": "https://github.com/VolumeFi/cellars#readme"
+}
