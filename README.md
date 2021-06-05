@@ -14,7 +14,7 @@ The contracts are compiled using [Vyper](https://github.com/vyperlang/vyper), ho
 
 Hardhat is a development environment that allows you to compile, deploy, test, and debug your Ethereum software.
 
-To compile cellars with Remix, follow these steps:
+To compile cellars contract with hardhat, follow these steps:
 
 - Install hardhat with `npm` by running the code below in your terminal.
 
