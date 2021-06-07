@@ -17,4 +17,4 @@ brownie test
 ```
 
 ### Extra Tests with Hardhat
-[Hardhat & Remix Readme](extras/hardhat/hardhat.md)
+You may also see our Hardhat test implementation here: [Hardhat & Remix Readme](extras/hardhat/hardhat.md)
