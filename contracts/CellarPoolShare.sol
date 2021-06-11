@@ -301,6 +301,7 @@ library SafeERC20 {
 }
 
 library FixedPoint96 {
+    uint8 internal constant RESOLUTION = 96;
     uint256 internal constant Q96 = 0x1000000000000000000000000;
 }
 
@@ -434,6 +435,80 @@ library TickMath {
     }
 }
 
+library LiquidityAmounts {
+    function toUint128(uint256 x) private pure returns (uint128 y) {
+        require((y = uint128(x)) == x);
+    }
+
+    function getLiquidityForAmount0(
+        uint160 sqrtRatioAX96,
+        uint160 sqrtRatioBX96,
+        uint256 amount0
+    ) internal pure returns (uint128 liquidity) {
+        if (sqrtRatioAX96 > sqrtRatioBX96)
+            (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+        uint256 intermediate =
+            FullMath.mulDiv(sqrtRatioAX96, sqrtRatioBX96, FixedPoint96.Q96);
+        return
+            toUint128(
+                FullMath.mulDiv(
+                    amount0,
+                    intermediate,
+                    sqrtRatioBX96 - sqrtRatioAX96
+                )
+            );
+    }
+
+    function getLiquidityForAmount1(
+        uint160 sqrtRatioAX96,
+        uint160 sqrtRatioBX96,
+        uint256 amount1
+    ) internal pure returns (uint128 liquidity) {
+        if (sqrtRatioAX96 > sqrtRatioBX96)
+            (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+        return
+            toUint128(
+                FullMath.mulDiv(
+                    amount1,
+                    FixedPoint96.Q96,
+                    sqrtRatioBX96 - sqrtRatioAX96
+                )
+            );
+    }
+
+    function getLiquidityForAmounts(
+        uint160 sqrtRatioX96,
+        uint160 sqrtRatioAX96,
+        uint160 sqrtRatioBX96,
+        uint256 amount0,
+        uint256 amount1
+    ) internal pure returns (uint128 liquidity) {
+        if (sqrtRatioAX96 > sqrtRatioBX96)
+            (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+
+        if (sqrtRatioX96 <= sqrtRatioAX96) {
+            liquidity = getLiquidityForAmount0(
+                sqrtRatioAX96,
+                sqrtRatioBX96,
+                amount0
+            );
+        } else if (sqrtRatioX96 < sqrtRatioBX96) {
+            uint128 liquidity0 =
+                getLiquidityForAmount0(sqrtRatioX96, sqrtRatioBX96, amount0);
+            uint128 liquidity1 =
+                getLiquidityForAmount1(sqrtRatioAX96, sqrtRatioX96, amount1);
+
+            liquidity = liquidity0 < liquidity1 ? liquidity0 : liquidity1;
+        } else {
+            liquidity = getLiquidityForAmount1(
+                sqrtRatioAX96,
+                sqrtRatioBX96,
+                amount1
+            );
+        }
+    }
+}
+
 interface ICellarPoolShare is IERC20 {
     struct MintParams {
         address token0;
@@ -484,6 +559,11 @@ interface ICellarPoolShare is IERC20 {
         address token0;
         address token1;
         uint24 feeLevel;
+    }
+
+    struct UintPair {
+        uint256 a;
+        uint256 b;
     }
 
     event AddedLiquidity(
@@ -590,6 +670,9 @@ contract CellarPoolShare is ICellarPoolShare {
         for (uint256 i = 0; i < _cellarTickInfo.length; i++) {
             require(_cellarTickInfo[i].weight > 0, "Weight cannot be zero");
             require(_cellarTickInfo[i].tokenId == 0, "tokenId is not empty");
+            if (i > 0) {
+                require(_cellarTickInfo[i].tickUpper <= _cellarTickInfo[i - 1].tickLower, "Wrong tick tier");
+            }
             cellarTickInfo.push(
                 CellarTickInfo({
                     tokenId: 0,
@@ -901,6 +984,9 @@ contract CellarPoolShare is ICellarPoolShare {
         }
         delete cellarTickInfo;
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
+            if (i > 0) {
+                require(_cellarTickInfo[i].tickUpper <= _cellarTickInfo[i - 1].tickLower, "Wrong tick tier");
+            }
             require(_cellarTickInfo[i].weight > 0, "Weight cannot be zero");
             require(_cellarTickInfo[i].tokenId == 0, "tokenId is not empty");
             cellarTickInfo.push(_cellarTickInfo[i]);
@@ -1074,10 +1160,7 @@ contract CellarPoolShare is ICellarPoolShare {
         emit Approval(owner_, spender, amount);
     }
 
-    function _getWeightInfo(
-        PoolInfo memory poolInfo,
-        CellarTickInfo[] memory _cellarTickInfo
-    )
+    function _getWeightInfo(CellarTickInfo[] memory _cellarTickInfo)
         internal
         view
         returns (
@@ -1093,12 +1176,36 @@ contract CellarPoolShare is ICellarPoolShare {
         (uint160 sqrtPriceX96, int24 currentTick, , , , , ) =
             IUniswapV3Pool(
                 IUniswapV3Factory(UNISWAPV3FACTORY).getPool(
-                    poolInfo.token0,
-                    poolInfo.token1,
-                    poolInfo.feeLevel
+                    token0,
+                    token1,
+                    feeLevel
                 )
             )
                 .slot0();
+        UintPair memory sqrtPrice0;
+        UintPair memory sqrtPrice1;
+        uint256 weight00;
+        uint256 weight10;
+        if (currentTick <= _cellarTickInfo[0].tickLower) {
+            sqrtPrice0.a = TickMath.getSqrtRatioAtTick(
+                _cellarTickInfo[0].tickLower
+            );
+            sqrtPrice0.b = TickMath.getSqrtRatioAtTick(
+                _cellarTickInfo[0].tickUpper
+            );
+            weight00 = _cellarTickInfo[0].weight;
+        }
+        if (
+            currentTick >= _cellarTickInfo[_cellarTickInfo.length - 1].tickUpper
+        ) {
+            sqrtPrice1.a = TickMath.getSqrtRatioAtTick(
+                _cellarTickInfo[_cellarTickInfo.length - 1].tickLower
+            );
+            sqrtPrice1.b = TickMath.getSqrtRatioAtTick(
+                _cellarTickInfo[_cellarTickInfo.length - 1].tickUpper
+            );
+            weight10 = _cellarTickInfo[_cellarTickInfo.length - 1].weight;
+        }
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
             if (_cellarTickInfo[i].tokenId > 0) {
                 (, , , , , , , uint128 liquidity, , , , ) =
@@ -1106,22 +1213,124 @@ contract CellarPoolShare is ICellarPoolShare {
                         .positions(_cellarTickInfo[i].tokenId);
                 liquidityBefore += liquidity;
             }
+            UintPair memory sqrtCurrentTickPriceX96;
+            sqrtCurrentTickPriceX96.a = TickMath.getSqrtRatioAtTick(
+                _cellarTickInfo[i].tickLower
+            );
+            sqrtCurrentTickPriceX96.b = TickMath.getSqrtRatioAtTick(
+                _cellarTickInfo[i].tickUpper
+            );
             if (currentTick <= _cellarTickInfo[i].tickLower) {
-                weight0[i] = _cellarTickInfo[i].weight * FixedPoint96.Q96;
+                weight0[i] =
+                    (FullMath.mulDiv(
+                        FullMath.mulDiv(
+                            FullMath.mulDiv(
+                                sqrtPrice0.a,
+                                sqrtPrice0.b,
+                                sqrtPrice0.b - sqrtPrice0.a
+                            ),
+                            sqrtCurrentTickPriceX96.b -
+                                sqrtCurrentTickPriceX96.a,
+                            sqrtCurrentTickPriceX96.b
+                        ),
+                        FixedPoint96.Q96,
+                        sqrtCurrentTickPriceX96.a
+                    ) * _cellarTickInfo[i].weight) /
+                    weight00;
                 weightSum0 += weight0[i];
             } else if (currentTick >= _cellarTickInfo[i].tickUpper) {
-                weight1[i] += _cellarTickInfo[i].weight * FixedPoint96.Q96;
+                weight1[i] =
+                    (FullMath.mulDiv(
+                        sqrtCurrentTickPriceX96.b - sqrtCurrentTickPriceX96.a,
+                        FixedPoint96.Q96,
+                        sqrtPrice0.b - sqrtPrice0.a
+                    ) * _cellarTickInfo[i].weight) /
+                    weight10;
                 weightSum1 += weight1[i];
             } else {
-                (weight0[i], weight1[i]) = _getWeights(
-                    TickMath.getSqrtRatioAtTick(_cellarTickInfo[i].tickLower),
-                    TickMath.getSqrtRatioAtTick(_cellarTickInfo[i].tickUpper),
-                    sqrtPriceX96,
-                    _cellarTickInfo[i].weight
-                );
+                weight0[i] =
+                    (FullMath.mulDiv(
+                        FullMath.mulDiv(
+                            FullMath.mulDiv(
+                                sqrtPrice0.a,
+                                sqrtPrice0.b,
+                                sqrtPrice0.b - sqrtPrice0.a
+                            ),
+                            sqrtCurrentTickPriceX96.b - sqrtPriceX96,
+                            sqrtCurrentTickPriceX96.b
+                        ),
+                        FixedPoint96.Q96,
+                        sqrtPriceX96
+                    ) * _cellarTickInfo[i].weight) /
+                    weight00;
+                weight1[i] =
+                    (FullMath.mulDiv(
+                        sqrtPriceX96 - sqrtCurrentTickPriceX96.a,
+                        FixedPoint96.Q96,
+                        sqrtPrice0.b - sqrtPrice0.a
+                    ) * _cellarTickInfo[i].weight) /
+                    weight10;
                 weightSum0 += weight0[i];
                 weightSum1 += weight1[i];
             }
+        }
+    }
+
+    function _modifyWeightInfo(
+        CellarTickInfo[] memory _cellarTickInfo,
+        uint256 amount0Desired,
+        uint256 amount1Desired,
+        uint256 weightSum0,
+        uint256 weightSum1,
+        uint256[] memory weight0,
+        uint256[] memory weight1
+    ) internal view returns (uint256 newWeightSum0, uint256 newWeightSum1) {
+        if (_cellarTickInfo.length == 1) {
+            return (weightSum0, weightSum1);
+        }
+        UintPair memory liquidity;
+        (uint160 sqrtPriceX96, , , , , , ) =
+            IUniswapV3Pool(
+                IUniswapV3Factory(UNISWAPV3FACTORY).getPool(
+                    token0,
+                    token1,
+                    feeLevel
+                )
+            )
+                .slot0();
+        liquidity.a = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtRatioAtTick(_cellarTickInfo[0].tickLower),
+            TickMath.getSqrtRatioAtTick(_cellarTickInfo[0].tickUpper),
+            FullMath.mulDiv(amount0Desired, weight0[0], weightSum0),
+            FullMath.mulDiv(amount1Desired, weight1[0], weightSum1)
+        );
+        uint256 tickLength = _cellarTickInfo.length - 1;
+        liquidity.b = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtRatioAtTick(_cellarTickInfo[tickLength].tickLower),
+            TickMath.getSqrtRatioAtTick(_cellarTickInfo[tickLength].tickUpper),
+            FullMath.mulDiv(amount0Desired, weight0[tickLength], weightSum0),
+            FullMath.mulDiv(amount1Desired, weight1[tickLength], weightSum1)
+        );
+
+        if (
+            liquidity.a * _cellarTickInfo[tickLength].weight >
+            liquidity.b * _cellarTickInfo[0].weight
+        ) {
+            newWeightSum0 = FullMath.mulDiv(
+                weightSum0,
+                liquidity.a * _cellarTickInfo[tickLength].weight,
+                liquidity.b * _cellarTickInfo[0].weight
+            );
+            newWeightSum1 = weightSum1;
+        } else {
+            newWeightSum0 = weightSum0;
+            newWeightSum1 = FullMath.mulDiv(
+                weightSum1,
+                liquidity.a * _cellarTickInfo[tickLength].weight,
+                liquidity.b * _cellarTickInfo[0].weight
+            );
         }
     }
 
@@ -1135,16 +1344,15 @@ contract CellarPoolShare is ICellarPoolShare {
         )
     {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
-        PoolInfo memory poolInfo =
-            PoolInfo({token0: token0, token1: token1, feeLevel: feeLevel});
-        IERC20(poolInfo.token0).safeApprove(
+        IERC20(token0).safeApprove(
             NONFUNGIBLEPOSITIONMANAGER,
             cellarParams.amount0Desired
         );
-        IERC20(poolInfo.token1).safeApprove(
+        IERC20(token1).safeApprove(
             NONFUNGIBLEPOSITIONMANAGER,
             cellarParams.amount1Desired
         );
+
         uint256 weightSum0;
         uint256 weightSum1;
         uint256[] memory weight0 = new uint256[](_cellarTickInfo.length);
@@ -1156,14 +1364,24 @@ contract CellarPoolShare is ICellarPoolShare {
             liquidityBefore,
             weight0,
             weight1
-        ) = _getWeightInfo(poolInfo, _cellarTickInfo);
+        ) = _getWeightInfo(_cellarTickInfo);
+
+        (weightSum0, weightSum1) = _modifyWeightInfo(
+            _cellarTickInfo,
+            cellarParams.amount0Desired,
+            cellarParams.amount1Desired,
+            weightSum0,
+            weightSum1,
+            weight0,
+            weight1
+        );
 
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
             INonfungiblePositionManager.MintParams memory mintParams =
                 INonfungiblePositionManager.MintParams({
-                    token0: poolInfo.token0,
-                    token1: poolInfo.token1,
-                    fee: poolInfo.feeLevel,
+                    token0: token0,
+                    token1: token1,
+                    fee: feeLevel,
                     tickLower: _cellarTickInfo[i].tickLower,
                     tickUpper: _cellarTickInfo[i].tickUpper,
                     amount0Desired: 0,
@@ -1216,34 +1434,38 @@ contract CellarPoolShare is ICellarPoolShare {
                 );
                 increaseLiquidityParams.amount1Min = mintParams.amount1Min;
             }
-            MintResult memory mintResult;
-            if (_cellarTickInfo[i].tokenId == 0) {
-                (
-                    mintResult.tokenId,
-                    mintResult.liquidity,
-                    mintResult.amount0,
-                    mintResult.amount1
-                ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
-                    .mint(mintParams);
-                cellarTickInfo[i].tokenId = uint184(mintResult.tokenId);
-                inAmount0 += mintResult.amount0;
-                inAmount1 += mintResult.amount1;
-                liquiditySum += mintResult.liquidity;
-            } else {
-                (
-                    mintResult.liquidity,
-                    mintResult.amount0,
-                    mintResult.amount1
-                ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
-                    .increaseLiquidity(increaseLiquidityParams);
-                inAmount0 += mintResult.amount0;
-                inAmount1 += mintResult.amount1;
-                liquiditySum += mintResult.liquidity;
+            if (
+                mintParams.amount0Desired > 0 || mintParams.amount1Desired > 0
+            ) {
+                MintResult memory mintResult;
+                if (_cellarTickInfo[i].tokenId == 0) {
+                    (
+                        mintResult.tokenId,
+                        mintResult.liquidity,
+                        mintResult.amount0,
+                        mintResult.amount1
+                    ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
+                        .mint(mintParams);
+                    cellarTickInfo[i].tokenId = uint184(mintResult.tokenId);
+                    inAmount0 += mintResult.amount0;
+                    inAmount1 += mintResult.amount1;
+                    liquiditySum += mintResult.liquidity;
+                } else {
+                    (
+                        mintResult.liquidity,
+                        mintResult.amount0,
+                        mintResult.amount1
+                    ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
+                        .increaseLiquidity(increaseLiquidityParams);
+                    inAmount0 += mintResult.amount0;
+                    inAmount1 += mintResult.amount1;
+                    liquiditySum += mintResult.liquidity;
+                }
             }
         }
 
-        IERC20(poolInfo.token0).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
-        IERC20(poolInfo.token1).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
+        IERC20(token0).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
+        IERC20(token1).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
     }
 
     function _removeLiquidity(CellarRemoveParams memory cellarParams)
@@ -1307,36 +1529,6 @@ contract CellarPoolShare is ICellarPoolShare {
         if (fee1 > 0) {
             IERC20(token1).safeTransfer(_owner, fee1);
         }
-    }
-
-    function _getWeights(
-        uint160 sqrtPriceAX96,
-        uint160 sqrtPriceBX96,
-        uint160 sqrtPriceX96,
-        uint24 weight
-    ) internal pure returns (uint256 weight0, uint256 weight1) {
-        weight0 =
-            FullMath.mulDiv(
-                FullMath.mulDiv(
-                    FullMath.mulDiv(
-                        sqrtPriceAX96,
-                        (sqrtPriceBX96 - sqrtPriceX96),
-                        FixedPoint96.Q96
-                    ),
-                    FixedPoint96.Q96,
-                    sqrtPriceX96
-                ),
-                FixedPoint96.Q96,
-                (sqrtPriceBX96 - sqrtPriceAX96)
-            ) *
-            weight;
-        weight1 =
-            FullMath.mulDiv(
-                (sqrtPriceX96 - sqrtPriceAX96),
-                FixedPoint96.Q96,
-                (sqrtPriceBX96 - sqrtPriceAX96)
-            ) *
-            weight;
     }
 
     function _beforeTokenTransfer(

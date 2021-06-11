@@ -3,7 +3,7 @@
   "plugins": [],
   "rules": {
     "avoid-call-value": "warn",
-    "avoid-low-level-calls": "warn",
+    "avoid-low-level-calls": "off",
     "avoid-sha3": "warn",
     "avoid-suicide": "warn",
     "avoid-throw": "warn",
@@ -38,7 +38,7 @@
     "multiple-sends": "warn",
     "no-complex-fallback": "warn",
     "no-empty-blocks": "warn",
-    "no-inline-assembly": "warn",
+    "no-inline-assembly": "off",
     "no-unused-vars": "warn",
     "not-rely-on-block-hash": "warn",
     "not-rely-on-time": "warn",
