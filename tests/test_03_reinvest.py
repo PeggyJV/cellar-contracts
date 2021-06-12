@@ -16,12 +16,10 @@ def test_empty(USDC, WETH, accounts, SwapRouter, CellarPoolShareContract):
         SwapRouter.exactInputSingle([USDC, WETH, 3000, accounts[3], 2 ** 256 - 1, 10000 * 10 ** 6, 5 * 10 ** 17, 0], {"from": accounts[3]})
         WETH.withdraw(WETH.balanceOf(accounts[3]), {"from": accounts[3]})
     tx = CellarPoolShareContract.reinvest({"from": accounts[2]})
-    print(tx.info())
     bal = CellarPoolShareContract.balanceOf(accounts[2])
     cellarRemoveParams = [bal, 0, 0, accounts[2], 2 ** 256 - 1]
     CellarPoolShareContract.removeLiquidityFromUniV3(cellarRemoveParams, {"from": accounts[2]})
-    assert USDC.balanceOf(CellarPoolShareContract) == 0
-    assert WETH.balanceOf(CellarPoolShareContract) == 0
+    assert CellarPoolShareContract.balanceOf(accounts[2]) == 0
 
 def test_add_liquidity_ETH(USDC, WETH, accounts, SwapRouter, CellarPoolShareContract):
     SwapRouter.exactOutputSingle([WETH, USDC, 3000, accounts[0], 2 ** 256 - 1, 6000 * 10 ** 6, 6 * 10 ** 18, 0], {"from": accounts[0], "value": 6 * 10 ** 18})
