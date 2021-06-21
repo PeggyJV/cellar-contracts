@@ -30,10 +30,17 @@ brownie run scripts/deploy.py --network local
 ```
 
 ### Running the Tests
-
 ```bash
 brownie test
 ```
+
+### Tests Suite Files
+|Test | Description | File | 
+| --- | --- | --- |
+|Add Liquidity to the Cellar Test | Test add liquidity using 180 ETH and 60,000 USDC  | test_00_add_liquidity.py |
+
+
+
 
 ### Extra Tests with Hardhat
 You may also see our Hardhat test implementation here: [Hardhat & Remix Readme](extras/hardhat/hardhat.md)
