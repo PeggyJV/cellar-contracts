@@ -35,9 +35,9 @@ brownie test
 ```
 
 ### Tests Suite Files
-|Test | Description | File | 
-| --- | --- | --- |
-|Add Liquidity to the Cellar Test | Test add liquidity using 180 ETH and 60,000 USDC  | test_00_add_liquidity.py |
+|Test | Description | Expected Failures | File | 
+| --- | --- | --- | --- |
+|Add Liquidity to the Cellar Test | Test add liquidity using 180 ETH and 60,000 USDC | Balance should fail when ???? | test_00_add_liquidity.py |
 
 
 
