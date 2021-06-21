@@ -37,8 +37,8 @@ brownie test
 ### Tests Suite Files
 |Test | Description | Expected Failures | File | 
 | --- | --- | --- | --- |
-|Add Liquidity to the Cellar Test | Test add liquidity using 180 ETH and 60,000 USDC | Balance should fail when ???? | test_00_add_liquidity.py |
-
+|Add liquidity to the Cellar Test | Test add liquidity using 180 ETH and 60,000 USDC and return the pool share balance for the transaction | Balance should fail when ???? | test_00_add_liquidity.py |
+|Transfer liquidity | Test transfer liquidity after adding liquidity | Success or failure conditions??? | test_01_transfer.py |
 
 
 
