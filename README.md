@@ -38,10 +38,10 @@ brownie test
 |Test | Description | Expected Failures | File | 
 | --- | --- | --- | --- |
 |Add liquidity to the Cellar Test | Test add liquidity using 180 ETH and 60,000 USDC and return the pool share balance for the transaction | Balance should fail when ???? | test_00_add_liquidity.py |
-|Transfer liquidity | Test transfer liquidity after adding liquidity | Success or failure conditions??? | test_01_transfer.py |
-|Remove liquidity | Test remove liquidity after adding liquidity | Success or failure conditions??? | test_02_remove_liquidity.py |
-|Reinvest liquidity | Test reinvest after adding liquidity | Success or failure conditions??? | test_03_reinvest.py |
-|Rebalance liquidity | Test rebalance after adding liquidity | Success or failure conditions??? | test_04_rebalance.py |
+|Transfer liquidity | Test transfer and approve liquidity after adding liquidity using 180 ETH and 60,000 USDC | Success or failure conditions??? | test_01_transfer.py |
+|Remove liquidity | Test remove liquidity in Uniswap version 3 after adding liquidity using 180 ETH and 60,000 USDC | Success or failure conditions??? | test_02_remove_liquidity.py |
+|Reinvest liquidity | Test reinvest after adding liquidity using 180 ETH and 60,000 USDC, confirm account balance is empty after removing liquidity | Success or failure conditions??? | test_03_reinvest.py |
+|Rebalance liquidity | Test rebalance after adding liquidity using 180 ETH and 60,000 USDC, confirm balance of account is 0 after rebalance and removing liquidity | Success or failure conditions??? | test_04_rebalance.py |
 
 
 
