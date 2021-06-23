@@ -39,6 +39,9 @@ brownie test
 | --- | --- | --- | --- |
 |Add liquidity to the Cellar Test | Test add liquidity using 180 ETH and 60,000 USDC and return the pool share balance for the transaction | Balance should fail when ???? | test_00_add_liquidity.py |
 |Transfer liquidity | Test transfer liquidity after adding liquidity | Success or failure conditions??? | test_01_transfer.py |
+|Remove liquidity | Test remove liquidity after adding liquidity | Success or failure conditions??? | test_02_remove_liquidity.py |
+|Reinvest | Test reinvest after adding liquidity | Success or failure conditions??? | test_03_reinvest.py |
+|Rebalance | Test rebalance after adding liquidity | Success or failure conditions??? | test_04_rebalance.py |
 
 
 
