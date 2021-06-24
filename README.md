@@ -37,12 +37,12 @@ brownie test
 ### Tests Suite Files
 |Test | Description | Expected Failures | File | 
 | --- | --- | --- | --- |
-|Add liquidity to the Cellar Test | - Test add liquidity using 1 ETH and 3,000 USDC 3 times for 2 users and compare their balances<br />- Test add liquidity using 1 WETH and 3,000 USDC 3 times for 2 users and compare their balances | Their balances should be the same. Otherwise, the test is failure | test_00_add_liquidity.py |
-|Transfer liquidity | Test transfer and approve liquidity after adding liquidity using 180 ETH and 60,000 USDC | Success or failure conditions??? | test_01_transfer.py |
-|Remove liquidity | Test remove liquidity in Uniswap version 3 after adding liquidity using 180 ETH and 60,000 USDC | Success or failure conditions??? | test_02_remove_liquidity.py |
-|Reinvest liquidity | Test reinvest after adding liquidity using 180 ETH and 60,000 USDC, confirm account balance is empty after removing liquidity | Success or failure conditions??? | test_03_reinvest.py |
-|Rebalance liquidity | Test rebalance after adding liquidity using 180 ETH and 60,000 USDC, confirm balance of account is 0 after rebalance and removing liquidity | Success or failure conditions??? | test_04_rebalance.py |
-
+|Add liquidity to the Cellar Test | - Test add liquidity using 1 ETH and 3,000 USDC 3 times for 2 users and compare their balances.<br />- Test add liquidity using 1 WETH and 3,000 USDC 3 times for 2 users and compare their balances. | Their balances should be the same. Otherwise, the test is failure | test_00_add_liquidity.py |
+|Transfer liquidity | Test transfer and approve liquidity after adding liquidity using 1 ETH and 3,000 USDC 3 times. | Approve / Transfer / TransferFrom should work as a standard ERC20. Otherwise, the test is failure. | test_01_transfer.py |
+|Remove liquidity | Test remove 1/3 liquidity in Uniswap version 3 after adding liquidity using 1 ETH and 3,000 USDC 3 times and compare to decreased balance. | Decreased balance should be the same as the balance for removed liquidity. | test_02_remove_liquidity.py |
+|Reinvest liquidity | Test reinvest after adding liquidity using 1 ETH and 3,000 USDC 3 times, confirm account balance is empty after removing liquidity. | The account balance should be empty. | test_03_reinvest.py |
+|Rebalance liquidity | Test rebalance after adding liquidity using 1 ETH and 3,000 USDC 3 times, confirm balance of account is 0 after rebalance and removing liquidity. | The account balance should be empty. | test_04_rebalance.py |
+|Weight Management | Test liquidities of NFLP in the contract after adding liquidity using 1 ETH and 1,000 USDC, 1 ETH and 5,000 USDC. | The liquidities' ratio should be the approximately same as weight. Accuracy is accurater than 1 millionth | test_05_weight.py |
 
 
 ### Extra Tests with Hardhat
