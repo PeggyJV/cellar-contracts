@@ -301,7 +301,6 @@ library SafeERC20 {
 }
 
 library FixedPoint96 {
-    uint8 internal constant RESOLUTION = 96;
     uint256 internal constant Q96 = 0x1000000000000000000000000;
 }
 
@@ -370,10 +369,6 @@ library FullMath {
 library TickMath {
     int24 internal constant MIN_TICK = -887272;
     int24 internal constant MAX_TICK = -MIN_TICK;
-
-    uint160 internal constant MIN_SQRT_RATIO = 4295128739;
-    uint160 internal constant MAX_SQRT_RATIO =
-        1461446703485210103287273052203988822378723970342;
 
     function getSqrtRatioAtTick(int24 tick)
         internal
@@ -553,12 +548,6 @@ interface ICellarPoolShare is IERC20 {
         int24 tickUpper;
         int24 tickLower;
         uint24 weight;
-    }
-
-    struct PoolInfo {
-        address token0;
-        address token1;
-        uint24 feeLevel;
     }
 
     struct UintPair {
@@ -1328,8 +1317,8 @@ contract CellarPoolShare is ICellarPoolShare {
             newWeightSum0 = weightSum0;
             newWeightSum1 = FullMath.mulDiv(
                 weightSum1,
-                liquidity.a * _cellarTickInfo[tickLength].weight,
-                liquidity.b * _cellarTickInfo[0].weight
+                liquidity.b * _cellarTickInfo[0].weight,
+                liquidity.a * _cellarTickInfo[tickLength].weight
             );
         }
     }
@@ -1391,7 +1380,6 @@ contract CellarPoolShare is ICellarPoolShare {
                     recipient: address(this),
                     deadline: cellarParams.deadline
                 });
-
 
                 INonfungiblePositionManager.IncreaseLiquidityParams
                     memory increaseLiquidityParams
@@ -1491,7 +1479,6 @@ contract CellarPoolShare is ICellarPoolShare {
                         _totalSupply
                     )
                 );
-
 
                 INonfungiblePositionManager.DecreaseLiquidityParams
                     memory decreaseLiquidityParams
