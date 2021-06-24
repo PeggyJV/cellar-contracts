@@ -10,19 +10,6 @@ To compile cellars contract with hardhat, follow these steps:
 npm install --save-dev hardhat
 ```
 
-After installation, run the command below in your terminal to create a new project:
-
-```
-npx hardhat
-```
-
-Follow the guide to create a sample project. Navigate to the project you created `Greeter.sol` and put the cellar contract in `Greatersol`.
-
-- Install the following dependencies:
-
-```
-npm install --save-dev @nomiclabs/hardhat-waffle ethereum-waffle chai @nomiclabs/hardhat-ethers ethers
-```
 
 - Compile your project by running the command below.
 
@@ -30,7 +17,7 @@ npm install --save-dev @nomiclabs/hardhat-waffle ethereum-waffle chai @nomiclabs
 npx hardhat compile
 ```
 
-- Your contract's `abi` can be found in the `artifacts` folder, i.e. `artifacts/Greeter.json`
+- Your contract's `abi` can be found in the `artifacts` folder, i.e. `artifacts/CellarPoolShare.sol`
 
 
 ### Compiling Contract With Remix
