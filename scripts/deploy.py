@@ -1,9 +1,9 @@
 from brownie import CellarPoolShare, accounts
 
 def main():
-    name = "Cellar Pool Share Token"
+    name = "Cellar Pool Share Test ETH USDT"
     symbol = "CPS"
-    token0 = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-    token1 = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    token0 = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    token1 = "0xdac17f958d2ee523a2206206994597c13d831ec7"
     cellarTickInfo = [[0, 240000, 210000, 1], [0, 210000, 180000, 5], [0, 180000, 150000, 2]]
     CellarPoolShare.deploy(name, symbol, token0, token1, 3000, cellarTickInfo, {'from':accounts[0]})
