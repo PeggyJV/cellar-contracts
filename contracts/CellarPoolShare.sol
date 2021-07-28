@@ -1279,6 +1279,7 @@ contract CellarPoolShare is ICellarPoolShare {
         if (_cellarTickInfo.length == 1) {
             return (weightSum0, weightSum1);
         }
+
         UintPair memory liquidity;
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
@@ -1309,19 +1310,29 @@ contract CellarPoolShare is ICellarPoolShare {
             liquidity.a * _cellarTickInfo[tickLength].weight >
             liquidity.b * _cellarTickInfo[0].weight
         ) {
-            newWeightSum0 = FullMath.mulDiv(
-                weightSum0,
-                liquidity.a * _cellarTickInfo[tickLength].weight,
-                liquidity.b * _cellarTickInfo[0].weight
-            );
+            if (liquidity.b * _cellarTickInfo[0].weight > 0) {
+                newWeightSum0 = FullMath.mulDiv(
+                    weightSum0,
+                    liquidity.a * _cellarTickInfo[tickLength].weight,
+                    liquidity.b * _cellarTickInfo[0].weight
+                );
+            }
+            else {
+                newWeightSum0 = 0;
+            }
             newWeightSum1 = weightSum1;
         } else {
             newWeightSum0 = weightSum0;
-            newWeightSum1 = FullMath.mulDiv(
-                weightSum1,
-                liquidity.b * _cellarTickInfo[0].weight,
-                liquidity.a * _cellarTickInfo[tickLength].weight
-            );
+            if (liquidity.a * _cellarTickInfo[tickLength].weight > 0) {
+                newWeightSum1 = FullMath.mulDiv(
+                    weightSum1,
+                    liquidity.b * _cellarTickInfo[0].weight,
+                    liquidity.a * _cellarTickInfo[tickLength].weight
+                );
+            }
+            else {
+                newWeightSum1 = 0;
+            }
         }
     }
 
@@ -1430,13 +1441,13 @@ contract CellarPoolShare is ICellarPoolShare {
                 MintResult memory mintResult;
                 if (_cellarTickInfo[i].tokenId == 0) {
 
-                    (
-                        mintResult.tokenId,
-                        mintResult.liquidity,
-                        mintResult.amount0,
-                        mintResult.amount1
-                    ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
-                        .mint(mintParams);
+                    try INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
+                        .mint(mintParams) returns (uint256 r1, uint128 r2, uint256 r3, uint256 r4) {
+                        mintResult.tokenId = r1;
+                        mintResult.liquidity = r2;
+                        mintResult.amount0 = r3;
+                        mintResult.amount1 = r4;
+                    } catch {}
 
                     cellarTickInfo[i].tokenId = uint184(mintResult.tokenId);
 
@@ -1444,12 +1455,12 @@ contract CellarPoolShare is ICellarPoolShare {
                     inAmount1 += mintResult.amount1;
                     liquiditySum += mintResult.liquidity;
                 } else {
-                    (
-                        mintResult.liquidity,
-                        mintResult.amount0,
-                        mintResult.amount1
-                    ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
-                        .increaseLiquidity(increaseLiquidityParams);
+                    try INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
+                        .increaseLiquidity(increaseLiquidityParams) returns (uint128 r1, uint256 r2, uint256 r3) {
+                        mintResult.liquidity = r1;
+                        mintResult.amount0 = r2;
+                        mintResult.amount1 = r3;
+                    } catch {}
                     inAmount0 += mintResult.amount0;
                     inAmount1 += mintResult.amount1;
                     liquiditySum += mintResult.liquidity;
