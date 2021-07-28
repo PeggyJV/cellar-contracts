@@ -642,6 +642,12 @@ contract CellarPoolShare is ICellarPoolShare {
     bool private _isEntered;
     uint16 public fee = 1000;
 
+    uint256 private _rebal;
+    
+    event Test(address addr);
+    event Test(int256 inumber);
+    event Test(uint256 unumber);
+
     constructor(
         string memory name_,
         string memory symbol_,
@@ -954,6 +960,7 @@ contract CellarPoolShare is ICellarPoolShare {
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external {
+        _rebal = 1;
         require(msg.sender == _owner, "Not owner");
         CellarRemoveParams memory removeParams =
             CellarRemoveParams({
@@ -966,13 +973,14 @@ contract CellarPoolShare is ICellarPoolShare {
         _removeLiquidity(removeParams);
 
         CellarTickInfo[] memory _oldCellarTickInfo = cellarTickInfo;
-        for (uint16 i = 0; i < _oldCellarTickInfo.length; i++) {
+        for (uint256 i = 0; i < _oldCellarTickInfo.length; i++) {
             INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).burn(
                 _oldCellarTickInfo[i].tokenId
             );
         }
         delete cellarTickInfo;
-        for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
+        for (uint256 i = 0; i < _cellarTickInfo.length; i++) {
+            require(_cellarTickInfo[i].tickUpper > _cellarTickInfo[i].tickLower, "Wrong tick tier");
             if (i > 0) {
                 require(_cellarTickInfo[i].tickUpper <= _cellarTickInfo[i - 1].tickLower, "Wrong tick tier");
             }
@@ -984,7 +992,61 @@ contract CellarPoolShare is ICellarPoolShare {
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
 
-        (uint256 inAmount0, uint256 inAmount1, , ) =
+        if (balance0 > 0 && balance1 > 0) {
+            (uint256 inAmount0, uint256 inAmount1, , ) =
+                _addLiquidity(
+                    CellarAddParams({
+                        amount0Desired: balance0,
+                        amount1Desired: balance1,
+                        amount0Min: 0,
+                        amount1Min: 0,
+                        recipient: address(this),
+                        deadline: type(uint256).max
+                    })
+                );
+            balance0 -= inAmount0;
+            balance1 -= inAmount1;
+        }
+        else {
+            // emit Test(IERC20(token0).balanceOf(address(this)));
+            // emit Test(IERC20(token1).balanceOf(address(this)));
+            if (balance1 == 0) {
+                IERC20(token0).safeApprove(SWAPROUTER, balance0 / 2);
+                ISwapRouter(SWAPROUTER).exactInputSingle(
+                    ISwapRouter.ExactInputSingleParams({
+                        tokenIn: token0,
+                        tokenOut: token1,
+                        fee: feeLevel,
+                        recipient: address(this),
+                        deadline: type(uint256).max,
+                        amountIn: balance0 / 2,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    })
+                );
+                IERC20(token0).safeApprove(SWAPROUTER, 0);
+            }
+            if (balance0 == 0) {
+                IERC20(token1).safeApprove(SWAPROUTER, balance1 / 2);
+                ISwapRouter(SWAPROUTER).exactInputSingle(
+                    ISwapRouter.ExactInputSingleParams({
+                        tokenIn: token1,
+                        tokenOut: token0,
+                        fee: feeLevel,
+                        recipient: address(this),
+                        deadline: type(uint256).max,
+                        amountIn: balance1 / 2,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    })
+                );
+                IERC20(token1).safeApprove(SWAPROUTER, 0);
+            }
+            // emit Test(IERC20(token0).balanceOf(address(this)));
+            // emit Test(IERC20(token1).balanceOf(address(this)));
+
+            balance0 = IERC20(token0).balanceOf(address(this));
+            balance1 = IERC20(token1).balanceOf(address(this));
             _addLiquidity(
                 CellarAddParams({
                     amount0Desired: balance0,
@@ -995,52 +1057,7 @@ contract CellarPoolShare is ICellarPoolShare {
                     deadline: type(uint256).max
                 })
             );
-        balance0 -= inAmount0;
-        balance1 -= inAmount1;
-        if (balance0 > balance1) {
-            IERC20(token0).safeApprove(SWAPROUTER, balance0 / 2);
-            ISwapRouter(SWAPROUTER).exactInputSingle(
-                ISwapRouter.ExactInputSingleParams({
-                    tokenIn: token0,
-                    tokenOut: token1,
-                    fee: feeLevel,
-                    recipient: address(this),
-                    deadline: type(uint256).max,
-                    amountIn: balance0 / 2,
-                    amountOutMinimum: 0,
-                    sqrtPriceLimitX96: 0
-                })
-            );
-            IERC20(token0).safeApprove(SWAPROUTER, 0);
-        } else {
-            IERC20(token1).safeApprove(SWAPROUTER, balance1 / 2);
-            ISwapRouter(SWAPROUTER).exactInputSingle(
-                ISwapRouter.ExactInputSingleParams({
-                    tokenIn: token1,
-                    tokenOut: token0,
-                    fee: feeLevel,
-                    recipient: address(this),
-                    deadline: type(uint256).max,
-                    amountIn: balance1 / 2,
-                    amountOutMinimum: 0,
-                    sqrtPriceLimitX96: 0
-                })
-            );
-            IERC20(token1).safeApprove(SWAPROUTER, 0);
         }
-        balance0 = IERC20(token0).balanceOf(address(this));
-        balance1 = IERC20(token1).balanceOf(address(this));
-
-        _addLiquidity(
-            CellarAddParams({
-                amount0Desired: balance0,
-                amount1Desired: balance1,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: address(this),
-                deadline: type(uint256).max
-            })
-        );
     }
 
     function setValidator(address _validator, bool value) external override {
@@ -1151,7 +1168,6 @@ contract CellarPoolShare is ICellarPoolShare {
 
     function _getWeightInfo(CellarTickInfo[] memory _cellarTickInfo)
         internal
-        view
         returns (
             uint256 weightSum0,
             uint256 weightSum1,
@@ -1172,29 +1188,31 @@ contract CellarPoolShare is ICellarPoolShare {
             )
                 .slot0();
         UintPair memory sqrtPrice0;
-        UintPair memory sqrtPrice1;
+        // UintPair memory sqrtPrice1;
         uint256 weight00;
         uint256 weight10;
-        if (currentTick <= _cellarTickInfo[0].tickLower) {
+        // if (currentTick <= _cellarTickInfo[0].tickLower) {
             sqrtPrice0.a = TickMath.getSqrtRatioAtTick(
                 _cellarTickInfo[0].tickLower
             );
             sqrtPrice0.b = TickMath.getSqrtRatioAtTick(
                 _cellarTickInfo[0].tickUpper
             );
+        // }
             weight00 = _cellarTickInfo[0].weight;
-        }
-        if (
-            currentTick >= _cellarTickInfo[_cellarTickInfo.length - 1].tickUpper
-        ) {
-            sqrtPrice1.a = TickMath.getSqrtRatioAtTick(
-                _cellarTickInfo[_cellarTickInfo.length - 1].tickLower
-            );
-            sqrtPrice1.b = TickMath.getSqrtRatioAtTick(
-                _cellarTickInfo[_cellarTickInfo.length - 1].tickUpper
-            );
+        // }
+        // if (
+        //     currentTick >= _cellarTickInfo[_cellarTickInfo.length - 1].tickUpper
+        // ) {
+        //     sqrtPrice1.a = TickMath.getSqrtRatioAtTick(
+        //         _cellarTickInfo[_cellarTickInfo.length - 1].tickLower
+        //     );
+        //     sqrtPrice1.b = TickMath.getSqrtRatioAtTick(
+        //         _cellarTickInfo[_cellarTickInfo.length - 1].tickUpper
+        //     );
+        // }
             weight10 = _cellarTickInfo[_cellarTickInfo.length - 1].weight;
-        }
+        // }
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
             if (_cellarTickInfo[i].tokenId > 0) {
                 (, , , , , , , uint128 liquidity, , , , ) =
@@ -1202,6 +1220,10 @@ contract CellarPoolShare is ICellarPoolShare {
                         .positions(_cellarTickInfo[i].tokenId);
                 liquidityBefore += liquidity;
             }
+
+            // emit Test(sqrtPrice0.a);
+            // emit Test(sqrtPrice0.b);
+
             UintPair memory sqrtCurrentTickPriceX96;
             sqrtCurrentTickPriceX96.a = TickMath.getSqrtRatioAtTick(
                 _cellarTickInfo[i].tickLower
@@ -1209,6 +1231,13 @@ contract CellarPoolShare is ICellarPoolShare {
             sqrtCurrentTickPriceX96.b = TickMath.getSqrtRatioAtTick(
                 _cellarTickInfo[i].tickUpper
             );
+
+            // emit Test(sqrtCurrentTickPriceX96.a);
+            // emit Test(sqrtCurrentTickPriceX96.b);
+            // emit Test(_cellarTickInfo[i].tickLower);
+            // emit Test(_cellarTickInfo[i].tickUpper);
+            // emit Test(currentTick);
+            // revert("Here");
             if (currentTick <= _cellarTickInfo[i].tickLower) {
                 weight0[i] =
                     (FullMath.mulDiv(
@@ -1252,6 +1281,10 @@ contract CellarPoolShare is ICellarPoolShare {
                         sqrtPriceX96
                     ) * _cellarTickInfo[i].weight) /
                     weight00;
+                // emit Test(sqrtPriceX96 - sqrtCurrentTickPriceX96.a);
+                // emit Test(sqrtPrice0.b - sqrtPrice0.a);
+                // emit Test(uint256(_cellarTickInfo[i].weight));
+                // emit Test(weight10);
                 weight1[i] =
                     (FullMath.mulDiv(
                         sqrtPriceX96 - sqrtCurrentTickPriceX96.a,
@@ -1354,7 +1387,11 @@ contract CellarPoolShare is ICellarPoolShare {
             weight0,
             weight1
         ) = _getWeightInfo(_cellarTickInfo);
-
+        // emit Test(weightSum0);
+        // emit Test(weightSum1);
+        // emit Test(weight0[0]);
+        // emit Test(weight1[0]);
+        // revert("Here");
         (weightSum0, weightSum1) = _modifyWeightInfo(
             _cellarTickInfo,
             cellarParams.amount0Desired,
@@ -1364,6 +1401,12 @@ contract CellarPoolShare is ICellarPoolShare {
             weight0,
             weight1
         );
+
+        // emit Test(cellarParams.amount0Desired);
+        // emit Test(cellarParams.amount1Desired);
+        // emit Test(weightSum0);
+        // emit Test(weightSum1);
+        // revert("Here");
 
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
             INonfungiblePositionManager.MintParams memory mintParams =
@@ -1427,6 +1470,23 @@ contract CellarPoolShare is ICellarPoolShare {
             ) {
                 MintResult memory mintResult;
                 if (_cellarTickInfo[i].tokenId == 0) {
+                    // emit Test(uint256(_cellarTickInfo[i].tokenId));
+                    // emit Test(mintParams.token0);
+                    // emit Test(mintParams.token1);
+                    // emit Test(uint256(mintParams.fee));
+                    // emit Test(mintParams.tickLower);
+                    // emit Test(mintParams.tickUpper);
+                    // emit Test(mintParams.amount0Desired);
+                    // emit Test(mintParams.amount1Desired);
+                    // emit Test(IERC20(token0).balanceOf(address(this)));
+                    // emit Test(IERC20(token1).balanceOf(address(this)));
+                    // emit Test(IERC20(token0).allowance(address(this), NONFUNGIBLEPOSITIONMANAGER));
+                    // emit Test(IERC20(token1).allowance(address(this), NONFUNGIBLEPOSITIONMANAGER));
+                    // emit Test(mintParams.amount0Min);
+                    // emit Test(mintParams.amount1Min);
+                    // emit Test(mintParams.recipient);
+                    // emit Test(mintParams.deadline);
+                    // if (_rebal > 0) break;
                     (
                         mintResult.tokenId,
                         mintResult.liquidity,
@@ -1434,7 +1494,11 @@ contract CellarPoolShare is ICellarPoolShare {
                         mintResult.amount1
                     ) = INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
                         .mint(mintParams);
+                    // if (_rebal > 0) _rebal++;
+                    // emit Test(uint256(mintResult.tokenId));
                     cellarTickInfo[i].tokenId = uint184(mintResult.tokenId);
+                    // emit Test(uint256(cellarTickInfo[i].tokenId));
+                    // if (_rebal == 1) revert("YEA");
                     inAmount0 += mintResult.amount0;
                     inAmount1 += mintResult.amount1;
                     liquiditySum += mintResult.liquidity;
@@ -1451,7 +1515,7 @@ contract CellarPoolShare is ICellarPoolShare {
                 }
             }
         }
-
+        // revert("Here!");
         IERC20(token0).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
         IERC20(token1).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
     }
