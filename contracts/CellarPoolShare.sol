@@ -932,27 +932,66 @@ contract CellarPoolShare is ICellarPoolShare {
         }
         balance0 = IERC20(token0).balanceOf(address(this));
         balance1 = IERC20(token1).balanceOf(address(this));
-        if (balance0 > 0 && balance1 > 0) {
-            (uint256 inAmount0, uint256 inAmount1, , uint128 liquiditySum) =
-                _addLiquidity(
-                    CellarAddParams({
-                        amount0Desired: balance0,
-                        amount1Desired: balance1,
-                        amount0Min: 0,
-                        amount1Min: 0,
-                        recipient: address(this),
-                        deadline: type(uint256).max
-                    })
-                );
 
-            emit AddedLiquidity(
-                token0,
-                token1,
-                liquiditySum,
-                inAmount0,
-                inAmount1
+        (uint256 inAmount0, uint256 inAmount1, , ) =
+            _addLiquidity(
+                CellarAddParams({
+                    amount0Desired: balance0,
+                    amount1Desired: balance1,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    recipient: address(this),
+                    deadline: type(uint256).max
+                })
             );
+        balance0 -= inAmount0;
+        balance1 -= inAmount1;
+
+        if (balance0 > balance1 && balance0 > 2) {
+            IERC20(token0).safeApprove(SWAPROUTER, balance0 / 2);
+            try ISwapRouter(SWAPROUTER).exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: token0,
+                    tokenOut: token1,
+                    fee: feeLevel,
+                    recipient: address(this),
+                    deadline: type(uint256).max,
+                    amountIn: balance0 / 2,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            ) {} catch {}
+            IERC20(token0).safeApprove(SWAPROUTER, 0);
         }
+        else if (balance1 > 2) {
+            IERC20(token1).safeApprove(SWAPROUTER, balance1 / 2);
+            try ISwapRouter(SWAPROUTER).exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: token1,
+                    tokenOut: token0,
+                    fee: feeLevel,
+                    recipient: address(this),
+                    deadline: type(uint256).max,
+                    amountIn: balance1 / 2,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            ) {} catch {}
+            IERC20(token1).safeApprove(SWAPROUTER, 0);
+        }
+
+        balance0 = IERC20(token0).balanceOf(address(this));
+        balance1 = IERC20(token1).balanceOf(address(this));
+        _addLiquidity(
+            CellarAddParams({
+                amount0Desired: balance0,
+                amount1Desired: balance1,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
+                deadline: type(uint256).max
+            })
+        );
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external {
@@ -988,57 +1027,7 @@ contract CellarPoolShare is ICellarPoolShare {
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
 
-        if (balance0 > 0 && balance1 > 0) {
-            (uint256 inAmount0, uint256 inAmount1, , ) =
-                _addLiquidity(
-                    CellarAddParams({
-                        amount0Desired: balance0,
-                        amount1Desired: balance1,
-                        amount0Min: 0,
-                        amount1Min: 0,
-                        recipient: address(this),
-                        deadline: type(uint256).max
-                    })
-                );
-            balance0 -= inAmount0;
-            balance1 -= inAmount1;
-        }
-        else {
-            if (balance1 == 0) {
-                IERC20(token0).safeApprove(SWAPROUTER, balance0 / 2);
-                ISwapRouter(SWAPROUTER).exactInputSingle(
-                    ISwapRouter.ExactInputSingleParams({
-                        tokenIn: token0,
-                        tokenOut: token1,
-                        fee: feeLevel,
-                        recipient: address(this),
-                        deadline: type(uint256).max,
-                        amountIn: balance0 / 2,
-                        amountOutMinimum: 0,
-                        sqrtPriceLimitX96: 0
-                    })
-                );
-                IERC20(token0).safeApprove(SWAPROUTER, 0);
-            }
-            if (balance0 == 0) {
-                IERC20(token1).safeApprove(SWAPROUTER, balance1 / 2);
-                ISwapRouter(SWAPROUTER).exactInputSingle(
-                    ISwapRouter.ExactInputSingleParams({
-                        tokenIn: token1,
-                        tokenOut: token0,
-                        fee: feeLevel,
-                        recipient: address(this),
-                        deadline: type(uint256).max,
-                        amountIn: balance1 / 2,
-                        amountOutMinimum: 0,
-                        sqrtPriceLimitX96: 0
-                    })
-                );
-                IERC20(token1).safeApprove(SWAPROUTER, 0);
-            }
-
-            balance0 = IERC20(token0).balanceOf(address(this));
-            balance1 = IERC20(token1).balanceOf(address(this));
+        (uint256 inAmount0, uint256 inAmount1, , ) =
             _addLiquidity(
                 CellarAddParams({
                     amount0Desired: balance0,
@@ -1049,7 +1038,53 @@ contract CellarPoolShare is ICellarPoolShare {
                     deadline: type(uint256).max
                 })
             );
+        balance0 -= inAmount0;
+        balance1 -= inAmount1;
+        if (balance0 > balance1 && balance0 > 2) {
+            IERC20(token0).safeApprove(SWAPROUTER, balance0 / 2);
+            try ISwapRouter(SWAPROUTER).exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: token0,
+                    tokenOut: token1,
+                    fee: feeLevel,
+                    recipient: address(this),
+                    deadline: type(uint256).max,
+                    amountIn: balance0 / 2,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            ) {} catch {}
+            IERC20(token0).safeApprove(SWAPROUTER, 0);
         }
+        else if (balance1 > 2) {
+            IERC20(token1).safeApprove(SWAPROUTER, balance1 / 2);
+            try ISwapRouter(SWAPROUTER).exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: token1,
+                    tokenOut: token0,
+                    fee: feeLevel,
+                    recipient: address(this),
+                    deadline: type(uint256).max,
+                    amountIn: balance1 / 2,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            ) {} catch {}
+            IERC20(token1).safeApprove(SWAPROUTER, 0);
+        }
+
+        balance0 = IERC20(token0).balanceOf(address(this));
+        balance1 = IERC20(token1).balanceOf(address(this));
+        _addLiquidity(
+            CellarAddParams({
+                amount0Desired: balance0,
+                amount1Desired: balance1,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
+                deadline: type(uint256).max
+            })
+        );
     }
 
     function setValidator(address _validator, bool value) external override {
@@ -1160,6 +1195,7 @@ contract CellarPoolShare is ICellarPoolShare {
 
     function _getWeightInfo(CellarTickInfo[] memory _cellarTickInfo)
         internal
+        view
         returns (
             uint256 weightSum0,
             uint256 weightSum1,
@@ -1367,16 +1403,17 @@ contract CellarPoolShare is ICellarPoolShare {
             weight0,
             weight1
         ) = _getWeightInfo(_cellarTickInfo);
-
-        (weightSum0, weightSum1) = _modifyWeightInfo(
-            _cellarTickInfo,
-            cellarParams.amount0Desired,
-            cellarParams.amount1Desired,
-            weightSum0,
-            weightSum1,
-            weight0,
-            weight1
-        );
+        if (weightSum0 > 0 && weightSum1 > 0) {
+            (weightSum0, weightSum1) = _modifyWeightInfo(
+                _cellarTickInfo,
+                cellarParams.amount0Desired,
+                cellarParams.amount1Desired,
+                weightSum0,
+                weightSum1,
+                weight0,
+                weight1
+            );
+        }
 
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
             INonfungiblePositionManager.MintParams memory mintParams =
