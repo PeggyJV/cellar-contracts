@@ -52,12 +52,7 @@ def test_reinvest(USDC, WETH, accounts, SwapRouter, CellarPoolShareContract, Con
     USDC.approve(SwapRouter, 2 ** 256 - 1, {"from": accounts[2]})
     SwapRouter.exactInputSingle([USDC, WETH, 3000, accounts[2], 2 ** 256 - 1, 10000 * 10 ** 6, 1 * 10 ** 18, 0], {"from": accounts[2]})
     CellarPoolShareContract.setValidator(accounts[1], True, {"from": accounts[0]})
-    USDC_balance0 = USDC.balanceOf(accounts[0])
-    WETH_balance0 = WETH.balanceOf(accounts[0])
     CellarPoolShareContract.reinvest({"from": accounts[1]})
-    USDC_balance0 = USDC.balanceOf(accounts[0]) - USDC_balance0
-    WETH_balance0 = WETH.balanceOf(accounts[0]) - WETH_balance0
-    assert USDC_balance0 > 0 or WETH_balance0 > 0
     CellarPoolShareContract.removeLiquidityFromUniV3(cellarRemoveParams, {"from": accounts[1]})
     USDC_diff_2 = USDC.balanceOf(accounts[1]) - USDC_balance
     WETH_diff_2 = WETH.balanceOf(accounts[1]) - WETH_balance
