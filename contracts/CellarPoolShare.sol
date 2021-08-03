@@ -722,6 +722,7 @@ contract CellarPoolShare is ICellarPoolShare {
         external
         override
     {
+        require(block.timestamp <= cellarParams.deadline);
         IERC20(token0).safeTransferFrom(
             msg.sender,
             address(this),
@@ -773,6 +774,7 @@ contract CellarPoolShare is ICellarPoolShare {
         override
         nonReentrant
     {
+        require(block.timestamp <= cellarParams.deadline);
         if (token0 == WETH) {
             if (msg.value > cellarParams.amount0Desired) {
                 payable(msg.sender).transfer(
@@ -854,6 +856,7 @@ contract CellarPoolShare is ICellarPoolShare {
     function removeLiquidityEthFromUniV3(
         CellarRemoveParams calldata cellarParams
     ) external override nonReentrant {
+        require(block.timestamp <= cellarParams.deadline);
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum) =
             _removeLiquidity(cellarParams);
         _burn(msg.sender, cellarParams.tokenAmount);
@@ -884,6 +887,7 @@ contract CellarPoolShare is ICellarPoolShare {
         external
         override
     {
+        require(block.timestamp <= cellarParams.deadline);
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum) =
             _removeLiquidity(cellarParams);
         _burn(msg.sender, cellarParams.tokenAmount);
@@ -995,7 +999,6 @@ contract CellarPoolShare is ICellarPoolShare {
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external {
-
         require(msg.sender == _owner, "Not owner");
         CellarRemoveParams memory removeParams =
             CellarRemoveParams({

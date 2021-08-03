@@ -34,6 +34,13 @@ brownie run scripts/deploy.py --network local
 brownie test
 ```
 
+### Get input amount ratio
+```bash
+brownie run scripts/check_input_ratio.py
+```
+If this amount is `division by zero` or `0`, only one token exists in the cellar.
+
+
 ### Tests Suite Files
 |Test | Description | Expected Failures | File | 
 | --- | --- | --- | --- |
