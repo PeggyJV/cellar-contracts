@@ -9,8 +9,6 @@ Sommelier Ethereum Cellars Work in Progress
 * [brownie](https://github.com/iamdefinitelyahuman/brownie) - tested with version [1.14.6](https://github.com/eth-brownie/brownie/releases/tag/v1.14.6)
 * ganache-cli
 
-The contracts are compiled using [Vyper](https://github.com/vyperlang/vyper), however, installation of the required Vyper versions is handled by Brownie.
-
 Run Ganache-cli mainnet-fork environment
 
 ```bash
@@ -52,5 +50,16 @@ If this amount is `division by zero` or `0`, only one token exists in the cellar
 |Weight Management | Test liquidities of NFLP in the contract after adding liquidity using 1 ETH and 1,000 USDC, 1 ETH and 5,000 USDC. | The liquidities' ratio should be the approximately same as weight. Accuracy is accurater than 1 millionth | test_05_weight.py |
 
 
-### Extra Tests with Hardhat
-You may also see our Hardhat test implementation here: [Hardhat & Remix Readme](extras/hardhat/hardhat.md)
+### Libraries Used
+|Function Name | Library Description | Source URL or additional documentation |
+| --- | --- | --- |
+|TickMath | Uniswap Math library for computing sqrt prices from ticks and vice versa. Computes sqrt price for ticks of size 1.0001, i.e. sqrt(1.0001^tick) as fixed point Q64.96 numbers. Supports prices between 2**-128 and 2**128 | https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/libraries/TickMath.sol | 
+|LiquidityAmounts | Liquidity amount functions provides functions for computing liquidity amounts from token amounts and prices | https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/libraries/LiquidityAmounts.sol | 
+|SafeMath | Zeppelin Solidity Library for Math operations with safety checks throws on error| https://github.com/OpenZeppelin/openzeppelin-contracts |
+|Address |
+|SafeERC20 | Zeppelin Solidity wrapper around the interface that eliminates the need to handle boolean return| https://docs.openzeppelin.com/contracts/3.x/api/token/erc20 | 
+|FixedPoint96 | A library for handling binary fixed point numbers | https://docs.uniswap.org/protocol/reference/core/libraries/FixedPoint96 |
+|FullMath | Contains 512-bit math functions. Facilitates multiplication and division that can have overflow of an intermediate value without any loss of precision. Handles "phantom overflow" i.e., allows multiplication and division where an intermediate value overflows 256 bits|
+ | https://github.com/Uniswap/uniswap-lib/blob/master/contracts/libraries/FullMath.sol | 
+
+
