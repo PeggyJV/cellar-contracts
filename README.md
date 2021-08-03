@@ -63,20 +63,20 @@ If this amount is `division by zero` or `0`, only one token exists in the cellar
 
 
 ## External functions
-| Function Name | Parameters |
-| --- | --- |
+| Function Name | Parameters | Description | 
+| --- | --- | --- |
 |transfer|address recipient, uint256 amount|
 |approve|address spender, uint256 amount|
 |transferFrom|address sender,address recipient,uint256 amount|
-|addLiquidityForUniV3|CellarAddParams calldata cellarParams|
-|addLiquidityEthForUniV3|CellarAddParams calldata cellarParams|
-|removeLiquidityEthFromUniV3|CellarRemoveParams calldata cellarParams|
-|removeLiquidityFromUniV3|CellarRemoveParams calldata cellarParams|
+|addLiquidityForUniV3|CellarAddParams calldata cellarParams| Add liquidity with both tokens to Uniswap v3 pool |
+|addLiquidityEthForUniV3|CellarAddParams calldata | Add liquidity with Eth and the other token to Uniswap v3 pool| cellarParams|
+|removeLiquidityEthFromUniV3|CellarRemoveParams calldata cellarParams| Remove liquidity to Eth and the other token from Uniswap v3 pool | 
+|removeLiquidityFromUniV3|CellarRemoveParams calldata cellarParams| Remove liquidity to both tokens from the Uniswap v3 pool | Collect swap fee and re-add liquidity to the Uniswap v3 pool. Some amounts go to owner as "Use Fee" |
 |reinvest||
-|rebalance|CellarTickInfo[] memory _cellarTickInfo|
-|setValidator|address _validator, bool value|
-|transferOwnership|address, newOwner|
-|setFee|uint16, newFee|
+|rebalance|CellarTickInfo[] memory _cellarTickInfo| Update NFLP positions of the Uniswap v3 pool | 
+|setValidator|address _validator, bool value| 
+|transferOwnership|address, newOwner|  
+|setFee|uint16, newFee| Set Use Fee ratio to owner | 
 |owner||
 |name||
 |symbol||
@@ -86,5 +86,11 @@ If this amount is `division by zero` or `0`, only one token exists in the cellar
 |allowance|address owner_, address spender|
 
 ## Internal functions
-The internal functions are taken from https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1-solc-0.7-2/contracts/token/ERC20/ERC20.sol
+| Function Name | Parameters | Description | 
+| --- | --- | --- |
+|modifyWeightInfo |CellarTickInfo[] memory _cellarTickInfo,uint256 amount0Desired,uint256 amount1Desired,uint256 weightSum0,uint256 weightSum1,uint256[] memory weight0,uint256[] memory weight1 |Calculate Sum of weights of token0 and token1 to add exact weighted-liquidity |
+|addLiquidity |CellarAddParams memory cellarParams | Add liquidity to NFLP |
+|removeLiquidity |CellarRemoveParams memory cellarParams | Remove liquidity from NFLP |
+
+Other internal functions are taken from https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1-solc-0.7-2/contracts/token/ERC20/ERC20.sol
 Common ERC-20 interfaces. Please use as reference.
