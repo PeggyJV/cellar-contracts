@@ -72,7 +72,7 @@ If this amount is `division by zero` or `0`, only one token exists in the cellar
 |addLiquidityEthForUniV3|CellarAddParams calldata | Add liquidity with Eth and the other token to Uniswap v3 pool| cellarParams|
 |removeLiquidityEthFromUniV3|CellarRemoveParams calldata cellarParams| Remove liquidity to Eth and the other token from Uniswap v3 pool | 
 |removeLiquidityFromUniV3|CellarRemoveParams calldata cellarParams| Remove liquidity to both tokens from the Uniswap v3 pool | Collect swap fee and re-add liquidity to the Uniswap v3 pool. Some amounts go to owner as "Use Fee" |
-|reinvest||
+|reinvest| | Collect swap fee and re-add liquidity. Some amounts go to owner as "Use Fee"|
 |rebalance|CellarTickInfo[] memory _cellarTickInfo| Update NFLP positions of the Uniswap v3 pool | 
 |setValidator|address _validator, bool value| 
 |transferOwnership|address, newOwner|  
@@ -88,6 +88,7 @@ If this amount is `division by zero` or `0`, only one token exists in the cellar
 ## Internal functions
 | Function Name | Parameters | Description | 
 | --- | --- | --- |
+|getWeightInfo |CellarTickInfo[] memory _cellarTickInfo | Get weights of Token0 and Token1 to add liquidity per NFLP |
 |modifyWeightInfo |CellarTickInfo[] memory _cellarTickInfo,uint256 amount0Desired,uint256 amount1Desired,uint256 weightSum0,uint256 weightSum1,uint256[] memory weight0,uint256[] memory weight1 |Calculate Sum of weights of token0 and token1 to add exact weighted-liquidity |
 |addLiquidity |CellarAddParams memory cellarParams | Add liquidity to NFLP |
 |removeLiquidity |CellarRemoveParams memory cellarParams | Remove liquidity from NFLP |
