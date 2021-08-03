@@ -62,3 +62,29 @@ If this amount is `division by zero` or `0`, only one token exists in the cellar
 |FullMath | Contains 512-bit math functions. Facilitates multiplication and division that can have overflow of an intermediate value without any loss of precision. Handles "phantom overflow" i.e., allows multiplication and division where an intermediate value overflows 256 bits | [Uniswap libraries](https://github.com/Uniswap/uniswap-lib/blob/master/contracts/libraries/FullMath.sol) | 
 
 
+## External functions
+| Function Name | Parameters |
+| --- | --- |
+|transfer|address recipient, uint256 amount|
+|approve|address spender, uint256 amount|
+|transferFrom|address sender,address recipient,uint256 amount|
+|addLiquidityForUniV3|CellarAddParams calldata cellarParams|
+|addLiquidityEthForUniV3|CellarAddParams calldata cellarParams|
+|removeLiquidityEthFromUniV3|CellarRemoveParams calldata cellarParams|
+|removeLiquidityFromUniV3|CellarRemoveParams calldata cellarParams|
+|reinvest||
+|rebalance|CellarTickInfo[] memory _cellarTickInfo|
+|setValidator|address _validator, bool value|
+|transferOwnership|address, newOwner|
+|setFee|uint16, newFee|
+|owner||
+|name||
+|symbol||
+|decimals||
+|totalSupply||
+|balanceOf|address account|
+|allowance|address owner_, address spender|
+
+## Internal functions
+The internal functions are taken from https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1-solc-0.7-2/contracts/token/ERC20/ERC20.sol
+Common ERC-20 interfaces. Please use as reference.
