@@ -921,7 +921,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         );
     }
 
-    function reinvest() external override onlyValidator {
+    function reinvest() external override onlyValidator notLocked(msg.sender) {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
         uint256 weightSum;
         uint256 balance0;
@@ -1041,7 +1041,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         );
     }
 
-    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external {
+    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external notLocked(msg.sender) {
         require(msg.sender == _owner, "R21");//"Not owner"
         CellarRemoveParams memory removeParams =
             CellarRemoveParams({
