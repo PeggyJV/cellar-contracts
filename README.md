@@ -9,8 +9,6 @@ Sommelier Ethereum Cellars Work in Progress
 * [brownie](https://github.com/iamdefinitelyahuman/brownie) - tested with version [1.14.6](https://github.com/eth-brownie/brownie/releases/tag/v1.14.6)
 * ganache-cli
 
-The contracts are compiled using [Vyper](https://github.com/vyperlang/vyper), however, installation of the required Vyper versions is handled by Brownie.
-
 Run Ganache-cli mainnet-fork environment
 
 ```bash
@@ -52,5 +50,48 @@ If this amount is `division by zero` or `0`, only one token exists in the cellar
 |Weight Management | Test liquidities of NFLP in the contract after adding liquidity using 1 ETH and 1,000 USDC, 1 ETH and 5,000 USDC. | The liquidities' ratio should be the approximately same as weight. Accuracy is accurater than 1 millionth | test_05_weight.py |
 
 
-### Extra Tests with Hardhat
-You may also see our Hardhat test implementation here: [Hardhat & Remix Readme](extras/hardhat/hardhat.md)
+### Libraries Used
+|Library Name | Library Description | Source URL or additional documentation |
+| --- | --- | --- |
+|TickMath | Uniswap Math library for computing sqrt prices from ticks and vice versa. Computes sqrt price for ticks of size 1.0001, i.e. sqrt(1.0001^tick) as fixed point Q64.96 numbers. Supports prices between 2**-128 and 2**128 | [Uniswap v3 Core](https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/libraries/TickMath.sol) | 
+|LiquidityAmounts | Liquidity amount functions provides functions for computing liquidity amounts from token amounts and prices | [Uniswap v3 periphery](https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/libraries/LiquidityAmounts.sol) | 
+|SafeMath | Zeppelin Solidity Library for Math operations with safety checks throws on error| [OpenZeppelin](https://github.com/OpenZeppelin/openzeppelin-contracts) |
+|Address | Collection of functions related to the address type. Returns true if account is a contract.| [OpenZeppelin](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1-solc-0.7-2/contracts/utils/Address.sol) | 
+|SafeERC20 | Zeppelin Solidity wrapper around the interface that eliminates the need to handle boolean return| [OpenZeppelin](https://docs.openzeppelin.com/contracts/3.x/api/token/erc20) | 
+|FixedPoint96 | A library for handling binary fixed point numbers | [Uniswap Core](https://docs.uniswap.org/protocol/reference/core/libraries/FixedPoint96) |
+|FullMath | Contains 512-bit math functions. Facilitates multiplication and division that can have overflow of an intermediate value without any loss of precision. Handles "phantom overflow" i.e., allows multiplication and division where an intermediate value overflows 256 bits | [Uniswap libraries](https://github.com/Uniswap/uniswap-lib/blob/master/contracts/libraries/FullMath.sol) | 
+
+
+## External functions
+| Function Name | Parameters | Description | 
+| --- | --- | --- |
+|transfer|address recipient, uint256 amount|
+|approve|address spender, uint256 amount|
+|transferFrom|address sender,address recipient,uint256 amount|
+|addLiquidityForUniV3|CellarAddParams calldata cellarParams| Add liquidity with both tokens to Uniswap v3 pool |
+|addLiquidityEthForUniV3|CellarAddParams calldata | Add liquidity with Eth and the other token to Uniswap v3 pool| cellarParams|
+|removeLiquidityEthFromUniV3|CellarRemoveParams calldata cellarParams| Remove liquidity to Eth and the other token from Uniswap v3 pool | 
+|removeLiquidityFromUniV3|CellarRemoveParams calldata cellarParams| Remove liquidity to both tokens from the Uniswap v3 pool | Collect swap fee and re-add liquidity to the Uniswap v3 pool. Some amounts go to owner as "Use Fee" |
+|reinvest| | Collect swap fee and re-add liquidity. Some amounts go to owner as "Use Fee"|
+|rebalance|CellarTickInfo[] memory _cellarTickInfo| Update NFLP positions of the Uniswap v3 pool | 
+|setValidator|address _validator, bool value| 
+|transferOwnership|address, newOwner|  
+|setFee|uint16, newFee| Set Use Fee ratio to owner | 
+|owner||
+|name||
+|symbol||
+|decimals||
+|totalSupply||
+|balanceOf|address account|
+|allowance|address owner_, address spender|
+
+## Internal functions
+| Function Name | Parameters | Description | 
+| --- | --- | --- |
+|getWeightInfo |CellarTickInfo[] memory _cellarTickInfo | Get weights of Token0 and Token1 to add liquidity per NFLP |
+|modifyWeightInfo |CellarTickInfo[] memory _cellarTickInfo,uint256 amount0Desired,uint256 amount1Desired,uint256 weightSum0,uint256 weightSum1,uint256[] memory weight0,uint256[] memory weight1 |Calculate Sum of weights of token0 and token1 to add exact weighted-liquidity |
+|addLiquidity |CellarAddParams memory cellarParams | Add liquidity to NFLP |
+|removeLiquidity |CellarRemoveParams memory cellarParams | Remove liquidity from NFLP |
+
+Other internal functions are taken from https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1-solc-0.7-2/contracts/token/ERC20/ERC20.sol
+Common ERC-20 interfaces. Please use as reference.
