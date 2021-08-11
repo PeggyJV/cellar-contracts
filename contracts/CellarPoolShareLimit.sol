@@ -6,7 +6,7 @@ pragma abicoder v2;
 
 import "./interfaces.sol";
 
-contract CellarPoolShare is ICellarPoolShare, BlockLock {
+contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
     using SafeERC20 for IERC20;
 
     address constant NONFUNGIBLEPOSITIONMANAGER =
@@ -38,6 +38,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     CellarTickInfo[] public cellarTickInfo;
     bool private _isEntered;
     uint16 public fee = 1000;
+    AggregatorV3Interface public constant priceFeed = AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46);
 
     constructor(
         string memory name_,
@@ -113,6 +114,12 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         return true;
     }
 
+    function totalPrice(uint256 amount0, uint256 amount1) internal view returns (uint256 total) {
+        // WETH + USDT
+        uint256 price = uint256(priceFeed.latestAnswer());
+        total = amount0 * 10 ** 6 / price + amount1;
+    }
+
     function addLiquidityForUniV3(CellarAddParams calldata cellarParams)
         external
         override
@@ -139,6 +146,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             uint128 liquiditySum
         ) = _addLiquidity(cellarParams);
 
+        uint256 prevTotalSupply = _totalSupply;
+
         if (liquidityBefore == 0) {
             _mint(msg.sender, liquiditySum);
         } else {
@@ -149,7 +158,16 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
         require(inAmount0 >= cellarParams.amount0Min, "R16");//"Less than Amount0Min"
         require(inAmount1 >= cellarParams.amount1Min, "R17");//"Less than Amount1Min"
-
+        // check limitation
+        uint256 increasedSupply = _totalSupply - prevTotalSupply;
+        if (increasedSupply > 0) {
+            uint256 inPrice = totalPrice(inAmount0, inAmount1);
+            uint256 userPrice = FullMath.mulDiv(inPrice, _balances[msg.sender], increasedSupply);
+            require(userPrice <= 10000 * 10 ** 6, "R31"); // "More than 10000 USD"
+            uint256 total = FullMath.mulDiv(inPrice, _totalSupply, increasedSupply);
+            require(total <= 500000 * 10 ** 6, "R32"); // "More than 500000 USD"
+        }
+        //
         if (cellarParams.amount0Desired > inAmount0) {
             IERC20(token0).safeTransfer(
                 msg.sender,
@@ -218,6 +236,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             uint128 liquiditySum
         ) = _addLiquidity(cellarParams);
 
+        uint256 prevTotalSupply = _totalSupply;
+
         if (liquidityBefore == 0) {
             _mint(msg.sender, liquiditySum);
         } else {
@@ -229,7 +249,16 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
         require(inAmount0 >= cellarParams.amount0Min, "R16");
         require(inAmount1 >= cellarParams.amount1Min, "R17");
-
+        // check limitation
+        uint256 increasedSupply = _totalSupply - prevTotalSupply;
+        if (increasedSupply > 0) {
+            uint256 inPrice = totalPrice(inAmount0, inAmount1);
+            uint256 userPrice = FullMath.mulDiv(inPrice, _balances[msg.sender], increasedSupply);
+            require(userPrice <= 10000 * 10 ** 6, "R31"); // "More than 10000 USD"
+            uint256 total = FullMath.mulDiv(inPrice, _totalSupply, increasedSupply);
+            require(total <= 500000 * 10 ** 6, "R32"); // "More than 500000 USD"
+        }
+        //
         uint256 retAmount0 = cellarParams.amount0Desired - inAmount0;
         uint256 retAmount1 = cellarParams.amount1Desired - inAmount1;
 
