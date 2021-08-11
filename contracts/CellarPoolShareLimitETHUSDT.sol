@@ -363,7 +363,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
                 )
             )
                 .slot0();
-        if (balance0 * inAmount1 > balance1 * inAmount0) {
+        if (balance0 * inAmount1 > balance1 * inAmount0 || (inAmount0 == 0 && inAmount1 == 0 && balance0 > balance1)) {
             uint256 swapAmount = (balance0 * inAmount1 - balance1 * inAmount0)
                 /
                 (FullMath.mulDiv(
@@ -374,6 +374,9 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
                     sqrtPriceX96,
                     FixedPoint96.Q96)
                 + inAmount1);
+            if (inAmount0 == 0 && inAmount1 == 0) {
+                swapAmount = balance0 / 2;
+            }
             IERC20(token0).safeApprove(SWAPROUTER, swapAmount);
             try ISwapRouter(SWAPROUTER).exactInputSingle(
                 ISwapRouter.ExactInputSingleParams({
@@ -389,7 +392,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
             ) {} catch {}
             IERC20(token0).safeApprove(SWAPROUTER, 0);
         }
-        if (balance0 * inAmount1 < balance1 * inAmount0) {
+        if (balance0 * inAmount1 < balance1 * inAmount0 || (inAmount0 == 0 && inAmount1 == 0 && balance0 < balance1)) {
             uint256 swapAmount = (balance1 * inAmount0 - balance0 * inAmount1)
                 /
                 (FullMath.mulDiv(
@@ -400,6 +403,9 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
                     FixedPoint96.Q96,
                     sqrtPriceX96)
                 + inAmount0);
+            if (inAmount0 == 0 && inAmount1 == 0) {
+                swapAmount = balance1 / 2;
+            }
             IERC20(token1).safeApprove(SWAPROUTER, swapAmount);
             try ISwapRouter(SWAPROUTER).exactInputSingle(
                 ISwapRouter.ExactInputSingleParams({

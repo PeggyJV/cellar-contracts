@@ -2,16 +2,16 @@
 
 import pytest
 
-def test_weight(USDC, WETH, accounts, SwapRouter, NonfungiblePositionManager, CellarPoolShareContract):
+def test_weight(USDT, WETH, accounts, SwapRouter, NonfungiblePositionManager, CellarPoolShareContract):
     ACCURACY = 10 ** 6
-    SwapRouter.exactOutputSingle([WETH, USDC, 3000, accounts[0], 2 ** 256 - 1, 6000 * 10 ** 6, 6 * 10 ** 18, 0], {"from": accounts[0], "value": 6 * 10 ** 18})
-    USDC.approve(CellarPoolShareContract, 6000 * 10 ** 6, {"from": accounts[0]})
-    USDC_amount = 1000 * 10 ** 6
+    SwapRouter.exactOutputSingle([WETH, USDT, 3000, accounts[0], 2 ** 256 - 1, 6000 * 10 ** 6, 6 * 10 ** 18, 0], {"from": accounts[0], "value": 6 * 10 ** 18})
+    USDT.approve(CellarPoolShareContract, 6000 * 10 ** 6, {"from": accounts[0]})
+    USDT_amount = 1000 * 10 ** 6
     ETH_amount = 1 * 10 ** 18
-    cellarAddParams = [1000 * 10 ** 6, 1 * 10 ** 18, 0, 0, accounts[0], 2 ** 256 - 1]
-    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
-    cellarAddParams = [5000 * 10 ** 6, 1 * 10 ** 18, 0, 0, accounts[0], 2 ** 256 - 1]
-    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
+    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, accounts[0], 2 ** 256 - 1]
+    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[0], "value": ETH_amount})
+    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, accounts[0], 2 ** 256 - 1]
+    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[0], "value": ETH_amount})
 
     token_id_0 = NonfungiblePositionManager.tokenOfOwnerByIndex(CellarPoolShareContract, 0)
     liq_0 = NonfungiblePositionManager.positions(token_id_0)[7]
