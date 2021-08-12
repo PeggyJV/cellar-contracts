@@ -6,7 +6,7 @@ pragma abicoder v2;
 
 import "./interfaces.sol";
 
-contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
+contract CellarPoolShareLimitUSDCETH is ICellarPoolShare, BlockLock {
     using SafeERC20 for IERC20;
 
     address constant NONFUNGIBLEPOSITIONMANAGER =
@@ -38,7 +38,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
     CellarTickInfo[] public cellarTickInfo;
     bool private _isEntered;
     uint16 public fee = 1000;
-    AggregatorV3Interface public constant priceFeed = AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46);
+    AggregatorV3Interface public constant priceFeed = AggregatorV3Interface(0x986b5E1e1755e3C2440e960477f25201B0a8bbD4);
 
     constructor(
         string memory name_,
@@ -116,9 +116,9 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
     }
 
     function totalPrice(uint256 amount0, uint256 amount1) internal view returns (uint256 total) {
-        // WETH + USDT
+        // USDC + WETH
         uint256 price = uint256(priceFeed.latestAnswer());
-        total = amount0 * 10 ** 6 / price + amount1;
+        total = amount1 * 10 ** 6 / price + amount0;
     }
 
     function addLiquidityForUniV3(CellarAddParams calldata cellarParams)

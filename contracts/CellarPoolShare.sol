@@ -56,6 +56,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         for (uint256 i = 0; i < _cellarTickInfo.length; i++) {
             require(_cellarTickInfo[i].weight > 0, "R10");//"Weight cannot be zero"
             require(_cellarTickInfo[i].tokenId == 0, "R11");//"tokenId is not empty"
+            require(_cellarTickInfo[i].tickUpper > _cellarTickInfo[i].tickLower, "R30");//"Wrong tick"
             if (i > 0) {
                 require(_cellarTickInfo[i].tickUpper <= _cellarTickInfo[i - 1].tickLower, "R12");//"Wrong tick tier"
             }
