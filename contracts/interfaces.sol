@@ -566,6 +566,20 @@ interface ICellarPoolShare is IERC20 {
         uint256 amount1
     );
 
+    event Reinvest (
+        uint256 fees0,
+        uint256 fees1,
+        uint256 amount0,
+        uint256 amount1
+    );
+
+    event Rebalance (
+        uint256 fees0,
+        uint256 fees1,
+        uint256 amount0,
+        uint256 amount1
+    );
+
     function addLiquidityForUniV3(CellarAddParams calldata cellarParams)
         external;
 
