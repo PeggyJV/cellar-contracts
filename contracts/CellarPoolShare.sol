@@ -333,8 +333,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         balance0 -= inAmount0;
         balance1 -= inAmount1;
 
-        totalInAmount0 += inAmount0
-        totalInAmount1 += inAmount1
+        totalInAmount0 += inAmount0;
+        totalInAmount1 += inAmount1;
 
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
@@ -417,9 +417,9 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     deadline: type(uint256).max
                 })
             );
-        
-        totalInAmount0 += inAmount0
-        totalInAmount1 += inAmount1
+
+        totalInAmount0 += inAmount0;
+        totalInAmount1 += inAmount1;
     }
 
     function reinvest() external override onlyValidator notLocked(msg.sender) {
@@ -453,7 +453,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
         (uint256 investedAmount0, uint256 investedAmount1) = invest();
 
-        emit Reinvest(fee0, fee1, investedAmount0, investedAmount1)
+        emit Reinvest(fee0, fee1, investedAmount0, investedAmount1);
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external notLocked(msg.sender) {
@@ -486,7 +486,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
 
         (uint256 investedAmount0, uint256 investedAmount1) = invest();
-        emit Rebalance(fee0, fee1, investedAmount0, investedAmount1)
+        emit Rebalance(fee0, fee1, investedAmount0, investedAmount1);
     }
 
     function setValidator(address _validator, bool value) external override {
