@@ -486,6 +486,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
 
         (uint256 investedAmount0, uint256 investedAmount1) = invest();
+
         emit Rebalance(fee0, fee1, investedAmount0, investedAmount1);
     }
 
