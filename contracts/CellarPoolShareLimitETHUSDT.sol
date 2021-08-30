@@ -495,7 +495,8 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
                 recipient: address(this),
                 deadline: type(uint256).max
             });
-        _removeLiquidity(removeParams);
+        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, uint256 fee0, uint256 fee1) =
+            _removeLiquidity(removeParams);
         CellarTickInfo[] memory _oldCellarTickInfo = cellarTickInfo;
         for (uint256 i = 0; i < _oldCellarTickInfo.length; i++) {
             INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).burn(
