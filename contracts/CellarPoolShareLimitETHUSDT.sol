@@ -287,7 +287,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
     ) external override nonReentrant notLocked(msg.sender) {
         lock(msg.sender);
         require(block.timestamp <= cellarParams.deadline);
-        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum) =
+        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, , ) =
             _removeLiquidity(cellarParams);
         _burn(msg.sender, cellarParams.tokenAmount);
 
@@ -320,7 +320,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
     {
         lock(msg.sender);
         require(block.timestamp <= cellarParams.deadline);
-        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum) =
+        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, , ) =
             _removeLiquidity(cellarParams);
         _burn(msg.sender, cellarParams.tokenAmount);
 
@@ -338,7 +338,13 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
         );
     }
 
-    function invest() private {
+    function invest()
+        private
+        returns (
+            uint256 totalInAmount0,
+            uint256 totalInAmount1
+        )
+    {
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
 
@@ -355,6 +361,10 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
             );
         balance0 -= inAmount0;
         balance1 -= inAmount1;
+
+        totalInAmount0 += inAmount0;
+        totalInAmount1 += inAmount1;
+
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
                 IUniswapV3Factory(UNISWAPV3FACTORY).getPool(
@@ -425,16 +435,20 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
 
         balance0 = IERC20(token0).balanceOf(address(this));
         balance1 = IERC20(token1).balanceOf(address(this));
-        _addLiquidity(
-            CellarAddParams({
-                amount0Desired: balance0,
-                amount1Desired: balance1,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: address(this),
-                deadline: type(uint256).max
-            })
-        );
+        (inAmount0, inAmount1, , ) =
+            _addLiquidity(
+                CellarAddParams({
+                    amount0Desired: balance0,
+                    amount1Desired: balance1,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    recipient: address(this),
+                    deadline: type(uint256).max
+                })
+            );
+
+        totalInAmount0 += inAmount0;
+        totalInAmount1 += inAmount1;
     }
 
     function reinvest() external override onlyValidator notLocked(msg.sender) {
@@ -466,7 +480,9 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
             IERC20(token1).safeTransfer(_owner, fee1);
         }
 
-        invest();
+        (uint256 investedAmount0, uint256 investedAmount1) = invest();
+
+        emit Reinvest(fee0, fee1, investedAmount0, investedAmount1);
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external notLocked(msg.sender) {
@@ -479,7 +495,8 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
                 recipient: address(this),
                 deadline: type(uint256).max
             });
-        _removeLiquidity(removeParams);
+        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, uint256 fee0, uint256 fee1) =
+            _removeLiquidity(removeParams);
         CellarTickInfo[] memory _oldCellarTickInfo = cellarTickInfo;
         for (uint256 i = 0; i < _oldCellarTickInfo.length; i++) {
             INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).burn(
@@ -497,7 +514,9 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
             cellarTickInfo.push(_cellarTickInfo[i]);
         }
 
-        invest();
+        (uint256 investedAmount0, uint256 investedAmount1) = invest();
+
+        emit Rebalance(fee0, fee1, investedAmount0, investedAmount1);
     }
 
     function setValidator(address _validator, bool value) external override {
@@ -926,12 +945,12 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
         returns (
             uint256 outAmount0,
             uint256 outAmount1,
-            uint128 liquiditySum
+            uint128 liquiditySum,
+            uint256 fee0,
+            uint256 fee1
         )
     {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
-        uint256 fee0;
-        uint256 fee1;
         for (uint16 i = 0; i < _cellarTickInfo.length; i++) {
             (, , , , , , , uint128 liquidity, , , , ) =
                 INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
