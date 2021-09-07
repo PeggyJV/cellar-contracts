@@ -608,6 +608,8 @@ interface ICellarPoolShare is IERC20 {
 
     function symbol() external view returns (string memory);
 
+    function getCellarTickInfo() external view returns (CellarTickInfo[] memory);
+
     function decimals() external pure returns (uint8);
 }
 

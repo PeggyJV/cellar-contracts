@@ -572,6 +572,15 @@ contract CellarPoolShareLimitUSDCETH is ICellarPoolShare, BlockLock {
         return _allowances[owner_][spender];
     }
 
+    function getCellarTickInfo()
+        external
+        view
+        override
+        returns (CellarTickInfo[] memory)
+    {
+        return cellarTickInfo;
+    }
+
     function _transfer(
         address sender,
         address recipient,
