@@ -296,6 +296,7 @@ library SafeERC20 {
 }
 
 library FixedPoint96 {
+    uint8 internal constant RESOLUTION = 96;
     uint256 internal constant Q96 = 0x1000000000000000000000000;
 }
 
@@ -497,6 +498,49 @@ library LiquidityAmounts {
             );
         }
     }
+
+    function getAmount0ForLiquidity(
+        uint160 sqrtRatioAX96,
+        uint160 sqrtRatioBX96,
+        uint128 liquidity
+    ) internal pure returns (uint256 amount0) {
+        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+
+        return
+            FullMath.mulDiv(
+                uint256(liquidity) << FixedPoint96.RESOLUTION,
+                sqrtRatioBX96 - sqrtRatioAX96,
+                sqrtRatioBX96
+            ) / sqrtRatioAX96;
+    }
+
+    function getAmount1ForLiquidity(
+        uint160 sqrtRatioAX96,
+        uint160 sqrtRatioBX96,
+        uint128 liquidity
+    ) internal pure returns (uint256 amount1) {
+        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+
+        return FullMath.mulDiv(liquidity, sqrtRatioBX96 - sqrtRatioAX96, FixedPoint96.Q96);
+    }
+
+    function getAmountsForLiquidity(
+        uint160 sqrtRatioX96,
+        uint160 sqrtRatioAX96,
+        uint160 sqrtRatioBX96,
+        uint128 liquidity
+    ) internal pure returns (uint256 amount0, uint256 amount1) {
+        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+
+        if (sqrtRatioX96 <= sqrtRatioAX96) {
+            amount0 = getAmount0ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity);
+        } else if (sqrtRatioX96 < sqrtRatioBX96) {
+            amount0 = getAmount0ForLiquidity(sqrtRatioX96, sqrtRatioBX96, liquidity);
+            amount1 = getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioX96, liquidity);
+        } else {
+            amount1 = getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity);
+        }
+    }
 }
 
 interface ICellarPoolShare is IERC20 {
@@ -581,18 +625,11 @@ interface ICellarPoolShare is IERC20 {
     );
 
     function addLiquidityForUniV3(CellarAddParams calldata cellarParams)
-        external;
-
-    function addLiquidityEthForUniV3(CellarAddParams calldata cellarParams)
         external
         payable;
 
     function removeLiquidityFromUniV3(CellarRemoveParams calldata cellarParams)
         external;
-
-    function removeLiquidityEthFromUniV3(
-        CellarRemoveParams calldata cellarParams
-    ) external;
 
     function reinvest() external;
 
@@ -600,7 +637,9 @@ interface ICellarPoolShare is IERC20 {
 
     function transferOwnership(address newOwner) external;
 
-    function setFee(uint16 newFee) external;
+    function setManagementFee(uint256 newFee) external;
+
+    function setPerformanceFee(uint256 newFee) external;
 
     function owner() external view returns (address);
 
@@ -623,12 +662,9 @@ contract BlockLock {
     // last block for which this address is timelocked
     mapping(address => uint256) public lastLockedBlock;
 
-    function lock(address _address) internal {
-        lastLockedBlock[_address] = block.number + BLOCK_LOCK_COUNT;
-    }
-
     modifier notLocked(address lockedAddress) {
         require(lastLockedBlock[lockedAddress] <= block.number, "R30");//"Locked"
+        lastLockedBlock[lockedAddress] = block.number + BLOCK_LOCK_COUNT;
         _;
     }
 }

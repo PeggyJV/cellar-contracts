@@ -10,13 +10,13 @@ def test_add_liquidity_ETH(USDT, WETH, accounts, SwapRouter, CellarPoolShareCont
     USDT_amount = 1000 * 10 ** 6
     ETH_amount = 1 * 10 ** 18
     cellarAddParams = [ETH_amount, USDT_amount, 0, 0, accounts[0], 2 ** 256 - 1]
-    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
-    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
-    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
+    CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
+    CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
+    CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
     cellarAddParams = [ETH_amount, USDT_amount, 0, 0, accounts[1], 2 ** 256 - 1]
-    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})
-    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})
-    CellarPoolShareContract.addLiquidityEthForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})
+    CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})
+    CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})
+    CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})
     assert CellarPoolShareContract.balanceOf(accounts[0]) == CellarPoolShareContract.balanceOf(accounts[1])
 
 def test_remove_liquidity(USDT, WETH, accounts, CellarPoolShareContract):
@@ -28,5 +28,5 @@ def test_remove_liquidity(USDT, WETH, accounts, CellarPoolShareContract):
 def test_remove_liquidity_ETH(USDT, WETH, accounts, CellarPoolShareContract):
     bal = CellarPoolShareContract.balanceOf(accounts[1])
     cellarRemoveParams = [bal // 2, 0, 0, accounts[1], 2 ** 256 - 1]
-    CellarPoolShareContract.removeLiquidityEthFromUniV3(cellarRemoveParams, {"from": accounts[1]})
+    CellarPoolShareContract.removeLiquidityFromUniV3(cellarRemoveParams, {"from": accounts[1]})
     assert bal - CellarPoolShareContract.balanceOf(accounts[1]) == bal // 2
