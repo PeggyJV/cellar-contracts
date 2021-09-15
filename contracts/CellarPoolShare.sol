@@ -230,7 +230,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         CellarRemoveParams calldata cellarParams
     ) external override nonReentrant notLocked(msg.sender) {
         require(block.timestamp <= cellarParams.deadline);
-        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, , ) =
+        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, ) =
             _removeLiquidity(cellarParams);
         _burn(msg.sender, cellarParams.tokenAmount);
 
@@ -429,7 +429,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
         (uint256 investedAmount0, uint256 investedAmount1) = invest(sqrtPriceX96);
 
-        emit Reinvest(fee0, fee1, investedAmount0, investedAmount1);
+        emit Reinvest(balance0, balance1, investedAmount0, investedAmount1);
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external notLocked(msg.sender) {
@@ -451,7 +451,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 recipient: address(this),
                 deadline: type(uint256).max
             });
-        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, uint256 fee0, uint256 fee1) =
+        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, UintPair memory collectedFee) =
             _removeLiquidity(removeParams);
         lastManageTimestamp = block.timestamp;
         if (fee0 > 0) {
@@ -479,7 +479,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
         (uint256 investedAmount0, uint256 investedAmount1) = invest(sqrtPriceX96);
 
-        emit Rebalance(fee0, fee1, investedAmount0, investedAmount1);
+        emit Rebalance(collectedFee.a, collectedFee.b, investedAmount0, investedAmount1);
     }
 
     function setValidator(address _validator, bool value) external override {
@@ -923,12 +923,10 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             uint256 outAmount0,
             uint256 outAmount1,
             uint128 liquiditySum,
-            uint256 fee0,
-            uint256 fee1
+            UintPair memory collectedFee
         )
     {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
-        UintPair memory collectedFee;
         uint256 duration = block.timestamp - lastManageTimestamp;
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
