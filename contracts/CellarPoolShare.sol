@@ -464,10 +464,10 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 recipient: address(this),
                 deadline: type(uint256).max
             });
-        lastManageTimestamp = block.timestamp;
 
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, CellarFees memory cellarFees) =
             _removeLiquidity(removeParams);
+        lastManageTimestamp = block.timestamp;
 
         uint256 fee0 = cellarFees.management0 + cellarFees.performance0;
         uint256 fee1 = cellarFees.management1 + cellarFees.performance1;
