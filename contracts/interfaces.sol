@@ -594,6 +594,15 @@ interface ICellarPoolShare is IERC20 {
         uint256 b;
     }
 
+    struct CellarFees {
+        uint256 collect0;
+        uint256 collect1;
+        uint256 management0;
+        uint256 management1;
+        uint256 performance0;
+        uint256 performance1;
+    }
+
     event AddedLiquidity(
         address indexed token0,
         address indexed token1,
@@ -613,6 +622,10 @@ interface ICellarPoolShare is IERC20 {
     event Reinvest (
         uint256 fees0,
         uint256 fees1,
+        uint256 managementFee0,
+        uint256 managementFee1,
+        uint256 performanceFee0,
+        uint256 performanceFee1,
         uint256 amount0,
         uint256 amount1
     );
@@ -620,6 +633,10 @@ interface ICellarPoolShare is IERC20 {
     event Rebalance (
         uint256 fees0,
         uint256 fees1,
+        uint256 managementFee0,
+        uint256 managementFee1,
+        uint256 performanceFee0,
+        uint256 performanceFee1,
         uint256 amount0,
         uint256 amount1
     );
