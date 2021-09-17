@@ -473,9 +473,21 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         uint256 fee1 = cellarFees.management1 + cellarFees.performance1;
         if (fee0 > cellarFees.collect0) {
             fee0 = cellarFees.collect0;
+            if (cellarFees.management0 < cellarFees.collect0) {
+                cellarFees.performance0 = cellarFees.collect0 - cellarFees.management0;
+            } else {
+                cellarFees.management0 = cellarFees.collect0;
+                cellarFees.performance0 = 0;
+            }
         }
         if (fee1 > cellarFees.collect1) {
             fee1 = cellarFees.collect1;
+            if (cellarFees.management1 < cellarFees.collect1) {
+                cellarFees.performance1 = cellarFees.collect1 - cellarFees.management1;
+            } else {
+                cellarFees.management1 = cellarFees.collect1;
+                cellarFees.performance1 = 0;
+            }
         }
 
         if (fee0 > 0) {
