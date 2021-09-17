@@ -420,9 +420,21 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         fee1 += perfFee1;
         if (fee0 > balance0) {
             fee0 = balance0;
+            if (mgmtFee0 < balance0) {
+                perfFee0 = balance0 - mgmtFee0;
+            } else {
+                mgmtFee0 = balance0;
+                perfFee0 = 0;
+            }
         }
         if (fee1 > balance1) {
             fee1 = balance1;
+            if (mgmtFee1 < balance1) {
+                perfFee1 = balance1 - mgmtFee1;
+            } else {
+                mgmtFee1 = balance1;
+                perfFee1 = 0;
+            }
         }
         lastManageTimestamp = block.timestamp;
         if (fee0 > 0) {
