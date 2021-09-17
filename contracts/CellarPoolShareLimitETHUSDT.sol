@@ -248,7 +248,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
         CellarRemoveParams calldata cellarParams
     ) external override nonReentrant notLocked(msg.sender) {
         require(block.timestamp <= cellarParams.deadline);
-        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, , ) =
+        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, ) =
             _removeLiquidity(cellarParams);
         _burn(msg.sender, cellarParams.tokenAmount);
 
@@ -430,13 +430,29 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
             fee0 += mFee0;
             fee1 += mFee1;
         }
-        fee0 += (balance0 * performanceFee) / FEEDOMINATOR;
-        fee1 += (balance1 * performanceFee) / FEEDOMINATOR;
+        uint256 mgmtFee0 = fee0;
+        uint256 mgmtFee1 = fee1;
+        uint256 perfFee0 = (balance0 * performanceFee) / FEEDOMINATOR;
+        uint256 perfFee1 = (balance1 * performanceFee) / FEEDOMINATOR;
+        fee0 += perfFee0;
+        fee1 += perfFee1;
         if (fee0 > balance0) {
             fee0 = balance0;
+            if (mgmtFee0 < balance0) {
+                perfFee0 = balance0 - mgmtFee0;
+            } else {
+                mgmtFee0 = balance0;
+                perfFee0 = 0;
+            }
         }
         if (fee1 > balance1) {
             fee1 = balance1;
+            if (mgmtFee1 < balance1) {
+                perfFee1 = balance1 - mgmtFee1;
+            } else {
+                mgmtFee1 = balance1;
+                perfFee1 = 0;
+            }
         }
         lastManageTimestamp = block.timestamp;
         if (fee0 > 0) {
@@ -447,7 +463,16 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
         }
         (uint256 investedAmount0, uint256 investedAmount1) = invest(sqrtPriceX96);
 
-        emit Reinvest(fee0, fee1, investedAmount0, investedAmount1);
+        emit Reinvest(
+            balance0,
+            balance1,
+            mgmtFee0,
+            mgmtFee1,
+            perfFee0,
+            perfFee1,
+            investedAmount0,
+            investedAmount1
+        );
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external notLocked(msg.sender) {
@@ -469,9 +494,32 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
                 recipient: address(this),
                 deadline: type(uint256).max
             });
-        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, uint256 fee0, uint256 fee1) =
+
+        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, CellarFees memory cellarFees) =
             _removeLiquidity(removeParams);
         lastManageTimestamp = block.timestamp;
+
+        uint256 fee0 = cellarFees.management0 + cellarFees.performance0;
+        uint256 fee1 = cellarFees.management1 + cellarFees.performance1;
+        if (fee0 > cellarFees.collect0) {
+            fee0 = cellarFees.collect0;
+            if (cellarFees.management0 < cellarFees.collect0) {
+                cellarFees.performance0 = cellarFees.collect0 - cellarFees.management0;
+            } else {
+                cellarFees.management0 = cellarFees.collect0;
+                cellarFees.performance0 = 0;
+            }
+        }
+        if (fee1 > cellarFees.collect1) {
+            fee1 = cellarFees.collect1;
+            if (cellarFees.management1 < cellarFees.collect1) {
+                cellarFees.performance1 = cellarFees.collect1 - cellarFees.management1;
+            } else {
+                cellarFees.management1 = cellarFees.collect1;
+                cellarFees.performance1 = 0;
+            }
+        }
+
         if (fee0 > 0) {
             IERC20(token0).safeTransfer(_owner, fee0);
         }
@@ -497,7 +545,16 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
 
         (uint256 investedAmount0, uint256 investedAmount1) = invest(sqrtPriceX96);
 
-        emit Rebalance(fee0, fee1, investedAmount0, investedAmount1);
+        emit Rebalance(
+            cellarFees.collect0,
+            cellarFees.collect1,
+            cellarFees.management0,
+            cellarFees.management1,
+            cellarFees.performance0,
+            cellarFees.performance1,
+            investedAmount0,
+            investedAmount1
+        );
     }
 
     function setValidator(address _validator, bool value) external override {
@@ -941,12 +998,10 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
             uint256 outAmount0,
             uint256 outAmount1,
             uint128 liquiditySum,
-            uint256 fee0,
-            uint256 fee1
+            CellarFees memory cellarFees
         )
     {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
-        UintPair memory collectedFee;
         uint256 duration = block.timestamp - lastManageTimestamp;
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
@@ -994,23 +1049,18 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
                         amount1Max: type(uint128).max
                     })
                 );
-            collectedFee.a += collectAmount.a - amount.a;
-            collectedFee.b += collectAmount.b - amount.b;
+            cellarFees.collect0 += collectAmount.a - amount.a;
+            cellarFees.collect1 += collectAmount.b - amount.b;
             outAmount0 += amount.a;
             outAmount1 += amount.b;
             liquiditySum += outLiquidity;
             (amount.a, amount.b) = getManagementFee(_cellarTickInfo[i].tokenId, sqrtPriceX96, duration);
-            fee0 += amount.a;
-            fee1 += amount.b;
+            cellarFees.management0 += amount.a;
+            cellarFees.management1 += amount.b;
         }
-        fee0 += (collectedFee.a * performanceFee) / FEEDOMINATOR;
-        fee1 += (collectedFee.b * performanceFee) / FEEDOMINATOR;
-        if (fee0 > collectedFee.a) {
-            fee0 = collectedFee.a;
-        }
-        if (fee1 > collectedFee.b) {
-            fee1 = collectedFee.b;
-        }
+
+        cellarFees.performance0 = (cellarFees.collect0 * performanceFee) / FEEDOMINATOR;
+        cellarFees.performance1 = (cellarFees.collect1 * performanceFee) / FEEDOMINATOR;
     }
 
     function _beforeTokenTransfer(
