@@ -1029,8 +1029,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             cellarFees.management1 += amount.b;
         }
 
-        cellarFees.performance0 += (cellarFees.collect0 * performanceFee) / FEEDOMINATOR;
-        cellarFees.performance1 += (cellarFees.collect1 * performanceFee) / FEEDOMINATOR;
+        cellarFees.performance0 = (cellarFees.collect0 * performanceFee) / FEEDOMINATOR;
+        cellarFees.performance1 = (cellarFees.collect1 * performanceFee) / FEEDOMINATOR;
     }
 
     function _beforeTokenTransfer(
