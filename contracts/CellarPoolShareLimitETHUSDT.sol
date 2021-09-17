@@ -249,7 +249,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
     ) external override nonReentrant notLocked(msg.sender) {
         require(block.timestamp <= cellarParams.deadline);
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, ) =
-            _removeLiquidity(cellarParams);
+            _removeLiquidity(cellarParams, false);
         _burn(msg.sender, cellarParams.tokenAmount);
 
         require(outAmount0 >= cellarParams.amount0Min, "R16");
@@ -496,7 +496,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
             });
 
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, CellarFees memory cellarFees) =
-            _removeLiquidity(removeParams);
+            _removeLiquidity(removeParams, true);
         lastManageTimestamp = block.timestamp;
 
         uint256 fee0 = cellarFees.management0 + cellarFees.performance0;
@@ -992,7 +992,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
         IERC20(token1).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
     }
 
-    function _removeLiquidity(CellarRemoveParams memory cellarParams)
+    function _removeLiquidity(CellarRemoveParams memory cellarParams, bool getFee)
         internal
         returns (
             uint256 outAmount0,
@@ -1049,18 +1049,21 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
                         amount1Max: type(uint128).max
                     })
                 );
-            cellarFees.collect0 += collectAmount.a - amount.a;
-            cellarFees.collect1 += collectAmount.b - amount.b;
             outAmount0 += amount.a;
             outAmount1 += amount.b;
             liquiditySum += outLiquidity;
-            (amount.a, amount.b) = getManagementFee(_cellarTickInfo[i].tokenId, sqrtPriceX96, duration);
-            cellarFees.management0 += amount.a;
-            cellarFees.management1 += amount.b;
+            if (getFee) {
+                cellarFees.collect0 += collectAmount.a - amount.a;
+                cellarFees.collect1 += collectAmount.b - amount.b;
+                (amount.a, amount.b) = getManagementFee(_cellarTickInfo[i].tokenId, sqrtPriceX96, duration);
+                cellarFees.management0 += amount.a;
+                cellarFees.management1 += amount.b;
+            }
         }
-
-        cellarFees.performance0 = (cellarFees.collect0 * performanceFee) / FEEDOMINATOR;
-        cellarFees.performance1 = (cellarFees.collect1 * performanceFee) / FEEDOMINATOR;
+        if (getFee) {
+            cellarFees.performance0 = (cellarFees.collect0 * performanceFee) / FEEDOMINATOR;
+            cellarFees.performance1 = (cellarFees.collect1 * performanceFee) / FEEDOMINATOR;
+        }
     }
 
     function _beforeTokenTransfer(
