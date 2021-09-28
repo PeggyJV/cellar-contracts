@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // VolumeFi Software, Inc.
 
 pragma solidity ^0.7.6;
@@ -457,7 +457,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         );
     }
 
-    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external notLocked(msg.sender) {
+    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external override notLocked(msg.sender) {
         require(msg.sender == _owner, "R21");//"Not owner"
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(

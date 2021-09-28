@@ -1,8 +1,10 @@
-//SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // VolumeFi Software, Inc.
 
 pragma solidity ^0.7.6;
 pragma abicoder v2;
+
+/// Imported from Openzeppelin
 
 interface IERC20 {
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -33,6 +35,8 @@ interface IERC20 {
 
     function totalSupply() external view returns (uint256);
 }
+
+/// Imported from Uniswap V3
 
 interface INonfungiblePositionManager {
     struct MintParams {
@@ -123,6 +127,8 @@ interface INonfungiblePositionManager {
         );
 }
 
+/// Imported from Uniswap V3
+
 interface ISwapRouter {
     struct ExactInputSingleParams {
         address tokenIn;
@@ -141,6 +147,8 @@ interface ISwapRouter {
         returns (uint256 amountOut);
 }
 
+/// Imported from Uniswap V3
+
 interface IUniswapV3Factory {
     function getPool(
         address tokenA,
@@ -148,6 +156,8 @@ interface IUniswapV3Factory {
         uint24 fee
     ) external view returns (address pool);
 }
+
+/// Imported from Uniswap V3
 
 interface IUniswapV3Pool {
     function slot0()
@@ -163,6 +173,8 @@ interface IUniswapV3Pool {
             bool unlocked
         );
 }
+
+/// Imported from Openzeppelin
 
 library Address {
     function functionCall(address target, bytes memory data)
@@ -239,6 +251,8 @@ library Address {
     }
 }
 
+/// Imported from Openzeppelin
+
 library SafeERC20 {
     using Address for address;
 
@@ -295,10 +309,14 @@ library SafeERC20 {
     }
 }
 
+/// Imported from Uniswap V3
+
 library FixedPoint96 {
     uint8 internal constant RESOLUTION = 96;
     uint256 internal constant Q96 = 0x1000000000000000000000000;
 }
+
+/// Imported from Uniswap V3
 
 library FullMath {
     function mulDiv(
@@ -361,6 +379,8 @@ library FullMath {
         return result;
     }
 }
+
+/// Imported from Uniswap V3
 
 library TickMath {
     int24 internal constant MIN_TICK = -887272;
@@ -425,6 +445,8 @@ library TickMath {
         );
     }
 }
+
+/// Imported from Uniswap V3
 
 library LiquidityAmounts {
     function toUint128(uint256 x) private pure returns (uint128 y) {
@@ -542,8 +564,11 @@ library LiquidityAmounts {
         }
     }
 }
-
+/// @title interface for CellarPoolShare
+/// @author Steven Jung
 interface ICellarPoolShare is IERC20 {
+
+    /// Same as MintParams in UniswapV3
     struct MintParams {
         address token0;
         address token1;
@@ -558,6 +583,8 @@ interface ICellarPoolShare is IERC20 {
         uint256 deadline;
     }
 
+    /// @notice Result from mint or add liquidity in Uniswap V3
+    /// @dev Used for decrease local memory variables.
     struct MintResult {
         uint256 tokenId;
         uint128 liquidity;
@@ -565,6 +592,8 @@ interface ICellarPoolShare is IERC20 {
         uint256 amount1;
     }
 
+    /// @notice Parameter for adding liquidity
+    /// @dev Similar to Uniswap V3 params
     struct CellarAddParams {
         uint256 amount0Desired;
         uint256 amount1Desired;
@@ -574,6 +603,8 @@ interface ICellarPoolShare is IERC20 {
         uint256 deadline;
     }
 
+    /// @notice Parameter for removing liquidity
+    /// @dev Similar to Uniswap V3 params
     struct CellarRemoveParams {
         uint256 tokenAmount;
         uint256 amount0Min;
@@ -582,6 +613,8 @@ interface ICellarPoolShare is IERC20 {
         uint256 deadline;
     }
 
+    /// @notice Parameter for adding liquidity
+    /// @dev Similar to Uniswap V3 params
     struct CellarTickInfo {
         uint184 tokenId;
         int24 tickUpper;
@@ -589,11 +622,13 @@ interface ICellarPoolShare is IERC20 {
         uint24 weight;
     }
 
+    /// @notice Used for decrease local memory variables.
     struct UintPair {
         uint256 a;
         uint256 b;
     }
 
+    /// @notice Used for decrease local memory variables.
     struct CellarFees {
         uint256 collect0;
         uint256 collect1;
@@ -641,13 +676,22 @@ interface ICellarPoolShare is IERC20 {
         uint256 amount1
     );
 
+    /// @notice Adding Liquidity For Uniswap V3 NFLP
+    /// @param cellarParams parameter for adding liquidity
     function addLiquidityForUniV3(CellarAddParams calldata cellarParams)
         external
         payable;
 
+    /// @notice Adding Liquidity For Uniswap V3 NFLP
+    /// @param cellarParams parameter for removing liquidity
     function removeLiquidityFromUniV3(CellarRemoveParams calldata cellarParams)
         external;
 
+    /// @notice Update cellar tick info
+    /// @param _cellarTickInfo new tick tier information
+    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external;
+
+    /// @notice collect fee and reinvest in liquidity
     function reinvest() external;
 
     function setValidator(address _validator, bool value) external;
@@ -675,12 +719,13 @@ interface IWETH {
     function withdraw(uint256) external;
 }
 
+/// @title BlockLock base contract to prevent flash loan attack
 contract BlockLock {
     // how many blocks are the functions locked for
     uint256 private constant BLOCK_LOCK_COUNT = 1;
     // last block for which this address is timelocked
     mapping(address => uint256) public lastLockedBlock;
-
+    // modifier to prevent flash loan attack
     modifier notLocked(address lockedAddress) {
         require(lastLockedBlock[lockedAddress] <= block.number, "R30");//"Locked"
         lastLockedBlock[lockedAddress] = block.number + BLOCK_LOCK_COUNT;
@@ -688,6 +733,7 @@ contract BlockLock {
     }
 }
 
+/// @notice AggregatorV3Interface from Chainlink token price oracle
 interface AggregatorV3Interface {
     function latestAnswer() external view returns(int256);
 }
