@@ -6,8 +6,18 @@ pragma abicoder v2;
 
 import "./interfaces.sol";
 
+/**
+ * @title Sommelier Cellar Pool Share contract
+ * @notice Main Cellar Pool share contract for Sommelier Network
+ * @author VolumeFi Software
+ */
+
 contract CellarPoolShare is ICellarPoolShare, BlockLock {
     using SafeERC20 for IERC20;
+
+    /**
+     * @notice Set the Uniswap V3 contract Addresses.
+     */
 
     address constant NONFUNGIBLEPOSITIONMANAGER =
         0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
@@ -23,6 +33,10 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     uint256 constant FEEDOMINATOR = 10000;
 
     uint256 constant YEAR = 31556952;
+
+    /**
+     * @notice Declare the variables and mappings
+     */
 
     mapping(address => uint256) private _balances;
 
@@ -42,6 +56,12 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     uint256 lastManageTimestamp;
     uint256 public performanceFee = 2000;
     uint256 public managementFee = 200;
+
+/**
+     * @notice Create the constructor that identifies 
+     * the toke names, symbols, and address for each token 
+     * pair of any Uniswap v3 AMM
+     */
 
     constructor(
         string memory name_,
