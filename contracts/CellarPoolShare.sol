@@ -15,10 +15,7 @@ import "./interfaces.sol";
 contract CellarPoolShare is ICellarPoolShare, BlockLock {
     using SafeERC20 for IERC20;
 
-    /**
-     * @notice Set the Uniswap V3 contract Addresses.
-     */
-
+    // Set the Uniswap V3 contract Addresses.
     address constant NONFUNGIBLEPOSITIONMANAGER =
         0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
 
@@ -34,10 +31,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
     uint256 constant YEAR = 31556952;
 
-    /**
-     * @notice Declare the variables and mappings
-     */
-
+    // Declare the variables and mappings
     mapping(address => uint256) private _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
