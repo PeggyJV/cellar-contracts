@@ -276,6 +276,12 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         );
     }
 
+    /**
+     * @notice invest token into Uniswap V3 liquidity
+     * @param sqrtPriceX96 The sqrt ratio for which to compute the tick as a Q64.96
+     * @return totalInAmount0 token0 amount added into liquidity
+     * @return totalInAmount1 token1 amount added into liquidity
+     */
     function invest(uint160 sqrtPriceX96)
         private
         returns (
@@ -380,7 +386,14 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         totalInAmount0 += inAmount0;
         totalInAmount1 += inAmount1;
     }
-
+    /**
+     * @notice get management fee from NFLP
+     * @param tokenId The ID of the token to get management fee
+     * @param sqrtPriceX96 The sqrt ratio for which to compute the tick as a Q64.96
+     * @param duration duration since last collecting management fee
+     * @return feeAmount0 token0 fee amount
+     * @return feeAmount1 token1 fee amount
+     */
     function getManagementFee(uint256 tokenId, uint160 sqrtPriceX96, uint256 duration)
         internal
         view
@@ -679,6 +692,17 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         emit Approval(owner_, spender, amount);
     }
 
+    /**
+     * @notice get weight information of positions
+     * @dev every position has its weight but it is for liquidity weight, not token amount weight.
+     *      this function calculates token amount weight and sum of weights from liquidity weight.
+     * @param _cellarTickInfo cellar tick info struct array
+     * @return weightSum0 sum of weights for token0
+     * @return weightSum1 sum of weights for token1
+     * @return liquidityBefore total liquidity of all positions
+     * @return weight0 weights array for token0
+     * @return weight1 weights array for token1
+     */
     function _getWeightInfo(CellarTickInfo[] memory _cellarTickInfo)
         internal
         view
@@ -789,6 +813,21 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
     }
 
+    /**
+     * @notice modify weight information of positions
+     * @dev some positions consist of either token.
+     *      that's why if we distribute tokens according to the weights, some tokens will remain.
+     *      so we remove weights from the weight sum if the position doesn't include either token.
+     * @param _cellarTickInfo cellar tick info struct array
+     * @param amount0Desired token0 amount to add liquidity
+     * @param amount1Desired token1 amount to add liquidity
+     * @param weightSum0 sum of weights for token0
+     * @param weightSum1 sum of weights for token1
+     * @param weight0 token0 weight array
+     * @param weight1 token1 weight array
+     * @return newWeightSum0 updated sum of weights for token0
+     * @return newWeightSum1 updated sum of weights for token1
+     */
     function _modifyWeightInfo(
         CellarTickInfo[] memory _cellarTickInfo,
         uint256 amount0Desired,
@@ -858,6 +897,14 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
     }
 
+    /**
+     * @notice add liquidity into Uniswap positions
+     * @param cellarParams params struct to add liquidity
+     * @return inAmount0 token0 amount added into liquidity
+     * @return inAmount1 token1 amount added into liquidity
+     * @return liquidityBefore liquidity sum before add liquidity
+     * @return liquiditySum liquidity sum after add liquidity
+     */
     function _addLiquidity(CellarAddParams memory cellarParams)
         internal
         returns (
@@ -994,6 +1041,16 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         IERC20(token1).safeApprove(NONFUNGIBLEPOSITIONMANAGER, 0);
     }
 
+    /**
+     * @notice remove liquidity from Uniswap positions
+     * @param cellarParams params struct to add liquidity
+     * @param getFee true if calculate fee and return as cellarFees param
+            set false when don't need fee calculation for saving gas.
+     * @return outAmount0 token0 amount added into liquidity
+     * @return outAmount1 token1 amount added into liquidity
+     * @return liquiditySum liquidity sum after add liquidity
+     * @return cellarFees fee information struct when getFee is true, otherwise empty
+     */
     function _removeLiquidity(CellarRemoveParams memory cellarParams, bool getFee)
         internal
         returns (
