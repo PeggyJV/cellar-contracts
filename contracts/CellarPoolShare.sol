@@ -309,8 +309,11 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         totalInAmount0 += inAmount0;
         totalInAmount1 += inAmount1;
 
-
+        // b0 / b1 > i0 / i1 means token0 will remain. swap some token0 into token1
         if (balance0 * inAmount1 > balance1 * inAmount0 || (inAmount0 == 0 && inAmount1 == 0 && balance0 > balance1)) {
+            // calculate swap amount from bal0, bal1, in0, in1.
+            // bal0, bal1 are token balance to add. in0, in1 are added balance in the first adding liquidity.
+            // approximated result because in swapping, because the price changes.
             uint256 swapAmount = (balance0 * inAmount1 - balance1 * inAmount0)
                 /
                 (FullMath.mulDiv(
@@ -321,6 +324,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     sqrtPriceX96,
                     FixedPoint96.Q96)
                 + inAmount1);
+            // nothing added means either token exists and price range is not out of range for the token.
+            // the case is balance0 > 0, balance1 = 0, swap half amount of token0 into token1
             if (inAmount0 == 0 && inAmount1 == 0) {
                 swapAmount = balance0 / 2;
             }
@@ -339,6 +344,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             ) {} catch {}
             IERC20(token0).safeApprove(SWAPROUTER, 0);
         }
+        // b0 / b1 < i0 / i1 means token1 will remain. swap some token1 into token0
         if (balance0 * inAmount1 < balance1 * inAmount0 || (inAmount0 == 0 && inAmount1 == 0 && balance0 < balance1)) {
             uint256 swapAmount = (balance1 * inAmount0 - balance0 * inAmount1)
                 /
@@ -350,6 +356,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     FixedPoint96.Q96,
                     sqrtPriceX96)
                 + inAmount0);
+            // nothing added means either token exists and price range is not out of range for the token.
+            // the case is balance1 > 0, balance0 = 0, swap half amount of token1 into token0
             if (inAmount0 == 0 && inAmount1 == 0) {
                 swapAmount = balance1 / 2;
             }
@@ -726,9 +734,11 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             )
                 .slot0();
         UintPair memory sqrtPrice0;
+        // price of ticks is increasing through ticks.
+        // At the first tick, token0 weight is maximum. Last tick, token1 weight is maximum.
 
-        uint256 weight00;
-        uint256 weight10;
+        uint256 weight00;// token0 maximum weight
+        uint256 weight10;// token1 maximum weight
 
         sqrtPrice0.a = TickMath.getSqrtRatioAtTick(
             _cellarTickInfo[0].tickLower
@@ -736,10 +746,10 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         sqrtPrice0.b = TickMath.getSqrtRatioAtTick(
             _cellarTickInfo[0].tickUpper
         );
+        weight00 = _cellarTickInfo[0].weight; // first position
+        weight10 = _cellarTickInfo[_cellarTickInfo.length - 1].weight; // last position
 
-        weight00 = _cellarTickInfo[0].weight;
-
-        weight10 = _cellarTickInfo[_cellarTickInfo.length - 1].weight;
+        // calculate token weight from liquidity weight per tick position
         for (uint256 i = 0; i < _cellarTickInfo.length; i++) {
             if (_cellarTickInfo[i].tokenId > 0) {
                 (, , , , , , , uint128 liquidity, , , , ) =
@@ -755,9 +765,10 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             sqrtCurrentTickPriceX96.b = TickMath.getSqrtRatioAtTick(
                 _cellarTickInfo[i].tickUpper
             );
-
+            // current tick is less than tickLower of the position.
+            // token1 amount is 0, So consider token0 amount and weight only.
             if (currentTick <= _cellarTickInfo[i].tickLower) {
-                weight0[i] =
+                weight0[i] = // weight for token0
                     (FullMath.mulDiv(
                         FullMath.mulDiv(
                             FullMath.mulDiv(
@@ -771,11 +782,14 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                         ),
                         FixedPoint96.Q96,
                         sqrtCurrentTickPriceX96.a
-                    ) * _cellarTickInfo[i].weight) /
+                    ) // token0 amount
+                     * _cellarTickInfo[i].weight) /
                     weight00;
                 weightSum0 += weight0[i];
+            // current tick is greater than tickLower of the position.
+            // token0 amount is 0, So consider token1 amount and weight only.
             } else if (currentTick >= _cellarTickInfo[i].tickUpper) {
-                weight1[i] =
+                weight1[i] = // weight for token1
                     (FullMath.mulDiv(
                         sqrtCurrentTickPriceX96.b - sqrtCurrentTickPriceX96.a,
                         FixedPoint96.Q96,
@@ -783,6 +797,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     ) * _cellarTickInfo[i].weight) /
                     weight10;
                 weightSum1 += weight1[i];
+            // current tick is in the range, recalculate both tokens weight.
             } else {
                 weight0[i] =
                     (FullMath.mulDiv(
