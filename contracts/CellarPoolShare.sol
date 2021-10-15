@@ -37,6 +37,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     mapping(address => mapping(address => uint256)) private _allowances;
 
     mapping(address => bool) public validator;
+    mapping(address => bool) public adjuster;
     uint256 private _totalSupply;
     address private _owner;
     bool private _isEntered;
@@ -88,10 +89,17 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             );
         }
         _owner = msg.sender;
+        validator[msg.sender] = true;
+        adjuster[msg.sender] = true;
     }
 
     modifier onlyValidator() {
         require(validator[msg.sender], "R13");//"Not validator"
+        _;
+    }
+
+    modifier onlyAdjuster() {
+        require(adjuster[msg.sender], "R31"); //"Not adjuster"
         _;
     }
 
@@ -492,8 +500,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         );
     }
 
-    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external override notLocked(msg.sender) {
-        require(msg.sender == _owner, "R21");//"Not owner"
+    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external override onlyAdjuster() notLocked(msg.sender) {
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
                 IUniswapV3Factory(UNISWAPV3FACTORY).getPool(
@@ -577,6 +584,11 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     function setValidator(address _validator, bool value) external override {
         require(msg.sender == _owner, "R21");
         validator[_validator] = value;
+    }
+
+    function setAdjuster(address _adjuster, bool value) external override {
+        require(msg.sender == _owner, "R21");
+        adjuster[_adjuster] = value;
     }
 
     function transferOwnership(address newOwner) external override {

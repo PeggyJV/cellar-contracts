@@ -1129,6 +1129,11 @@ interface ICellarPoolShare is IERC20 {
     /// @param value add/remove option
     function setValidator(address _validator, bool value) external;
 
+    /// @notice set adjuster
+    /// @param _adjuster address to add or remove from adjuster list
+    /// @param value add/remove option
+    function setAdjuster(address _adjuster, bool value) external;
+
     /// @notice transfer ownership to new address
     /// @param newOwner address of new owner
     function transferOwnership(address newOwner) external;
