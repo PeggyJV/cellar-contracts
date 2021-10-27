@@ -31,7 +31,7 @@
 
     "mark-callable-contracts": "off",
 
-    "max-line-length": ["error", 120],
+    "max-line-length": ["warn", 120],
     "max-states-count": ["warn", 15],
 
     "modifier-name-mixedcase": "warn",
@@ -47,7 +47,7 @@
     "payable-fallback": "warn",
 
     "private-vars-leading-underscore": ["warn",{"strict":false}],
-    "quotes": ["error", "double"],
+    "quotes": ["warn", "double"],
     "reason-string": ["warn", {"maxLength": 32}],
     "reentrancy": "warn",
     "state-visibility": "warn",

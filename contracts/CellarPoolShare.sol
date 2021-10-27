@@ -14,6 +14,7 @@ import "./interfaces.sol";
 
 contract CellarPoolShare is ICellarPoolShare, BlockLock {
     using SafeERC20 for IERC20;
+    using SafeMath for uint256;
 
     // Set the Uniswap V3 contract Addresses.
     address constant NONFUNGIBLEPOSITIONMANAGER =
@@ -226,8 +227,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         require(inAmount0 >= cellarParams.amount0Min, "R16");
         require(inAmount1 >= cellarParams.amount1Min, "R17");
 
-        uint256 retAmount0 = cellarParams.amount0Desired - inAmount0;
-        uint256 retAmount1 = cellarParams.amount1Desired - inAmount1;
+        uint256 retAmount0 = cellarParams.amount0Desired.sub(inAmount0);
+        uint256 retAmount1 = cellarParams.amount1Desired.sub(inAmount1);
 
         if (retAmount0 > 0) {
             if (token0 == WETH) {
@@ -305,18 +306,18 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     deadline: type(uint256).max
                 })
             );
-        balance0 -= inAmount0;
-        balance1 -= inAmount1;
+        balance0 = balance0.sub(inAmount0);
+        balance1 = balance1.sub(inAmount1);
 
-        totalInAmount0 += inAmount0;
-        totalInAmount1 += inAmount1;
+        totalInAmount0 = totalInAmount0.add(inAmount0);
+        totalInAmount1 = totalInAmount1.add(inAmount1);
 
         // b0 / b1 > i0 / i1 means token0 will remain. swap some token0 into token1
-        if (balance0 * inAmount1 > balance1 * inAmount0 || (inAmount0 == 0 && inAmount1 == 0 && balance0 > balance1)) {
+        if (balance0.mul(inAmount1) > balance1.mul(inAmount0) || (inAmount0 == 0 && inAmount1 == 0 && balance0 > balance1)) {
             // calculate swap amount from bal0, bal1, in0, in1.
             // bal0, bal1 are token balance to add. in0, in1 are added balance in the first adding liquidity.
             // approximated result because in swapping, because the price changes.
-            uint256 swapAmount = (balance0 * inAmount1 - balance1 * inAmount0)
+            uint256 swapAmount = (balance0.mul(inAmount1) - balance1.mul(inAmount0))
                 /
                 (FullMath.mulDiv(
                     FullMath.mulDiv(
@@ -347,8 +348,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             IERC20(token0).safeApprove(SWAPROUTER, 0);
         }
         // b0 / b1 < i0 / i1 means token1 will remain. swap some token1 into token0
-        if (balance0 * inAmount1 < balance1 * inAmount0 || (inAmount0 == 0 && inAmount1 == 0 && balance0 < balance1)) {
-            uint256 swapAmount = (balance1 * inAmount0 - balance0 * inAmount1)
+        if (balance0.mul(inAmount1) < balance1.mul(inAmount0) || (inAmount0 == 0 && inAmount1 == 0 && balance0 < balance1)) {
+            uint256 swapAmount = (balance1.mul(inAmount0) - balance0.mul(inAmount1))
                 /
                 (FullMath.mulDiv(
                     FullMath.mulDiv(
@@ -393,8 +394,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 })
             );
 
-        totalInAmount0 += inAmount0;
-        totalInAmount1 += inAmount1;
+        totalInAmount0 = totalInAmount0.add(inAmount0);
+        totalInAmount1 = totalInAmount1.add(inAmount1);
     }
     /**
      * @notice get management fee from NFLP
@@ -416,8 +417,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         uint160 sqrtPriceBX96 = TickMath.getSqrtRatioAtTick(tickUpper);
         (uint256 amount0, uint256 amount1) =
             LiquidityAmounts.getAmountsForLiquidity(sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, liquidity);
-        feeAmount0 = amount0 * managementFee * duration / YEAR / FEEDOMINATOR;
-        feeAmount1 = amount1 * managementFee * duration / YEAR / FEEDOMINATOR;
+        feeAmount0 = amount0.mul(managementFee).mul(duration) / YEAR / FEEDOMINATOR;
+        feeAmount1 = amount1.mul(managementFee).mul(duration) / YEAR / FEEDOMINATOR;
     }
 
     function reinvest() external override onlyValidator notLocked(msg.sender) {
@@ -457,8 +458,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
         uint256 mgmtFee0 = fee0;
         uint256 mgmtFee1 = fee1;
-        uint256 perfFee0 = (balance0 * performanceFee) / FEEDOMINATOR;
-        uint256 perfFee1 = (balance1 * performanceFee) / FEEDOMINATOR;
+        uint256 perfFee0 = balance0.mul(performanceFee) / FEEDOMINATOR;
+        uint256 perfFee1 = balance1.mul(performanceFee) / FEEDOMINATOR;
         fee0 += perfFee0;
         fee1 += perfFee1;
         if (fee0 > balance0) {
@@ -1042,9 +1043,10 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
                     cellarTickInfo[i].tokenId = uint184(mintResult.tokenId);
 
-                    inAmount0 += mintResult.amount0;
-                    inAmount1 += mintResult.amount1;
+                    inAmount0 = inAmount0.add(mintResult.amount0);
+                    inAmount1 = inAmount1.add(mintResult.amount1);
                     liquiditySum += mintResult.liquidity;
+                    require(liquiditySum >= mintResult.liquidity, "R31");
                 } else {
                     try INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
                         .increaseLiquidity(increaseLiquidityParams) returns (uint128 r1, uint256 r2, uint256 r3) {
@@ -1052,9 +1054,10 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                         mintResult.amount0 = r2;
                         mintResult.amount1 = r3;
                     } catch {}
-                    inAmount0 += mintResult.amount0;
-                    inAmount1 += mintResult.amount1;
+                    inAmount0 = inAmount0.add(mintResult.amount0);
+                    inAmount1 = inAmount1.add(mintResult.amount1);
                     liquiditySum += mintResult.liquidity;
+                    require(liquiditySum >= mintResult.liquidity, "R31");
                 }
             }
         }
@@ -1129,20 +1132,21 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                         amount1Max: type(uint128).max
                     })
                 );
-            outAmount0 += amount.a;
-            outAmount1 += amount.b;
+            outAmount0 = outAmount0.add(amount.a);
+            outAmount1 = outAmount1.add(amount.b);
             liquiditySum += outLiquidity;
+            require(liquiditySum >= outLiquidity, "R31");
             if (getFee) {
-                cellarFees.collect0 += collectAmount.a - amount.a;
-                cellarFees.collect1 += collectAmount.b - amount.b;
+                cellarFees.collect0 = cellarFees.collect0.add(collectAmount.a - amount.a);
+                cellarFees.collect1 = cellarFees.collect1.add(collectAmount.b - amount.b);
                 (amount.a, amount.b) = getManagementFee(_cellarTickInfo[i].tokenId, sqrtPriceX96, duration);
-                cellarFees.management0 += amount.a;
-                cellarFees.management1 += amount.b;
+                cellarFees.management0 = cellarFees.management0.add(amount.a);
+                cellarFees.management1 = cellarFees.management1.add(amount.b);
             }
         }
         if (getFee) {
-            cellarFees.performance0 = (cellarFees.collect0 * performanceFee) / FEEDOMINATOR;
-            cellarFees.performance1 = (cellarFees.collect1 * performanceFee) / FEEDOMINATOR;
+            cellarFees.performance0 = cellarFees.collect0.mul(performanceFee) / FEEDOMINATOR;
+            cellarFees.performance1 = cellarFees.collect1.mul(performanceFee) / FEEDOMINATOR;
         }
     }
 
