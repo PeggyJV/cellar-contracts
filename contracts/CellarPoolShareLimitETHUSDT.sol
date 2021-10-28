@@ -570,7 +570,9 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
 
     function setValidator(address _validator, bool value) external override {
         require(msg.sender == _owner, "M");
+        require(_validator != address(0), "a"); // "Invalid input"
         validator[_validator] = value;
+        emit SetValidator(_validator, value);
     }
 
     function setAdjuster(address _adjuster, bool value) external override {
@@ -580,17 +582,23 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
 
     function transferOwnership(address newOwner) external override {
         require(msg.sender == _owner, "M");
+        require(newOwner != address(0), "a");
         _owner = newOwner;
+        emit TransferOwnership(newOwner);
     }
 
     function setManagementFee(uint256 newFee) external override {
         require(msg.sender == _owner, "M");
+        require(newFee < FEEDOMINATOR, "a");
         managementFee = newFee;
+        emit SetManagementFee(newFee);
     }
 
     function setPerformanceFee(uint256 newFee) external override {
         require(msg.sender == _owner, "M");
+        require(newFee < FEEDOMINATOR, "a");
         performanceFee = newFee;
+        emit SetPerformanceFee(newFee);
     }
 
     function owner() external view override returns (address) {

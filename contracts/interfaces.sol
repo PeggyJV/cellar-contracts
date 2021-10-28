@@ -1106,6 +1106,32 @@ interface ICellarPoolShare is IERC20 {
         uint256 amount1
     );
 
+    /// @notice Emitted when update validator setting
+    /// @param validator validator address to add or remove
+    /// @param value true to add, false to remove
+    event SetValidator (
+        address validator,
+        bool value
+    );
+
+    /// @notice Emitted when transfer ownership
+    /// @param newOwner new owner address
+    event TransferOwnership (
+        address newOwner
+    );
+
+    /// @notice Emitted when update performance fee
+    /// @param newFee new performance fee
+    event SetPerformanceFee (
+        uint256 newFee
+    );
+
+    /// @notice Emitted when update performance fee
+    /// @param newFee new performance fee
+    event SetManagementFee (
+        uint256 newFee
+    );
+
     /// @notice Adding Liquidity For Uniswap V3 NFLP
     /// @param cellarParams parameter for adding liquidity
     function addLiquidityForUniV3(CellarAddParams calldata cellarParams)
