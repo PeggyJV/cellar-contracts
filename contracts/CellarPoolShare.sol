@@ -672,8 +672,6 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         require(sender != address(0), "N");//"transfer from zero address"
         require(recipient != address(0), "O");//"transfer to zero address"
 
-        _beforeTokenTransfer(sender, recipient, amount);
-
         uint256 senderBalance = _balances[sender];
         require(senderBalance >= amount, "P");//"transfer exceeds balance"
         _balances[sender] = senderBalance - amount;
@@ -685,8 +683,6 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     function _mint(address account, uint256 amount) internal {
         require(account != address(0), "Q");//"mint to zero address"
 
-        _beforeTokenTransfer(address(0), account, amount);
-
         _totalSupply += amount;
         _balances[account] += amount;
         emit Transfer(address(0), account, amount);
@@ -694,8 +690,6 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
     function _burn(address account, uint256 amount) internal {
         require(account != address(0), "R");//"burn from zero address"
-
-        _beforeTokenTransfer(account, address(0), amount);
 
         uint256 accountBalance = _balances[account];
         require(accountBalance >= amount, "S");//"burn exceeds balance"
@@ -1159,12 +1153,6 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             cellarFees.performance1 = cellarFees.collect1.mul(performanceFee) / FEEDOMINATOR;
         }
     }
-
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual {}
 
     receive() external payable {
         require(msg.sender == WETH);
