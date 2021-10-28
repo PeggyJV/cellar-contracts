@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Apache-2.0
 // VolumeFi Software, Inc.
 
-pragma solidity ^0.7.6;
+pragma solidity 0.7.6;
 pragma abicoder v2;
 
 import "./interfaces.sol";
