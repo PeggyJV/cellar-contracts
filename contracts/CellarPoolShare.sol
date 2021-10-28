@@ -73,11 +73,11 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         token1 = _token1;
         feeLevel = _feeLevel;
         for (uint256 i = 0; i < _cellarTickInfo.length; i++) {
-            require(_cellarTickInfo[i].weight > 0, "R10");//"Weight cannot be zero"
-            require(_cellarTickInfo[i].tokenId == 0, "R11");//"tokenId is not empty"
-            require(_cellarTickInfo[i].tickUpper > _cellarTickInfo[i].tickLower, "R12");//"Wrong tick tier"
+            require(_cellarTickInfo[i].weight > 0, "A");//"Weight cannot be zero"
+            require(_cellarTickInfo[i].tokenId == 0, "B");//"tokenId is not empty"
+            require(_cellarTickInfo[i].tickUpper > _cellarTickInfo[i].tickLower, "C");//"Wrong tick tier"
             if (i > 0) {
-                require(_cellarTickInfo[i].tickUpper <= _cellarTickInfo[i - 1].tickLower, "R12");//"Wrong tick tier"
+                require(_cellarTickInfo[i].tickUpper <= _cellarTickInfo[i - 1].tickLower, "C");//"Wrong tick tier"
             }
             cellarTickInfo.push(
                 CellarTickInfo({
@@ -92,12 +92,12 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     }
 
     modifier onlyValidator() {
-        require(validator[msg.sender], "R13");//"Not validator"
+        require(validator[msg.sender], "D");//"Not validator"
         _;
     }
 
     modifier nonReentrant() {
-        require(!_isEntered, "R14");//"reentrant call"
+        require(!_isEntered, "E");//"reentrant call"
         _isEntered = true;
         _;
         _isEntered = false;
@@ -128,7 +128,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     ) external override returns (bool) {
         _transfer(sender, recipient, amount);
         uint256 currentAllowance = _allowances[sender][msg.sender];
-        require(currentAllowance >= amount, "R15");//"transfer exceeds allowance"
+        require(currentAllowance >= amount, "F");//"transfer exceeds allowance"
         _approve(sender, msg.sender, currentAllowance - amount);
         return true;
     }
@@ -216,8 +216,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             );
         }
 
-        require(inAmount0 >= cellarParams.amount0Min, "R16");
-        require(inAmount1 >= cellarParams.amount1Min, "R17");
+        require(inAmount0 >= cellarParams.amount0Min, "G");
+        require(inAmount1 >= cellarParams.amount1Min, "H");
 
         uint256 retAmount0 = cellarParams.amount0Desired.sub(inAmount0);
         uint256 retAmount1 = cellarParams.amount1Desired.sub(inAmount1);
@@ -249,15 +249,15 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             _removeLiquidity(cellarParams, false);
         _burn(msg.sender, cellarParams.tokenAmount);
 
-        require(outAmount0 >= cellarParams.amount0Min, "R16");
-        require(outAmount1 >= cellarParams.amount1Min, "R17");
+        require(outAmount0 >= cellarParams.amount0Min, "G");
+        require(outAmount1 >= cellarParams.amount1Min, "H");
 
         if (token0 == WETH) {
             IWETH(WETH).withdraw(outAmount0);
             msg.sender.transfer(outAmount0);
             IERC20(token1).safeTransfer(msg.sender, outAmount1);
         } else {
-            require(token1 == WETH, "R19");
+            require(token1 == WETH, "J");
             IWETH(WETH).withdraw(outAmount1);
             msg.sender.transfer(outAmount1);
             IERC20(token0).safeTransfer(msg.sender, outAmount0);
@@ -432,7 +432,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             )
                 .slot0();
         for (uint256 index = 0; index < _cellarTickInfo.length; index++) {
-            require(_cellarTickInfo[index].tokenId != 0, "R20");//"NFLP doesnot exist"
+            require(_cellarTickInfo[index].tokenId != 0, "K");//"NFLP doesnot exist"
             weightSum += _cellarTickInfo[index].weight;
             (uint256 amount0, uint256 amount1) =
                 INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).collect(
@@ -495,7 +495,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo) external override notLocked(msg.sender) {
-        require(msg.sender == _owner, "R21");//"Not owner"
+        require(msg.sender == _owner, "M");//"Not owner"
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
                 IUniswapV3Factory(UNISWAPV3FACTORY).getPool(
@@ -553,12 +553,12 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
         delete cellarTickInfo;
         for (uint256 i = 0; i < _cellarTickInfo.length; i++) {
-            require(_cellarTickInfo[i].tickUpper > _cellarTickInfo[i].tickLower, "R12");
+            require(_cellarTickInfo[i].tickUpper > _cellarTickInfo[i].tickLower, "C");
             if (i > 0) {
-                require(_cellarTickInfo[i].tickUpper <= _cellarTickInfo[i - 1].tickLower, "R12");
+                require(_cellarTickInfo[i].tickUpper <= _cellarTickInfo[i - 1].tickLower, "C");
             }
-            require(_cellarTickInfo[i].weight > 0, "R10");
-            require(_cellarTickInfo[i].tokenId == 0, "R11");
+            require(_cellarTickInfo[i].weight > 0, "A");
+            require(_cellarTickInfo[i].tokenId == 0, "B");
             cellarTickInfo.push(_cellarTickInfo[i]);
         }
 
@@ -577,22 +577,22 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     }
 
     function setValidator(address _validator, bool value) external override {
-        require(msg.sender == _owner, "R21");
+        require(msg.sender == _owner, "M");
         validator[_validator] = value;
     }
 
     function transferOwnership(address newOwner) external override {
-        require(msg.sender == _owner, "R21");
+        require(msg.sender == _owner, "M");
         _owner = newOwner;
     }
 
     function setManagementFee(uint256 newFee) external override {
-        require(msg.sender == _owner, "R21");
+        require(msg.sender == _owner, "M");
         managementFee = newFee;
     }
 
     function setPerformanceFee(uint256 newFee) external override {
-        require(msg.sender == _owner, "R21");
+        require(msg.sender == _owner, "M");
         performanceFee = newFee;
     }
 
@@ -648,13 +648,13 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         address recipient,
         uint256 amount
     ) internal {
-        require(sender != address(0), "R22");//"transfer from zero address"
-        require(recipient != address(0), "R23");//"transfer to zero address"
+        require(sender != address(0), "N");//"transfer from zero address"
+        require(recipient != address(0), "O");//"transfer to zero address"
 
         _beforeTokenTransfer(sender, recipient, amount);
 
         uint256 senderBalance = _balances[sender];
-        require(senderBalance >= amount, "R24");//"transfer exceeds balance"
+        require(senderBalance >= amount, "P");//"transfer exceeds balance"
         _balances[sender] = senderBalance - amount;
         _balances[recipient] += amount;
 
@@ -662,7 +662,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     }
 
     function _mint(address account, uint256 amount) internal {
-        require(account != address(0), "R25");//"mint to zero address"
+        require(account != address(0), "Q");//"mint to zero address"
 
         _beforeTokenTransfer(address(0), account, amount);
 
@@ -672,12 +672,12 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     }
 
     function _burn(address account, uint256 amount) internal {
-        require(account != address(0), "R26");//"burn from zero address"
+        require(account != address(0), "R");//"burn from zero address"
 
         _beforeTokenTransfer(account, address(0), amount);
 
         uint256 accountBalance = _balances[account];
-        require(accountBalance >= amount, "R27");//"burn exceeds balance"
+        require(accountBalance >= amount, "S");//"burn exceeds balance"
         _balances[account] = accountBalance - amount;
         _totalSupply -= amount;
 
@@ -689,8 +689,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         address spender,
         uint256 amount
     ) internal {
-        require(owner_ != address(0), "R28");//"approve from zero address"
-        require(spender != address(0), "R29");//"approve to zero address"
+        require(owner_ != address(0), "T");//"approve from zero address"
+        require(spender != address(0), "U");//"approve to zero address"
 
         _allowances[owner_][spender] = amount;
         emit Approval(owner_, spender, amount);
@@ -1035,7 +1035,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     inAmount0 = inAmount0.add(mintResult.amount0);
                     inAmount1 = inAmount1.add(mintResult.amount1);
                     liquiditySum += mintResult.liquidity;
-                    require(liquiditySum >= mintResult.liquidity, "R31");
+                    require(liquiditySum >= mintResult.liquidity, "W");
                 } else {
                     try INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER)
                         .increaseLiquidity(increaseLiquidityParams) returns (uint128 r1, uint256 r2, uint256 r3) {
@@ -1046,7 +1046,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     inAmount0 = inAmount0.add(mintResult.amount0);
                     inAmount1 = inAmount1.add(mintResult.amount1);
                     liquiditySum += mintResult.liquidity;
-                    require(liquiditySum >= mintResult.liquidity, "R31");
+                    require(liquiditySum >= mintResult.liquidity, "W");
                 }
             }
         }
@@ -1124,7 +1124,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             outAmount0 = outAmount0.add(amount.a);
             outAmount1 = outAmount1.add(amount.b);
             liquiditySum += outLiquidity;
-            require(liquiditySum >= outLiquidity, "R31");
+            require(liquiditySum >= outLiquidity, "W");
             if (getFee) {
                 cellarFees.collect0 = cellarFees.collect0.add(collectAmount.a - amount.a);
                 cellarFees.collect1 = cellarFees.collect1.add(collectAmount.b - amount.b);
