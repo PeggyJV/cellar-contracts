@@ -68,7 +68,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     ) {
         _name = name_;
         _symbol = symbol_;
-        require(_token0 < _token1, "R9");//"Tokens are not sorted"
+        require(_token0 < _token1, "9");//"Tokens are not sorted"
         token0 = _token0;
         token1 = _token1;
         feeLevel = _feeLevel;
