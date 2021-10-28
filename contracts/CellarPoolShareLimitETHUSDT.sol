@@ -278,6 +278,7 @@ contract CellarPoolShareLimitETHUSDT is ICellarPoolShare, BlockLock {
 
     function invest(uint160 sqrtPriceX96)
         private
+        nonReentrant
         returns (
             uint256 totalInAmount0,
             uint256 totalInAmount1
