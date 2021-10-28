@@ -357,7 +357,7 @@ library Address {
         internal
         returns (bytes memory)
     {
-        return functionCall(target, data, "R2");//"Address: low-level call failed"
+        return functionCall(target, data, "2");//"Address: low-level call failed"
     }
 
     /**
@@ -395,7 +395,7 @@ library Address {
                 target,
                 data,
                 value,
-                "R3"//"Address: low-level call with value failed"
+                "3"//"Address: low-level call with value failed"
             );
     }
 
@@ -413,9 +413,9 @@ library Address {
     ) internal returns (bytes memory) {
         require(
             address(this).balance >= value,
-            "R4"//"insufficient balance for call"
+            "4"//"insufficient balance for call"
         );
-        require(isContract(target), "R5");//"Address: call to non-contract"
+        require(isContract(target), "5");//"Address: call to non-contract"
 
         (bool success, bytes memory returndata) =
             target.call{value: value}(data);
@@ -527,7 +527,7 @@ library SafeERC20 {
         // solhint-disable-next-line max-line-length
         require(
             (value == 0) || (token.allowance(address(this), spender) == 0),
-            "R6"//"approve non-zero to non-zero"
+            "6"//"approve non-zero to non-zero"
         );
         _callOptionalReturn(
             token,
@@ -548,12 +548,12 @@ library SafeERC20 {
         bytes memory returndata =
             address(token).functionCall(
                 data,
-                "R7"//"SafeERC20: low-level call failed"
+                "7"//"SafeERC20: low-level call failed"
             );
         if (returndata.length > 0) {
             require(
                 abi.decode(returndata, (bool)),
-                "R8"//"ERC20 operation did not succeed"
+                "8"//"ERC20 operation did not succeed"
             );
         }
     }
@@ -1211,7 +1211,7 @@ library SafeMath {
      */
     function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
-        require(c >= a, "R31"); // "SafeMath: addition overflow"
+        require(c >= a, "W"); // "SafeMath: addition overflow"
         return c;
     }
 
@@ -1226,7 +1226,7 @@ library SafeMath {
      * - Subtraction cannot overflow.
      */
     function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b <= a, "R32"); // "SafeMath: subtraction overflow"
+        require(b <= a, "X"); // "SafeMath: subtraction overflow"
         return a - b;
     }
 
@@ -1243,7 +1243,7 @@ library SafeMath {
     function mul(uint256 a, uint256 b) internal pure returns (uint256) {
         if (a == 0) return 0;
         uint256 c = a * b;
-        require(c / a == b, "R33"); //"SafeMath: multiplication overflow"
+        require(c / a == b, "Y"); //"SafeMath: multiplication overflow"
         return c;
     }
 }
@@ -1256,7 +1256,7 @@ contract BlockLock {
     mapping(address => uint256) public lastLockedBlock;
     // modifier to prevent flash loan attack
     modifier notLocked(address lockedAddress) {
-        require(lastLockedBlock[lockedAddress] <= block.number, "R30");//"Locked"
+        require(lastLockedBlock[lockedAddress] <= block.number, "V");//"Locked"
         lastLockedBlock[lockedAddress] = block.number + BLOCK_LOCK_COUNT;
         _;
     }
