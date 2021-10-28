@@ -1145,5 +1145,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         uint256 amount
     ) internal virtual {}
 
-    receive() external payable {}
+    receive() external payable {
+        require(msg.sender == WETH);
+    }
 }
