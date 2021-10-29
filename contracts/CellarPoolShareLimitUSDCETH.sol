@@ -295,7 +295,7 @@ contract CellarPoolShareLimitUSDCETH is ICellarPoolShare, BlockLock {
                     amount0Min: 0,
                     amount1Min: 0,
                     recipient: address(this),
-                    deadline: type(uint256).max
+                    deadline: block.timestamp
                 })
             );
         balance0 = balance0.sub(inAmount0);
@@ -326,7 +326,7 @@ contract CellarPoolShareLimitUSDCETH is ICellarPoolShare, BlockLock {
                     tokenOut: token1,
                     fee: feeLevel,
                     recipient: address(this),
-                    deadline: type(uint256).max,
+                    deadline: block.timestamp,
                     amountIn: swapAmount,
                     amountOutMinimum: 0,
                     sqrtPriceLimitX96: 0
@@ -355,7 +355,7 @@ contract CellarPoolShareLimitUSDCETH is ICellarPoolShare, BlockLock {
                     tokenOut: token0,
                     fee: feeLevel,
                     recipient: address(this),
-                    deadline: type(uint256).max,
+                    deadline: block.timestamp,
                     amountIn: swapAmount,
                     amountOutMinimum: 0,
                     sqrtPriceLimitX96: 0
@@ -374,7 +374,7 @@ contract CellarPoolShareLimitUSDCETH is ICellarPoolShare, BlockLock {
                     amount0Min: 0,
                     amount1Min: 0,
                     recipient: address(this),
-                    deadline: type(uint256).max
+                    deadline: block.timestamp
                 })
             );
 
@@ -495,7 +495,7 @@ contract CellarPoolShareLimitUSDCETH is ICellarPoolShare, BlockLock {
                 amount0Min: 0,
                 amount1Min: 0,
                 recipient: address(this),
-                deadline: type(uint256).max
+                deadline: block.timestamp
             });
 
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, CellarFees memory cellarFees) =
