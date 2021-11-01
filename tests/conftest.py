@@ -1,25 +1,7 @@
 #!/usr/bin/python3
 
 import pytest, math
-from brownie import accounts, CellarPoolShare, CellarPoolShareLimitETHUSDT, CellarPoolShareLimitUSDCETH, Contract
-
-@pytest.fixture(scope="module")
-def CellarPoolShareLimitETHUSDTContract(USDC, WETH, USDT):
-    name = "Cellar Pool Share Token"
-    symbol = "CPS"
-    token0 = WETH
-    token1 = USDT
-    cellarTickInfo = [[0,-188820,-194820,1],[0,-194820,-200820,1],[0,-200820,-206820,1],[0,-206820,-212820,1]]
-    return CellarPoolShareLimitETHUSDT.deploy(name, symbol, token0, token1, 3000, cellarTickInfo, {'from':accounts[1]})
-
-@pytest.fixture(scope="module")
-def CellarPoolShareLimitUSDCETHContract(USDC, WETH, USDT):
-    name = "Cellar Pool Share Limited Test USDC-ETH-3000"
-    symbol = "CPS"
-    token0 = USDC
-    token1 = WETH
-    cellarTickInfo = [[0,210000,180000,1]]
-    return CellarPoolShareLimitUSDCETH.deploy(name, symbol, token0, token1, 3000, cellarTickInfo, {'from':accounts[1]})
+from brownie import accounts, CellarPoolShare, Contract
 
 @pytest.fixture(scope="module")
 def CellarPoolShareContract(USDC, WETH, USDT):
