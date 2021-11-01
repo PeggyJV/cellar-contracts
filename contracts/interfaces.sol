@@ -1145,10 +1145,10 @@ interface ICellarPoolShare is IERC20 {
 
     /// @notice Update cellar tick info
     /// @param _cellarTickInfo new tick tier information
-    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external;
+    function rebalance(CellarTickInfo[] memory _cellarTickInfo, uint256 currentPrice) external;
 
     /// @notice collect fee and reinvest in liquidity
-    function reinvest() external;
+    function reinvest(uint256 currentPriceX96) external;
 
     /// @notice set validator
     /// @param _validator address to add or remove from validator list
