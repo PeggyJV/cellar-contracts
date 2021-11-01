@@ -28,9 +28,11 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
-    uint256 constant FEEDOMINATOR = 10000;
+    uint256 constant DOMINATOR = 10000;
 
     uint256 constant YEAR = 31556952;
+
+    uint256 constant TOLERANCE = 50; // 1% slippage -> 1.005 tolerance of sqrtPrice
 
     // Declare the variables and mappings
     mapping(address => uint256) private _balances;
@@ -418,11 +420,11 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         uint160 sqrtPriceBX96 = TickMath.getSqrtRatioAtTick(tickUpper);
         (uint256 amount0, uint256 amount1) =
             LiquidityAmounts.getAmountsForLiquidity(sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, liquidity);
-        feeAmount0 = amount0.mul(managementFee).mul(duration) / YEAR / FEEDOMINATOR;
-        feeAmount1 = amount1.mul(managementFee).mul(duration) / YEAR / FEEDOMINATOR;
+        feeAmount0 = amount0.mul(managementFee).mul(duration) / YEAR / DOMINATOR;
+        feeAmount1 = amount1.mul(managementFee).mul(duration) / YEAR / DOMINATOR;
     }
 
-    function reinvest() external override onlyValidator notLocked(msg.sender) {
+    function reinvest(uint256 currentPriceX96) external override onlyValidator notLocked(msg.sender) {
         CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
         uint256 weightSum;
         uint256 balance0;
@@ -439,6 +441,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 )
             )
                 .slot0();
+        require(uint256(sqrtPriceX96) - currentPriceX96 < currentPriceX96 * TOLERANCE / DOMINATOR || currentPriceX96 - uint256(sqrtPriceX96) < currentPriceX96 * TOLERANCE / DOMINATOR, "b"); // "High Slippage"
         for (uint256 index = 0; index < _cellarTickInfo.length; index++) {
             require(_cellarTickInfo[index].tokenId != 0, "K");//"NFLP doesnot exist"
             weightSum += _cellarTickInfo[index].weight;
@@ -459,8 +462,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
         uint256 mgmtFee0 = fee0;
         uint256 mgmtFee1 = fee1;
-        uint256 perfFee0 = balance0.mul(performanceFee) / FEEDOMINATOR;
-        uint256 perfFee1 = balance1.mul(performanceFee) / FEEDOMINATOR;
+        uint256 perfFee0 = balance0.mul(performanceFee) / DOMINATOR;
+        uint256 perfFee1 = balance1.mul(performanceFee) / DOMINATOR;
         fee0 += perfFee0;
         fee1 += perfFee1;
         if (fee0 > balance0) {
@@ -502,7 +505,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         );
     }
 
-    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external override notLocked(msg.sender) {
+    function rebalance(CellarTickInfo[] memory _cellarTickInfo, uint256 currentPriceX96) external override notLocked(msg.sender) {
         require(msg.sender == _owner, "M");//"Not owner"
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
@@ -513,6 +516,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 )
             )
                 .slot0();
+        require(uint256(sqrtPriceX96) - currentPriceX96 < currentPriceX96 * TOLERANCE / DOMINATOR || currentPriceX96 - uint256(sqrtPriceX96) < currentPriceX96 * TOLERANCE / DOMINATOR, "b"); // "High Slippage"
         CellarRemoveParams memory removeParams =
             CellarRemoveParams({
                 tokenAmount: _totalSupply,
@@ -605,14 +609,14 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
     function setManagementFee(uint256 newFee) external override {
         require(msg.sender == _owner, "M");
-        require(newFee < FEEDOMINATOR, "a");
+        require(newFee < DOMINATOR, "a");
         managementFee = newFee;
         emit SetManagementFee(newFee);
     }
 
     function setPerformanceFee(uint256 newFee) external override {
         require(msg.sender == _owner, "M");
-        require(newFee < FEEDOMINATOR, "a");
+        require(newFee < DOMINATOR, "a");
         performanceFee = newFee;
         emit SetPerformanceFee(newFee);
     }
@@ -1149,8 +1153,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             }
         }
         if (getFee) {
-            cellarFees.performance0 = cellarFees.collect0.mul(performanceFee) / FEEDOMINATOR;
-            cellarFees.performance1 = cellarFees.collect1.mul(performanceFee) / FEEDOMINATOR;
+            cellarFees.performance0 = cellarFees.collect0.mul(performanceFee) / DOMINATOR;
+            cellarFees.performance1 = cellarFees.collect1.mul(performanceFee) / DOMINATOR;
         }
     }
 
