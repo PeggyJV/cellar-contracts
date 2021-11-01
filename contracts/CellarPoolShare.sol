@@ -129,9 +129,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         uint256 amount
     ) external override returns (bool) {
         _transfer(sender, recipient, amount);
-        uint256 currentAllowance = _allowances[sender][msg.sender];
-        require(currentAllowance >= amount, "F");//"transfer exceeds allowance"
-        _approve(sender, msg.sender, currentAllowance - amount);
+        _approve(sender, msg.sender, _allowances[sender][msg.sender].sub(amount));
         return true;
     }
 
@@ -142,7 +140,6 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         nonReentrant
         notLocked(msg.sender)
     {
-        require(block.timestamp <= cellarParams.deadline);
         if (token0 == WETH) {
             if (msg.value >= cellarParams.amount0Desired) {
                 if (msg.value > cellarParams.amount0Desired) {
@@ -246,7 +243,6 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     function removeLiquidityFromUniV3(
         CellarRemoveParams calldata cellarParams
     ) external override nonReentrant notLocked(msg.sender) {
-        require(block.timestamp <= cellarParams.deadline);
         (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, ) =
             _removeLiquidity(cellarParams, false);
         _burn(msg.sender, cellarParams.tokenAmount);
@@ -306,26 +302,28 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
         totalInAmount0 = totalInAmount0.add(inAmount0);
         totalInAmount1 = totalInAmount1.add(inAmount1);
-
+        uint256 swapAmount;
         // b0 / b1 > i0 / i1 means token0 will remain. swap some token0 into token1
         if (balance0.mul(inAmount1) > balance1.mul(inAmount0) || (inAmount0 == 0 && inAmount1 == 0 && balance0 > balance1)) {
-            // calculate swap amount from bal0, bal1, in0, in1.
-            // bal0, bal1 are token balance to add. in0, in1 are added balance in the first adding liquidity.
-            // approximated result because in swapping, because the price changes.
-            uint256 swapAmount = (balance0.mul(inAmount1) - balance1.mul(inAmount0))
-                /
-                (FullMath.mulDiv(
-                    FullMath.mulDiv(
-                        inAmount0,
-                        sqrtPriceX96,
-                        FixedPoint96.Q96),
-                    sqrtPriceX96,
-                    FixedPoint96.Q96)
-                + inAmount1);
             // nothing added means either token exists and price range is not out of range for the token.
             // the case is balance0 > 0, balance1 = 0, swap half amount of token0 into token1
             if (inAmount0 == 0 && inAmount1 == 0) {
                 swapAmount = balance0 / 2;
+            }
+            // calculate swap amount from bal0, bal1, in0, in1.
+            // bal0, bal1 are token balance to add. in0, in1 are added balance in the first adding liquidity.
+            // approximated result because in swapping, because the price changes.
+            else {
+                swapAmount = (balance0.mul(inAmount1) - balance1.mul(inAmount0))
+                    /
+                    (FullMath.mulDiv(
+                        FullMath.mulDiv(
+                            inAmount0,
+                            sqrtPriceX96,
+                            FixedPoint96.Q96),
+                        sqrtPriceX96,
+                        FixedPoint96.Q96)
+                    + inAmount1);
             }
             IERC20(token0).safeApprove(SWAPROUTER, swapAmount);
             try ISwapRouter(SWAPROUTER).exactInputSingle(
@@ -344,20 +342,22 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         }
         // b0 / b1 < i0 / i1 means token1 will remain. swap some token1 into token0
         if (balance0.mul(inAmount1) < balance1.mul(inAmount0) || (inAmount0 == 0 && inAmount1 == 0 && balance0 < balance1)) {
-            uint256 swapAmount = (balance1.mul(inAmount0) - balance0.mul(inAmount1))
-                /
-                (FullMath.mulDiv(
-                    FullMath.mulDiv(
-                        inAmount1,
-                        FixedPoint96.Q96,
-                        sqrtPriceX96),
-                    FixedPoint96.Q96,
-                    sqrtPriceX96)
-                + inAmount0);
             // nothing added means either token exists and price range is not out of range for the token.
             // the case is balance1 > 0, balance0 = 0, swap half amount of token1 into token0
             if (inAmount0 == 0 && inAmount1 == 0) {
                 swapAmount = balance1 / 2;
+            }
+            else {
+                swapAmount = (balance1.mul(inAmount0) - balance0.mul(inAmount1))
+                    /
+                    (FullMath.mulDiv(
+                        FullMath.mulDiv(
+                            inAmount1,
+                            FixedPoint96.Q96,
+                            sqrtPriceX96),
+                        FixedPoint96.Q96,
+                        sqrtPriceX96)
+                    + inAmount0);
             }
             IERC20(token1).safeApprove(SWAPROUTER, swapAmount);
             try ISwapRouter(SWAPROUTER).exactInputSingle(
