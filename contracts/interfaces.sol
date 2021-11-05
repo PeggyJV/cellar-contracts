@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // VolumeFi Software, Inc.
 
-pragma solidity ^0.7.6;
+pragma solidity 0.7.6;
 pragma abicoder v2;
 
 /// Imported from Openzeppelin
@@ -357,7 +357,7 @@ library Address {
         internal
         returns (bytes memory)
     {
-        return functionCall(target, data, "R2");//"Address: low-level call failed"
+        return functionCall(target, data, "2");//"Address: low-level call failed"
     }
 
     /**
@@ -395,7 +395,7 @@ library Address {
                 target,
                 data,
                 value,
-                "R3"//"Address: low-level call with value failed"
+                "3"//"Address: low-level call with value failed"
             );
     }
 
@@ -413,9 +413,9 @@ library Address {
     ) internal returns (bytes memory) {
         require(
             address(this).balance >= value,
-            "R4"//"insufficient balance for call"
+            "4"//"insufficient balance for call"
         );
-        require(isContract(target), "R5");//"Address: call to non-contract"
+        require(isContract(target), "5");//"Address: call to non-contract"
 
         (bool success, bytes memory returndata) =
             target.call{value: value}(data);
@@ -527,7 +527,7 @@ library SafeERC20 {
         // solhint-disable-next-line max-line-length
         require(
             (value == 0) || (token.allowance(address(this), spender) == 0),
-            "R6"//"approve non-zero to non-zero"
+            "6"//"approve non-zero to non-zero"
         );
         _callOptionalReturn(
             token,
@@ -548,12 +548,12 @@ library SafeERC20 {
         bytes memory returndata =
             address(token).functionCall(
                 data,
-                "R7"//"SafeERC20: low-level call failed"
+                "7"//"SafeERC20: low-level call failed"
             );
         if (returndata.length > 0) {
             require(
                 abi.decode(returndata, (bool)),
-                "R8"//"ERC20 operation did not succeed"
+                "8"//"ERC20 operation did not succeed"
             );
         }
     }
@@ -1106,6 +1106,37 @@ interface ICellarPoolShare is IERC20 {
         uint256 amount1
     );
 
+    /// @notice Emitted when update validator setting
+    /// @param validator validator address to add or remove
+    /// @param value true to add, false to remove
+    event SetValidator (
+        address validator,
+        bool value
+    );
+
+    event SetAdjuster (
+        address adjuster,
+        bool value
+    );
+
+    /// @notice Emitted when transfer ownership
+    /// @param newOwner new owner address
+    event TransferOwnership (
+        address newOwner
+    );
+
+    /// @notice Emitted when update performance fee
+    /// @param newFee new performance fee
+    event SetPerformanceFee (
+        uint256 newFee
+    );
+
+    /// @notice Emitted when update performance fee
+    /// @param newFee new performance fee
+    event SetManagementFee (
+        uint256 newFee
+    );
+
     /// @notice Adding Liquidity For Uniswap V3 NFLP
     /// @param cellarParams parameter for adding liquidity
     function addLiquidityForUniV3(CellarAddParams calldata cellarParams)
@@ -1119,10 +1150,10 @@ interface ICellarPoolShare is IERC20 {
 
     /// @notice Update cellar tick info
     /// @param _cellarTickInfo new tick tier information
-    function rebalance(CellarTickInfo[] memory _cellarTickInfo) external;
+    function rebalance(CellarTickInfo[] memory _cellarTickInfo, uint256 currentPrice) external;
 
     /// @notice collect fee and reinvest in liquidity
-    function reinvest() external;
+    function reinvest(uint256 currentPriceX96) external;
 
     /// @notice set validator
     /// @param _validator address to add or remove from validator list
@@ -1185,6 +1216,69 @@ interface IWETH {
     function withdraw(uint256) external;
 }
 
+/**
+ * @dev Wrappers over Solidity's arithmetic operations with added overflow
+ * checks.
+ *
+ * Arithmetic operations in Solidity wrap on overflow. This can easily result
+ * in bugs, because programmers usually assume that an overflow raises an
+ * error, which is the standard behavior in high level programming languages.
+ * `SafeMath` restores this intuition by reverting the transaction when an
+ * operation overflows.
+ *
+ * Using this library instead of the unchecked operations eliminates an entire
+ * class of bugs, so it's recommended to use it always.
+ */
+library SafeMath {
+    /**
+     * @dev Returns the addition of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `+` operator.
+     *
+     * Requirements:
+     *
+     * - Addition cannot overflow.
+     */
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a, "W"); // "SafeMath: addition overflow"
+        return c;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting on
+     * overflow (when the result is negative).
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b <= a, "X"); // "SafeMath: subtraction overflow"
+        return a - b;
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `*` operator.
+     *
+     * Requirements:
+     *
+     * - Multiplication cannot overflow.
+     */
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) return 0;
+        uint256 c = a * b;
+        require(c / a == b, "Y"); //"SafeMath: multiplication overflow"
+        return c;
+    }
+}
+
 /// @title BlockLock base contract to prevent flash loan attack
 contract BlockLock {
     // how many blocks are the functions locked for
@@ -1193,7 +1287,7 @@ contract BlockLock {
     mapping(address => uint256) public lastLockedBlock;
     // modifier to prevent flash loan attack
     modifier notLocked(address lockedAddress) {
-        require(lastLockedBlock[lockedAddress] <= block.number, "R30");//"Locked"
+        require(lastLockedBlock[lockedAddress] <= block.number, "V");//"Locked"
         lastLockedBlock[lockedAddress] = block.number + BLOCK_LOCK_COUNT;
         _;
     }
