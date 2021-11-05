@@ -1114,6 +1114,11 @@ interface ICellarPoolShare is IERC20 {
         bool value
     );
 
+    event SetAdjuster (
+        address adjuster,
+        bool value
+    );
+
     /// @notice Emitted when transfer ownership
     /// @param newOwner new owner address
     event TransferOwnership (

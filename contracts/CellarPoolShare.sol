@@ -40,7 +40,9 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     mapping(address => mapping(address => uint256)) private _allowances;
 
     mapping(address => bool) public validator;
+
     mapping(address => bool) public adjuster;
+
     uint256 private _totalSupply;
     address private _owner;
     bool private _isEntered;
@@ -151,7 +153,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         if (token0 == WETH) {
             if (msg.value >= cellarParams.amount0Desired) {
                 if (msg.value > cellarParams.amount0Desired) {
-                    payable(msg.sender).transfer(
+                    msg.sender.transfer(
                         msg.value - cellarParams.amount0Desired
                     );
                 }
@@ -163,7 +165,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     cellarParams.amount0Desired
                 );
                 if (msg.value > 0) {
-                    payable(msg.sender).transfer(msg.value);
+                    msg.sender.transfer(msg.value);
                 }
             }
             IERC20(token1).safeTransferFrom(
@@ -174,7 +176,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         } else if (token1 == WETH) {
             if (msg.value >= cellarParams.amount1Desired) {
                 if (msg.value > cellarParams.amount1Desired) {
-                    payable(msg.sender).transfer(
+                    msg.sender.transfer(
                         msg.value - cellarParams.amount1Desired
                     );
                 }
@@ -186,7 +188,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     cellarParams.amount1Desired
                 );
                 if (msg.value > 0) {
-                    payable(msg.sender).transfer(msg.value);
+                    msg.sender.transfer(msg.value);
                 }
             }
             IERC20(token0).safeTransferFrom(
@@ -425,7 +427,6 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     }
 
     function reinvest(uint256 currentPriceX96) external override onlyValidator notLocked(msg.sender) {
-        CellarTickInfo[] memory _cellarTickInfo = cellarTickInfo;
         uint256 weightSum;
         uint256 balance0;
         uint256 balance1;
@@ -442,13 +443,13 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             )
                 .slot0();
         require(uint256(sqrtPriceX96) - currentPriceX96 < currentPriceX96 * TOLERANCE / DOMINATOR || currentPriceX96 - uint256(sqrtPriceX96) < currentPriceX96 * TOLERANCE / DOMINATOR, "b"); // "High Slippage"
-        for (uint256 index = 0; index < _cellarTickInfo.length; index++) {
-            require(_cellarTickInfo[index].tokenId != 0, "K");//"NFLP doesnot exist"
-            weightSum += _cellarTickInfo[index].weight;
+        for (uint256 index = 0; index < cellarTickInfo.length; index++) {
+            require(cellarTickInfo[index].tokenId != 0, "K");//"NFLP doesnot exist"
+            weightSum += cellarTickInfo[index].weight;
             (uint256 amount0, uint256 amount1) =
                 INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).collect(
                     INonfungiblePositionManager.CollectParams({
-                        tokenId: _cellarTickInfo[index].tokenId,
+                        tokenId: cellarTickInfo[index].tokenId,
                         recipient: address(this),
                         amount0Max: type(uint128).max,
                         amount1Max: type(uint128).max
@@ -456,14 +457,14 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 );
             balance0 += amount0;
             balance1 += amount1;
-            (uint256 mFee0, uint256 mFee1) = getManagementFee(_cellarTickInfo[index].tokenId, sqrtPriceX96, duration);
+            (uint256 mFee0, uint256 mFee1) = getManagementFee(cellarTickInfo[index].tokenId, sqrtPriceX96, duration);
             fee0 += mFee0;
             fee1 += mFee1;
         }
         uint256 mgmtFee0 = fee0;
         uint256 mgmtFee1 = fee1;
-        uint256 perfFee0 = balance0.mul(performanceFee) / DOMINATOR;
-        uint256 perfFee1 = balance1.mul(performanceFee) / DOMINATOR;
+        uint256 perfFee0 = balance0 * performanceFee / DOMINATOR;
+        uint256 perfFee1 = balance1 * performanceFee / DOMINATOR;
         fee0 += perfFee0;
         fee1 += perfFee1;
         if (fee0 > balance0) {
@@ -506,7 +507,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     }
 
     function rebalance(CellarTickInfo[] memory _cellarTickInfo, uint256 currentPriceX96) external override notLocked(msg.sender) {
-        require(msg.sender == _owner, "M");//"Not owner"
+        require(adjuster[msg.sender], "c");//"Not adjuster"
         (uint160 sqrtPriceX96, , , , , , ) =
             IUniswapV3Pool(
                 IUniswapV3Factory(UNISWAPV3FACTORY).getPool(
@@ -526,7 +527,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 deadline: block.timestamp
             });
 
-        (uint256 outAmount0, uint256 outAmount1, uint128 liquiditySum, CellarFees memory cellarFees) =
+        (, , , CellarFees memory cellarFees) =
             _removeLiquidity(removeParams, true);
         lastManageTimestamp = block.timestamp;
 
@@ -557,10 +558,9 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         if (fee1 > 0) {
             IERC20(token1).safeTransfer(_owner, fee1);
         }
-        CellarTickInfo[] memory _oldCellarTickInfo = cellarTickInfo;
-        for (uint256 i = 0; i < _oldCellarTickInfo.length; i++) {
+        for (uint256 i = 0; i < cellarTickInfo.length; i++) {
             INonfungiblePositionManager(NONFUNGIBLEPOSITIONMANAGER).burn(
-                _oldCellarTickInfo[i].tokenId
+                cellarTickInfo[i].tokenId
             );
         }
         delete cellarTickInfo;
@@ -596,8 +596,10 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
     }
 
     function setAdjuster(address _adjuster, bool value) external override {
-        require(msg.sender == _owner, "R21");
+        require(msg.sender == _owner, "M");
+        require(_adjuster != address(0), "a");
         adjuster[_adjuster] = value;
+        emit SetAdjuster(_adjuster, value);
     }
 
     function transferOwnership(address newOwner) external override {
@@ -1153,8 +1155,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
             }
         }
         if (getFee) {
-            cellarFees.performance0 = cellarFees.collect0.mul(performanceFee) / DOMINATOR;
-            cellarFees.performance1 = cellarFees.collect1.mul(performanceFee) / DOMINATOR;
+            cellarFees.performance0 = cellarFees.collect0 * performanceFee / DOMINATOR;
+            cellarFees.performance1 = cellarFees.collect1 * performanceFee / DOMINATOR;
         }
     }
 
