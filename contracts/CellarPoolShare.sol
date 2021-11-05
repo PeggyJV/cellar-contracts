@@ -103,11 +103,6 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         _;
     }
 
-    modifier onlyAdjuster() {
-        require(adjuster[msg.sender], "R31"); //"Not adjuster"
-        _;
-    }
-
     modifier nonReentrant() {
         require(!_isEntered, "E");//"reentrant call"
         _isEntered = true;
