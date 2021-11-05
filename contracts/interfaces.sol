@@ -1114,6 +1114,11 @@ interface ICellarPoolShare is IERC20 {
         bool value
     );
 
+    event SetAdjuster (
+        address adjuster,
+        bool value
+    );
+
     /// @notice Emitted when transfer ownership
     /// @param newOwner new owner address
     event TransferOwnership (
@@ -1154,6 +1159,8 @@ interface ICellarPoolShare is IERC20 {
     /// @param _validator address to add or remove from validator list
     /// @param value add/remove option
     function setValidator(address _validator, bool value) external;
+
+    function setAdjuster(address _adjuster, bool value) external;
 
     /// @notice transfer ownership to new address
     /// @param newOwner address of new owner
