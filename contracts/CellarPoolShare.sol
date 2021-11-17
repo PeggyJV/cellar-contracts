@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // VolumeFi Software, Inc.
 
-pragma solidity 0.7.6;
+pragma solidity 0.8.10;
 pragma abicoder v2;
 
 import "./interfaces.sol";
@@ -14,7 +14,6 @@ import "./interfaces.sol";
 
 contract CellarPoolShare is ICellarPoolShare, BlockLock {
     using SafeERC20 for IERC20;
-    using SafeMath for uint256;
 
     // Set the Uniswap V3 contract Addresses.
     address constant NONFUNGIBLEPOSITIONMANAGER =
@@ -32,7 +31,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
     uint256 constant YEAR = 31556952;
 
-    uint256 constant TOLERANCE = 50; // 1% slippage -> 1.005 tolerance of sqrtPrice
+    uint256 constant TOLERANCE = 25; // 0.5% slippage -> 1.0025 tolerance of sqrtPrice
 
     // Declare the variables and mappings
     mapping(address => uint256) private _balances;
@@ -134,7 +133,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         uint256 amount
     ) external override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, msg.sender, _allowances[sender][msg.sender].sub(amount));
+        _approve(sender, msg.sender, _allowances[sender][msg.sender] - amount);
         return true;
     }
 
@@ -148,7 +147,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         if (token0 == WETH) {
             if (msg.value >= cellarParams.amount0Desired) {
                 if (msg.value > cellarParams.amount0Desired) {
-                    msg.sender.transfer(
+                    payable(msg.sender).transfer(
                         msg.value - cellarParams.amount0Desired
                     );
                 }
@@ -160,7 +159,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     cellarParams.amount0Desired
                 );
                 if (msg.value > 0) {
-                    msg.sender.transfer(msg.value);
+                    payable(msg.sender).transfer(msg.value);
                 }
             }
             IERC20(token1).safeTransferFrom(
@@ -171,7 +170,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         } else if (token1 == WETH) {
             if (msg.value >= cellarParams.amount1Desired) {
                 if (msg.value > cellarParams.amount1Desired) {
-                    msg.sender.transfer(
+                    payable(msg.sender).transfer(
                         msg.value - cellarParams.amount1Desired
                     );
                 }
@@ -183,7 +182,7 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     cellarParams.amount1Desired
                 );
                 if (msg.value > 0) {
-                    msg.sender.transfer(msg.value);
+                    payable(msg.sender).transfer(msg.value);
                 }
             }
             IERC20(token0).safeTransferFrom(
@@ -223,13 +222,13 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         require(inAmount0 >= cellarParams.amount0Min, "G");
         require(inAmount1 >= cellarParams.amount1Min, "H");
 
-        uint256 retAmount0 = cellarParams.amount0Desired.sub(inAmount0);
-        uint256 retAmount1 = cellarParams.amount1Desired.sub(inAmount1);
+        uint256 retAmount0 = cellarParams.amount0Desired - inAmount0;
+        uint256 retAmount1 = cellarParams.amount1Desired - inAmount1;
 
         if (retAmount0 > 0) {
             if (token0 == WETH) {
                 IWETH(WETH).withdraw(retAmount0);
-                msg.sender.transfer(retAmount0);
+                payable(msg.sender).transfer(retAmount0);
             } else {
                 IERC20(token0).safeTransfer(msg.sender, retAmount0);
             }
@@ -237,12 +236,12 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         if (retAmount1 > 0) {
             if (token1 == WETH) {
                 IWETH(WETH).withdraw(retAmount1);
-                msg.sender.transfer(retAmount1);
+                payable(msg.sender).transfer(retAmount1);
             } else {
                 IERC20(token1).safeTransfer(msg.sender, retAmount1);
             }
         }
-        emit AddedLiquidity(token0, token1, liquiditySum, inAmount0, inAmount1);
+        emit AddedLiquidity(liquiditySum, inAmount0, inAmount1);
     }
 
     function removeLiquidityFromUniV3(
@@ -257,21 +256,59 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
         if (token0 == WETH) {
             IWETH(WETH).withdraw(outAmount0);
-            msg.sender.transfer(outAmount0);
+            payable(msg.sender).transfer(outAmount0);
             IERC20(token1).safeTransfer(msg.sender, outAmount1);
         } else {
             require(token1 == WETH, "J");
             IWETH(WETH).withdraw(outAmount1);
-            msg.sender.transfer(outAmount1);
+            payable(msg.sender).transfer(outAmount1);
             IERC20(token0).safeTransfer(msg.sender, outAmount0);
         }
         emit RemovedLiquidity(
-            token0,
-            token1,
             liquiditySum,
             outAmount0,
             outAmount1
         );
+    }
+
+    function midSwap(address _token0, address _token1, uint256 inAmount0, uint256 inAmount1, uint256 balance0, uint256 balance1, uint256 sqrtPriceX96)
+        private
+    {
+            uint256 swapAmount;
+            // nothing added means either token exists and price range is not out of range for the token.
+            // the case is balance0 > 0, balance1 = 0, swap half amount of token0 into token1
+            if (inAmount0 == 0 && inAmount1 == 0) {
+                swapAmount = balance0 / 2;
+            }
+            // calculate swap amount from bal0, bal1, in0, in1.
+            // bal0, bal1 are token balance to add. in0, in1 are added balance in the first adding liquidity.
+            // approximated result because in swapping, because the price changes.
+            else {
+                swapAmount = (balance0* inAmount1 - balance1 * inAmount0)
+                    /
+                    (FullMath.mulDiv(
+                        FullMath.mulDiv(
+                            inAmount0,
+                            sqrtPriceX96,
+                            FixedPoint96.Q96),
+                        sqrtPriceX96,
+                        FixedPoint96.Q96)
+                    + inAmount1);
+            }
+            IERC20(_token0).safeApprove(SWAPROUTER, swapAmount);
+            try ISwapRouter(SWAPROUTER).exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: _token0,
+                    tokenOut: _token1,
+                    fee: feeLevel,
+                    recipient: address(this),
+                    deadline: block.timestamp,
+                    amountIn: swapAmount,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            ) {} catch {}
+            IERC20(_token0).safeApprove(SWAPROUTER, 0);
     }
 
     /**
@@ -302,91 +339,26 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                     deadline: block.timestamp
                 })
             );
-        balance0 = balance0.sub(inAmount0);
-        balance1 = balance1.sub(inAmount1);
+        balance0 = balance0 - inAmount0;
+        balance1 = balance1 - inAmount1;
 
-        totalInAmount0 = totalInAmount0.add(inAmount0);
-        totalInAmount1 = totalInAmount1.add(inAmount1);
-        uint256 swapAmount;
+        totalInAmount0 = totalInAmount0 + inAmount0;
+        totalInAmount1 = totalInAmount1 + inAmount1;
+        // uint256 swapAmount;
         // b0 / b1 > i0 / i1 means token0 will remain. swap some token0 into token1
-        if (balance0.mul(inAmount1) > balance1.mul(inAmount0) || (inAmount0 == 0 && inAmount1 == 0 && balance0 > balance1)) {
-            // nothing added means either token exists and price range is not out of range for the token.
-            // the case is balance0 > 0, balance1 = 0, swap half amount of token0 into token1
-            if (inAmount0 == 0 && inAmount1 == 0) {
-                swapAmount = balance0 / 2;
-            }
-            // calculate swap amount from bal0, bal1, in0, in1.
-            // bal0, bal1 are token balance to add. in0, in1 are added balance in the first adding liquidity.
-            // approximated result because in swapping, because the price changes.
-            else {
-                swapAmount = (balance0.mul(inAmount1) - balance1.mul(inAmount0))
-                    /
-                    (FullMath.mulDiv(
-                        FullMath.mulDiv(
-                            inAmount0,
-                            sqrtPriceX96,
-                            FixedPoint96.Q96),
-                        sqrtPriceX96,
-                        FixedPoint96.Q96)
-                    + inAmount1);
-            }
-            IERC20(token0).safeApprove(SWAPROUTER, swapAmount);
-            try ISwapRouter(SWAPROUTER).exactInputSingle(
-                ISwapRouter.ExactInputSingleParams({
-                    tokenIn: token0,
-                    tokenOut: token1,
-                    fee: feeLevel,
-                    recipient: address(this),
-                    deadline: block.timestamp,
-                    amountIn: swapAmount,
-                    amountOutMinimum: 0,
-                    sqrtPriceLimitX96: 0
-                })
-            ) {} catch {}
-            IERC20(token0).safeApprove(SWAPROUTER, 0);
+        if (balance0 * inAmount1 > balance1 * inAmount0 || (inAmount0 == 0 && inAmount1 == 0 && balance0 > balance1)) {
+            midSwap(token0, token1, inAmount0, inAmount1, balance0, balance1, sqrtPriceX96);
         }
         // b0 / b1 < i0 / i1 means token1 will remain. swap some token1 into token0
-        if (balance0.mul(inAmount1) < balance1.mul(inAmount0) || (inAmount0 == 0 && inAmount1 == 0 && balance0 < balance1)) {
-            // nothing added means either token exists and price range is not out of range for the token.
-            // the case is balance1 > 0, balance0 = 0, swap half amount of token1 into token0
-            if (inAmount0 == 0 && inAmount1 == 0) {
-                swapAmount = balance1 / 2;
-            }
-            else {
-                swapAmount = (balance1.mul(inAmount0) - balance0.mul(inAmount1))
-                    /
-                    (FullMath.mulDiv(
-                        FullMath.mulDiv(
-                            inAmount1,
-                            FixedPoint96.Q96,
-                            sqrtPriceX96),
-                        FixedPoint96.Q96,
-                        sqrtPriceX96)
-                    + inAmount0);
-            }
-            IERC20(token1).safeApprove(SWAPROUTER, swapAmount);
-            try ISwapRouter(SWAPROUTER).exactInputSingle(
-                ISwapRouter.ExactInputSingleParams({
-                    tokenIn: token1,
-                    tokenOut: token0,
-                    fee: feeLevel,
-                    recipient: address(this),
-                    deadline: block.timestamp,
-                    amountIn: swapAmount,
-                    amountOutMinimum: 0,
-                    sqrtPriceLimitX96: 0
-                })
-            ) {} catch {}
-            IERC20(token1).safeApprove(SWAPROUTER, 0);
+        if (balance0 * inAmount1 < balance1 * inAmount0 || (inAmount0 == 0 && inAmount1 == 0 && balance0 < balance1)) {
+            uint256 revertedSqrtPriceX96 = FullMath.mulDiv(FixedPoint96.Q96, FixedPoint96.Q96, sqrtPriceX96);
+            midSwap(token1, token0, inAmount1, inAmount0, balance1, balance0, revertedSqrtPriceX96);
         }
-
-        balance0 = IERC20(token0).balanceOf(address(this));
-        balance1 = IERC20(token1).balanceOf(address(this));
         (inAmount0, inAmount1, , ) =
             _addLiquidity(
                 CellarAddParams({
-                    amount0Desired: balance0,
-                    amount1Desired: balance1,
+                    amount0Desired: IERC20(token0).balanceOf(address(this)),
+                    amount1Desired: IERC20(token1).balanceOf(address(this)),
                     amount0Min: 0,
                     amount1Min: 0,
                     recipient: address(this),
@@ -394,8 +366,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 })
             );
 
-        totalInAmount0 = totalInAmount0.add(inAmount0);
-        totalInAmount1 = totalInAmount1.add(inAmount1);
+        totalInAmount0 += inAmount0;
+        totalInAmount1 += inAmount1;
     }
     /**
      * @notice get management fee from NFLP
@@ -417,8 +389,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
         uint160 sqrtPriceBX96 = TickMath.getSqrtRatioAtTick(tickUpper);
         (uint256 amount0, uint256 amount1) =
             LiquidityAmounts.getAmountsForLiquidity(sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, liquidity);
-        feeAmount0 = amount0.mul(managementFee).mul(duration) / YEAR / DOMINATOR;
-        feeAmount1 = amount1.mul(managementFee).mul(duration) / YEAR / DOMINATOR;
+        feeAmount0 = amount0 * managementFee * duration / YEAR / DOMINATOR;
+        feeAmount1 = amount1 * managementFee * duration / YEAR / DOMINATOR;
     }
 
     function reinvest(uint256 currentPriceX96) external override onlyValidator notLocked(msg.sender) {
@@ -437,7 +409,9 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 )
             )
                 .slot0();
-        require(uint256(sqrtPriceX96) - currentPriceX96 < currentPriceX96 * TOLERANCE / DOMINATOR || currentPriceX96 - uint256(sqrtPriceX96) < currentPriceX96 * TOLERANCE / DOMINATOR, "b"); // "High Slippage"
+        unchecked{
+            require(uint256(sqrtPriceX96) - currentPriceX96 < currentPriceX96 * TOLERANCE / DOMINATOR || currentPriceX96 - uint256(sqrtPriceX96) < currentPriceX96 * TOLERANCE / DOMINATOR, "b"); // "High Slippage"
+        }
         for (uint256 index = 0; index < cellarTickInfo.length; index++) {
             require(cellarTickInfo[index].tokenId != 0, "K");//"NFLP doesnot exist"
             weightSum += cellarTickInfo[index].weight;
@@ -512,7 +486,9 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                 )
             )
                 .slot0();
-        require(uint256(sqrtPriceX96) - currentPriceX96 < currentPriceX96 * TOLERANCE / DOMINATOR || currentPriceX96 - uint256(sqrtPriceX96) < currentPriceX96 * TOLERANCE / DOMINATOR, "b"); // "High Slippage"
+        unchecked{
+            require(uint256(sqrtPriceX96) - currentPriceX96 < currentPriceX96 * TOLERANCE / DOMINATOR || currentPriceX96 - uint256(sqrtPriceX96) < currentPriceX96 * TOLERANCE / DOMINATOR, "b"); // "High Slippage"
+        }
         CellarRemoveParams memory removeParams =
             CellarRemoveParams({
                 tokenAmount: _totalSupply,
@@ -1048,8 +1024,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
 
                     cellarTickInfo[i].tokenId = uint184(mintResult.tokenId);
 
-                    inAmount0 = inAmount0.add(mintResult.amount0);
-                    inAmount1 = inAmount1.add(mintResult.amount1);
+                    inAmount0 = inAmount0 + mintResult.amount0;
+                    inAmount1 = inAmount1 + mintResult.amount1;
                     liquiditySum += mintResult.liquidity;
                     require(liquiditySum >= mintResult.liquidity, "W");
                 } else {
@@ -1059,8 +1035,8 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                         mintResult.amount0 = r2;
                         mintResult.amount1 = r3;
                     } catch {}
-                    inAmount0 = inAmount0.add(mintResult.amount0);
-                    inAmount1 = inAmount1.add(mintResult.amount1);
+                    inAmount0 = inAmount0 + mintResult.amount0;
+                    inAmount1 = inAmount1 + mintResult.amount1;
                     liquiditySum += mintResult.liquidity;
                     require(liquiditySum >= mintResult.liquidity, "W");
                 }
@@ -1137,16 +1113,16 @@ contract CellarPoolShare is ICellarPoolShare, BlockLock {
                         amount1Max: type(uint128).max
                     })
                 );
-            outAmount0 = outAmount0.add(amount.a);
-            outAmount1 = outAmount1.add(amount.b);
+            outAmount0 = outAmount0 + amount.a;
+            outAmount1 = outAmount1 + amount.b;
             liquiditySum += outLiquidity;
             require(liquiditySum >= outLiquidity, "W");
             if (getFee) {
-                cellarFees.collect0 = cellarFees.collect0.add(collectAmount.a - amount.a);
-                cellarFees.collect1 = cellarFees.collect1.add(collectAmount.b - amount.b);
+                cellarFees.collect0 = cellarFees.collect0 + collectAmount.a - amount.a;
+                cellarFees.collect1 = cellarFees.collect1 + collectAmount.b - amount.b;
                 (amount.a, amount.b) = getManagementFee(_cellarTickInfo[i].tokenId, sqrtPriceX96, duration);
-                cellarFees.management0 = cellarFees.management0.add(amount.a);
-                cellarFees.management1 = cellarFees.management1.add(amount.b);
+                cellarFees.management0 = cellarFees.management0 + amount.a;
+                cellarFees.management1 = cellarFees.management1 + amount.b;
             }
         }
         if (getFee) {
