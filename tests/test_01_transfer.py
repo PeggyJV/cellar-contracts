@@ -10,11 +10,11 @@ def test_add_liquidity_ETH(USDT, WETH, accounts, SwapRouter, CellarPoolShareCont
     USDT.approve(CellarPoolShareContract, 3000 * 10 ** 6, {"from": accounts[1]})
     USDT_amount = 1000 * 10 ** 6
     ETH_amount = 1 * 10 ** 18
-    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, accounts[0], 2 ** 256 - 1]
+    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, 2 ** 256 - 1]
     CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
     CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
     CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[0], "value": 1 * 10 ** 18})
-    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, accounts[1], 2 ** 256 - 1]
+    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, 2 ** 256 - 1]
     CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})
     CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})
     CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[1], "value": 1 * 10 ** 18})

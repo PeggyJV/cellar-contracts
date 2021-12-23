@@ -8,9 +8,9 @@ def test_weight(USDT, WETH, accounts, SwapRouter, NonfungiblePositionManager, Ce
     USDT.approve(CellarPoolShareContract, 6000 * 10 ** 6, {"from": accounts[0]})
     USDT_amount = 1000 * 10 ** 6
     ETH_amount = 1 * 10 ** 18
-    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, accounts[0], 2 ** 256 - 1]
+    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, 2 ** 256 - 1]
     CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[0], "value": ETH_amount})
-    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, accounts[0], 2 ** 256 - 1]
+    cellarAddParams = [ETH_amount, USDT_amount, 0, 0, 2 ** 256 - 1]
     CellarPoolShareContract.addLiquidityForUniV3(cellarAddParams, {"from": accounts[0], "value": ETH_amount})
 
     token_id_0 = NonfungiblePositionManager.tokenOfOwnerByIndex(CellarPoolShareContract, 0)
