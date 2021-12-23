@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // VolumeFi Software, Inc.
 
-pragma solidity 0.8.10;
-pragma abicoder v2;
+pragma solidity 0.8.11;
 
 /// Imported from Openzeppelin
 
@@ -357,7 +356,7 @@ library Address {
         internal
         returns (bytes memory)
     {
-        return functionCall(target, data, "2");//"Address: low-level call failed"
+        return functionCall(target, data, "A");//"Address: low-level call failed"
     }
 
     /**
@@ -395,7 +394,7 @@ library Address {
                 target,
                 data,
                 value,
-                "3"//"Address: low-level call with value failed"
+                "B"//"Address: low-level call with value failed"
             );
     }
 
@@ -413,9 +412,9 @@ library Address {
     ) internal returns (bytes memory) {
         require(
             address(this).balance >= value,
-            "4"//"insufficient balance for call"
+            "C"//"insufficient balance for call"
         );
-        require(isContract(target), "5");//"Address: call to non-contract"
+        require(isContract(target), "D");//"Address: call to non-contract"
 
         (bool success, bytes memory returndata) =
             target.call{value: value}(data);
@@ -527,7 +526,7 @@ library SafeERC20 {
         // solhint-disable-next-line max-line-length
         require(
             (value == 0) || (token.allowance(address(this), spender) == 0),
-            "6"//"approve non-zero to non-zero"
+            "E"//"approve non-zero to non-zero"
         );
         _callOptionalReturn(
             token,
@@ -548,12 +547,12 @@ library SafeERC20 {
         bytes memory returndata =
             address(token).functionCall(
                 data,
-                "7"//"SafeERC20: low-level call failed"
+                "F"//"SafeERC20: low-level call failed"
             );
         if (returndata.length > 0) {
             require(
                 abi.decode(returndata, (bool)),
-                "8"//"ERC20 operation did not succeed"
+                "G"//"ERC20 operation did not succeed"
             );
         }
     }
@@ -706,7 +705,7 @@ library TickMath {
         unchecked{
             uint256 absTick =
                 tick < 0 ? uint256(-int256(tick)) : uint256(int256(tick));
-            require(absTick <= uint256(int256(MAX_TICK)), "T");
+            require(absTick <= uint256(int256(MAX_TICK)), "H");
 
             uint256 ratio =
                 absTick & 0x1 != 0
@@ -929,34 +928,6 @@ library LiquidityAmounts {
 /// @author Steven Jung
 interface ICellarPoolShare is IERC20 {
 
-    /**
-     * @notice The struct to mint a position
-     * @member token0 The address of the token0 for a specific pool
-     * @member token1 The address of the token1 for a specific pool
-     * @member fee The fee associated with the pool
-     * @member tickLower The lower end of the tick range for the position
-     * @member tickUpper The higher end of the tick range for the position
-     * @member amount0Desired The desired amount of token0 to be spent
-     * @member amount1Desired The desired amount of token1 to be spent
-     * @member amount0Min The minimum amount of token0 to spend, which serves as a slippage check
-     * @member amount1Min The minimum amount of token1 to spend, which serves as a slippage check
-     * @member recipient The account that should receive the tokens
-     * @member deadline The time by which the transaction must be included to effect the change
-     */
-    struct MintParams {
-        address token0;
-        address token1;
-        uint24 fee;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        address recipient;
-        uint256 deadline;
-    }
-
     /// @notice Result from mint or add liquidity in Uniswap V3
     /// @dev Used for decrease local memory variables.
     /// @member tokenId minted tokenId
@@ -976,7 +947,6 @@ interface ICellarPoolShare is IERC20 {
      * @member amount1Desired The desired amount of token1 to be spent
      * @member amount0Min The minimum amount of token0 to spend, which serves as a slippage check
      * @member amount1Min The minimum amount of token1 to spend, which serves as a slippage check
-     * @member recipient The account that should receive the tokens
      * @member deadline The time by which the transaction must be included to effect the change
      */
     struct CellarAddParams {
@@ -984,7 +954,6 @@ interface ICellarPoolShare is IERC20 {
         uint256 amount1Desired;
         uint256 amount0Min;
         uint256 amount1Min;
-        address recipient;
         uint256 deadline;
     }
 
@@ -993,14 +962,12 @@ interface ICellarPoolShare is IERC20 {
      * @member tokenAmount The amount of cellar token amount by which liquidity will be decreased
      * @member amount0Min The minimum amount of token0 that should be accounted for the burned liquidity
      * @member amount1Min The minimum amount of token1 that should be accounted for the burned liquidity
-     * @member recipient The account that should receive the tokens
      * @member deadline The time by which the transaction must be included to effect the change
      */
     struct CellarRemoveParams {
         uint256 tokenAmount;
         uint256 amount0Min;
         uint256 amount1Min;
-        address recipient;
         uint256 deadline;
     }
 
@@ -1133,6 +1100,24 @@ interface ICellarPoolShare is IERC20 {
         uint256 newFee
     );
 
+    error OverDeposit();
+    error UnsortedTokens();
+    error ZeroWeight();
+    error NonEmptyTokenId();
+    error WrongTickTier();
+    error NonPermission();
+    error Reentrance();
+    error InsufficientAmount();
+    error HighSlippage();
+    error InvalidTokenId();
+    error InvalidInput();
+    error TransferToZeroAddress();
+    error TransferFromZeroAddress();
+    error MintToZeroAddress();
+    error BurnFromZeroAddress();
+    error ApproveToZeroAddress();
+    error ApproveFromZeroAddress();
+
     /// @notice Adding Liquidity For Uniswap V3 NFLP
     /// @param cellarParams parameter for adding liquidity
     function addLiquidityForUniV3(CellarAddParams calldata cellarParams)
@@ -1214,13 +1199,14 @@ interface IWETH {
 
 /// @title BlockLock base contract to prevent flash loan attack
 contract BlockLock {
+    error Locked();
     // how many blocks are the functions locked for
     uint256 private constant BLOCK_LOCK_COUNT = 1;
     // last block for which this address is timelocked
     mapping(address => uint256) public lastLockedBlock;
     // modifier to prevent flash loan attack
     modifier notLocked(address lockedAddress) {
-        require(lastLockedBlock[lockedAddress] <= block.number, "V");//"Locked"
+        if (lastLockedBlock[lockedAddress] > block.number) revert Locked();
         lastLockedBlock[lockedAddress] = block.number + BLOCK_LOCK_COUNT;
         _;
     }

@@ -9,7 +9,7 @@ networks:
 
 compiler:
   solc:
-    version: 0.8.10
+    version: 0.8.11
     optimizer:
       enabled: true
-      runs: 200
+      runs: 933
