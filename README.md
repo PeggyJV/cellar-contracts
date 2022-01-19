@@ -1,5 +1,5 @@
-# cellars
-Sommelier Ethereum Cellars Work in Progress
+# Uniswap v3 Cellars
+Sommelier Ethereum Cellars for Uniswap v3 Work in Progress
 
 ## Testing and Development on testnet
 
@@ -95,3 +95,7 @@ If this amount is `division by zero` or `0`, only one token exists in the cellar
 
 Other internal functions are taken from https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1-solc-0.7-2/contracts/token/ERC20/ERC20.sol
 Common ERC-20 interfaces. Please use as reference.
+
+
+## Audit Report
+Audit provided by Quantstamp
