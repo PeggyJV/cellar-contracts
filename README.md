@@ -99,3 +99,7 @@ Common ERC-20 interfaces. Please use as reference.
 
 ## Audit Report
 Audit provided by Quantstamp
+
+## Disclaimer
+Neither does VolumeFi nor Sommelier manage any portfolios. You must make an independent judgment as to whether to add liquidity to portfolios.
+Users of this repo should familiarize themselves with smart contracts to further consider the risks associated with smart contracts before adding liquidity to any portfolios or deployed smart contract. These smart contracts are non-custodial and come with no warranties. VolumeFi does not endorse any pools in any of the smart contracts found in this repo. VolumeFi and Sommelier are not giving you investment advice with this software and neither firm has control of your funds. All our smart contract software is alpha, works in progress and are undergoing daily updates that may result in errors or other issues.
