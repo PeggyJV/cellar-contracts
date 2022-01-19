@@ -98,7 +98,7 @@ Common ERC-20 interfaces. Please use as reference.
 
 
 ## Audit Report
-Audit provided by Quantstamp
+Last Audit provided by [Quantstamp on November 4, 2021](https://github.com/VolumeFi/cellars/blob/main/audits/20211104_Sommelier%20Finance%20-%20Report-Final.pdf) 
 
 ## Disclaimer
 Neither does VolumeFi nor Sommelier manage any portfolios. You must make an independent judgment as to whether to add liquidity to portfolios.
