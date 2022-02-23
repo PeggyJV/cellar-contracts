@@ -5,8 +5,8 @@ pragma solidity 0.8.11;
 
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-/// @title interface for Cellar
-interface ICellar is IERC20 {
+/// @title interface for AaveStablecoinCellar
+interface IAaveStablecoinCellar is IERC20 {
     /**
      * @notice Emitted when liquidity is increased for cellar
      * @param input_token the address of the token
@@ -23,17 +23,41 @@ interface ICellar is IERC20 {
     
     /**
      * @notice Emitted when tokens swapped
-     * @param _token0 the address of the _token0
-     * @param amountIn the amount of the _token0
-     * @param _token1 the address of the _token1
-     * @param amountOut the amount of the _token1
+     * @param tokenIn the address of the tokenIn
+     * @param amountIn the amount of the tokenIn
+     * @param tokenOut the address of the tokenOut
+     * @param amountOut the amount of the tokenOut
      * @param timestamp the timestamp of the action
      **/
     event Swapped(
-        address indexed _token0,
+        address indexed tokenIn,
         uint256 amountIn,
-        address _token1,
+        address tokenOut,
         uint256 amountOut,
+        uint256 timestamp
+    );
+    
+    /**
+    * @dev emitted on deposit to Aave
+    * @param token the address of the token
+    * @param token_amount the amount to be deposited
+    * @param timestamp the timestamp of the action
+    **/
+    event DepositeToAave(
+        address indexed token,
+        uint256 token_amount,
+        uint256 timestamp
+    );
+    
+    /**
+    * @dev emitted on redeem from Aave
+    * @param token the address of the token
+    * @param token_amount the amount to be redeemed
+    * @param timestamp the timestamp of the action
+    **/
+    event RedeemFromAave(
+        address indexed token,
+        uint256 token_amount,
         uint256 timestamp
     );
     
@@ -46,7 +70,14 @@ interface ICellar is IERC20 {
     );
     
     error NonSupportedToken();
-    error userNotHaveEnoughBalance();
+    error PathIsTooShort();
+    error UserNotHaveEnoughBalance();
+    error TokenAlreadyInitialized();
+    error ZeroAmount();
+    
+    error TokenIsNotSupportedByAave();
+    error NotEnoughTokenLiquidity();
+    error InsufficientAaveDepositBalance();
     
     error NonPermission();
     error Reentrance();

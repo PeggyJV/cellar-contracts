@@ -1,8 +1,8 @@
-from brownie import Cellar, accounts
+from brownie import AaveStablecoinCellar, accounts
 
 def main():
     acct = accounts.load("deployer_account")
-    name = "Cellar Inactive LP Token"
-    symbol = "CILPT"
+    name = "Aave Stablecoin Cellar Inactive LP Token"
+    symbol = "ASCCT"
 
-    Cellar.deploy(name, symbol, {"from":acct})
+    AaveStablecoinCellar.deploy(name, symbol, {"from":acct})
