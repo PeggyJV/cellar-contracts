@@ -179,7 +179,7 @@ contract AaveStablecoinCellar is
         onlyOwner
     {
         // deposits to Aave
-        _depositeToAave(token, tokenAmount);
+        _depositToAave(token, tokenAmount);
 
         // TODO: to change inactive_lp_shares into active_lp_shares
     }
@@ -189,7 +189,7 @@ contract AaveStablecoinCellar is
      * @param token the address of the token
      * @param tokenAmount the amount of token to be deposited
      **/
-    function _depositeToAave(address token, uint256 tokenAmount) internal {
+    function _depositToAave(address token, uint256 tokenAmount) internal {
         if (!inputTokens[token]) revert NonSupportedToken();
         if (tokenAmount == 0) revert ZeroAmount();
 
