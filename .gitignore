@@ -1,10 +1,35 @@
-__pycache__
-.pytest_cache
-.history
-.hypothesis/
-bin/
-build/
-reports/
+# directories
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+**/artifacts
+**/build
+**/cache
+**/coverage
+**/.coverage_artifacts
+**/.coverage_cache
+**/.coverage_contracts
+**/dist
+**/node_modules
 
-node_modules
-.env
+# files
+*.env
+*.log
+.pnp.*
+coverage.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# types
+src/types/*
+!src/types/common.ts
+!src/types/Greeter.ts
+
+# factories
+!src/types/factories
+src/types/factories/*
+!src/types/factories/Greeter__factory.ts
