@@ -4,6 +4,8 @@ import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 
+import "./tasks";
+
 import { resolve } from "path";
 
 import { config as dotenvConfig } from "dotenv";
