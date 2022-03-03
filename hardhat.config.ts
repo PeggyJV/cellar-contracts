@@ -4,7 +4,7 @@ import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 
-import "./tasks";
+import "./tasks/accounts";
 
 import { resolve } from "path";
 
