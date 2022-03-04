@@ -25,14 +25,10 @@ contract AaveStablecoinCellar is
     using SafeTransferLib for ERC20;
 
     // Uniswap Router V3 contract address
-    address private constant SWAP_ROUTER =
-        0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address private immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
     // Aave Lending Pool V2 contract address
-    address private constant AAVE_LENDING_POOL =
-        0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
-
-    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address private immutable aaveLendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
 
     // Declare the variables and mappings
     address[] public inputTokensList;
@@ -45,11 +41,20 @@ contract AaveStablecoinCellar is
 
     /**
      * @notice Constructor identifies the name and symbol of the inactive lp token
+     * @param _swapRouter Uniswap V3 swap router address
+     * @param _aaveLendingPool Aave V2 lending pool address
+     * @param _name name of inactive LP token
+     * @param _symbol symbol of inactive LP token
      */
-    constructor(string memory _name, string memory _symbol)
-        ERC20(_name, _symbol, 18)
-        Ownable()
-    {}
+    constructor(
+        address _swapRouter,
+        address _aaveLendingPool,
+        string memory _name,
+        string memory _symbol
+    ) ERC20(_name, _symbol, 18) Ownable() {
+        swapRouter =  _swapRouter;
+        aaveLendingPool = _aaveLendingPool;
+    }
 
     /**
      * @dev adds liquidity (the supported token) into the cellar.
@@ -101,7 +106,7 @@ contract AaveStablecoinCellar is
         if (!inputTokens[tokenOut]) revert NonSupportedToken();
 
         // Approve the router to spend tokenIn
-        TransferHelper.safeApprove(tokenIn, SWAP_ROUTER, amountIn);
+        TransferHelper.safeApprove(tokenIn, swapRouter, amountIn);
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
@@ -116,7 +121,7 @@ contract AaveStablecoinCellar is
             });
 
         // Executes the swap.
-        amountOut = ISwapRouter(SWAP_ROUTER).exactInputSingle(params);
+        amountOut = ISwapRouter(swapRouter).exactInputSingle(params);
 
         emit Swapped(tokenIn, amountIn, tokenOut, amountOut, block.timestamp);
     }
@@ -141,7 +146,7 @@ contract AaveStablecoinCellar is
         if (!inputTokens[tokenOut]) revert NonSupportedToken();
 
         // Approve the router to spend first token in path
-        TransferHelper.safeApprove(tokenIn, SWAP_ROUTER, amountIn);
+        TransferHelper.safeApprove(tokenIn, swapRouter, amountIn);
 
         bytes memory encodePackedPath = abi.encodePacked(tokenIn);
         for (uint256 i = 1; i < path.length; i++) {
@@ -164,7 +169,7 @@ contract AaveStablecoinCellar is
             });
 
         // Executes the swap.
-        amountOut = ISwapRouter(SWAP_ROUTER).exactInput(params);
+        amountOut = ISwapRouter(swapRouter).exactInput(params);
 
         emit Swapped(tokenIn, amountIn, tokenOut, amountOut, block.timestamp);
     }
@@ -193,10 +198,10 @@ contract AaveStablecoinCellar is
         if (!inputTokens[token]) revert NonSupportedToken();
         if (tokenAmount == 0) revert ZeroAmount();
 
-        ILendingPool aaveLendingPool = ILendingPool(AAVE_LENDING_POOL);
+        ILendingPool lendingPool = ILendingPool(aaveLendingPool);
 
         // token verification in Aave protocol
-        (, , , , , , , address aTokenAddress, , , , ) = aaveLendingPool
+        (, , , , , , , address aTokenAddress, , , , ) = lendingPool
             .getReserveData(token);
         if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
 
@@ -204,12 +209,12 @@ contract AaveStablecoinCellar is
         if (tokenAmount > ERC20(token).balanceOf(address(this)))
             revert NotEnoughTokenLiquidity();
 
-        TransferHelper.safeApprove(token, AAVE_LENDING_POOL, tokenAmount);
+        TransferHelper.safeApprove(token, aaveLendingPool, tokenAmount);
 
-        aaveDepositBalances[token] = aaveDepositBalances[token] + tokenAmount;
+        aaveDepositBalances[token] += tokenAmount;
 
         // deposit token to Aave protocol
-        aaveLendingPool.deposit(token, tokenAmount, address(this), 0);
+        lendingPool.deposit(token, tokenAmount, address(this), 0);
 
         emit DepositeToAave(token, tokenAmount, block.timestamp);
     }
@@ -226,10 +231,10 @@ contract AaveStablecoinCellar is
         if (!inputTokens[token]) revert NonSupportedToken();
         if (tokenAmount == 0) revert ZeroAmount();
 
-        ILendingPool aaveLendingPool = ILendingPool(AAVE_LENDING_POOL);
+        ILendingPool lendingPool = ILendingPool(aaveLendingPool);
 
         // token verification in Aave protocol
-        (, , , , , , , address aTokenAddress, , , , ) = aaveLendingPool
+        (, , , , , , , address aTokenAddress, , , , ) = lendingPool
             .getReserveData(token);
         if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
 
@@ -238,9 +243,9 @@ contract AaveStablecoinCellar is
             revert InsufficientAaveDepositBalance();
 
         // withdraw token from Aave protocol
-        aaveLendingPool.withdraw(token, tokenAmount, address(this));
+        lendingPool.withdraw(token, tokenAmount, address(this));
 
-        aaveDepositBalances[token] = aaveDepositBalances[token] - tokenAmount;
+        aaveDepositBalances[token] -= tokenAmount;
 
         emit RedeemFromAave(token, tokenAmount, block.timestamp);
     }
