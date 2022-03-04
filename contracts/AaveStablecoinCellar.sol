@@ -3,7 +3,6 @@
 pragma solidity 0.8.11;
 
 import "./interfaces/IAaveStablecoinCellar.sol";
-import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "./interfaces/ILendingPool.sol";
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
@@ -67,18 +66,12 @@ contract AaveStablecoinCellar is
 
         if (tokenAmount == 0) revert ZeroAmount();
 
-        // minting corresponding amount of the inactive lp token to user
-        _mint(msg.sender, tokenAmount);
-
-        // transfer inputToken to the Cellar contract
         if (ERC20(inputToken).balanceOf(msg.sender) < tokenAmount)
             revert UserNotHaveEnoughBalance();
-        TransferHelper.safeTransferFrom(
-            inputToken,
-            msg.sender,
-            address(this),
-            tokenAmount
-        );
+
+        ERC20(inputToken).safeTransferFrom(msg.sender, address(this), tokenAmount);
+
+        _mint(msg.sender, tokenAmount);
 
         emit AddedLiquidity(
             inputToken,
@@ -106,7 +99,7 @@ contract AaveStablecoinCellar is
         if (!inputTokens[tokenOut]) revert NonSupportedToken();
 
         // Approve the router to spend tokenIn
-        TransferHelper.safeApprove(tokenIn, swapRouter, amountIn);
+        ERC20(tokenIn).safeApprove(swapRouter, amountIn);
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
@@ -146,7 +139,7 @@ contract AaveStablecoinCellar is
         if (!inputTokens[tokenOut]) revert NonSupportedToken();
 
         // Approve the router to spend first token in path
-        TransferHelper.safeApprove(tokenIn, swapRouter, amountIn);
+        ERC20(tokenIn).safeApprove(swapRouter, amountIn);
 
         bytes memory encodePackedPath = abi.encodePacked(tokenIn);
         for (uint256 i = 1; i < path.length; i++) {
@@ -209,7 +202,7 @@ contract AaveStablecoinCellar is
         if (tokenAmount > ERC20(token).balanceOf(address(this)))
             revert NotEnoughTokenLiquidity();
 
-        TransferHelper.safeApprove(token, aaveLendingPool, tokenAmount);
+        ERC20(token).safeApprove(aaveLendingPool, tokenAmount);
 
         aaveDepositBalances[token] += tokenAmount;
 
