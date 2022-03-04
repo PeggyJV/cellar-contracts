@@ -136,6 +136,13 @@ const config: HardhatUserConfig = {
           optimizer: {
             enabled: optimizerEnabled,
             runs: 999999,
+            details: {
+              // Enabled to fix stack errors when attempting to run test coverage
+              yul: true,
+              yulDetails: {
+                stackAllocation: true,
+              },
+            },
           },
         },
       },
