@@ -30,8 +30,6 @@ contract AaveStablecoinCellar is
     // Aave Lending Pool V2 contract address
     address private immutable aaveLendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
 
-    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-
     // Declare the variables and mappings
     address[] public inputTokensList;
     mapping(address => bool) internal inputTokens;
@@ -213,7 +211,7 @@ contract AaveStablecoinCellar is
 
         TransferHelper.safeApprove(token, aaveLendingPool, tokenAmount);
 
-        aaveDepositBalances[token] = aaveDepositBalances[token] + tokenAmount;
+        aaveDepositBalances[token] += tokenAmount;
 
         // deposit token to Aave protocol
         lendingPool.deposit(token, tokenAmount, address(this), 0);
@@ -247,7 +245,7 @@ contract AaveStablecoinCellar is
         // withdraw token from Aave protocol
         lendingPool.withdraw(token, tokenAmount, address(this));
 
-        aaveDepositBalances[token] = aaveDepositBalances[token] - tokenAmount;
+        aaveDepositBalances[token] -= tokenAmount;
 
         emit RedeemFromAave(token, tokenAmount, block.timestamp);
     }
