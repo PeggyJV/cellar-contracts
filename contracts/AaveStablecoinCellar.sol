@@ -23,6 +23,11 @@ contract AaveStablecoinCellar is
 {
     using SafeTransferLib for ERC20;
 
+    struct Deposit {
+        uint256 amount;
+        uint256 timeDeposited;
+    }
+
     // Uniswap Router V3 contract address
     address private immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
@@ -32,6 +37,14 @@ contract AaveStablecoinCellar is
     // Declare the variables and mappings
     address[] public inputTokensList;
     mapping(address => bool) internal inputTokens;
+    address private immutable currentLendingToken;
+    // Track user user deposits to determine active/inactive shares
+    mapping(address => Deposit[]) public userDeposits;
+    // Store the index of the user's last non-zero deposit to save gas on looping
+    mapping(address => uint256) public currentDepositIndex;
+    // Last time inactive funds were entered into a strategy and made active
+    uint256 public lastTimeEnteredStrategy;
+    uint256 public totalActiveShares;
 
     uint24 public constant POOL_FEE = 3000;
 
@@ -42,22 +55,25 @@ contract AaveStablecoinCellar is
      * @notice Constructor identifies the name and symbol of the inactive lp token
      * @param _swapRouter Uniswap V3 swap router address
      * @param _aaveLendingPool Aave V2 lending pool address
+     * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
      * @param _name name of inactive LP token
      * @param _symbol symbol of inactive LP token
      */
     constructor(
         address _swapRouter,
         address _aaveLendingPool,
+        address _currentLendingToken,
         string memory _name,
         string memory _symbol
     ) ERC20(_name, _symbol, 18) Ownable() {
         swapRouter =  _swapRouter;
         aaveLendingPool = _aaveLendingPool;
+        currentLendingToken = _currentLendingToken;
     }
 
     /**
      * @dev adds liquidity (the supported token) into the cellar.
-     * A corresponding amount of the inactive lp token is minted.
+     * A corresponding amount of the shares is minted.
      * @param inputToken the address of the token
      * @param tokenAmount the amount to be added
      **/
@@ -79,6 +95,58 @@ contract AaveStablecoinCellar is
             tokenAmount,
             block.timestamp
         );
+    }
+
+    function withdraw(uint256 tokenAmount) external {
+        if (tokenAmount == 0) revert ZeroAmount();
+
+        // burn user shares
+        _burn(msg.sender, tokenAmount);
+
+        uint256 activeShares;
+        uint256 inactiveShares;
+
+        Deposit[] storage deposits = userDeposits[msg.sender];
+        uint256 currentIdx = currentDepositIndex[msg.sender];
+
+        for (uint256 i = currentIdx; i < deposits.length; i++) {
+            Deposit storage deposit = deposits[i];
+
+            uint256 withdrawAmount = deposit.amount < tokenAmount ? deposit.amount : tokenAmount;
+            if (deposit.timeDeposited < lastTimeEnteredStrategy) {
+                activeShares += withdrawAmount;
+            } else {
+                inactiveShares += withdrawAmount;
+            }
+
+            deposit.amount -= withdrawAmount;
+
+            if (activeShares + inactiveShares >= tokenAmount) {
+                if (deposit.amount != 0) {
+                    currentDepositIndex[msg.sender] = i;
+                } else {
+                    currentDepositIndex[msg.sender] = i + 1;
+                }
+
+                break;
+            }
+        }
+
+        // only redeem on active shares
+        uint256 totalWithdrawAmount = _calculateRedeemable(activeShares) + inactiveShares;
+
+        if (totalWithdrawAmount > aaveDepositBalances[currentLendingToken])
+            revert InsufficientAaveDepositBalance();
+
+        // withdraw user tokens from Aave to user
+        ILendingPool lendingPool = ILendingPool(aaveLendingPool);
+        lendingPool.withdraw(currentLendingToken, totalWithdrawAmount, msg.sender);
+
+        totalActiveShares -= activeShares;
+    }
+
+    function _calculateRedeemable(uint256 activeShares) internal view returns (uint256) {
+        // TODO: implement
     }
 
     /**
@@ -178,6 +246,8 @@ contract AaveStablecoinCellar is
     {
         // deposits to Aave
         _depositToAave(token, tokenAmount);
+
+        totalActiveShares += tokenAmount;
 
         // TODO: to change inactive_lp_shares into active_lp_shares
     }
