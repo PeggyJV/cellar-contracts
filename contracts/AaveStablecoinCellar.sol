@@ -10,7 +10,7 @@ import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.s
 import {ReentrancyGuard} from "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IAToken.sol";
-import "./utils/Math.sol";
+import "./utils/MathUtils.sol";
 
 /**
  * @title Sommelier AaveStablecoinCellar contract
@@ -170,7 +170,7 @@ contract AaveStablecoinCellar is
         // you want to receive, not the amount of aTokens you want to redeem
         uint256 aTokenAmount = convertToAssets(activeShares);
         // refer to the `burn` function in Aave's AToken.sol to understand why this is necessary
-        uint256 activeAmount = Math.rayMulDown(aTokenAmount, liquidityIndex);
+        uint256 activeAmount = MathUtils.rayMulDown(aTokenAmount, liquidityIndex);
 
         uint256 totalWithdrawAmount = activeAmount + inactiveAmount;
 
@@ -185,13 +185,13 @@ contract AaveStablecoinCellar is
     }
 
     function convertToShares(uint256 assets) public view returns (uint256) {
-        return totalActiveShares == 0 ? assets : Math.mulDivDown(assets, totalActiveShares, totalAssets());
+        return totalActiveShares == 0 ? assets : MathUtils.mulDivDown(assets, totalActiveShares, totalAssets());
     }
 
     function convertToAssets(uint256 activeShares) public view returns (uint256) {
         return totalActiveShares == 0 ?
             activeShares :
-            Math.mulDivDown(activeShares, totalAssets(), totalActiveShares);
+            MathUtils.mulDivDown(activeShares, totalAssets(), totalActiveShares);
     }
 
     /**

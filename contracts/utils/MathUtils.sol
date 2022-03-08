@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.11;
 
-library Math {
+library MathUtils {
     uint256 internal constant RAY = 1e27;
     uint256 internal constant HALF_RAY = RAY / 2;
 
