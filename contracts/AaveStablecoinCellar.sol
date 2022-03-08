@@ -9,6 +9,8 @@ import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./interfaces/IAToken.sol";
+import "./utils/Math.sol";
 
 /**
  * @title Sommelier AaveStablecoinCellar contract
@@ -25,6 +27,7 @@ contract AaveStablecoinCellar is
 
     struct Deposit {
         uint256 amount;
+        uint256 shares;
         uint256 timeDeposited;
     }
 
@@ -92,10 +95,15 @@ contract AaveStablecoinCellar is
 
         ERC20(inputToken).safeTransferFrom(msg.sender, address(this), tokenAmount);
 
-        Deposit[] storage deposits = userDeposits[msg.sender];
-        deposits.push(Deposit({ amount: tokenAmount, timeDeposited: block.timestamp }));
+        uint256 shares = convertToShares(tokenAmount);
+        _mint(msg.sender, shares);
 
-        _mint(msg.sender, tokenAmount);
+        Deposit[] storage deposits = userDeposits[msg.sender];
+        deposits.push(Deposit({
+            amount: tokenAmount,
+            shares: shares,
+            timeDeposited: block.timestamp
+        }));
 
         emit AddedLiquidity(
             inputToken,
@@ -108,11 +116,12 @@ contract AaveStablecoinCellar is
     function withdraw(uint256 tokenAmount) external {
         if (tokenAmount == 0) revert ZeroAmount();
 
-        // burn user shares
-        _burn(msg.sender, tokenAmount);
+        // burn proportional amount of user shares
+        uint256 shares = convertToShares(tokenAmount);
+        _burn(msg.sender, shares);
 
+        uint256 inactiveAmount;
         uint256 activeShares;
-        uint256 inactiveShares;
 
         Deposit[] storage deposits = userDeposits[msg.sender];
         uint256 currentIdx = currentDepositIndex[msg.sender];
@@ -120,16 +129,29 @@ contract AaveStablecoinCellar is
         for (uint256 i = currentIdx; i < deposits.length; i++) {
             Deposit storage deposit = deposits[i];
 
-            uint256 withdrawAmount = deposit.amount < tokenAmount ? deposit.amount : tokenAmount;
-            if (deposit.timeDeposited < lastTimeEnteredStrategy) {
-                activeShares += withdrawAmount;
+            uint256 withdrawnAmount;
+            uint256 withdrawnShares;
+
+            if (deposit.amount <= tokenAmount) {
+                withdrawnAmount = deposit.amount;
+                withdrawnShares = deposit.shares;
             } else {
-                inactiveShares += withdrawAmount;
+                withdrawnAmount = tokenAmount;
+                withdrawnShares = deposit.shares * (tokenAmount / deposit.amount);
             }
 
-            deposit.amount -= withdrawAmount;
+            if (deposit.timeDeposited < lastTimeEnteredStrategy) {
+                activeShares += withdrawnShares;
+            } else {
+                inactiveAmount += withdrawnAmount;
+            }
 
-            if (activeShares + inactiveShares >= tokenAmount) {
+            deposit.amount -= withdrawnAmount;
+            deposit.shares -= withdrawnShares;
+
+            tokenAmount -= withdrawnAmount;
+
+            if (tokenAmount == 0) {
                 if (deposit.amount != 0) {
                     currentDepositIndex[msg.sender] = i;
                 } else {
@@ -140,22 +162,36 @@ contract AaveStablecoinCellar is
             }
         }
 
-        // only redeem on active shares
-        uint256 totalWithdrawAmount = redeemableFor(activeShares) + inactiveShares;
+        (, uint256 liquidityIndex, , , , , , , , , , ) = ILendingPool(aaveLendingPool)
+            .getReserveData(currentLendingToken);
 
-        if (totalWithdrawAmount > aaveDepositBalances[currentLendingToken])
-            revert InsufficientAaveDepositBalance();
+        // convert from shares -> aTokens -> amount of tokens Aave with exchange for amount of aTokens.
+        // necessary to do because with Aave `withdraw` function you must specify the amount of tokens
+        // you want to receive, not the amount of aTokens you want to redeem
+        uint256 aTokenAmount = convertToAssets(activeShares);
+        // refer to the `burn` function in Aave's AToken.sol to understand why this is necessary
+        uint256 activeAmount = Math.rayMulDown(aTokenAmount, liquidityIndex);
+
+        uint256 totalWithdrawAmount = activeAmount + inactiveAmount;
 
         // withdraw user tokens from Aave to user
-        ILendingPool lendingPool = ILendingPool(aaveLendingPool);
-        lendingPool.withdraw(currentLendingToken, totalWithdrawAmount, msg.sender);
+        ILendingPool(aaveLendingPool).withdraw(currentLendingToken, totalWithdrawAmount, msg.sender);
 
         totalActiveShares -= activeShares;
     }
 
-    function redeemableFor(uint256 activeShares) public view returns (uint256) {
-        uint256 totalTokens = ERC20(currentAToken).balanceOf(address(this));
-        return totalTokens * activeShares / totalActiveShares;
+    function totalAssets() public view returns (uint256) {
+        return IAToken(currentAToken).balanceOf(address(this));
+    }
+
+    function convertToShares(uint256 assets) public view returns (uint256) {
+        return totalActiveShares == 0 ? assets : Math.mulDivDown(assets, totalActiveShares, totalAssets());
+    }
+
+    function convertToAssets(uint256 activeShares) public view returns (uint256) {
+        return totalActiveShares == 0 ?
+            activeShares :
+            Math.mulDivDown(activeShares, totalAssets(), totalActiveShares);
     }
 
     /**
@@ -256,7 +292,8 @@ contract AaveStablecoinCellar is
         // deposits to Aave
         _depositToAave(token, tokenAmount);
 
-        totalActiveShares += tokenAmount;
+        uint256 shares = convertToShares(tokenAmount);
+        totalActiveShares += shares;
 
         // TODO: to change inactive_lp_shares into active_lp_shares
     }
