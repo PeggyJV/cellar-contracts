@@ -9,6 +9,7 @@ import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./utils/Math.sol";
 
 /**
  * @title Sommelier AaveStablecoinCellar contract
@@ -37,14 +38,20 @@ contract AaveStablecoinCellar is
     // Declare the variables and mappings
     address[] public inputTokensList;
     mapping(address => bool) internal inputTokens;
-    address private immutable currentLendingToken;
+    address public immutable currentLendingToken;
+    address private immutable currentAToken;
     // Track user user deposits to determine active/inactive shares
     mapping(address => Deposit[]) public userDeposits;
+    // Record time user last withdrew
+    mapping(address => uint256) public lastWithdraw;
     // Store the index of the user's last non-zero deposit to save gas on looping
     mapping(address => uint256) public currentDepositIndex;
     // Last time inactive funds were entered into a strategy and made active
     uint256 public lastTimeEnteredStrategy;
     uint256 public totalActiveShares;
+
+    uint256 public lastTimeRewardsUpdated;
+    uint256 public lastAccruedTokens;
 
     uint24 public constant POOL_FEE = 3000;
 
@@ -52,13 +59,13 @@ contract AaveStablecoinCellar is
     mapping(address => uint256) public aaveDepositBalances;
 
     /**
-     * @notice Constructor identifies the name and symbol of the inactive lp token
-     * @param _swapRouter Uniswap V3 swap router address
-     * @param _aaveLendingPool Aave V2 lending pool address
-     * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
-     * @param _name name of inactive LP token
-     * @param _symbol symbol of inactive LP token
-     */
+        * @notice Constructor identifies the name and symbol of the inactive lp token
+        * @param _swapRouter Uniswap V3 swap router address
+        * @param _aaveLendingPool Aave V2 lending pool address
+        * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
+        * @param _name name of inactive LP token
+        * @param _symbol symbol of inactive LP token
+        */
     constructor(
         address _swapRouter,
         address _aaveLendingPool,
@@ -69,6 +76,10 @@ contract AaveStablecoinCellar is
         swapRouter =  _swapRouter;
         aaveLendingPool = _aaveLendingPool;
         currentLendingToken = _currentLendingToken;
+
+        (, , , , , , , address aTokenAddress, , , , ) = ILendingPool(aaveLendingPool)
+            .getReserveData(currentLendingToken);
+        currentAToken = aTokenAddress;
     }
 
     /**
@@ -115,7 +126,7 @@ contract AaveStablecoinCellar is
         for (uint256 i = currentIdx; i < deposits.length; i++) {
             Deposit storage deposit = deposits[i];
 
-            uint256 withdrawAmount = deposit.amount < tokenAmount ? deposit.amount : tokenAmount;
+            uint256 withdrawAmount = Math.min(deposit.amount, tokenAmount);
             if (deposit.timeDeposited < lastTimeEnteredStrategy) {
                 activeShares += withdrawAmount;
             } else {
@@ -136,7 +147,7 @@ contract AaveStablecoinCellar is
         }
 
         // only redeem on active shares
-        uint256 totalWithdrawAmount = _calculateRedeemable(activeShares) + inactiveShares;
+        uint256 totalWithdrawAmount = _calculateRedeemable(msg.sender, activeShares) + inactiveShares;
 
         if (totalWithdrawAmount > aaveDepositBalances[currentLendingToken])
             revert InsufficientAaveDepositBalance();
@@ -145,11 +156,38 @@ contract AaveStablecoinCellar is
         ILendingPool lendingPool = ILendingPool(aaveLendingPool);
         lendingPool.withdraw(currentLendingToken, totalWithdrawAmount, msg.sender);
 
+        lastWithdraw[msg.sender] = block.timestamp;
+
         totalActiveShares -= activeShares;
     }
 
-    function _calculateRedeemable(uint256 activeShares) internal view returns (uint256) {
-        // TODO: implement
+    function _calculateRedeemable(address account, uint256 activeShares) internal returns (uint256) {
+        uint256 elapsedTime = block.timestamp - lastWithdraw[account];
+        uint256 rewards = rewardsPerSecond() * elapsedTime;
+
+        return activeShares + (rewards * activeShares / totalActiveShares);
+    }
+
+    function rewardsPerSecond() public returns (uint256) {
+        uint256 aTokenBalance = ERC20(currentAToken).balanceOf(address(this));
+        uint256 accruedTokens = aTokenBalance - aaveDepositBalances[currentLendingToken];
+
+        /// @dev If first time updating, will need to first store baseline data
+        /// and call again at a later time to calculate rewardsPerSecond
+        if (lastTimeRewardsUpdated == 0) {
+            lastAccruedTokens = accruedTokens;
+            lastTimeRewardsUpdated = block.timestamp;
+
+            return 0;
+        }
+
+        uint256 accruedSince = Math.abs(int256(accruedTokens) - int256(lastAccruedTokens));
+        uint256 elapsedTime = block.timestamp - lastTimeRewardsUpdated;
+
+        lastAccruedTokens = accruedTokens;
+        lastTimeRewardsUpdated = block.timestamp;
+
+        return accruedSince / elapsedTime;
     }
 
     /**
