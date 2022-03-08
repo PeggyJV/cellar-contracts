@@ -83,24 +83,24 @@ contract AaveStablecoinCellar is
      * @dev adds liquidity (the supported token) into the cellar.
      * A corresponding amount of the shares is minted.
      * @param inputToken the address of the token
-     * @param tokenAmount the amount to be added
+     * @param amount the amount to be added
      **/
-    function addLiquidity(address inputToken, uint256 tokenAmount) external {
+    function addLiquidity(address inputToken, uint256 amount) external {
         if (!inputTokens[inputToken]) revert NonSupportedToken();
 
-        if (tokenAmount == 0) revert ZeroAmount();
+        if (amount == 0) revert ZeroAmount();
 
-        if (ERC20(inputToken).balanceOf(msg.sender) < tokenAmount)
+        if (ERC20(inputToken).balanceOf(msg.sender) < amount)
             revert UserNotHaveEnoughBalance();
 
-        ERC20(inputToken).safeTransferFrom(msg.sender, address(this), tokenAmount);
+        ERC20(inputToken).safeTransferFrom(msg.sender, address(this), amount);
 
-        uint256 shares = convertToShares(tokenAmount);
+        uint256 shares = convertToShares(amount);
         _mint(msg.sender, shares);
 
         Deposit[] storage deposits = userDeposits[msg.sender];
         deposits.push(Deposit({
-            amount: tokenAmount,
+            amount: amount,
             shares: shares,
             timeDeposited: block.timestamp
         }));
@@ -108,16 +108,16 @@ contract AaveStablecoinCellar is
         emit AddedLiquidity(
             inputToken,
             msg.sender,
-            tokenAmount,
+            amount,
             block.timestamp
         );
     }
 
-    function withdraw(uint256 tokenAmount) external {
-        if (tokenAmount == 0) revert ZeroAmount();
+    function withdraw(uint256 amount) external {
+        if (amount == 0) revert ZeroAmount();
 
         // burn proportional amount of user shares
-        uint256 shares = convertToShares(tokenAmount);
+        uint256 shares = convertToShares(amount);
         _burn(msg.sender, shares);
 
         uint256 inactiveAmount;
@@ -132,12 +132,12 @@ contract AaveStablecoinCellar is
             uint256 withdrawnAmount;
             uint256 withdrawnShares;
 
-            if (deposit.amount <= tokenAmount) {
+            if (deposit.amount <= amount) {
                 withdrawnAmount = deposit.amount;
                 withdrawnShares = deposit.shares;
             } else {
-                withdrawnAmount = tokenAmount;
-                withdrawnShares = deposit.shares * (tokenAmount / deposit.amount);
+                withdrawnAmount = amount;
+                withdrawnShares = deposit.shares * (amount / deposit.amount);
             }
 
             if (deposit.timeDeposited < lastTimeEnteredStrategy) {
@@ -149,9 +149,9 @@ contract AaveStablecoinCellar is
             deposit.amount -= withdrawnAmount;
             deposit.shares -= withdrawnShares;
 
-            tokenAmount -= withdrawnAmount;
+            amount -= withdrawnAmount;
 
-            if (tokenAmount == 0) {
+            if (amount == 0) {
                 if (deposit.amount != 0) {
                     currentDepositIndex[msg.sender] = i;
                 } else {
@@ -283,16 +283,16 @@ contract AaveStablecoinCellar is
     /**
      * @dev enters Aave Stablecoin Strategy
      * @param token the address of the token
-     * @param tokenAmount the amount of token to be deposited
+     * @param amount the amount of token to be deposited
      **/
-    function enterStrategy(address token, uint256 tokenAmount)
+    function enterStrategy(address token, uint256 amount)
         external
         onlyOwner
     {
         // deposits to Aave
-        _depositToAave(token, tokenAmount);
+        _depositToAave(token, amount);
 
-        uint256 shares = convertToShares(tokenAmount);
+        uint256 shares = convertToShares(amount);
         totalActiveShares += shares;
 
         // TODO: to change inactive_lp_shares into active_lp_shares
@@ -301,11 +301,11 @@ contract AaveStablecoinCellar is
     /**
      * @dev deposits cellar holdings into Aave lending pool
      * @param token the address of the token
-     * @param tokenAmount the amount of token to be deposited
+     * @param amount the amount of token to be deposited
      **/
-    function _depositToAave(address token, uint256 tokenAmount) internal {
+    function _depositToAave(address token, uint256 amount) internal {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (tokenAmount == 0) revert ZeroAmount();
+        if (amount == 0) revert ZeroAmount();
 
         ILendingPool lendingPool = ILendingPool(aaveLendingPool);
 
@@ -315,30 +315,30 @@ contract AaveStablecoinCellar is
         if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
 
         // verification of liquidity
-        if (tokenAmount > ERC20(token).balanceOf(address(this)))
+        if (amount > ERC20(token).balanceOf(address(this)))
             revert NotEnoughTokenLiquidity();
 
-        ERC20(token).safeApprove(aaveLendingPool, tokenAmount);
+        ERC20(token).safeApprove(aaveLendingPool, amount);
 
-        aaveDepositBalances[token] += tokenAmount;
+        aaveDepositBalances[token] += amount;
 
         // deposit token to Aave protocol
-        lendingPool.deposit(token, tokenAmount, address(this), 0);
+        lendingPool.deposit(token, amount, address(this), 0);
 
-        emit DepositeToAave(token, tokenAmount, block.timestamp);
+        emit DepositeToAave(token, amount, block.timestamp);
     }
 
     /**
      * @dev redeems an token from Aave protocol
      * @param token the address of the token
-     * @param tokenAmount the token amount being redeemed
+     * @param amount the token amount being redeemed
      **/
-    function redeemFromAave(address token, uint256 tokenAmount)
+    function redeemFromAave(address token, uint256 amount)
         external
         onlyOwner
     {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (tokenAmount == 0) revert ZeroAmount();
+        if (amount == 0) revert ZeroAmount();
 
         ILendingPool lendingPool = ILendingPool(aaveLendingPool);
 
@@ -348,15 +348,15 @@ contract AaveStablecoinCellar is
         if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
 
         // verification Aave deposit balance of token
-        if (tokenAmount > aaveDepositBalances[token])
+        if (amount > aaveDepositBalances[token])
             revert InsufficientAaveDepositBalance();
 
         // withdraw token from Aave protocol
-        lendingPool.withdraw(token, tokenAmount, address(this));
+        lendingPool.withdraw(token, amount, address(this));
 
-        aaveDepositBalances[token] -= tokenAmount;
+        aaveDepositBalances[token] -= amount;
 
-        emit RedeemFromAave(token, tokenAmount, block.timestamp);
+        emit RedeemFromAave(token, amount, block.timestamp);
     }
 
     function initInputToken(address inputToken) public onlyOwner {
