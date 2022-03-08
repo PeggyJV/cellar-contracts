@@ -59,13 +59,13 @@ contract AaveStablecoinCellar is
     mapping(address => uint256) public aaveDepositBalances;
 
     /**
-        * @notice Constructor identifies the name and symbol of the inactive lp token
-        * @param _swapRouter Uniswap V3 swap router address
-        * @param _aaveLendingPool Aave V2 lending pool address
-        * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
-        * @param _name name of inactive LP token
-        * @param _symbol symbol of inactive LP token
-        */
+     * @notice Constructor identifies the name and symbol of the inactive lp token
+     * @param _swapRouter Uniswap V3 swap router address
+     * @param _aaveLendingPool Aave V2 lending pool address
+     * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
+     * @param _name name of inactive LP token
+     * @param _symbol symbol of inactive LP token
+     */
     constructor(
         address _swapRouter,
         address _aaveLendingPool,
