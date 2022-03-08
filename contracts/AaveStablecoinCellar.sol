@@ -87,6 +87,9 @@ contract AaveStablecoinCellar is
 
         ERC20(inputToken).safeTransferFrom(msg.sender, address(this), tokenAmount);
 
+        Deposit[] storage deposits = userDeposits[msg.sender];
+        deposits.push(Deposit({ amount: tokenAmount, timeDeposited: block.timestamp }));
+
         _mint(msg.sender, tokenAmount);
 
         emit AddedLiquidity(
