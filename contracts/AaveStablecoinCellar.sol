@@ -181,13 +181,13 @@ contract AaveStablecoinCellar is
             return 0;
         }
 
-        uint256 accruedSince = Math.abs(int256(accruedTokens) - int256(lastAccruedTokens));
+        uint256 accruedDelta = Math.abs(int256(accruedTokens) - int256(lastAccruedTokens));
         uint256 elapsedTime = block.timestamp - lastTimeRewardsUpdated;
 
         lastAccruedTokens = accruedTokens;
         lastTimeRewardsUpdated = block.timestamp;
 
-        return accruedSince / elapsedTime;
+        return accruedDelta / elapsedTime;
     }
 
     /**
