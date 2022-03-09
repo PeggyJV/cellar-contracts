@@ -206,9 +206,9 @@ contract AaveStablecoinCellar is
         onlyOwner
     {
         // deposits to Aave
-        _depositToAave(token, tokenAmount);
         currentLendingToken = token;
-        
+        _depositToAave(token, tokenAmount);
+
         // TODO: to change inactive_lp_shares into active_lp_shares
     }
 

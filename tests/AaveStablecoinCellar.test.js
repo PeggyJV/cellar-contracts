@@ -9,6 +9,7 @@ describe("AaveStablecoinCellar", () => {
   let router;
   let lendingPool;
   let aToken;
+  let dataProvider;
 
   beforeEach(async () => {
     [owner] = await ethers.getSigners();
@@ -24,6 +25,11 @@ describe("AaveStablecoinCellar", () => {
     await lendingPool.deployed();
     aToken = await ethers.getContractAt("MockToken", lendingPool.aToken());
 
+    const MockAaveDataProvider = await ethers.getContractFactory("MockAaveDataProvider");
+    dataProvider = await MockAaveDataProvider.deploy();
+    await dataProvider.deployed();
+
+
     // Deploy cellar contract
     const AaveStablecoinCellar = await ethers.getContractFactory(
       "AaveStablecoinCellar"
@@ -31,6 +37,7 @@ describe("AaveStablecoinCellar", () => {
     cellar = await AaveStablecoinCellar.deploy(
       router.address,
       lendingPool.address,
+      dataProvider.address,
       "Aave Stablecoin Cellar Inactive LP Token",
       "ASCCT"
     );
