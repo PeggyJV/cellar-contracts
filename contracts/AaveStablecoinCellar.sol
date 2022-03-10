@@ -25,43 +25,41 @@ contract AaveStablecoinCellar is
 {
     using SafeTransferLib for ERC20;
 
-    struct Deposit {
-        uint256 amount;
+    struct UserDeposit {
+        uint256 assets;
         uint256 shares;
         uint256 timeDeposited;
     }
 
-    // Uniswap Router V3 contract address
+    // Uniswap Router V3 contract address.
     address private immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
-    // Aave Lending Pool V2 contract address
+    // Aave Lending Pool V2 contract address.
     address private immutable aaveLendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
 
-    // Declare the variables and mappings
+    // Declare the variables and mappings.
     address[] public inputTokensList;
     mapping(address => bool) internal inputTokens;
-    address private immutable currentLendingToken;
-    address private immutable currentAToken;
-    // Track user user deposits to determine active/inactive shares
-    mapping(address => Deposit[]) public userDeposits;
-    // Store the index of the user's last non-zero deposit to save gas on looping
+    address public currentLendingToken;
+    address public immutable currentAToken;
+    // Track user user deposits to determine active/inactive shares.
+    mapping(address => UserDeposit[]) public userDeposits;
+    // Store the index of the user's last non-zero deposit to save gas on looping.
     mapping(address => uint256) public currentDepositIndex;
-    // Last time inactive funds were entered into a strategy and made active
+    // Last time inactive funds were entered into a strategy and made active.
     uint256 public lastTimeEnteredStrategy;
-    uint256 public totalActiveShares;
 
     uint24 public constant POOL_FEE = 3000;
 
-    // Aave deposit balances by tokens
+    // Aave deposit balances by tokens.
     mapping(address => uint256) public aaveDepositBalances;
 
     /**
-     * @notice Constructor identifies the name and symbol of the inactive lp token
      * @param _swapRouter Uniswap V3 swap router address
      * @param _aaveLendingPool Aave V2 lending pool address
      * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
-     * @param _name name of inactive LP token
-     * @param _symbol symbol of inactive LP token
+     * @param _name name of LP token
+     * @param _symbol symbol of LP token
      */
     constructor(
         address _swapRouter,
@@ -80,122 +78,162 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @dev adds liquidity (the supported token) into the cellar.
-     * A corresponding amount of the shares is minted.
-     * @param inputToken the address of the token
-     * @param amount the amount to be added
+     * @dev Deposit supported tokens into the cellar.
+     * @param token address of the supported token to deposit
+     * @param assets amount of assets to deposit
+     * @param receiver address that should receive shares
+     * @return shares amount of shares minted to receiver
      **/
-    function addLiquidity(address inputToken, uint256 amount) external {
-        if (!inputTokens[inputToken]) revert NonSupportedToken();
+    function deposit(address token, uint256 assets, address receiver) public returns (uint256 shares) {
+        if (!inputTokens[token]) revert NonSupportedToken();
 
-        if (amount == 0) revert ZeroAmount();
+        if ((shares = convertToShares(assets)) == 0) revert ZeroAmount();
 
-        if (ERC20(inputToken).balanceOf(msg.sender) < amount)
-            revert UserNotHaveEnoughBalance();
+        // TODO: If token is not current lending token, swap into current lending token before depositing.
 
-        ERC20(inputToken).safeTransferFrom(msg.sender, address(this), amount);
+        ERC20(token).safeTransferFrom(msg.sender, address(this), assets);
 
-        uint256 shares = convertToShares(amount);
-        _mint(msg.sender, shares);
+        _mint(receiver, shares);
 
-        Deposit[] storage deposits = userDeposits[msg.sender];
-        deposits.push(Deposit({
-            amount: amount,
+        UserDeposit[] storage deposits = userDeposits[receiver];
+        deposits.push(UserDeposit({
+            assets: assets,
             shares: shares,
             timeDeposited: block.timestamp
         }));
 
-        emit AddedLiquidity(
-            inputToken,
-            msg.sender,
-            amount,
-            block.timestamp
-        );
+        emit Deposit(msg.sender, receiver, assets, shares);
     }
 
-    function withdraw(uint256 amount) external {
-        if (amount == 0) revert ZeroAmount();
+    function deposit(uint256 assets) external {
+        deposit(currentLendingToken, assets, msg.sender);
+    }
 
-        // burn proportional amount of user shares
-        uint256 shares = convertToShares(amount);
-        _burn(msg.sender, shares);
+    /// @dev For ERC4626 compatibility.
+    function deposit(uint256 assets, address receiver) external {
+        deposit(currentLendingToken, assets, receiver);
+    }
 
-        uint256 inactiveAmount;
+    /**
+     * @dev Withdraw from the cellar.
+     * @param assets amount of assets to withdraw
+     * @param receiver address that should receive assets
+     * @param owner address that should own the shares
+     * @return shares amount of shares burned from owner
+     **/
+    function withdraw(uint256 assets, address receiver, address owner) public returns (uint256 shares) {
+        if (assets == 0) revert ZeroAmount();
+
+        UserDeposit[] storage deposits = userDeposits[owner];
+        if (deposits.length == 0 || currentDepositIndex[owner] > deposits.length - 1)
+            revert NoNonemptyUserDeposits();
+
+
         uint256 activeShares;
+        uint256 inactiveShares;
+        uint256 inactiveAssets;
 
-        Deposit[] storage deposits = userDeposits[msg.sender];
-        uint256 currentIdx = currentDepositIndex[msg.sender];
+        // Saves gas by avoiding calling `convertToAssets` on active shares during each loop.
+        uint256 exchangeRate = convertToAssets(1e18);
 
+        uint256 left = assets;
+        uint256 currentIdx = currentDepositIndex[owner];
         for (uint256 i = currentIdx; i < deposits.length; i++) {
-            Deposit storage deposit = deposits[i];
+            UserDeposit storage d = deposits[i];
 
-            uint256 withdrawnAmount;
+            uint256 withdrawnAssets;
             uint256 withdrawnShares;
 
-            if (deposit.amount <= amount) {
-                withdrawnAmount = deposit.amount;
-                withdrawnShares = deposit.shares;
-            } else {
-                withdrawnAmount = amount;
-                withdrawnShares = deposit.shares * (amount / deposit.amount);
-            }
+            // Check if deposit shares are active or inactive.
+            if (d.timeDeposited < lastTimeEnteredStrategy) {
+                // Active:
+                uint256 dAssets = exchangeRate * d.shares / 1e18;
+                withdrawnAssets = MathUtils.min(left, dAssets);
+                withdrawnShares = MathUtils.mulDivUp(d.shares, withdrawnAssets, dAssets);
+                delete d.assets; // Don't need anymore; delete for a gas refund.
 
-            if (deposit.timeDeposited < lastTimeEnteredStrategy) {
                 activeShares += withdrawnShares;
             } else {
-                inactiveAmount += withdrawnAmount;
+                // Inactive:
+                withdrawnAssets = MathUtils.min(left, d.assets);
+                withdrawnShares = MathUtils.mulDivUp(d.shares, withdrawnAssets, d.assets);
+                d.assets -= withdrawnAssets;
+
+                inactiveShares += withdrawnShares;
+                inactiveAssets += withdrawnAssets;
             }
 
-            deposit.amount -= withdrawnAmount;
-            deposit.shares -= withdrawnShares;
+            d.shares -= withdrawnShares;
 
-            amount -= withdrawnAmount;
+            left -= withdrawnAssets;
 
-            if (amount == 0) {
-                if (deposit.amount != 0) {
-                    currentDepositIndex[msg.sender] = i;
+            if (left == 0) {
+                if (d.shares != 0) {
+                    currentDepositIndex[owner] = i;
                 } else {
-                    currentDepositIndex[msg.sender] = i + 1;
+                    currentDepositIndex[owner] = i + 1;
                 }
 
                 break;
             }
         }
 
+        uint256 activeAssets = exchangeRate * activeShares / 1e18;
+
+        if (activeAssets + inactiveAssets != assets) revert FailedWithdraw();
+
+        shares = activeShares + inactiveShares;
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
+        _burn(owner, shares);
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        if (activeAssets > 0) {
+            // Withdraw tokens from Aave to receiver.
+            ILendingPool(aaveLendingPool).withdraw(currentLendingToken, activeAssets, receiver);
+        }
+
+        if (inactiveAssets > 0) {
+            ERC20(currentLendingToken).transfer(receiver, inactiveAssets);
+        }
+    }
+
+    function withdraw(uint256 assets) external {
+        withdraw(assets, msg.sender, msg.sender);
+    }
+
+    /// @dev Total amount of the underlying asset that is managed by cellar.
+    function totalAssets() public view returns (uint256) {
+        uint256 inactiveAssets = ERC20(currentLendingToken).balanceOf(address(this));
+
         (, uint256 liquidityIndex, , , , , , , , , , ) = ILendingPool(aaveLendingPool)
             .getReserveData(currentLendingToken);
 
-        // convert from shares -> aTokens -> amount of tokens Aave with exchange for amount of aTokens.
-        // necessary to do because with Aave `withdraw` function you must specify the amount of tokens
-        // you want to receive, not the amount of aTokens you want to redeem
-        uint256 aTokenAmount = convertToAssets(activeShares);
-        // refer to the `burn` function in Aave's AToken.sol to understand why this is necessary
-        uint256 activeAmount = MathUtils.rayMulDown(aTokenAmount, liquidityIndex);
+        // Use aTokens * index to find the worth of aTokens in underlying assets.
+        uint256 aTokens = IAToken(currentAToken).balanceOf(address(this));
+        uint256 activeAssets = MathUtils.rayMul(aTokens, liquidityIndex);
 
-        uint256 totalWithdrawAmount = activeAmount + inactiveAmount;
-
-        // withdraw user tokens from Aave to user
-        ILendingPool(aaveLendingPool).withdraw(currentLendingToken, totalWithdrawAmount, msg.sender);
-
-        totalActiveShares -= activeShares;
+        return activeAssets + inactiveAssets;
     }
 
-    function totalAssets() public view returns (uint256) {
-        return IAToken(currentAToken).balanceOf(address(this));
-    }
-
+    /// @dev The amount of shares that the cellar would exchange for the amount of assets provided.
     function convertToShares(uint256 assets) public view returns (uint256) {
-        return totalActiveShares == 0 ? assets : MathUtils.mulDivDown(assets, totalActiveShares, totalAssets());
+        return totalSupply == 0 ? assets : MathUtils.mulDivDown(assets, totalSupply, totalAssets());
     }
 
-    function convertToAssets(uint256 activeShares) public view returns (uint256) {
-        return totalActiveShares == 0 ?
-            activeShares :
-            MathUtils.mulDivDown(activeShares, totalAssets(), totalActiveShares);
+    /// @dev The amount of assets that the cellar would exchange for the amount of shares provided.
+    function convertToAssets(uint256 shares) public view returns (uint256) {
+        return totalSupply == 0 ? shares : MathUtils.mulDivDown(shares, totalAssets(), totalSupply);
     }
 
     /**
-     * @dev swaps input token by Uniswap V3
+     * @dev Swaps input token by Uniswap V3.
      * @param tokenIn the address of the incoming token
      * @param tokenOut the address of the outgoing token
      * @param amountIn the amount of tokens to be swapped
@@ -211,7 +249,7 @@ contract AaveStablecoinCellar is
         if (!inputTokens[tokenIn]) revert NonSupportedToken();
         if (!inputTokens[tokenOut]) revert NonSupportedToken();
 
-        // Approve the router to spend tokenIn
+        // Approve the router to spend tokenIn.
         ERC20(tokenIn).safeApprove(swapRouter, amountIn);
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
@@ -233,7 +271,7 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @dev swaps tokens by multihop swap in Uniswap V3
+     * @dev Swaps tokens by multihop swap in Uniswap V3.
      * @param path the token swap path (token addresses)
      * @param amountIn the amount of tokens to be swapped
      * @param amountOutMinimum the minimum amount of tokens returned
@@ -251,7 +289,7 @@ contract AaveStablecoinCellar is
         if (!inputTokens[tokenIn]) revert NonSupportedToken();
         if (!inputTokens[tokenOut]) revert NonSupportedToken();
 
-        // Approve the router to spend first token in path
+        // Approve the router to spend first token in path.
         ERC20(tokenIn).safeApprove(swapRouter, amountIn);
 
         bytes memory encodePackedPath = abi.encodePacked(tokenIn);
@@ -263,8 +301,11 @@ contract AaveStablecoinCellar is
             );
         }
 
-        // Multiple pool swaps are encoded through bytes called a `path`. A path is a sequence of token addresses and poolFees that define the pools used in the swaps.
-        // The format for pool encoding is (tokenIn, fee, tokenOut/tokenIn, fee, tokenOut) where tokenIn/tokenOut parameter is the shared token across the pools.
+        // Multiple pool swaps are encoded through bytes called a `path`. A path
+        // is a sequence of token addresses and poolFees that define the pools
+        // used in the swaps. The format for pool encoding is (tokenIn, fee,
+        // tokenOut/tokenIn, fee, tokenOut) where tokenIn/tokenOut parameter is
+        // the shared token across the pools.
         ISwapRouter.ExactInputParams memory params = ISwapRouter
             .ExactInputParams({
                 path: encodePackedPath,
@@ -281,55 +322,50 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @dev enters Aave Stablecoin Strategy
+     * @dev Enters Aave stablecoin strategy.
      * @param token the address of the token
-     * @param amount the amount of token to be deposited
+     * @param assets the amount of token to be deposited
      **/
-    function enterStrategy(address token, uint256 amount)
+    function enterStrategy(address token, uint256 assets)
         external
         onlyOwner
     {
-        // deposits to Aave
-        _depositToAave(token, amount);
+        _depositToAave(token, assets);
 
-        uint256 shares = convertToShares(amount);
-        totalActiveShares += shares;
-
-        // TODO: to change inactive_lp_shares into active_lp_shares
+        lastTimeEnteredStrategy = block.timestamp;
     }
 
     /**
-     * @dev deposits cellar holdings into Aave lending pool
+     * @dev Deposits cellar holdings into Aave lending pool.
      * @param token the address of the token
-     * @param amount the amount of token to be deposited
+     * @param assets the amount of token to be deposited
      **/
-    function _depositToAave(address token, uint256 amount) internal {
+    function _depositToAave(address token, uint256 assets) internal {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (amount == 0) revert ZeroAmount();
+        if (assets == 0) revert ZeroAmount();
 
         ILendingPool lendingPool = ILendingPool(aaveLendingPool);
 
-        // token verification in Aave protocol
-        (, , , , , , , address aTokenAddress, , , , ) = lendingPool
-            .getReserveData(token);
+        // Token verification in Aave protocol.
+        (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(token);
         if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
 
-        // verification of liquidity
-        if (amount > ERC20(token).balanceOf(address(this)))
+        // Verification of liquidity.
+        if (assets > ERC20(token).balanceOf(address(this)))
             revert NotEnoughTokenLiquidity();
 
-        ERC20(token).safeApprove(aaveLendingPool, amount);
+        ERC20(token).safeApprove(aaveLendingPool, assets);
 
-        aaveDepositBalances[token] += amount;
+        aaveDepositBalances[token] += assets;
 
-        // deposit token to Aave protocol
-        lendingPool.deposit(token, amount, address(this), 0);
+        // Deposit token to Aave protocol.
+        lendingPool.deposit(token, assets, address(this), 0);
 
-        emit DepositeToAave(token, amount, block.timestamp);
+        emit DepositToAave(token, assets, block.timestamp);
     }
 
     /**
-     * @dev redeems an token from Aave protocol
+     * @dev Redeems a token from Aave protocol.
      * @param token the address of the token
      * @param amount the token amount being redeemed
      **/
@@ -342,16 +378,17 @@ contract AaveStablecoinCellar is
 
         ILendingPool lendingPool = ILendingPool(aaveLendingPool);
 
-        // token verification in Aave protocol
+        // Token verification in Aave protocol.
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool
             .getReserveData(token);
         if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
 
-        // verification Aave deposit balance of token
+        // Verification Aave deposit balance of token
+        // NOTE: aToken balances increase over time, this may not be sufficient.
         if (amount > aaveDepositBalances[token])
             revert InsufficientAaveDepositBalance();
 
-        // withdraw token from Aave protocol
+        // Withdraw token from Aave protocol
         lendingPool.withdraw(token, amount, address(this));
 
         aaveDepositBalances[token] -= amount;
@@ -359,10 +396,14 @@ contract AaveStablecoinCellar is
         emit RedeemFromAave(token, amount, block.timestamp);
     }
 
-    function initInputToken(address inputToken) public onlyOwner {
-        if (inputTokens[inputToken]) revert TokenAlreadyInitialized();
+    /**
+     * @dev Allow a supported token to be deposited into the cellar.
+     * @param token the address of the supported token
+     **/
+    function initInputToken(address token) public onlyOwner {
+        if (inputTokens[token]) revert TokenAlreadyInitialized();
 
-        inputTokens[inputToken] = true;
-        inputTokensList.push(inputToken);
+        inputTokens[token] = true;
+        inputTokensList.push(token);
     }
 }

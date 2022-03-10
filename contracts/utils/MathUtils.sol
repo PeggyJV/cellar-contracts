@@ -11,6 +11,25 @@ library MathUtils {
     }
 
     // From Solmate's FixedPointMathLib
+    function fmul(
+        uint256 x,
+        uint256 y,
+        uint256 baseUnit
+    ) internal pure returns (uint256 z) {
+        assembly {
+            // Store x * y in z for now.
+            z := mul(x, y)
+
+            // Equivalent to require(x == 0 || (x * y) / x == y)
+            if iszero(or(iszero(x), eq(div(z, x), y))) {
+                revert(0, 0)
+            }
+
+            // If baseUnit is zero this will return zero instead of reverting.
+            z := div(z, baseUnit)
+        }
+    }
+
     function mulDivDown(
         uint256 x,
         uint256 y,
@@ -58,7 +77,7 @@ library MathUtils {
      * @param b Ray
      * @return The result of a/b, in ray
      **/
-    function rayDivUp(uint256 a, uint256 b) internal pure returns (uint256) {
+    function rayDiv(uint256 a, uint256 b) internal pure returns (uint256) {
         require(b != 0, "cannot divide by zero");
         uint256 halfB = b / 2;
 
@@ -73,13 +92,11 @@ library MathUtils {
      * @param b Ray
      * @return The result of a*b, in ray
      **/
-    function rayMulDown(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0 || b == 0) {
-            return 0;
-        }
+    function rayMul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0 || b == 0) return 0;
 
         require(a <= (type(uint256).max - HALF_RAY) / b, "math multiplicatoin overflow");
 
-        return (a * b - HALF_RAY) / RAY;
+        return (a * b + HALF_RAY) / RAY;
     }
 }

@@ -5,17 +5,27 @@ pragma solidity 0.8.11;
 /// @title interface for AaveStablecoinCellar
 interface IAaveStablecoinCellar {
     /**
-     * @notice Emitted when liquidity is increased for cellar
-     * @param inputToken the address of the token
-     * @param user the address of the user
-     * @param amount the amount of the token
-     * @param timestamp the timestamp of the action
+     * @notice Emitted when assets are deposited into cellar
+     * @param caller the address of the caller
+     * @param owner the address of the owner of shares
+     * @param assets the amount of assets being deposited
+     * @param shares the amount of shares minted to owner
      **/
-    event AddedLiquidity(
-        address indexed inputToken,
-        address user,
-        uint256 amount,
-        uint256 timestamp
+    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
+
+    /**
+     * @notice Emitted when assets are withdrawn from cellar
+     * @param caller the address of the caller
+     * @param owner the address of the owner of shares
+     * @param assets the amount of assets being withdrawn
+     * @param shares the amount of shares burned from owner
+     **/
+    event Withdraw(
+        address indexed caller,
+        address indexed receiver,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
     );
 
     /**
@@ -40,7 +50,7 @@ interface IAaveStablecoinCellar {
      * @param tokenAmount the amount to be deposited
      * @param timestamp the timestamp of the action
      **/
-    event DepositeToAave(
+    event DepositToAave(
         address indexed token,
         uint256 tokenAmount,
         uint256 timestamp
@@ -77,4 +87,7 @@ interface IAaveStablecoinCellar {
     error BurnFromZeroAddress();
     error ApproveToZeroAddress();
     error ApproveFromZeroAddress();
+
+    error NoNonemptyUserDeposits();
+    error FailedWithdraw();
 }
