@@ -128,7 +128,6 @@ contract AaveStablecoinCellar is
         if (deposits.length == 0 || currentDepositIndex[owner] > deposits.length - 1)
             revert NoNonemptyUserDeposits();
 
-
         uint256 activeShares;
         uint256 inactiveShares;
         uint256 inactiveAssets;
@@ -136,7 +135,7 @@ contract AaveStablecoinCellar is
         // Saves gas by avoiding calling `convertToAssets` on active shares during each loop.
         uint256 exchangeRate = convertToAssets(1e18);
 
-        uint256 left = assets;
+        uint256 leftToWithdraw = assets;
         uint256 currentIdx = currentDepositIndex[owner];
         for (uint256 i = currentIdx; i < deposits.length; i++) {
             UserDeposit storage d = deposits[i];
@@ -148,14 +147,14 @@ contract AaveStablecoinCellar is
             if (d.timeDeposited < lastTimeEnteredStrategy) {
                 // Active:
                 uint256 dAssets = exchangeRate * d.shares / 1e18;
-                withdrawnAssets = MathUtils.min(left, dAssets);
+                withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
                 withdrawnShares = MathUtils.mulDivUp(d.shares, withdrawnAssets, dAssets);
                 delete d.assets; // Don't need anymore; delete for a gas refund.
 
                 activeShares += withdrawnShares;
             } else {
                 // Inactive:
-                withdrawnAssets = MathUtils.min(left, d.assets);
+                withdrawnAssets = MathUtils.min(leftToWithdraw, d.assets);
                 withdrawnShares = MathUtils.mulDivUp(d.shares, withdrawnAssets, d.assets);
                 d.assets -= withdrawnAssets;
 
@@ -165,15 +164,10 @@ contract AaveStablecoinCellar is
 
             d.shares -= withdrawnShares;
 
-            left -= withdrawnAssets;
+            leftToWithdraw -= withdrawnAssets;
 
-            if (left == 0) {
-                if (d.shares != 0) {
-                    currentDepositIndex[owner] = i;
-                } else {
-                    currentDepositIndex[owner] = i + 1;
-                }
-
+            if (leftToWithdraw == 0) {
+                d.shares != 0 ? currentDepositIndex[owner] = i : currentDepositIndex[owner] = i+1;
                 break;
             }
         }
@@ -192,8 +186,6 @@ contract AaveStablecoinCellar is
 
         _burn(owner, shares);
 
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
-
         if (activeAssets > 0) {
             // Withdraw tokens from Aave to receiver.
             ILendingPool(aaveLendingPool).withdraw(currentLendingToken, activeAssets, receiver);
@@ -202,6 +194,8 @@ contract AaveStablecoinCellar is
         if (inactiveAssets > 0) {
             ERC20(currentLendingToken).transfer(receiver, inactiveAssets);
         }
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
     function withdraw(uint256 assets) external {
@@ -211,13 +205,10 @@ contract AaveStablecoinCellar is
     /// @dev Total amount of the underlying asset that is managed by cellar.
     function totalAssets() public view returns (uint256) {
         uint256 inactiveAssets = ERC20(currentLendingToken).balanceOf(address(this));
-
-        (, uint256 liquidityIndex, , , , , , , , , , ) = ILendingPool(aaveLendingPool)
-            .getReserveData(currentLendingToken);
-
-        // Use aTokens * index to find the worth of aTokens in underlying assets.
-        uint256 aTokens = IAToken(currentAToken).balanceOf(address(this));
-        uint256 activeAssets = MathUtils.rayMul(aTokens, liquidityIndex);
+        // The aTokens' value is pegged to the value of the corresponding deposited
+        // asset at a 1:1 ratio, so we can find the amount of assets active in a
+        // strategy simply by taking balance of aTokens cellar holds.
+        uint256 activeAssets = ERC20(currentAToken).balanceOf(address(this));
 
         return activeAssets + inactiveAssets;
     }
