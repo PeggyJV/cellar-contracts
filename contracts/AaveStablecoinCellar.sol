@@ -173,7 +173,7 @@ contract AaveStablecoinCellar is
             leftToWithdraw -= withdrawnAssets;
 
             if (leftToWithdraw == 0) {
-                d.shares != 0 ? currentDepositIndex[owner] = i : currentDepositIndex[owner] = i+1;
+                currentDepositIndex[owner] = d.shares != 0 ? i : i+1;
                 break;
             }
         }
