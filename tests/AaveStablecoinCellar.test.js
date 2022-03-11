@@ -39,6 +39,8 @@ describe("AaveStablecoinCellar", () => {
     lendingPool = await LendingPool.deploy(aUSDC.address);
     await lendingPool.deployed();
 
+    await aUSDC.setLendingPool(lendingPool.address);
+
     // Deploy cellar contract
     const AaveStablecoinCellar = await ethers.getContractFactory(
       "AaveStablecoinCellar"
@@ -85,7 +87,7 @@ describe("AaveStablecoinCellar", () => {
   });
 
   describe("deposit", () => {
-    it("should mint correct amount of inactive LP token to user", async () => {
+    it("should mint correct amount of shares to user", async () => {
       // add $100 of inactive assets in cellar
       await cellar["deposit(uint256)"](100);
       // expect 100 shares to be minted (because total supply of shares is 0)
@@ -109,6 +111,15 @@ describe("AaveStablecoinCellar", () => {
       // expect $100 to have been transferred from owner to cellar
       expect(updatedUserBalance - initialUserBalance).to.eq(-100);
       expect(updatedCellarBalance - initialCellarBalance).to.eq(100);
+    });
+
+    it("should mint shares to receiver instead of caller if specified", async () => {
+      // owner mints to alice
+      await cellar["deposit(uint256,address)"](100, alice.address);
+      // expect alice receives 100 shares
+      expect(await cellar.balanceOf(alice.address)).to.eq(100);
+      // expect owner receives no shares
+      expect(await cellar.balanceOf(owner.address)).to.eq(0);
     });
   });
 
@@ -224,6 +235,37 @@ describe("AaveStablecoinCellar", () => {
         cellar.connect(alice)["withdraw(uint256)"](150)
       ).to.be.revertedWith("FailedWithdraw()");
     });
+
+    it("should not allow unapproved 3rd party to withdraw using another's shares", async () => {
+      // owner tries to withdraw alice's shares without approval (expect revert)
+      await expect(
+        cellar["withdraw(uint256,address,address)"](
+          100,
+          owner.address,
+          alice.address
+        )
+      ).to.be.reverted;
+
+      cellar.connect(alice).approve(100);
+
+      // owner tries again after alice approved owner to withdraw $100 (expect pass)
+      await expect(
+        cellar["withdraw(uint256,address,address)"](
+          100,
+          owner.address,
+          alice.address
+        )
+      ).to.be.reverted;
+
+      // owner tries to withdraw another $100 (expect revert)
+      await expect(
+        cellar["withdraw(uint256,address,address)"](
+          100,
+          owner.address,
+          alice.address
+        )
+      ).to.be.reverted;
+    });
   });
 
   describe("swap", () => {
@@ -293,11 +335,6 @@ describe("AaveStablecoinCellar", () => {
       // alice adds $100 of inactive assets
       await cellar.connect(alice)["deposit(uint256)"](100);
 
-      // set Aave lending pool index to x1.25
-      await lendingPool.setLiquidityIndex(
-        BigNumber.from("1250000000000000000000000000")
-      );
-
       // enter all $200 of inactive assets into a strategy
       await cellar.enterStrategy(usdc.address, 200);
     });
@@ -310,8 +347,12 @@ describe("AaveStablecoinCellar", () => {
     });
 
     it("should return correct amount of aTokens to cellar", async () => {
-      // should mint 160 aUSDC = $200 / x1.25
-      expect(await aUSDC.balanceOf(cellar.address)).to.eq(160);
+      expect(await aUSDC.balanceOf(cellar.address)).to.eq(200);
+    });
+
+    it("should not allow deposit if cellar does not have enough liquidity", async () => {
+      // cellar tries to enter strategy with $100 it does not have
+      await expect(cellar.enterStrategy(usdc.address, 100)).to.be.reverted;
     });
   });
 
@@ -331,6 +372,11 @@ describe("AaveStablecoinCellar", () => {
 
     it("should transfer correct amount of aTokens to lending pool", async () => {
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
+    });
+
+    it("should not allow redeeming more than cellar deposited", async () => {
+      // cellar tries to redeem $100 when it should have deposit balance of $0
+      await expect(cellar.redeemFromAave(usdc.address, 100)).to.be.reverted;
     });
   });
 });
