@@ -113,6 +113,30 @@ describe("AaveStablecoinCellar", () => {
       expect(updatedCellarBalance - initialCellarBalance).to.eq(100);
     });
 
+    it("should swap input token for current lending token if not already", async () => {
+      const initialUserBalance = await dai.balanceOf(owner.address);
+      const initialCellarBalance = await usdc.balanceOf(cellar.address);
+
+      await cellar["deposit(address,uint256,uint256,address)"](
+        dai.address,
+        100,
+        95,
+        owner.address
+      );
+
+      const updatedUserBalance = await dai.balanceOf(owner.address);
+      const updatedCellarBalance = await usdc.balanceOf(cellar.address);
+
+      // expect $100 to have been transferred from owner
+      expect(updatedUserBalance - initialUserBalance).to.eq(-100);
+      // expect $95 to have been received by cellar (simulate $5 being lost during swap)
+      expect(updatedCellarBalance - initialCellarBalance).to.eq(95);
+
+      // expect shares to be minted to owner as if they deposited $95 even though
+      // they deposited $100 (because that is what the cellar received after swap)
+      expect(await cellar.balanceOf(owner.address)).to.eq(95);
+    });
+
     it("should mint shares to receiver instead of caller if specified", async () => {
       // owner mints to alice
       await cellar["deposit(uint256,address)"](100, alice.address);
@@ -123,13 +147,7 @@ describe("AaveStablecoinCellar", () => {
     });
 
     it("should emit Deposit event", async () => {
-      await expect(
-        cellar["deposit(address,uint256,address)"](
-          usdc.address,
-          100,
-          alice.address
-        )
-      )
+      await expect(cellar["deposit(uint256,address)"](100, alice.address))
         .to.emit(cellar, "Deposit")
         .withArgs(owner.address, alice.address, 100, 100);
     });

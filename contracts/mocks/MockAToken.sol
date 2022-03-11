@@ -6,6 +6,40 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./MockLendingPool.sol";
 import "../utils/MathUtils.sol";
 
+library WadRayMath {
+    uint256 internal constant RAY = 1e27;
+    uint256 internal constant HALF_RAY = RAY / 2;
+
+    /**
+     * @dev Divides two ray, rounding half up to the nearest ray
+     * @param a Ray
+     * @param b Ray
+     * @return The result of a/b, in ray
+     **/
+    function rayDiv(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b != 0, "cannot divide by zero");
+        uint256 halfB = b / 2;
+
+        require(a <= (type(uint256).max - halfB) / RAY, "math multiplicatoin overflow");
+
+        return (a * RAY + halfB) / b;
+    }
+
+    /**
+     * @dev Multiplies two ray, rounding down to the nearest ray
+     * @param a Ray
+     * @param b Ray
+     * @return The result of a*b, in ray
+     **/
+    function rayMul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0 || b == 0) return 0;
+
+        require(a <= (type(uint256).max - HALF_RAY) / b, "math multiplicatoin overflow");
+
+        return (a * b + HALF_RAY) / RAY;
+    }
+}
+
 contract MockAToken is ERC20 {
     address public underlyingAsset;
     MockLendingPool public lendingPool;
@@ -34,7 +68,7 @@ contract MockAToken is ERC20 {
     ) external returns (bool) {
         uint256 previousBalance = super.balanceOf(user);
 
-        uint256 amountScaled = MathUtils.rayDiv(amount, index);
+        uint256 amountScaled = WadRayMath.rayDiv(amount, index);
         require(amountScaled != 0, "CT_INVALID_MINT_AMOUNT");
         _mint(user, amountScaled);
 
@@ -55,7 +89,7 @@ contract MockAToken is ERC20 {
         uint256 amount,
         uint256 index
     ) external {
-        uint256 amountScaled = MathUtils.rayDiv(amount, index);
+        uint256 amountScaled = WadRayMath.rayDiv(amount, index);
         require(amountScaled != 0, "CT_INVALID_BURN_AMOUNT");
         _burn(user, amountScaled);
 
@@ -68,7 +102,7 @@ contract MockAToken is ERC20 {
      * @return The balance of the user
      **/
     function balanceOf(address user) public view override returns (uint256) {
-        return MathUtils.rayMul(super.balanceOf(user), lendingPool.index());
+        return WadRayMath.rayMul(super.balanceOf(user), lendingPool.index());
     }
 
     /**

@@ -78,17 +78,26 @@ contract AaveStablecoinCellar is
      * @dev Deposit supported tokens into the cellar.
      * @param token address of the supported token to deposit
      * @param assets amount of assets to deposit
+     * @param minAssetsIn minimum amount of assets cellar should receive after swap (if applicable)
      * @param receiver address that should receive shares
      * @return shares amount of shares minted to receiver
      **/
-    function deposit(address token, uint256 assets, address receiver) public returns (uint256 shares) {
+    function deposit(
+        address token,
+        uint256 assets,
+        uint256 minAssetsIn,
+        address receiver
+    ) public returns (uint256 shares) {
         if (!inputTokens[token]) revert NonSupportedToken();
 
-        if ((shares = convertToShares(assets)) == 0) revert ZeroAmount();
-
-        // TODO: If token is not current lending token, swap into current lending token before depositing.
-
         ERC20(token).safeTransferFrom(msg.sender, address(this), assets);
+
+        if (token != currentLendingToken) {
+            assets = _swap(token, currentLendingToken, assets, minAssetsIn);
+        }
+
+        // Must calculate shares as if assets were not yet transfered in.
+        if ((shares = _convertToShares(assets, assets)) == 0) revert ZeroAmount();
 
         _mint(receiver, shares);
 
@@ -102,17 +111,17 @@ contract AaveStablecoinCellar is
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 
-    function deposit(uint256 assets) external {
-        deposit(currentLendingToken, assets, msg.sender);
+    function deposit(uint256 assets) external returns (uint256 shares) {
+        return deposit(currentLendingToken, assets, assets, msg.sender);
     }
 
     /// @dev For ERC4626 compatibility.
-    function deposit(uint256 assets, address receiver) external {
-        deposit(currentLendingToken, assets, receiver);
+    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
+        return deposit(currentLendingToken, assets, assets, receiver);
     }
 
     /**
-     * @dev Withdraw from the cellar.
+     * @notice Withdraw from the cellar.
      * @param assets amount of assets to withdraw
      * @param receiver address that should receive assets
      * @param owner address that should own the shares
@@ -195,11 +204,11 @@ contract AaveStablecoinCellar is
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
-    function withdraw(uint256 assets) external {
-        withdraw(assets, msg.sender, msg.sender);
+    function withdraw(uint256 assets) external returns (uint256 shares) {
+        return withdraw(assets, msg.sender, msg.sender);
     }
 
-    /// @dev Total amount of the underlying asset that is managed by cellar.
+    /// @notice Total amount of the underlying asset that is managed by cellar.
     function totalAssets() public view returns (uint256) {
         uint256 inactiveAssets = ERC20(currentLendingToken).balanceOf(address(this));
         // The aTokens' value is pegged to the value of the corresponding deposited
@@ -210,33 +219,41 @@ contract AaveStablecoinCellar is
         return activeAssets + inactiveAssets;
     }
 
-    /// @dev The amount of shares that the cellar would exchange for the amount of assets provided.
-    function convertToShares(uint256 assets) public view returns (uint256) {
-        return totalSupply == 0 ? assets : MathUtils.mulDivDown(assets, totalSupply, totalAssets());
+    /**
+     * @notice The amount of shares that the cellar would exchange for the amount of assets provided.
+     * @param assets amount of assets to convert
+     * @param offset amount to negatively offset total assets during calculation
+     */
+    function _convertToShares(uint256 assets, uint256 offset) internal view returns (uint256) {
+        return totalSupply == 0 ? assets : MathUtils.mulDivDown(assets, totalSupply, totalAssets() - offset);
     }
 
-    /// @dev The amount of assets that the cellar would exchange for the amount of shares provided.
+    function convertToShares(uint256 assets) public view returns (uint256) {
+        return _convertToShares(assets, 0);
+    }
+
+    /**
+     * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
+     * @param shares amount of shares to convert
+     */
     function convertToAssets(uint256 shares) public view returns (uint256) {
         return totalSupply == 0 ? shares : MathUtils.mulDivDown(shares, totalAssets(), totalSupply);
     }
 
     /**
-     * @dev Swaps input token by Uniswap V3.
+     * @notice Swaps input token by Uniswap V3.
      * @param tokenIn the address of the incoming token
      * @param tokenOut the address of the outgoing token
      * @param amountIn the amount of tokens to be swapped
      * @param amountOutMinimum the minimum amount of tokens returned
      * @return amountOut the amount of tokens received after swap
      **/
-    function swap(
+    function _swap(
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
         uint256 amountOutMinimum
-    ) external onlyOwner returns (uint256 amountOut) {
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
-
+    ) internal returns (uint256 amountOut) {
         // Approve the router to spend tokenIn.
         ERC20(tokenIn).safeApprove(swapRouter, amountIn);
 
@@ -258,8 +275,20 @@ contract AaveStablecoinCellar is
         emit Swapped(tokenIn, amountIn, tokenOut, amountOut, block.timestamp);
     }
 
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) external onlyOwner returns (uint256 amountOut) {
+        if (!inputTokens[tokenIn]) revert NonSupportedToken();
+        if (!inputTokens[tokenOut]) revert NonSupportedToken();
+
+        return _swap(tokenIn, tokenOut, amountIn, amountOutMinimum);
+    }
+
     /**
-     * @dev Swaps tokens by multihop swap in Uniswap V3.
+     * @notice Swaps tokens by multihop swap in Uniswap V3.
      * @param path the token swap path (token addresses)
      * @param amountIn the amount of tokens to be swapped
      * @param amountOutMinimum the minimum amount of tokens returned
@@ -310,7 +339,7 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @dev Enters Aave stablecoin strategy.
+     * @notice Enters Aave stablecoin strategy.
      * @param token the address of the token
      * @param assets the amount of token to be deposited
      **/
@@ -324,7 +353,7 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @dev Deposits cellar holdings into Aave lending pool.
+     * @notice Deposits cellar holdings into Aave lending pool.
      * @param token the address of the token
      * @param assets the amount of token to be deposited
      **/
@@ -353,7 +382,7 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @dev Redeems a token from Aave protocol.
+     * @notice Redeems a token from Aave protocol.
      * @param token the address of the token
      * @param amount the token amount being redeemed
      **/
@@ -385,7 +414,7 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @dev Allow a supported token to be deposited into the cellar.
+     * @notice Allow a supported token to be deposited into the cellar.
      * @param token the address of the supported token
      **/
     function initInputToken(address token) public onlyOwner {
