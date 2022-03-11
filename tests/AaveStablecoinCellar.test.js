@@ -121,6 +121,18 @@ describe("AaveStablecoinCellar", () => {
       // expect owner receives no shares
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
     });
+
+    it("should emit Deposit event", async () => {
+      await expect(
+        cellar["deposit(address,uint256,address)"](
+          usdc.address,
+          100,
+          alice.address
+        )
+      )
+        .to.emit(cellar, "Deposit")
+        .withArgs(owner.address, alice.address, 100, 100);
+    });
   });
 
   describe("withdraw", () => {
@@ -266,6 +278,18 @@ describe("AaveStablecoinCellar", () => {
         )
       ).to.be.reverted;
     });
+
+    it("should emit Withdraw event", async () => {
+      await expect(
+        cellar["withdraw(uint256,address,address)"](
+          100,
+          alice.address,
+          owner.address
+        )
+      )
+        .to.emit(cellar, "Withdraw")
+        .withArgs(owner.address, alice.address, owner.address, 100, 100);
+    });
   });
 
   describe("swap", () => {
@@ -289,6 +313,13 @@ describe("AaveStablecoinCellar", () => {
       await expect(
         cellar.swap(usdc.address, dai.address, 3000, 2800)
       ).to.be.revertedWith("ERC20: transfer amount exceeds balance");
+    });
+
+    it("should emit Swapped event", async () => {
+      const timestamp = (await ethers.provider.getBlock()).timestamp;
+      await expect(cellar.swap(usdc.address, dai.address, 1000, 950))
+        .to.emit(cellar, "Swapped")
+        .withArgs(usdc.address, 1000, dai.address, 950, timestamp + 1);
     });
   });
 
@@ -325,6 +356,19 @@ describe("AaveStablecoinCellar", () => {
         )
       ).to.be.revertedWith("ERC20: transfer amount exceeds balance");
     });
+
+    it("should emit Swapped event", async () => {
+      const timestamp = (await ethers.provider.getBlock()).timestamp;
+      await expect(
+        cellar.multihopSwap(
+          [weth.address, usdc.address, dai.address],
+          1000,
+          950
+        )
+      )
+        .to.emit(cellar, "Swapped")
+        .withArgs(weth.address, 1000, dai.address, 950, timestamp + 1);
+    });
   });
 
   describe("enterStrategy", () => {
@@ -354,6 +398,15 @@ describe("AaveStablecoinCellar", () => {
       // cellar tries to enter strategy with $100 it does not have
       await expect(cellar.enterStrategy(usdc.address, 100)).to.be.reverted;
     });
+
+    it("should emit DepositToAave event", async () => {
+      await cellar["deposit(uint256)"](200);
+
+      const timestamp = (await ethers.provider.getBlock()).timestamp;
+      await expect(cellar.enterStrategy(usdc.address, 200))
+        .to.emit(cellar, "DepositToAave")
+        .withArgs(usdc.address, 200, timestamp + 1);
+    });
   });
 
   describe("redeemFromAave", () => {
@@ -377,6 +430,16 @@ describe("AaveStablecoinCellar", () => {
     it("should not allow redeeming more than cellar deposited", async () => {
       // cellar tries to redeem $100 when it should have deposit balance of $0
       await expect(cellar.redeemFromAave(usdc.address, 100)).to.be.reverted;
+    });
+
+    it("should emit RedeemFromAave event", async () => {
+      await usdc.mint(cellar.address, 1000);
+      await cellar.enterStrategy(usdc.address, 1000);
+
+      const timestamp = (await ethers.provider.getBlock()).timestamp;
+      await expect(cellar.redeemFromAave(usdc.address, 1000))
+        .to.emit(cellar, "RedeemFromAave")
+        .withArgs(usdc.address, 1000, timestamp + 1);
     });
   });
 });
