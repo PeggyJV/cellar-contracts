@@ -5,7 +5,9 @@ describe("AaveStablecoinCellar", () => {
   let owner;
   let cellar;
   let usdc;
+  let weth;
   let dai;
+  let usdt;
   let router;
   let lendingPool;
   let aToken;
@@ -25,10 +27,11 @@ describe("AaveStablecoinCellar", () => {
     await lendingPool.deployed();
     aToken = await ethers.getContractAt("MockToken", lendingPool.aToken());
 
-    const MockAaveDataProvider = await ethers.getContractFactory("MockAaveDataProvider");
+    const MockAaveDataProvider = await ethers.getContractFactory(
+      "MockAaveDataProvider"
+    );
     dataProvider = await MockAaveDataProvider.deploy();
     await dataProvider.deployed();
-
 
     // Deploy cellar contract
     const AaveStablecoinCellar = await ethers.getContractFactory(
@@ -48,34 +51,42 @@ describe("AaveStablecoinCellar", () => {
     usdc = await Token.deploy("USDC");
     dai = await Token.deploy("DAI");
     weth = await Token.deploy("WETH");
+    usdt = await Token.deploy("USDT");
+
     await usdc.deployed();
     await dai.deployed();
     await weth.deployed();
+    await usdt.deployed();
 
     // Mint mock tokens to owner
     await usdc.mint(owner.address, 100);
     await dai.mint(owner.address, 100);
     await weth.mint(owner.address, 100);
+    await usdt.mint(owner.address, 100);
 
     // Approve cellar to spend mock tokens
     await usdc.approve(cellar.address, 100);
     await dai.approve(cellar.address, 100);
     await weth.approve(cellar.address, 100);
+    await usdt.approve(cellar.address, 100);
 
     // Mint initial tokens to cellar
     await usdc.mint(cellar.address, 1000);
     await dai.mint(cellar.address, 1000);
     await weth.mint(cellar.address, 1000);
+    await usdt.mint(cellar.address, 1000);
 
     // Mint initial liquidity to router
     await usdc.mint(router.address, 5000);
     await dai.mint(router.address, 5000);
     await weth.mint(router.address, 5000);
+    await usdt.mint(router.address, 5000);
 
     // Initialize with mock tokens as input tokens
     await cellar.initInputToken(usdc.address);
     await cellar.initInputToken(dai.address);
     await cellar.initInputToken(weth.address);
+    await cellar.initInputToken(usdt.address);
   });
 
   describe("addLiquidity", () => {
@@ -112,16 +123,31 @@ describe("AaveStablecoinCellar", () => {
   describe("multihopSwap", () => {
     it("should swap input tokens for at least the minimum amount of output tokens", async () => {
       await cellar.multihopSwap(
-        [weth.address, usdc.address, dai.address],
+        [weth.address, usdc.address, usdt.address],
         1000,
         950
       );
       expect(await weth.balanceOf(cellar.address)).to.eq(0);
-      expect(await dai.balanceOf(cellar.address)).to.be.at.least(950);
+      expect(await usdt.balanceOf(cellar.address)).to.be.at.least(950);
 
       expect(
         cellar.swap(usdc.address, dai.address, 1000, 2000)
       ).to.be.revertedWith("amountOutMin invariant failed");
+    });
+    it("multihop swap with two tokens in the path", async () => {
+      await cellar.multihopSwap([weth.address, dai.address], 1000, 950);
+      expect(await weth.balanceOf(cellar.address)).to.eq(0);
+      expect(await dai.balanceOf(cellar.address)).to.be.at.least(950);
+    });
+
+    it("multihop swap with four tokens in the path", async () => {
+      await cellar.multihopSwap(
+        [usdc.address, dai.address, weth.address, usdt.address],
+        1000,
+        950
+      );
+      expect(await usdc.balanceOf(cellar.address)).to.eq(0);
+      expect(await usdt.balanceOf(cellar.address)).to.be.at.least(950);
     });
   });
 
@@ -157,6 +183,24 @@ describe("AaveStablecoinCellar", () => {
 
     it("should transfer correct amount of aTokens to lending pool", async () => {
       expect(await aToken.balanceOf(cellar.address)).to.eq(0);
+    });
+  });
+
+  describe("rebalance", () => {
+    beforeEach(async () => {
+      await cellar.enterStrategy(usdc.address, 1000);
+    });
+    it("should rebalance all usdc liquidity in dai", async () => {
+      await cellar.rebalance(dai.address);
+      expect(await usdc.balanceOf(lendingPool.address)).to.eq(0);
+      // After the swap,  amount of  coin will change from the exchange rate of 0.95
+      expect(await dai.balanceOf(lendingPool.address)).to.eq(950);
+    });
+
+    it("should not be possible to rebalance to the same token", async () => {
+      await expect(cellar.rebalance(usdc.address)).to.be.revertedWith(
+        "SameLendingToken"
+      );
     });
   });
 });

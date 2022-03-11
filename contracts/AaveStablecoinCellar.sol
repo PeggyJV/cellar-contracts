@@ -306,6 +306,8 @@ contract AaveStablecoinCellar is
     {
         if (currentLendingToken == address(0)) revert NoLendingPosition();
         if (!inputTokens[newLendingToken]) revert NonSupportedToken();
+
+        if(newLendingToken == currentLendingToken) revert SameLendingToken();
         
         uint256 lendingPositionBalance = getCurrentATokenBalance();
         
