@@ -7,9 +7,7 @@ import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "./interfaces/ILendingPool.sol";
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import {ReentrancyGuard} from "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./interfaces/IAToken.sol";
 import "./utils/MathUtils.sol";
 
 /**
@@ -20,7 +18,6 @@ import "./utils/MathUtils.sol";
 contract AaveStablecoinCellar is
     IAaveStablecoinCellar,
     ERC20,
-    ReentrancyGuard,
     Ownable
 {
     using SafeTransferLib for ERC20;

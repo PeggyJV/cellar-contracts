@@ -8,7 +8,7 @@ import "../utils/MathUtils.sol";
 
 contract MockAToken is ERC20 {
     address public underlyingAsset;
-    MockLendingPool lendingPool;
+    MockLendingPool public lendingPool;
 
     constructor(address _underlyingAsset, string memory _symbol) ERC20(_symbol, _symbol) {
         underlyingAsset = _underlyingAsset;
