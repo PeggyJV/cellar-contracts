@@ -9,6 +9,8 @@ import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./utils/MathUtils.sol";
+import "./interfaces/IAaveIncentivesController.sol";
+import "./interfaces/IStakedTokenV2.sol";
 
 /**
  * @title Sommelier AaveStablecoinCellar contract
@@ -28,10 +30,15 @@ contract AaveStablecoinCellar is
         uint256 timeDeposited;
     }
 
-    // Uniswap Router V3 contract address.
+    // Uniswap Router V3 contract
     ISwapRouter public immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
-    // Aave Lending Pool V2 contract address.
+    // Aave Lending Pool V2 contract
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
+    // Aave Incentives Controller V2 contract
+    IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
+    IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
+    address public immutable AAVE; // 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9
+    address public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
     // Declare the variables and mappings.
     address[] public inputTokensList;
@@ -58,14 +65,22 @@ contract AaveStablecoinCellar is
      * @param _symbol symbol of LP token
      */
     constructor(
-        address _swapRouter,
-        address _lendingPool,
+        ISwapRouter _swapRouter,
+        ILendingPool _lendingPool,
+        IAaveIncentivesController _incentivesController,
+        IStakedTokenV2 _stkAAVE,
+        address _AAVE,
+        address _WETH,
         address _currentLendingToken,
         string memory _name,
         string memory _symbol
     ) ERC20(_name, _symbol, 18) Ownable() {
-        swapRouter =  ISwapRouter(_swapRouter);
-        lendingPool = ILendingPool(_lendingPool);
+        swapRouter =  _swapRouter;
+        lendingPool = _lendingPool;
+        incentivesController = _incentivesController;
+        stkAAVE = _stkAAVE;
+        AAVE = _AAVE;
+        WETH = _WETH;
 
         currentLendingToken = _currentLendingToken;
         _updateCurrentAToken();
@@ -296,17 +311,15 @@ contract AaveStablecoinCellar is
      * @param amountOutMinimum the minimum amount of tokens returned
      * @return amountOut the amount of tokens received after swap
      **/
-    function multihopSwap(
+    function _multihopSwap(
         address[] memory path,
         uint256 amountIn,
         uint256 amountOutMinimum
-    ) external onlyOwner returns (uint256 amountOut) {
+    ) internal returns (uint256 amountOut) {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
         if (path.length < 2) revert PathIsTooShort();
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
 
         // Approve the router to spend first token in path.
         ERC20(tokenIn).safeApprove(address(swapRouter), amountIn);
@@ -340,6 +353,20 @@ contract AaveStablecoinCellar is
         emit Swapped(tokenIn, amountIn, tokenOut, amountOut, block.timestamp);
     }
 
+    function multihopSwap(
+        address[] memory path,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) external onlyOwner returns (uint256) {
+        address tokenIn = path[0];
+        address tokenOut = path[path.length - 1];
+
+        if (!inputTokens[tokenIn]) revert NonSupportedToken();
+        if (!inputTokens[tokenOut]) revert NonSupportedToken();
+
+        return _multihopSwap(path, amountIn, amountOutMinimum);
+    }
+
     /**
      * @notice Enters Aave stablecoin strategy.
      * @param token the address of the token
@@ -355,6 +382,52 @@ contract AaveStablecoinCellar is
         _updateCurrentAToken();
 
         lastTimeEnteredStrategy = block.timestamp;
+    }
+
+    /**
+     * @notice Reinvest stkAAVE rewards back into cellar's current position on Aave.
+     * @dev Must be called in the 2 day unstake period started 10 days after claimAndUnstake was run.
+     * @param amount amount of stkAAVE to redeem and reinvest
+     * @param minAssetsOut minimum amount of assets cellar should receive after swap
+     */
+    function reinvest(uint256 amount, uint256 minAssetsOut) public onlyOwner {
+        stkAAVE.redeem(address(this), amount);
+
+        address[] memory path = new address[](3);
+        path[0] = AAVE;
+        path[1] = WETH;
+        path[2] = currentLendingToken;
+
+        uint256 amountIn = ERC20(AAVE).balanceOf(address(this));
+
+        // NOTE: Due to the lack of liquidity for AAVE on Uniswap, we will
+        // likely need change this to use Sushiswap instead for swaps.
+        uint256 amountOut = _multihopSwap(path, amountIn, minAssetsOut);
+
+        _depositToAave(currentLendingToken, amountOut);
+    }
+
+    function reinvest(uint256 minAssetsOut) external onlyOwner {
+        reinvest(type(uint256).max, minAssetsOut);
+    }
+
+    /**
+     * @dev Claim stkAAVE rewards from Aave and begin cooldown period to unstake.
+     * @param amount amount of rewards to claim
+     * @return claimed amount of rewards claimed from Aave
+     */
+    function claimAndUnstake(uint256 amount) public onlyOwner returns (uint256 claimed) {
+        // Necessary as claimRewards accepts a dynamic array as first param.
+        address[] memory aToken = new address[](1);
+        aToken[0] = currentAToken;
+
+        claimed = incentivesController.claimRewards(aToken, amount, address(this));
+
+        stkAAVE.cooldown();
+    }
+
+    function claimAndUnstake() external onlyOwner returns (uint256) {
+        return claimAndUnstake(type(uint256).max);
     }
 
     /**
