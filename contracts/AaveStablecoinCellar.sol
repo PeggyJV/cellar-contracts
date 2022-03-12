@@ -37,7 +37,7 @@ contract AaveStablecoinCellar is
     address[] public inputTokensList;
     mapping(address => bool) internal inputTokens;
     address public currentLendingToken;
-    address public immutable currentAToken;
+    address public currentAToken;
     // Track user user deposits to determine active/inactive shares.
     mapping(address => UserDeposit[]) public userDeposits;
     // Store the index of the user's last non-zero deposit to save gas on looping.
@@ -66,8 +66,12 @@ contract AaveStablecoinCellar is
     ) ERC20(_name, _symbol, 18) Ownable() {
         swapRouter =  ISwapRouter(_swapRouter);
         lendingPool = ILendingPool(_lendingPool);
-        currentLendingToken = _currentLendingToken;
 
+        currentLendingToken = _currentLendingToken;
+        _updateCurrentAToken();
+    }
+
+    function _updateCurrentAToken() internal {
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(currentLendingToken);
         currentAToken = aTokenAddress;
     }
@@ -346,6 +350,9 @@ contract AaveStablecoinCellar is
         onlyOwner
     {
         _depositToAave(token, assets);
+
+        currentLendingToken = token;
+        _updateCurrentAToken();
 
         lastTimeEnteredStrategy = block.timestamp;
     }
