@@ -117,11 +117,10 @@ describe("AaveStablecoinCellar", () => {
     await dai.mint(router.address, 5000);
     await weth.mint(router.address, 5000);
 
-    // Initialize with input tokens
-    await cellar.initInputToken(usdc.address);
-    await cellar.initInputToken(dai.address);
-    await cellar.initInputToken(weth.address);
-    await cellar.initInputToken(aave.address);
+    // Initialize with mock tokens as input tokens
+    await cellar.approveInputToken(usdc.address);
+    await cellar.approveInputToken(dai.address);
+    await cellar.approveInputToken(weth.address);
   });
 
   describe("deposit", () => {

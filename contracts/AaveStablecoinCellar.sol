@@ -83,6 +83,10 @@ contract AaveStablecoinCellar is
         WETH = _WETH;
 
         currentLendingToken = _currentLendingToken;
+        _updateCurrentAToken();
+    }
+
+    function _updateCurrentAToken() internal {
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(currentLendingToken);
         currentAToken = aTokenAddress;
     }
@@ -362,6 +366,9 @@ contract AaveStablecoinCellar is
     {
         _depositToAave(token, assets);
 
+        currentLendingToken = token;
+        _updateCurrentAToken();
+
         lastTimeEnteredStrategy = block.timestamp;
     }
 
@@ -469,10 +476,10 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @notice Allow a supported token to be deposited into the cellar.
+     * @notice Approve a supported token to be deposited into the cellar.
      * @param token the address of the supported token
      **/
-    function initInputToken(address token) public onlyOwner {
+    function approveInputToken(address token) external onlyOwner {
         if (inputTokens[token]) revert TokenAlreadyInitialized();
 
         inputTokens[token] = true;
