@@ -368,13 +368,12 @@ contract AaveStablecoinCellar is
     /**
      * @notice Reinvest stkAAVE rewards back into cellar's current position on Aave.
      * @dev Must be called in the 2 day unstake period started 10 days after claimAndUnstake was run.
-     * @param minAssestsOut minimum amount of assets cellar should receive after swap
+     * @param amount amount of stkAAVE to redeem and reinvest
+     * @param minAssetsOut minimum amount of assets cellar should receive after swap
      */
-    function reinvest(uint256 minAssestsOut) external onlyOwner {
-        stkAAVE.redeem(address(this), type(uint256).max);
+    function reinvest(uint256 amount, uint256 minAssetsOut) public onlyOwner {
+        stkAAVE.redeem(address(this), amount);
 
-        // NOTE: Due to the lack of liquidity for AAVE on Uniswap, we will
-        // likely need to use Sushiswap instead for swaps.
         address[] memory path = new address[](3);
         path[0] = AAVE;
         path[1] = WETH;
@@ -382,27 +381,34 @@ contract AaveStablecoinCellar is
 
         uint256 amountIn = ERC20(AAVE).balanceOf(address(this));
 
-        uint256 amountOut = multihopSwap(path, amountIn, minAssestsOut);
+        // NOTE: Due to the lack of liquidity for AAVE on Uniswap, we will
+        // likely need change this to use Sushiswap instead for swaps.
+        uint256 amountOut = multihopSwap(path, amountIn, minAssetsOut);
 
         _depositToAave(currentLendingToken, amountOut);
+    }
+
+    function reinvest(uint256 minAssetsOut) external onlyOwner {
+        reinvest(type(uint256).max, minAssetsOut);
     }
 
     /**
      * @dev Claim stkAAVE rewards from Aave and begin cooldown period to unstake.
      * @param amount amount of rewards to claim
+     * @return claimed amount of rewards claimed from Aave
      */
-    function claimAndUnstake(uint256 amount) public onlyOwner {
-        // Necessary as claimRewards only accepts a dynamic array as first param.
+    function claimAndUnstake(uint256 amount) public onlyOwner returns (uint256 claimed) {
+        // Necessary as claimRewards accepts a dynamic array as first param.
         address[] memory aToken = new address[](1);
         aToken[0] = currentAToken;
 
-        incentivesController.claimRewards(aToken, amount, address(this));
+        claimed = incentivesController.claimRewards(aToken, amount, address(this));
 
         stkAAVE.cooldown();
     }
 
-    function claimAndUnstake() external onlyOwner {
-        claimAndUnstake(type(uint256).max);
+    function claimAndUnstake() external onlyOwner returns (uint256) {
+        return claimAndUnstake(type(uint256).max);
     }
 
     /**
