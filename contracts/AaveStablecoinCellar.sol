@@ -311,17 +311,15 @@ contract AaveStablecoinCellar is
      * @param amountOutMinimum the minimum amount of tokens returned
      * @return amountOut the amount of tokens received after swap
      **/
-    function multihopSwap(
+    function _multihopSwap(
         address[] memory path,
         uint256 amountIn,
         uint256 amountOutMinimum
-    ) public onlyOwner returns (uint256 amountOut) {
+    ) internal returns (uint256 amountOut) {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
         if (path.length < 2) revert PathIsTooShort();
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
 
         // Approve the router to spend first token in path.
         ERC20(tokenIn).safeApprove(address(swapRouter), amountIn);
@@ -353,6 +351,20 @@ contract AaveStablecoinCellar is
         amountOut = swapRouter.exactInput(params);
 
         emit Swapped(tokenIn, amountIn, tokenOut, amountOut, block.timestamp);
+    }
+
+    function multihopSwap(
+        address[] memory path,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) external onlyOwner returns (uint256) {
+        address tokenIn = path[0];
+        address tokenOut = path[path.length - 1];
+
+        if (!inputTokens[tokenIn]) revert NonSupportedToken();
+        if (!inputTokens[tokenOut]) revert NonSupportedToken();
+
+        return _multihopSwap(path, amountIn, amountOutMinimum);
     }
 
     /**
@@ -390,7 +402,7 @@ contract AaveStablecoinCellar is
 
         // NOTE: Due to the lack of liquidity for AAVE on Uniswap, we will
         // likely need change this to use Sushiswap instead for swaps.
-        uint256 amountOut = multihopSwap(path, amountIn, minAssetsOut);
+        uint256 amountOut = _multihopSwap(path, amountIn, minAssetsOut);
 
         _depositToAave(currentLendingToken, amountOut);
     }
