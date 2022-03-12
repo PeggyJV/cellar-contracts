@@ -370,7 +370,7 @@ contract AaveStablecoinCellar is
      * @dev Must be called in the 2 day unstake period started 10 days after claimAndUnstake was run.
      * @param minAssestsOut minimum amount of assets cellar should receive after swap
      */
-    function reinvest(uint256 minAssestsOut) external {
+    function reinvest(uint256 minAssestsOut) external onlyOwner {
         stkAAVE.redeem(address(this), type(uint256).max);
 
         // NOTE: Due to the lack of liquidity for AAVE on Uniswap, we will
