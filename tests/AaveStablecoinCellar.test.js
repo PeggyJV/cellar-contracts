@@ -2,6 +2,19 @@ const { ethers } = require("hardhat");
 const { expect } = require("chai");
 const { BigNumber } = require("ethers");
 
+const timestamp = async () => {
+  const latestBlock = await ethers.provider.getBlock(
+    await ethers.provider.getBlockNumber()
+  );
+
+  return latestBlock.timestamp;
+};
+
+const timetravel = async (addTime) => {
+  await network.provider.send("evm_increaseTime", [addTime]);
+  await network.provider.send("evm_mine");
+};
+
 describe("AaveStablecoinCellar", () => {
   let owner;
   let alice;
@@ -10,7 +23,10 @@ describe("AaveStablecoinCellar", () => {
   let dai;
   let router;
   let lendingPool;
+  let incentivesController;
   let aUSDC;
+  let stkAAVE;
+  let aave;
 
   beforeEach(async () => {
     [owner, alice] = await ethers.getSigners();
@@ -41,6 +57,23 @@ describe("AaveStablecoinCellar", () => {
 
     await aUSDC.setLendingPool(lendingPool.address);
 
+    // Deploy mock AAVE
+    aave = await Token.deploy("AAVE");
+
+    // Deploy mock stkAAVE
+    const MockStkAAVE = await ethers.getContractFactory("MockStkAAVE");
+    stkAAVE = await MockStkAAVE.deploy(aave.address);
+    await stkAAVE.deployed();
+
+    // Deploy mock Aave incentives controller
+    const MockIncentivesController = await ethers.getContractFactory(
+      "MockIncentivesController"
+    );
+    incentivesController = await MockIncentivesController.deploy(
+      stkAAVE.address
+    );
+    await incentivesController.deployed();
+
     // Deploy cellar contract
     const AaveStablecoinCellar = await ethers.getContractFactory(
       "AaveStablecoinCellar"
@@ -48,6 +81,10 @@ describe("AaveStablecoinCellar", () => {
     cellar = await AaveStablecoinCellar.deploy(
       router.address,
       lendingPool.address,
+      incentivesController.address,
+      stkAAVE.address,
+      aave.address,
+      weth.address,
       usdc.address,
       "Sommelier Aave Stablecoin Cellar LP Token",
       "SASCT"
@@ -80,10 +117,11 @@ describe("AaveStablecoinCellar", () => {
     await dai.mint(router.address, 5000);
     await weth.mint(router.address, 5000);
 
-    // Initialize with mock tokens as input tokens
+    // Initialize with input tokens
     await cellar.initInputToken(usdc.address);
     await cellar.initInputToken(dai.address);
     await cellar.initInputToken(weth.address);
+    await cellar.initInputToken(aave.address);
   });
 
   describe("deposit", () => {
@@ -334,10 +372,15 @@ describe("AaveStablecoinCellar", () => {
     });
 
     it("should emit Swapped event", async () => {
-      const timestamp = (await ethers.provider.getBlock()).timestamp;
       await expect(cellar.swap(usdc.address, dai.address, 1000, 950))
         .to.emit(cellar, "Swapped")
-        .withArgs(usdc.address, 1000, dai.address, 950, timestamp + 1);
+        .withArgs(
+          usdc.address,
+          1000,
+          dai.address,
+          950,
+          (await timestamp()) + 1
+        );
     });
   });
 
@@ -376,7 +419,6 @@ describe("AaveStablecoinCellar", () => {
     });
 
     it("should emit Swapped event", async () => {
-      const timestamp = (await ethers.provider.getBlock()).timestamp;
       await expect(
         cellar.multihopSwap(
           [weth.address, usdc.address, dai.address],
@@ -385,7 +427,13 @@ describe("AaveStablecoinCellar", () => {
         )
       )
         .to.emit(cellar, "Swapped")
-        .withArgs(weth.address, 1000, dai.address, 950, timestamp + 1);
+        .withArgs(
+          weth.address,
+          1000,
+          dai.address,
+          950,
+          (await timestamp()) + 1
+        );
     });
   });
 
@@ -420,10 +468,46 @@ describe("AaveStablecoinCellar", () => {
     it("should emit DepositToAave event", async () => {
       await cellar["deposit(uint256)"](200);
 
-      const timestamp = (await ethers.provider.getBlock()).timestamp;
       await expect(cellar.enterStrategy(usdc.address, 200))
         .to.emit(cellar, "DepositToAave")
-        .withArgs(usdc.address, 200, timestamp + 1);
+        .withArgs(usdc.address, 200, (await timestamp()) + 1);
+    });
+  });
+
+  describe("claimAndUnstake", () => {
+    beforeEach(async () => {
+      // simulate cellar contract having 100 stkAAVE to claim
+      await incentivesController.addRewards(cellar.address, 100);
+
+      await cellar["claimAndUnstake()"]();
+    });
+
+    it("should claim rewards from Aave and begin unstaking", async () => {
+      // expect cellar to claim all 100 stkAAVE
+      expect(await stkAAVE.balanceOf(cellar.address)).to.eq(100);
+    });
+
+    it("should have started 10 day unstaking cooldown period", async () => {
+      expect(await stkAAVE.stakersCooldowns(cellar.address)).to.eq(
+        await timestamp()
+      );
+    });
+  });
+
+  describe("reinvest", () => {
+    beforeEach(async () => {
+      await incentivesController.addRewards(cellar.address, 100);
+      // cellar claims rewards and begins the 10 day cooldown period
+      await cellar["claimAndUnstake()"]();
+
+      await timetravel(864000);
+
+      await cellar["reinvest(uint256)"](95);
+    });
+
+    it("should reinvested rewards back into principal", async () => {
+      expect(await stkAAVE.balanceOf(cellar.address)).to.eq(0);
+      expect(await aUSDC.balanceOf(cellar.address)).to.eq(95);
     });
   });
 
@@ -454,10 +538,9 @@ describe("AaveStablecoinCellar", () => {
       await usdc.mint(cellar.address, 1000);
       await cellar.enterStrategy(usdc.address, 1000);
 
-      const timestamp = (await ethers.provider.getBlock()).timestamp;
       await expect(cellar.redeemFromAave(usdc.address, 1000))
         .to.emit(cellar, "RedeemFromAave")
-        .withArgs(usdc.address, 1000, timestamp + 1);
+        .withArgs(usdc.address, 1000, (await timestamp()) + 1);
     });
   });
 });
