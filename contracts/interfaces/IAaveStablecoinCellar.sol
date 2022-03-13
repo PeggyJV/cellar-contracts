@@ -90,4 +90,6 @@ interface IAaveStablecoinCellar {
 
     error NoNonemptyUserDeposits();
     error FailedWithdraw();
+
+    error IsShutdown();
 }

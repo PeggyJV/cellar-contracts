@@ -57,6 +57,8 @@ contract AaveStablecoinCellar is
     // Aave deposit balances by tokens.
     mapping(address => uint256) public aaveDepositBalances;
 
+    bool public isShutdown;
+
     /**
      * @param _swapRouter Uniswap V3 swap router address
      * @param _lendingPool Aave V2 lending pool address
@@ -92,6 +94,14 @@ contract AaveStablecoinCellar is
     }
 
     /**
+     * @notice Pause or disable critical contract functionality in case of an emergency.
+     * @param _isShutdown whether or not the cellar should be shutdown
+     */
+    function setShutdown(bool _isShutdown) external onlyOwner {
+        isShutdown = _isShutdown;
+    }
+
+    /**
      * @dev Deposit supported tokens into the cellar.
      * @param token address of the supported token to deposit
      * @param assets amount of assets to deposit
@@ -106,6 +116,7 @@ contract AaveStablecoinCellar is
         address receiver
     ) public returns (uint256 shares) {
         if (!inputTokens[token]) revert NonSupportedToken();
+        if (isShutdown) revert IsShutdown();
 
         ERC20(token).safeTransferFrom(msg.sender, address(this), assets);
 
