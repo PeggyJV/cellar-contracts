@@ -552,8 +552,8 @@ contract AaveStablecoinCellar is
     /**
      * @notice Removes tokens from this cellar that are not the type of token managed
      *         by this cellar. This may be used in case of accidentally sending the
-     *         wrong kind of token to this Vault.
-     * @param token address of token to transfer out of this vault.
+     *         wrong kind of token to this contract.
+     * @param token address of token to transfer out of this cellar
      */
     function sweep(address token) external onlyOwner {
         if (inputTokens[token] || token == currentAToken) revert ProtectedAsset();
