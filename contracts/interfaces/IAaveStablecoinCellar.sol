@@ -45,28 +45,27 @@ interface IAaveStablecoinCellar {
     );
 
     /**
-     * @dev emitted on deposit to Aave
+     * @notice Emitted on deposit to Aave
      * @param token the address of the token
      * @param tokenAmount the amount to be deposited
      * @param timestamp the timestamp of the action
      **/
-    event DepositToAave(
-        address indexed token,
-        uint256 tokenAmount,
-        uint256 timestamp
-    );
+    event DepositToAave(address indexed token, uint256 tokenAmount, uint256 timestamp);
 
     /**
-     * @dev emitted on redeem from Aave
+     * @notice Emitted on redeem from Aave
      * @param token the address of the token
      * @param tokenAmount the amount to be redeemed
      * @param timestamp the timestamp of the action
      **/
-    event RedeemFromAave(
-        address indexed token,
-        uint256 tokenAmount,
-        uint256 timestamp
-    );
+    event RedeemFromAave(address indexed token, uint256 tokenAmount, uint256 timestamp);
+
+    /**
+     * @notice Emitted when tokens accidently sent to cellar are recovered.
+     * @param token the address of the token
+     * @param amount amount transferred out
+     **/
+    event Sweep(address indexed token, uint256 amount);
 
     error NonSupportedToken();
     error PathIsTooShort();
@@ -90,4 +89,6 @@ interface IAaveStablecoinCellar {
 
     error NoNonemptyUserDeposits();
     error FailedWithdraw();
+
+    error ProtectedAsset();
 }
