@@ -542,4 +542,16 @@ describe("AaveStablecoinCellar", () => {
         .withArgs(usdc.address, 1000, (await timestamp()) + 1);
     });
   });
+
+  describe("shutdown", () => {
+    beforeEach(async () => {
+      await cellar.setShutdown(true);
+    });
+
+    it("should prevent users from depositing while shutdown", async () => {
+      expect(cellar["deposit(uint256)"](100)).to.be.revertedWith(
+        "IsShutdown()"
+      );
+    });
+  });
 });
