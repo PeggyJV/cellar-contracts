@@ -77,6 +77,13 @@ interface IAaveStablecoinCellar {
      */
     event LiquidityRestrictionRemoved();
 
+    /**
+     * @notice Emitted when tokens accidently sent to cellar are recovered.
+     * @param token the address of the token
+     * @param amount amount transferred out
+     */
+    event Sweep(address indexed token, uint256 amount);
+
     error NonSupportedToken();
     error PathIsTooShort();
     error TokenAlreadyInitialized();
@@ -90,4 +97,6 @@ interface IAaveStablecoinCellar {
     error NoNonemptyUserDeposits();
 
     error SameLendingToken();
+
+    error ProtectedAsset();
 }

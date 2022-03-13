@@ -40,8 +40,10 @@ contract AaveStablecoinCellar is
     // Aave Incentives Controller V2 contract
     IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
     IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
+
     address public immutable AAVE; // 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9
     address public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+    address public immutable USDC; // 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
 
     // Declare the variables and mappings
     address[] public inputTokensList;
@@ -81,6 +83,7 @@ contract AaveStablecoinCellar is
         IStakedTokenV2 _stkAAVE,
         address _AAVE,
         address _WETH,
+        address _USDC,
         address _currentLendingToken,
         string memory _name,
         string memory _symbol
@@ -92,6 +95,7 @@ contract AaveStablecoinCellar is
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
         WETH = _WETH;
+        USDC = _USDC;
 
         currentLendingToken = _currentLendingToken;
         _updateCurrentAToken();
@@ -543,5 +547,20 @@ contract AaveStablecoinCellar is
         delete maxLiquidity;
 
         emit LiquidityRestrictionRemoved();
+    }
+
+    /**
+     * @notice Removes tokens from this cellar that are not the type of token managed
+     *         by this cellar. This may be used in case of accidentally sending the
+     *         wrong kind of token to this Vault.
+     * @param token address of token to transfer out of this vault.
+     */
+    function sweep(address token) external onlyOwner {
+        if (inputTokens[token] || token == currentAToken) revert ProtectedAsset();
+
+        uint256 amount = ERC20(token).balanceOf(address(this));
+        ERC20(token).safeTransfer(msg.sender, amount);
+
+        emit Sweep(token, amount);
     }
 }
