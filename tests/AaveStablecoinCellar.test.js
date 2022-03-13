@@ -19,6 +19,7 @@ describe("AaveStablecoinCellar", () => {
   let owner;
   let alice;
   let cellar;
+  let Token;
   let usdc;
   let dai;
   let router;
@@ -37,7 +38,7 @@ describe("AaveStablecoinCellar", () => {
     await router.deployed();
 
     // Deploy mock tokens
-    const Token = await ethers.getContractFactory("MockToken");
+    Token = await ethers.getContractFactory("MockToken");
     usdc = await Token.deploy("USDC");
     dai = await Token.deploy("DAI");
     weth = await Token.deploy("WETH");
@@ -85,6 +86,7 @@ describe("AaveStablecoinCellar", () => {
       stkAAVE.address,
       aave.address,
       weth.address,
+      usdc.address,
       usdc.address,
       "Sommelier Aave Stablecoin Cellar LP Token",
       "SASCT"
@@ -540,6 +542,41 @@ describe("AaveStablecoinCellar", () => {
       await expect(cellar.redeemFromAave(usdc.address, 1000))
         .to.emit(cellar, "RedeemFromAave")
         .withArgs(usdc.address, 1000, (await timestamp()) + 1);
+    });
+  });
+
+  describe("sweep", () => {
+    let SOMM;
+
+    beforeEach(async () => {
+      SOMM = await Token.deploy("SOMM");
+      await SOMM.deployed();
+
+      // mimic 1000 SOMM being transferred to the cellar contract by accident
+      await SOMM.mint(cellar.address, 1000);
+    });
+
+    it("should not allow assets managed by cellar to be transferred out", async () => {
+      await expect(cellar.sweep(usdc.address)).to.be.revertedWith(
+        "ProtectedAsset()"
+      );
+      await expect(cellar.sweep(aUSDC.address)).to.be.revertedWith(
+        "ProtectedAsset()"
+      );
+    });
+
+    it("should recover tokens accidentally transferred to the contract", async () => {
+      await cellar.sweep(SOMM.address);
+
+      // expect 1000 SOMM to have been transferred from cellar to owner
+      expect(await SOMM.balanceOf(owner.address)).to.eq(1000);
+      expect(await SOMM.balanceOf(cellar.address)).to.eq(0);
+    });
+
+    it("should emit Sweep event", async () => {
+      await expect(cellar.sweep(SOMM.address))
+        .to.emit(cellar, "Sweep")
+        .withArgs(SOMM.address, 1000);
     });
   });
 });
