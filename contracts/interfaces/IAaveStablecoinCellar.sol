@@ -70,23 +70,12 @@ interface IAaveStablecoinCellar {
 
     error NonSupportedToken();
     error PathIsTooShort();
-    error UserNotHaveEnoughBalance();
     error TokenAlreadyInitialized();
     error ZeroAmount();
 
     error TokenIsNotSupportedByAave();
     error NotEnoughTokenLiquidity();
     error InsufficientAaveDepositBalance();
-
-    error NonPermission();
-    error Reentrance();
-    error InvalidInput();
-    error TransferToZeroAddress();
-    error TransferFromZeroAddress();
-    error MintToZeroAddress();
-    error BurnFromZeroAddress();
-    error ApproveToZeroAddress();
-    error ApproveFromZeroAddress();
 
     error NoNonemptyUserDeposits();
     error FailedWithdraw();
