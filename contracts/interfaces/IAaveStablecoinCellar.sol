@@ -78,7 +78,6 @@ interface IAaveStablecoinCellar {
 
     error TokenIsNotSupportedByAave();
     error NotEnoughTokenLiquidity();
-    error NotEnoughAaveAvailableLiquidity();
     error InsufficientAaveDepositBalance();
     error NoLendingPosition();
     

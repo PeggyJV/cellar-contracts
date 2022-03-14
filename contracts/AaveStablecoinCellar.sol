@@ -38,9 +38,6 @@ contract AaveStablecoinCellar is
     mapping(address => bool) internal inputTokens;
 
     uint24 public constant POOL_FEE = 3000;
-
-    // Aave deposit balances by tokens
-    mapping(address => uint256) public aaveDepositBalances;
     
     // The address of the token of the current lending position
     address currentLendingToken;
@@ -221,18 +218,11 @@ contract AaveStablecoinCellar is
         if (!inputTokens[token]) revert NonSupportedToken();
         if (tokenAmount == 0) revert ZeroAmount();
 
-        // token verification in Aave protocol
-        (, , , , , , , address aTokenAddress, , , , ) = aaveLendingPool
-            .getReserveData(token);
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
-
         // verification of liquidity
         if (tokenAmount > ERC20(token).balanceOf(address(this)))
             revert NotEnoughTokenLiquidity();
 
         ERC20(token).safeApprove(address(aaveLendingPool), tokenAmount);
-
-        aaveDepositBalances[token] = getCurrentATokenBalance() + tokenAmount;
 
         // deposit token to Aave protocol
         aaveLendingPool.deposit(token, tokenAmount, address(this), 0);
@@ -254,67 +244,29 @@ contract AaveStablecoinCellar is
         )
     {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (tokenAmount == 0) revert ZeroAmount();
-
-        // token verification in Aave protocol
-        (, , , , , , , address aTokenAddress, , , , ) = aaveLendingPool
-            .getReserveData(token);
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
-
-        uint256 currentATokenBalance = getCurrentATokenBalance();
         
-        // verification Aave deposit balance of token
-        if (tokenAmount != type(uint256).max && tokenAmount > currentATokenBalance)
-            revert InsufficientAaveDepositBalance();
-
+        uint256 currentATokenBalance = ERC20(currentAToken).balanceOf(address(this));
+        
         // withdraw token from Aave protocol
         withdrawnAmount = aaveLendingPool.withdraw(token, tokenAmount, address(this));
-
-        aaveDepositBalances[token] = currentATokenBalance - withdrawnAmount; // maybe aaveDepositBalances is not necessary
-
-        if (aaveDepositBalances[token] == 0) {
-            currentLendingToken = address(0);
-        }
           
         emit RedeemFromAave(token, withdrawnAmount, block.timestamp);
-    }
-    
-    /**
-     * @dev gets current aToken balance of lending position
-     * @return currentATokenBalance the current aToken balance
-     **/
-    function getCurrentATokenBalance()
-        public
-        view
-        returns (
-            uint256 currentATokenBalance
-        )
-    {
-        if (currentLendingToken == address(0)) revert NoLendingPosition();
-        
-        (currentATokenBalance, , , , , , , , ) = aaveDataProvider
-            .getUserReserveData(currentLendingToken, address(this));
     }
     
     /**
      * @dev rebalances of Aave lending position
      * @param newLendingToken the address of the token of the new lending position
      **/
-    function rebalance(address newLendingToken)
+    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount)
         external
         onlyOwner
     {
         if (currentLendingToken == address(0)) revert NoLendingPosition();
         if (!inputTokens[newLendingToken]) revert NonSupportedToken();
         
-        uint256 lendingPositionBalance = getCurrentATokenBalance();
-        
-        (uint256 availableLiquidity, , , , , , , , , ) = aaveDataProvider.getReserveData(currentLendingToken);
-        
-        if (lendingPositionBalance > availableLiquidity) revert NotEnoughAaveAvailableLiquidity();
+        uint256 lendingPositionBalance = ERC20(currentAToken).balanceOf(address(this));
         
         lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
-        aaveDepositBalances[currentLendingToken] = 0;
         
         address[] memory path = new address[](2);
         path[0] = currentLendingToken;
@@ -323,11 +275,10 @@ contract AaveStablecoinCellar is
         uint256 newLendingTokenAmount = _multihopSwap(
             path,
             lendingPositionBalance,
-            0
+            minNewLendingTokenAmount
         );
         
         _depositToAave(newLendingToken, newLendingTokenAmount);
-        aaveDepositBalances[newLendingToken] = newLendingTokenAmount;
         currentLendingToken = newLendingToken;
         
         emit Rebalance(newLendingToken, newLendingTokenAmount, block.timestamp);
