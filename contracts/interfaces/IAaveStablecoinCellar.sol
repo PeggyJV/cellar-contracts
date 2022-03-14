@@ -50,7 +50,7 @@ interface IAaveStablecoinCellar {
      * @param tokenAmount the amount that has been deposited
      * @param timestamp the timestamp of the action
      **/
-    event DepositeToAave(
+    event DepositToAave(
         address indexed lendingToken,
         uint256 tokenAmount,
         uint256 timestamp
@@ -91,4 +91,6 @@ interface IAaveStablecoinCellar {
 
     error NoNonemptyUserDeposits();
     error FailedWithdraw();
+    
+    error SameLendingToken();
 }

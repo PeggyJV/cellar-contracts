@@ -62,10 +62,10 @@ contract AaveStablecoinCellar is
      * @param _swapRouter Uniswap V3 swap router address
      * @param _lendingPool Aave V2 lending pool address
      * @param _aaveDataProvider Aave Protocol Data Provider V2 contract address
-     * @param _incentivesController
-     * @param _stkAAVE
-     * @param _AAVE
-     * @param _WETH
+     * @param _incentivesController _incentivesController
+     * @param _stkAAVE _stkAAVE
+     * @param _AAVE _AAVE
+     * @param _WETH _WETH
      * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
      * @param _name name of LP token
      * @param _symbol symbol of LP token
@@ -377,12 +377,12 @@ contract AaveStablecoinCellar is
 
     /**
      * @notice Enters Aave stablecoin strategy.
-     * @param assets the amount of currentLendingToken to be deposited
      **/
-    function enterStrategy(uint256 assets)
+    function enterStrategy()
         external
         onlyOwner
     {
+        uint256 assets = ERC20(currentLendingToken).balanceOf(address(this));
         _depositToAave(currentLendingToken, assets);
 
         lastTimeEnteredStrategy = block.timestamp;
@@ -462,7 +462,7 @@ contract AaveStablecoinCellar is
      * @return withdrawnAmount the withdrawn amount from Aave
      **/
     function redeemFromAave(address token, uint256 amount)
-        external
+        public
         onlyOwner
         returns (
             uint256 withdrawnAmount
@@ -512,7 +512,6 @@ contract AaveStablecoinCellar is
      * @notice Approve a supported token to be deposited into the cellar.
      * @param token the address of the supported token
      **/
-    }
     function approveInputToken(address token) external onlyOwner {
         if (inputTokens[token]) revert TokenAlreadyInitialized();
 

@@ -44,7 +44,7 @@ contract MockLendingPool {
 
     function getReserveData(address asset)
     external
-    pure
+    view
     returns (
         uint256 configuration,
         uint128 liquidityIndex,
