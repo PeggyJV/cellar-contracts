@@ -6,6 +6,8 @@
     "no-empty-blocks": "off",
     "not-rely-on-time": "off",
     "avoid-low-level-calls": "off",
-    "no-inline-assembly": "off"
+    "no-inline-assembly": "off",
+    "func-name-mixedcase": "off",
+    "var-name-mixedcase": "off"
   }
 }

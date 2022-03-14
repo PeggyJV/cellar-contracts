@@ -5,17 +5,27 @@ pragma solidity 0.8.11;
 /// @title interface for AaveStablecoinCellar
 interface IAaveStablecoinCellar {
     /**
-     * @notice Emitted when liquidity is increased for cellar
-     * @param inputToken the address of the token
-     * @param user the address of the user
-     * @param amount the amount of the token
-     * @param timestamp the timestamp of the action
+     * @notice Emitted when assets are deposited into cellar
+     * @param caller the address of the caller
+     * @param owner the address of the owner of shares
+     * @param assets the amount of assets being deposited
+     * @param shares the amount of shares minted to owner
      **/
-    event AddedLiquidity(
-        address indexed inputToken,
-        address user,
-        uint256 amount,
-        uint256 timestamp
+    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
+
+    /**
+     * @notice Emitted when assets are withdrawn from cellar
+     * @param caller the address of the caller
+     * @param owner the address of the owner of shares
+     * @param assets the amount of assets being withdrawn
+     * @param shares the amount of shares burned from owner
+     **/
+    event Withdraw(
+        address indexed caller,
+        address indexed receiver,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
     );
 
     /**
@@ -72,23 +82,13 @@ interface IAaveStablecoinCellar {
     
     error NonSupportedToken();
     error PathIsTooShort();
-    error UserNotHaveEnoughBalance();
     error TokenAlreadyInitialized();
     error ZeroAmount();
 
     error TokenIsNotSupportedByAave();
     error NotEnoughTokenLiquidity();
     error InsufficientAaveDepositBalance();
-    error NoLendingPosition();
 
-    error NonPermission();
-    error Reentrance();
-    error InvalidInput();
-    error TransferToZeroAddress();
-    error TransferFromZeroAddress();
-    error MintToZeroAddress();
-    error BurnFromZeroAddress();
-    error ApproveToZeroAddress();
-    error ApproveFromZeroAddress();
-    error SameLendingToken();
+    error NoNonemptyUserDeposits();
+    error FailedWithdraw();
 }

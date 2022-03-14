@@ -2,15 +2,20 @@
 
 pragma solidity 0.8.11;
 
-import "./MockToken.sol";
+import "./MockAToken.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract MockLendingPool {
     address public aToken;
+    uint256 public index = 1000000000000000000000000000;
 
-    constructor(string memory _symbol) {
-        MockToken token = new MockToken(string(abi.encodePacked("a", _symbol)));
-        aToken = address(token);
+    constructor(address _aToken) {
+        aToken = address(_aToken);
+    }
+
+    // for testing purposes; not in actual contract
+    function setLiquidityIndex(uint256 _index) external {
+        index = _index;
     }
 
     function deposit(
@@ -19,8 +24,8 @@ contract MockLendingPool {
         address onBehalfOf,
         uint16
     ) external {
-        IERC20(asset).transferFrom(onBehalfOf, address(this), amount);
-        MockToken(aToken).mint(onBehalfOf, amount);
+        IERC20(asset).transferFrom(onBehalfOf, aToken, amount);
+        MockAToken(aToken).mint(onBehalfOf, amount, index);
     }
 
     function withdraw(
@@ -29,9 +34,11 @@ contract MockLendingPool {
         address to
     ) external returns (uint256) {
         if (amount == type(uint256).max)
-            amount = MockToken(aToken).balanceOf(msg.sender);
-        MockToken(aToken).burn(to, amount);
+            amount = MockAToken(aToken).balanceOf(msg.sender);
+
+        MockAToken(aToken).burn(msg.sender, to, amount, index);
         IERC20(asset).transfer(to, amount);
+
         return amount;
     }
 
@@ -55,13 +62,13 @@ contract MockLendingPool {
     {
         asset;
         configuration;
-        liquidityIndex;
+        liquidityIndex = uint128(index);
         variableBorrowIndex;
         currentLiquidityRate;
         currentVariableBorrowRate;
         currentStableBorrowRate;
         lastUpdateTimestamp;
-        aTokenAddress = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // We only care about this for now
+        aTokenAddress = aToken;
         stableDebtTokenAddress;
         variableDebtTokenAddress;
         interestRateStrategyAddress;
