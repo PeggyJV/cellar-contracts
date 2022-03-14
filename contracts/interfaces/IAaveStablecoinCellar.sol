@@ -80,7 +80,7 @@ interface IAaveStablecoinCellar {
     error NotEnoughTokenLiquidity();
     error InsufficientAaveDepositBalance();
     error NoLendingPosition();
-    
+
     error NonPermission();
     error Reentrance();
     error InvalidInput();
@@ -90,4 +90,5 @@ interface IAaveStablecoinCellar {
     error BurnFromZeroAddress();
     error ApproveToZeroAddress();
     error ApproveFromZeroAddress();
+    error SameLendingToken();
 }
