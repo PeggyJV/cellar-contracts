@@ -33,3 +33,5 @@ src/types/*
 !src/types/factories
 src/types/factories/*
 !src/types/factories/Greeter__factory.ts
+
+package-lock.json

@@ -46,28 +46,40 @@ interface IAaveStablecoinCellar {
 
     /**
      * @dev emitted on deposit to Aave
-     * @param token the address of the token
-     * @param tokenAmount the amount to be deposited
+     * @param lendingToken the address of the token of the lending position
+     * @param tokenAmount the amount that has been deposited
      * @param timestamp the timestamp of the action
      **/
-    event DepositToAave(
-        address indexed token,
+    event DepositeToAave(
+        address indexed lendingToken,
         uint256 tokenAmount,
         uint256 timestamp
     );
 
     /**
      * @dev emitted on redeem from Aave
-     * @param token the address of the token
-     * @param tokenAmount the amount to be redeemed
+     * @param lendingToken the address of the redeemed token
+     * @param tokenAmount the amount that has been redeemed
      * @param timestamp the timestamp of the action
      **/
     event RedeemFromAave(
-        address indexed token,
+        address indexed lendingToken,
         uint256 tokenAmount,
         uint256 timestamp
     );
-
+    
+    /**
+     * @dev emitted on rebalance of Aave lending position
+     * @param lendingToken the address of the token of the new lending position
+     * @param tokenAmount the amount that has been deposited
+     * @param timestamp the timestamp of the action
+     **/
+    event Rebalance(
+        address indexed lendingToken,
+        uint256 tokenAmount,
+        uint256 timestamp
+    );
+    
     error NonSupportedToken();
     error PathIsTooShort();
     error TokenAlreadyInitialized();

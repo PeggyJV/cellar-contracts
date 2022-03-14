@@ -3,6 +3,7 @@
 pragma solidity 0.8.11;
 
 import "./interfaces/IAaveStablecoinCellar.sol";
+import "./interfaces/IAaveProtocolDataProvider.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "./interfaces/ILendingPool.sol";
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
@@ -34,15 +35,18 @@ contract AaveStablecoinCellar is
     ISwapRouter public immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
     // Aave Lending Pool V2 contract
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
+    // Aave Protocol Data Provider V2 contract
+    IAaveProtocolDataProvider public immutable aaveDataProvider; // 0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d
     // Aave Incentives Controller V2 contract
     IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
     IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
     address public immutable AAVE; // 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9
     address public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
-    // Declare the variables and mappings.
+    // Declare the variables and mappings
     address[] public inputTokensList;
     mapping(address => bool) internal inputTokens;
+    // The address of the token of the current lending position
     address public currentLendingToken;
     address public currentAToken;
     // Track user user deposits to determine active/inactive shares.
@@ -54,12 +58,14 @@ contract AaveStablecoinCellar is
 
     uint24 public constant POOL_FEE = 3000;
 
-    // Aave deposit balances by tokens.
-    mapping(address => uint256) public aaveDepositBalances;
-
     /**
      * @param _swapRouter Uniswap V3 swap router address
      * @param _lendingPool Aave V2 lending pool address
+     * @param _aaveDataProvider Aave Protocol Data Provider V2 contract address
+     * @param _incentivesController
+     * @param _stkAAVE
+     * @param _AAVE
+     * @param _WETH
      * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
      * @param _name name of LP token
      * @param _symbol symbol of LP token
@@ -67,6 +73,7 @@ contract AaveStablecoinCellar is
     constructor(
         ISwapRouter _swapRouter,
         ILendingPool _lendingPool,
+        IAaveProtocolDataProvider _aaveDataProvider,
         IAaveIncentivesController _incentivesController,
         IStakedTokenV2 _stkAAVE,
         address _AAVE,
@@ -77,6 +84,7 @@ contract AaveStablecoinCellar is
     ) ERC20(_name, _symbol, 18) Ownable() {
         swapRouter =  _swapRouter;
         lendingPool = _lendingPool;
+        aaveDataProvider = _aaveDataProvider;
         incentivesController = _incentivesController;
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
@@ -88,6 +96,9 @@ contract AaveStablecoinCellar is
 
     function _updateCurrentAToken() internal {
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(currentLendingToken);
+        
+        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
+        
         currentAToken = aTokenAddress;
     }
 
@@ -315,10 +326,13 @@ contract AaveStablecoinCellar is
         address[] memory path,
         uint256 amountIn,
         uint256 amountOutMinimum
+
     ) internal returns (uint256 amountOut) {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
+        if (!inputTokens[tokenIn]) revert NonSupportedToken();
+        if (!inputTokens[tokenOut]) revert NonSupportedToken();
         if (path.length < 2) revert PathIsTooShort();
 
         // Approve the router to spend first token in path.
@@ -358,28 +372,18 @@ contract AaveStablecoinCellar is
         uint256 amountIn,
         uint256 amountOutMinimum
     ) external onlyOwner returns (uint256) {
-        address tokenIn = path[0];
-        address tokenOut = path[path.length - 1];
-
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
-
         return _multihopSwap(path, amountIn, amountOutMinimum);
     }
 
     /**
      * @notice Enters Aave stablecoin strategy.
-     * @param token the address of the token
-     * @param assets the amount of token to be deposited
+     * @param assets the amount of currentLendingToken to be deposited
      **/
-    function enterStrategy(address token, uint256 assets)
+    function enterStrategy(uint256 assets)
         external
         onlyOwner
     {
-        _depositToAave(token, assets);
-
-        currentLendingToken = token;
-        _updateCurrentAToken();
+        _depositToAave(currentLendingToken, assets);
 
         lastTimeEnteredStrategy = block.timestamp;
     }
@@ -439,17 +443,11 @@ contract AaveStablecoinCellar is
         if (!inputTokens[token]) revert NonSupportedToken();
         if (assets == 0) revert ZeroAmount();
 
-        // Token verification in Aave protocol.
-        (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(token);
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
-
         // Verification of liquidity.
         if (assets > ERC20(token).balanceOf(address(this)))
             revert NotEnoughTokenLiquidity();
 
         ERC20(token).safeApprove(address(lendingPool), assets);
-
-        aaveDepositBalances[token] += assets;
 
         // Deposit token to Aave protocol.
         lendingPool.deposit(token, assets, address(this), 0);
@@ -461,36 +459,58 @@ contract AaveStablecoinCellar is
      * @notice Redeems a token from Aave protocol.
      * @param token the address of the token
      * @param amount the token amount being redeemed
+     * @return withdrawnAmount the withdrawn amount from Aave
      **/
     function redeemFromAave(address token, uint256 amount)
         external
         onlyOwner
+        returns (
+            uint256 withdrawnAmount
+        )
     {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (amount == 0) revert ZeroAmount();
-
-        // Token verification in Aave protocol.
-        (, , , , , , , address aTokenAddress, , , , ) = lendingPool
-            .getReserveData(token);
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
-
-        // Verification Aave deposit balance of token
-        // NOTE: aToken balances increase over time, this may not be sufficient.
-        if (amount > aaveDepositBalances[token])
-            revert InsufficientAaveDepositBalance();
 
         // Withdraw token from Aave protocol
-        lendingPool.withdraw(token, amount, address(this));
+        withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
 
-        aaveDepositBalances[token] -= amount;
-
-        emit RedeemFromAave(token, amount, block.timestamp);
+        emit RedeemFromAave(token, withdrawnAmount, block.timestamp);
     }
-
+    
+    /**
+     * @dev rebalances of Aave lending position
+     * @param newLendingToken the address of the token of the new lending position
+     **/
+    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount)
+        external
+        onlyOwner
+    {
+        if (!inputTokens[newLendingToken]) revert NonSupportedToken();
+        
+        uint256 lendingPositionBalance = ERC20(currentAToken).balanceOf(address(this));
+        
+        lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
+        
+        address[] memory path = new address[](2);
+        path[0] = currentLendingToken;
+        path[1] = newLendingToken;
+        
+        uint256 newLendingTokenAmount = _multihopSwap(
+            path,
+            lendingPositionBalance,
+            minNewLendingTokenAmount
+        );
+        
+        _depositToAave(newLendingToken, newLendingTokenAmount);
+        currentLendingToken = newLendingToken;
+        
+        emit Rebalance(newLendingToken, newLendingTokenAmount, block.timestamp);
+    }
+    
     /**
      * @notice Approve a supported token to be deposited into the cellar.
      * @param token the address of the supported token
      **/
+    }
     function approveInputToken(address token) external onlyOwner {
         if (inputTokens[token]) revert TokenAlreadyInitialized();
 
