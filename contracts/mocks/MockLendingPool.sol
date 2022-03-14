@@ -29,31 +29,36 @@ contract MockLendingPool {
     }
 
     function withdraw(
-        address,
+        address asset,
         uint256 amount,
         address to
     ) external returns (uint256) {
+        if (amount == type(uint256).max)
+            amount = MockAToken(aToken).balanceOf(msg.sender);
+
         MockAToken(aToken).burn(msg.sender, to, amount, index);
+        IERC20(asset).transfer(to, amount);
+
         return amount;
     }
 
     function getReserveData(address asset)
-        external
-        view
-        returns (
-            uint256 configuration,
-            uint128 liquidityIndex,
-            uint128 variableBorrowIndex,
-            uint128 currentLiquidityRate,
-            uint128 currentVariableBorrowRate,
-            uint128 currentStableBorrowRate,
-            uint40 lastUpdateTimestamp,
-            address aTokenAddress,
-            address stableDebtTokenAddress,
-            address variableDebtTokenAddress,
-            address interestRateStrategyAddress,
-            uint8 id
-        )
+    external
+    pure
+    returns (
+        uint256 configuration,
+        uint128 liquidityIndex,
+        uint128 variableBorrowIndex,
+        uint128 currentLiquidityRate,
+        uint128 currentVariableBorrowRate,
+        uint128 currentStableBorrowRate,
+        uint40 lastUpdateTimestamp,
+        address aTokenAddress,
+        address stableDebtTokenAddress,
+        address variableDebtTokenAddress,
+        address interestRateStrategyAddress,
+        uint8 id
+    )
     {
         asset;
         configuration;

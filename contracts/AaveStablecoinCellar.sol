@@ -485,6 +485,8 @@ contract AaveStablecoinCellar is
         onlyOwner
     {
         if (!inputTokens[newLendingToken]) revert NonSupportedToken();
+
+        if(newLendingToken == currentLendingToken) revert SameLendingToken();
         
         uint256 lendingPositionBalance = ERC20(currentAToken).balanceOf(address(this));
         
