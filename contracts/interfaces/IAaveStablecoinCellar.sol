@@ -85,4 +85,6 @@ interface IAaveStablecoinCellar {
     error FailedWithdraw();
 
     error SameLendingToken();
+
+    error IsShutdown();
 }

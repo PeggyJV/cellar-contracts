@@ -38,7 +38,7 @@ describe("AaveStablecoinCellar", () => {
     const SwapRouter = await ethers.getContractFactory("MockSwapRouter");
     router = await SwapRouter.deploy();
     await router.deployed();
-    
+
     // Deploy mock tokens
     const Token = await ethers.getContractFactory("MockToken");
     usdc = await Token.deploy("USDC");
@@ -120,7 +120,7 @@ describe("AaveStablecoinCellar", () => {
     await dai.approve(cellar.address, 1000);
     await weth.approve(cellar.address, 1000);
     await usdt.approve(cellar.address, 1000);
-    
+
     await usdc.connect(alice).approve(cellar.address, 1000);
     await dai.connect(alice).approve(cellar.address, 1000);
     await weth.connect(alice).approve(cellar.address, 1000);
@@ -411,15 +411,19 @@ describe("AaveStablecoinCellar", () => {
     it("should swap input tokens for at least the minimum amount of output tokens", async () => {
       const balanceWETHBefore = await weth.balanceOf(cellar.address);
       const balanceUSDTBefore = await usdt.balanceOf(cellar.address);
-      
+
       await cellar.multihopSwap(
         [weth.address, usdc.address, usdt.address],
         1000,
         950
       );
 
-      expect(await weth.balanceOf(cellar.address)).to.eq(balanceWETHBefore - 1000);
-      expect(await usdt.balanceOf(cellar.address)).to.be.at.least(balanceUSDTBefore + 950);
+      expect(await weth.balanceOf(cellar.address)).to.eq(
+        balanceWETHBefore - 1000
+      );
+      expect(await usdt.balanceOf(cellar.address)).to.be.at.least(
+        balanceUSDTBefore + 950
+      );
 
       await expect(
         cellar.multihopSwap(
@@ -433,11 +437,15 @@ describe("AaveStablecoinCellar", () => {
     it("multihop swap with two tokens in the path", async () => {
       const balanceWETHBefore = await weth.balanceOf(cellar.address);
       const balanceDAIBefore = await dai.balanceOf(cellar.address);
-      
+
       await cellar.multihopSwap([weth.address, dai.address], 1000, 950);
-      
-      expect(await weth.balanceOf(cellar.address)).to.eq(balanceWETHBefore - 1000);
-      expect(await dai.balanceOf(cellar.address)).to.be.at.least(balanceDAIBefore + 950);
+
+      expect(await weth.balanceOf(cellar.address)).to.eq(
+        balanceWETHBefore - 1000
+      );
+      expect(await dai.balanceOf(cellar.address)).to.be.at.least(
+        balanceDAIBefore + 950
+      );
     });
 
     it("multihop swap with four tokens in the path", async () => {
@@ -600,6 +608,18 @@ describe("AaveStablecoinCellar", () => {
     it("should not be possible to rebalance to the same token", async () => {
       await expect(cellar.rebalance(usdc.address)).to.be.revertedWith(
         "SameLendingToken"
+      );
+    });
+  });
+
+  describe("shutdown", () => {
+    beforeEach(async () => {
+      await cellar.setShutdown(true);
+    });
+
+    it("should prevent users from depositing while shutdown", async () => {
+      expect(cellar["deposit(uint256)"](100)).to.be.revertedWith(
+        "IsShutdown()"
       );
     });
   });
