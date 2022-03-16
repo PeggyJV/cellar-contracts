@@ -581,18 +581,18 @@ contract AaveStablecoinCellar is
 
     /// @notice Transfer accrued platform fees to Cosmos to distribute fees.
     function transferPlatformFees() external onlyOwner {
-        accruedPlatformFees = 0;
-
         uint256 feeInAssets = _sendFeesToCosmos(accruedPlatformFees);
+
+        accruedPlatformFees = 0;
 
         emit TransferPlatformFees(feeInAssets);
     }
 
     /// @notice Transfer accrued performance fees to Cosmos to distribute fees.
     function transferPerformanceFees() external onlyOwner {
-        accruedPerformanceFees = 0;
-
         uint256 feeInAssets = _sendFeesToCosmos(accruedPerformanceFees);
+
+        accruedPerformanceFees = 0;
 
         emit TransferPerformanceFees(feeInAssets);
     }
