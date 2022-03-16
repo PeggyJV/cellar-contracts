@@ -188,15 +188,13 @@ contract MockSwapRouter {
 
     function exactInput(ExactInputParams memory params) external payable returns (uint256) {
         uint256 exchangeRate = 9500;
-        address tokenOut;
-        (address tokenIn, ,) = params.path.decodeFirstPool();
-
-        do {
-            (,tokenOut ,) = params.path.decodeFirstPool();
+        
+        (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
+        
+        while (params.path.hasMultiplePools()) {
             params.path = params.path.skipToken();
-
+            (,tokenOut ,) = params.path.decodeFirstPool();
         }
-        while (params.path.hasMultiplePools());
 
         IERC20(tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 

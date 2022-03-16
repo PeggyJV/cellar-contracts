@@ -27,6 +27,7 @@ describe("AaveStablecoinCellar", () => {
   let lendingPool;
   let incentivesController;
   let aUSDC;
+  let aDAI;
   let stkAAVE;
   let aave;
   let dataProvider;
@@ -56,12 +57,20 @@ describe("AaveStablecoinCellar", () => {
     aUSDC = await MockAToken.deploy(usdc.address, "aUSDC");
     await aUSDC.deployed();
 
+    // Deploy mock aDAI
+    aDAI = await MockAToken.deploy(dai.address, "aDAI");
+    await aDAI.deployed();
+
     // Deploy mock Aave USDC lending pool
     const LendingPool = await ethers.getContractFactory("MockLendingPool");
-    lendingPool = await LendingPool.deploy(aUSDC.address);
+    lendingPool = await LendingPool.deploy();
     await lendingPool.deployed();
 
+    await lendingPool.initReserve(usdc.address, aUSDC.address);
+    await lendingPool.initReserve(dai.address, aDAI.address);
+
     await aUSDC.setLendingPool(lendingPool.address);
+    await aDAI.setLendingPool(lendingPool.address);
 
     // Deploy mock AAVE
     aave = await Token.deploy("AAVE");
@@ -392,13 +401,7 @@ describe("AaveStablecoinCellar", () => {
     it("should emit Swapped event", async () => {
       await expect(cellar.swap(usdc.address, dai.address, 1000, 950))
         .to.emit(cellar, "Swapped")
-        .withArgs(
-          usdc.address,
-          1000,
-          dai.address,
-          950,
-          (await timestamp()) + 1
-        );
+        .withArgs(usdc.address, 1000, dai.address, 950);
     });
   });
 
@@ -418,10 +421,11 @@ describe("AaveStablecoinCellar", () => {
         950
       );
 
+      expect(balanceUSDTBefore).to.eq(0);
       expect(await weth.balanceOf(cellar.address)).to.eq(
         balanceWETHBefore - 1000
       );
-      expect(await usdt.balanceOf(cellar.address)).to.be.at.least(
+      expect(await usdt.balanceOf(cellar.address)).to.eq(
         balanceUSDTBefore + 950
       );
 
@@ -449,13 +453,22 @@ describe("AaveStablecoinCellar", () => {
     });
 
     it("multihop swap with four tokens in the path", async () => {
+      await usdc.mint(cellar.address, 2000);
+
+      const balanceUSDCBefore = await usdc.balanceOf(cellar.address);
+      const balanceUSDTBefore = await usdt.balanceOf(cellar.address);
+
       await cellar.multihopSwap(
-        [usdc.address, dai.address, weth.address, usdt.address],
+        [usdc.address, weth.address, dai.address, usdt.address],
         1000,
         950
       );
-      expect(await usdc.balanceOf(cellar.address)).to.eq(0);
-      expect(await usdt.balanceOf(cellar.address)).to.be.at.least(950);
+      expect(await usdc.balanceOf(cellar.address)).to.eq(
+        balanceUSDCBefore - 1000
+      );
+      expect(await usdt.balanceOf(cellar.address)).to.be.at.least(
+        balanceUSDTBefore + 950
+      );
     });
 
     it("should revert if trying to swap more tokens than cellar has", async () => {
@@ -477,13 +490,7 @@ describe("AaveStablecoinCellar", () => {
         )
       )
         .to.emit(cellar, "Swapped")
-        .withArgs(
-          weth.address,
-          1000,
-          dai.address,
-          950,
-          (await timestamp()) + 1
-        );
+        .withArgs(weth.address, 1000, dai.address, 950);
     });
   });
 
@@ -520,7 +527,7 @@ describe("AaveStablecoinCellar", () => {
 
       await expect(cellar.enterStrategy())
         .to.emit(cellar, "DepositToAave")
-        .withArgs(usdc.address, 200, (await timestamp()) + 1);
+        .withArgs(usdc.address, 200);
     });
   });
 
@@ -590,37 +597,106 @@ describe("AaveStablecoinCellar", () => {
 
       await expect(cellar.redeemFromAave(usdc.address, 1000))
         .to.emit(cellar, "RedeemFromAave")
-        .withArgs(usdc.address, 1000, (await timestamp()) + 1);
+        .withArgs(usdc.address, 1000);
     });
   });
 
   describe("rebalance", () => {
     beforeEach(async () => {
+      await usdc.mint(cellar.address, 1000);
       await cellar.enterStrategy();
     });
+
     it("should rebalance all usdc liquidity in dai", async () => {
-      await cellar.rebalance(dai.address);
-      expect(await usdc.balanceOf(lendingPool.address)).to.eq(0);
+      expect(await dai.balanceOf(cellar.address)).to.eq(0);
+      expect(await aUSDC.balanceOf(cellar.address)).to.eq(1000);
+
+      await cellar.rebalance(dai.address, 0);
+
+      expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
       // After the swap,  amount of  coin will change from the exchange rate of 0.95
-      expect(await dai.balanceOf(lendingPool.address)).to.eq(950);
+      expect(await aDAI.balanceOf(cellar.address)).to.eq(950);
+
+      await cellar.redeemFromAave(dai.address, 950);
+
+      expect(await aDAI.balanceOf(cellar.address)).to.eq(0);
+      expect(await dai.balanceOf(cellar.address)).to.eq(950);
     });
 
     it("should not be possible to rebalance to the same token", async () => {
-      await expect(cellar.rebalance(usdc.address)).to.be.revertedWith(
+      await expect(cellar.rebalance(usdc.address, 0)).to.be.revertedWith(
         "SameLendingToken"
       );
     });
   });
 
-  describe("shutdown", () => {
-    beforeEach(async () => {
-      await cellar.setShutdown(true);
-    });
-
-    it("should prevent users from depositing while shutdown", async () => {
+  describe("pause", () => {
+    it("should prevent users from depositing while paused", async () => {
+      await cellar.setPaused(true, false);
       expect(cellar["deposit(uint256)"](100)).to.be.revertedWith(
         "IsShutdown()"
       );
+    });
+
+    it("should prevent withdraws if specified", async () => {
+      // alice first deposits
+      await cellar.connect(alice)["deposit(uint256)"](100);
+
+      // cellar is paused and withdraws are prevented
+      await cellar.setPaused(true, false);
+
+      // alice should be prevented from withdraws
+      await expect(
+        cellar.connect(alice)["withdraw(uint256)"](100)
+      ).to.be.revertedWith("ContractPaused()");
+
+      // cellar is unpaused
+      await cellar.setPaused(false, false);
+
+      // alice deposits again
+      await cellar.connect(alice)["deposit(uint256)"](100);
+
+      // cellar is paused and withdraws are allowed
+      await cellar.setPaused(true, false);
+
+      // alice should be allowed to withdraw
+      await cellar.connect(alice)["withdraw(uint256)"](100);
+    });
+
+    it("should emits a ContractShutdown event", async () => {
+      await expect(cellar.shutdown())
+        .to.emit(cellar, "ContractShutdown")
+        .withArgs(owner.address);
+    });
+  });
+
+  describe("shutdown", () => {
+    it("should prevent users from depositing while shutdown", async () => {
+      await cellar.shutdown();
+      expect(cellar["deposit(uint256)"](100)).to.be.revertedWith(
+        "IsShutdown()"
+      );
+    });
+
+    it("should allow users to withdraw", async () => {
+      // alice first deposits
+      await cellar.connect(alice)["deposit(uint256)"](100);
+
+      // cellar is paused and withdraws are prevented
+      await cellar.setPaused(true, false);
+
+      // cellar is shutdown
+      await cellar.shutdown();
+
+      // alice should be allowed to withdraw (even though pause should of
+      // prevented withdraws, shutdown should allow withdraws again)
+      await cellar.connect(alice)["withdraw(uint256)"](100);
+    });
+
+    it("should emits a ContractShutdown event", async () => {
+      await expect(cellar.shutdown())
+        .to.emit(cellar, "ContractShutdown")
+        .withArgs(owner.address);
     });
   });
 });

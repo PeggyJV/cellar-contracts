@@ -72,6 +72,20 @@ interface IAaveStablecoinCellar {
         uint256 assets
     );
 
+    /**
+     * @notice Emitted when cellar is paused.
+     * @param caller address that set the pause
+     * @param isPaused whether the contract is paused
+     * @param isWithdrawable whether the contract allows withdraws
+     */
+    event Pause(address caller, bool isPaused, bool isWithdrawable);
+
+    /**
+     * @notice Emitted when cellar is shutdown.
+     * @param caller address that called the shutdown
+     */
+    event Shutdown(address caller);
+
     error NonSupportedToken();
     error PathIsTooShort();
     error TokenAlreadyInitialized();
@@ -86,5 +100,7 @@ interface IAaveStablecoinCellar {
 
     error SameLendingToken();
 
-    error IsShutdown();
+    error ContractShutdown();
+    error ContractPaused();
+    error AlreadyShutdown();
 }

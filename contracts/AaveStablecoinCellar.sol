@@ -58,6 +58,9 @@ contract AaveStablecoinCellar is
 
     uint24 public constant POOL_FEE = 3000;
 
+    // Emergency states in case of contract malfunction.
+    bool public isPaused;
+    bool public isWithdrawable;
     bool public isShutdown;
 
     /**
@@ -105,14 +108,6 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @notice Pause or disable critical contract functionality in case of an emergency.
-     * @param _isShutdown whether or not the cellar should be shutdown
-     */
-    function setShutdown(bool _isShutdown) external onlyOwner {
-        isShutdown = _isShutdown;
-    }
-
-    /**
      * @notice Deposit supported tokens into the cellar.
      * @param token address of the supported token to deposit
      * @param assets amount of assets to deposit
@@ -127,7 +122,8 @@ contract AaveStablecoinCellar is
         address receiver
     ) public returns (uint256 shares) {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (isShutdown) revert IsShutdown();
+        if (isPaused) revert ContractPaused();
+        if (isShutdown) revert ContractShutdown();
 
         ERC20(token).safeTransferFrom(msg.sender, address(this), assets);
 
@@ -168,6 +164,7 @@ contract AaveStablecoinCellar is
      */
     function withdraw(uint256 assets, address receiver, address owner) public returns (uint256 shares) {
         if (assets == 0) revert ZeroAmount();
+        if (isPaused && !isWithdrawable) revert ContractPaused();
 
         UserDeposit[] storage deposits = userDeposits[owner];
         if (deposits.length == 0 || currentDepositIndex[owner] > deposits.length - 1)
@@ -320,9 +317,6 @@ contract AaveStablecoinCellar is
         uint256 amountIn,
         uint256 amountOutMinimum
     ) external onlyOwner returns (uint256 amountOut) {
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
-
         return _swap(tokenIn, tokenOut, amountIn, amountOutMinimum);
     }
 
@@ -342,8 +336,6 @@ contract AaveStablecoinCellar is
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
         if (path.length < 2) revert PathIsTooShort();
 
         // Approve the router to spend first token in path.
@@ -452,11 +444,6 @@ contract AaveStablecoinCellar is
      */
     function _depositToAave(address token, uint256 assets) internal {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (assets == 0) revert ZeroAmount();
-
-        // Verification of liquidity.
-        if (assets > ERC20(token).balanceOf(address(this)))
-            revert NotEnoughTokenLiquidity();
 
         ERC20(token).safeApprove(address(lendingPool), assets);
 
@@ -499,9 +486,7 @@ contract AaveStablecoinCellar is
 
         if(newLendingToken == currentLendingToken) revert SameLendingToken();
 
-        uint256 lendingPositionBalance = ERC20(currentAToken).balanceOf(address(this));
-
-        lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
+        uint256 lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
 
         address[] memory path = new address[](2);
         path[0] = currentLendingToken;
@@ -513,8 +498,8 @@ contract AaveStablecoinCellar is
             minNewLendingTokenAmount
         );
 
-        _depositToAave(newLendingToken, newLendingTokenAmount);
         currentLendingToken = newLendingToken;
+        _depositToAave(newLendingToken, newLendingTokenAmount);
 
         emit Rebalance(newLendingToken, newLendingTokenAmount);
     }
@@ -529,4 +514,39 @@ contract AaveStablecoinCellar is
         inputTokens[token] = true;
         inputTokensList.push(token);
     }
+
+    /**
+     * @notice Pause the contract. Pausing prevents staking, unstaking, claiming
+     *         rewards, and scheduling new rewards. Should only be used
+     *         in an emergency.
+     * @param _isPaused whether the contract should be paused
+     * @param _isWithdrawable whether withdraws should be possible
+     */
+    function setPause(bool _isPaused, bool _isWithdrawable) external onlyOwner {
+        if (isShutdown) revert AlreadyShutdown();
+
+        isPaused = _isPaused;
+        isWithdrawable = _isWithdrawable;
+
+        emit Pause(msg.sender, _isPaused, _isWithdrawable);
+    }
+
+    /**
+     * @notice Stops the contract - this is irreversible. Should only be used
+     *         in an emergency, for example an irreversible accounting bug
+     *         or an exploit. Enables all depositors to withdraw their stake
+     *         instantly.
+     */
+    function shutdown() external onlyOwner {
+        if (isShutdown) revert AlreadyShutdown();
+
+        // Update state and put in irreversible emergency mode.
+        isShutdown = true;
+
+        // Ensure contract is not paused to allow withdraws (in case it was and withdraws were prevented).
+        isPaused = false;
+
+        emit Shutdown(msg.sender);
+    }
+
 }
