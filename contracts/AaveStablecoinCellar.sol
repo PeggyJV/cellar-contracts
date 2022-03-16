@@ -436,11 +436,6 @@ contract AaveStablecoinCellar is
      */
     function _depositToAave(address token, uint256 assets) internal {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (assets == 0) revert ZeroAmount();
-
-        // Verification of liquidity.
-        if (assets > ERC20(token).balanceOf(address(this)))
-            revert NotEnoughTokenLiquidity();
 
         ERC20(token).safeApprove(address(lendingPool), assets);
 
@@ -482,7 +477,7 @@ contract AaveStablecoinCellar is
         if (!inputTokens[newLendingToken]) revert NonSupportedToken();
 
         if(newLendingToken == currentLendingToken) revert SameLendingToken();
-        
+
         uint256 lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
 
         address[] memory path = new address[](2);
