@@ -234,18 +234,18 @@ contract AaveStablecoinCellar is
 
         shares = withdrawnActiveShares + withdrawnInactiveShares;
 
-        // Take performance fee
+        // Take performance fees.
         if (withdrawnActiveAssets > 0) {
             uint256 gain = withdrawnActiveAssets - originalDepositedAssets;
             uint256 feeInAssets = gain * performanceFee / DENOMINATOR;
-            uint256 fee = convertToShares(feeInAssets);
+            uint256 fees = convertToShares(feeInAssets);
 
-            accruedPerformanceFees += fee;
+            accruedPerformanceFees += fees;
             withdrawnActiveAssets -= feeInAssets;
-            shares -= fee;
+            shares -= fees;
 
             // Take portion of shares that would have been burned as fees.
-            ERC20(address(this)).safeTransferFrom(msg.sender, address(this), fee);
+            ERC20(address(this)).safeTransferFrom(msg.sender, address(this), fees);
         }
 
         if (msg.sender != owner) {
