@@ -352,9 +352,6 @@ contract AaveStablecoinCellar is
         uint256 amountIn,
         uint256 amountOutMinimum
     ) external onlyOwner returns (uint256 amountOut) {
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
-
         return _swap(tokenIn, tokenOut, amountIn, amountOutMinimum);
     }
 
@@ -374,8 +371,6 @@ contract AaveStablecoinCellar is
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
         if (path.length < 2) revert PathIsTooShort();
 
         // Approve the router to spend first token in path.
@@ -483,11 +478,6 @@ contract AaveStablecoinCellar is
      */
     function _depositToAave(address token, uint256 assets) internal {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (assets == 0) revert ZeroAmount();
-
-        // Verification of liquidity.
-        if (assets > ERC20(token).balanceOf(address(this)))
-            revert NotEnoughTokenLiquidity();
 
         ERC20(token).safeApprove(address(lendingPool), assets);
 
@@ -530,9 +520,7 @@ contract AaveStablecoinCellar is
 
         if(newLendingToken == currentLendingToken) revert SameLendingToken();
 
-        uint256 lendingPositionBalance = activeAssets();
-
-        lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
+        uint256 lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
 
         address[] memory path = new address[](2);
         path[0] = currentLendingToken;
@@ -544,8 +532,8 @@ contract AaveStablecoinCellar is
             minNewLendingTokenAmount
         );
 
-        _depositToAave(newLendingToken, newLendingTokenAmount);
         currentLendingToken = newLendingToken;
+        _depositToAave(newLendingToken, newLendingTokenAmount);
 
         emit Rebalance(newLendingToken, newLendingTokenAmount);
     }
