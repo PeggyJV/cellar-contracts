@@ -509,7 +509,8 @@ contract AaveStablecoinCellar is
      * @param token address of token to transfer out of this cellar
      */
     function sweep(address token) external onlyOwner {
-        if (inputTokens[token] || token == currentAToken) revert ProtectedAsset();
+        if (inputTokens[token] || token == currentAToken || token == address(this))
+            revert ProtectedAsset();
 
         uint256 amount = ERC20(token).balanceOf(address(this));
         ERC20(token).safeTransfer(msg.sender, amount);
