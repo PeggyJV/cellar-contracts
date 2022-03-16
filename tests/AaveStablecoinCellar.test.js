@@ -632,7 +632,7 @@ describe("AaveStablecoinCellar", () => {
 
   describe("pause", () => {
     it("should prevent users from depositing while paused", async () => {
-      await cellar.setPaused(true, false);
+      await cellar.setPause(true, false);
       expect(cellar["deposit(uint256)"](100)).to.be.revertedWith(
         "IsShutdown()"
       );
@@ -643,7 +643,7 @@ describe("AaveStablecoinCellar", () => {
       await cellar.connect(alice)["deposit(uint256)"](100);
 
       // cellar is paused and withdraws are prevented
-      await cellar.setPaused(true, false);
+      await cellar.setPause(true, false);
 
       // alice should be prevented from withdraws
       await expect(
@@ -651,22 +651,22 @@ describe("AaveStablecoinCellar", () => {
       ).to.be.revertedWith("ContractPaused()");
 
       // cellar is unpaused
-      await cellar.setPaused(false, false);
+      await cellar.setPause(false, false);
 
       // alice deposits again
       await cellar.connect(alice)["deposit(uint256)"](100);
 
       // cellar is paused and withdraws are allowed
-      await cellar.setPaused(true, false);
+      await cellar.setPause(true, true);
 
       // alice should be allowed to withdraw
       await cellar.connect(alice)["withdraw(uint256)"](100);
     });
 
-    it("should emits a ContractShutdown event", async () => {
-      await expect(cellar.shutdown())
-        .to.emit(cellar, "ContractShutdown")
-        .withArgs(owner.address);
+    it("should emits a Pause event", async () => {
+      await expect(cellar.setPause(true, false))
+        .to.emit(cellar, "Pause")
+        .withArgs(owner.address, true, false);
     });
   });
 
@@ -683,7 +683,7 @@ describe("AaveStablecoinCellar", () => {
       await cellar.connect(alice)["deposit(uint256)"](100);
 
       // cellar is paused and withdraws are prevented
-      await cellar.setPaused(true, false);
+      await cellar.setPause(true, false);
 
       // cellar is shutdown
       await cellar.shutdown();
@@ -693,9 +693,9 @@ describe("AaveStablecoinCellar", () => {
       await cellar.connect(alice)["withdraw(uint256)"](100);
     });
 
-    it("should emits a ContractShutdown event", async () => {
+    it("should emits a Shutdown event", async () => {
       await expect(cellar.shutdown())
-        .to.emit(cellar, "ContractShutdown")
+        .to.emit(cellar, "Shutdown")
         .withArgs(owner.address);
     });
   });
