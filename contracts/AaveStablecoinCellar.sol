@@ -237,9 +237,11 @@ contract AaveStablecoinCellar is
         // Take performance fee
         if (withdrawnActiveAssets > 0) {
             uint256 gain = withdrawnActiveAssets - originalDepositedAssets;
-            uint256 fee = convertToShares(gain * performanceFee / DENOMINATOR);
+            uint256 feeInAssets = gain * performanceFee / DENOMINATOR;
+            uint256 fee = convertToShares(feeInAssets);
 
             accruedPerformanceFees += fee;
+            withdrawnActiveAssets -= feeInAssets;
             shares -= fee;
 
             // Take portion of shares that would have been burned as fees.
