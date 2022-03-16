@@ -545,23 +545,29 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @notice Change the performance fee taken.
-     * @param fee new performance fee
+     * @notice Change the platform fee taken.
+     * @param newFee new platform fee
      */
-    function setPerformanceFee(uint256 fee) external onlyOwner {
-        if (fee > DENOMINATOR) revert GreaterThanMaxValue();
+    function setPlatformFee(uint256 newFee) external onlyOwner {
+        if (newFee > DENOMINATOR) revert GreaterThanMaxValue();
 
-        performanceFee = fee;
+        uint256 oldFee = platformFee;
+        platformFee = newFee;
+
+        emit ChangedPlatformFees(oldFee, newFee);
     }
 
     /**
-     * @notice Change the platform fee taken.
-     * @param fee new platform fee
+     * @notice Change the performance fee taken.
+     * @param newFee new performance fee
      */
-    function setPlatformFee(uint256 fee) external onlyOwner {
-        if (fee > DENOMINATOR) revert GreaterThanMaxValue();
+    function setPerformanceFee(uint256 newFee) external onlyOwner {
+        if (newFee > DENOMINATOR) revert GreaterThanMaxValue();
 
-        platformFee = fee;
+        uint256 oldFee = performanceFee;
+        performanceFee = newFee;
+
+        emit ChangedPerformanceFees(oldFee, newFee);
     }
 
     /// @notice Take platform fees off of cellar's active assets.

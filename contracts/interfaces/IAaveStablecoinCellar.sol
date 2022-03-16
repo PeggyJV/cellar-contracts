@@ -73,16 +73,30 @@ interface IAaveStablecoinCellar {
     );
 
     /**
-     * @notice Emitted when platform fees are transferred to Cosmos
+     * @notice Emitted when platform fees are transferred to Cosmos.
      * @param assets amount of assets transferred
      */
     event TransferPlatformFees(uint256 assets);
 
     /**
-     * @notice Emitted when performance fees are transferred to Cosmos
+     * @notice Emitted when performance fees are transferred to Cosmos.
      * @param assets amount of assets transferred
      */
     event TransferPerformanceFees(uint256 assets);
+
+    /**
+     * @notice Emitted when platform fees are changed.
+     * @param oldFee what fees were set to before
+     * @param newFee what fees were set to after
+     */
+    event ChangedPlatformFees(uint256 oldFee, uint256 newFee);
+
+    /**
+     * @notice Emitted when performance fees are changed.
+     * @param oldFee what fees were set to before
+     * @param newFee what fees were set to after
+     */
+    event ChangedPerformanceFees(uint256 oldFee, uint256 newFee);
 
     error NonSupportedToken();
     error PathIsTooShort();
