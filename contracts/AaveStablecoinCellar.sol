@@ -40,8 +40,10 @@ contract AaveStablecoinCellar is
     IAaveProtocolDataProvider public immutable aaveDataProvider; // 0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d
     // Aave Incentives Controller V2 contract
     IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
+    // Cosmos Gravity Bridge contract
     Gravity public immutable gravityBridge; // 0x69592e6f9d21989a043646fE8225da2600e5A0f7
-    bytes32 public immutable feesDistributor; // TBD
+    // Cosmos address of fee distributor
+    bytes32 public feesDistributor; // TBD
     IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
     address public immutable AAVE; // 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9
     address public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
@@ -75,9 +77,10 @@ contract AaveStablecoinCellar is
      * @param _lendingPool Aave V2 lending pool address
      * @param _aaveDataProvider Aave Protocol Data Provider V2 contract address
      * @param _incentivesController _incentivesController
-     * @param _stkAAVE _stkAAVE
-     * @param _AAVE _AAVE
-     * @param _WETH _WETH
+     * @param _gravityBridge Cosmos Gravity Bridge address
+     * @param _stkAAVE stkAAVE address
+     * @param _AAVE AAVE address
+     * @param _WETH WETH address
      * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
      * @param _name name of LP token
      * @param _symbol symbol of LP token
@@ -88,7 +91,6 @@ contract AaveStablecoinCellar is
         IAaveProtocolDataProvider _aaveDataProvider,
         IAaveIncentivesController _incentivesController,
         Gravity _gravityBridge,
-        bytes32 _feesDistributor,
         IStakedTokenV2 _stkAAVE,
         address _AAVE,
         address _WETH,
@@ -101,13 +103,14 @@ contract AaveStablecoinCellar is
         aaveDataProvider = _aaveDataProvider;
         incentivesController = _incentivesController;
         gravityBridge = _gravityBridge;
-        feesDistributor = _feesDistributor;
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
         WETH = _WETH;
 
         currentLendingToken = _currentLendingToken;
         _updateCurrentAToken();
+
+        lastTimeAccruedPlatformFees = block.timestamp;
     }
 
     function _updateCurrentAToken() internal {
@@ -187,8 +190,7 @@ contract AaveStablecoinCellar is
         uint256 exchangeRate = convertToAssets(1e18);
 
         uint256 leftToWithdraw = assets;
-        uint256 currentIdx = currentDepositIndex[owner];
-        for (uint256 i = currentIdx; i < deposits.length; i++) {
+        for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
             UserDeposit storage d = deposits[i];
 
             uint256 withdrawnAssets;
@@ -234,24 +236,28 @@ contract AaveStablecoinCellar is
 
         shares = withdrawnActiveShares + withdrawnInactiveShares;
 
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
         // Take performance fees.
         if (withdrawnActiveAssets > 0) {
             uint256 gain = withdrawnActiveAssets - originalDepositedAssets;
             uint256 feeInAssets = gain * performanceFee / DENOMINATOR;
             uint256 fees = convertToShares(feeInAssets);
 
-            accruedPerformanceFees += fees;
-            withdrawnActiveAssets -= feeInAssets;
-            shares -= fees;
+            if (fees > 0) {
+                accruedPerformanceFees += fees;
+                withdrawnActiveAssets -= feeInAssets;
+                shares -= fees;
 
-            // Take portion of shares that would have been burned as fees.
-            ERC20(address(this)).safeTransferFrom(msg.sender, address(this), fees);
-        }
-
-        if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+                // Take portion of shares that would have been burned as fees.
+                /// @dev Ensure user approves contract to trasnfer their shares
+                /// before attempting to withdraw or else will revert here!
+                ERC20(address(this)).safeTransferFrom(owner, address(this), fees);
+            }
         }
 
         _burn(owner, shares);
@@ -598,6 +604,7 @@ contract AaveStablecoinCellar is
 
         _burn(address(this), shares);
 
+        ERC20(currentLendingToken).approve(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(currentLendingToken, feesDistributor, feeInAssets);
     }
 
