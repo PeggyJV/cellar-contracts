@@ -58,6 +58,9 @@ contract AaveStablecoinCellar is
 
     uint24 public constant POOL_FEE = 3000;
 
+    // Restrict liquidity until after security audits.
+    uint256 public maxLiquidity = 5_000_000e18;
+
     /**
      * @param _swapRouter Uniswap V3 swap router address
      * @param _lendingPool Aave V2 lending pool address
@@ -117,6 +120,7 @@ contract AaveStablecoinCellar is
         address receiver
     ) public returns (uint256 shares) {
         if (!inputTokens[token]) revert NonSupportedToken();
+        if (maxLiquidity != 0 && assets + totalAssets() > maxLiquidity) revert LiquidityRestricted();
 
         uint256 balance = ERC20(token).balanceOf(msg.sender);
         if (assets > balance) assets = balance;
@@ -506,5 +510,12 @@ contract AaveStablecoinCellar is
 
         inputTokens[token] = true;
         inputTokensList.push(token);
+    }
+
+    /// @notice Removes initial liquidity restriction.
+    function removeLiquidityRestriction() external onlyOwner {
+        delete maxLiquidity;
+
+        emit LiquidityRestrictionRemoved();
     }
 }

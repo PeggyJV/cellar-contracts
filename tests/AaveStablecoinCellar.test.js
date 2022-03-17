@@ -635,4 +635,23 @@ describe("AaveStablecoinCellar", () => {
       );
     });
   });
+
+  describe("maxLiquidity", () => {
+    beforeEach(async () => {
+      await usdc.mint(
+        cellar.address,
+        ethers.BigNumber.from("5000000000000000000000000") // $5m
+      );
+    });
+    it("should prevent deposit it greater than max liquidity", async () => {
+      await expect(cellar["deposit(uint256)"](1)).to.be.revertedWith(
+        "LiquidityRestricted()"
+      );
+    });
+
+    it("should allow deposits above max liquidity once restriction removed", async () => {
+      await cellar.removeLiquidityRestriction();
+      await cellar["deposit(uint256)"](1);
+    });
+  });
 });

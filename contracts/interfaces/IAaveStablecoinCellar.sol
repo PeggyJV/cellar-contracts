@@ -72,10 +72,16 @@ interface IAaveStablecoinCellar {
         uint256 assets
     );
 
+    /**
+     * @notice Emitted when liquidity restriction removed.
+     */
+    event LiquidityRestrictionRemoved();
+
     error NonSupportedToken();
     error PathIsTooShort();
     error TokenAlreadyInitialized();
     error ZeroAmount();
+    error LiquidityRestricted();
 
     error TokenIsNotSupportedByAave();
     error NotEnoughTokenLiquidity();
