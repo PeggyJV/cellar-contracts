@@ -146,13 +146,39 @@ contract AaveStablecoinCellar is
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 
-    function deposit(uint256 assets) external returns (uint256 shares) {
+    function deposit(uint256 assets) external returns (uint256) {
         return deposit(currentLendingToken, assets, assets, msg.sender);
     }
 
     /// @dev For ERC4626 compatibility.
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) external returns (uint256) {
         return deposit(currentLendingToken, assets, assets, receiver);
+    }
+
+    /**
+     * @notice Deposit supported tokens into the cellar and enter them directly into strategy.
+     * @param token address of the supported token to deposit
+     * @param assets amount of assets to deposit
+     * @param minAssetsIn minimum amount of assets cellar should receive after swap (if applicable)
+     * @param receiver address that should receive shares
+     * @return shares amount of shares minted to receiver
+     */
+    function depositAndEnter(
+        address token,
+        uint256 assets,
+        uint256 minAssetsIn,
+        address receiver
+    ) external returns (uint256 shares) {
+        uint256 oldBalance = ERC20(currentLendingToken).balanceOf(address(this));
+
+        shares = deposit(token, assets, minAssetsIn, receiver);
+
+        uint256 newBalance = ERC20(currentLendingToken).balanceOf(address(this));
+
+        // Most times newBalance - oldBalance == assets, however if token was
+        // swapped into current lending token then tokens received by cellar
+        // will be slightly different after swap.
+        _depositToAave(currentLendingToken, newBalance - oldBalance);
     }
 
     /**

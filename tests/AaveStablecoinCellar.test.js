@@ -225,6 +225,17 @@ describe("AaveStablecoinCellar", () => {
     });
   });
 
+  describe("depositAndEnter", () => {
+    it("should deposit directly into Aave strategy", async () => {
+      await cellar.depositAndEnter(usdc.address, 1000, 1000, owner.address);
+      expect(await aUSDC.balanceOf(cellar.address)).to.eq(1000);
+
+      // try with swap involved
+      await cellar.depositAndEnter(dai.address, 1000, 950, owner.address);
+      expect(await aUSDC.balanceOf(cellar.address)).to.eq(1950);
+    });
+  });
+
   describe("withdraw", () => {
     beforeEach(async () => {
       // both owner and alice should start off owning 50% of the cellar's total assets each
