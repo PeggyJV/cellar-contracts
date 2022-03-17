@@ -186,11 +186,11 @@ contract AaveStablecoinCellar is
         uint256 minAssetsIn,
         address receiver
     ) external returns (uint256 shares) {
-        uint256 oldBalance = ERC20(currentLendingToken).balanceOf(address(this));
+        uint256 oldBalance = inactiveAssets();
 
         shares = deposit(token, assets, minAssetsIn, receiver);
 
-        uint256 newBalance = ERC20(currentLendingToken).balanceOf(address(this));
+        uint256 newBalance = inactiveAssets();
 
         // Most times newBalance - oldBalance == assets, however if token was
         // swapped into current lending token then tokens received by cellar
