@@ -11,6 +11,17 @@ Run scripts (fork mainnet):
 
 ```bash
 npx hardhat --network hardhat run scripts/gasConsumption.test.js
+
+result:
+
+cellar.deposit tx.blockNumber: 13837547, gasUsed: 250646
+cellar.swap tx.blockNumber: 13837548, gasUsed: 147989
+cellar.multihopSwap tx.blockNumber: 13837549, gasUsed: 139874
+cellar.sushiswap tx.blockNumber: 13837550, gasUsed: 132350
+cellar.enterStrategy tx.blockNumber: 13837551, gasUsed: 332342
+cellar.withdraw tx.blockNumber: 13837556, gasUsed: 372811
+cellar.redeemFromAave tx.blockNumber: 13837559, gasUsed: 288590
+cellar.rebalance tx.blockNumber: 13837560, gasUsed: 579163
 ```
 
 Run tests:
