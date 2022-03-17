@@ -644,10 +644,9 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @notice Approve a supported token to be deposited into the cellar.
      * @notice Set approval for a token to be deposited into the cellar.
      * @param token the address of the supported token
-     **/
+     */
     function setInputToken(address token, bool isApproved) external onlyOwner {
         inputTokens[token] = isApproved;
     }
