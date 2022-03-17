@@ -98,6 +98,4 @@ interface IAaveStablecoinCellar {
     error ProtectedAsset();
 
     error SameLendingToken();
-
-    error ProtectedAsset();
 }
