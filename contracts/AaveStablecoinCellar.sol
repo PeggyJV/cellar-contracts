@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./utils/MathUtils.sol";
 import "./interfaces/IAaveIncentivesController.sol";
 import "./interfaces/IStakedTokenV2.sol";
+import "./interfaces/IGravity.sol";
 
 /**
  * @title Sommelier AaveStablecoinCellar contract
@@ -35,10 +36,12 @@ contract AaveStablecoinCellar is
     ISwapRouter public immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
     // Aave Lending Pool V2 contract
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
-    // Aave Protocol Data Provider V2 contract
-    IAaveProtocolDataProvider public immutable aaveDataProvider; // 0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d
     // Aave Incentives Controller V2 contract
     IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
+    // Cosmos Gravity Bridge contract
+    Gravity public immutable gravityBridge; // 0x69592e6f9d21989a043646fE8225da2600e5A0f7
+    // Cosmos address of fee distributor
+    bytes32 public feesDistributor; // TBD
     IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
 
     address public immutable AAVE; // 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9
@@ -57,19 +60,28 @@ contract AaveStablecoinCellar is
     // Last time inactive funds were entered into a strategy and made active.
     uint256 public lastTimeEnteredStrategy;
 
-    uint24 public constant POOL_FEE = 3000;
-
     // Restrict liquidity until after security audits.
     uint256 public maxLiquidity = 5_000_000e18;
+
+    uint24 public constant POOL_FEE = 3000;
+
+    uint256 public constant DENOMINATOR = 10_000;
+    uint256 public constant SECS_PER_YEAR = 31_556_952;
+    uint256 public platformFee = 100;
+    uint256 public performanceFee = 500;
+    uint256 public lastTimeAccruedPlatformFees;
+    // Fees are taken in shares and redeemed for assets at the time they are transferred.
+    uint256 public accruedPlatformFees;
+    uint256 public accruedPerformanceFees;
 
     /**
      * @param _swapRouter Uniswap V3 swap router address
      * @param _lendingPool Aave V2 lending pool address
-     * @param _aaveDataProvider Aave Protocol Data Provider V2 contract address
      * @param _incentivesController _incentivesController
-     * @param _stkAAVE _stkAAVE
-     * @param _AAVE _AAVE
-     * @param _WETH _WETH
+     * @param _gravityBridge Cosmos Gravity Bridge address
+     * @param _stkAAVE stkAAVE address
+     * @param _AAVE AAVE address
+     * @param _WETH WETH address
      * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
      * @param _name name of LP token
      * @param _symbol symbol of LP token
@@ -77,8 +89,8 @@ contract AaveStablecoinCellar is
     constructor(
         ISwapRouter _swapRouter,
         ILendingPool _lendingPool,
-        IAaveProtocolDataProvider _aaveDataProvider,
         IAaveIncentivesController _incentivesController,
+        Gravity _gravityBridge,
         IStakedTokenV2 _stkAAVE,
         address _AAVE,
         address _WETH,
@@ -89,8 +101,8 @@ contract AaveStablecoinCellar is
     ) ERC20(_name, _symbol, 18) Ownable() {
         swapRouter =  _swapRouter;
         lendingPool = _lendingPool;
-        aaveDataProvider = _aaveDataProvider;
         incentivesController = _incentivesController;
+        gravityBridge = _gravityBridge;
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
         WETH = _WETH;
@@ -98,6 +110,8 @@ contract AaveStablecoinCellar is
 
         currentLendingToken = _currentLendingToken;
         _updateCurrentAToken();
+
+        lastTimeAccruedPlatformFees = block.timestamp;
     }
 
     function _updateCurrentAToken() internal {
@@ -198,16 +212,16 @@ contract AaveStablecoinCellar is
         if (deposits.length == 0 || currentDepositIndex[owner] > deposits.length - 1)
             revert NoNonemptyUserDeposits();
 
-        uint256 activeShares;
-        uint256 inactiveShares;
-        uint256 inactiveAssets;
+        uint256 withdrawnActiveShares;
+        uint256 withdrawnInactiveShares;
+        uint256 withdrawnInactiveAssets;
+        uint256 originalDepositedAssets; // Used for calculating performance fees.
 
         // Saves gas by avoiding calling `convertToAssets` on active shares during each loop.
         uint256 exchangeRate = convertToAssets(1e18);
 
         uint256 leftToWithdraw = assets;
-        uint256 currentIdx = currentDepositIndex[owner];
-        for (uint256 i = currentIdx; i < deposits.length; i++) {
+        for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
             UserDeposit storage d = deposits[i];
 
             uint256 withdrawnAssets;
@@ -219,17 +233,22 @@ contract AaveStablecoinCellar is
                 uint256 dAssets = exchangeRate * d.shares / 1e18;
                 withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
                 withdrawnShares = MathUtils.mulDivUp(d.shares, withdrawnAssets, dAssets);
-                delete d.assets; // Don't need anymore; delete for a gas refund.
 
-                activeShares += withdrawnShares;
+                uint256 originalDepositWithdrawn = MathUtils.mulDivUp(d.assets, withdrawnShares, d.shares);
+                // Store to calculate performance fees on future withdraws.
+                d.assets -= originalDepositWithdrawn;
+
+                originalDepositedAssets += originalDepositWithdrawn;
+                withdrawnActiveShares += withdrawnShares;
             } else {
                 // Inactive:
                 withdrawnAssets = MathUtils.min(leftToWithdraw, d.assets);
                 withdrawnShares = MathUtils.mulDivUp(d.shares, withdrawnAssets, d.assets);
+
                 d.assets -= withdrawnAssets;
 
-                inactiveShares += withdrawnShares;
-                inactiveAssets += withdrawnAssets;
+                withdrawnInactiveShares += withdrawnShares;
+                withdrawnInactiveAssets += withdrawnAssets;
             }
 
             d.shares -= withdrawnShares;
@@ -242,9 +261,9 @@ contract AaveStablecoinCellar is
             }
         }
 
-        uint256 activeAssets = exchangeRate * activeShares / 1e18;
+        uint256 withdrawnActiveAssets = exchangeRate * withdrawnActiveShares / 1e18;
 
-        shares = activeShares + inactiveShares;
+        shares = withdrawnActiveShares + withdrawnInactiveShares;
 
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -252,15 +271,33 @@ contract AaveStablecoinCellar is
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
 
-        _burn(owner, shares);
+        // Take performance fees.
+        if (withdrawnActiveAssets > 0) {
+            uint256 gain = withdrawnActiveAssets - originalDepositedAssets;
+            uint256 feeInAssets = gain * performanceFee / DENOMINATOR;
+            uint256 fees = convertToShares(feeInAssets);
 
-        if (activeAssets > 0) {
-            // Withdraw tokens from Aave to receiver.
-            lendingPool.withdraw(currentLendingToken, activeAssets, receiver);
+            if (fees > 0) {
+                accruedPerformanceFees += fees;
+                withdrawnActiveAssets -= feeInAssets;
+                shares -= fees;
+
+                // Take portion of shares that would have been burned as fees.
+                /// @dev Ensure user approves contract to trasnfer their shares
+                /// before attempting to withdraw or else will revert here!
+                ERC20(address(this)).safeTransferFrom(owner, address(this), fees);
+            }
         }
 
-        if (inactiveAssets > 0) {
-            ERC20(currentLendingToken).transfer(receiver, inactiveAssets);
+        _burn(owner, shares);
+
+        if (withdrawnActiveAssets > 0) {
+            // Withdraw tokens from Aave to receiver.
+            lendingPool.withdraw(currentLendingToken, withdrawnActiveAssets, receiver);
+        }
+
+        if (withdrawnInactiveAssets > 0) {
+            ERC20(currentLendingToken).transfer(receiver, withdrawnInactiveAssets);
         }
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
@@ -270,15 +307,22 @@ contract AaveStablecoinCellar is
         return withdraw(assets, msg.sender, msg.sender);
     }
 
-    /// @notice Total amount of the underlying asset that is managed by cellar.
-    function totalAssets() public view returns (uint256) {
-        uint256 inactiveAssets = ERC20(currentLendingToken).balanceOf(address(this));
+    /// @notice Total amount of inactive asset waiting in a holding pool to be entered into a strategy.
+    function inactiveAssets() public view returns (uint256) {
+        return ERC20(currentLendingToken).balanceOf(address(this));
+    }
+
+    /// @notice Total amount of active asset entered into a strategy.
+    function activeAssets() public view returns (uint256) {
         // The aTokens' value is pegged to the value of the corresponding deposited
         // asset at a 1:1 ratio, so we can find the amount of assets active in a
         // strategy simply by taking balance of aTokens cellar holds.
-        uint256 activeAssets = ERC20(currentAToken).balanceOf(address(this));
+        return ERC20(currentAToken).balanceOf(address(this));
+    }
 
-        return activeAssets + inactiveAssets;
+    /// @notice Total amount of the underlying asset that is managed by cellar.
+    function totalAssets() public view returns (uint256) {
+        return activeAssets() + inactiveAssets();
     }
 
     /**
@@ -411,8 +455,7 @@ contract AaveStablecoinCellar is
         external
         onlyOwner
     {
-        uint256 assets = ERC20(currentLendingToken).balanceOf(address(this));
-        _depositToAave(currentLendingToken, assets);
+        _depositToAave(currentLendingToken, inactiveAssets());
 
         lastTimeEnteredStrategy = block.timestamp;
     }
@@ -531,6 +574,77 @@ contract AaveStablecoinCellar is
     }
 
     /**
+     * @notice Change the platform fee taken.
+     * @param newFee new platform fee
+     */
+    function setPlatformFee(uint256 newFee) external onlyOwner {
+        if (newFee > DENOMINATOR) revert GreaterThanMaxValue();
+
+        uint256 oldFee = platformFee;
+        platformFee = newFee;
+
+        emit ChangedPlatformFees(oldFee, newFee);
+    }
+
+    /**
+     * @notice Change the performance fee taken.
+     * @param newFee new performance fee
+     */
+    function setPerformanceFee(uint256 newFee) external onlyOwner {
+        if (newFee > DENOMINATOR) revert GreaterThanMaxValue();
+
+        uint256 oldFee = performanceFee;
+        performanceFee = newFee;
+
+        emit ChangedPerformanceFees(oldFee, newFee);
+    }
+
+    /// @notice Take platform fees off of cellar's active assets.
+    function accruePlatformFees() external {
+        uint256 elapsedTime = block.timestamp - lastTimeAccruedPlatformFees;
+        uint256 feeInAssets = (activeAssets() * elapsedTime * platformFee) / DENOMINATOR / SECS_PER_YEAR;
+        uint256 fees = convertToShares(feeInAssets);
+
+        _mint(address(this), fees);
+
+        accruedPlatformFees += fees;
+    }
+
+    /// @notice Transfer accrued platform fees to Cosmos to distribute fees.
+    function transferPlatformFees() external onlyOwner {
+        uint256 feeInAssets = _sendFeesToCosmos(accruedPlatformFees);
+
+        accruedPlatformFees = 0;
+
+        emit TransferPlatformFees(feeInAssets);
+    }
+
+    /// @notice Transfer accrued performance fees to Cosmos to distribute fees.
+    function transferPerformanceFees() external onlyOwner {
+        uint256 feeInAssets = _sendFeesToCosmos(accruedPerformanceFees);
+
+        accruedPerformanceFees = 0;
+
+        emit TransferPerformanceFees(feeInAssets);
+    }
+
+    function _sendFeesToCosmos(uint256 shares) internal returns (uint256 feeInAssets) {
+        feeInAssets = convertToShares(shares);
+
+        // Only withdraw from Aave if holding pool does not contain enough funds.
+        uint256 holdingPoolAssets = inactiveAssets();
+        if (holdingPoolAssets < feeInAssets) {
+            redeemFromAave(currentLendingToken, feeInAssets - holdingPoolAssets);
+        }
+
+        _burn(address(this), shares);
+
+        ERC20(currentLendingToken).approve(address(gravityBridge), feeInAssets);
+        gravityBridge.sendToCosmos(currentLendingToken, feesDistributor, feeInAssets);
+    }
+
+    /**
+     * @notice Approve a supported token to be deposited into the cellar.
      * @notice Set approval for a token to be deposited into the cellar.
      * @param token the address of the supported token
      **/
