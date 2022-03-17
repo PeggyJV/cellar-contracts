@@ -95,6 +95,8 @@ interface IAaveStablecoinCellar {
 
     error NoNonemptyUserDeposits();
 
+    error ProtectedAsset();
+
     error SameLendingToken();
 
     error ProtectedAsset();
