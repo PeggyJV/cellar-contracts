@@ -4,9 +4,9 @@ pragma solidity 0.8.11;
 
 contract MockAaveDataProvider {
 
-    function getUserReserveData(address asset, address user)
+    function getUserReserveData(address, address)
     external
-    view
+    pure
     returns (
         uint256 currentATokenBalance,
         uint256 currentStableDebt,
@@ -31,9 +31,9 @@ contract MockAaveDataProvider {
         usageAsCollateralEnabled = false;
     }
 
-    function getReserveData(address asset)
+    function getReserveData(address)
     external
-    view
+    pure
     returns (
         uint256 availableLiquidity,
         uint256 totalStableDebt,
