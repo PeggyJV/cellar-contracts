@@ -118,6 +118,9 @@ contract AaveStablecoinCellar is
     ) public returns (uint256 shares) {
         if (!inputTokens[token]) revert NonSupportedToken();
 
+        uint256 balance = ERC20(token).balanceOf(msg.sender);
+        if (assets > balance) assets = balance;
+
         ERC20(token).safeTransferFrom(msg.sender, address(this), assets);
 
         if (token != currentLendingToken) {
@@ -207,8 +210,6 @@ contract AaveStablecoinCellar is
         }
 
         uint256 activeAssets = exchangeRate * activeShares / 1e18;
-
-        if (activeAssets + inactiveAssets != assets) revert FailedWithdraw();
 
         shares = activeShares + inactiveShares;
 

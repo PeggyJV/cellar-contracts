@@ -82,7 +82,6 @@ interface IAaveStablecoinCellar {
     error InsufficientAaveDepositBalance();
 
     error NoNonemptyUserDeposits();
-    error FailedWithdraw();
 
     error SameLendingToken();
 }

@@ -211,6 +211,13 @@ describe("AaveStablecoinCellar", () => {
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
     });
 
+    it("should deposit all user's balance if tries to deposit more than they have", async () => {
+      // owner has $1000 to deposit, withdrawing $2000 should only withdraw $1000
+      await cellar["deposit(uint256)"](2000);
+      expect(await usdc.balanceOf(owner.address)).to.eq(0);
+      expect(await usdc.balanceOf(cellar.address)).to.eq(1000);
+    });
+
     it("should emit Deposit event", async () => {
       await expect(cellar["deposit(uint256,address)"](100, alice.address))
         .to.emit(cellar, "Deposit")
@@ -318,17 +325,16 @@ describe("AaveStablecoinCellar", () => {
       expect(await cellar.currentDepositIndex(alice.address)).to.eq(0);
     });
 
-    it("should revert if user tries to withdraw more assets than they have", async () => {
+    it("should withraw all user's assets if tries to withdraw more than they have", async () => {
       await cellar["withdraw(uint256)"](100);
       // owner should now have nothing left to withdraw
       await expect(cellar["withdraw(uint256)"](1)).to.revertedWith(
         "NoNonemptyUserDeposits()"
       );
 
-      // alice only has $100 to withdraw, withdrawing $150 should revert
-      await expect(
-        cellar.connect(alice)["withdraw(uint256)"](150)
-      ).to.be.revertedWith("FailedWithdraw()");
+      // alice only has $100 to withdraw, withdrawing $150 should only withdraw $100
+      await cellar.connect(alice)["withdraw(uint256)"](150);
+      expect(await usdc.balanceOf(alice.address)).to.eq(1000);
     });
 
     it("should not allow unapproved 3rd party to withdraw using another's shares", async () => {
