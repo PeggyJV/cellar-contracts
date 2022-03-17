@@ -672,6 +672,7 @@ describe("AaveStablecoinCellar", () => {
 
   describe("shutdown", () => {
     it("should prevent users from depositing while shutdown", async () => {
+      await cellar["deposit(uint256)"](100);
       await cellar.shutdown();
       expect(cellar["deposit(uint256)"](100)).to.be.revertedWith(
         "IsShutdown()"
@@ -693,7 +694,26 @@ describe("AaveStablecoinCellar", () => {
       await cellar.connect(alice)["withdraw(uint256)"](100);
     });
 
-    it("should emits a Shutdown event", async () => {
+    it("should withdraw all active assets from Aave", async () => {
+      await cellar["deposit(uint256)"](1000);
+
+      await cellar.enterStrategy();
+
+      // mimic growth from $1000 -> $1250 (1.25x increase) while in strategy
+      await lendingPool.setLiquidityIndex(
+        BigNumber.from("1250000000000000000000000000")
+      );
+
+      await cellar.shutdown();
+
+      // expect all of active liquidity to be withdrawn from Aave
+      expect(await usdc.balanceOf(cellar.address)).to.eq(1250);
+
+      // should allow users to withdraw from holding pool
+      await cellar["withdraw(uint256)"](1250);
+    });
+
+    it("should emit a Shutdown event", async () => {
       await expect(cellar.shutdown())
         .to.emit(cellar, "Shutdown")
         .withArgs(owner.address);

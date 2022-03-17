@@ -229,8 +229,12 @@ contract AaveStablecoinCellar is
         _burn(owner, shares);
 
         if (activeAssets > 0) {
-            // Withdraw tokens from Aave to receiver.
-            lendingPool.withdraw(currentLendingToken, activeAssets, receiver);
+            if (!isShutdown) {
+                // Withdraw tokens from Aave to receiver.
+                lendingPool.withdraw(currentLendingToken, activeAssets, receiver);
+            } else {
+                ERC20(currentLendingToken).transfer(receiver, activeAssets);
+            }
         }
 
         if (inactiveAssets > 0) {
@@ -317,6 +321,8 @@ contract AaveStablecoinCellar is
         uint256 amountIn,
         uint256 amountOutMinimum
     ) external onlyOwner returns (uint256 amountOut) {
+        if (isShutdown) revert ContractShutdown();
+
         return _swap(tokenIn, tokenOut, amountIn, amountOutMinimum);
     }
 
@@ -331,7 +337,6 @@ contract AaveStablecoinCellar is
         address[] memory path,
         uint256 amountIn,
         uint256 amountOutMinimum
-
     ) internal returns (uint256 amountOut) {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
@@ -375,16 +380,17 @@ contract AaveStablecoinCellar is
         uint256 amountIn,
         uint256 amountOutMinimum
     ) external onlyOwner returns (uint256) {
+        if (isShutdown) revert ContractShutdown();
+
         return _multihopSwap(path, amountIn, amountOutMinimum);
     }
 
     /**
      * @notice Enters Aave stablecoin strategy.
      */
-    function enterStrategy()
-        external
-        onlyOwner
-    {
+    function enterStrategy() external onlyOwner {
+        if (isShutdown) revert ContractShutdown();
+
         uint256 assets = ERC20(currentLendingToken).balanceOf(address(this));
         _depositToAave(currentLendingToken, assets);
 
@@ -411,7 +417,9 @@ contract AaveStablecoinCellar is
         // likely need change this to use Sushiswap instead for swaps.
         uint256 amountOut = _multihopSwap(path, amountIn, minAssetsOut);
 
-        _depositToAave(currentLendingToken, amountOut);
+        if (!isShutdown) {
+            _depositToAave(currentLendingToken, amountOut);
+        }
     }
 
     function reinvest(uint256 minAssetsOut) external onlyOwner {
@@ -483,6 +491,7 @@ contract AaveStablecoinCellar is
         onlyOwner
     {
         if (!inputTokens[newLendingToken]) revert NonSupportedToken();
+        if (isShutdown) revert ContractShutdown();
 
         if(newLendingToken == currentLendingToken) revert SameLendingToken();
 
@@ -523,7 +532,7 @@ contract AaveStablecoinCellar is
      * @param _isWithdrawable whether withdraws should be possible
      */
     function setPause(bool _isPaused, bool _isWithdrawable) external onlyOwner {
-        if (isShutdown) revert AlreadyShutdown();
+        if (isShutdown) revert ContractShutdown();
 
         isPaused = _isPaused;
         isWithdrawable = _isWithdrawable;
@@ -546,7 +555,11 @@ contract AaveStablecoinCellar is
         // Ensure contract is not paused to allow withdraws (in case it was and withdraws were prevented).
         isPaused = false;
 
+        if (ERC20(currentAToken).balanceOf(address(this)) > 0) {
+            // Withdraw everything from Aave.
+            redeemFromAave(currentLendingToken, type(uint256).max);
+        }
+
         emit Shutdown(msg.sender);
     }
-
 }
