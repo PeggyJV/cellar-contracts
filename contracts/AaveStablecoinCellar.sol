@@ -3,6 +3,7 @@
 pragma solidity 0.8.11;
 
 import "./interfaces/IAaveStablecoinCellar.sol";
+import "./interfaces/IAaveProtocolDataProvider.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "./interfaces/ILendingPool.sol";
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
@@ -34,6 +35,8 @@ contract AaveStablecoinCellar is
     ISwapRouter public immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
     // Aave Lending Pool V2 contract
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
+    // Aave Protocol Data Provider V2 contract
+    IAaveProtocolDataProvider public immutable aaveDataProvider; // 0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d
     // Aave Incentives Controller V2 contract
     IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
     IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
@@ -42,9 +45,10 @@ contract AaveStablecoinCellar is
     address public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
     address public immutable USDC; // 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
 
-    // Declare the variables and mappings.
+    // Declare the variables and mappings
     address[] public inputTokensList;
     mapping(address => bool) internal inputTokens;
+    // The address of the token of the current lending position
     address public currentLendingToken;
     address public currentAToken;
     // Track user user deposits to determine active/inactive shares.
@@ -56,12 +60,17 @@ contract AaveStablecoinCellar is
 
     uint24 public constant POOL_FEE = 3000;
 
-    // Aave deposit balances by tokens.
-    mapping(address => uint256) public aaveDepositBalances;
+    // Restrict liquidity until after security audits.
+    uint256 public maxLiquidity = 5_000_000e18;
 
     /**
      * @param _swapRouter Uniswap V3 swap router address
      * @param _lendingPool Aave V2 lending pool address
+     * @param _aaveDataProvider Aave Protocol Data Provider V2 contract address
+     * @param _incentivesController _incentivesController
+     * @param _stkAAVE _stkAAVE
+     * @param _AAVE _AAVE
+     * @param _WETH _WETH
      * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
      * @param _name name of LP token
      * @param _symbol symbol of LP token
@@ -69,6 +78,7 @@ contract AaveStablecoinCellar is
     constructor(
         ISwapRouter _swapRouter,
         ILendingPool _lendingPool,
+        IAaveProtocolDataProvider _aaveDataProvider,
         IAaveIncentivesController _incentivesController,
         IStakedTokenV2 _stkAAVE,
         address _AAVE,
@@ -80,6 +90,7 @@ contract AaveStablecoinCellar is
     ) ERC20(_name, _symbol, 18) Ownable() {
         swapRouter =  _swapRouter;
         lendingPool = _lendingPool;
+        aaveDataProvider = _aaveDataProvider;
         incentivesController = _incentivesController;
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
@@ -92,17 +103,20 @@ contract AaveStablecoinCellar is
 
     function _updateCurrentAToken() internal {
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(currentLendingToken);
+
+        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
+
         currentAToken = aTokenAddress;
     }
 
     /**
-     * @dev Deposit supported tokens into the cellar.
+     * @notice Deposit supported tokens into the cellar.
      * @param token address of the supported token to deposit
      * @param assets amount of assets to deposit
      * @param minAssetsIn minimum amount of assets cellar should receive after swap (if applicable)
      * @param receiver address that should receive shares
      * @return shares amount of shares minted to receiver
-     **/
+     */
     function deposit(
         address token,
         uint256 assets,
@@ -110,6 +124,10 @@ contract AaveStablecoinCellar is
         address receiver
     ) public returns (uint256 shares) {
         if (!inputTokens[token]) revert NonSupportedToken();
+        if (maxLiquidity != 0 && assets + totalAssets() > maxLiquidity) revert LiquidityRestricted();
+
+        uint256 balance = ERC20(token).balanceOf(msg.sender);
+        if (assets > balance) assets = balance;
 
         ERC20(token).safeTransferFrom(msg.sender, address(this), assets);
 
@@ -132,13 +150,39 @@ contract AaveStablecoinCellar is
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 
-    function deposit(uint256 assets) external returns (uint256 shares) {
+    function deposit(uint256 assets) external returns (uint256) {
         return deposit(currentLendingToken, assets, assets, msg.sender);
     }
 
     /// @dev For ERC4626 compatibility.
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) external returns (uint256) {
         return deposit(currentLendingToken, assets, assets, receiver);
+    }
+
+    /**
+     * @notice Deposit supported tokens into the cellar and enter them directly into strategy.
+     * @param token address of the supported token to deposit
+     * @param assets amount of assets to deposit
+     * @param minAssetsIn minimum amount of assets cellar should receive after swap (if applicable)
+     * @param receiver address that should receive shares
+     * @return shares amount of shares minted to receiver
+     */
+    function depositAndEnter(
+        address token,
+        uint256 assets,
+        uint256 minAssetsIn,
+        address receiver
+    ) external returns (uint256 shares) {
+        uint256 oldBalance = ERC20(currentLendingToken).balanceOf(address(this));
+
+        shares = deposit(token, assets, minAssetsIn, receiver);
+
+        uint256 newBalance = ERC20(currentLendingToken).balanceOf(address(this));
+
+        // Most times newBalance - oldBalance == assets, however if token was
+        // swapped into current lending token then tokens received by cellar
+        // will be slightly different after swap.
+        _depositToAave(currentLendingToken, newBalance - oldBalance);
     }
 
     /**
@@ -147,7 +191,7 @@ contract AaveStablecoinCellar is
      * @param receiver address that should receive assets
      * @param owner address that should own the shares
      * @return shares amount of shares burned from owner
-     **/
+     */
     function withdraw(uint256 assets, address receiver, address owner) public returns (uint256 shares) {
         if (assets == 0) revert ZeroAmount();
 
@@ -200,8 +244,6 @@ contract AaveStablecoinCellar is
         }
 
         uint256 activeAssets = exchangeRate * activeShares / 1e18;
-
-        if (activeAssets + inactiveAssets != assets) revert FailedWithdraw();
 
         shares = activeShares + inactiveShares;
 
@@ -268,7 +310,7 @@ contract AaveStablecoinCellar is
      * @param amountIn the amount of tokens to be swapped
      * @param amountOutMinimum the minimum amount of tokens returned
      * @return amountOut the amount of tokens received after swap
-     **/
+     */
     function _swap(
         address tokenIn,
         address tokenOut,
@@ -293,7 +335,7 @@ contract AaveStablecoinCellar is
         // Executes the swap.
         amountOut = swapRouter.exactInputSingle(params);
 
-        emit Swapped(tokenIn, amountIn, tokenOut, amountOut, block.timestamp);
+        emit Swapped(tokenIn, amountIn, tokenOut, amountOut);
     }
 
     function swap(
@@ -302,9 +344,6 @@ contract AaveStablecoinCellar is
         uint256 amountIn,
         uint256 amountOutMinimum
     ) external onlyOwner returns (uint256 amountOut) {
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
-
         return _swap(tokenIn, tokenOut, amountIn, amountOutMinimum);
     }
 
@@ -314,11 +353,12 @@ contract AaveStablecoinCellar is
      * @param amountIn the amount of tokens to be swapped
      * @param amountOutMinimum the minimum amount of tokens returned
      * @return amountOut the amount of tokens received after swap
-     **/
+     */
     function _multihopSwap(
         address[] memory path,
         uint256 amountIn,
         uint256 amountOutMinimum
+
     ) internal returns (uint256 amountOut) {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
@@ -354,7 +394,7 @@ contract AaveStablecoinCellar is
         // Executes the swap.
         amountOut = swapRouter.exactInput(params);
 
-        emit Swapped(tokenIn, amountIn, tokenOut, amountOut, block.timestamp);
+        emit Swapped(tokenIn, amountIn, tokenOut, amountOut);
     }
 
     function multihopSwap(
@@ -362,28 +402,18 @@ contract AaveStablecoinCellar is
         uint256 amountIn,
         uint256 amountOutMinimum
     ) external onlyOwner returns (uint256) {
-        address tokenIn = path[0];
-        address tokenOut = path[path.length - 1];
-
-        if (!inputTokens[tokenIn]) revert NonSupportedToken();
-        if (!inputTokens[tokenOut]) revert NonSupportedToken();
-
         return _multihopSwap(path, amountIn, amountOutMinimum);
     }
 
     /**
      * @notice Enters Aave stablecoin strategy.
-     * @param token the address of the token
-     * @param assets the amount of token to be deposited
-     **/
-    function enterStrategy(address token, uint256 assets)
+     */
+    function enterStrategy()
         external
         onlyOwner
     {
-        _depositToAave(token, assets);
-
-        currentLendingToken = token;
-        _updateCurrentAToken();
+        uint256 assets = ERC20(currentLendingToken).balanceOf(address(this));
+        _depositToAave(currentLendingToken, assets);
 
         lastTimeEnteredStrategy = block.timestamp;
     }
@@ -416,7 +446,7 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @dev Claim stkAAVE rewards from Aave and begin cooldown period to unstake.
+     * @notice Claim stkAAVE rewards from Aave and begin cooldown period to unstake.
      * @param amount amount of rewards to claim
      * @return claimed amount of rewards claimed from Aave
      */
@@ -438,68 +468,85 @@ contract AaveStablecoinCellar is
      * @notice Deposits cellar holdings into Aave lending pool.
      * @param token the address of the token
      * @param assets the amount of token to be deposited
-     **/
+     */
     function _depositToAave(address token, uint256 assets) internal {
         if (!inputTokens[token]) revert NonSupportedToken();
-        if (assets == 0) revert ZeroAmount();
-
-        // Token verification in Aave protocol.
-        (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(token);
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
-
-        // Verification of liquidity.
-        if (assets > ERC20(token).balanceOf(address(this)))
-            revert NotEnoughTokenLiquidity();
 
         ERC20(token).safeApprove(address(lendingPool), assets);
-
-        aaveDepositBalances[token] += assets;
 
         // Deposit token to Aave protocol.
         lendingPool.deposit(token, assets, address(this), 0);
 
-        emit DepositToAave(token, assets, block.timestamp);
+        emit DepositToAave(token, assets);
     }
 
     /**
      * @notice Redeems a token from Aave protocol.
      * @param token the address of the token
      * @param amount the token amount being redeemed
-     **/
+     * @return withdrawnAmount the withdrawn amount from Aave
+     */
     function redeemFromAave(address token, uint256 amount)
+        public
+        onlyOwner
+        returns (
+            uint256 withdrawnAmount
+        )
+    {
+        if (!inputTokens[token]) revert NonSupportedToken();
+
+        // Withdraw token from Aave protocol
+        withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
+
+        emit RedeemFromAave(token, withdrawnAmount);
+    }
+
+    /**
+     * @notice Rebalances of Aave lending position.
+     * @param newLendingToken the address of the token of the new lending position
+     */
+    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount)
         external
         onlyOwner
     {
-        if (!inputTokens[token]) revert NonSupportedToken();
-        if (amount == 0) revert ZeroAmount();
+        if (!inputTokens[newLendingToken]) revert NonSupportedToken();
 
-        // Token verification in Aave protocol.
-        (, , , , , , , address aTokenAddress, , , , ) = lendingPool
-            .getReserveData(token);
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
+        if(newLendingToken == currentLendingToken) revert SameLendingToken();
 
-        // Verification Aave deposit balance of token
-        // NOTE: aToken balances increase over time, this may not be sufficient.
-        if (amount > aaveDepositBalances[token])
-            revert InsufficientAaveDepositBalance();
+        uint256 lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
 
-        // Withdraw token from Aave protocol
-        lendingPool.withdraw(token, amount, address(this));
+        address[] memory path = new address[](2);
+        path[0] = currentLendingToken;
+        path[1] = newLendingToken;
 
-        aaveDepositBalances[token] -= amount;
+        uint256 newLendingTokenAmount = _multihopSwap(
+            path,
+            lendingPositionBalance,
+            minNewLendingTokenAmount
+        );
 
-        emit RedeemFromAave(token, amount, block.timestamp);
+        currentLendingToken = newLendingToken;
+        _depositToAave(newLendingToken, newLendingTokenAmount);
+
+        emit Rebalance(newLendingToken, newLendingTokenAmount);
     }
 
     /**
      * @notice Approve a supported token to be deposited into the cellar.
      * @param token the address of the supported token
-     **/
+     */
     function approveInputToken(address token) external onlyOwner {
         if (inputTokens[token]) revert TokenAlreadyInitialized();
 
         inputTokens[token] = true;
         inputTokensList.push(token);
+    }
+
+    /// @notice Removes initial liquidity restriction.
+    function removeLiquidityRestriction() external onlyOwner {
+        delete maxLiquidity;
+
+        emit LiquidityRestrictionRemoved();
     }
 
     /**

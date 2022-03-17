@@ -6,12 +6,10 @@ import "./MockAToken.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract MockLendingPool {
-    address public aToken;
+    mapping(address => address) public aTokens;
     uint256 public index = 1000000000000000000000000000;
 
-    constructor(address _aToken) {
-        aToken = address(_aToken);
-    }
+    constructor() { }
 
     // for testing purposes; not in actual contract
     function setLiquidityIndex(uint256 _index) external {
@@ -24,36 +22,40 @@ contract MockLendingPool {
         address onBehalfOf,
         uint16
     ) external {
-        IERC20(asset).transferFrom(onBehalfOf, aToken, amount);
-        MockAToken(aToken).mint(onBehalfOf, amount, index);
+        IERC20(asset).transferFrom(onBehalfOf, aTokens[asset], amount);
+        MockAToken(aTokens[asset]).mint(onBehalfOf, amount, index);
     }
 
     function withdraw(
-        address,
+        address asset,
         uint256 amount,
         address to
     ) external returns (uint256) {
-        MockAToken(aToken).burn(msg.sender, to, amount, index);
+        if (amount == type(uint256).max)
+            amount = MockAToken(aTokens[asset]).balanceOf(msg.sender);
+
+        MockAToken(aTokens[asset]).burn(msg.sender, to, amount, index);
+
         return amount;
     }
 
     function getReserveData(address asset)
-        external
-        view
-        returns (
-            uint256 configuration,
-            uint128 liquidityIndex,
-            uint128 variableBorrowIndex,
-            uint128 currentLiquidityRate,
-            uint128 currentVariableBorrowRate,
-            uint128 currentStableBorrowRate,
-            uint40 lastUpdateTimestamp,
-            address aTokenAddress,
-            address stableDebtTokenAddress,
-            address variableDebtTokenAddress,
-            address interestRateStrategyAddress,
-            uint8 id
-        )
+    external
+    view
+    returns (
+        uint256 configuration,
+        uint128 liquidityIndex,
+        uint128 variableBorrowIndex,
+        uint128 currentLiquidityRate,
+        uint128 currentVariableBorrowRate,
+        uint128 currentStableBorrowRate,
+        uint40 lastUpdateTimestamp,
+        address aTokenAddress,
+        address stableDebtTokenAddress,
+        address variableDebtTokenAddress,
+        address interestRateStrategyAddress,
+        uint8 id
+    )
     {
         asset;
         configuration;
@@ -63,10 +65,17 @@ contract MockLendingPool {
         currentVariableBorrowRate;
         currentStableBorrowRate;
         lastUpdateTimestamp;
-        aTokenAddress = aToken;
+        aTokenAddress = aTokens[asset];
         stableDebtTokenAddress;
         variableDebtTokenAddress;
         interestRateStrategyAddress;
         id;
+    }
+    
+    function initReserve(
+      address asset,
+      address aTokenAddress
+    ) external {
+      aTokens[asset] = aTokenAddress;
     }
 }
