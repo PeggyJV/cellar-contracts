@@ -45,8 +45,7 @@ contract AaveStablecoinCellar is
     address public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
     address public immutable USDC; // 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
 
-    // Declare the variables and mappings
-    address[] public inputTokensList;
+    // Declare the variables and mappings.
     mapping(address => bool) internal inputTokens;
     // The address of the token of the current lending position
     address public currentLendingToken;
@@ -532,14 +531,11 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @notice Approve a supported token to be deposited into the cellar.
+     * @notice Set approval for a token to be deposited into the cellar.
      * @param token the address of the supported token
-     */
-    function approveInputToken(address token) external onlyOwner {
-        if (inputTokens[token]) revert TokenAlreadyInitialized();
-
-        inputTokens[token] = true;
-        inputTokensList.push(token);
+     **/
+    function setInputToken(address token, bool isApproved) external onlyOwner {
+        inputTokens[token] = isApproved;
     }
 
     /// @notice Removes initial liquidity restriction.
