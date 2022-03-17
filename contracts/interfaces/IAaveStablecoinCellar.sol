@@ -86,7 +86,6 @@ interface IAaveStablecoinCellar {
 
     error NonSupportedToken();
     error PathIsTooShort();
-    error TokenAlreadyInitialized();
     error ZeroAmount();
     error LiquidityRestricted();
 
