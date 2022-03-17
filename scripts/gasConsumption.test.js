@@ -15,6 +15,7 @@ let tx
 
 // addresses of smart contracts in the mainnet
 const routerAddress = '0xE592427A0AEce92De3Edee1F18E0157C05861564' // Uniswap V3 SwapRouter
+// const sushiSwapRouterAddress = '0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F' // SushiSwap V2 Router
 const lendingPoolAddress = '0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9' // Aave LendingPool
 const dataProviderAddress = '0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d' // AaveProtocolDataProvider
 const incentivesControllerAddress = '0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5' // StakedTokenIncentivesController
@@ -151,6 +152,7 @@ async function main() {
 
   cellar = await AaveStablecoinCellar.deploy(
     routerAddress,
+//     sushiSwapRouterAddress,
     lendingPoolAddress,
     dataProviderAddress,
     incentivesControllerAddress,
@@ -183,6 +185,9 @@ async function main() {
   tx = await cellar.multihopSwap([usdc.address, dai.address], ethers.BigNumber.from(10).pow(6).mul(50), 0);
   gasUsedLog('cellar.multihopSwap', tx);
 
+  tx = await cellar.sushiswap([usdc.address, dai.address], ethers.BigNumber.from(10).pow(6).mul(50), 0);
+  gasUsedLog('cellar.sushiswap', tx);
+  
   tx = await cellar.enterStrategy();
   gasUsedLog('cellar.enterStrategy', tx);
 
