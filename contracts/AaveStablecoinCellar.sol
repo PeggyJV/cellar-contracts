@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./utils/MathUtils.sol";
 import "./interfaces/IAaveIncentivesController.sol";
 import "./interfaces/IStakedTokenV2.sol";
+import "./interfaces/ISushiSwapRouter.sol";
 import "./interfaces/IGravity.sol";
 
 import "hardhat/console.sol";
@@ -36,6 +37,8 @@ contract AaveStablecoinCellar is
 
     // Uniswap Router V3 contract
     ISwapRouter public immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
+    // SushiSwap Router V2 contract
+    ISushiSwapRouter public immutable sushiSwapRouter = ISushiSwapRouter(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
     // Aave Lending Pool V2 contract
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
     // Aave Incentives Controller V2 contract
@@ -90,6 +93,7 @@ contract AaveStablecoinCellar is
      */
     constructor(
         ISwapRouter _swapRouter,
+//         ISushiSwapRouter _sushiSwapRouter,  TODO: too many parameters in constructor - CompilerError: Stack too deep
         ILendingPool _lendingPool,
         IAaveIncentivesController _incentivesController,
         Gravity _gravityBridge,
@@ -102,6 +106,7 @@ contract AaveStablecoinCellar is
         string memory _symbol
     ) ERC20(_name, _symbol, 18) Ownable() {
         swapRouter =  _swapRouter;
+//         sushiSwapRouter = _sushiSwapRouter;
         lendingPool = _lendingPool;
         incentivesController = _incentivesController;
         gravityBridge = _gravityBridge;
@@ -450,6 +455,49 @@ contract AaveStablecoinCellar is
         return _multihopSwap(path, amountIn, amountOutMinimum);
     }
 
+    /**
+     * @notice Swaps tokens by SushiSwap Router.
+     * @param path the token swap path (token addresses)
+     * @param amountIn the amount of tokens to be swapped
+     * @param amountOutMinimum the minimum amount of tokens returned
+     * @return amountOut the amount of tokens received after swap
+     */
+    function _sushiswap(
+        address[] memory path,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) internal returns (uint256 amountOut) {
+        address tokenIn = path[0];
+
+        if (ERC20(tokenIn).balanceOf(address(this)) < amountIn) revert NotEnoughTokenLiquidity();
+        if (path.length < 2) revert PathIsTooShort();
+
+        // Approve the router to spend first token in path.
+        ERC20(tokenIn).safeApprove(address(sushiSwapRouter), amountIn);
+        
+        uint256[] memory amounts = sushiSwapRouter.swapExactTokensForTokens(
+            amountIn,
+            amountOutMinimum,
+            path,
+            address(this),
+            block.timestamp + 60
+        );
+
+        amountOut = amounts[amounts.length - 1];
+
+        emit Swapped(tokenIn, amountIn, path[path.length - 1], amountOut);
+
+        return amountOut;
+    }
+    
+    function sushiswap(
+        address[] memory path,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) external onlyOwner returns (uint256) {
+        return _sushiswap(path, amountIn, amountOutMinimum);
+    }
+    
     /**
      * @notice Enters Aave stablecoin strategy.
      */
