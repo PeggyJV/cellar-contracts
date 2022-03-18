@@ -228,8 +228,6 @@ interface IAaveV2StablecoinCellar {
 
     function claimAndUnstake() external returns (uint256);
 
-    function redeemFromAave(address token, uint256 amount) external returns (uint256 withdrawnAmount);
-
     function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount) external;
 
     function accruePlatformFees() external;

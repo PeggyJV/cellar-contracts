@@ -367,14 +367,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
      * @param amount the token amount being redeemed
      * @return withdrawnAmount the withdrawn amount from Aave
      */
-    // TODO: make internal
-    function redeemFromAave(address token, uint256 amount)
-        public
-        onlyOwner
-        returns (
-            uint256 withdrawnAmount
-        )
-    {
+    function _redeemFromAave(address token, uint256 amount) internal returns (uint256 withdrawnAmount) {
         // Withdraw token from Aave protocol
         withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
 
@@ -391,7 +384,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         if(newLendingToken == currentLendingToken) revert SameLendingToken(newLendingToken);
 
-        uint256 lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
+        uint256 lendingPositionBalance = _redeemFromAave(currentLendingToken, type(uint256).max);
 
         address[] memory path = new address[](2);
         path[0] = currentLendingToken;
@@ -488,7 +481,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         // Only withdraw from Aave if holding pool does not contain enough funds.
         uint256 holdingPoolAssets = inactiveAssets();
         if (holdingPoolAssets < feeInAssets) {
-            redeemFromAave(currentLendingToken, feeInAssets - holdingPoolAssets);
+            _redeemFromAave(currentLendingToken, feeInAssets - holdingPoolAssets);
         }
 
         _burn(address(this), fees);
@@ -549,7 +542,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         if (activeAssets() > 0) {
             // Withdraw everything from Aave.
-            redeemFromAave(currentLendingToken, type(uint256).max);
+            _redeemFromAave(currentLendingToken, type(uint256).max);
         }
 
         emit Shutdown(msg.sender);

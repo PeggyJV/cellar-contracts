@@ -635,39 +635,6 @@ describe("AaveV2StablecoinCellar", () => {
     });
   });
 
-  describe("redeemFromAave", () => {
-    beforeEach(async () => {
-      // Mint initial liquidity to cellar
-      await usdc.mint(cellar.address, 1000);
-
-      await cellar.enterStrategy();
-
-      await cellar.redeemFromAave(usdc.address, 1000);
-    });
-
-    it("should return correct amount of tokens back to cellar from lending pool", async () => {
-      expect(await usdc.balanceOf(cellar.address)).to.eq(1000);
-    });
-
-    it("should transfer correct amount of aTokens to lending pool", async () => {
-      expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
-    });
-
-    it("should not allow redeeming more than cellar deposited", async () => {
-      // cellar tries to redeem $100 when it should have deposit balance of $0
-      await expect(cellar.redeemFromAave(usdc.address, 100)).to.be.reverted;
-    });
-
-    it("should emit RedeemFromAave event", async () => {
-      await usdc.mint(cellar.address, 1000);
-      await cellar.enterStrategy();
-
-      await expect(cellar.redeemFromAave(usdc.address, 1000))
-        .to.emit(cellar, "RedeemFromAave")
-        .withArgs(usdc.address, 1000);
-    });
-  });
-
   describe("rebalance", () => {
     beforeEach(async () => {
       await usdc.mint(cellar.address, 1000);
@@ -678,16 +645,11 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await dai.balanceOf(cellar.address)).to.eq(0);
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(1000);
 
-      await cellar.rebalance(dai.address, 0);
+      await cellar.rebalance(dai.address, 950);
 
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
-      // After the swap,  amount of  coin will change from the exchange rate of 0.95
+      // After the swap, amount of coin will change from the exchange rate of 0.95
       expect(await aDAI.balanceOf(cellar.address)).to.eq(950);
-
-      await cellar.redeemFromAave(dai.address, 950);
-
-      expect(await aDAI.balanceOf(cellar.address)).to.eq(0);
-      expect(await dai.balanceOf(cellar.address)).to.eq(950);
     });
 
     it("should not be possible to rebalance to the same token", async () => {
