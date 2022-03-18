@@ -188,9 +188,9 @@ contract MockSwapRouter {
 
     function exactInput(ExactInputParams memory params) external payable returns (uint256) {
         uint256 exchangeRate = 9500;
-        
+
         (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
-        
+
         while (params.path.hasMultiplePools()) {
             params.path = params.path.skipToken();
             (,tokenOut ,) = params.path.decodeFirstPool();
@@ -203,6 +203,31 @@ contract MockSwapRouter {
 
         IERC20(tokenOut).transfer(params.recipient, amountOut);
         return amountOut;
+    }
+
+    function swapExactTokensForTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint
+    ) external returns (uint[] memory) {
+        uint256 exchangeRate = 9500;
+
+        address tokenIn = path[0];
+        address tokenOut = path[path.length - 1];
+
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
+
+        uint256 amountOut = amountIn * exchangeRate / 10000;
+        require(amountOut >= amountOutMin, "amountOutMin invariant failed");
+
+        IERC20(tokenOut).transfer(to, amountOut);
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amountOut;
+
+        return amounts;
     }
 
     receive() external payable {}
