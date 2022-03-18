@@ -67,12 +67,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
     uint256 public constant DENOMINATOR = 10_000;
     uint256 public constant SECS_PER_YEAR = 31_556_952;
-    uint256 public platformFee = 100;
-    uint256 public performanceFee = 500;
+    uint256 public constant PLATFORM_FEE = 100;
+    uint256 public constant PERFORMANCE_FEE = 500;
+
     uint256 public lastTimeAccruedPlatformFees;
     // Fees are taken in shares and redeemed for assets at the time they are transferred.
     uint256 public accruedPlatformFees;
     uint256 public accruedPerformanceFees;
+
+    // Emergency states in case of contract malfunction.
+    bool public isPaused;
+    bool public isShutdown;
 
     /**
      * @param _uniswapRouter Uniswap V3 swap router address
@@ -125,6 +130,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         uint256 minAssetsIn,
         address receiver
     ) public nonReentrant returns (uint256 shares) {
+        if (isPaused) revert ContractPaused();
+        if (isShutdown) revert ContractShutdown();
+
         if (!inputTokens[token]) revert UnapprovedToken(token);
         if (maxLiquidity != 0 && assets + totalAssets() > maxLiquidity)
             revert LiquidityRestricted(totalAssets(), maxLiquidity);
@@ -240,7 +248,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         // Take performance fees.
         if (withdrawnActiveAssets > 0) {
             uint256 gain = withdrawnActiveAssets - originalDepositedAssets;
-            uint256 feeInAssets = gain * performanceFee / DENOMINATOR;
+            uint256 feeInAssets = gain * PERFORMANCE_FEE / DENOMINATOR;
             uint256 fees = convertToShares(feeInAssets);
 
             if (fees > 0) {
@@ -259,8 +267,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         _burn(owner, shares);
 
         if (withdrawnActiveAssets > 0) {
-            // Withdraw tokens from Aave to receiver.
-            lendingPool.withdraw(currentLendingToken, withdrawnActiveAssets, receiver);
+            if (!isShutdown) {
+                // Withdraw tokens from Aave to receiver.
+                lendingPool.withdraw(currentLendingToken, withdrawnActiveAssets, receiver);
+            } else {
+                ERC20(currentLendingToken).transfer(receiver, withdrawnActiveAssets);
+            }
         }
 
         if (withdrawnInactiveAssets > 0) {
@@ -274,14 +286,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         return withdraw(assets, msg.sender, msg.sender);
     }
 
-
     /**
      * @notice Enters Aave stablecoin strategy.
      */
-    function enterStrategy()
-        external
-        onlyOwner
-    {
+    function enterStrategy() external onlyOwner {
+        if (isShutdown) revert ContractShutdown();
+
         _depositToAave(currentLendingToken, inactiveAssets());
 
         lastTimeEnteredStrategy = block.timestamp;
@@ -309,7 +319,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         // Due to the lack of liquidity for AAVE on Uniswap, we use Sushiswap instead here.
         uint256 amountOut = _sushiswap(path, amountIn, minAssetsOut);
 
-        _depositToAave(currentLendingToken, amountOut);
+        if (!isShutdown) {
+            _depositToAave(currentLendingToken, amountOut);
+        }
     }
 
     function reinvest(uint256 minAssetsOut) external onlyOwner {
@@ -355,6 +367,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
      * @param amount the token amount being redeemed
      * @return withdrawnAmount the withdrawn amount from Aave
      */
+    // TODO: make internal
     function redeemFromAave(address token, uint256 amount)
         public
         onlyOwner
@@ -372,11 +385,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
      * @notice Rebalances of Aave lending position.
      * @param newLendingToken the address of the token of the new lending position
      */
-    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount)
-        external
-        onlyOwner
-    {
+    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount) external onlyOwner {
         if (!inputTokens[newLendingToken]) revert UnapprovedToken(newLendingToken);
+        if (isShutdown) revert ContractShutdown();
 
         if(newLendingToken == currentLendingToken) revert SameLendingToken(newLendingToken);
 
@@ -461,7 +472,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     /// @notice Take platform fees off of cellar's active assets.
     function accruePlatformFees() external {
         uint256 elapsedTime = block.timestamp - lastTimeAccruedPlatformFees;
-        uint256 feeInAssets = (activeAssets() * elapsedTime * platformFee) / DENOMINATOR / SECS_PER_YEAR;
+        uint256 feeInAssets = (activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / SECS_PER_YEAR;
         uint256 fees = convertToShares(feeInAssets);
 
         _mint(address(this), fees);
@@ -509,6 +520,39 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         delete maxLiquidity;
 
         emit LiquidityRestrictionRemoved();
+    }
+
+    /**
+     * @notice Pause the contract, prevents depositing.
+     * @param _isPaused whether the contract should be paused
+     */
+    function setPause(bool _isPaused) external onlyOwner {
+        if (isShutdown) revert ContractShutdown();
+
+        isPaused = _isPaused;
+
+        emit Pause(msg.sender, _isPaused);
+    }
+
+    /**
+     * @notice Stops the contract - this is irreversible. Should only be used in an emergency,
+     *         for example an irreversible accounting bug or an exploit.
+     */
+    function shutdown() external onlyOwner {
+        if (isShutdown) revert AlreadyShutdown();
+
+        // Update state and put in irreversible emergency mode.
+        isShutdown = true;
+
+        // Ensure contract is not paused.
+        isPaused = false;
+
+        if (activeAssets() > 0) {
+            // Withdraw everything from Aave.
+            redeemFromAave(currentLendingToken, type(uint256).max);
+        }
+
+        emit Shutdown(msg.sender);
     }
 
     /**

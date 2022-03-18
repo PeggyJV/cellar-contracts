@@ -99,6 +99,19 @@ interface IAaveV2StablecoinCellar {
     event SetInputToken(address token, bool isApproved);
 
     /**
+     * @notice Emitted when cellar is paused.
+     * @param caller address that set the pause
+     * @param isPaused whether the contract is paused
+     */
+    event Pause(address caller, bool isPaused);
+
+    /**
+     * @notice Emitted when cellar is shutdown.
+     * @param caller address that called the shutdown
+     */
+    event Shutdown(address caller);
+
+    /**
      * @notice Attempted an action with a token that is not approved.
      * @param unapprovedToken address of the unapproved token
      */
@@ -145,6 +158,21 @@ interface IAaveV2StablecoinCellar {
      * @param lendingToken address of the lending token
      */
     error SameLendingToken(address lendingToken);
+
+    /**
+     * @notice Attempted action was prevented due to contract being shutdown.
+     */
+    error ContractShutdown();
+
+    /**
+     * @notice Attempted action was prevented due to contract being paused.
+     */
+    error ContractPaused();
+
+    /**
+     * @notice Attempted to shutdown the contract when it was already shutdown.
+     */
+    error AlreadyShutdown();
 
     function deposit(
         address token,
