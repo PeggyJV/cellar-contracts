@@ -67,8 +67,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
     uint256 public constant DENOMINATOR = 10_000;
     uint256 public constant SECS_PER_YEAR = 31_556_952;
-    uint256 public platformFee = 100;
-    uint256 public performanceFee = 500;
+    uint256 public constant PLATFORM_FEE = 100;
+    uint256 public constant PERFORMANCE_FEE = 500;
+
     uint256 public lastTimeAccruedPlatformFees;
     // Fees are taken in shares and redeemed for assets at the time they are transferred.
     uint256 public accruedPlatformFees;
@@ -76,7 +77,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
     // Emergency states in case of contract malfunction.
     bool public isPaused;
-    bool public isWithdrawable;
     bool public isShutdown;
 
     /**
@@ -130,6 +130,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         uint256 minAssetsIn,
         address receiver
     ) public nonReentrant returns (uint256 shares) {
+        if (isPaused) revert ContractPaused();
+        if (isShutdown) revert ContractShutdown();
+
         if (!inputTokens[token]) revert UnapprovedToken(token);
         if (maxLiquidity != 0 && assets + totalAssets() > maxLiquidity)
             revert LiquidityRestricted(totalAssets(), maxLiquidity);
@@ -179,7 +182,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     function withdraw(uint256 assets, address receiver, address owner) public returns (uint256 shares) {
         if (assets == 0) revert ZeroAssets();
         if (balanceOf[owner] == 0) revert ZeroShares();
-        if (isPaused && !isWithdrawable) revert ContractPaused();
 
         uint256 withdrawnActiveShares;
         uint256 withdrawnInactiveShares;
@@ -246,7 +248,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         // Take performance fees.
         if (withdrawnActiveAssets > 0) {
             uint256 gain = withdrawnActiveAssets - originalDepositedAssets;
-            uint256 feeInAssets = gain * performanceFee / DENOMINATOR;
+            uint256 feeInAssets = gain * PERFORMANCE_FEE / DENOMINATOR;
             uint256 fees = convertToShares(feeInAssets);
 
             if (fees > 0) {
@@ -470,7 +472,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     /// @notice Take platform fees off of cellar's active assets.
     function accruePlatformFees() external {
         uint256 elapsedTime = block.timestamp - lastTimeAccruedPlatformFees;
-        uint256 feeInAssets = (activeAssets() * elapsedTime * platformFee) / DENOMINATOR / SECS_PER_YEAR;
+        uint256 feeInAssets = (activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / SECS_PER_YEAR;
         uint256 fees = convertToShares(feeInAssets);
 
         _mint(address(this), fees);
@@ -518,6 +520,39 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         delete maxLiquidity;
 
         emit LiquidityRestrictionRemoved();
+    }
+
+    /**
+     * @notice Pause the contract, prevents depositing.
+     * @param _isPaused whether the contract should be paused
+     */
+    function setPause(bool _isPaused) external onlyOwner {
+        if (isShutdown) revert ContractShutdown();
+
+        isPaused = _isPaused;
+
+        emit Pause(msg.sender, _isPaused);
+    }
+
+    /**
+     * @notice Stops the contract - this is irreversible. Should only be used in an emergency,
+     *         for example an irreversible accounting bug or an exploit.
+     */
+    function shutdown() external onlyOwner {
+        if (isShutdown) revert AlreadyShutdown();
+
+        // Update state and put in irreversible emergency mode.
+        isShutdown = true;
+
+        // Ensure contract is not paused.
+        isPaused = false;
+
+        if (activeAssets() > 0) {
+            // Withdraw everything from Aave.
+            redeemFromAave(currentLendingToken, type(uint256).max);
+        }
+
+        emit Shutdown(msg.sender);
     }
 
     /**
@@ -731,44 +766,5 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         currentLendingToken = newLendingToken;
         currentAToken = aTokenAddress;
-    }
-
-    /**
-     * @notice Pause the contract. Pausing prevents staking, unstaking, claiming
-     *         rewards, and scheduling new rewards. Should only be used
-     *         in an emergency.
-     * @param _isPaused whether the contract should be paused
-     * @param _isWithdrawable whether withdraws should be possible
-     */
-    function setPause(bool _isPaused, bool _isWithdrawable) external onlyOwner {
-        if (isShutdown) revert ContractShutdown();
-
-        isPaused = _isPaused;
-        isWithdrawable = _isWithdrawable;
-
-        emit Pause(msg.sender, _isPaused, _isWithdrawable);
-    }
-
-    /**
-     * @notice Stops the contract - this is irreversible. Should only be used
-     *         in an emergency, for example an irreversible accounting bug
-     *         or an exploit. Enables all depositors to withdraw their stake
-     *         instantly.
-     */
-    function shutdown() external onlyOwner {
-        if (isShutdown) revert AlreadyShutdown();
-
-        // Update state and put in irreversible emergency mode.
-        isShutdown = true;
-
-        // Ensure contract is not paused to allow withdraws (in case it was and withdraws were prevented).
-        isPaused = false;
-
-        if (activeAssets() > 0) {
-            // Withdraw everything from Aave.
-            redeemFromAave(currentLendingToken, type(uint256).max);
-        }
-
-        emit Shutdown(msg.sender);
     }
 }

@@ -102,9 +102,8 @@ interface IAaveV2StablecoinCellar {
      * @notice Emitted when cellar is paused.
      * @param caller address that set the pause
      * @param isPaused whether the contract is paused
-     * @param isWithdrawable whether the contract allows withdraws
      */
-    event Pause(address caller, bool isPaused, bool isWithdrawable);
+    event Pause(address caller, bool isPaused);
 
     /**
      * @notice Emitted when cellar is shutdown.

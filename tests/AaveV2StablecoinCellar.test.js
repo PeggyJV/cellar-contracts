@@ -765,41 +765,16 @@ describe("AaveV2StablecoinCellar", () => {
 
   describe("pause", () => {
     it("should prevent users from depositing while paused", async () => {
-      await cellar.setPause(true, false);
+      await cellar.setPause(true);
       expect(cellar["deposit(uint256)"](100)).to.be.revertedWith(
-        "IsShutdown()"
+        "ContractPaused()"
       );
     });
 
-    it("should prevent withdraws if specified", async () => {
-      // alice first deposits
-      await cellar.connect(alice)["deposit(uint256)"](100);
-
-      // cellar is paused and withdraws are prevented
-      await cellar.setPause(true, false);
-
-      // alice should be prevented from withdraws
-      await expect(
-        cellar.connect(alice)["withdraw(uint256)"](100)
-      ).to.be.revertedWith("ContractPaused()");
-
-      // cellar is unpaused
-      await cellar.setPause(false, false);
-
-      // alice deposits again
-      await cellar.connect(alice)["deposit(uint256)"](100);
-
-      // cellar is paused and withdraws are allowed
-      await cellar.setPause(true, true);
-
-      // alice should be allowed to withdraw
-      await cellar.connect(alice)["withdraw(uint256)"](100);
-    });
-
     it("should emits a Pause event", async () => {
-      await expect(cellar.setPause(true, false))
+      await expect(cellar.setPause(true))
         .to.emit(cellar, "Pause")
-        .withArgs(owner.address, true, false);
+        .withArgs(owner.address, true);
     });
   });
 
@@ -808,7 +783,7 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar["deposit(uint256)"](100);
       await cellar.shutdown();
       expect(cellar["deposit(uint256)"](100)).to.be.revertedWith(
-        "IsShutdown()"
+        "ContractShutdown()"
       );
     });
 
@@ -816,14 +791,9 @@ describe("AaveV2StablecoinCellar", () => {
       // alice first deposits
       await cellar.connect(alice)["deposit(uint256)"](100);
 
-      // cellar is paused and withdraws are prevented
-      await cellar.setPause(true, false);
-
       // cellar is shutdown
       await cellar.shutdown();
 
-      // alice should be allowed to withdraw (even though pause should of
-      // prevented withdraws, shutdown should allow withdraws again)
       await cellar.connect(alice)["withdraw(uint256)"](100);
     });
 
