@@ -15,7 +15,7 @@ const timetravel = async (addTime) => {
   await network.provider.send("evm_mine");
 };
 
-describe("AaveStablecoinCellar", () => {
+describe("AaveV2StablecoinCellar", () => {
   let owner;
   let alice;
   let bob;
@@ -97,10 +97,10 @@ describe("AaveStablecoinCellar", () => {
     await gravity.deployed();
 
     // Deploy cellar contract
-    const AaveStablecoinCellar = await ethers.getContractFactory(
-      "AaveStablecoinCellar"
+    const AaveV2StablecoinCellar = await ethers.getContractFactory(
+      "AaveV2StablecoinCellar"
     );
-    cellar = await AaveStablecoinCellar.deploy(
+    cellar = await AaveV2StablecoinCellar.deploy(
       router.address,
       router.address,
       lendingPool.address,
@@ -155,8 +155,6 @@ describe("AaveStablecoinCellar", () => {
     // Initialize with mock tokens as input tokens
     await cellar.setInputToken(usdc.address, true);
     await cellar.setInputToken(dai.address, true);
-    await cellar.setInputToken(weth.address, true);
-    await cellar.setInputToken(usdt.address, true);
   });
 
   describe("deposit", () => {
@@ -230,17 +228,6 @@ describe("AaveStablecoinCellar", () => {
       await expect(cellar["deposit(uint256,address)"](100, alice.address))
         .to.emit(cellar, "Deposit")
         .withArgs(owner.address, alice.address, 100, 100);
-    });
-  });
-
-  describe("depositAndEnter", () => {
-    it("should deposit directly into Aave strategy", async () => {
-      await cellar.depositAndEnter(usdc.address, 1000, 1000, owner.address);
-      expect(await aUSDC.balanceOf(cellar.address)).to.eq(1000);
-
-      // try with swap involved
-      await cellar.depositAndEnter(dai.address, 1000, 950, owner.address);
-      expect(await aUSDC.balanceOf(cellar.address)).to.eq(1950);
     });
   });
 
@@ -710,8 +697,8 @@ describe("AaveStablecoinCellar", () => {
     });
   });
 
-  describe("platformFees", () => {
-    beforeEach(async () => {
+  describe("fees", () => {
+    it("should accrue platform fees", async () => {
       // owner deposits $1,000,000
       await cellar["deposit(uint256)"](1_000_000);
 
@@ -721,33 +708,12 @@ describe("AaveStablecoinCellar", () => {
       await timetravel(86400); // 1 day
 
       await cellar.accruePlatformFees();
-    });
 
-    it("should accrue platform fees", async () => {
       // $27 worth of shares in fees = $1,000,000 * 86430 sec * (2% / secsPerYear)
       expect(await cellar.balanceOf(cellar.address)).to.eq(27);
     });
 
-    it("should be able to transfer platform fees", async () => {
-      await cellar.transferPlatformFees();
-      // expect all fee shares to be transferred out
-      expect(await cellar.balanceOf(cellar.address)).to.eq(0);
-      expect(await cellar.balanceOf(gravity.address)).to.eq(0);
-    });
-
-    it("should allow platform fee to be changed", async () => {
-      await cellar.setPlatformFee(1000); // 10%
-      expect(await cellar.platformFee()).to.eq(1000);
-
-      // expect fail if set too high
-      await expect(cellar.setPlatformFee(20_000)).to.be.revertedWith(
-        "GreaterThanMaxValue(10000)"
-      );
-    });
-  });
-
-  describe("performanceFees", () => {
-    beforeEach(async () => {
+    it("should accrue performance fees upon withdraw", async () => {
       // owner deposits $1000
       await cellar["deposit(uint256)"](1000);
 
@@ -760,28 +726,34 @@ describe("AaveStablecoinCellar", () => {
       );
 
       await cellar["withdraw(uint256)"](1250);
-    });
 
-    it("should accrue performance fees upon withdraw", async () => {
       // expect cellar to have received $12 fees in shares = $250 gain * 5%
       expect(await cellar.balanceOf(cellar.address)).to.eq(9);
     });
 
-    it("should be able to transfer performance fees", async () => {
-      await cellar.transferPerformanceFees();
+    it("should be able to transfer fees", async () => {
+      // accrue some platform fees
+      await cellar["deposit(uint256)"](1_000_000);
+      await cellar.enterStrategy();
+      await timetravel(86400); // 1 day
+      await cellar.accruePlatformFees();
+
+      // accrue some performance fees
+      await cellar.connect(alice)["deposit(uint256)"](1000);
+      await cellar.enterStrategy();
+      await lendingPool.setLiquidityIndex(
+        BigNumber.from("1250000000000000000000000000")
+      );
+      await cellar.connect(alice)["withdraw(uint256)"](1250);
+
+      const fees = await cellar.balanceOf(cellar.address);
+      const feeInAssets = await cellar.convertToAssets(fees);
+
+      await cellar.transferFees();
+
       // expect all fee shares to be transferred out
       expect(await cellar.balanceOf(cellar.address)).to.eq(0);
-      expect(await cellar.balanceOf(gravity.address)).to.eq(0);
-    });
-
-    it("should allow performance fee to be changed", async () => {
-      await cellar.setPerformanceFee(1000); // 10%
-      expect(await cellar.performanceFee()).to.eq(1000);
-
-      // expect fail if set too high
-      await expect(cellar.setPerformanceFee(20_000)).to.be.revertedWith(
-        "GreaterThanMaxValue(10000)"
-      );
+      expect(await usdc.balanceOf(gravity.address)).to.eq(feeInAssets);
     });
   });
 

@@ -2,12 +2,12 @@
 
 pragma solidity 0.8.11;
 
-import "./interfaces/IAaveStablecoinCellar.sol";
-import "./interfaces/IAaveProtocolDataProvider.sol";
+import "./interfaces/IAaveV2StablecoinCellar.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "./interfaces/ILendingPool.sol";
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
+import {ReentrancyGuard} from "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./utils/MathUtils.sol";
 import "./interfaces/IAaveIncentivesController.sol";
@@ -15,18 +15,12 @@ import "./interfaces/IStakedTokenV2.sol";
 import "./interfaces/ISushiSwapRouter.sol";
 import "./interfaces/IGravity.sol";
 
-import "hardhat/console.sol";
-
 /**
- * @title Sommelier AaveStablecoinCellar contract
- * @notice AaveStablecoinCellar contract for Sommelier Network
+ * @title Sommelier AaveV2 Stablecoin Cellar contract
+ * @notice AaveV2StablecoinCellar contract for Sommelier Network
  * @author Sommelier Finance
  */
-contract AaveStablecoinCellar is
-    IAaveStablecoinCellar,
-    ERC20,
-    Ownable
-{
+contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGuard, Ownable {
     using SafeTransferLib for ERC20;
 
     struct UserDeposit {
@@ -54,7 +48,7 @@ contract AaveStablecoinCellar is
     address public immutable USDC; // 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
 
     // Declare the variables and mappings.
-    mapping(address => bool) internal inputTokens;
+    mapping(address => bool) public inputTokens;
     // The address of the token of the current lending position
     address public currentLendingToken;
     address public currentAToken;
@@ -66,8 +60,8 @@ contract AaveStablecoinCellar is
     uint256 public lastTimeEnteredStrategy;
 
     // Restrict liquidity and deposits per wallet until after security audits.
-    uint256 public maxDeposit = 50_000e18;
-    uint256 public maxLiquidity = 5_000_000e18;
+    uint256 public maxDeposit = 50_000e18; // $50k
+    uint256 public maxLiquidity = 5_000_000e18; // $5m
 
     uint24 public constant POOL_FEE = 3000;
 
@@ -101,8 +95,7 @@ contract AaveStablecoinCellar is
         address _WETH,
         address _USDC,
         address _currentLendingToken
-    // TODO: figure out name and symbol for this cellar's share tokens
-    ) ERC20("Sommelier Aave Stablecoin Cellar LP Token", "SASC", 18) Ownable() {
+    ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "sommSAAVE", 18) Ownable() {
         uniswapRouter =  _uniswapRouter;
         sushiSwapRouter = _sushiSwapRouter;
         lendingPool = _lendingPool;
@@ -118,16 +111,6 @@ contract AaveStablecoinCellar is
         lastTimeAccruedPlatformFees = block.timestamp;
     }
 
-    function _updateLendingPosition(address newLendingToken) internal {
-        currentLendingToken = newLendingToken;
-
-        (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(currentLendingToken);
-
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave(currentLendingToken);
-
-        currentAToken = aTokenAddress;
-    }
-
     /**
      * @notice Deposit supported tokens into the cellar.
      * @param token address of the supported token to deposit
@@ -141,7 +124,7 @@ contract AaveStablecoinCellar is
         uint256 assets,
         uint256 minAssetsIn,
         address receiver
-    ) public returns (uint256 shares) {
+    ) public nonReentrant returns (uint256 shares) {
         if (!inputTokens[token]) revert UnapprovedToken(token);
         if (maxLiquidity != 0 && assets + totalAssets() > maxLiquidity)
             revert LiquidityRestricted(totalAssets(), maxLiquidity);
@@ -182,32 +165,6 @@ contract AaveStablecoinCellar is
     }
 
     /**
-     * @notice Deposit supported tokens into the cellar and enter them directly into strategy.
-     * @param token address of the supported token to deposit
-     * @param assets amount of assets to deposit
-     * @param minAssetsIn minimum amount of assets cellar should receive after swap (if applicable)
-     * @param receiver address that should receive shares
-     * @return shares amount of shares minted to receiver
-     */
-    function depositAndEnter(
-        address token,
-        uint256 assets,
-        uint256 minAssetsIn,
-        address receiver
-    ) external returns (uint256 shares) {
-        uint256 oldBalance = inactiveAssets();
-
-        shares = deposit(token, assets, minAssetsIn, receiver);
-
-        uint256 newBalance = inactiveAssets();
-
-        // Most times newBalance - oldBalance == assets, however if token was
-        // swapped into current lending token then tokens received by cellar
-        // will be slightly different after swap.
-        _depositToAave(currentLendingToken, newBalance - oldBalance);
-    }
-
-    /**
      * @notice Withdraw from the cellar.
      * @param assets amount of assets to withdraw
      * @param receiver address that should receive assets
@@ -229,7 +186,7 @@ contract AaveStablecoinCellar is
         UserDeposit[] storage deposits = userDeposits[owner];
 
         uint256 leftToWithdraw = assets;
-        for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
+        for (uint256 i = deposits.length - 1; i + 1 != currentDepositIndex[owner]; i--) {
             UserDeposit storage d = deposits[i];
 
             uint256 withdrawnAssets;
@@ -263,7 +220,7 @@ contract AaveStablecoinCellar is
 
             leftToWithdraw -= withdrawnAssets;
 
-            if (leftToWithdraw == 0) {
+            if (i == 0 || leftToWithdraw == 0) {
                 currentDepositIndex[owner] = d.shares != 0 ? i : i+1;
                 break;
             }
@@ -317,43 +274,257 @@ contract AaveStablecoinCellar is
         return withdraw(assets, msg.sender, msg.sender);
     }
 
-    /// @notice Total amount of inactive asset waiting in a holding pool to be entered into a strategy.
-    function inactiveAssets() public view returns (uint256) {
-        return ERC20(currentLendingToken).balanceOf(address(this));
-    }
 
-    /// @notice Total amount of active asset entered into a strategy.
-    function activeAssets() public view returns (uint256) {
-        // The aTokens' value is pegged to the value of the corresponding deposited
-        // asset at a 1:1 ratio, so we can find the amount of assets active in a
-        // strategy simply by taking balance of aTokens cellar holds.
-        return ERC20(currentAToken).balanceOf(address(this));
-    }
+    /**
+     * @notice Enters Aave stablecoin strategy.
+     */
+    function enterStrategy()
+        external
+        onlyOwner
+    {
+        _depositToAave(currentLendingToken, inactiveAssets());
 
-    /// @notice Total amount of the underlying asset that is managed by cellar.
-    function totalAssets() public view returns (uint256) {
-        return activeAssets() + inactiveAssets();
+        lastTimeEnteredStrategy = block.timestamp;
     }
 
     /**
-     * @notice The amount of shares that the cellar would exchange for the amount of assets provided.
-     * @param assets amount of assets to convert
-     * @param offset amount to negatively offset total assets during calculation
+     * @notice Reinvest stkAAVE rewards back into cellar's current position on Aave.
+     * @dev Must be called in the 2 day unstake period started 10 days after claimAndUnstake was run.
+     * @param amount amount of stkAAVE to redeem and reinvest
+     * @param minAssetsOut minimum amount of assets cellar should receive after swap
      */
-    function _convertToShares(uint256 assets, uint256 offset) internal view returns (uint256) {
-        return totalSupply == 0 ? assets : MathUtils.mulDivDown(assets, totalSupply, totalAssets() - offset);
+    // auction model:
+    // - send stkaave to the bridge
+    // - add functionality to distribute SOMM rewards
+    function reinvest(uint256 amount, uint256 minAssetsOut) public onlyOwner {
+        stkAAVE.redeem(address(this), amount);
+
+        address[] memory path = new address[](3);
+        path[0] = AAVE;
+        path[1] = WETH;
+        path[2] = currentLendingToken;
+
+        uint256 amountIn = ERC20(AAVE).balanceOf(address(this));
+
+        // Due to the lack of liquidity for AAVE on Uniswap, we use Sushiswap instead here.
+        uint256 amountOut = _sushiswap(path, amountIn, minAssetsOut);
+
+        _depositToAave(currentLendingToken, amountOut);
     }
 
-    function convertToShares(uint256 assets) public view returns (uint256) {
-        return _convertToShares(assets, 0);
+    function reinvest(uint256 minAssetsOut) external onlyOwner {
+        reinvest(type(uint256).max, minAssetsOut);
     }
 
     /**
-     * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
-     * @param shares amount of shares to convert
+     * @notice Claim stkAAVE rewards from Aave and begin cooldown period to unstake.
+     * @param amount amount of rewards to claim
+     * @return claimed amount of rewards claimed from Aave
      */
-    function convertToAssets(uint256 shares) public view returns (uint256) {
-        return totalSupply == 0 ? shares : MathUtils.mulDivDown(shares, totalAssets(), totalSupply);
+    function claimAndUnstake(uint256 amount) public onlyOwner returns (uint256 claimed) {
+        // Necessary as claimRewards accepts a dynamic array as first param.
+        address[] memory aToken = new address[](1);
+        aToken[0] = currentAToken;
+
+        claimed = incentivesController.claimRewards(aToken, amount, address(this));
+
+        stkAAVE.cooldown();
+    }
+
+    function claimAndUnstake() external onlyOwner returns (uint256) {
+        return claimAndUnstake(type(uint256).max);
+    }
+
+    /**
+     * @notice Deposits cellar holdings into Aave lending pool.
+     * @param token the address of the token
+     * @param assets the amount of token to be deposited
+     */
+    function _depositToAave(address token, uint256 assets) internal {
+        ERC20(token).safeApprove(address(lendingPool), assets);
+
+        // Deposit token to Aave protocol.
+        lendingPool.deposit(token, assets, address(this), 0);
+
+        emit DepositToAave(token, assets);
+    }
+
+    /**
+     * @notice Redeems a token from Aave protocol.
+     * @param token the address of the token
+     * @param amount the token amount being redeemed
+     * @return withdrawnAmount the withdrawn amount from Aave
+     */
+    function redeemFromAave(address token, uint256 amount)
+        public
+        onlyOwner
+        returns (
+            uint256 withdrawnAmount
+        )
+    {
+        // Withdraw token from Aave protocol
+        withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
+
+        emit RedeemFromAave(token, withdrawnAmount);
+    }
+
+    /**
+     * @notice Rebalances of Aave lending position.
+     * @param newLendingToken the address of the token of the new lending position
+     */
+    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount)
+        external
+        onlyOwner
+    {
+        if (!inputTokens[newLendingToken]) revert UnapprovedToken(newLendingToken);
+
+        if(newLendingToken == currentLendingToken) revert SameLendingToken(newLendingToken);
+
+        uint256 lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
+
+        address[] memory path = new address[](2);
+        path[0] = currentLendingToken;
+        path[1] = newLendingToken;
+
+        uint256 newLendingTokenAmount = _multihopSwap(
+            path,
+            lendingPositionBalance,
+            minNewLendingTokenAmount
+        );
+
+        _updateLendingPosition(newLendingToken);
+
+        _depositToAave(newLendingToken, newLendingTokenAmount);
+
+        emit Rebalance(newLendingToken, newLendingTokenAmount);
+    }
+
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        return transferFrom(msg.sender, to, amount);
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public override returns (bool) {
+        if (from != msg.sender) {
+            uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
+        }
+
+        balanceOf[from] -= amount;
+
+        UserDeposit[] storage depositsFrom = userDeposits[from];
+        UserDeposit[] storage depositsTo = userDeposits[to];
+
+        // NOTE: Flag this for auditors.
+        uint256 leftToTransfer = amount;
+        for (uint256 i = depositsFrom.length - 1; i + 1 != currentDepositIndex[from]; i--) {
+            UserDeposit storage dFrom = depositsFrom[i];
+            uint256 dFromShares = dFrom.shares;
+
+            if (dFromShares == 0) continue;
+
+            uint256 transferShares = MathUtils.min(leftToTransfer, dFromShares);
+            uint256 transferAssets = MathUtils.mulDivUp(dFrom.assets, transferShares, dFromShares);
+
+            dFrom.shares -= transferShares;
+            dFrom.assets -= transferAssets;
+
+            depositsTo.push(UserDeposit({
+                assets: transferAssets,
+                shares: transferShares,
+                timeDeposited: dFrom.timeDeposited
+            }));
+
+            leftToTransfer -= transferShares;
+
+            if (i == 0 || leftToTransfer == 0) {
+                currentDepositIndex[from] = dFrom.shares != 0 ? i : i+1;
+                break;
+            }
+        }
+
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[to] += amount;
+        }
+
+        emit Transfer(from, to, amount);
+
+        return true;
+    }
+
+    /// @notice Take platform fees off of cellar's active assets.
+    function accruePlatformFees() external {
+        uint256 elapsedTime = block.timestamp - lastTimeAccruedPlatformFees;
+        uint256 feeInAssets = (activeAssets() * elapsedTime * platformFee) / DENOMINATOR / SECS_PER_YEAR;
+        uint256 fees = convertToShares(feeInAssets);
+
+        _mint(address(this), fees);
+
+        accruedPlatformFees += fees;
+    }
+
+    /// @notice Transfer accrued fees to Cosmos to distribute.
+    function transferFees() external onlyOwner {
+        uint256 fees = accruedPerformanceFees + accruedPlatformFees;
+        uint256 feeInAssets = convertToAssets(fees);
+
+        // Only withdraw from Aave if holding pool does not contain enough funds.
+        uint256 holdingPoolAssets = inactiveAssets();
+        if (holdingPoolAssets < feeInAssets) {
+            redeemFromAave(currentLendingToken, feeInAssets - holdingPoolAssets);
+        }
+
+        _burn(address(this), fees);
+
+        ERC20(currentLendingToken).approve(address(gravityBridge), feeInAssets);
+        gravityBridge.sendToCosmos(currentLendingToken, feesDistributor, feeInAssets);
+
+        accruedPlatformFees = 0;
+        accruedPerformanceFees = 0;
+
+        emit TransferFees(fees, feeInAssets);
+    }
+
+    /**
+     * @notice Set approval for a token to be deposited into the cellar.
+     * @param token the address of the supported token
+     */
+    function setInputToken(address token, bool isApproved) external onlyOwner {
+        _validateTokenOnAave(token); // Only allow input tokens supported by Aave.
+
+        inputTokens[token] = isApproved;
+
+        emit SetInputToken(token, isApproved);
+    }
+
+    /// @notice Removes initial liquidity restriction.
+    function removeLiquidityRestriction() external onlyOwner {
+        delete maxDeposit;
+        delete maxLiquidity;
+
+        emit LiquidityRestrictionRemoved();
+    }
+
+    /**
+     * @notice Removes tokens from this cellar that are not the type of token managed
+     *         by this cellar. This may be used in case of accidentally sending the
+     *         wrong kind of token to this contract.
+     * @param token address of token to transfer out of this cellar
+     */
+    function sweep(address token) external onlyOwner {
+        if (inputTokens[token] || token == currentAToken || token == address(this))
+            revert ProtectedToken(token);
+
+        uint256 amount = ERC20(token).balanceOf(address(this));
+        ERC20(token).safeTransfer(msg.sender, amount);
+
+        emit Sweep(token, amount);
     }
 
     /**
@@ -491,281 +662,65 @@ contract AaveStablecoinCellar is
         return _sushiswap(path, amountIn, amountOutMinimum);
     }
 
-    /**
-     * @notice Enters Aave stablecoin strategy.
-     */
-    function enterStrategy()
-        external
-        onlyOwner
-    {
-        _depositToAave(currentLendingToken, inactiveAssets());
 
-        lastTimeEnteredStrategy = block.timestamp;
+    /// @notice Total amount of inactive asset waiting in a holding pool to be entered into a strategy.
+    function inactiveAssets() public view returns (uint256) {
+        return ERC20(currentLendingToken).balanceOf(address(this));
+    }
+
+    /// @notice Total amount of active asset entered into a strategy.
+    function activeAssets() public view returns (uint256) {
+        // The aTokens' value is pegged to the value of the corresponding deposited
+        // asset at a 1:1 ratio, so we can find the amount of assets active in a
+        // strategy simply by taking balance of aTokens cellar holds.
+        return ERC20(currentAToken).balanceOf(address(this));
+    }
+
+    /// @notice Total amount of the underlying asset that is managed by cellar.
+    function totalAssets() public view returns (uint256) {
+        return activeAssets() + inactiveAssets();
     }
 
     /**
-     * @notice Reinvest stkAAVE rewards back into cellar's current position on Aave.
-     * @dev Must be called in the 2 day unstake period started 10 days after claimAndUnstake was run.
-     * @param amount amount of stkAAVE to redeem and reinvest
-     * @param minAssetsOut minimum amount of assets cellar should receive after swap
+     * @notice The amount of shares that the cellar would exchange for the amount of assets provided.
+     * @param assets amount of assets to convert
+     * @param offset amount to negatively offset total assets during calculation
      */
-    function reinvest(uint256 amount, uint256 minAssetsOut) public onlyOwner {
-        stkAAVE.redeem(address(this), amount);
-
-        address[] memory path = new address[](3);
-        path[0] = AAVE;
-        path[1] = WETH;
-        path[2] = currentLendingToken;
-
-        uint256 amountIn = ERC20(AAVE).balanceOf(address(this));
-
-        // Due to the lack of liquidity for AAVE on Uniswap, we use Sushiswap instead here.
-        uint256 amountOut = _sushiswap(path, amountIn, minAssetsOut);
-
-        _depositToAave(currentLendingToken, amountOut);
+    function _convertToShares(uint256 assets, uint256 offset) internal view returns (uint256) {
+        return totalSupply == 0 ? assets : MathUtils.mulDivDown(assets, totalSupply, totalAssets() - offset);
     }
 
-    function reinvest(uint256 minAssetsOut) external onlyOwner {
-        reinvest(type(uint256).max, minAssetsOut);
+    function convertToShares(uint256 assets) public view returns (uint256) {
+        return _convertToShares(assets, 0);
     }
 
     /**
-     * @notice Claim stkAAVE rewards from Aave and begin cooldown period to unstake.
-     * @param amount amount of rewards to claim
-     * @return claimed amount of rewards claimed from Aave
+     * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
+     * @param shares amount of shares to convert
      */
-    function claimAndUnstake(uint256 amount) public onlyOwner returns (uint256 claimed) {
-        // Necessary as claimRewards accepts a dynamic array as first param.
-        address[] memory aToken = new address[](1);
-        aToken[0] = currentAToken;
-
-        claimed = incentivesController.claimRewards(aToken, amount, address(this));
-
-        stkAAVE.cooldown();
-    }
-
-    function claimAndUnstake() external onlyOwner returns (uint256) {
-        return claimAndUnstake(type(uint256).max);
+    function convertToAssets(uint256 shares) public view returns (uint256) {
+        return totalSupply == 0 ? shares : MathUtils.mulDivDown(shares, totalAssets(), totalSupply);
     }
 
     /**
-     * @notice Deposits cellar holdings into Aave lending pool.
-     * @param token the address of the token
-     * @param assets the amount of token to be deposited
+     * @notice Check if a token is being supported by Aave.
+     * @param token address of the token being checked
+     * @return aTokenAddress address of the token's aToken version on Aave
      */
-    function _depositToAave(address token, uint256 assets) internal {
-        ERC20(token).safeApprove(address(lendingPool), assets);
+    function _validateTokenOnAave(address token) internal view returns (address aTokenAddress) {
+        (, , , , , , , aTokenAddress, , , , ) = lendingPool.getReserveData(token);
 
-        // Deposit token to Aave protocol.
-        lendingPool.deposit(token, assets, address(this), 0);
-
-        emit DepositToAave(token, assets);
+        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave(token);
     }
 
     /**
-     * @notice Redeems a token from Aave protocol.
-     * @param token the address of the token
-     * @param amount the token amount being redeemed
-     * @return withdrawnAmount the withdrawn amount from Aave
+     * @notice Update the current lending tokening and current aToken.
+     * @param newLendingToken address of the new lending token
      */
-    function redeemFromAave(address token, uint256 amount)
-        public
-        onlyOwner
-        returns (
-            uint256 withdrawnAmount
-        )
-    {
-        // Withdraw token from Aave protocol
-        withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
+    function _updateLendingPosition(address newLendingToken) internal {
+        address aTokenAddress = _validateTokenOnAave(newLendingToken);
 
-        emit RedeemFromAave(token, withdrawnAmount);
-    }
-
-    /**
-     * @notice Rebalances of Aave lending position.
-     * @param newLendingToken the address of the token of the new lending position
-     */
-    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount)
-        external
-        onlyOwner
-    {
-        if (!inputTokens[newLendingToken]) revert UnapprovedToken(newLendingToken);
-
-        if(newLendingToken == currentLendingToken) revert SameLendingToken(newLendingToken);
-
-        uint256 lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
-
-        address[] memory path = new address[](2);
-        path[0] = currentLendingToken;
-        path[1] = newLendingToken;
-
-        uint256 newLendingTokenAmount = _multihopSwap(
-            path,
-            lendingPositionBalance,
-            minNewLendingTokenAmount
-        );
-
-        _updateLendingPosition(newLendingToken);
-
-        _depositToAave(newLendingToken, newLendingTokenAmount);
-
-        emit Rebalance(newLendingToken, newLendingTokenAmount);
-    }
-
-    /**
-     * @notice Change the platform fee taken.
-     * @param newFee new platform fee
-     */
-    function setPlatformFee(uint256 newFee) external onlyOwner {
-        if (newFee > DENOMINATOR) revert GreaterThanMaxValue(DENOMINATOR);
-
-        uint256 oldFee = platformFee;
-        platformFee = newFee;
-
-        emit ChangedPlatformFees(oldFee, newFee);
-    }
-
-    /**
-     * @notice Change the performance fee taken.
-     * @param newFee new performance fee
-     */
-    function setPerformanceFee(uint256 newFee) external onlyOwner {
-        if (newFee > DENOMINATOR) revert GreaterThanMaxValue(DENOMINATOR);
-
-        uint256 oldFee = performanceFee;
-        performanceFee = newFee;
-
-        emit ChangedPerformanceFees(oldFee, newFee);
-    }
-
-    /// @notice Take platform fees off of cellar's active assets.
-    function accruePlatformFees() external {
-        uint256 elapsedTime = block.timestamp - lastTimeAccruedPlatformFees;
-        uint256 feeInAssets = (activeAssets() * elapsedTime * platformFee) / DENOMINATOR / SECS_PER_YEAR;
-        uint256 fees = convertToShares(feeInAssets);
-
-        _mint(address(this), fees);
-
-        accruedPlatformFees += fees;
-    }
-
-    /// @notice Transfer accrued platform fees to Cosmos to distribute fees.
-    function transferPlatformFees() external onlyOwner {
-        uint256 feeInAssets = _sendFeesToCosmos(accruedPlatformFees);
-
-        accruedPlatformFees = 0;
-
-        emit TransferPlatformFees(feeInAssets);
-    }
-
-    /// @notice Transfer accrued performance fees to Cosmos to distribute fees.
-    function transferPerformanceFees() external onlyOwner {
-        uint256 feeInAssets = _sendFeesToCosmos(accruedPerformanceFees);
-
-        accruedPerformanceFees = 0;
-
-        emit TransferPerformanceFees(feeInAssets);
-    }
-
-    function _sendFeesToCosmos(uint256 shares) internal returns (uint256 feeInAssets) {
-        feeInAssets = convertToShares(shares);
-
-        // Only withdraw from Aave if holding pool does not contain enough funds.
-        uint256 holdingPoolAssets = inactiveAssets();
-        if (holdingPoolAssets < feeInAssets) {
-            redeemFromAave(currentLendingToken, feeInAssets - holdingPoolAssets);
-        }
-
-        _burn(address(this), shares);
-
-        ERC20(currentLendingToken).approve(address(gravityBridge), feeInAssets);
-        gravityBridge.sendToCosmos(currentLendingToken, feesDistributor, feeInAssets);
-    }
-
-    /**
-     * @notice Set approval for a token to be deposited into the cellar.
-     * @param token the address of the supported token
-     */
-    function setInputToken(address token, bool isApproved) external onlyOwner {
-        inputTokens[token] = isApproved;
-    }
-
-    /// @notice Removes initial liquidity restriction.
-    function removeLiquidityRestriction() external onlyOwner {
-        delete maxDeposit;
-        delete maxLiquidity;
-
-        emit LiquidityRestrictionRemoved();
-    }
-
-    /**
-     * @notice Removes tokens from this cellar that are not the type of token managed
-     *         by this cellar. This may be used in case of accidentally sending the
-     *         wrong kind of token to this contract.
-     * @param token address of token to transfer out of this cellar
-     */
-    function sweep(address token) external onlyOwner {
-        if (inputTokens[token] || token == currentAToken || token == address(this))
-            revert ProtectedToken(token);
-
-        uint256 amount = ERC20(token).balanceOf(address(this));
-        ERC20(token).safeTransfer(msg.sender, amount);
-
-        emit Sweep(token, amount);
-    }
-
-    function transfer(address to, uint256 amount) public override returns (bool) {
-        return transferFrom(msg.sender, to, amount);
-    }
-
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public override returns (bool) {
-        if (from != msg.sender) {
-            uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
-        }
-
-        balanceOf[from] -= amount;
-
-        UserDeposit[] storage depositsFrom = userDeposits[from];
-        UserDeposit[] storage depositsTo = userDeposits[to];
-
-        uint256 leftToTransfer = amount;
-        for (uint256 i = currentDepositIndex[from]; i < depositsFrom.length; i++) {
-            UserDeposit storage dFrom = depositsFrom[i];
-
-            uint256 transferShares = MathUtils.min(leftToTransfer, dFrom.shares);
-            uint256 transferAssets = MathUtils.mulDivUp(dFrom.assets, transferShares, dFrom.shares);
-
-            dFrom.shares -= transferShares;
-            dFrom.assets -= transferAssets;
-
-            depositsTo.push(UserDeposit({
-                assets: transferAssets,
-                shares: transferShares,
-                timeDeposited: dFrom.timeDeposited
-            }));
-
-            leftToTransfer -= transferShares;
-
-            if (leftToTransfer == 0) {
-                currentDepositIndex[from] = dFrom.shares != 0 ? i : i+1;
-                break;
-            }
-        }
-
-        // Cannot overflow because the sum of all user
-        // balances can't exceed the max uint256 value.
-        unchecked {
-            balanceOf[to] += amount;
-        }
-
-        emit Transfer(from, to, amount);
-
-        return true;
+        currentLendingToken = newLendingToken;
+        currentAToken = aTokenAddress;
     }
 }
