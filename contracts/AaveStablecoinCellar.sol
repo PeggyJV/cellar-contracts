@@ -467,6 +467,7 @@ contract AaveStablecoinCellar is
      * @param amount the token amount being redeemed
      * @return withdrawnAmount the withdrawn amount from Aave
      */
+    // TODO: make internal
     function redeemFromAave(address token, uint256 amount)
         public
         onlyOwner
@@ -531,6 +532,7 @@ contract AaveStablecoinCellar is
      * @param _isPaused whether the contract should be paused
      * @param _isWithdrawable whether withdraws should be possible
      */
+    // TODO: remove ability to restrict withdraws
     function setPause(bool _isPaused, bool _isWithdrawable) external onlyOwner {
         if (isShutdown) revert ContractShutdown();
 
@@ -546,6 +548,7 @@ contract AaveStablecoinCellar is
      *         or an exploit. Enables all depositors to withdraw their stake
      *         instantly.
      */
+    // TODO: restrict to steward
     function shutdown() external onlyOwner {
         if (isShutdown) revert AlreadyShutdown();
 
