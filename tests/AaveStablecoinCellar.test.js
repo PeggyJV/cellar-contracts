@@ -400,6 +400,51 @@ describe("AaveStablecoinCellar", () => {
     });
   });
 
+  describe("transfer", () => {
+    it("should correctly update deposit accounting upon transferring shares", async () => {
+      // deposit $100 -> 100 shares
+      await cellar["deposit(uint256)"](100);
+      const depositTimestamp = await timestamp();
+
+      const aliceOldBalance = await cellar.balanceOf(alice.address);
+      await cellar.transfer(alice.address, 25);
+      const aliceNewBalance = await cellar.balanceOf(alice.address);
+
+      expect(aliceNewBalance - aliceOldBalance).to.eq(25);
+
+      const ownerDeposit = await cellar.userDeposits(owner.address, 0);
+      const aliceDeposit = await cellar.userDeposits(alice.address, 0);
+
+      expect(ownerDeposit[0]).to.eq(75); // expect 75 assets
+      expect(ownerDeposit[1]).to.eq(75); // expect 75 shares
+      expect(ownerDeposit[2]).to.eq(depositTimestamp);
+      expect(aliceDeposit[0]).to.eq(25); // expect 25 assets
+      expect(aliceDeposit[1]).to.eq(25); // expect 25 shares
+      expect(aliceDeposit[2]).to.eq(depositTimestamp);
+    });
+
+    it("should allow withdrawing of transferred shares", async () => {
+      await cellar["deposit(uint256)"](100);
+      await cellar.transfer(alice.address, 100);
+
+      await cellar.enterStrategy();
+
+      // mimic growth from $100 -> $125 (1.25x increase) while in strategy
+      await lendingPool.setLiquidityIndex(
+        BigNumber.from("1250000000000000000000000000")
+      );
+
+      await cellar.connect(alice)["deposit(uint256)"](100);
+
+      const aliceOldBalance = await usdc.balanceOf(alice.address);
+      await cellar.connect(alice)["withdraw(uint256)"](125 + 100);
+      const aliceNewBalance = await usdc.balanceOf(alice.address);
+
+      expect(await cellar.balanceOf(alice.address)).to.eq(0);
+      expect(aliceNewBalance - aliceOldBalance).to.eq(225);
+    });
+  });
+
   describe("swap", () => {
     beforeEach(async () => {
       // Mint initial liquidity to cellar

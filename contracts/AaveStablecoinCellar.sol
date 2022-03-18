@@ -14,6 +14,8 @@ import "./interfaces/IAaveIncentivesController.sol";
 import "./interfaces/IStakedTokenV2.sol";
 import "./interfaces/IGravity.sol";
 
+import "hardhat/console.sol";
+
 /**
  * @title Sommelier AaveStablecoinCellar contract
  * @notice AaveStablecoinCellar contract for Sommelier Network
@@ -672,5 +674,60 @@ contract AaveStablecoinCellar is
         ERC20(token).safeTransfer(msg.sender, amount);
 
         emit Sweep(token, amount);
+    }
+
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        return transferFrom(msg.sender, to, amount);
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public override returns (bool) {
+        if (from != msg.sender) {
+            uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
+        }
+
+        balanceOf[from] -= amount;
+
+        UserDeposit[] storage depositsFrom = userDeposits[from];
+        UserDeposit[] storage depositsTo = userDeposits[to];
+
+        uint256 leftToTransfer = amount;
+        for (uint256 i = currentDepositIndex[from]; i < depositsFrom.length; i++) {
+            UserDeposit storage dFrom = depositsFrom[i];
+
+            uint256 transferShares = MathUtils.min(leftToTransfer, dFrom.shares);
+            uint256 transferAssets = MathUtils.mulDivUp(dFrom.assets, transferShares, dFrom.shares);
+
+            dFrom.shares -= transferShares;
+            dFrom.assets -= transferAssets;
+
+            depositsTo.push(UserDeposit({
+                assets: transferAssets,
+                shares: transferShares,
+                timeDeposited: dFrom.timeDeposited
+            }));
+
+            leftToTransfer -= transferShares;
+
+            if (leftToTransfer == 0) {
+                currentDepositIndex[from] = dFrom.shares != 0 ? i : i+1;
+                break;
+            }
+        }
+
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[to] += amount;
+        }
+
+        emit Transfer(from, to, amount);
+
+        return true;
     }
 }
