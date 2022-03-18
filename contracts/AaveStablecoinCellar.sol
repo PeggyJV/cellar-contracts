@@ -36,9 +36,9 @@ contract AaveStablecoinCellar is
     }
 
     // Uniswap Router V3 contract
-    ISwapRouter public immutable swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
+    ISwapRouter public immutable uniswapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
     // SushiSwap Router V2 contract
-    ISushiSwapRouter public immutable sushiSwapRouter = ISushiSwapRouter(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    ISushiSwapRouter public immutable sushiSwapRouter; // 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
     // Aave Lending Pool V2 contract
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
     // Aave Incentives Controller V2 contract
@@ -80,7 +80,7 @@ contract AaveStablecoinCellar is
     uint256 public accruedPerformanceFees;
 
     /**
-     * @param _swapRouter Uniswap V3 swap router address
+     * @param _uniswapRouter Uniswap V3 swap router address
      * @param _lendingPool Aave V2 lending pool address
      * @param _incentivesController _incentivesController
      * @param _gravityBridge Cosmos Gravity Bridge address
@@ -88,12 +88,10 @@ contract AaveStablecoinCellar is
      * @param _AAVE AAVE address
      * @param _WETH WETH address
      * @param _currentLendingToken token of lending pool where the cellar has its liquidity deposited
-     * @param _name name of LP token
-     * @param _symbol symbol of LP token
      */
     constructor(
-        ISwapRouter _swapRouter,
-//         ISushiSwapRouter _sushiSwapRouter,  TODO: too many parameters in constructor - CompilerError: Stack too deep
+        ISwapRouter _uniswapRouter,
+        ISushiSwapRouter _sushiSwapRouter,
         ILendingPool _lendingPool,
         IAaveIncentivesController _incentivesController,
         Gravity _gravityBridge,
@@ -101,12 +99,11 @@ contract AaveStablecoinCellar is
         address _AAVE,
         address _WETH,
         address _USDC,
-        address _currentLendingToken,
-        string memory _name,
-        string memory _symbol
-    ) ERC20(_name, _symbol, 18) Ownable() {
-        swapRouter =  _swapRouter;
-//         sushiSwapRouter = _sushiSwapRouter;
+        address _currentLendingToken
+    // TODO: figure out name and symbol for this cellar's share tokens
+    ) ERC20("Sommelier Aave Stablecoin Cellar LP Token", "SASC", 18) Ownable() {
+        uniswapRouter =  _uniswapRouter;
+        sushiSwapRouter = _sushiSwapRouter;
         lendingPool = _lendingPool;
         incentivesController = _incentivesController;
         gravityBridge = _gravityBridge;
@@ -368,7 +365,7 @@ contract AaveStablecoinCellar is
         uint256 amountOutMinimum
     ) internal returns (uint256 amountOut) {
         // Approve the router to spend tokenIn.
-        ERC20(tokenIn).safeApprove(address(swapRouter), amountIn);
+        ERC20(tokenIn).safeApprove(address(uniswapRouter), amountIn);
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
@@ -383,7 +380,7 @@ contract AaveStablecoinCellar is
             });
 
         // Executes the swap.
-        amountOut = swapRouter.exactInputSingle(params);
+        amountOut = uniswapRouter.exactInputSingle(params);
 
         emit Swapped(tokenIn, amountIn, tokenOut, amountOut);
     }
@@ -408,7 +405,6 @@ contract AaveStablecoinCellar is
         address[] memory path,
         uint256 amountIn,
         uint256 amountOutMinimum
-
     ) internal returns (uint256 amountOut) {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
@@ -416,7 +412,7 @@ contract AaveStablecoinCellar is
         if (path.length < 2) revert PathIsTooShort();
 
         // Approve the router to spend first token in path.
-        ERC20(tokenIn).safeApprove(address(swapRouter), amountIn);
+        ERC20(tokenIn).safeApprove(address(uniswapRouter), amountIn);
 
         bytes memory encodePackedPath = abi.encodePacked(tokenIn);
         for (uint256 i = 1; i < path.length; i++) {
@@ -442,7 +438,7 @@ contract AaveStablecoinCellar is
             });
 
         // Executes the swap.
-        amountOut = swapRouter.exactInput(params);
+        amountOut = uniswapRouter.exactInput(params);
 
         emit Swapped(tokenIn, amountIn, tokenOut, amountOut);
     }
@@ -474,7 +470,7 @@ contract AaveStablecoinCellar is
 
         // Approve the router to spend first token in path.
         ERC20(tokenIn).safeApprove(address(sushiSwapRouter), amountIn);
-        
+
         uint256[] memory amounts = sushiSwapRouter.swapExactTokensForTokens(
             amountIn,
             amountOutMinimum,
@@ -486,10 +482,8 @@ contract AaveStablecoinCellar is
         amountOut = amounts[amounts.length - 1];
 
         emit Swapped(tokenIn, amountIn, path[path.length - 1], amountOut);
-
-        return amountOut;
     }
-    
+
     function sushiswap(
         address[] memory path,
         uint256 amountIn,
@@ -497,7 +491,7 @@ contract AaveStablecoinCellar is
     ) external onlyOwner returns (uint256) {
         return _sushiswap(path, amountIn, amountOutMinimum);
     }
-    
+
     /**
      * @notice Enters Aave stablecoin strategy.
      */
@@ -526,9 +520,8 @@ contract AaveStablecoinCellar is
 
         uint256 amountIn = ERC20(AAVE).balanceOf(address(this));
 
-        // NOTE: Due to the lack of liquidity for AAVE on Uniswap, we will
-        // likely need change this to use Sushiswap instead for swaps.
-        uint256 amountOut = _multihopSwap(path, amountIn, minAssetsOut);
+        // Due to the lack of liquidity for AAVE on Uniswap, we use Sushiswap instead here.
+        uint256 amountOut = _sushiswap(path, amountIn, minAssetsOut);
 
         _depositToAave(currentLendingToken, amountOut);
     }

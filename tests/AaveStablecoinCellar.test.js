@@ -101,6 +101,7 @@ describe("AaveStablecoinCellar", () => {
     );
     cellar = await AaveStablecoinCellar.deploy(
       router.address,
+      router.address,
       lendingPool.address,
       incentivesController.address,
       gravity.address,
@@ -108,9 +109,7 @@ describe("AaveStablecoinCellar", () => {
       aave.address,
       weth.address,
       usdc.address,
-      usdc.address,
-      "Sommelier Aave Stablecoin Cellar LP Token",
-      "SASCT"
+      usdc.address
     );
     await cellar.deployed();
 
