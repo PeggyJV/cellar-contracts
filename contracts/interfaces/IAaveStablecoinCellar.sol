@@ -125,4 +125,80 @@ interface IAaveStablecoinCellar {
     error ProtectedAsset();
 
     error SameLendingToken();
+
+    function deposit(address token, uint256 assets, uint256 minAssetsIn, address receiver) external returns (uint256 shares);
+
+    function deposit(uint256 assets) external returns (uint256);
+
+    function deposit(uint256 assets, address receiver) external returns (uint256);
+
+    function depositAndEnter(
+        address token,
+        uint256 assets,
+        uint256 minAssetsIn,
+        address receiver
+    ) external returns (uint256 shares);
+
+    function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+
+    function withdraw(uint256 assets) external returns (uint256 shares);
+
+    function inactiveAssets() external view returns (uint256);
+
+    function activeAssets() external view returns (uint256);
+
+    function totalAssets() external view returns (uint256);
+
+    function convertToShares(uint256 assets) external view returns (uint256);
+
+    function convertToAssets(uint256 shares) external view returns (uint256);
+
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) external returns (uint256 amountOut);
+
+    function multihopSwap(
+        address[] memory path,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) external returns (uint256);
+
+    function sushiswap(
+        address[] memory path,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) external returns (uint256);
+
+    function enterStrategy() external;
+
+    function reinvest(uint256 amount, uint256 minAssetsOut) external;
+
+    function reinvest(uint256 minAssetsOut) external;
+
+    function claimAndUnstake(uint256 amount) external returns (uint256 claimed);
+
+    function claimAndUnstake() external returns (uint256);
+
+    function redeemFromAave(address token, uint256 amount) external returns (uint256 withdrawnAmount);
+
+    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount) external;
+
+    function setPlatformFee(uint256 newFee) external;
+
+    function setPerformanceFee(uint256 newFee) external;
+
+    function accruePlatformFees() external;
+
+    function transferPlatformFees() external;
+
+    function transferPerformanceFees() external;
+
+    function setInputToken(address token, bool isApproved) external;
+
+    function removeLiquidityRestriction() external;
+
+    function sweep(address token) external;
 }
