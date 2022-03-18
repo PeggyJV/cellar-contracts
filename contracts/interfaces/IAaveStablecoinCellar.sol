@@ -110,23 +110,66 @@ interface IAaveStablecoinCellar {
      */
     event Sweep(address indexed token, uint256 amount);
 
-    error NonSupportedToken();
-    error PathIsTooShort();
-    error ZeroAmount();
-    error GreaterThanMaxValue();
-    error LiquidityRestricted();
+    /**
+     * @notice Attempted an action with a token that is not approved.
+     * @param unapprovedToken address of the unapproved token
+     */
+    error UnapprovedToken(address unapprovedToken);
 
-    error TokenIsNotSupportedByAave();
-    error NotEnoughTokenLiquidity();
-    error InsufficientAaveDepositBalance();
+    /**
+     * @notice Attempted an action with zero assets.
+     */
+    error ZeroAssets();
 
-    error NoNonemptyUserDeposits();
+    /**
+     * @notice Attempted an action with zero shares.
+     */
+    error ZeroShares();
 
-    error ProtectedAsset();
+    /**
+     * @notice Attempted set a value to greater than the max.
+     * @param maxValue the maximum value
+     */
+    error GreaterThanMaxValue(uint256 maxValue);
 
-    error SameLendingToken();
+    /**
+     * @notice Attempted deposit more liquidity over the liquidity limit.
+     * @param currentLiquidity the current liquidity
+     * @param maxLiquidity the max liquidity
+     */
+    error LiquidityRestricted(uint256 currentLiquidity, uint256 maxLiquidity);
 
-    function deposit(address token, uint256 assets, uint256 minAssetsIn, address receiver) external returns (uint256 shares);
+    /**
+     * @notice Attempted deposit more than the per wallet limit.
+     * @param currentDeposit the current deposit
+     * @param maxDeposit the max deposit
+     */
+    error DepositRestricted(uint256 currentDeposit, uint256 maxDeposit);
+
+    /**
+     * @notice Current lending token is updated to an asset not supported by Aave.
+     * @param unsupportedToken address of the unsupported token
+     */
+    error TokenIsNotSupportedByAave(address unsupportedToken);
+
+    /**
+     * @notice Attempted to sweep an asset that is managed by the cellar.
+     * @param protectedToken address of the unsupported token
+     */
+    error ProtectedToken(address protectedToken);
+
+    /**
+     * @notice Attempted rebalance into the same lending token.
+     * @param lendingToken address of the lending token
+     */
+    error SameLendingToken(address lendingToken);
+
+    function deposit(
+        address token,
+        uint256 assets,
+        uint256 minAssetsIn,
+        address receiver
+    ) external returns (uint256 shares);
 
     function deposit(uint256 assets) external returns (uint256);
 

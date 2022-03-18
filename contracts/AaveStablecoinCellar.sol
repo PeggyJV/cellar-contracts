@@ -65,7 +65,8 @@ contract AaveStablecoinCellar is
     // Last time inactive funds were entered into a strategy and made active.
     uint256 public lastTimeEnteredStrategy;
 
-    // Restrict liquidity until after security audits.
+    // Restrict liquidity and deposits per wallet until after security audits.
+    uint256 public maxDeposit = 50_000e18;
     uint256 public maxLiquidity = 5_000_000e18;
 
     uint24 public constant POOL_FEE = 3000;
@@ -112,16 +113,17 @@ contract AaveStablecoinCellar is
         WETH = _WETH;
         USDC = _USDC;
 
-        currentLendingToken = _currentLendingToken;
-        _updateCurrentAToken();
+        _updateLendingPosition(_currentLendingToken);
 
         lastTimeAccruedPlatformFees = block.timestamp;
     }
 
-    function _updateCurrentAToken() internal {
+    function _updateLendingPosition(address newLendingToken) internal {
+        currentLendingToken = newLendingToken;
+
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(currentLendingToken);
 
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave();
+        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave(currentLendingToken);
 
         currentAToken = aTokenAddress;
     }
@@ -140,8 +142,11 @@ contract AaveStablecoinCellar is
         uint256 minAssetsIn,
         address receiver
     ) public returns (uint256 shares) {
-        if (!inputTokens[token]) revert NonSupportedToken();
-        if (maxLiquidity != 0 && assets + totalAssets() > maxLiquidity) revert LiquidityRestricted();
+        if (!inputTokens[token]) revert UnapprovedToken(token);
+        if (maxLiquidity != 0 && assets + totalAssets() > maxLiquidity)
+            revert LiquidityRestricted(totalAssets(), maxLiquidity);
+        if (maxDeposit != 0 && ERC20(token).balanceOf(msg.sender) + assets > maxDeposit)
+            revert DepositRestricted(ERC20(token).balanceOf(msg.sender), maxDeposit);
 
         uint256 balance = ERC20(token).balanceOf(msg.sender);
         if (assets > balance) assets = balance;
@@ -153,7 +158,7 @@ contract AaveStablecoinCellar is
         }
 
         // Must calculate shares as if assets were not yet transfered in.
-        if ((shares = _convertToShares(assets, assets)) == 0) revert ZeroAmount();
+        if ((shares = _convertToShares(assets, assets)) == 0) revert ZeroAssets();
 
         _mint(receiver, shares);
 
@@ -210,11 +215,8 @@ contract AaveStablecoinCellar is
      * @return shares amount of shares burned from owner
      */
     function withdraw(uint256 assets, address receiver, address owner) public returns (uint256 shares) {
-        if (assets == 0) revert ZeroAmount();
-
-        UserDeposit[] storage deposits = userDeposits[owner];
-        if (deposits.length == 0 || currentDepositIndex[owner] > deposits.length - 1)
-            revert NoNonemptyUserDeposits();
+        if (assets == 0) revert ZeroAssets();
+        if (balanceOf[owner] == 0) revert ZeroShares();
 
         uint256 withdrawnActiveShares;
         uint256 withdrawnInactiveShares;
@@ -223,6 +225,8 @@ contract AaveStablecoinCellar is
 
         // Saves gas by avoiding calling `convertToAssets` on active shares during each loop.
         uint256 exchangeRate = convertToAssets(1e18);
+
+        UserDeposit[] storage deposits = userDeposits[owner];
 
         uint256 leftToWithdraw = assets;
         for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
@@ -265,7 +269,6 @@ contract AaveStablecoinCellar is
             }
         }
 
-        uint256 withdrawnActiveAssets = exchangeRate * withdrawnActiveShares / 1e18;
 
         shares = withdrawnActiveShares + withdrawnInactiveShares;
 
@@ -274,6 +277,8 @@ contract AaveStablecoinCellar is
 
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
+
+        uint256 withdrawnActiveAssets = exchangeRate * withdrawnActiveShares / 1e18;
 
         // Take performance fees.
         if (withdrawnActiveAssets > 0) {
@@ -286,10 +291,11 @@ contract AaveStablecoinCellar is
                 withdrawnActiveAssets -= feeInAssets;
                 shares -= fees;
 
+                /// @dev Ensure user approves contract to transfer their shares
+                /// before attempting to withdraw or else will revert up next!
+
                 // Take portion of shares that would have been burned as fees.
-                /// @dev Ensure user approves contract to trasnfer their shares
-                /// before attempting to withdraw or else will revert here!
-                ERC20(address(this)).safeTransferFrom(owner, address(this), fees);
+                transferFrom(owner, address(this), fees);
             }
         }
 
@@ -406,12 +412,8 @@ contract AaveStablecoinCellar is
         uint256 amountIn,
         uint256 amountOutMinimum
     ) internal returns (uint256 amountOut) {
-        address tokenIn = path[0];
-        address tokenOut = path[path.length - 1];
-
-        if (path.length < 2) revert PathIsTooShort();
-
         // Approve the router to spend first token in path.
+        address tokenIn = path[0];
         ERC20(tokenIn).safeApprove(address(uniswapRouter), amountIn);
 
         bytes memory encodePackedPath = abi.encodePacked(tokenIn);
@@ -440,7 +442,7 @@ contract AaveStablecoinCellar is
         // Executes the swap.
         amountOut = uniswapRouter.exactInput(params);
 
-        emit Swapped(tokenIn, amountIn, tokenOut, amountOut);
+        emit Swapped(tokenIn, amountIn, path[path.length - 1], amountOut);
     }
 
     function multihopSwap(
@@ -464,9 +466,6 @@ contract AaveStablecoinCellar is
         uint256 amountOutMinimum
     ) internal returns (uint256 amountOut) {
         address tokenIn = path[0];
-
-        if (ERC20(tokenIn).balanceOf(address(this)) < amountIn) revert NotEnoughTokenLiquidity();
-        if (path.length < 2) revert PathIsTooShort();
 
         // Approve the router to spend first token in path.
         ERC20(tokenIn).safeApprove(address(sushiSwapRouter), amountIn);
@@ -555,8 +554,6 @@ contract AaveStablecoinCellar is
      * @param assets the amount of token to be deposited
      */
     function _depositToAave(address token, uint256 assets) internal {
-        if (!inputTokens[token]) revert NonSupportedToken();
-
         ERC20(token).safeApprove(address(lendingPool), assets);
 
         // Deposit token to Aave protocol.
@@ -578,8 +575,6 @@ contract AaveStablecoinCellar is
             uint256 withdrawnAmount
         )
     {
-        if (!inputTokens[token]) revert NonSupportedToken();
-
         // Withdraw token from Aave protocol
         withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
 
@@ -594,9 +589,9 @@ contract AaveStablecoinCellar is
         external
         onlyOwner
     {
-        if (!inputTokens[newLendingToken]) revert NonSupportedToken();
+        if (!inputTokens[newLendingToken]) revert UnapprovedToken(newLendingToken);
 
-        if(newLendingToken == currentLendingToken) revert SameLendingToken();
+        if(newLendingToken == currentLendingToken) revert SameLendingToken(newLendingToken);
 
         uint256 lendingPositionBalance = redeemFromAave(currentLendingToken, type(uint256).max);
 
@@ -610,7 +605,8 @@ contract AaveStablecoinCellar is
             minNewLendingTokenAmount
         );
 
-        currentLendingToken = newLendingToken;
+        _updateLendingPosition(newLendingToken);
+
         _depositToAave(newLendingToken, newLendingTokenAmount);
 
         emit Rebalance(newLendingToken, newLendingTokenAmount);
@@ -621,7 +617,7 @@ contract AaveStablecoinCellar is
      * @param newFee new platform fee
      */
     function setPlatformFee(uint256 newFee) external onlyOwner {
-        if (newFee > DENOMINATOR) revert GreaterThanMaxValue();
+        if (newFee > DENOMINATOR) revert GreaterThanMaxValue(DENOMINATOR);
 
         uint256 oldFee = platformFee;
         platformFee = newFee;
@@ -634,7 +630,7 @@ contract AaveStablecoinCellar is
      * @param newFee new performance fee
      */
     function setPerformanceFee(uint256 newFee) external onlyOwner {
-        if (newFee > DENOMINATOR) revert GreaterThanMaxValue();
+        if (newFee > DENOMINATOR) revert GreaterThanMaxValue(DENOMINATOR);
 
         uint256 oldFee = performanceFee;
         performanceFee = newFee;
@@ -696,6 +692,7 @@ contract AaveStablecoinCellar is
 
     /// @notice Removes initial liquidity restriction.
     function removeLiquidityRestriction() external onlyOwner {
+        delete maxDeposit;
         delete maxLiquidity;
 
         emit LiquidityRestrictionRemoved();
@@ -709,7 +706,7 @@ contract AaveStablecoinCellar is
      */
     function sweep(address token) external onlyOwner {
         if (inputTokens[token] || token == currentAToken || token == address(this))
-            revert ProtectedAsset();
+            revert ProtectedToken(token);
 
         uint256 amount = ERC20(token).balanceOf(address(this));
         ERC20(token).safeTransfer(msg.sender, amount);

@@ -18,6 +18,7 @@ const timetravel = async (addTime) => {
 describe("AaveStablecoinCellar", () => {
   let owner;
   let alice;
+  let bob;
   let cellar;
   let Token;
   let usdc;
@@ -35,7 +36,7 @@ describe("AaveStablecoinCellar", () => {
   let dataProvider;
 
   beforeEach(async () => {
-    [owner, alice] = await ethers.getSigners();
+    [owner, alice, bob] = await ethers.getSigners();
 
     // Deploy mock Uniswap router contract
     const SwapRouter = await ethers.getContractFactory("MockSwapRouter");
@@ -346,8 +347,9 @@ describe("AaveStablecoinCellar", () => {
     it("should withdraw all user's assets if tries to withdraw more than they have", async () => {
       await cellar["withdraw(uint256)"](100);
       // owner should now have nothing left to withdraw
-      await expect(cellar["withdraw(uint256)"](1)).to.revertedWith(
-        "NoNonemptyUserDeposits()"
+      expect(await cellar.balanceOf(owner.address)).to.eq(0);
+      await expect(cellar["withdraw(uint256)"](1)).to.be.revertedWith(
+        "ZeroShares()"
       );
 
       // alice only has $100 to withdraw, withdrawing $150 should only withdraw $100
@@ -441,6 +443,15 @@ describe("AaveStablecoinCellar", () => {
 
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
       expect(aliceNewBalance - aliceOldBalance).to.eq(225);
+    });
+
+    it("should require approval for transferring other's shares", async () => {
+      await cellar.connect(alice)["deposit(uint256)"](100);
+      await cellar.connect(alice).approve(owner.address, 50);
+
+      await cellar.transferFrom(alice.address, owner.address, 50);
+      await expect(cellar.transferFrom(alice.address, owner.address, 200)).to.be
+        .reverted;
     });
   });
 
@@ -730,7 +741,7 @@ describe("AaveStablecoinCellar", () => {
 
       // expect fail if set too high
       await expect(cellar.setPlatformFee(20_000)).to.be.revertedWith(
-        "GreaterThanMaxValue()"
+        "GreaterThanMaxValue(10000)"
       );
     });
   });
@@ -769,27 +780,42 @@ describe("AaveStablecoinCellar", () => {
 
       // expect fail if set too high
       await expect(cellar.setPerformanceFee(20_000)).to.be.revertedWith(
-        "GreaterThanMaxValue()"
+        "GreaterThanMaxValue(10000)"
       );
     });
   });
 
-  describe("maxLiquidity", () => {
-    beforeEach(async () => {
+  describe("restrictLiquidity", () => {
+    it("should prevent deposit it greater than max liquidity", async () => {
       await usdc.mint(
         cellar.address,
         ethers.BigNumber.from("5000000000000000000000000") // $5m
       );
-    });
-    it("should prevent deposit it greater than max liquidity", async () => {
+
       await expect(cellar["deposit(uint256)"](1)).to.be.revertedWith(
-        "LiquidityRestricted()"
+        "LiquidityRestricted(5000000000000000000000000, 5000000000000000000000000)"
+      );
+    });
+
+    it("should prevent deposit it greater than max deposit", async () => {
+      await expect(
+        cellar["deposit(uint256)"](
+          ethers.BigNumber.from("50000000000000000000001")
+        )
+      ).to.be.revertedWith(
+        "DepositRestricted(1000000, 50000000000000000000000)"
       );
     });
 
     it("should allow deposits above max liquidity once restriction removed", async () => {
+      await usdc.mint(
+        cellar.address,
+        ethers.BigNumber.from("5000000000000000000000000") // $5m
+      );
+
       await cellar.removeLiquidityRestriction();
-      await cellar["deposit(uint256)"](1);
+
+      await cellar["deposit(uint256)"](50_001);
     });
   });
 
@@ -806,10 +832,10 @@ describe("AaveStablecoinCellar", () => {
 
     it("should not allow assets managed by cellar to be transferred out", async () => {
       await expect(cellar.sweep(usdc.address)).to.be.revertedWith(
-        "ProtectedAsset()"
+        `ProtectedToken("${usdc.address}")`
       );
       await expect(cellar.sweep(aUSDC.address)).to.be.revertedWith(
-        "ProtectedAsset()"
+        `ProtectedToken("${aUSDC.address}")`
       );
     });
 
