@@ -2,8 +2,8 @@
 
 pragma solidity 0.8.11;
 
-/// @title interface for AaveStablecoinCellar
-interface IAaveStablecoinCellar {
+/// @title interface for AaveV2StablecoinCellar
+interface IAaveV2StablecoinCellar {
     /**
      * @notice Emitted when assets are deposited into cellar.
      * @param caller the address of the caller
@@ -74,29 +74,10 @@ interface IAaveStablecoinCellar {
 
     /**
      * @notice Emitted when platform fees are transferred to Cosmos.
-     * @param assets amount of assets transferred
+     * @param feeInShares amount of fees transferred (in shares)
+     * @param feeInAssets amount of fees transferred (in assets)
      */
-    event TransferPlatformFees(uint256 assets);
-
-    /**
-     * @notice Emitted when performance fees are transferred to Cosmos.
-     * @param assets amount of assets transferred
-     */
-    event TransferPerformanceFees(uint256 assets);
-
-    /**
-     * @notice Emitted when platform fees are changed.
-     * @param oldFee what fees were set to before
-     * @param newFee what fees were set to after
-     */
-    event ChangedPlatformFees(uint256 oldFee, uint256 newFee);
-
-    /**
-     * @notice Emitted when performance fees are changed.
-     * @param oldFee what fees were set to before
-     * @param newFee what fees were set to after
-     */
-    event ChangedPerformanceFees(uint256 oldFee, uint256 newFee);
+    event TransferFees(uint256 feeInShares, uint256 feeInAssets);
 
     /**
      * @notice Emitted when liquidity restriction removed.
@@ -109,6 +90,26 @@ interface IAaveStablecoinCellar {
      * @param amount amount transferred out
      */
     event Sweep(address indexed token, uint256 amount);
+
+    /**
+     * @notice Emitted when an input token is approved or unapproved.
+     * @param token the address of the token
+     * @param isApproved whether it is approved
+     */
+    event SetInputToken(address token, bool isApproved);
+
+    /**
+     * @notice Emitted when cellar is paused.
+     * @param caller address that set the pause
+     * @param isPaused whether the contract is paused
+     */
+    event Pause(address caller, bool isPaused);
+
+    /**
+     * @notice Emitted when cellar is shutdown.
+     * @param caller address that called the shutdown
+     */
+    event Shutdown(address caller);
 
     /**
      * @notice Attempted an action with a token that is not approved.
@@ -125,12 +126,6 @@ interface IAaveStablecoinCellar {
      * @notice Attempted an action with zero shares.
      */
     error ZeroShares();
-
-    /**
-     * @notice Attempted set a value to greater than the max.
-     * @param maxValue the maximum value
-     */
-    error GreaterThanMaxValue(uint256 maxValue);
 
     /**
      * @notice Attempted deposit more liquidity over the liquidity limit.
@@ -164,6 +159,21 @@ interface IAaveStablecoinCellar {
      */
     error SameLendingToken(address lendingToken);
 
+    /**
+     * @notice Attempted action was prevented due to contract being shutdown.
+     */
+    error ContractShutdown();
+
+    /**
+     * @notice Attempted action was prevented due to contract being paused.
+     */
+    error ContractPaused();
+
+    /**
+     * @notice Attempted to shutdown the contract when it was already shutdown.
+     */
+    error AlreadyShutdown();
+
     function deposit(
         address token,
         uint256 assets,
@@ -174,13 +184,6 @@ interface IAaveStablecoinCellar {
     function deposit(uint256 assets) external returns (uint256);
 
     function deposit(uint256 assets, address receiver) external returns (uint256);
-
-    function depositAndEnter(
-        address token,
-        uint256 assets,
-        uint256 minAssetsIn,
-        address receiver
-    ) external returns (uint256 shares);
 
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
 
@@ -225,19 +228,11 @@ interface IAaveStablecoinCellar {
 
     function claimAndUnstake() external returns (uint256);
 
-    function redeemFromAave(address token, uint256 amount) external returns (uint256 withdrawnAmount);
-
     function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount) external;
-
-    function setPlatformFee(uint256 newFee) external;
-
-    function setPerformanceFee(uint256 newFee) external;
 
     function accruePlatformFees() external;
 
-    function transferPlatformFees() external;
-
-    function transferPerformanceFees() external;
+    function transferFees() external;
 
     function setInputToken(address token, bool isApproved) external;
 
