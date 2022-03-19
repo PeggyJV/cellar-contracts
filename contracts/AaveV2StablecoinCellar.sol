@@ -15,8 +15,6 @@ import "./interfaces/IStakedTokenV2.sol";
 import "./interfaces/ISushiSwapRouter.sol";
 import "./interfaces/IGravity.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title Sommelier AaveV2 Stablecoin Cellar contract
  * @notice AaveV2StablecoinCellar contract for Sommelier Network
