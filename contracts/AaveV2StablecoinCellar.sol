@@ -58,8 +58,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     uint256 public lastTimeEnteredStrategy;
 
     // Restrict liquidity and deposits per wallet until after security audits.
-    uint256 public maxDeposit = 50_000e18; // $50k
-    uint256 public maxLiquidity = 5_000_000e18; // $5m
+    // TODO: fix this
+    uint256 public maxDeposit = 50_000; // $50k
+    uint256 public maxLiquidity = 5_000_000; // $5m
 
     uint24 public constant POOL_FEE = 3000;
 
@@ -112,6 +113,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         _updateLendingPosition(_currentLendingToken);
 
         lastTimeAccruedPlatformFees = block.timestamp;
+    }
+
+    // NOTE: For beta only
+    function setFeeDistributor(bytes32 _newFeeDistributor) external onlyOwner {
+        feesDistributor = _newFeeDistributor;
     }
 
     /**
