@@ -319,18 +319,6 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
     });
 
-    it("should use and store index of first non-zero deposit", async () => {
-      // owner withdraws everything from deposit object at index 0
-      await cellar["withdraw(uint256)"](100);
-      // expect next non-zero deposit is set to index 1
-      expect(await cellar.currentDepositIndex(owner.address)).to.eq(1);
-
-      // alice only withdraws half from index 0, leaving some shares remaining
-      await cellar.connect(alice)["withdraw(uint256)"](50);
-      // expect next non-zero deposit is set to index 0 since some shares still remain
-      expect(await cellar.currentDepositIndex(alice.address)).to.eq(0);
-    });
-
     it("should withdraw all user's assets if tries to withdraw more than they have", async () => {
       await cellar["withdraw(uint256)"](100);
       // owner should now have nothing left to withdraw
@@ -686,11 +674,6 @@ describe("AaveV2StablecoinCellar", () => {
       await lendingPool.setLiquidityIndex(
         BigNumber.from("1250000000000000000000000000")
       );
-
-      await cellar.shutdown();
-
-      // expect all of active liquidity to be withdrawn from Aave
-      expect(await usdc.balanceOf(cellar.address)).to.eq(1250);
 
       // should allow users to withdraw from holding pool
       await cellar["withdraw(uint256)"](1250);

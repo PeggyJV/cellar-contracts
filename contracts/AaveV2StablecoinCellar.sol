@@ -15,6 +15,8 @@ import "./interfaces/IStakedTokenV2.sol";
 import "./interfaces/ISushiSwapRouter.sol";
 import "./interfaces/IGravity.sol";
 
+import "hardhat/console.sol";
+
 /**
  * @title Sommelier AaveV2 Stablecoin Cellar contract
  * @notice AaveV2StablecoinCellar contract for Sommelier Network
@@ -54,8 +56,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     address public currentAToken;
     // Track user user deposits to determine active/inactive shares.
     mapping(address => UserDeposit[]) public userDeposits;
-    // Store the index of the user's last non-zero deposit to save gas on looping.
-    mapping(address => uint256) public currentDepositIndex;
     // Last time inactive funds were entered into a strategy and made active.
     uint256 public lastTimeEnteredStrategy;
 
@@ -194,46 +194,47 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         UserDeposit[] storage deposits = userDeposits[owner];
 
         uint256 leftToWithdraw = assets;
-        for (uint256 i = deposits.length - 1; i + 1 != currentDepositIndex[owner]; i--) {
+        for (uint256 i = deposits.length - 1; i + 1 != 0; i--) {
             UserDeposit storage d = deposits[i];
 
-            uint256 withdrawnAssets;
-            uint256 withdrawnShares;
+            uint256 dAssets = d.assets;
+            if (dAssets != 0) {
+                uint256 dShares = d.shares;
 
-            // Check if deposit shares are active or inactive.
-            if (d.timeDeposited < lastTimeEnteredStrategy) {
-                // Active:
-                uint256 dAssets = exchangeRate * d.shares / 1e18;
-                withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
-                withdrawnShares = MathUtils.mulDivUp(d.shares, withdrawnAssets, dAssets);
+                uint256 withdrawnAssets;
+                uint256 withdrawnShares;
 
-                uint256 originalDepositWithdrawn = MathUtils.mulDivUp(d.assets, withdrawnShares, d.shares);
-                // Store to calculate performance fees on future withdraws.
-                d.assets -= originalDepositWithdrawn;
+                // Check if deposit shares are active or inactive.
+                if (d.timeDeposited < lastTimeEnteredStrategy) {
+                    // Active:
+                    dAssets = exchangeRate * dShares / 1e18;
+                    withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
+                    withdrawnShares = MathUtils.mulDivUp(dShares, withdrawnAssets, dAssets);
 
-                originalDepositedAssets += originalDepositWithdrawn;
-                withdrawnActiveShares += withdrawnShares;
-            } else {
-                // Inactive:
-                withdrawnAssets = MathUtils.min(leftToWithdraw, d.assets);
-                withdrawnShares = MathUtils.mulDivUp(d.shares, withdrawnAssets, d.assets);
+                    uint256 originalDepositWithdrawn = MathUtils.mulDivUp(d.assets, withdrawnShares, dShares);
+                    // Store to calculate performance fees on future withdraws.
+                    d.assets -= originalDepositWithdrawn;
 
-                d.assets -= withdrawnAssets;
+                    originalDepositedAssets += originalDepositWithdrawn;
+                    withdrawnActiveShares += withdrawnShares;
+                } else {
+                    // Inactive:
+                    withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
+                    withdrawnShares = MathUtils.mulDivUp(dShares, withdrawnAssets, dAssets);
 
-                withdrawnInactiveShares += withdrawnShares;
-                withdrawnInactiveAssets += withdrawnAssets;
+                    d.assets -= withdrawnAssets;
+
+                    withdrawnInactiveShares += withdrawnShares;
+                    withdrawnInactiveAssets += withdrawnAssets;
+                }
+
+                d.shares -= withdrawnShares;
+
+                leftToWithdraw -= withdrawnAssets;
             }
 
-            d.shares -= withdrawnShares;
-
-            leftToWithdraw -= withdrawnAssets;
-
-            if (i == 0 || leftToWithdraw == 0) {
-                currentDepositIndex[owner] = d.shares != 0 ? i : i+1;
-                break;
-            }
+            if (i == 0 || leftToWithdraw == 0) break;
         }
-
 
         shares = withdrawnActiveShares + withdrawnInactiveShares;
 
@@ -254,13 +255,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             if (fees > 0) {
                 accruedPerformanceFees += fees;
                 withdrawnActiveAssets -= feeInAssets;
-                shares -= fees;
 
-                /// @dev Ensure user approves contract to transfer their shares
-                /// before attempting to withdraw or else will revert up next!
-
-                // Take portion of shares that would have been burned as fees.
-                transferFrom(owner, address(this), fees);
+                _mint(address(this), fees);
             }
         }
 
@@ -425,30 +421,27 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         // NOTE: Flag this for auditors.
         uint256 leftToTransfer = amount;
-        for (uint256 i = depositsFrom.length - 1; i + 1 != currentDepositIndex[from]; i--) {
+        for (uint256 i = depositsFrom.length - 1; i + 1 != 0; i--) {
             UserDeposit storage dFrom = depositsFrom[i];
+
             uint256 dFromShares = dFrom.shares;
+            if (dFromShares != 0) {
+                uint256 transferShares = MathUtils.min(leftToTransfer, dFromShares);
+                uint256 transferAssets = MathUtils.mulDivUp(dFrom.assets, transferShares, dFromShares);
 
-            if (dFromShares == 0) continue;
+                dFrom.shares -= transferShares;
+                dFrom.assets -= transferAssets;
 
-            uint256 transferShares = MathUtils.min(leftToTransfer, dFromShares);
-            uint256 transferAssets = MathUtils.mulDivUp(dFrom.assets, transferShares, dFromShares);
+                depositsTo.push(UserDeposit({
+                    assets: transferAssets,
+                    shares: transferShares,
+                    timeDeposited: dFrom.timeDeposited
+                }));
 
-            dFrom.shares -= transferShares;
-            dFrom.assets -= transferAssets;
-
-            depositsTo.push(UserDeposit({
-                assets: transferAssets,
-                shares: transferShares,
-                timeDeposited: dFrom.timeDeposited
-            }));
-
-            leftToTransfer -= transferShares;
-
-            if (i == 0 || leftToTransfer == 0) {
-                currentDepositIndex[from] = dFrom.shares != 0 ? i : i+1;
-                break;
+                leftToTransfer -= transferShares;
             }
+
+            if (i == 0 || leftToTransfer == 0) break;
         }
 
         // Cannot overflow because the sum of all user
