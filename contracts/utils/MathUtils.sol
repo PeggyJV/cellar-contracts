@@ -5,6 +5,21 @@ pragma solidity 0.8.11;
 library MathUtils {
     uint256 internal constant RAY = 1e27;
 
+    // Used to change the decimals of precision used for an amount
+    function changeDecimals(
+        uint256 amount,
+        uint8 fromDecimals,
+        uint8 toDecimals
+    ) internal pure returns (uint256) {
+        if (fromDecimals == toDecimals) {
+            return amount;
+        } else if (fromDecimals < toDecimals) {
+            return amount * 10**(toDecimals - fromDecimals);
+        } else {
+            return amount / 10**(fromDecimals - toDecimals);
+        }
+    }
+
     function min(uint256 a, uint256 b) internal pure returns (uint256) {
         return a < b ? a : b;
     }

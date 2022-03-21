@@ -7,23 +7,31 @@ interface IAaveV2StablecoinCellar {
     /**
      * @notice Emitted when assets are deposited into cellar.
      * @param caller the address of the caller
+     * @param token the address of token the cellar receives (not necessarily the one deposited)
      * @param owner the address of the owner of shares
      * @param assets the amount of assets being deposited
      * @param shares the amount of shares minted to owner
      */
-    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
+    event Deposit(
+        address indexed caller,
+        address indexed owner,
+        address indexed token,
+        uint256 assets,
+        uint256 shares
+    );
 
     /**
      * @notice Emitted when assets are withdrawn from cellar.
-     * @param caller the address of the caller
-     * @param owner the address of the owner of shares
+     * @param receiver the address of the receiver of the withdrawn assets
+     * @param owner the address of the owner of the shares
+     * @param token the address of the token withdrawn
      * @param assets the amount of assets being withdrawn
      * @param shares the amount of shares burned from owner
      */
     event Withdraw(
-        address indexed caller,
         address indexed receiver,
         address indexed owner,
+        address indexed token,
         uint256 assets,
         uint256 shares
     );
@@ -64,11 +72,13 @@ interface IAaveV2StablecoinCellar {
 
     /**
      * @notice Emitted on rebalance of Aave lending position.
-     * @param token the address of the token of the new lending position
-     * @param assets the amount that has been deposited
+     * @param oldLendingToken the address of the token of the old lending position
+     * @param newLendingToken the address of the token of the new lending position
+     * @param assets the amount of the new lending tokens that has been deposited to Aave after rebalance
      */
     event Rebalance(
-        address indexed token,
+        address indexed oldLendingToken,
+        address indexed newLendingToken,
         uint256 assets
     );
 
@@ -129,17 +139,15 @@ interface IAaveV2StablecoinCellar {
 
     /**
      * @notice Attempted deposit more liquidity over the liquidity limit.
-     * @param currentLiquidity the current liquidity
      * @param maxLiquidity the max liquidity
      */
-    error LiquidityRestricted(uint256 currentLiquidity, uint256 maxLiquidity);
+    error LiquidityRestricted(uint256 maxLiquidity);
 
     /**
      * @notice Attempted deposit more than the per wallet limit.
-     * @param currentDeposit the current deposit
      * @param maxDeposit the max deposit
      */
-    error DepositRestricted(uint256 currentDeposit, uint256 maxDeposit);
+    error DepositRestricted(uint256 maxDeposit);
 
     /**
      * @notice Current lending token is updated to an asset not supported by Aave.
@@ -198,25 +206,6 @@ interface IAaveV2StablecoinCellar {
     function convertToShares(uint256 assets) external view returns (uint256);
 
     function convertToAssets(uint256 shares) external view returns (uint256);
-
-    function swap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        uint256 amountOutMinimum
-    ) external returns (uint256 amountOut);
-
-    function multihopSwap(
-        address[] memory path,
-        uint256 amountIn,
-        uint256 amountOutMinimum
-    ) external returns (uint256);
-
-    function sushiswap(
-        address[] memory path,
-        uint256 amountIn,
-        uint256 amountOutMinimum
-    ) external returns (uint256);
 
     function enterStrategy() external;
 
