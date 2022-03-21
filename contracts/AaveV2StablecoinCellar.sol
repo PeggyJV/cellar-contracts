@@ -59,8 +59,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
     // Restrict liquidity and deposits per wallet until after security audits.
     // TODO: fix this
-    uint256 public maxDeposit = 50_000; // $50k
-    uint256 public maxLiquidity = 5_000_000; // $5m
+//     uint256 public maxDeposit = 50_000; // $50k
+//     uint256 public maxLiquidity = 5_000_000; // $5m
+    uint256 public maxDeposit = 5_000_000 * 10 ** 18; // $50k
+    uint256 public maxLiquidity = 5_000_000 * 10 ** 18; // $5m
 
     uint24 public constant POOL_FEE = 3000;
 

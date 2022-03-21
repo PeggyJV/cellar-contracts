@@ -6,7 +6,7 @@ import "solidity-coverage";
 import "hardhat-contract-sizer";
 
 import "./tasks/accounts";
-import "./tasks/deploy/aaveV2Cellar";
+// import "./tasks/deploy/aaveV2Cellar";
 
 import { resolve } from "path";
 
