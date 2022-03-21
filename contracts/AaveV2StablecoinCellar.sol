@@ -515,6 +515,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     }
 
     // ======================================= STATE INFORMATION =======================================
+
     /// @dev The internal functions always use 18 decimals of precision while the public / external
     ///      functions use as many decimals as the current lending token.
 
