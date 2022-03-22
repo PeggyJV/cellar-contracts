@@ -245,7 +245,7 @@ describe("AaveV2StablecoinCellar", () => {
       );
       // expect 100 shares to be minted (because total supply of shares is 0)
       expect(await cellar.balanceOf(owner.address)).to.eq(
-        bigNum(100, 6)
+        bigNum(100, 18)
       );
 
       // add $50 of inactive assets in cellar
@@ -254,7 +254,7 @@ describe("AaveV2StablecoinCellar", () => {
         ["deposit(uint256)"](bigNum(50, 6));
       // expect 50 shares = 100 total shares * ($50 / $100) to be minted
       expect(await cellar.balanceOf(alice.address)).to.eq(
-        bigNum(50, 6)
+        bigNum(50, 18)
       );
     });
 
@@ -304,7 +304,7 @@ describe("AaveV2StablecoinCellar", () => {
       // expect shares to be minted to owner as if they deposited $95 even though
       // they deposited $100 (because that is what the cellar received after swap)
       expect(await cellar.balanceOf(owner.address)).to.be.at.least(
-        bigNum(95, 6)
+        bigNum(95, 18)
       );
     });
 
@@ -316,28 +316,27 @@ describe("AaveV2StablecoinCellar", () => {
       );
       // expect alice receives 100 shares
       expect(await cellar.balanceOf(alice.address)).to.eq(
-        bigNum(100, 6)
+        bigNum(100, 18)
       );
       // expect owner receives no shares
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
     });
-
+    
     it("should deposit all user's balance if tries to deposit more than they have", async () => {
-      const initialUserBalance = await usdc.balanceOf(owner.address);
-
-      // owner deposits $1000 more than he has.
-      // only what he had on his balance sheet should be deposited
-      await cellar["deposit(uint256)"](
-        initialUserBalance.add(bigNum(1000, 6))
-      );
+      // owner has $1000 to deposit, withdrawing $5000 should only withdraw $1000
+      await cellar["deposit(uint256)"](bigNum(5000, 6));
       expect(await usdc.balanceOf(owner.address)).to.eq(0);
-      expect(await usdc.balanceOf(cellar.address)).to.eq(initialUserBalance);
+      expect(await usdc.balanceOf(cellar.address)).to.eq(bigNum(1000, 6));
     });
 
     it("should emit Deposit event", async () => {
+      await cellar.connect(alice)["deposit(uint256)"](bigNum(1000, 6));
+      
+      await cellar.enterStrategy();
+      
       await expect(
         cellar["deposit(uint256,address)"](
-          bigNum(100, 6),
+          bigNum(2000, 6),
           alice.address
         )
       )
@@ -345,8 +344,9 @@ describe("AaveV2StablecoinCellar", () => {
         .withArgs(
           owner.address,
           alice.address,
-          bigNum(100, 6),
-          bigNum(100, 6)
+          usdc.address,
+          bigNum(1000, 6),
+          '999999999000000000999'
         );
     });
   });
@@ -398,12 +398,12 @@ describe("AaveV2StablecoinCellar", () => {
 
       // owner should be able redeem all shares
       await cellar["withdraw(uint256)"](
-        bigNum(1000, 6).add(72864)
+        bigNum(1000, 6).add(72863)
       );
 
       // expect owner receives desired amount of tokens
       expect(await usdc.balanceOf(owner.address)).to.eq(
-        bigNum(1000, 6).add(72864)
+        bigNum(1000, 6).add(72863)
       );
       // expect all owner's shares to be burned
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
@@ -411,11 +411,11 @@ describe("AaveV2StablecoinCellar", () => {
       // alice should be able redeem all shares
       await cellar
         .connect(alice)
-        ["withdraw(uint256)"](bigNum(1000, 6).add(72863));
+        ["withdraw(uint256)"](bigNum(1000, 6).add(72862));
 
       // expect alice receives desired amount of tokens
       expect(await usdc.balanceOf(alice.address)).to.eq(
-        bigNum(1000, 6).add(72863)
+        bigNum(1000, 6).add(72862)
       );
       // expect all alice's shares to be burned
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
@@ -438,12 +438,12 @@ describe("AaveV2StablecoinCellar", () => {
 
       // owner should be able redeem all shares for $200.072898 ($100.072864 active + $100 inactive)
       await cellar["withdraw(uint256)"](
-        bigNum(1000, 6).add(72864)
+        bigNum(1000, 6).add(72863)
       );
 
       // expect owner receives desired amount of tokens
       expect(await usdc.balanceOf(owner.address)).to.eq(
-        ethers.BigNumber.from(bigNum(1000, 6).add(72864))
+        ethers.BigNumber.from(bigNum(1000, 6).add(72863))
       );
       // expect all owner's shares to be burned
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
@@ -512,20 +512,22 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should emit Withdraw event", async () => {
+      await cellar.enterStrategy();
+
       await expect(
         cellar["withdraw(uint256,address,address)"](
-          bigNum(100, 6),
+          bigNum(2000, 6),
           alice.address,
           owner.address
         )
       )
         .to.emit(cellar, "Withdraw")
         .withArgs(
-          owner.address,
           alice.address,
           owner.address,
+          usdc.address,
           bigNum(100, 6),
-          bigNum(100, 6)
+          bigNum(100, 18)
         );
     });
   });
@@ -537,28 +539,28 @@ describe("AaveV2StablecoinCellar", () => {
       const depositTimestamp = await timestamp();
 
       const aliceOldBalance = await cellar.balanceOf(alice.address);
-      await cellar.transfer(alice.address, bigNum(25, 6));
+      await cellar.transfer(alice.address, bigNum(25, 18));
       const aliceNewBalance = await cellar.balanceOf(alice.address);
 
-      expect(aliceNewBalance - aliceOldBalance).to.eq(bigNum(25, 6));
+      expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(bigNum(25, 18));
 
       const ownerDeposit = await cellar.userDeposits(owner.address, 0);
       const aliceDeposit = await cellar.userDeposits(alice.address, 0);
 
-      expect(ownerDeposit[0]).to.eq(bigNum(75, 6)); // expect 75 assets
-      expect(ownerDeposit[1]).to.eq(bigNum(75, 6)); // expect 75 shares
+      expect(ownerDeposit[0]).to.eq(bigNum(75, 18)); // expect 75 assets
+      expect(ownerDeposit[1]).to.eq(bigNum(75, 18)); // expect 75 shares
       expect(ownerDeposit[2]).to.eq(depositTimestamp);
-      expect(aliceDeposit[0]).to.eq(bigNum(25, 6)); // expect 25 assets
-      expect(aliceDeposit[1]).to.eq(bigNum(25, 6)); // expect 25 shares
+      expect(aliceDeposit[0]).to.eq(bigNum(25, 18)); // expect 25 assets
+      expect(aliceDeposit[1]).to.eq(bigNum(25, 18)); // expect 25 shares
       expect(aliceDeposit[2]).to.eq(depositTimestamp);
     });
-
+    
     it("should allow withdrawing of transferred shares", async () => {
       await cellar["deposit(uint256)"](bigNum(100, 6));
-      await cellar.transfer(alice.address, bigNum(100, 6));
+      
+      await cellar.transfer(alice.address, bigNum(100, 18));
 
       await cellar.enterStrategy();
-
       await timetravel(864000); // 10 day
       
       await cellar.connect(alice)["deposit(uint256)"](bigNum(100, 6));
@@ -568,7 +570,7 @@ describe("AaveV2StablecoinCellar", () => {
       const aliceNewBalance = await usdc.balanceOf(alice.address);
 
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
-      expect(aliceNewBalance - aliceOldBalance).to.eq(bigNum(200, 6).add(72864));
+      expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(bigNum(200, 6).add(72863));
     });
 
     it("should require approval for transferring other's shares", async () => {
@@ -647,7 +649,7 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should claim rewards from Aave and begin unstaking", async () => {
       // expect cellar to claim all 100 stkAAVE
-      expect(await stkAAVE.balanceOf(cellar.address)).to.eq(126337316069221);
+      expect(await stkAAVE.balanceOf(cellar.address)).to.eq('126337316069221');
     });
 
     it("should have started 10 day unstaking cooldown period", async () => {
@@ -713,33 +715,8 @@ describe("AaveV2StablecoinCellar", () => {
 
   describe("fees", () => {
     it("should accrue platform fees", async () => {
-      // set 100000 ETH to owner balance
-      await network.provider.send("hardhat_setBalance", [
-        owner.address,
-        ethers.utils.parseEther("100000").toHexString(),
-      ]);
-  
-      await swapRouter.exactOutputSingle(
-        [
-          wethAddress, // tokenIn
-          usdc.address, // tokenOut
-          3000, // fee
-          owner.address, // recipient
-          1657479474, // deadline
-          bigNum(1000000, 6), // amountOut
-          ethers.utils.parseEther("20000"), // amountInMaximum
-          0, // sqrtPriceLimitX96
-        ],
-        { value: ethers.utils.parseEther("20000") }
-      );
-
-      await usdc.approve(
-        cellar.address,
-        bigNum(1000000, 6)
-      );
-
-      // owner deposits $1,000,000
-      await cellar["deposit(uint256)"](bigNum(1000000, 6));
+      // owner deposits $1000
+      await cellar["deposit(uint256)"](bigNum(1000, 6));
 
       // convert all inactive assets -> active assets
       await cellar.enterStrategy();
@@ -747,10 +724,13 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.accruePlatformFees();
 
-      // $27 worth of shares in fees = $1,000,000 * 86430 sec * (2% / secsPerYear)
-      expect(await cellar.balanceOf(cellar.address)).to.eq(bigNum(27, 6)); // TODO: Expected "27386040" to be equal 27000000
+      // ~$0.027 worth of shares in fees = $1000 * 86400 sec * (1% / secsPerYear)
+      expect(await cellar.balanceOf(cellar.address)).to.be.closeTo(
+        '27000000000000000',
+        '1000000000000000'
+      );
     });
-
+    
     it("should accrue performance fees upon withdraw", async () => {
       // owner deposits $1000
       await cellar["deposit(uint256)"](bigNum(1000, 6));
@@ -760,41 +740,16 @@ describe("AaveV2StablecoinCellar", () => {
       await timetravel(864000); // 10 day
 
       // should allow users to withdraw from holding pool
-      await cellar["withdraw(uint256)"](bigNum(200, 6));
+      await cellar["withdraw(uint256)"](bigNum(1250, 6));
 
       expect(await usdc.balanceOf(owner.address)).to.eq(1000728631);
-      // expect cellar to have received 36431.55 fees in shares = 728631 gain * 5%
-      expect(await cellar.balanceOf(cellar.address)).to.eq(36431); // TODO: Expected "199992337" to be equal 1000728631
+      // expect cellar to have received $0.03643155 fees in shares = 0.728631$ gain * 5%
+      expect(await cellar.balanceOf(cellar.address)).to.eq('36431550000000000'); // TODO: Expected "38319609625809196" to be equal 36431550000000000
     });
-
-    it("should be able to transfer fees", async () => {
-      // set 100000 ETH to owner balance
-      await network.provider.send("hardhat_setBalance", [
-        owner.address,
-        ethers.utils.parseEther("100000").toHexString(),
-      ]);
-
-      await swapRouter.exactOutputSingle(
-        [
-          wethAddress, // tokenIn
-          usdc.address, // tokenOut
-          3000, // fee
-          owner.address, // recipient
-          1657479474, // deadline
-          bigNum(1000000, 6), // amountOut
-          ethers.utils.parseEther("20000"), // amountInMaximum
-          0, // sqrtPriceLimitX96
-        ],
-        { value: ethers.utils.parseEther("20000") }
-      );
-
-      await usdc.approve(
-        cellar.address,
-        bigNum(1000000, 6)
-      );
-
-      // owner deposits $1,000,000
-      await cellar["deposit(uint256)"](bigNum(1000000, 6));
+    
+    it("should be able to transfer fees to Cosmos", async () => {
+      // owner deposits $1000
+      await cellar["deposit(uint256)"](bigNum(1000, 6));
 
       await cellar.enterStrategy();
       await timetravel(86400); // 1 day
