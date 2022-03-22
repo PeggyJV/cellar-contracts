@@ -36,3 +36,4 @@ src/types/factories/*
 
 package-lock.json
 secrets.json
+contracts-exposed

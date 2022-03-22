@@ -7,8 +7,8 @@ import "./MockLendingPool.sol";
 import "../utils/MathUtils.sol";
 
 library WadRayMath {
-    uint256 internal constant RAY = 1e27;
-    uint256 internal constant HALF_RAY = RAY / 2;
+    uint256 public constant RAY = 1e27;
+    uint256 public constant HALF_RAY = RAY / 2;
 
     /**
      * @dev Divides two ray, rounding half up to the nearest ray
