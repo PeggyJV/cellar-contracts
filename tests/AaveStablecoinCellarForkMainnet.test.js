@@ -12,7 +12,8 @@ describe("AaveV2StablecoinCellar", () => {
   let usdt;
   let dai;
   let aave;
-
+  let hex;
+  
   let aUSDC;
   let aDAI;
 
@@ -41,7 +42,8 @@ describe("AaveV2StablecoinCellar", () => {
   const wethAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
   const aUSDCAddress = "0xBcca60bB61934080951369a648Fb03DF4F96263C";
   const aDAIAddress = "0x028171bCA77440897B824Ca71D1c56caC55b68A3";
-
+  const hexAddress = "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39";
+  
   const timestamp = async () => {
     const latestBlock = await ethers.provider.getBlock(
       await ethers.provider.getBlockNumber()
@@ -84,6 +86,7 @@ describe("AaveV2StablecoinCellar", () => {
     aave = await Token.attach(aaveAddress);
     aDAI = await Token.attach(aDAIAddress);
     aUSDC = await Token.attach(aUSDCAddress);
+    hex = await Token.attach(hexAddress);
 
     // uniswap v3 router contract
     swapRouter = await ethers.getContractAt("ISwapRouter", routerAddress);
@@ -583,7 +586,7 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar["deposit(uint256)"](
         bigNum(1000, 6)
       );
-      
+
       await cellar
         .connect(alice)
         ["deposit(uint256)"](bigNum(1000, 6));
@@ -618,7 +621,7 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar["deposit(uint256)"](
         bigNum(1000, 6)
       );
-      
+
       await cellar
         .connect(alice)
         ["deposit(uint256)"](bigNum(1000, 6));
@@ -704,7 +707,7 @@ describe("AaveV2StablecoinCellar", () => {
         .withArgs(usdc.address, bigNum(1000, 6), dai.address, bigNum(992, 18).add('792014394087097233'));
     });
   });
-  
+
   describe("enterStrategy", () => {
     beforeEach(async () => {
       // owner adds $100 of inactive assets
@@ -748,7 +751,7 @@ describe("AaveV2StablecoinCellar", () => {
         .withArgs(usdc.address, bigNum(200, 6));
     });
   });
-  
+
   describe("claimAndUnstake", () => {
     beforeEach(async () => {
       // owner adds $100 of inactive assets
@@ -834,7 +837,7 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
   });
-  
+
   describe("fees", () => {
     it("should accrue platform fees", async () => {
       // set 100000 ETH to owner balance
@@ -942,6 +945,109 @@ describe("AaveV2StablecoinCellar", () => {
       // expect all fee shares to be transferred out
       expect(await cellar.balanceOf(cellar.address)).to.eq(0);
       expect(await usdc.balanceOf(gravity.address)).to.eq(feeInAssets);
+    });
+  });
+
+  describe("pause", () => {
+    it("should prevent users from depositing while paused", async () => {
+      await cellar.setPause(true);
+      expect(cellar["deposit(uint256)"](bigNum(100, 6))).to.be.revertedWith(
+        "ContractPaused()"
+      );
+    });
+
+    it("should emits a Pause event", async () => {
+      await expect(cellar.setPause(true))
+        .to.emit(cellar, "Pause")
+        .withArgs(owner.address, true);
+    });
+  });
+
+  describe("shutdown", () => {
+    it("should prevent users from depositing while shutdown", async () => {
+      await cellar["deposit(uint256)"](bigNum(100, 6));
+      await cellar.shutdown();
+      expect(cellar["deposit(uint256)"](bigNum(100, 6))).to.be.revertedWith(
+        "ContractShutdown()"
+      );
+    });
+
+    it("should allow users to withdraw", async () => {
+      // alice first deposits
+      await cellar.connect(alice)["deposit(uint256)"](bigNum(100, 6));
+
+      // cellar is shutdown
+      await cellar.shutdown();
+
+      await cellar.connect(alice)["withdraw(uint256)"](bigNum(100, 6));
+    });
+
+    it("should withdraw all active assets from Aave", async () => {
+      await cellar["deposit(uint256)"](bigNum(1000, 6));
+
+      await cellar.enterStrategy();
+      await timetravel(864000); // 10 day
+      
+      await cellar.shutdown();
+
+      // expect all of active liquidity to be withdrawn from Aave
+      expect(await usdc.balanceOf(cellar.address)).to.eq(bigNum(1000, 6).add(766980));
+
+      // should allow users to withdraw from holding pool
+      await cellar["withdraw(uint256)"](bigNum(1000, 6).add(766980));
+      
+      expect(await usdc.balanceOf(cellar.address)).to.eq(38349);
+    });
+
+    it("should emit a Shutdown event", async () => {
+      await expect(cellar.shutdown())
+        .to.emit(cellar, "Shutdown")
+        .withArgs(owner.address);
+    });
+  });
+  
+  describe("sweep", () => {
+    beforeEach(async () => {
+      await swapRouter.exactOutputSingle(
+        [
+          wethAddress, // tokenIn
+          hex.address, // tokenOut
+          3000, // fee
+          owner.address, // recipient
+          1657479474, // deadline
+          bigNum(1000, 8), // amountOut
+          ethers.utils.parseEther("10"), // amountInMaximum
+          0, // sqrtPriceLimitX96
+        ],
+        { value: ethers.utils.parseEther("10") }
+      );
+
+      await hex.transfer(cellar.address, bigNum(1000, 8));
+    });
+
+    it("should not allow assets managed by cellar to be transferred out", async () => {
+      await expect(cellar.sweep(usdc.address)).to.be.revertedWith(
+        `ProtectedToken("${usdc.address}")`
+      );
+      await expect(cellar.sweep(aUSDC.address)).to.be.revertedWith(
+        `ProtectedToken("${aUSDC.address}")`
+      );
+    });
+
+    it("should recover tokens accidentally transferred to the contract", async () => {
+      expect(await hex.balanceOf(owner.address)).to.eq(0);
+      
+      await cellar.sweep(hex.address);
+
+      // expect 1000 hex to have been transferred from cellar to owner
+      expect(await hex.balanceOf(owner.address)).to.eq(bigNum(1000, 8));
+      expect(await hex.balanceOf(cellar.address)).to.eq(0);
+    });
+
+    it("should emit Sweep event", async () => {
+      await expect(cellar.sweep(hex.address))
+        .to.emit(cellar, "Sweep")
+        .withArgs(hex.address, bigNum(1000, 8));
     });
   });
 });
