@@ -9,12 +9,12 @@ contract MockStkAAVE is MockToken {
     uint256 public constant UNSTAKE_WINDOW = 172800; // 2 days
     mapping(address => uint256) public stakersCooldowns;
 
-    constructor(MockToken _AAVE) MockToken("stkAAVE") {
+    constructor(MockToken _AAVE) MockToken("stkAAVE", 18) {
         AAVE = _AAVE;
     }
 
     function cooldown() external {
-        require(balanceOf(msg.sender) != 0, "INVALID_BALANCE_ON_COOLDOWN");
+        require(balanceOf[msg.sender] != 0, "INVALID_BALANCE_ON_COOLDOWN");
         stakersCooldowns[msg.sender] = block.timestamp;
     }
 
@@ -27,9 +27,9 @@ contract MockStkAAVE is MockToken {
             "UNSTAKE_WINDOW_FINISHED"
         );
 
-        uint256 balanceOfMessageSender = balanceOf(msg.sender);
+        uint256 balanceOfMessageSender = balanceOf[msg.sender];
 
-        uint256 amountToRedeem = (amount > balanceOfMessageSender) ? balanceOfMessageSender : amount;
+        uint256 amountToRedeem = amount > balanceOfMessageSender ? balanceOfMessageSender : amount;
 
         // _updateCurrentUnclaimedRewards(msg.sender, balanceOfMessageSender, true);
 

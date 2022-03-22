@@ -2,10 +2,10 @@
 
 pragma solidity 0.8.11;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 
 contract MockToken is ERC20 {
-    constructor(string memory _symbol) ERC20(_symbol, _symbol) { }
+    constructor(string memory _symbol, uint8 _decimals) ERC20(_symbol, _symbol, _decimals) { }
 
     function mint(address to, uint256 amount) external {
         _mint(to, amount);

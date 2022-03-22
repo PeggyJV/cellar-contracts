@@ -2,7 +2,8 @@
 
 pragma solidity 0.8.11;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import "../utils/MathUtils.sol";
 
 library BytesLib {
     function slice(
@@ -155,6 +156,7 @@ library Path {
 
 contract MockSwapRouter {
     using Path for bytes;
+    using MathUtils for uint256;
 
     struct ExactInputSingleParams {
         address tokenIn;
@@ -169,12 +171,17 @@ contract MockSwapRouter {
 
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256) {
         uint256 exchangeRate = 9500;
-        IERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
+        ERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
         uint256 amountOut = params.amountIn * exchangeRate / 10000;
+
+        uint8 fromDecimals = ERC20(params.tokenIn).decimals();
+        uint8 toDecimals = ERC20(params.tokenOut).decimals();
+        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+
         require(amountOut >= params.amountOutMinimum, "amountOutMin invariant failed");
 
-        IERC20(params.tokenOut).transfer(params.recipient, amountOut);
+        ERC20(params.tokenOut).transfer(params.recipient, amountOut);
         return amountOut;
     }
 
@@ -196,12 +203,17 @@ contract MockSwapRouter {
             (,tokenOut ,) = params.path.decodeFirstPool();
         }
 
-        IERC20(tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
+        ERC20(tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
         uint256 amountOut = params.amountIn * exchangeRate / 10000;
+
+        uint8 fromDecimals = ERC20(tokenIn).decimals();
+        uint8 toDecimals = ERC20(tokenOut).decimals();
+        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+
         require(amountOut >= params.amountOutMinimum, "amountOutMin invariant failed");
 
-        IERC20(tokenOut).transfer(params.recipient, amountOut);
+        ERC20(tokenOut).transfer(params.recipient, amountOut);
         return amountOut;
     }
 
@@ -217,12 +229,17 @@ contract MockSwapRouter {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
-        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
+        ERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
 
         uint256 amountOut = amountIn * exchangeRate / 10000;
+
+        uint8 fromDecimals = ERC20(tokenIn).decimals();
+        uint8 toDecimals = ERC20(tokenOut).decimals();
+        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+
         require(amountOut >= amountOutMin, "amountOutMin invariant failed");
 
-        IERC20(tokenOut).transfer(to, amountOut);
+        ERC20(tokenOut).transfer(to, amountOut);
 
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amountOut;
