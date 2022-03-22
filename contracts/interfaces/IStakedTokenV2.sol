@@ -10,4 +10,8 @@ interface IStakedTokenV2 {
   function cooldown() external;
 
   function claimRewards(address to, uint256 amount) external;
+  
+  function balanceOf(address account) external view returns (uint256);
+  
+  function stakersCooldowns(address account) external view returns (uint256);
 }
