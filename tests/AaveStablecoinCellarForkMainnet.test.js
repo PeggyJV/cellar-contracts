@@ -1005,6 +1005,107 @@ describe("AaveV2StablecoinCellar", () => {
         .withArgs(owner.address);
     });
   });
+
+  describe("restrictLiquidity", () => {
+    it("should prevent deposit it greater than max liquidity", async () => {
+      // set 200000 ETH to owner balance
+      await network.provider.send("hardhat_setBalance", [
+        owner.address,
+        ethers.utils.parseEther("200000").toHexString(),
+      ]);
+
+      await swapRouter.exactOutputSingle(
+        [
+          wethAddress, // tokenIn
+          usdc.address, // tokenOut
+          3000, // fee
+          owner.address, // recipient
+          1657479474, // deadline
+          bigNum(5_000_000, 6), // amountOut
+          ethers.utils.parseEther("150000"), // amountInMaximum
+          0, // sqrtPriceLimitX96
+        ],
+        { value: ethers.utils.parseEther("150000") }
+      );
+
+      // transfer to cellar $5,000,000
+      await usdc.transfer(cellar.address, bigNum(5_000_000, 6));
+
+      await expect(cellar["deposit(uint256)"](1)).to.be.revertedWith(
+        `LiquidityRestricted(${bigNum(5_000_000, 6)})`
+      );
+    });
+
+    it("should prevent deposit it greater than max deposit", async () => {
+      // set 100000 ETH to owner balance
+      await network.provider.send("hardhat_setBalance", [
+        owner.address,
+        ethers.utils.parseEther("100000").toHexString(),
+      ]);
+
+      await swapRouter.exactOutputSingle(
+        [
+          wethAddress, // tokenIn
+          usdc.address, // tokenOut
+          3000, // fee
+          owner.address, // recipient
+          1657479474, // deadline
+          bigNum(100_000, 6), // amountOut
+          ethers.utils.parseEther("50000"), // amountInMaximum
+          0, // sqrtPriceLimitX96
+        ],
+        { value: ethers.utils.parseEther("50000") }
+      );
+
+      await usdc.approve(
+        cellar.address,
+        bigNum(100_000, 6)
+      );
+      
+      // owner deposits $5,000,000
+      await expect(
+        cellar["deposit(uint256)"](
+          bigNum(50_001, 6)
+        )
+      ).to.be.revertedWith(
+        `DepositRestricted(${bigNum(50_000, 6)})`
+      );
+      
+      await cellar["deposit(uint256)"](bigNum(50_000, 6));
+      await expect(cellar["deposit(uint256)"](1)).to.be.revertedWith(
+        `DepositRestricted(${bigNum(50_000, 6)})`
+      );
+    });
+    
+    it("should allow deposits above max liquidity once restriction removed", async () => {
+      // set 200000 ETH to owner balance
+      await network.provider.send("hardhat_setBalance", [
+        owner.address,
+        ethers.utils.parseEther("200000").toHexString(),
+      ]);
+
+      await swapRouter.exactOutputSingle(
+        [
+          wethAddress, // tokenIn
+          usdc.address, // tokenOut
+          3000, // fee
+          owner.address, // recipient
+          1657479474, // deadline
+          bigNum(5_000_000, 6), // amountOut
+          ethers.utils.parseEther("150000"), // amountInMaximum
+          0, // sqrtPriceLimitX96
+        ],
+        { value: ethers.utils.parseEther("150000") }
+      );
+
+      // transfer to cellar $5,000,000
+      await usdc.transfer(cellar.address, bigNum(5_000_000, 6));
+
+      await cellar.removeLiquidityRestriction();
+
+      await cellar["deposit(uint256)"](bigNum(50_001, 6));
+    });
+  });
   
   describe("sweep", () => {
     beforeEach(async () => {
