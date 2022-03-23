@@ -15,9 +15,6 @@ import "./interfaces/IStakedTokenV2.sol";
 import "./interfaces/ISushiSwapRouter.sol";
 import "./interfaces/IGravity.sol";
 
-// TODO: delete
-import "hardhat/console.sol";
-
 /**
  * @title Sommelier AaveV2 Stablecoin Cellar contract
  * @notice AaveV2StablecoinCellar contract for Sommelier Network
@@ -74,10 +71,16 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     uint256 public constant PLATFORM_FEE = 100;
     uint256 public constant PERFORMANCE_FEE = 500;
 
-    uint256 public lastTimeAccruedPlatformFees;
-    // Fees are taken in shares and redeemed for assets at the time they are transferred.
-    uint256 public accruedPlatformFees;
-    uint256 public accruedPerformanceFees;
+    struct FeesData {
+        uint256 lastTimeAccruedPlatformFees;
+        uint256 lastActiveAssets;
+        uint256 lastInterestIndex;
+        // Fees are taken in shares and redeemed for assets at the time they are transferred.
+        uint256 accruedPlatformFees;
+        uint256 accruedPerformanceFees;
+    }
+
+    FeesData public feesData;
 
     // Emergency states in case of contract malfunction.
     bool public isPaused;
@@ -121,7 +124,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         maxDeposit = 50_000 * 10**tokenDecimals;
         maxLiquidity = 5_000_000 * 10**tokenDecimals;
 
-        lastTimeAccruedPlatformFees = block.timestamp;
+        feesData.lastTimeAccruedPlatformFees = block.timestamp;
     }
 
     // ======================================= CORE FUNCTIONS =======================================
@@ -265,20 +268,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         uint256 withdrawnActiveAssets = exchangeRate * withdrawnActiveShares / 1e18;
 
-        // Take performance fees.
-        if (withdrawnActiveAssets > 0) {
-            uint256 gain = withdrawnActiveAssets - originalDepositedAssets;
-            uint256 feeInAssets = gain * PERFORMANCE_FEE / DENOMINATOR;
-            uint256 fees = _convertToShares(feeInAssets, 0);
-
-            if (fees > 0) {
-                accruedPerformanceFees += fees;
-                withdrawnActiveAssets -= feeInAssets;
-
-                _mint(address(this), fees);
-            }
-        }
-
         _burn(owner, shares);
 
         if (withdrawnActiveAssets > 0) {
@@ -330,9 +319,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
      * @param amount amount of stkAAVE to redeem and reinvest
      * @param minAssetsOut minimum amount of assets cellar should receive after swap
      */
-    // auction model:
-    // - send stkaave to the bridge
-    // - add functionality to distribute SOMM rewards
     function reinvest(uint256 amount, uint256 minAssetsOut) public onlyOwner {
         stkAAVE.redeem(address(this), amount);
 
@@ -347,6 +333,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         uint256 amountOut = _sushiswap(path, amountIn, minAssetsOut);
 
         if (!isShutdown) {
+            // Take performance fee off of rewards.
+            uint256 performanceFeeInAssets = amountOut * PERFORMANCE_FEE / DENOMINATOR;
+            uint256 performanceFees = convertToShares(performanceFeeInAssets);
+
+            _mint(address(this), performanceFees);
+
+            feesData.accruedPerformanceFees += performanceFees;
+
+            // Reinvest rewards back into current lending position.
             _depositToAave(currentLendingToken, amountOut);
         }
     }
@@ -384,6 +379,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         if (newLendingToken == currentLendingToken) revert SameLendingToken(newLendingToken);
 
+        // Last accrual of performance fees with current lending position before rebalancing.
+        _accruePerformanceFees(false);
+
         uint256 lendingPositionBalance = _redeemFromAave(currentLendingToken, type(uint256).max);
 
         address[] memory path = new address[](2);
@@ -397,9 +395,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         );
 
         address oldLendingToken = currentLendingToken;
+
         _updateLendingPosition(newLendingToken);
 
         _depositToAave(newLendingToken, newLendingTokenAmount);
+
+        // Update fee data for next fee accrual with new lending position.
+        feesData.lastActiveAssets = _activeAssets();
+        feesData.lastInterestIndex = lendingPool.getReserveNormalizedIncome(currentLendingToken);
 
         emit Rebalance(oldLendingToken, newLendingToken, newLendingTokenAmount);
     }
@@ -432,20 +435,68 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         emit Sweep(token, amount);
     }
 
-    /// @notice Take platform fees off of cellar's active assets.
-    function accruePlatformFees() external {
-        uint256 elapsedTime = block.timestamp - lastTimeAccruedPlatformFees;
-        uint256 feeInAssets = (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / SECS_PER_YEAR;
-        uint256 fees = _convertToShares(feeInAssets, 0);
+    /// @notice Take platform fees and performance fees off of cellar's active assets.
+    function accrueFees() external {
+        uint256 elapsedTime = block.timestamp - feesData.lastTimeAccruedPlatformFees;
+        uint256 platformFeeInAssets =
+            (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / SECS_PER_YEAR;
+        uint256 platformFees = _convertToShares(platformFeeInAssets, 0);
 
-        _mint(address(this), fees);
+        feesData.accruedPlatformFees += platformFees;
 
-        accruedPlatformFees += fees;
+        _mint(address(this), platformFees);
+
+        _accruePerformanceFees(true);
+    }
+
+    function _accruePerformanceFees(bool updateFeeData) internal {
+        uint256 performanceFees;
+        uint256 currentInterestIndex = lendingPool.getReserveNormalizedIncome(currentLendingToken);
+
+        if (feesData.lastActiveAssets != 0 && currentInterestIndex != feesData.lastInterestIndex) {
+            // An index value greater than 1e27 indicates positive performance, while a value less than
+            // indicates negative performance.
+            uint256 performanceIndex = currentInterestIndex * 1e27 / feesData.lastInterestIndex;
+            uint256 updatedActiveAssets = feesData.lastActiveAssets.mulDivUp(performanceIndex, 1e27);
+
+            if (currentInterestIndex > feesData.lastInterestIndex) {
+                uint256 gain = updatedActiveAssets - feesData.lastActiveAssets;
+
+                uint256 performanceFeeInAssets = gain * PERFORMANCE_FEE / DENOMINATOR;
+                performanceFees = _convertToShares(performanceFeeInAssets, 0);
+
+                _mint(address(this), performanceFees);
+
+                feesData.accruedPerformanceFees += performanceFees;
+            } else {
+                // This would only happen if the current lending position on Aave lost money. This should
+                // rarely happen, if ever. But in case it does, this mechanism will burn performance fees
+                // to help offset losses in proportion to the amount minted for gains.
+
+                uint256 loss = feesData.lastActiveAssets - updatedActiveAssets;
+
+                uint256 feesBurntInAssets = loss * PERFORMANCE_FEE / DENOMINATOR;
+                uint256 feesBurnt = _convertToShares(feesBurntInAssets, 0);
+
+                if (feesBurnt > feesData.accruedPerformanceFees) {
+                    feesBurnt = feesData.accruedPerformanceFees;
+                }
+
+                _burn(address(this), feesBurnt);
+
+                feesData.accruedPerformanceFees -= feesBurnt;
+            }
+        }
+
+        if (updateFeeData) {
+            feesData.lastActiveAssets = _activeAssets();
+            feesData.lastInterestIndex = currentInterestIndex;
+        }
     }
 
     /// @notice Transfer accrued fees to Cosmos to distribute.
     function transferFees() external onlyOwner {
-        uint256 fees = accruedPerformanceFees + accruedPlatformFees;
+        uint256 fees = feesData.accruedPerformanceFees + feesData.accruedPlatformFees;
         uint256 feeInAssets = _convertToAssets(fees);
 
         feeInAssets = feeInAssets.changeDecimals(decimals, tokenDecimals);
@@ -461,12 +512,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         ERC20(currentLendingToken).approve(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(currentLendingToken, feesDistributor, feeInAssets);
 
-        accruedPlatformFees = 0;
-        accruedPerformanceFees = 0;
+        feesData.accruedPlatformFees = 0;
+        feesData.accruedPerformanceFees = 0;
 
         emit TransferFees(fees, feeInAssets);
     }
-
 
     // NOTE: For beta only.
     function setFeeDistributor(bytes32 _newFeeDistributor) external onlyOwner {
@@ -560,7 +610,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         return totalSupply == 0 ? assets : assets.mulDivDown(totalSupply, _totalAssets() - offset);
     }
 
-    function convertToShares(uint256 assets) external view returns (uint256) {
+    function convertToShares(uint256 assets) public view returns (uint256) {
         assets = assets.changeDecimals(tokenDecimals, decimals);
         return _convertToShares(assets, 0);
     }

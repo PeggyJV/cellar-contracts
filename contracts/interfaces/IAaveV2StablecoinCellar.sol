@@ -219,7 +219,7 @@ interface IAaveV2StablecoinCellar {
 
     function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount) external;
 
-    function accruePlatformFees() external;
+    function accrueFees() external;
 
     function transferFees() external;
 
