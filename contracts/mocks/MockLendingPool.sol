@@ -71,7 +71,11 @@ contract MockLendingPool {
         interestRateStrategyAddress;
         id;
     }
-    
+
+    function getReserveNormalizedIncome(address) external view returns (uint256) {
+        return index;
+    }
+
     function initReserve(
       address asset,
       address aTokenAddress

@@ -23,9 +23,8 @@ const timetravel = async (addTime) => {
 // TODO:
 // - test withdrawing 0
 // - test many transfers
-// - test withdrawing active vs inactive shares
 // - test transferring active vs inactive shares
-// - test convert shares
+// - test view functions
 
 describe("AaveV2StablecoinCellar", () => {
   let owner;
@@ -307,18 +306,16 @@ describe("AaveV2StablecoinCellar", () => {
       const ownerOldBalance = await usdc.balanceOf(owner.address);
       await cellar["withdraw(uint256)"](Num(125, 6));
       const ownerNewBalance = await usdc.balanceOf(owner.address);
-      expect((ownerNewBalance - ownerOldBalance).toString()).to.eq(
-        Num(123.75, 6)
-      );
+      // owner should be able redeem all shares for initial $125 (50% of total)
+      expect((ownerNewBalance - ownerOldBalance).toString()).to.eq(Num(125, 6));
       // expect all owner's shares to be burned
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
 
       const aliceOldBalance = await usdc.balanceOf(alice.address);
       await cellar.connect(alice)["withdraw(uint256)"](Num(125, 6));
       const aliceNewBalance = await usdc.balanceOf(alice.address);
-      expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(
-        Num(123.75, 6)
-      );
+      // alice should be able redeem all shares for initial $125 (50% of total)
+      expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(Num(125, 6));
       // expect all alice's shares to be burned
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
     });
@@ -342,7 +339,7 @@ describe("AaveV2StablecoinCellar", () => {
       const ownerNewBalance = await usdc.balanceOf(owner.address);
       // expect owner receives desired amount of tokens
       expect((ownerNewBalance - ownerOldBalance).toString()).to.eq(
-        Num(100 + 123.75, 6)
+        Num(100 + 125, 6)
       );
       // expect all owner's shares to be burned
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
@@ -352,7 +349,7 @@ describe("AaveV2StablecoinCellar", () => {
       const aliceNewBalance = await usdc.balanceOf(alice.address);
       // expect alice receives desired amount of tokens
       expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(
-        Num(75 + 123.75, 6)
+        Num(75 + 125, 6)
       );
       // expect all alice's shares to be burned
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
@@ -422,7 +419,7 @@ describe("AaveV2StablecoinCellar", () => {
           alice.address,
           owner.address,
           usdc.address,
-          Num(123.75, 6),
+          Num(125, 6),
           Num(100, 18)
         );
     });
@@ -469,7 +466,7 @@ describe("AaveV2StablecoinCellar", () => {
 
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
       expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(
-        Num(123.75 + 100, 6)
+        Num(125 + 100, 6)
       );
     });
 
@@ -556,12 +553,23 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await stkAAVE.balanceOf(cellar.address)).to.eq(0);
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(Num(95, 6));
     });
+
+    it("should have accrued performance fees", async () => {
+      const accruedPerformanceFees = (await cellar.feesData())[4];
+
+      // expect $4.75 ($95 * 0.05 = $4.75) worth of fees to be minted as shares
+      expect(await cellar.balanceOf(cellar.address)).to.eq(Num(4.75, 18));
+      expect(accruedPerformanceFees).to.eq(Num(4.75, 18));
+    });
   });
 
   describe("rebalance", () => {
     beforeEach(async () => {
-      await usdc.mint(cellar.address, Num(1000, 6));
+      await cellar["deposit(uint256)"](Num(1000, 6));
       await cellar.enterStrategy();
+
+      // set initial fee data
+      await cellar.accrueFees();
     });
 
     it("should rebalance all usdc liquidity in dai", async () => {
@@ -579,9 +587,28 @@ describe("AaveV2StablecoinCellar", () => {
         "SameLendingToken"
       );
     });
+
+    it("should have accrued performance fees", async () => {
+      await lendingPool.setLiquidityIndex(
+        ethers.BigNumber.from("1250000000000000000000000000")
+      );
+
+      const accruedPerformanceFeesBefore = (await cellar.feesData())[4];
+      const feesBefore = await cellar.balanceOf(cellar.address);
+
+      const activeLiquidity = await cellar.activeAssets();
+      await cellar.rebalance(dai.address, activeLiquidity * 0.95);
+
+      const accruedPerformanceFeesAfter = (await cellar.feesData())[4];
+      const feesAfter = await cellar.balanceOf(cellar.address);
+
+      expect(accruedPerformanceFeesAfter.gt(accruedPerformanceFeesBefore)).to.be
+        .true;
+      expect(feesAfter.gt(feesBefore)).to.be.true;
+    });
   });
 
-  describe("fees", () => {
+  describe("accrueFees", () => {
     it("should accrue platform fees", async () => {
       // owner deposits $1000
       await cellar["deposit(uint256)"](Num(1000, 6));
@@ -591,13 +618,13 @@ describe("AaveV2StablecoinCellar", () => {
 
       await timetravel(86400); // 1 day
 
-      await cellar.accruePlatformFees();
+      await cellar.accrueFees();
+
+      const accruedPlatformFees = (await cellar.feesData())[3];
+      const feesInAssets = await cellar.convertToAssets(accruedPlatformFees);
 
       // ~$0.027 worth of shares in fees = $1000 * 86400 sec * (1% / secsPerYear)
-      expect(await cellar.balanceOf(cellar.address)).to.be.closeTo(
-        Num(0.027, 18),
-        Num(0.001, 18)
-      );
+      expect(feesInAssets).to.be.closeTo(Num(0.027, 6), Num(0.001, 6));
     });
 
     it("should accrue performance fees upon withdraw", async () => {
@@ -607,17 +634,68 @@ describe("AaveV2StablecoinCellar", () => {
       // convert all inactive assets -> active assets
       await cellar.enterStrategy();
 
+      await cellar.accrueFees();
+
       // mimic growth from $1000 -> $1250 (1.25x increase) while in strategy
       await lendingPool.setLiquidityIndex(
         ethers.BigNumber.from("1250000000000000000000000000")
       );
 
-      // should allow users to withdraw from holding pool
-      await cellar["withdraw(uint256)"](Num(1250, 6));
+      await cellar.accrueFees();
 
-      // expect cellar to have received $12.5 fees in shares = $250 gain * 5%
-      const expectedFees = await cellar.convertToShares(Num(12.5, 6));
-      expect(await cellar.balanceOf(cellar.address)).to.eq(expectedFees);
+      const performanceFees = (await cellar.feesData())[4];
+      // expect cellar to have received $12.5 fees in shares = $250 gain * 5%,
+      // which would be ~10 shares at the time of accrual
+      expect(performanceFees).to.be.closeTo(Num(10, 18), Num(0.001, 18));
+
+      const ownerAssetBalance = await cellar.convertToAssets(
+        await cellar.balanceOf(owner.address)
+      );
+      const cellarAssetBalance = await cellar.convertToAssets(
+        await cellar.balanceOf(cellar.address)
+      );
+
+      // expect to be ~$1250 (will be off by an extremely slight amount due to
+      // converToAssets truncating 18 decimals of precision to 6 decimals)
+      expect(
+        ethers.BigNumber.from(ownerAssetBalance).add(
+          ethers.BigNumber.from(cellarAssetBalance)
+        )
+      ).to.be.closeTo(Num(1250, 6), Num(0.001, 6));
+    });
+
+    it("should burn performance fees with negative performance", async () => {
+      // owner deposits $1000
+      await cellar["deposit(uint256)"](Num(1000, 6));
+
+      // convert all inactive assets -> active assets
+      await cellar.enterStrategy();
+
+      await cellar.accrueFees();
+
+      // mimic growth from $1000 -> $1250 (1.25x increase) while in strategy
+      await lendingPool.setLiquidityIndex(
+        ethers.BigNumber.from("1250000000000000000000000000")
+      );
+
+      await cellar.accrueFees();
+
+      const feesBeforeLoss = ethers.BigNumber.from(
+        await cellar.balanceOf(cellar.address)
+      );
+
+      await lendingPool.setLiquidityIndex(
+        ethers.BigNumber.from("1150000000000000000000000000")
+      );
+
+      await cellar.accrueFees();
+
+      const feesAfterLoss = ethers.BigNumber.from(
+        await cellar.balanceOf(cellar.address)
+      );
+
+      // expect performance fee shares to have been burned
+      expect(feesAfterLoss.lt(feesBeforeLoss)).to.be.true;
     });
 
     it("should be able to transfer fees to Cosmos", async () => {
@@ -625,7 +703,7 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar["deposit(uint256)"](Num(1000, 6));
       await cellar.enterStrategy();
       await timetravel(86400); // 1 day
-      await cellar.accruePlatformFees();
+      await cellar.accrueFees();
 
       // accrue some performance fees
       await cellar.connect(alice)["deposit(uint256)"](Num(1000, 6));
@@ -634,6 +712,7 @@ describe("AaveV2StablecoinCellar", () => {
         ethers.BigNumber.from("1250000000000000000000000000")
       );
       await cellar.connect(alice)["withdraw(uint256)"](Num(1250, 6));
+      await cellar.accrueFees();
 
       const fees = await cellar.balanceOf(cellar.address);
       const feeInAssets = await cellar.convertToAssets(fees);
