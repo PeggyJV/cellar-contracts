@@ -69,7 +69,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     uint24 public constant POOL_FEE = 3000;
 
     uint256 public constant DENOMINATOR = 10_000;
-    uint256 public constant SECS_PER_YEAR = 31_556_952;
+    uint256 public constant SECS_PER_YEAR = 365 days;
     uint256 public constant PLATFORM_FEE = 100;
     uint256 public constant PERFORMANCE_FEE = 500;
 
@@ -230,7 +230,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             // Check if deposit shares are active or inactive.
             if (d.timeDeposited < lastTimeEnteredStrategy) {
                 // Active:
-                uint256 dAssets = exchangeRate * d.shares / 1e18;
+                uint256 dAssets = d.shares.mulDivDown(exchangeRate, 1e18);
                 withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
                 withdrawnShares = d.shares.mulDivUp(withdrawnAssets, dAssets);
 
@@ -269,7 +269,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
 
-        uint256 withdrawnActiveAssets = exchangeRate * withdrawnActiveShares / 1e18;
+        uint256 withdrawnActiveAssets = withdrawnActiveShares.mulDivDown(exchangeRate, 1e18);
 
         _burn(owner, shares);
 
@@ -328,7 +328,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         if (!isShutdown) {
             // Take performance fee off of rewards.
-            uint256 performanceFeeInAssets = amountOut * PERFORMANCE_FEE / DENOMINATOR;
+            uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
             uint256 performanceFees = convertToShares(performanceFeeInAssets);
 
             _mint(address(this), performanceFees);
@@ -450,13 +450,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         if (feesData.lastActiveAssets != 0 && currentInterestIndex != feesData.lastInterestIndex) {
             // An index value greater than 1e27 indicates positive performance, while a value less than
             // indicates negative performance.
-            uint256 performanceIndex = currentInterestIndex * 1e27 / feesData.lastInterestIndex;
+            uint256 performanceIndex = currentInterestIndex.mulDivDown(1e27, feesData.lastInterestIndex);
             uint256 updatedActiveAssets = feesData.lastActiveAssets.mulDivUp(performanceIndex, 1e27);
 
             if (currentInterestIndex > feesData.lastInterestIndex) {
                 uint256 gain = updatedActiveAssets - feesData.lastActiveAssets;
 
-                uint256 performanceFeeInAssets = gain * PERFORMANCE_FEE / DENOMINATOR;
+                uint256 performanceFeeInAssets = gain.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
                 performanceFees = _convertToShares(performanceFeeInAssets, 0);
 
                 _mint(address(this), performanceFees);
@@ -469,12 +469,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
                 uint256 loss = feesData.lastActiveAssets - updatedActiveAssets;
 
-                uint256 feesBurntInAssets = loss * PERFORMANCE_FEE / DENOMINATOR;
+                uint256 feesBurntInAssets = loss.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
                 uint256 feesBurnt = _convertToShares(feesBurntInAssets, 0);
 
-                if (feesBurnt > feesData.accruedPerformanceFees) {
+                if (feesBurnt > feesData.accruedPerformanceFees)
                     feesBurnt = feesData.accruedPerformanceFees;
-                }
 
                 _burn(address(this), feesBurnt);
 
