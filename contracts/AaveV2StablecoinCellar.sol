@@ -222,7 +222,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         uint256 withdrawnActiveShares;
         uint256 withdrawnInactiveShares;
         uint256 withdrawnInactiveAssets;
-        uint256 originalDepositedAssets; // Used for calculating performance fees.
 
         // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
         uint256 exchangeRate = _convertToAssets(1e18);
@@ -243,11 +242,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
                 withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
                 withdrawnShares = d.shares.mulDivUp(withdrawnAssets, dAssets);
 
-                uint256 originalDepositWithdrawn = d.assets.mulDivUp(withdrawnShares, d.shares);
-                // Store to calculate performance fees on future withdraws.
-                d.assets -= originalDepositWithdrawn;
+                delete d.assets; // Don't need anymore; delete for a gas refund.
 
-                originalDepositedAssets += originalDepositWithdrawn;
                 withdrawnActiveShares += withdrawnShares;
             } else {
                 // Inactive:
