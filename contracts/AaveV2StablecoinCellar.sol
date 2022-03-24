@@ -109,7 +109,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         address _WETH,
         address _USDC,
         address _currentLendingToken
-    ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "sommSAAVE", 18) Ownable() {
+    ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "aave2CLR-S", 18) Ownable() {
         uniswapRouter =  _uniswapRouter;
         sushiSwapRouter = _sushiSwapRouter;
         lendingPool = _lendingPool;
