@@ -168,6 +168,12 @@ interface IAaveV2StablecoinCellar {
     error SameLendingToken(address lendingToken);
 
     /**
+     * @notice Attempted to rebalance with a path that does not start with the current lending token.
+     * @param path the invalid swap path that was attempted
+     */
+    error InvalidSwapPath(address[] path);
+
+    /**
      * @notice Attempted action was prevented due to contract being shutdown.
      */
     error ContractShutdown();
@@ -217,7 +223,7 @@ interface IAaveV2StablecoinCellar {
 
     function claimAndUnstake() external returns (uint256);
 
-    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount) external;
+    function rebalance(address[] memory path, uint256 minNewLendingTokenAmount) external;
 
     function accrueFees() external;
 

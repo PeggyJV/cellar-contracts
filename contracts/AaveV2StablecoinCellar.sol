@@ -365,28 +365,37 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
     /**
      * @notice Rebalances of Aave lending position.
-     * @param newLendingToken the address of the token of the new lending position
+     * @param path path to swap from the current lending token to new lending token on Uniswap
+     * @param minNewLendingTokenAmount minimum amount of tokens received by cellar after swap
      */
-    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount) external onlyOwner {
-        if (!inputTokens[newLendingToken]) revert UnapprovedToken(newLendingToken);
-        if (isShutdown) revert ContractShutdown();
+    function rebalance(address[] memory path, uint256 minNewLendingTokenAmount) external onlyOwner {
+        address newLendingToken = path[path.length - 1];
 
-        if (newLendingToken == currentLendingToken) revert SameLendingToken(newLendingToken);
+        if (!inputTokens[newLendingToken]) revert UnapprovedToken(newLendingToken);
+        if (newLendingToken == currentLendingToken) revert SameLendingToken(currentLendingToken);
+        if (path[0] != currentLendingToken) revert InvalidSwapPath(path);
+        if (isShutdown) revert ContractShutdown();
 
         // Last accrual of performance fees with current lending position before rebalancing.
         _accruePerformanceFees(false);
 
-        uint256 lendingPositionBalance = _redeemFromAave(currentLendingToken, type(uint256).max);
+        _redeemFromAave(currentLendingToken, type(uint256).max);
 
-        address[] memory path = new address[](2);
-        path[0] = currentLendingToken;
-        path[1] = newLendingToken;
-
-        uint256 newLendingTokenAmount = _multihopSwap(
-            path,
-            lendingPositionBalance,
-            minNewLendingTokenAmount
-        );
+        uint256 newLendingTokenAmount;
+        if (path.length > 2) {
+            newLendingTokenAmount = _multihopSwap(
+                path,
+                inactiveAssets(),
+                minNewLendingTokenAmount
+            );
+        } else {
+            newLendingTokenAmount = _swap(
+                currentLendingToken,
+                newLendingToken,
+                inactiveAssets(),
+                minNewLendingTokenAmount
+            );
+        }
 
         address oldLendingToken = currentLendingToken;
 

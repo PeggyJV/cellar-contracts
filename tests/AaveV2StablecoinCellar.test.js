@@ -21,12 +21,7 @@ const timetravel = async (addTime) => {
 };
 
 // TODO:
-// - test withdrawing 0
-// - test many transfers
 // - test transferring active vs inactive shares
-// - test transfer after rebalancing
-// - get full coverage
-// - test if withdraw and transferFees withdraw from strategy when necessary
 
 describe("AaveV2StablecoinCellar", () => {
   let owner;
@@ -44,6 +39,7 @@ describe("AaveV2StablecoinCellar", () => {
   let gravity;
   let aUSDC;
   let aDAI;
+  let aUSDT;
   let stkAAVE;
   let aave;
 
@@ -76,6 +72,10 @@ describe("AaveV2StablecoinCellar", () => {
     aDAI = await MockAToken.deploy(dai.address, "aDAI");
     await aDAI.deployed();
 
+    // Deploy mock aUSDT
+    aUSDT = await MockAToken.deploy(usdt.address, "aUSDT");
+    await aUSDT.deployed();
+
     // Deploy mock Aave USDC lending pool
     const LendingPool = await ethers.getContractFactory("MockLendingPool");
     lendingPool = await LendingPool.deploy();
@@ -83,9 +83,11 @@ describe("AaveV2StablecoinCellar", () => {
 
     await lendingPool.initReserve(usdc.address, aUSDC.address);
     await lendingPool.initReserve(dai.address, aDAI.address);
+    await lendingPool.initReserve(usdt.address, aUSDT.address);
 
     await aUSDC.setLendingPool(lendingPool.address);
     await aDAI.setLendingPool(lendingPool.address);
+    await aUSDT.setLendingPool(lendingPool.address);
 
     // Deploy mock AAVE
     aave = await Token.deploy("AAVE", 18);
@@ -167,6 +169,7 @@ describe("AaveV2StablecoinCellar", () => {
     // Initialize with mock tokens as input tokens
     await cellar.setInputToken(usdc.address, true);
     await cellar.setInputToken(dai.address, true);
+    await cellar.setInputToken(usdt.address, true);
   });
 
   describe("deposit", () => {
@@ -259,6 +262,12 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.connect(alice)["withdraw(uint256)"](Num(50, 6));
       // expect next non-zero deposit is set to index 0 since some shares still remain
       expect(await cellar.currentDepositIndex(alice.address)).to.eq(0);
+    });
+
+    it("should not allow deposits of 0", async () => {
+      await expect(cellar["deposit(uint256)"](0)).to.be.revertedWith(
+        "ZeroAssets()"
+      );
     });
 
     it("should emit Deposit event", async () => {
@@ -386,6 +395,12 @@ describe("AaveV2StablecoinCellar", () => {
       expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(Num(100, 6));
     });
 
+    it("should not allow withdraws of 0", async () => {
+      await expect(cellar["withdraw(uint256)"](0)).to.be.revertedWith(
+        "ZeroAssets()"
+      );
+    });
+
     it("should not allow unapproved 3rd party to withdraw using another's shares", async () => {
       // owner tries to withdraw alice's shares without approval (expect revert)
       await expect(
@@ -415,6 +430,27 @@ describe("AaveV2StablecoinCellar", () => {
           alice.address
         )
       ).to.be.reverted;
+    });
+
+    it("should only withdraw from strategy if holding pool does not contain enough funds", async () => {
+      await cellar.enterStrategy();
+      await lendingPool.setLiquidityIndex(
+        ethers.BigNumber.from("1250000000000000000000000000")
+      );
+
+      await cellar.connect(alice)["deposit(uint256)"](Num(125, 6));
+
+      const beforeActiveAssets = await cellar.activeAssets();
+
+      // with $125 in strategy and $125 in holding pool, should with
+      await cellar["withdraw(uint256)"](Num(125, 6));
+
+      const afterActiveAssets = await cellar.activeAssets();
+
+      // active assets from strategy should not have changed
+      expect(afterActiveAssets).to.eq(beforeActiveAssets);
+      // should have withdrawn from holding pool funds
+      expect(await cellar.inactiveAssets()).to.eq(0);
     });
 
     it("should emit Withdraw event", async () => {
@@ -605,20 +641,39 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.accrueFees();
     });
 
-    it("should rebalance all usdc liquidity in dai", async () => {
+    it("should rebalance all USDC liquidity into DAI", async () => {
       expect(await dai.balanceOf(cellar.address)).to.eq(0);
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(Num(1000, 6));
 
-      await cellar.rebalance(dai.address, Num(950, 18));
+      await cellar.rebalance([usdc.address, dai.address], Num(950, 18));
 
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
       expect(await aDAI.balanceOf(cellar.address)).to.be.at.least(Num(950, 18));
     });
 
+    it("should use a multihop swap when needed", async () => {
+      await cellar.rebalance([usdc.address, dai.address, usdt.address], 0);
+    });
+
     it("should not be possible to rebalance to the same token", async () => {
-      await expect(cellar.rebalance(usdc.address, 0)).to.be.revertedWith(
-        "SameLendingToken"
+      const currentLendingToken = await cellar.currentLendingToken();
+      await expect(
+        cellar.rebalance([usdc.address, currentLendingToken], Num(950, 18))
+      ).to.be.revertedWith(`SameLendingToken("${currentLendingToken}")`);
+    });
+
+    it("should not be able to rebalance a different token than the current lending token", async () => {
+      await expect(
+        cellar.rebalance([dai.address, usdt.address], Num(950, 18))
+      ).to.be.revertedWith(
+        `InvalidSwapPath(["${dai.address}", "${usdt.address}"])`
       );
+    });
+
+    it("should not be able to an unapproved token", async () => {
+      await expect(
+        cellar.rebalance([usdc.address, weth.address], Num(950, 18))
+      ).to.be.revertedWith(`UnapprovedToken("${weth.address}")`);
     });
 
     it("should have accrued performance fees", async () => {
@@ -629,8 +684,7 @@ describe("AaveV2StablecoinCellar", () => {
       const accruedPerformanceFeesBefore = (await cellar.feesData())[4];
       const feesBefore = await cellar.balanceOf(cellar.address);
 
-      const activeLiquidity = await cellar.activeAssets();
-      await cellar.rebalance(dai.address, activeLiquidity * 0.95);
+      await cellar.rebalance([usdc.address, dai.address], Num(950, 18));
 
       const accruedPerformanceFeesAfter = (await cellar.feesData())[4];
       const feesAfter = await cellar.balanceOf(cellar.address);
@@ -713,22 +767,16 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.accrueFees();
 
-      const feesBeforeLoss = ethers.BigNumber.from(
-        await cellar.balanceOf(cellar.address)
-      );
-
       await lendingPool.setLiquidityIndex(
-        ethers.BigNumber.from("1150000000000000000000000000")
+        ethers.BigNumber.from("1000000000000000000000000000")
       );
 
       await cellar.accrueFees();
 
-      const feesAfterLoss = ethers.BigNumber.from(
-        await cellar.balanceOf(cellar.address)
-      );
+      const performanceFees = (await cellar.feesData())[4];
 
-      // expect performance fee shares to have been burned
-      expect(feesAfterLoss.lt(feesBeforeLoss)).to.be.true;
+      // expect all performance fee shares to have been burned
+      expect(performanceFees).to.eq(0);
     });
 
     it("should be able to transfer fees to Cosmos", async () => {
@@ -756,6 +804,36 @@ describe("AaveV2StablecoinCellar", () => {
       // expect all fee shares to be transferred out
       expect(await cellar.balanceOf(cellar.address)).to.eq(0);
       expect(await usdc.balanceOf(gravity.address)).to.eq(feeInAssets);
+    });
+
+    it("should only withdraw from strategy if holding pool does not contain enough funds", async () => {
+      // accrue some platform fees
+      await cellar["deposit(uint256)"](Num(1000, 6));
+      await cellar.enterStrategy();
+      await timetravel(86400); // 1 day
+      await cellar.accrueFees();
+
+      // accrue some performance fees
+      await lendingPool.setLiquidityIndex(
+        ethers.BigNumber.from("1250000000000000000000000000")
+      );
+      await cellar.accrueFees();
+
+      await cellar.connect(alice)["deposit(uint256)"](Num(100, 6));
+
+      const beforeActiveAssets = await cellar.activeAssets();
+      const beforeInactiveAssets = await cellar.inactiveAssets();
+
+      // redeems fee shares for their underlying assets and sends them to Cosmos
+      await cellar.transferFees();
+
+      const afterActiveAssets = await cellar.activeAssets();
+      const afterInactiveAssets = await cellar.inactiveAssets();
+
+      // active assets from strategy should not have changed
+      expect(afterActiveAssets).to.eq(beforeActiveAssets);
+      // should have withdrawn from holding pool funds
+      expect(afterInactiveAssets.lt(beforeInactiveAssets)).to.be.true;
     });
   });
 
