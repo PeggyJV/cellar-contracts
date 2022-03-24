@@ -57,6 +57,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     address public currentAToken;
     // Track user user deposits to determine active/inactive shares.
     mapping(address => UserDeposit[]) public userDeposits;
+    // Store the index of the user's last non-zero deposit to save gas on looping.
+    mapping(address => uint256) public currentDepositIndex;
     // Last time inactive funds were entered into a strategy and made active.
     uint256 public lastTimeEnteredStrategy;
 
@@ -219,43 +221,44 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         UserDeposit[] storage deposits = userDeposits[owner];
 
         uint256 leftToWithdraw = assets;
-        for (uint256 i = deposits.length - 1; i + 1 != 0; i--) {
+        for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
             UserDeposit storage d = deposits[i];
 
-            if (d.assets != 0) {
-                uint256 withdrawnAssets;
-                uint256 withdrawnShares;
+            uint256 withdrawnAssets;
+            uint256 withdrawnShares;
 
-                // Check if deposit shares are active or inactive.
-                if (d.timeDeposited < lastTimeEnteredStrategy) {
-                    // Active:
-                    uint256 dAssets = exchangeRate * d.shares / 1e18;
-                    withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
-                    withdrawnShares = d.shares.mulDivUp(withdrawnAssets, dAssets);
+            // Check if deposit shares are active or inactive.
+            if (d.timeDeposited < lastTimeEnteredStrategy) {
+                // Active:
+                uint256 dAssets = exchangeRate * d.shares / 1e18;
+                withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
+                withdrawnShares = d.shares.mulDivUp(withdrawnAssets, dAssets);
 
-                    uint256 originalDepositWithdrawn = d.assets.mulDivUp(withdrawnShares, d.shares);
-                    // Store to calculate performance fees on future withdraws.
-                    d.assets -= originalDepositWithdrawn;
+                uint256 originalDepositWithdrawn = d.assets.mulDivUp(withdrawnShares, d.shares);
+                // Store to calculate performance fees on future withdraws.
+                d.assets -= originalDepositWithdrawn;
 
-                    originalDepositedAssets += originalDepositWithdrawn;
-                    withdrawnActiveShares += withdrawnShares;
-                } else {
-                    // Inactive:
-                    withdrawnAssets = MathUtils.min(leftToWithdraw, d.assets);
-                    withdrawnShares = d.shares.mulDivUp(withdrawnAssets, d.assets);
+                originalDepositedAssets += originalDepositWithdrawn;
+                withdrawnActiveShares += withdrawnShares;
+            } else {
+                // Inactive:
+                withdrawnAssets = MathUtils.min(leftToWithdraw, d.assets);
+                withdrawnShares = d.shares.mulDivUp(withdrawnAssets, d.assets);
 
-                    d.assets -= withdrawnAssets;
+                d.assets -= withdrawnAssets;
 
-                    withdrawnInactiveShares += withdrawnShares;
-                    withdrawnInactiveAssets += withdrawnAssets;
-                }
-
-                d.shares -= withdrawnShares;
-
-                leftToWithdraw -= withdrawnAssets;
+                withdrawnInactiveShares += withdrawnShares;
+                withdrawnInactiveAssets += withdrawnAssets;
             }
 
-            if (i == 0 || leftToWithdraw == 0) break;
+            d.shares -= withdrawnShares;
+
+            leftToWithdraw -= withdrawnAssets;
+
+            if (leftToWithdraw == 0) {
+                currentDepositIndex[owner] = d.shares != 0 ? i : i+1;
+                break;
+            }
         }
 
         shares = withdrawnActiveShares + withdrawnInactiveShares;
@@ -817,27 +820,28 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         // NOTE: Flag this for auditors.
         uint256 leftToTransfer = amount;
-        for (uint256 i = depositsFrom.length - 1; i + 1 != 0; i--) {
+        for (uint256 i = currentDepositIndex[from]; i < depositsFrom.length; i++) {
             UserDeposit storage dFrom = depositsFrom[i];
 
             uint256 dFromShares = dFrom.shares;
-            if (dFromShares != 0) {
-                uint256 transferShares = MathUtils.min(leftToTransfer, dFromShares);
-                uint256 transferAssets = dFrom.assets.mulDivUp(transferShares, dFromShares);
+            uint256 transferShares = MathUtils.min(leftToTransfer, dFromShares);
+            uint256 transferAssets = dFrom.assets.mulDivUp(transferShares, dFromShares);
 
-                dFrom.shares -= transferShares;
-                dFrom.assets -= transferAssets;
+            dFrom.shares -= transferShares;
+            dFrom.assets -= transferAssets;
 
-                depositsTo.push(UserDeposit({
-                    assets: transferAssets,
-                    shares: transferShares,
-                    timeDeposited: dFrom.timeDeposited
-                }));
+            depositsTo.push(UserDeposit({
+                assets: transferAssets,
+                shares: transferShares,
+                timeDeposited: dFrom.timeDeposited
+            }));
 
-                leftToTransfer -= transferShares;
+            leftToTransfer -= transferShares;
+
+            if (leftToTransfer == 0) {
+                currentDepositIndex[from] = dFrom.shares != 0 ? i : i+1;
+                break;
             }
-
-            if (i == 0 || leftToTransfer == 0) break;
         }
 
         // Cannot overflow because the sum of all user

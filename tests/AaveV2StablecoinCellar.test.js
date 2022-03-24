@@ -24,7 +24,8 @@ const timetravel = async (addTime) => {
 // - test withdrawing 0
 // - test many transfers
 // - test transferring active vs inactive shares
-// - test view functions
+// - test transfer after rebalancing
+// - get full coverage
 
 describe("AaveV2StablecoinCellar", () => {
   let owner;
@@ -245,6 +246,20 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await usdc.balanceOf(cellar.address)).to.eq(Num(1000, 6));
     });
 
+    it("should use and store index of first non-zero deposit", async () => {
+      await cellar["deposit(uint256)"](Num(100, 6));
+      // owner withdraws everything from deposit object at index 0
+      await cellar["withdraw(uint256)"](Num(100, 6));
+      // expect next non-zero deposit is set to index 1
+      expect(await cellar.currentDepositIndex(owner.address)).to.eq(1);
+
+      await cellar.connect(alice)["deposit(uint256)"](Num(100, 6));
+      // alice only withdraws half from index 0, leaving some shares remaining
+      await cellar.connect(alice)["withdraw(uint256)"](Num(50, 6));
+      // expect next non-zero deposit is set to index 0 since some shares still remain
+      expect(await cellar.currentDepositIndex(alice.address)).to.eq(0);
+    });
+
     it("should emit Deposit event", async () => {
       await cellar.connect(alice)["deposit(uint256)"](Num(1000, 6));
 
@@ -426,9 +441,11 @@ describe("AaveV2StablecoinCellar", () => {
   });
 
   describe("transfer", () => {
-    it("should correctly update deposit accounting upon transferring shares", async () => {
-      // deposit $100 -> 100 shares
+    beforeEach(async () => {
       await cellar["deposit(uint256)"](Num(100, 6));
+    });
+
+    it("should correctly update deposit accounting upon transferring shares", async () => {
       const depositTimestamp = await timestamp();
 
       const aliceOldBalance = await cellar.balanceOf(alice.address);
@@ -449,8 +466,6 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should allow withdrawing of transferred shares", async () => {
-      await cellar["deposit(uint256)"](Num(100, 6));
-
       await cellar.transfer(alice.address, Num(100, 18));
 
       await cellar.enterStrategy();
@@ -470,11 +485,28 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
 
-    it("should require approval for transferring other's shares", async () => {
-      await cellar.connect(alice)["deposit(uint256)"](Num(100, 6));
-      await cellar.connect(alice).approve(owner.address, Num(50, 18));
+    it("should use and store index of first non-zero deposit", async () => {
+      await cellar["deposit(uint256)"](Num(100, 6));
+      // owner transfers everything from deposit object at index 0
+      await cellar.transfer(alice.address, Num(100, 18));
+      // expect next non-zero deposit is set to index 1
+      expect(await cellar.currentDepositIndex(owner.address)).to.eq(1);
 
-      await cellar.transferFrom(alice.address, owner.address, Num(50, 18));
+      await cellar.connect(alice)["deposit(uint256)"](Num(100, 6));
+      // alice only transfers half from index 0, leaving some shares remaining
+      await cellar.connect(alice).transfer(owner.address, Num(50, 18));
+      // expect next non-zero deposit is set to index 0 since some shares still remain
+      expect(await cellar.currentDepositIndex(alice.address)).to.eq(0);
+    });
+
+    it("should require approval for transferring other's shares", async () => {
+      await cellar["deposit(uint256)"](Num(100, 6));
+      await cellar.approve(alice.address, Num(50, 18));
+
+      await cellar
+        .connect(alice)
+        .transferFrom(owner.address, alice.address, Num(50, 18));
+
       await expect(
         cellar.transferFrom(alice.address, owner.address, Num(200, 18))
       ).to.be.reverted;
@@ -849,6 +881,22 @@ describe("AaveV2StablecoinCellar", () => {
       await expect(cellar.sweep(SOMM.address))
         .to.emit(cellar, "Sweep")
         .withArgs(SOMM.address, 1000);
+    });
+  });
+
+  describe("conversions", () => {
+    it("should accurately convert shares to assets and vice versa", async () => {
+      // has been tested successfully from 0 up to 10_000, but set to run once to avoid long test time
+      for (let i = 0; i < 1; i++) {
+        const initialAssets = Num(i, 6);
+        const assetsToShares = await cellar.convertToShares(initialAssets);
+        const sharesBackToAssets = await cellar.convertToAssets(assetsToShares);
+        expect(sharesBackToAssets).to.eq(initialAssets);
+        const assetsBackToShares = await cellar.convertToShares(
+          sharesBackToAssets
+        );
+        expect(assetsBackToShares).to.eq(assetsToShares);
+      }
     });
   });
 });
