@@ -13,6 +13,9 @@ from typing import Dict, Union, List
 def init():
     """Moves the current directory to the repo level and verifies all of the 
     expected directories are visible.
+
+    Note: You need to run this script from the repo level,
+    not from inside the scripts directory.
     """
 
     if os.path.dirname(__file__) == "scripts":
@@ -22,10 +25,11 @@ def init():
         assert [ed in os.listdir() for ed in expected_directories]
 
 def abi_fname_and_path():
-    contract_name: str = "AaveStablecoinCellar"
+    contract_name: str = "AaveV2StablecoinCellar"
     contract_fname = contract_name + ".sol"
     abi_fname = contract_name + ".json"
 
+    breakpoint()
     abi_path = os.path.join("artifacts", "contracts", contract_fname, abi_fname)
     assert os.path.exists(abi_path)
     return abi_fname, abi_path
