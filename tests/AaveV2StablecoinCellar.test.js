@@ -206,7 +206,7 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
 
-    it("should swap input token for current lending token if not already", async () => {
+    it("should swap deposit token for current lending token if not already", async () => {
       const ownerOldBalance = await dai.balanceOf(owner.address);
       const cellarOldBalance = await usdc.balanceOf(cellar.address);
 
@@ -243,7 +243,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
     });
 
-    it("should deposit all user's balance if tries to deposit more than they have", async () => {
+    it("should deposit all user's balance if they try depositing more than their balance", async () => {
       // owner has $1000 to deposit, withdrawing $5000 should only withdraw $1000
       await cellar["deposit(uint256)"](Num(5000, 6));
       expect(await usdc.balanceOf(owner.address)).to.eq(0);
@@ -380,7 +380,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
     });
 
-    it("should withdraw all user's assets if tries to withdraw more than they have", async () => {
+    it("should withdraw all user's assets if they try withdrawing more than their balance", async () => {
       await cellar["withdraw(uint256)"](Num(100, 6));
       // owner should now have nothing left to withdraw
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
@@ -636,6 +636,7 @@ describe("AaveV2StablecoinCellar", () => {
     beforeEach(async () => {
       await cellar["deposit(uint256)"](Num(1000, 6));
       await cellar.enterStrategy();
+      await cellar["deposit(uint256)"](Num(500, 6));
 
       // set initial fee data
       await cellar.accrueFees();
@@ -643,9 +644,9 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should rebalance all USDC liquidity into DAI", async () => {
       expect(await dai.balanceOf(cellar.address)).to.eq(0);
-      expect(await aUSDC.balanceOf(cellar.address)).to.eq(Num(1000, 6));
+      expect(await cellar.totalAssets()).to.eq(Num(1500, 6));
 
-      await cellar.rebalance([usdc.address, dai.address], Num(950, 18));
+      await cellar.rebalance([usdc.address, dai.address], 0);
 
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
       expect(await aDAI.balanceOf(cellar.address)).to.be.at.least(Num(950, 18));
@@ -670,7 +671,7 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
 
-    it("should not be able to an unapproved token", async () => {
+    it("should not be able to rebalance into an unapproved token", async () => {
       await expect(
         cellar.rebalance([usdc.address, weth.address], Num(950, 18))
       ).to.be.revertedWith(`UnapprovedToken("${weth.address}")`);
@@ -714,7 +715,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(feesInAssets).to.be.closeTo(Num(0.027, 6), Num(0.001, 6));
     });
 
-    it("should accrue performance fees upon withdraw", async () => {
+    it("should accrue performance fees", async () => {
       // owner deposits $1000
       await cellar["deposit(uint256)"](Num(1000, 6));
 
@@ -751,7 +752,7 @@ describe("AaveV2StablecoinCellar", () => {
       ).to.be.closeTo(Num(1250, 6), Num(0.001, 6));
     });
 
-    it("should burn performance fees with negative performance", async () => {
+    it("should burn performance fees as insurance for negative performance", async () => {
       // owner deposits $1000
       await cellar["deposit(uint256)"](Num(1000, 6));
 
@@ -898,7 +899,7 @@ describe("AaveV2StablecoinCellar", () => {
   });
 
   describe("restrictLiquidity", () => {
-    it("should prevent deposit it greater than max liquidity", async () => {
+    it("should prevent deposit if greater than max liquidity", async () => {
       // mint $5m to cellar (to hit liquidity cap)
       await usdc.mint(cellar.address, Num(5_000_000, 6));
 
@@ -907,7 +908,7 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
 
-    it("should prevent deposit it greater than max deposit", async () => {
+    it("should prevent deposit if greater than max deposit", async () => {
       await usdc.mint(owner.address, Num(50_001, 6));
       await expect(
         cellar["deposit(uint256)"](Num(50_001, 6))
@@ -919,12 +920,13 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
 
-    it("should allow deposits above max liquidity once restriction removed", async () => {
+    it("should allow deposits above max deposit and max liquidity once restriction removed", async () => {
       // mint $5m to cellar (to hit liquidity cap)
       await usdc.mint(cellar.address, Num(5_000_000, 6));
 
       await cellar.removeLiquidityRestriction();
 
+      // should be able to depositing past the max deposit restriction since its been removed
       await cellar["deposit(uint256)"](Num(50_001, 6));
     });
   });
@@ -946,6 +948,9 @@ describe("AaveV2StablecoinCellar", () => {
       );
       await expect(cellar.sweep(aUSDC.address)).to.be.revertedWith(
         `ProtectedToken("${aUSDC.address}")`
+      );
+      await expect(cellar.sweep(cellar.address)).to.be.revertedWith(
+        `ProtectedToken("${cellar.address}")`
       );
     });
 
