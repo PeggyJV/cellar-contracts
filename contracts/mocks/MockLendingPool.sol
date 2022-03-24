@@ -2,15 +2,18 @@
 
 pragma solidity 0.8.11;
 
-import "./MockToken.sol";
+import "./MockAToken.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract MockLendingPool {
-    address public aToken;
+    mapping(address => address) public aTokens;
+    uint256 public index = 1000000000000000000000000000;
 
-    constructor(string memory _symbol) {
-        MockToken token = new MockToken(string(abi.encodePacked("a", _symbol)));
-        aToken = address(token);
+    constructor() { }
+
+    // for testing purposes; not in actual contract
+    function setLiquidityIndex(uint256 _index) external {
+        index = _index;
     }
 
     function deposit(
@@ -19,8 +22,8 @@ contract MockLendingPool {
         address onBehalfOf,
         uint16
     ) external {
-        IERC20(asset).transferFrom(onBehalfOf, address(this), amount);
-        MockToken(aToken).mint(onBehalfOf, amount);
+        IERC20(asset).transferFrom(onBehalfOf, aTokens[asset], amount);
+        MockAToken(aTokens[asset]).mint(onBehalfOf, amount, index);
     }
 
     function withdraw(
@@ -28,41 +31,55 @@ contract MockLendingPool {
         uint256 amount,
         address to
     ) external returns (uint256) {
-        MockToken(aToken).burn(to, amount);
-        IERC20(asset).transfer(to, amount);
+        if (amount == type(uint256).max)
+            amount = MockAToken(aTokens[asset]).balanceOf(msg.sender);
+
+        MockAToken(aTokens[asset]).burn(msg.sender, to, amount, index);
+
         return amount;
     }
 
     function getReserveData(address asset)
-        external
-        pure
-        returns (
-            uint256 configuration,
-            uint128 liquidityIndex,
-            uint128 variableBorrowIndex,
-            uint128 currentLiquidityRate,
-            uint128 currentVariableBorrowRate,
-            uint128 currentStableBorrowRate,
-            uint40 lastUpdateTimestamp,
-            address aTokenAddress,
-            address stableDebtTokenAddress,
-            address variableDebtTokenAddress,
-            address interestRateStrategyAddress,
-            uint8 id
-        )
+    external
+    view
+    returns (
+        uint256 configuration,
+        uint128 liquidityIndex,
+        uint128 variableBorrowIndex,
+        uint128 currentLiquidityRate,
+        uint128 currentVariableBorrowRate,
+        uint128 currentStableBorrowRate,
+        uint40 lastUpdateTimestamp,
+        address aTokenAddress,
+        address stableDebtTokenAddress,
+        address variableDebtTokenAddress,
+        address interestRateStrategyAddress,
+        uint8 id
+    )
     {
         asset;
         configuration;
-        liquidityIndex;
+        liquidityIndex = uint128(index);
         variableBorrowIndex;
         currentLiquidityRate;
         currentVariableBorrowRate;
         currentStableBorrowRate;
         lastUpdateTimestamp;
-        aTokenAddress = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // We only care about this for now
+        aTokenAddress = aTokens[asset];
         stableDebtTokenAddress;
         variableDebtTokenAddress;
         interestRateStrategyAddress;
         id;
+    }
+
+    function getReserveNormalizedIncome(address) external view returns (uint256) {
+        return index;
+    }
+
+    function initReserve(
+      address asset,
+      address aTokenAddress
+    ) external {
+      aTokens[asset] = aTokenAddress;
     }
 }

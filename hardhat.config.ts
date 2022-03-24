@@ -3,8 +3,11 @@ import "@nomiclabs/hardhat-waffle";
 import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
+import "hardhat-contract-sizer";
+import "hardhat-exposed";
 
 import "./tasks/accounts";
+// import "./tasks/deploy/aaveV2Cellar";
 
 import { resolve } from "path";
 
@@ -135,7 +138,7 @@ const config: HardhatUserConfig = {
           // https://hardhat.org/hardhat-network/#solidity-optimizer-support
           optimizer: {
             enabled: optimizerEnabled,
-            runs: 999999,
+            runs: 100,
             details: {
               // Enabled to fix stack errors when attempting to run test coverage
               yul: true,
