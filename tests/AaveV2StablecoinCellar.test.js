@@ -26,6 +26,7 @@ const timetravel = async (addTime) => {
 // - test transferring active vs inactive shares
 // - test transfer after rebalancing
 // - get full coverage
+// - test if withdraw and transferFees withdraw from strategy when necessary
 
 describe("AaveV2StablecoinCellar", () => {
   let owner;
@@ -738,15 +739,16 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.accrueFees();
 
       // accrue some performance fees
-      await cellar.connect(alice)["deposit(uint256)"](Num(1000, 6));
-      await cellar.enterStrategy();
       await lendingPool.setLiquidityIndex(
         ethers.BigNumber.from("1250000000000000000000000000")
       );
-      await cellar.connect(alice)["withdraw(uint256)"](Num(1250, 6));
       await cellar.accrueFees();
 
       const fees = await cellar.balanceOf(cellar.address);
+      const accruedPlatformFees = (await cellar.feesData())[3];
+      const accruedPerformanceFees = (await cellar.feesData())[4];
+      expect(fees).to.eq(accruedPlatformFees.add(accruedPerformanceFees));
+
       const feeInAssets = await cellar.convertToAssets(fees);
 
       await cellar.transferFees();

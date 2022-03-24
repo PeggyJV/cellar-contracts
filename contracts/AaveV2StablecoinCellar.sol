@@ -273,28 +273,19 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         _burn(owner, shares);
 
-        if (withdrawnActiveAssets > 0) {
-            withdrawnActiveAssets = withdrawnActiveAssets.changeDecimals(decimals, tokenDecimals);
+        uint256 toWithdaw = withdrawnActiveAssets + withdrawnInactiveAssets;
+        toWithdaw = toWithdaw.changeDecimals(decimals, tokenDecimals);
 
-            if (!isShutdown) {
-                // Withdraw tokens from Aave to receiver.
-                lendingPool.withdraw(currentLendingToken, withdrawnActiveAssets, receiver);
-            } else {
-                ERC20(currentLendingToken).transfer(receiver, withdrawnActiveAssets);
-            }
-        }
+        // Only withdraw from strategy if holding pool does not contain enough funds.
+        _allocateAssets(toWithdaw);
 
-        if (withdrawnInactiveAssets > 0) {
-            withdrawnInactiveAssets = withdrawnInactiveAssets.changeDecimals(decimals, tokenDecimals);
-
-            ERC20(currentLendingToken).transfer(receiver, withdrawnInactiveAssets);
-        }
+        ERC20(currentLendingToken).safeTransfer(receiver, toWithdaw);
 
         emit Withdraw(
             receiver,
             owner,
             currentLendingToken,
-            withdrawnActiveAssets + withdrawnInactiveAssets,
+            toWithdaw,
             shares
         );
     }
@@ -500,17 +491,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     /// @notice Transfer accrued fees to Cosmos to distribute.
     function transferFees() external onlyOwner {
         uint256 fees = feesData.accruedPerformanceFees + feesData.accruedPlatformFees;
-        uint256 feeInAssets = _convertToAssets(fees);
-
-        feeInAssets = feeInAssets.changeDecimals(decimals, tokenDecimals);
-
-        // Only withdraw from Aave if holding pool does not contain enough funds.
-        uint256 holdingPoolBalance = inactiveAssets();
-        if (holdingPoolBalance < feeInAssets) {
-            _redeemFromAave(currentLendingToken, feeInAssets - holdingPoolBalance);
-        }
+        uint256 feeInAssets = convertToAssets(fees);
 
         _burn(address(this), fees);
+
+        // Only withdraw from strategy if holding pool does not contain enough funds.
+        _allocateAssets(feeInAssets);
 
         ERC20(currentLendingToken).approve(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(currentLendingToken, feesDistributor, feeInAssets);
@@ -521,7 +507,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         emit TransferFees(fees, feeInAssets);
     }
 
-    // NOTE: For beta only.
+    // NOTE: For test deployment only.
     function setFeeDistributor(bytes32 _newFeeDistributor) external onlyOwner {
         feesDistributor = _newFeeDistributor;
     }
@@ -658,6 +644,18 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         withdrawnAmount = lendingPool.withdraw(token, assets, address(this));
 
         emit RedeemFromAave(token, withdrawnAmount);
+    }
+
+    /**
+     * @notice Allocates a specific amount of assets to be transferred.
+     * @dev Only withdraws from strategies if needed.
+     * @param assets The amount of underlying tokens to allocate
+     */
+    function _allocateAssets(uint256 assets) internal {
+        uint256 holdingPoolAssets = inactiveAssets();
+        if (assets > holdingPoolAssets) {
+            _redeemFromAave(currentLendingToken, assets - holdingPoolAssets);
+        }
     }
 
     /**
