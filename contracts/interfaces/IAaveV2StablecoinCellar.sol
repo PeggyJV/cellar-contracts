@@ -4,6 +4,9 @@ pragma solidity 0.8.11;
 
 /// @title interface for AaveV2StablecoinCellar
 interface IAaveV2StablecoinCellar {
+
+    // ======================================= EVENTS =======================================
+
     /**
      * @notice Emitted when assets are deposited into cellar.
      * @param caller the address of the caller
@@ -121,6 +124,8 @@ interface IAaveV2StablecoinCellar {
      */
     event Shutdown(address caller);
 
+    // ======================================= ERRORS =======================================
+
     /**
      * @notice Attempted an action with a token that is not approved.
      * @param unapprovedToken address of the unapproved token
@@ -187,6 +192,8 @@ interface IAaveV2StablecoinCellar {
      * @notice Attempted to shutdown the contract when it was already shutdown.
      */
     error AlreadyShutdown();
+
+    // ======================================= FUNCTIONS =======================================
 
     function deposit(
         address[] memory path,
