@@ -69,7 +69,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     uint24 public constant POOL_FEE = 3000;
 
     uint256 public constant DENOMINATOR = 10_000;
-    uint256 public constant SECS_PER_YEAR = 31_556_952;
+    uint256 public constant SECS_PER_YEAR = 365 days;
     uint256 public constant PLATFORM_FEE = 100;
     uint256 public constant PERFORMANCE_FEE = 500;
 
@@ -230,7 +230,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             // Check if deposit shares are active or inactive.
             if (d.timeDeposited < lastTimeEnteredStrategy) {
                 // Active:
-                uint256 dAssets = exchangeRate * d.shares / 1e18;
+                uint256 dAssets = d.shares.mulDivDown(exchangeRate, 1e18);
                 withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
                 withdrawnShares = d.shares.mulDivUp(withdrawnAssets, dAssets);
 
@@ -269,7 +269,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
 
-        uint256 withdrawnActiveAssets = exchangeRate * withdrawnActiveShares / 1e18;
+        uint256 withdrawnActiveAssets = withdrawnActiveShares.mulDivDown(exchangeRate, 1e18);
 
         _burn(owner, shares);
 
@@ -328,7 +328,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         if (!isShutdown) {
             // Take performance fee off of rewards.
-            uint256 performanceFeeInAssets = amountOut * PERFORMANCE_FEE / DENOMINATOR;
+            uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
             uint256 performanceFees = convertToShares(performanceFeeInAssets);
 
             _mint(address(this), performanceFees);
@@ -365,28 +365,37 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
     /**
      * @notice Rebalances of Aave lending position.
-     * @param newLendingToken the address of the token of the new lending position
+     * @param path path to swap from the current lending token to new lending token on Uniswap
+     * @param minNewLendingTokenAmount minimum amount of tokens received by cellar after swap
      */
-    function rebalance(address newLendingToken, uint256 minNewLendingTokenAmount) external onlyOwner {
-        if (!inputTokens[newLendingToken]) revert UnapprovedToken(newLendingToken);
-        if (isShutdown) revert ContractShutdown();
+    function rebalance(address[] memory path, uint256 minNewLendingTokenAmount) external onlyOwner {
+        address newLendingToken = path[path.length - 1];
 
-        if (newLendingToken == currentLendingToken) revert SameLendingToken(newLendingToken);
+        if (!inputTokens[newLendingToken]) revert UnapprovedToken(newLendingToken);
+        if (newLendingToken == currentLendingToken) revert SameLendingToken(currentLendingToken);
+        if (path[0] != currentLendingToken) revert InvalidSwapPath(path);
+        if (isShutdown) revert ContractShutdown();
 
         // Last accrual of performance fees with current lending position before rebalancing.
         _accruePerformanceFees(false);
 
-        uint256 lendingPositionBalance = _redeemFromAave(currentLendingToken, type(uint256).max);
+        _redeemFromAave(currentLendingToken, type(uint256).max);
 
-        address[] memory path = new address[](2);
-        path[0] = currentLendingToken;
-        path[1] = newLendingToken;
-
-        uint256 newLendingTokenAmount = _multihopSwap(
-            path,
-            lendingPositionBalance,
-            minNewLendingTokenAmount
-        );
+        uint256 newLendingTokenAmount;
+        if (path.length > 2) {
+            newLendingTokenAmount = _multihopSwap(
+                path,
+                inactiveAssets(),
+                minNewLendingTokenAmount
+            );
+        } else {
+            newLendingTokenAmount = _swap(
+                currentLendingToken,
+                newLendingToken,
+                inactiveAssets(),
+                minNewLendingTokenAmount
+            );
+        }
 
         address oldLendingToken = currentLendingToken;
 
@@ -450,13 +459,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         if (feesData.lastActiveAssets != 0 && currentInterestIndex != feesData.lastInterestIndex) {
             // An index value greater than 1e27 indicates positive performance, while a value less than
             // indicates negative performance.
-            uint256 performanceIndex = currentInterestIndex * 1e27 / feesData.lastInterestIndex;
+            uint256 performanceIndex = currentInterestIndex.mulDivDown(1e27, feesData.lastInterestIndex);
             uint256 updatedActiveAssets = feesData.lastActiveAssets.mulDivUp(performanceIndex, 1e27);
 
             if (currentInterestIndex > feesData.lastInterestIndex) {
                 uint256 gain = updatedActiveAssets - feesData.lastActiveAssets;
 
-                uint256 performanceFeeInAssets = gain * PERFORMANCE_FEE / DENOMINATOR;
+                uint256 performanceFeeInAssets = gain.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
                 performanceFees = _convertToShares(performanceFeeInAssets, 0);
 
                 _mint(address(this), performanceFees);
@@ -469,12 +478,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
                 uint256 loss = feesData.lastActiveAssets - updatedActiveAssets;
 
-                uint256 feesBurntInAssets = loss * PERFORMANCE_FEE / DENOMINATOR;
+                uint256 feesBurntInAssets = loss.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
                 uint256 feesBurnt = _convertToShares(feesBurntInAssets, 0);
 
-                if (feesBurnt > feesData.accruedPerformanceFees) {
+                if (feesBurnt > feesData.accruedPerformanceFees)
                     feesBurnt = feesData.accruedPerformanceFees;
-                }
 
                 _burn(address(this), feesBurnt);
 

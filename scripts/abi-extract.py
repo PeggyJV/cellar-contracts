@@ -29,7 +29,6 @@ def abi_fname_and_path():
     contract_fname = contract_name + ".sol"
     abi_fname = contract_name + ".json"
 
-    breakpoint()
     abi_path = os.path.join("artifacts", "contracts", contract_fname, abi_fname)
     assert os.path.exists(abi_path)
     return abi_fname, abi_path
