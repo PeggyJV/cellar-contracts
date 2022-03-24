@@ -168,7 +168,7 @@ interface IAaveV2StablecoinCellar {
     error SameLendingToken(address lendingToken);
 
     /**
-     * @notice Attempted to rebalance with a path that does not start with the current lending token.
+     * @notice Specified a swap path that doesn't make sense for the action attempted.
      * @param path the invalid swap path that was attempted
      */
     error InvalidSwapPath(address[] path);
@@ -189,9 +189,9 @@ interface IAaveV2StablecoinCellar {
     error AlreadyShutdown();
 
     function deposit(
-        address token,
-        uint256 assets,
+        address[] memory path,
         uint256 minAssetsIn,
+        uint256 assets,
         address receiver
     ) external returns (uint256 shares);
 

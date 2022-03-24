@@ -210,10 +210,10 @@ describe("AaveV2StablecoinCellar", () => {
       const ownerOldBalance = await dai.balanceOf(owner.address);
       const cellarOldBalance = await usdc.balanceOf(cellar.address);
 
-      await cellar["deposit(address,uint256,uint256,address)"](
-        dai.address,
-        Num(100, 18),
+      await cellar["deposit(address[],uint256,uint256,address)"](
+        [dai.address, usdc.address],
         Num(95, 6),
+        Num(100, 18),
         owner.address
       );
 

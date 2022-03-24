@@ -133,30 +133,33 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
     /**
      * @notice Deposit supported tokens into the cellar.
-     * @param token address of the supported token to deposit
+     * @param path path to swap from the deposit token to current lending token on Uniswap
+     * @param minAssetsOut minimum amount of assets cellar should receive after swap (if applicable)
      * @param assets amount of assets to deposit
-     * @param minAssetsIn minimum amount of assets cellar should receive after swap (if applicable)
      * @param receiver address that should receive shares
      * @return shares amount of shares minted to receiver
      */
     function deposit(
-        address token,
+        address[] memory path,
+        uint256 minAssetsOut,
         uint256 assets,
-        uint256 minAssetsIn,
         address receiver
     ) public nonReentrant returns (uint256 shares) {
         if (isPaused) revert ContractPaused();
         if (isShutdown) revert ContractShutdown();
 
-        if (!inputTokens[token]) revert UnapprovedToken(token);
+        address depositToken = path[0];
 
-        uint256 balance = ERC20(token).balanceOf(msg.sender);
+        if (!inputTokens[depositToken]) revert UnapprovedToken(depositToken);
+        if (path[path.length - 1] != currentLendingToken) revert InvalidSwapPath(path);
+
+        uint256 balance = ERC20(depositToken).balanceOf(msg.sender);
         if (assets > balance) assets = balance;
 
-        ERC20(token).safeTransferFrom(msg.sender, address(this), assets);
+        ERC20(depositToken).safeTransferFrom(msg.sender, address(this), assets);
 
-        if (token != currentLendingToken) {
-            assets = _swap(token, currentLendingToken, assets, minAssetsIn);
+        if (depositToken != currentLendingToken) {
+            assets = _swap(path, assets, minAssetsOut, true);
         }
 
         if (maxLiquidity != 0 && assets + totalAssets() > maxLiquidity)
@@ -189,12 +192,18 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     }
 
     function deposit(uint256 assets) external returns (uint256) {
-        return deposit(currentLendingToken, assets, assets, msg.sender);
+        address [] memory path = new address [](1);
+        path[0] = currentLendingToken;
+
+        return deposit(path, assets, assets, msg.sender);
     }
 
     /// @dev For ERC4626 compatibility.
     function deposit(uint256 assets, address receiver) external returns (uint256) {
-        return deposit(currentLendingToken, assets, assets, receiver);
+        address [] memory path = new address [](1);
+        path[0] = currentLendingToken;
+
+        return deposit(path, assets, assets, receiver);
     }
 
     /**
@@ -324,7 +333,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         uint256 amountIn = ERC20(AAVE).balanceOf(address(this));
 
         // Due to the lack of liquidity for AAVE on Uniswap, we use Sushiswap instead here.
-        uint256 amountOut = _sushiswap(path, amountIn, minAssetsOut);
+        uint256 amountOut = _swap(path, amountIn, minAssetsOut, false);
 
         if (!isShutdown) {
             // Take performance fee off of rewards.
@@ -381,21 +390,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
 
         _redeemFromAave(currentLendingToken, type(uint256).max);
 
-        uint256 newLendingTokenAmount;
-        if (path.length > 2) {
-            newLendingTokenAmount = _multihopSwap(
-                path,
-                inactiveAssets(),
-                minNewLendingTokenAmount
-            );
-        } else {
-            newLendingTokenAmount = _swap(
-                currentLendingToken,
-                newLendingToken,
-                inactiveAssets(),
-                minNewLendingTokenAmount
-            );
-        }
+        uint256 newLendingTokenAmount = _swap(path, inactiveAssets(), minNewLendingTokenAmount, true);
 
         address oldLendingToken = currentLendingToken;
 
@@ -693,113 +688,81 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     }
 
     /**
-     * @notice Swaps input token by Uniswap V3.
-     * @param tokenIn the address of the incoming token
-     * @param tokenOut the address of the outgoing token
-     * @param amountIn the amount of tokens to be swapped
-     * @param amountOutMinimum the minimum amount of tokens returned
-     * @return amountOut the amount of tokens received after swap
+     * @notice Swaps token using Uniswap V3.
+     * @param path swap path (ie. token addresses) from the token you have to the one you want
+     * @param amountIn amount of tokens to be swapped
+     * @param amountOutMinimum minimum amount of tokens returned
+     * @param useUniswap whether to use Uniswap or Sushiswap
+     * @return amountOut amount of tokens received after swap
      */
     function _swap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        uint256 amountOutMinimum
-    ) internal returns (uint256 amountOut) {
-        // Approve the router to spend tokenIn.
-        ERC20(tokenIn).safeApprove(address(uniswapRouter), amountIn);
-
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
-            .ExactInputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                fee: POOL_FEE,
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: amountIn,
-                amountOutMinimum: amountOutMinimum,
-                sqrtPriceLimitX96: 0
-            });
-
-        // Executes the swap.
-        amountOut = uniswapRouter.exactInputSingle(params);
-
-        emit Swapped(tokenIn, amountIn, tokenOut, amountOut);
-    }
-
-    /**
-     * @notice Swaps tokens by multihop swap in Uniswap V3.
-     * @param path the token swap path (token addresses)
-     * @param amountIn the amount of tokens to be swapped
-     * @param amountOutMinimum the minimum amount of tokens returned
-     * @return amountOut the amount of tokens received after swap
-     */
-    function _multihopSwap(
         address[] memory path,
         uint256 amountIn,
-        uint256 amountOutMinimum
+        uint256 amountOutMinimum,
+        bool useUniswap
     ) internal returns (uint256 amountOut) {
-        // Approve the router to spend first token in path.
         address tokenIn = path[0];
+        address tokenOut = path[path.length - 1];
+
+        // Approve the router to spend first token in path.
         ERC20(tokenIn).safeApprove(address(uniswapRouter), amountIn);
 
-        bytes memory encodePackedPath = abi.encodePacked(tokenIn);
-        for (uint256 i = 1; i < path.length; i++) {
-            encodePackedPath = abi.encodePacked(
-                encodePackedPath,
-                POOL_FEE,
-                path[i]
-            );
+        if (path.length > 2){
+            if (useUniswap) {
+                bytes memory encodePackedPath = abi.encodePacked(tokenIn);
+                for (uint256 i = 1; i < path.length; i++) {
+                    encodePackedPath = abi.encodePacked(
+                        encodePackedPath,
+                        POOL_FEE,
+                        path[i]
+                    );
+                }
+
+                // Multiple pool swaps are encoded through bytes called a `path`. A path
+                // is a sequence of token addresses and poolFees that define the pools
+                // used in the swaps. The format for pool encoding is (tokenIn, fee,
+                // tokenOut/tokenIn, fee, tokenOut) where tokenIn/tokenOut parameter is
+                // the shared token across the pools.
+                ISwapRouter.ExactInputParams memory params = ISwapRouter
+                    .ExactInputParams({
+                        path: encodePackedPath,
+                        recipient: address(this),
+                        deadline: block.timestamp,
+                        amountIn: amountIn,
+                        amountOutMinimum: amountOutMinimum
+                    });
+
+                // Executes a multihop swap.
+                amountOut = uniswapRouter.exactInput(params);
+            } else {
+                uint256[] memory amounts = sushiSwapRouter.swapExactTokensForTokens(
+                    amountIn,
+                    amountOutMinimum,
+                    path,
+                    address(this),
+                    block.timestamp + 60
+                );
+
+                amountOut = amounts[amounts.length - 1];
+            }
+        } else {
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+                .ExactInputSingleParams({
+                    tokenIn: tokenIn,
+                    tokenOut: tokenOut,
+                    fee: POOL_FEE,
+                    recipient: address(this),
+                    deadline: block.timestamp,
+                    amountIn: amountIn,
+                    amountOutMinimum: amountOutMinimum,
+                    sqrtPriceLimitX96: 0
+                });
+
+            // Executes a single swap.
+            amountOut = uniswapRouter.exactInputSingle(params);
         }
 
-        // Multiple pool swaps are encoded through bytes called a `path`. A path
-        // is a sequence of token addresses and poolFees that define the pools
-        // used in the swaps. The format for pool encoding is (tokenIn, fee,
-        // tokenOut/tokenIn, fee, tokenOut) where tokenIn/tokenOut parameter is
-        // the shared token across the pools.
-        ISwapRouter.ExactInputParams memory params = ISwapRouter
-            .ExactInputParams({
-                path: encodePackedPath,
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: amountIn,
-                amountOutMinimum: amountOutMinimum
-            });
-
-        // Executes the swap.
-        amountOut = uniswapRouter.exactInput(params);
-
-        emit Swapped(tokenIn, amountIn, path[path.length - 1], amountOut);
-    }
-
-    /**
-     * @notice Swaps tokens by SushiSwap Router.
-     * @param path the token swap path (token addresses)
-     * @param amountIn the amount of tokens to be swapped
-     * @param amountOutMinimum the minimum amount of tokens returned
-     * @return amountOut the amount of tokens received after swap
-     */
-    function _sushiswap(
-        address[] memory path,
-        uint256 amountIn,
-        uint256 amountOutMinimum
-    ) internal returns (uint256 amountOut) {
-        address tokenIn = path[0];
-
-        // Approve the router to spend first token in path.
-        ERC20(tokenIn).safeApprove(address(sushiSwapRouter), amountIn);
-
-        uint256[] memory amounts = sushiSwapRouter.swapExactTokensForTokens(
-            amountIn,
-            amountOutMinimum,
-            path,
-            address(this),
-            block.timestamp + 60
-        );
-
-        amountOut = amounts[amounts.length - 1];
-
-        emit Swapped(tokenIn, amountIn, path[path.length - 1], amountOut);
+        emit Swapped(tokenIn, amountIn, tokenOut, amountOut);
     }
 
     // ============================================ TRANSFERS ============================================
