@@ -684,7 +684,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
     }
 
     /**
-     * @notice Swaps token using Uniswap V3.
+     * @notice Swaps token using Uniswap V3 or Sushiswap V2.
      * @param path swap path (ie. token addresses) from the token you have to the one you want
      * @param amountIn amount of tokens to be swapped
      * @param amountOutMinimum minimum amount of tokens returned
