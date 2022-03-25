@@ -31,8 +31,7 @@ contract MockLendingPool {
         uint256 amount,
         address to
     ) external returns (uint256) {
-        if (amount == type(uint256).max)
-            amount = MockAToken(aTokens[asset]).balanceOf(msg.sender);
+        if (amount == type(uint256).max) amount = MockAToken(aTokens[asset]).balanceOf(msg.sender);
 
         MockAToken(aTokens[asset]).burn(msg.sender, to, amount, index);
 

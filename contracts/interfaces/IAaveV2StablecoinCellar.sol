@@ -4,7 +4,6 @@ pragma solidity 0.8.11;
 
 /// @title interface for AaveV2StablecoinCellar
 interface IAaveV2StablecoinCellar {
-
     // ======================================= EVENTS =======================================
 
     /**
@@ -86,11 +85,29 @@ interface IAaveV2StablecoinCellar {
     );
 
     /**
-     * @notice Emitted when platform fees are transferred to Cosmos.
-     * @param feeInShares amount of fees transferred (in shares)
-     * @param feeInAssets amount of fees transferred (in assets)
+     * @notice Emitted when platform fees accrued.
+     * @param fees amount of fees accrued in shares
      */
-    event TransferFees(uint256 feeInShares, uint256 feeInAssets);
+    event AccruedPlatformFees(uint256 fees);
+
+    /**
+     * @notice Emitted when performance fees accrued.
+     * @param fees amount of fees accrued in shares
+     */
+    event AccruedPerformanceFees(uint256 fees);
+
+    /**
+     * @notice Emitted when performance fees burnt as insurance.
+     * @param fees amount of fees burnt in shares
+     */
+    event BurntPerformanceFees(uint256 fees);
+
+    /**
+     * @notice Emitted when platform fees are transferred to Cosmos.
+     * @param platformFees amount of platform fees transferred
+     * @param performanceFees amount of performance fees transferred
+     */
+    event TransferFees(uint256 platformFees, uint256 performanceFees);
 
     /**
      * @notice Emitted when liquidity restriction removed.
@@ -162,9 +179,9 @@ interface IAaveV2StablecoinCellar {
 
     /**
      * @notice Attempted to sweep an asset that is managed by the cellar.
-     * @param protectedToken address of the unsupported token
+     * @param token address of the token that can't be sweeped
      */
-    error ProtectedToken(address protectedToken);
+    error ProtectedAsset(address token);
 
     /**
      * @notice Attempted rebalance into the same lending token.
@@ -193,13 +210,45 @@ interface IAaveV2StablecoinCellar {
      */
     error AlreadyShutdown();
 
+    // ======================================= STRUCTS =======================================
+
+    /**
+     * @notice Stores user deposit data.
+     * @param assets amount of assets deposited
+     * @param shares amount of shares that were minted for their deposit
+     * @param timeDeposited timestamp of when the user deposited
+     */
+    struct UserDeposit {
+        uint256 assets;
+        uint256 shares;
+        uint256 timeDeposited;
+    }
+
+   /**
+     * @notice Stores fee data.
+     * @param lastTimeAccruedPlatformFees timestamp of last time platform fees were accrued
+     * @param lastActiveAssets amount of active assets in cellar last time performance fees were accrued
+     * @param lastNormalizedIncome normalized income index of asset last time performance fees were accrued
+     * @param accruedPlatformFees amount of platform fees that have been accrued awaiting transfer
+     * @param accruedPerformanceFees amount of performance fees that have been accrued awaiting transfer
+     */
+    struct FeesData {
+        uint256 lastTimeAccruedPlatformFees;
+        uint256 lastActiveAssets;
+        uint256 lastNormalizedIncome;
+        // Fees are taken in shares and redeemed for assets at the time they are transferred from the
+        // cellar to Cosmos to be distributed.
+        uint256 accruedPlatformFees;
+        uint256 accruedPerformanceFees;
+    }
+
     // ======================================= FUNCTIONS =======================================
 
     function deposit(
-        address[] memory path,
-        uint256 minAssetsIn,
         uint256 assets,
-        address receiver
+        address receiver,
+        address[] memory path,
+        uint256 minAssetsIn
     ) external returns (uint256 shares);
 
     function deposit(uint256 assets) external returns (uint256);
@@ -222,13 +271,9 @@ interface IAaveV2StablecoinCellar {
 
     function enterStrategy() external;
 
-    function reinvest(uint256 amount, uint256 minAssetsOut) external;
+    function reinvest(address[] memory path, uint256 minAssetsOut) external;
 
-    function reinvest(uint256 minAssetsOut) external;
-
-    function claimAndUnstake(uint256 amount) external returns (uint256 claimed);
-
-    function claimAndUnstake() external returns (uint256);
+    function claimAndUnstake() external returns (uint256 claimed);
 
     function rebalance(address[] memory path, uint256 minNewLendingTokenAmount) external;
 
