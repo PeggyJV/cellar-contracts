@@ -284,16 +284,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         // calculations are done.
         assets = assets.changeDecimals(assetDecimals, decimals);
 
-        // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
-        uint256 exchangeRate = _convertToAssets(1e18);
-
-        // Tracks the amount of assets left to withdraw.
-        uint256 leftToWithdraw = assets;
-
-        // Retrieve the user's deposits and begin looping through them, generally from oldest to newest
+        // Retrieve the user's deposits to begin looping through them, generally from oldest to newest
         // deposits. This is not always the case though if shares have been transferred to the owner, as
         // they will be added to the end of the owner's deposits regardless of time deposited.
         UserDeposit[] storage deposits = userDeposits[owner];
+
+        // Tracks the amount of assets left to withdraw; updated at the end of each loop.
+        uint256 leftToWithdraw = assets;
+
+        // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
+        uint256 exchangeRate = _convertToAssets(1e18);
+
         for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
             UserDeposit storage d = deposits[i];
 
@@ -977,15 +978,16 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
         }
 
-        // Tracks the amount of shares left to transfer.
-        uint256 leftToTransfer = amount;
-
         // Retrieve the deposits from both sender and receiver then begin looping through the sender's
         // deposits, generally from oldest to newest deposits. This is not always the case though if shares
         // have been transferred to the sender, as they will be added to the end of the sender's deposits
         // regardless of time deposited.
         UserDeposit[] storage depositsFrom = userDeposits[from];
         UserDeposit[] storage depositsTo = userDeposits[to];
+
+        // Tracks the amount of shares left to transfer; updated at the end of each loop.
+        uint256 leftToTransfer = amount;
+
         for (uint256 i = currentDepositIndex[from]; i < depositsFrom.length; i++) {
             UserDeposit storage dFrom = depositsFrom[i];
 
