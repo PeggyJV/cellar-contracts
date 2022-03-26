@@ -265,6 +265,13 @@ interface IAaveV2StablecoinCellar {
 
     function previewRedeem(uint256 shares) external view returns (uint256);
 
+    function depositBalances(address user) external view returns (
+        uint256 userActiveShares,
+        uint256 userInactiveShares,
+        uint256 userActiveAssets,
+        uint256 userInactiveAssets
+    );
+
     // ============================ DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ============================
 
     function maxDeposit(address owner) external view returns (uint256);

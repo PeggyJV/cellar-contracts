@@ -1180,8 +1180,8 @@ describe("AaveV2StablecoinCellar", () => {
       }
     });
 
-    it("should accurate retrieve information on user deposits", async () => {
-      const data = await cellar.depositsInfo(bob.address);
+    it("should accurately retrieve information on a user's deposit balances", async () => {
+      const data = await cellar.depositBalances(bob.address);
 
       expect(data[0].toString()).to.eq(activeShares);
       expect(data[1].toString()).to.eq(inactiveShares);
