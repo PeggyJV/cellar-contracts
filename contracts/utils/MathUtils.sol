@@ -3,9 +3,9 @@
 pragma solidity 0.8.11;
 
 library MathUtils {
-    uint256 public constant RAY = 1e27;
-
-    // Used to change the decimals of precision used for an amount
+    /**
+     * @notice Used to change the decimals of precision used for an amount.
+     */
     function changeDecimals(
         uint256 amount,
         uint8 fromDecimals,
@@ -24,7 +24,14 @@ library MathUtils {
         return a < b ? a : b;
     }
 
-    // From Solmate's FixedPointMathLib
+    // ================================= SOLMATE's FIXEDPOINTMATHLIB =================================
+
+    uint256 internal constant WAD = 1e18; // The scalar of ETH and most ERC20s.
+
+    function mulWadDown(uint256 x, uint256 y) internal pure returns (uint256) {
+        return mulDivDown(x, y, WAD); // Equivalent to (x * y) / WAD rounded down.
+    }
+
     function mulDivDown(
         uint256 x,
         uint256 y,
