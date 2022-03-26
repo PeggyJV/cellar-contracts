@@ -1,30 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
-
 pragma solidity 0.8.11;
 
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import "./utils/MathUtils.sol";
 import "./interfaces/IAaveV2StablecoinCellar.sol";
 import "./interfaces/IAaveIncentivesController.sol";
 import "./interfaces/IStakedTokenV2.sol";
 import "./interfaces/ISushiSwapRouter.sol";
 import "./interfaces/IGravity.sol";
 import "./interfaces/ILendingPool.sol";
+import "./utils/MathUtils.sol";
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
- * @notice AaveV2StablecoinCellar contract for Sommelier Network
- * @author Sommelier Finance
+ * @notice Dynamic vault that changes strategies to always get the best yield for stablecoins on Aave.
+ * @author Brian Le
  */
 contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
 
     /**
-     * @notice The asset that makes up the cellar's holding pool. Will change when the cellar
+     * @notice The asset that makes up the cellar's holding pool. Will change whenever the cellar
      *         rebalances into a new strategy.
      * @dev The cellar denotes its inactive assets in this token. While it waits in the holding pool
      *      to be entered into a strategy, it is used to pay for withdraws from those redeeming their
@@ -103,7 +102,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     bool public isShutdown;
 
-    // ======================================== IMMUTABLES ========================================
+    // ========================================= IMMUTABLES =========================================
 
     // Uniswap Router V3 contract
     ISwapRouter public immutable uniswapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
@@ -1144,5 +1143,4 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function transfer(address to, uint256 amount) public override returns (bool) {
         return transferFrom(msg.sender, to, amount, false);
     }
-
 }
