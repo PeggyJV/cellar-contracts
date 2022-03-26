@@ -1068,23 +1068,12 @@ describe("AaveV2StablecoinCellar", () => {
     });
   });
 
-  describe("conversions", () => {
-    it("should accurately convert shares to assets and vice versa", async () => {
-      // has been tested successfully from 0 up to 10_000, but set to run once to avoid long test time
-      for (let i = 0; i < 1; i++) {
-        const initialAssets = Num(i, 6);
-        const assetsToShares = await cellar.convertToShares(initialAssets);
-        const sharesBackToAssets = await cellar.convertToAssets(assetsToShares);
-        expect(sharesBackToAssets).to.eq(initialAssets);
-        const assetsBackToShares = await cellar.convertToShares(
-          sharesBackToAssets
-        );
-        expect(assetsBackToShares).to.eq(assetsToShares);
-      }
-    });
-  });
+  describe("accounting", () => {
+    let activeShares;
+    let activeAssets;
+    let inactiveShares;
+    let inactiveAssets;
 
-  describe("previews", () => {
     beforeEach(async () => {
       // Start with some liquidity in the cellar to mimic more realistic conditions
       await USDC.mint(bob.address, Num(1_000_000, 6));
@@ -1100,9 +1089,30 @@ describe("AaveV2StablecoinCellar", () => {
         ["deposit(uint256,address)"](Num(10_000, 6), bob.address);
       await cellar.enterStrategy();
       await lendingPool.setLiquidityIndex(Num(1.25, 27));
+
+      activeShares = await cellar.balanceOf(bob.address);
+      activeAssets = Num(10_000 * 1.25, 6);
+
       await cellar
         .connect(bob)
         ["deposit(uint256,address)"](Num(42_069, 6), bob.address);
+
+      inactiveShares = (await cellar.balanceOf(bob.address)).sub(activeShares);
+      inactiveAssets = Num(42_069, 6);
+    });
+
+    it("should accurately convert shares to assets and vice versa", async () => {
+      // has been tested successfully from 0 up to 10_000, but set to run once to avoid long test time
+      for (let i = 0; i < 1; i++) {
+        const initialAssets = Num(i, 6);
+        const assetsToShares = await cellar.convertToShares(initialAssets);
+        const sharesBackToAssets = await cellar.convertToAssets(assetsToShares);
+        expect(sharesBackToAssets).to.eq(initialAssets);
+        const assetsBackToShares = await cellar.convertToShares(
+          sharesBackToAssets
+        );
+        expect(assetsBackToShares).to.eq(assetsToShares);
+      }
     });
 
     it("should correctly preview deposits", async () => {
@@ -1168,6 +1178,15 @@ describe("AaveV2StablecoinCellar", () => {
 
         expect(withdrawnAssets).to.eq(expectedAssets);
       }
+    });
+
+    it("should accurate retrieve information on user deposits", async () => {
+      const data = await cellar.depositsInfo(bob.address);
+
+      expect(data[0].toString()).to.eq(activeShares);
+      expect(data[1].toString()).to.eq(inactiveShares);
+      expect(data[2].toString()).to.eq(activeAssets);
+      expect(data[3].toString()).to.eq(inactiveAssets);
     });
   });
 

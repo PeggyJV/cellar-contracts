@@ -484,6 +484,43 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         return convertToAssets(shares);
     }
 
+    /**
+     * @notice Retrieve information on a user's deposits.
+     * @param user address of the user
+     */
+    function depositsInfo(address user) public view returns (
+        uint256 userActiveShares,
+        uint256 userInactiveShares,
+        uint256 userActiveAssets,
+        uint256 userInactiveAssets
+    ) {
+        // Retrieve the user's deposits to begin looping through them, generally from oldest to
+        // newest deposits. This is not be the case though if shares have been transferred to the
+        // owner, which will be added to the end of the user's deposits regardless of time
+        // deposited.
+        UserDeposit[] storage deposits = userDeposits[user];
+
+        // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
+        uint256 exchangeRate = _convertToAssets(1e18);
+
+        for (uint256 i = currentDepositIndex[user]; i < deposits.length; i++) {
+            UserDeposit storage d = deposits[i];
+
+            // Determine wheter or not deposit is active or inactive.
+            if (d.timeDeposited < lastTimeEnteredStrategy) {
+                userActiveShares += d.shares;
+                userActiveAssets += d.shares.mulWadDown(exchangeRate); // Convert shares to assets.
+            } else {
+                userInactiveShares += d.shares;
+                userInactiveAssets += d.assets;
+            }
+        }
+
+        // Return assets in their original units.
+        userActiveAssets = userActiveAssets.changeDecimals(decimals, assetDecimals);
+        userInactiveAssets = userInactiveAssets.changeDecimals(decimals, assetDecimals);
+    }
+
     // ============================ DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ============================
 
     /**
