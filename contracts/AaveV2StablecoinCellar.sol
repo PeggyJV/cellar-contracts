@@ -102,7 +102,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     bool public isShutdown;
 
-    // ========================================= IMMUTABLES =========================================
+    // ======================================== IMMUTABLES ========================================
 
     // Uniswap Router V3 contract
     ISwapRouter public immutable uniswapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
@@ -157,7 +157,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         feesData.lastTimeAccruedPlatformFees = block.timestamp;
     }
 
-    // ================================= DEPOSIT/WITHDRAWAL OPERATIONS =================================
+    // =============================== DEPOSIT/WITHDRAWAL OPERATIONS ===============================
 
     /**
      * @notice Deposits assets and mints the shares to receiver.
@@ -361,7 +361,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         return (shares, assets);
     }
 
-    // ==================================== ACCOUNTING OPERATIONS ====================================
+    // ================================== ACCOUNTING OPERATIONS ==================================
 
     /**
      * @dev The internal functions always use 18 decimals of precision while the public functions use
@@ -527,7 +527,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         userInactiveAssets = userInactiveAssets.changeDecimals(decimals, assetDecimals);
     }
 
-    // ============================ DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ============================
+    // =========================== DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ===========================
 
     /**
      * @notice Total number of assets that can be deposited by owner into the cellar.
@@ -600,7 +600,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         return balanceOf[owner];
     }
 
-    // ======================================= FEE OPERATIONS =======================================
+    // ====================================== FEE OPERATIONS ======================================
 
     /**
      * @notice Take platform fees and performance fees off of cellar's active assets.
@@ -722,7 +722,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         feesData.accruedPerformanceFees = 0;
     }
 
-    // ========================================= ADMIN OPERATIONS =========================================
+    // ===================================== ADMIN OPERATIONS =====================================
 
     /**
      * @notice Enters into the current Aave stablecoin strategy.
@@ -891,7 +891,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         emit Shutdown();
     }
 
-    // ============================================ HELPERS ============================================
+    // ========================================== HELPERS ==========================================
 
     /**
      * @notice Update state variables related to the current strategy.
@@ -914,7 +914,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     }
 
     /**
-     * @notice Ensures there is a specific amount of assets in the contract available to be transferred.
+     * @notice Ensures there is enough assets in the contract available for a transfer.
      * @dev Only withdraws from strategy if needed.
      * @param assets The amount of assets to allocate
      */
@@ -946,11 +946,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @param amount the amount of tokens to withdraw
      * @return withdrawnAmount the withdrawn amount from Aave
      */
-    function _withdrawFromAave(address token, uint256 amount) internal returns (uint256 withdrawnAmount) {
+    function _withdrawFromAave(address token, uint256 amount) internal returns (uint256) {
         // Withdraw tokens from Aave protocol
-        withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
+        uint256 withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
 
         emit WithdrawFromAave(token, withdrawnAmount);
+
+        return withdrawnAmount;
     }
 
     /**
@@ -1039,7 +1041,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         emit Swap(tokenIn, amountIn, tokenOut, amountOut);
     }
 
-    // ==================================== SHARE TRANSFER OPERATIONS ====================================
+    // ================================= SHARE TRANSFER OPERATIONS =================================
 
     /**
      * @dev Modified versions of Solmate's ERC20 transfer and transferFrom functions to work with the
@@ -1131,16 +1133,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     }
 
     /// @dev For compatibility with ERC20 standard.
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public override returns (bool) {
-        // Defaults to not caring whether the shares transferred are active or not.
-        return transferFrom(from, to, amount, false);
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        // Defaults to only transferring active shares.
+        return transferFrom(from, to, amount, true);
     }
 
     function transfer(address to, uint256 amount) public override returns (bool) {
-        return transferFrom(msg.sender, to, amount, false);
+        // Defaults to only transferring active shares.
+        return transferFrom(msg.sender, to, amount, true);
     }
 }
