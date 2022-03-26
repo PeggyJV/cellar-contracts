@@ -16,7 +16,7 @@ import "./interfaces/ISushiSwapRouter.sol";
 import "./interfaces/IGravity.sol";
 
 /**
- * @title Sommelier AaveV2 Stablecoin Cellar contract
+ * @title Sommelier Aave V2 Stablecoin Cellar
  * @notice AaveV2StablecoinCellar contract for Sommelier Network
  * @author Sommelier Finance
  */
@@ -284,21 +284,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         // calculations are done.
         assets = assets.changeDecimals(assetDecimals, decimals);
 
-        // Tracks the amount of active shares we need to redeem to withdraw the amount of assets we want.
-        uint256 withdrawnActiveShares;
-        // Also the amount of inactive shares.
-        uint256 withdrawnInactiveShares;
-        // Inactive shares don't earn yield so we can't redeem them like we do active shares. If a user
-        // tries to redeem inactive shares, they should get back what they orignally deposited. So this
-        // keeps track of how many assets their withdrawn inactive shares can be redeemed for.
-        uint256 withdrawnInactiveAssets;
-
         // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
         uint256 exchangeRate = _convertToAssets(1e18);
 
         // Tracks the amount of assets left to withdraw.
         uint256 leftToWithdraw = assets;
 
+        // Retrieve the user's deposits and begin looping through them, generally from oldest to newest
+        // deposits. This is not always the case though if shares have been transferred to the owner, as
+        // they will be added to the end of the owner's deposits regardless of time deposited.
         UserDeposit[] storage deposits = userDeposits[owner];
         for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
             UserDeposit storage d = deposits[i];
@@ -307,45 +301,43 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             uint256 withdrawnAssets;
             uint256 withdrawnShares;
 
+            // Storing these variables saves an extra SLOAD.
+            uint256 dAssets;
+            uint256 dShares = d.shares;
+
             // Check if deposit shares are active or inactive.
             if (d.timeDeposited < lastTimeEnteredStrategy) {
                 // Active:
 
                 // Since these shares are active, convert them to the amount of assets they're worth to see
                 // the maximum amount of assets we can take from this deposit.
-                uint256 dAssets = d.shares.mulDivDown(exchangeRate, 1e18);
+                dAssets = dShares.mulDivDown(exchangeRate, 1e18);
 
                 // Get the amount of assets we need from this deposit.
                 withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
 
                 // Get the amount of shares we'd have to redeem to get the amount of assets we need.
-                withdrawnShares = d.shares.mulDivUp(withdrawnAssets, dAssets);
+                withdrawnShares = dShares.mulDivUp(withdrawnAssets, dAssets);
 
                 delete d.assets; // Don't need this anymore; delete for a gas refund.
-
-                // Add the shares taken from this deposit to our total.
-                withdrawnActiveShares += withdrawnShares;
             } else {
                 // Inactive:
 
+                dAssets = d.assets;
+
                 // Get the amount of assets we need from this deposit.
-                withdrawnAssets = MathUtils.min(leftToWithdraw, d.assets);
+                withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
 
                 // Get the amount of shares we'd have to redeem to get the amount of assets we need.
-                withdrawnShares = d.shares.mulDivUp(withdrawnAssets, d.assets);
-
-                // Add the shares taken from this deposit to our total.
-                withdrawnInactiveShares += withdrawnShares;
-
-                // Store the amount of assets these inactive shares were originally worth.
-                withdrawnInactiveAssets += withdrawnAssets;
+                withdrawnShares = dShares.mulDivUp(withdrawnAssets, dAssets);
 
                 // Update this deposit with the amount of assets we've taken.
                 d.assets -= withdrawnAssets;
             }
 
-            // Update this deposit with the amount of shares we've taken.
+            // Take the shares we need from this deposit and add them to our total.
             d.shares -= withdrawnShares;
+            shares += withdrawnShares;
 
             // Update the counter of assets we have left to withdraw.
             leftToWithdraw -= withdrawnAssets;
@@ -361,9 +353,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             }
         }
 
-        // Total up the shares we will be redeeming.
-        shares = withdrawnActiveShares + withdrawnInactiveShares;
-
         // If the caller is not the owner of the shares, check to see if the owner has approved them to
         // spend their shares.
         if (msg.sender != owner) {
@@ -372,28 +361,26 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
 
-        // Convert the active shares to their worth in assets.
-        uint256 withdrawnActiveAssets = withdrawnActiveShares.mulDivDown(exchangeRate, 1e18);
-
         // Redeem the shares.
         _burn(owner, shares);
 
-        uint256 toWithdaw = withdrawnActiveAssets + withdrawnInactiveAssets;
+        // Determine the total amount of assets withdrawn.
+        assets -= leftToWithdraw;
 
         // Convert decimals back to get ready for transfers.
-        toWithdaw = toWithdaw.changeDecimals(decimals, assetDecimals);
+        assets = assets.changeDecimals(decimals, assetDecimals);
 
         // Only withdraw from strategy if holding pool does not contain enough funds.
-        _allocateAssets(toWithdaw);
+        _allocateAssets(assets);
 
         // Transfer assets to receiver from the cellar's holding pool.
-        ERC20(currentLendingToken).safeTransfer(receiver, toWithdaw);
+        ERC20(currentLendingToken).safeTransfer(receiver, assets);
 
         emit Withdraw(
             receiver,
             owner,
             currentLendingToken,
-            toWithdaw,
+            assets,
             shares
         );
     }
@@ -635,7 +622,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             feesData.lastActiveAssets = _activeAssets();
             feesData.lastNormalizedIncome = normalizedIncome;
         }
-
     }
 
     /**
@@ -954,14 +940,35 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
      */
 
     function transfer(address to, uint256 amount) public override returns (bool) {
-        return transferFrom(msg.sender, to, amount);
+        return transferFrom(msg.sender, to, amount, false);
     }
 
+    /// @dev For compatibility with ERC20 standard.
     function transferFrom(
         address from,
         address to,
         uint256 amount
     ) public override returns (bool) {
+        // Defaults to not caring whether the shares transferred are active or not.
+        return transferFrom(from, to, amount, false);
+    }
+
+    /**
+     * @notice Transfers shares from one account to another.
+     * @dev If the sender specifies to only transfer active shares and does not have enough active shares
+     *      to transfer to meet the amount specified, the default behavior is to not to revert but transfer
+     *      as many active shares as the sender has to the receiver.
+     * @param from address that is sending shares
+     * @param to address that is receiving shares
+     * @param amount amount of shares to transfer
+     * @param onlyActive whether to only transfer active shares
+     */
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount,
+        bool onlyActive
+    ) public returns (bool) {
         // If the sender is not the owner of the shares, check to see if the owner has approved them to
         // spend their shares.
         if (from != msg.sender) {
@@ -970,35 +977,35 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
             if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
         }
 
-        // Will revert here if sender is trying to transfer more shares then they have, so no need for an
-        // explict check.
-        balanceOf[from] -= amount;
-
-        // Retrieve deposits of both the sender and receiver of shares.
-        UserDeposit[] storage depositsFrom = userDeposits[from];
-        UserDeposit[] storage depositsTo = userDeposits[to];
-
         // Tracks the amount of shares left to transfer.
         uint256 leftToTransfer = amount;
+
+        // Retrieve the deposits from both sender and receiver then begin looping through the sender's
+        // deposits, generally from oldest to newest deposits. This is not always the case though if shares
+        // have been transferred to the sender, as they will be added to the end of the sender's deposits
+        // regardless of time deposited.
+        UserDeposit[] storage depositsFrom = userDeposits[from];
+        UserDeposit[] storage depositsTo = userDeposits[to];
         for (uint256 i = currentDepositIndex[from]; i < depositsFrom.length; i++) {
             UserDeposit storage dFrom = depositsFrom[i];
 
-            uint256 dFromShares = dFrom.shares; // Saves an extra SLOAD.
+            // If we only want to transfer active shares, skips this deposit if it is inactive.
+            bool isActive = dFrom.timeDeposited < lastTimeEnteredStrategy;
+            if (onlyActive && !isActive) continue;
 
             // Track the amount of assets and shares transfered from the sender's deposit.
-            uint256 transferShares = MathUtils.min(leftToTransfer, dFromShares);
-            uint256 transferAssets = dFrom.assets.mulDivUp(transferShares, dFromShares);
+            uint256 transferShares = MathUtils.min(leftToTransfer, dFrom.shares);
+            uint256 transferAssets = dFrom.assets.mulDivUp(transferShares, dFrom.shares);
 
             // Update this deposit with the amount of assets taken.
             dFrom.shares -= transferShares;
             dFrom.assets -= transferAssets;
 
-            // Update the receiver's deposits with the amount of assets being transferred to them from the
-            // sender's deposit.
+            // Add a deposit to the end of receiver's list of deposits.
             depositsTo.push(UserDeposit({
-                assets: transferAssets,
+                assets: isActive ? 0 : transferAssets, // Saves gas on storage if active.
                 shares: transferShares,
-                timeDeposited: dFrom.timeDeposited
+                timeDeposited: isActive ? 0 : dFrom.timeDeposited // Same here.
             }));
 
             // Update the counter of assets left to withdraw.
@@ -1011,6 +1018,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
                 break;
             }
         }
+
+        // Determine the total amount of shares transferred.
+        amount -= leftToTransfer;
+
+        // Will revert here if sender is trying to transfer more shares then they have, so no need for an
+        // explict check.
+        balanceOf[from] -= amount;
 
         // Cannot overflow because the sum of all user balances can't exceed the max uint256 value.
         unchecked {

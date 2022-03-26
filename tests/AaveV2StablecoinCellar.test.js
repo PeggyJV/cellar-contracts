@@ -501,23 +501,64 @@ describe("AaveV2StablecoinCellar", () => {
       expect(aliceDeposit[2]).to.eq(depositTimestamp);
     });
 
-    it("should allow withdrawing of transferred shares", async () => {
-      await cellar.transfer(alice.address, Num(100, 18));
-
+    it("should correctly withdraw transferred shares", async () => {
+      // active $100 worth of active shares -> $125
       await cellar.enterStrategy();
       await lendingPool.setLiquidityIndex(
         ethers.BigNumber.from("1250000000000000000000000000")
       );
 
-      await cellar.connect(alice)["deposit(uint256)"](Num(100, 6));
+      // gain $100 worth of inactive shares
+      await cellar["deposit(uint256)"](Num(100, 6));
+
+      // transfer all shares to alice
+      await cellar.transfer(
+        alice.address,
+        await cellar.balanceOf(owner.address)
+      );
 
       const aliceOldBalance = await USDC.balanceOf(alice.address);
-      await cellar.connect(alice)["withdraw(uint256)"](Num(125 + 100, 6));
+
+      // alice redeem all the shares that have been transferred to her and withdraw all of her assets
+      await cellar
+        .connect(alice)
+        ["withdraw(uint256)"](
+          await cellar.convertToAssets(await cellar.balanceOf(alice.address))
+        );
+
       const aliceNewBalance = await USDC.balanceOf(alice.address);
 
+      // expect alice to have redeemed all the shares transferred to her for $225 in assets
       expect(await cellar.balanceOf(alice.address)).to.eq(0);
       expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(
         Num(125 + 100, 6)
+      );
+    });
+
+    it("should only transfer active shares if specified", async () => {
+      // active $100 worth of shares
+      await cellar.enterStrategy();
+      const expectedShares = await cellar.balanceOf(owner.address);
+
+      // gain $100 worth of inactive shares
+      await cellar["deposit(uint256)"](Num(100, 6));
+
+      const aliceOldBalance = await cellar.balanceOf(alice.address);
+
+      // attempting to transfer all active shares should transfer $100 worth of active shares (and not the
+      // $100 worth of inactive shares) and not revert
+      await cellar["transferFrom(address,address,uint256,bool)"](
+        owner.address,
+        alice.address,
+        await cellar.balanceOf(owner.address),
+        true
+      );
+
+      const aliceNewBalance = await cellar.balanceOf(alice.address);
+
+      // expect alice to have received $100 worth of shares
+      expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(
+        expectedShares
       );
     });
 
@@ -541,10 +582,18 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar
         .connect(alice)
-        .transferFrom(owner.address, alice.address, Num(50, 18));
+        ["transferFrom(address,address,uint256)"](
+          owner.address,
+          alice.address,
+          Num(50, 18)
+        );
 
       await expect(
-        cellar.transferFrom(alice.address, owner.address, Num(200, 18))
+        cellar["transferFrom(address,address,uint256)"](
+          alice.address,
+          owner.address,
+          Num(200, 18)
+        )
       ).to.be.reverted;
     });
   });
