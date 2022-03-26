@@ -25,7 +25,7 @@ library MathUtils {
 
     // ================================= SOLMATE's FIXEDPOINTMATHLIB =================================
 
-    uint256 internal constant WAD = 1e18; // The scalar of ETH and most ERC20s.
+    uint256 public constant WAD = 1e18; // The scalar of ETH and most ERC20s.
 
     function mulWadDown(uint256 x, uint256 y) internal pure returns (uint256) {
         return mulDivDown(x, y, WAD); // Equivalent to (x * y) / WAD rounded down.

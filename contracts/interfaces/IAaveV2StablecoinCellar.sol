@@ -203,27 +203,9 @@ interface IAaveV2StablecoinCellar {
      * @param timeDeposited timestamp of when the user deposited
      */
     struct UserDeposit {
-        uint256 assets;
-        uint256 shares;
-        uint256 timeDeposited;
-    }
-
-   /**
-     * @notice Stores fee data.
-     * @param lastTimeAccruedPlatformFees timestamp of last time platform fees were accrued
-     * @param lastActiveAssets amount of active assets in cellar last time performance fees were accrued
-     * @param lastNormalizedIncome normalized income index of asset last time performance fees were accrued
-     * @param accruedPlatformFees amount of platform fees that have been accrued awaiting transfer
-     * @param accruedPerformanceFees amount of performance fees that have been accrued awaiting transfer
-     */
-    struct FeesData {
-        uint256 lastTimeAccruedPlatformFees;
-        uint256 lastActiveAssets;
-        uint256 lastNormalizedIncome;
-        // Fees are taken in shares and redeemed for assets at the time they are transferred from the
-        // cellar to Cosmos to be distributed.
-        uint256 accruedPlatformFees;
-        uint256 accruedPerformanceFees;
+        uint112 assets;
+        uint112 shares;
+        uint32 timeDeposited;
     }
 
     // ================================= DEPOSIT/WITHDRAWAL OPERATIONS =================================
@@ -264,12 +246,16 @@ interface IAaveV2StablecoinCellar {
 
     function previewRedeem(uint256 shares) external view returns (uint256);
 
+    // ======================================= STATE INFORMATION =====================================
+
     function depositBalances(address user) external view returns (
         uint256 userActiveShares,
         uint256 userInactiveShares,
         uint256 userActiveAssets,
         uint256 userInactiveAssets
     );
+
+    function numDeposits(address user) external view returns (uint256);
 
     // ============================ DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ============================
 

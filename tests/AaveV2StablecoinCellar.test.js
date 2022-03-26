@@ -137,6 +137,12 @@ describe("AaveV2StablecoinCellar", () => {
     await DAI.mint(alice.address, Num(1000, 18));
     await WETH.mint(alice.address, Num(1000, 18));
     await USDT.mint(alice.address, Num(1000, 6));
+    await USDC.mint(alice.address, Num(1000, 6));
+
+    await USDC.mint(bob.address, Num(1000, 6));
+    await DAI.mint(bob.address, Num(1000, 18));
+    await WETH.mint(bob.address, Num(1000, 18));
+    await USDT.mint(bob.address, Num(1000, 6));
 
     // Approve cellar to spend mock tokens
     await USDC.approve(cellar.address, ethers.constants.MaxUint256);
@@ -161,11 +167,29 @@ describe("AaveV2StablecoinCellar", () => {
       ethers.constants.MaxUint256
     );
 
+    await USDC.connect(bob).approve(
+      cellar.address,
+      ethers.constants.MaxUint256
+    );
+    await DAI.connect(bob).approve(cellar.address, ethers.constants.MaxUint256);
+    await WETH.connect(bob).approve(
+      cellar.address,
+      ethers.constants.MaxUint256
+    );
+    await USDT.connect(bob).approve(
+      cellar.address,
+      ethers.constants.MaxUint256
+    );
+
     // Approve cellar to spend shares (to take as fees)
     await cellar.approve(cellar.address, ethers.constants.MaxUint256);
 
     await cellar
       .connect(alice)
+      .approve(cellar.address, ethers.constants.MaxUint256);
+
+    await cellar
+      .connect(bob)
       .approve(cellar.address, ethers.constants.MaxUint256);
 
     // Mint initial liquidity to Aave USDC lending pool
@@ -522,40 +546,82 @@ describe("AaveV2StablecoinCellar", () => {
   describe("transfer", () => {
     beforeEach(async () => {
       await cellar["deposit(uint256,address)"](Num(100, 6), owner.address);
+      await cellar.enterStrategy();
     });
 
     it("should correctly update deposit accounting upon transferring shares", async () => {
-      const depositTimestamp = await timestamp();
+      // transferring active shares:
+
+      const transferredActiveShares = Num(50, 18);
 
       const aliceOldBalance = await cellar.balanceOf(alice.address);
-      await cellar.transfer(alice.address, Num(25, 18));
+      await cellar.transfer(alice.address, transferredActiveShares);
       const aliceNewBalance = await cellar.balanceOf(alice.address);
 
-      expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(Num(25, 18));
+      expect((aliceNewBalance - aliceOldBalance).toString()).to.eq(
+        transferredActiveShares
+      );
 
-      const ownerDeposit = await cellar.userDeposits(owner.address, 0);
-      const aliceDeposit = await cellar.userDeposits(alice.address, 0);
+      let ownerDeposit = await cellar.userDeposits(owner.address, 0);
+      let aliceDeposit = await cellar.userDeposits(alice.address, 0);
 
-      expect(ownerDeposit[0]).to.eq(Num(75, 18)); // expect 75 assets
-      expect(ownerDeposit[1]).to.eq(Num(75, 18)); // expect 75 shares
+      expect(ownerDeposit[0]).to.eq(0); // expect 0 assets (should have been deleted for a gas refund)
+      expect(ownerDeposit[1]).to.eq(Num(50, 18)); // expect 50 shares
+      expect(ownerDeposit[2]).to.eq(0); // expect 0 assets (should have been deleted for a gas refund)
+      expect(aliceDeposit[0]).to.eq(0); // expect 0 assets (should have been deleted for a gas refund)
+      expect(aliceDeposit[1]).to.eq(transferredActiveShares); // expect 50 shares
+      expect(aliceDeposit[2]).to.eq(0); // expect 0 assets (should have been deleted for a gas refund)
+
+      // transferring inactive shares:
+
+      await cellar.connect(bob).deposit(Num(100, 6), bob.address);
+      const depositTimestamp = await timestamp();
+
+      const transferredInactiveShares = Num(25, 18);
+
+      const ownerOldBalance = await cellar.balanceOf(owner.address);
+      await cellar
+        .connect(bob)
+        ["transferFrom(address,address,uint256,bool)"](
+          bob.address,
+          owner.address,
+          transferredInactiveShares,
+          false
+        );
+      const ownerNewBalance = await cellar.balanceOf(owner.address);
+
+      expect((ownerNewBalance - ownerOldBalance).toString()).to.eq(
+        transferredInactiveShares
+      );
+
+      bobDeposit = await cellar.userDeposits(bob.address, 0);
+      ownerDeposit = await cellar.userDeposits(
+        owner.address,
+        (await cellar.numDeposits(owner.address)) - 1
+      );
+
+      // must change decimals because deposit data is stored with 18 decimals
+      expect(bobDeposit[0]).to.eq(Num(75, 18)); // expect 75 assets
+      expect(bobDeposit[1]).to.eq(Num(75, 18)); // expect 75 shares
+      expect(bobDeposit[2]).to.eq(depositTimestamp);
+      expect(ownerDeposit[0]).to.eq(Num(25, 18)); // expect 25 assets
+      expect(ownerDeposit[1]).to.eq(transferredInactiveShares); // expect 25 shares
       expect(ownerDeposit[2]).to.eq(depositTimestamp);
-      expect(aliceDeposit[0]).to.eq(Num(25, 18)); // expect 25 assets
-      expect(aliceDeposit[1]).to.eq(Num(25, 18)); // expect 25 shares
-      expect(aliceDeposit[2]).to.eq(depositTimestamp);
     });
 
     it("should correctly withdraw transferred shares", async () => {
-      // active $100 worth of active shares -> $125
-      await cellar.enterStrategy();
+      // $100 worth of active shares -> $125
       await lendingPool.setLiquidityIndex(Num(1.25, 27));
 
       // gain $100 worth of inactive shares
       await cellar["deposit(uint256,address)"](Num(100, 6), owner.address);
 
       // transfer all shares to alice
-      await cellar.transfer(
+      await cellar["transferFrom(address,address,uint256,bool)"](
+        owner.address,
         alice.address,
-        await cellar.balanceOf(owner.address)
+        await cellar.balanceOf(owner.address),
+        false
       );
 
       const aliceOldBalance = await USDC.balanceOf(alice.address);
@@ -578,9 +644,7 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
 
-    it("should only transfer active shares if specified", async () => {
-      // active $100 worth of shares
-      await cellar.enterStrategy();
+    it("should only transfer active shares by default", async () => {
       const expectedShares = await cellar.balanceOf(owner.address);
 
       // gain $100 worth of inactive shares
@@ -590,11 +654,9 @@ describe("AaveV2StablecoinCellar", () => {
 
       // attempting to transfer all active shares should transfer $100 worth of active shares (and not the
       // $100 worth of inactive shares) and not revert
-      await cellar["transferFrom(address,address,uint256,bool)"](
-        owner.address,
+      await cellar.transfer(
         alice.address,
-        await cellar.balanceOf(owner.address),
-        true
+        await cellar.balanceOf(owner.address)
       );
 
       const aliceNewBalance = await cellar.balanceOf(alice.address);
@@ -605,18 +667,35 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
 
-    it("should use and store index of first non-zero deposit", async () => {
+    it("should use and store index of first non-zero deposit if not only active", async () => {
       await cellar["deposit(uint256,address)"](Num(100, 6), owner.address);
-      // owner transfers everything from deposit object at index 0
-      await cellar.transfer(alice.address, Num(100, 18));
-      // expect next non-zero deposit is set to index 1
-      expect(await cellar.currentDepositIndex(owner.address)).to.eq(1);
+      // owner transfers all active shares from deposit object at index 0
+      await cellar.transfer(alice.address, Num(100, 6));
+      // expect next non-zero deposit is not have updated because onlyActive was true
+      expect(await cellar.currentDepositIndex(owner.address)).to.eq(0);
+
+      // owner transfers everything from deposit object at index 1
+      await cellar["transferFrom(address,address,uint256,bool)"](
+        owner.address,
+        alice.address,
+        await cellar.balanceOf(owner.address),
+        false
+      );
+      // expect next non-zero deposit is set to index 2
+      expect(await cellar.currentDepositIndex(owner.address)).to.eq(2);
 
       await cellar
         .connect(alice)
         ["deposit(uint256,address)"](Num(100, 6), alice.address);
       // alice only transfers half from index 0, leaving some shares remaining
-      await cellar.connect(alice).transfer(owner.address, Num(50, 18));
+      await cellar
+        .connect(alice)
+        ["transferFrom(address,address,uint256,bool)"](
+          alice.address,
+          owner.address,
+          Num(50, 6),
+          false
+        );
       // expect next non-zero deposit is set to index 0 since some shares still remain
       expect(await cellar.currentDepositIndex(alice.address)).to.eq(0);
     });
@@ -719,7 +798,7 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should have accrued performance fees", async () => {
-      const accruedPerformanceFees = (await cellar.feesData())[4];
+      const accruedPerformanceFees = await cellar.accruedPerformanceFees();
 
       // expect $4.75 ($95 * 0.05 = $4.75) worth of fees to be minted as shares
       expect(await cellar.balanceOf(cellar.address)).to.eq(Num(4.75, 18));
@@ -779,12 +858,13 @@ describe("AaveV2StablecoinCellar", () => {
     it("should have accrued performance fees", async () => {
       await lendingPool.setLiquidityIndex(Num(1.25, 27));
 
-      const accruedPerformanceFeesBefore = (await cellar.feesData())[4];
+      const accruedPerformanceFeesBefore =
+        await cellar.accruedPerformanceFees();
       const feesBefore = await cellar.balanceOf(cellar.address);
 
       await cellar.rebalance([USDC.address, DAI.address], Num(950, 18));
 
-      const accruedPerformanceFeesAfter = (await cellar.feesData())[4];
+      const accruedPerformanceFeesAfter = await cellar.accruedPerformanceFees();
       const feesAfter = await cellar.balanceOf(cellar.address);
 
       expect(accruedPerformanceFeesAfter.gt(accruedPerformanceFeesBefore)).to.be
@@ -805,7 +885,7 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.accrueFees();
 
-      const accruedPlatformFees = (await cellar.feesData())[3];
+      const accruedPlatformFees = await cellar.accruedPlatformFees();
       const feesInAssets = await cellar.convertToAssets(accruedPlatformFees);
 
       // ~$0.027 worth of shares in fees = $1000 * 86400 sec * (1% / secsPerYear)
@@ -826,7 +906,7 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.accrueFees();
 
-      const performanceFees = (await cellar.feesData())[4];
+      const performanceFees = await cellar.accruedPerformanceFees();
       // expect cellar to have received $12.5 fees in shares = $250 gain * 5%,
       // which would be ~10 shares at the time of accrual
       expect(performanceFees).to.be.closeTo(Num(10, 18), Num(0.001, 18));
@@ -867,7 +947,7 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.accrueFees();
 
-      const performanceFees = (await cellar.feesData())[4];
+      const performanceFees = await cellar.accruedPerformanceFees();
 
       // expect all performance fee shares to have been burned
       expect(performanceFees).to.eq(0);
@@ -885,8 +965,8 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.accrueFees();
 
       const fees = await cellar.balanceOf(cellar.address);
-      const accruedPlatformFees = (await cellar.feesData())[3];
-      const accruedPerformanceFees = (await cellar.feesData())[4];
+      const accruedPlatformFees = await cellar.accruedPlatformFees();
+      const accruedPerformanceFees = await cellar.accruedPerformanceFees();
       expect(fees).to.eq(accruedPlatformFees.add(accruedPerformanceFees));
 
       const feeInAssets = await cellar.convertToAssets(fees);

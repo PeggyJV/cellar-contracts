@@ -65,13 +65,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     uint256 public lastTimeEnteredStrategy;
 
     /**
-     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same
-     *         units as the current asset.
-     * @dev Limited to $5m until after security audits.
-     */
-    uint256 public maxLiquidity;
-
-    /**
      * @notice The value fees are divided by to get a percentage. Represents maximum percent (100%).
      */
     uint256 public constant DENOMINATOR = 100_00;
@@ -87,10 +80,41 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     uint256 public constant PERFORMANCE_FEE = 5_00;
 
     /**
-     * @notice Struct where fee data gets updated and stored.
-     * @dev This is stored in a struct purely to avoid stack too deep errors.
+     * @notice Timestamp of last time platform fees were accrued.
      */
-    FeesData public feesData;
+    uint256 public lastTimeAccruedPlatformFees;
+
+    /**
+     * @notice Amount of active assets in cellar last time performance fees were accrued.
+     */
+    uint256 public lastActiveAssets;
+
+    /**
+     * @notice Normalized income index for the current asset on Aave recorded last time performance
+     *         fees were accrued.
+     */
+    uint256 public lastNormalizedIncome;
+
+    /**
+     * @notice Amount of platform fees that have been accrued awaiting transfer.
+     * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
+     *      the cellar to Cosmos to be distributed.
+     */
+    uint256 public accruedPlatformFees;
+
+    /**
+     * @notice Amount of performance fees that have been accrued awaiting transfer.
+     * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
+     *      the cellar to Cosmos to be distributed.
+     */
+    uint256 public accruedPerformanceFees;
+
+    /**
+     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same
+     *         units as the current asset.
+     * @dev Limited to $5m until after security audits.
+     */
+    uint256 public maxLiquidity;
 
     /**
      * @notice Whether or not the contract is paused in case of an emergency.
@@ -154,7 +178,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Initialize starting point for platform fee accrual to time when cellar was created.
         // Otherwise it would incorrectly calculate how much platform fees to take when accrueFees
         // is called for the first time.
-        feesData.lastTimeAccruedPlatformFees = block.timestamp;
+        lastTimeAccruedPlatformFees = block.timestamp;
     }
 
     // =============================== DEPOSIT/WITHDRAWAL OPERATIONS ===============================
@@ -198,9 +222,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Always store asset amounts with 18 decimals of precision regardless of the asset's
             // decimals. This is so we can still use this data even after rebalancing to different
             // asset.
-            assets: assets.changeDecimals(assetDecimals, decimals),
-            shares: shares,
-            timeDeposited: block.timestamp
+            assets: uint112(assets.changeDecimals(assetDecimals, decimals)),
+            shares: uint112(shares),
+            timeDeposited: uint32(block.timestamp)
         }));
 
         emit Deposit(
@@ -302,21 +326,22 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
             // If shares are active, convert them to the amount of assets they're worth to see the
             // maximum amount of assets we can take from this deposit.
-            uint256 dAssets = isActive ? d.shares.mulWadDown(exchangeRate) : d.assets;
+            uint256 dAssets = isActive ? uint256(d.shares).mulWadDown(exchangeRate) : d.assets;
 
-            // Determine the amount of assets we need from this deposit.
+            // Determine the amount of assets and shares to withdraw from this deposit.
             uint256 withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
+            uint256 withdrawnShares = uint256(d.shares).mulDivUp(withdrawnAssets, dAssets);
 
-            // Determine the amount of shares we'd have to redeem to get the amount of assets we
-            // need.
-            uint256 withdrawnShares = d.shares.mulDivUp(withdrawnAssets, dAssets);
-
-            // Either deletes the assets data for a gas refund since we won't need it anymore or
-            // updates it with the amount of assets we've withrdawn.
-            d.assets = isActive ? 0 : d.assets - withdrawnAssets;
+            // For active shares, deletes the deposit data we don't need anymore for a gas refund.
+            if (isActive) {
+                delete d.assets;
+                delete d.timeDeposited;
+            } else {
+                d.assets -= uint112(withdrawnAssets);
+            }
 
             // Take the shares we need from this deposit and add them to our total.
-            d.shares -= withdrawnShares;
+            d.shares -= uint112(withdrawnShares);
             shares += withdrawnShares;
 
             // Update the counter of assets we have left to withdraw.
@@ -486,15 +511,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         return convertToAssets(shares);
     }
 
+    // ======================================= STATE INFORMATION =====================================
+
     /**
      * @notice Retrieve information on a user's deposits.
-     * @param owner address of account that owns shares
+     * @param user address of the user
      * @return userActiveShares amount of active shares the user has
      * @return userInactiveShares amount of inactive shares the user has
      * @return userActiveAssets amount of active assets the user has
      * @return userInactiveAssets amount of inactive assets the user has
      */
-    function depositBalances(address owner) public view returns (
+    function depositBalances(address user) public view returns (
         uint256 userActiveShares,
         uint256 userInactiveShares,
         uint256 userActiveAssets,
@@ -502,20 +529,24 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     ) {
         // Retrieve the user's deposits to begin looping through them, generally from oldest to
         // newest deposits. This is not be the case though if shares have been transferred to the
-        // owner, which will be added to the end of the user's deposits regardless of time
+        // user, which will be added to the end of the user's deposits regardless of time
         // deposited.
-        UserDeposit[] storage deposits = userDeposits[owner];
+        UserDeposit[] storage deposits = userDeposits[user];
 
         // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
         uint256 exchangeRate = _convertToAssets(1e18);
 
-        for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
+        for (uint256 i = currentDepositIndex[user]; i < deposits.length; i++) {
             UserDeposit storage d = deposits[i];
+
 
             // Determine whether or not deposit is active or inactive.
             if (d.timeDeposited < lastTimeEnteredStrategy) {
-                userActiveShares += d.shares;
-                userActiveAssets += d.shares.mulWadDown(exchangeRate); // Convert shares to assets.
+                // Saves an extra SLOAD if active and cast type to uint256.
+                uint256 dShares = d.shares;
+
+                userActiveShares += dShares;
+                userActiveAssets += dShares.mulWadDown(exchangeRate); // Convert shares to assets.
             } else {
                 userInactiveShares += d.shares;
                 userInactiveAssets += d.assets;
@@ -525,6 +556,16 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Return assets in their original units.
         userActiveAssets = userActiveAssets.changeDecimals(decimals, assetDecimals);
         userInactiveAssets = userInactiveAssets.changeDecimals(decimals, assetDecimals);
+    }
+
+    /**
+     * @notice Returns the number of deposits for a user. Can be used off-chain to
+     *         make iterating through user stakes easier.
+     * @param user address of the user
+     * @return deposits the number of deposits for the user
+     */
+    function numDeposits(address user) external view returns (uint256) {
+        return userDeposits[user].length;
     }
 
     // =========================== DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ===========================
@@ -583,7 +624,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Determine the amount of assets that can be withdrawn. Only redeem active shares for
             // assets, otherwise just withdrawn the orignal amount of assets that were deposited.
             assets += d.timeDeposited < lastTimeEnteredStrategy ?
-                d.shares.mulWadDown(exchangeRate) :
+                uint256(d.shares).mulWadDown(exchangeRate) :
                 d.assets;
         }
 
@@ -611,7 +652,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         if (isShutdown) revert ContractShutdown();
 
         // Platform fees taken each accrual = activeAssets * (elapsedTime * (2% / SECS_PER_YEAR)).
-        uint256 elapsedTime = block.timestamp - feesData.lastTimeAccruedPlatformFees;
+        uint256 elapsedTime = block.timestamp - lastTimeAccruedPlatformFees;
         uint256 platformFeeInAssets =
             (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
 
@@ -621,7 +662,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         // Update the tracker for total platform fees accrued that are still waiting to be
         // transferred.
-        feesData.accruedPlatformFees += platformFees;
+        accruedPlatformFees += platformFees;
 
         emit AccruedPlatformFees(platformFees);
 
@@ -640,27 +681,27 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // If this is the first time the cellar is accuring performance fees, it will skip the part
         // were we take fees and should just update the fee data to set a baseline for assessing the
         // current strategy's performance.
-        if (feesData.lastActiveAssets != 0) {
+        if (lastActiveAssets != 0) {
             // An index value greater than 1e27 indicates positive performance for the strategy's
             // lending position, while a value less than that indicates negative performance.
-            uint256 performanceIndex = normalizedIncome.mulDivDown(1e27, feesData.lastNormalizedIncome);
+            uint256 performanceIndex = normalizedIncome.mulDivDown(1e27, lastNormalizedIncome);
 
             // This is the amount the cellar's active assets have grown to solely from performance
             // on Aave since the last time performance fees were accrued.  It does not include
             // changes from deposits and withdraws.
-            uint256 updatedActiveAssets = feesData.lastActiveAssets.mulDivUp(performanceIndex, 1e27);
+            uint256 updatedActiveAssets = lastActiveAssets.mulDivUp(performanceIndex, 1e27);
 
             // Determines whether performance has been positive or negative.
             if (performanceIndex >= 1e27) {
                 // Fees taken each accrual = (updatedActiveAssets - lastActiveAssets) * 5%
-                uint256 gain = updatedActiveAssets - feesData.lastActiveAssets;
+                uint256 gain = updatedActiveAssets - lastActiveAssets;
                 uint256 performanceFeeInAssets = gain.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
 
                 // The cellar accrues fees as shares instead of assets.
                 uint256 performanceFees = _convertToShares(performanceFeeInAssets);
                 _mint(address(this), performanceFees);
 
-                feesData.accruedPerformanceFees += performanceFees;
+                accruedPerformanceFees += performanceFees;
 
                 emit AccruedPerformanceFees(performanceFees);
             } else {
@@ -669,18 +710,18 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
                 // in case it does, this mechanism will burn performance fees to help offset losses
                 // in proportion to those minted for previous gains.
 
-                uint256 loss = feesData.lastActiveAssets - updatedActiveAssets;
+                uint256 loss = lastActiveAssets - updatedActiveAssets;
                 uint256 insuranceInAssets = loss.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
 
                 // Cannot burn more performance fees than the cellar has accrued.
                 uint256 insurance = MathUtils.min(
                     _convertToShares(insuranceInAssets),
-                    feesData.accruedPerformanceFees
+                    accruedPerformanceFees
                 );
 
                 _burn(address(this), insurance);
 
-                feesData.accruedPerformanceFees -= insurance;
+                accruedPerformanceFees -= insurance;
 
                 emit BurntPerformanceFees(insurance);
             }
@@ -690,8 +731,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // when we accrue performance fees before rebalancing into a new strategy since the data
         // will be outdated after the rebalance to a new strategy.
         if (updateFeeData) {
-            feesData.lastActiveAssets = _activeAssets();
-            feesData.lastNormalizedIncome = normalizedIncome;
+            lastActiveAssets = _activeAssets();
+            lastNormalizedIncome = normalizedIncome;
         }
     }
 
@@ -701,7 +742,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function transferFees() external onlyOwner {
         // Total up all the fees this cellar has accrued and determine how much they can be redeemed
         // for in assets.
-        uint256 fees = feesData.accruedPerformanceFees + feesData.accruedPlatformFees;
+        uint256 fees = accruedPerformanceFees + accruedPlatformFees;
         uint256 feeInAssets = previewRedeem(fees);
 
         // Redeem our fee shares for assets to transfer to Cosmos.
@@ -715,11 +756,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         ERC20(asset).approve(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, feeInAssets);
 
-        emit TransferFees(feesData.accruedPlatformFees, feesData.accruedPerformanceFees);
+        emit TransferFees(accruedPlatformFees, accruedPerformanceFees);
 
         // Reset the tracker for fees accrued that are still waiting to be transferred.
-        feesData.accruedPlatformFees = 0;
-        feesData.accruedPerformanceFees = 0;
+        accruedPlatformFees = 0;
+        accruedPerformanceFees = 0;
     }
 
     // ===================================== ADMIN OPERATIONS =====================================
@@ -728,8 +769,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Enters into the current Aave stablecoin strategy.
      */
     function enterStrategy() external onlyOwner {
-        // When the contract is shutdown, it shouldn't be allowed to enter back into a strategy with the
-        // assets it just withdrew from Aave.
+        // When the contract is shutdown, it shouldn't be allowed to enter back into a strategy with
+        // the assets it just withdrew from Aave.
         if (isShutdown) revert ContractShutdown();
 
         // Deposits all inactive assets in the holding pool into the current strategy.
@@ -757,13 +798,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         if (newAsset == address(asset)) revert SameAsset(newAsset);
 
         // Accrue any final performance fees from the current strategy before rebalancing. Otherwise
-        // those fees would be lost when we proceed to update fee data for the new strategy. Also
-        // we don't want to update the fee data here because we will do that later on after we've
+        // those fees would be lost when we proceed to update fee data for the new strategy. Also we
+        // don't want to update the fee data here because we will do that later on after we've
         // rebalanced into a new strategy.
         _accruePerformanceFees(false);
 
-        // Pull all active assets entered into Aave back into the cellar so we can swap everything into
-        // the new asset.
+        // Pull all active assets entered into Aave back into the cellar so we can swap everything
+        // into the new asset.
         _withdrawFromAave(address(asset), type(uint256).max);
         uint256 amountOut = _swap(path, inactiveAssets(), amountOutMinimum, true);
 
@@ -778,8 +819,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         _depositToAave(newAsset, amountOut);
 
         // Update fee data for next fee accrual with new strategy.
-        feesData.lastActiveAssets = _activeAssets();
-        feesData.lastNormalizedIncome = lendingPool.getReserveNormalizedIncome(address(asset));
+        lastActiveAssets = _activeAssets();
+        lastNormalizedIncome = lendingPool.getReserveNormalizedIncome(address(asset));
 
         emit Rebalance(oldAsset, newAsset, amountOut);
     }
@@ -810,7 +851,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Mint performance fees to cellar as shares.
             _mint(address(this), performanceFees);
 
-            feesData.accruedPerformanceFees += performanceFees;
+            accruedPerformanceFees += performanceFees;
 
             // Reinvest rewards back into the current strategy.
             _depositToAave(address(asset), amountOut);
@@ -1072,12 +1113,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
         }
 
-        // Retrieve the deposits from both sender and receiver then begin looping through the
-        // sender's deposits, generally from oldest to newest deposits. This is not always the case
-        // though if shares have been transferred to the sender, as they will be added to the end of
-        // the sender's deposits regardless of time deposited.
+        // Retrieve the deposits from sender then begin looping through deposits, generally from
+        // oldest to newest deposits. This is not always the case though if shares have been
+        // transferred to the sender, as they will be added to the end of the sender's deposits
+        // regardless of time deposited.
         UserDeposit[] storage depositsFrom = userDeposits[from];
-        UserDeposit[] storage depositsTo = userDeposits[to];
 
         // Tracks the amount of shares left to transfer; updated at the end of each loop.
         uint256 leftToTransfer = amount;
@@ -1089,28 +1129,38 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             bool isActive = dFrom.timeDeposited < lastTimeEnteredStrategy;
             if (onlyActive && !isActive) continue;
 
-            // Track the amount of assets and shares transfered from the sender's deposit.
-            uint256 transferredShares = MathUtils.min(leftToTransfer, dFrom.shares);
-            uint256 transferredAssets = dFrom.assets.mulDivUp(transferredShares, dFrom.shares);
+            // Saves an extra SLOAD if active and cast type to uint256.
+            uint256 dFromShares = dFrom.shares;
 
-            // Update this deposit with the amount of assets taken.
-            dFrom.shares -= transferredShares;
-            dFrom.assets -= transferredAssets;
+            // Determine the amount of assets and shares to transfer from this deposit.
+            uint256 transferredShares = MathUtils.min(leftToTransfer, dFromShares);
+            uint256 transferredAssets = uint256(dFrom.assets).mulDivUp(transferredShares, dFromShares);
 
-            // Add a deposit to the end of receiver's list of deposits.
-            depositsTo.push(UserDeposit({
-                assets: isActive ? 0 : transferredAssets, // Saves gas on storage if active.
-                shares: transferredShares,
-                timeDeposited: isActive ? 0 : dFrom.timeDeposited // Same here.
+            // For active shares, deletes the deposit data we don't need anymore for a gas refund.
+            if (isActive) {
+                delete dFrom.assets;
+                delete dFrom.timeDeposited;
+            } else {
+                dFrom.assets -= uint112(transferredAssets);
+            }
+
+            // Taken shares from this deposit to transfer.
+            dFrom.shares -= uint112(transferredShares);
+
+            // Transfer a new deposit to the end of receiver's list of deposits.
+            userDeposits[to].push(UserDeposit({
+                assets: isActive ? 0 : uint112(transferredAssets),
+                shares: uint112(transferredShares),
+                timeDeposited: isActive ? 0 : dFrom.timeDeposited
             }));
 
             // Update the counter of assets left to transfer.
             leftToTransfer -= transferredShares;
 
-            // Finish if this is the last deposit or there is nothing left to transfer.
             if (i == depositsFrom.length - 1 || leftToTransfer == 0) {
-                // Store the index for the next non-zero deposit to save gas on looping.
-                currentDepositIndex[from] = dFrom.shares != 0 ? i : i+1;
+                // Only store the index for the next non-zero deposit to save gas on looping if
+                // inactive deposits weren't skipped.
+                if (!onlyActive) currentDepositIndex[from] = dFrom.shares != 0 ? i : i+1;
                 break;
             }
         }
