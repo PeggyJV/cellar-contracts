@@ -114,7 +114,7 @@ interface IAaveV2StablecoinCellar {
     event LiquidityRestrictionRemoved();
 
     /**
-     * @notice Emitted when tokens accidently sent to cellar are recovered.
+     * @notice Emitted when tokens accidentally sent to cellar are recovered.
      * @param token the address of the token
      * @param amount amount transferred out
      */
