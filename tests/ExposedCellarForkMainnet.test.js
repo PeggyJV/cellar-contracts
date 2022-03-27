@@ -34,10 +34,17 @@ describe("AaveV2StablecoinCellar", () => {
   const wethAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
   const aUSDCAddress = "0xBcca60bB61934080951369a648Fb03DF4F96263C";
 
-  const bigNum = (number, decimals) => {
-    return ethers.BigNumber.from(10).pow(decimals).mul(number);
+  const timetravel = async (addTime) => {
+    await network.provider.send("evm_increaseTime", [addTime]);
+    await network.provider.send("evm_mine");
   };
-  
+
+  const Num = (number, decimals) => {
+    const [characteristic, mantissa] = number.toString().split(".");
+    const padding = mantissa ? decimals - mantissa.length : decimals;
+    return characteristic + (mantissa ?? "") + "0".repeat(padding);
+  };
+
   beforeEach(async () => {
     await network.provider.request({
       method: "hardhat_reset",
@@ -60,6 +67,7 @@ describe("AaveV2StablecoinCellar", () => {
     usdc = await Token.attach(usdcAddress);
     usdt = await Token.attach(usdtAddress);
     dai = await Token.attach(daiAddress);
+    aave = await Token.attach(aaveAddress);
     aUSDC = await Token.attach(aUSDCAddress);
 
     // uniswap v3 router contract
@@ -84,7 +92,6 @@ describe("AaveV2StablecoinCellar", () => {
     );
     await cellar.deployed();
 
-    await cellar.setInputToken(wethAddress, true);
     await cellar.setInputToken(usdc.address, true);
     await cellar.setInputToken(usdt.address, true);
     await cellar.setInputToken(dai.address, true);
@@ -96,7 +103,7 @@ describe("AaveV2StablecoinCellar", () => {
         3000, // fee
         owner.address, // recipient
         1657479474, // deadline
-        bigNum(1000, 6), // amountOut
+        Num(1000, 6), // amountOut
         ethers.utils.parseEther("10"), // amountInMaximum
         0, // sqrtPriceLimitX96
       ],
@@ -110,7 +117,7 @@ describe("AaveV2StablecoinCellar", () => {
         3000, // fee
         owner.address, // recipient
         1657479474, // deadline
-        bigNum(1000, 18), // amountOut
+        Num(1000, 18), // amountOut
         ethers.utils.parseEther("10"), // amountInMaximum
         0, // sqrtPriceLimitX96
       ],
@@ -124,7 +131,7 @@ describe("AaveV2StablecoinCellar", () => {
         3000, // fee
         owner.address, // recipient
         1657479474, // deadline
-        bigNum(1000, 6), // amountOut
+        Num(1000, 6), // amountOut
         ethers.utils.parseEther("10"), // amountInMaximum
         0, // sqrtPriceLimitX96
       ],
@@ -138,7 +145,7 @@ describe("AaveV2StablecoinCellar", () => {
         3000, // fee
         alice.address, // recipient
         1657479474, // deadline
-        bigNum(1000, 6), // amountOut
+        Num(1000, 6), // amountOut
         ethers.utils.parseEther("10"), // amountInMaximum
         0, // sqrtPriceLimitX96
       ],
@@ -152,7 +159,7 @@ describe("AaveV2StablecoinCellar", () => {
         3000, // fee
         alice.address, // recipient
         1657479474, // deadline
-        bigNum(1000, 18), // amountOut
+        Num(1000, 18), // amountOut
         ethers.utils.parseEther("10"), // amountInMaximum
         0, // sqrtPriceLimitX96
       ],
@@ -166,7 +173,7 @@ describe("AaveV2StablecoinCellar", () => {
         3000, // fee
         alice.address, // recipient
         1657479474, // deadline
-        bigNum(1000, 6), // amountOut
+        Num(1000, 6), // amountOut
         ethers.utils.parseEther("10"), // amountInMaximum
         0, // sqrtPriceLimitX96
       ],
@@ -175,41 +182,43 @@ describe("AaveV2StablecoinCellar", () => {
 
     await usdc.approve(
       cellar.address,
-      bigNum(10000, 6)
+      Num(10000, 6)
     );
     await usdt.approve(
       cellar.address,
-      bigNum(10000, 6)
+      Num(10000, 6)
     );
     await dai.approve(
       cellar.address,
-      bigNum(10000, 18)
+      Num(10000, 18)
     );
 
     await usdc
       .connect(alice)
-      .approve(cellar.address, bigNum(10000, 6));
+      .approve(cellar.address, Num(10000, 6));
     await dai
       .connect(alice)
-      .approve(cellar.address, bigNum(10000, 18));
+      .approve(cellar.address, Num(10000, 18));
     await usdt
       .connect(alice)
-      .approve(cellar.address, bigNum(10000, 6));
+      .approve(cellar.address, Num(10000, 6));
 
     // balances accumulate every test
   });
 
   describe("_redeemFromAave", () => {
     beforeEach(async () => {
-      await cellar["deposit(uint256)"](bigNum(1000, 6));
+      await cellar["deposit(uint256)"](Num(1000, 6));
 
       await cellar.enterStrategy();
 
-      await cellar.$_redeemFromAave(usdc.address, bigNum(1000, 6).add(1)); // deposit + income
+      await timetravel(864000); // 10 day
+
+      await cellar.$_redeemFromAave(usdc.address, Num(1000.76698, 6)); // deposit + income
     });
 
     it("should return correct amount of tokens back to cellar from lending pool", async () => {
-      expect(await usdc.balanceOf(cellar.address)).to.eq(bigNum(1000, 6).add(1));
+      expect(await usdc.balanceOf(cellar.address)).to.eq(Num(1000.76698, 6));
     });
 
     it("should transfer correct amount of aTokens to lending pool", async () => {
@@ -218,143 +227,249 @@ describe("AaveV2StablecoinCellar", () => {
     
     it("should not allow redeeming more than cellar deposited", async () => {
       // cellar tries to redeem $100 when it should have deposit balance of $0
-      await expect(cellar.$_redeemFromAave(usdc.address, bigNum(100, 6))).to.be.reverted;
+      await expect(cellar.$_redeemFromAave(usdc.address, Num(100, 6))).to.be.reverted;
     });
 
     it("should emit RedeemFromAave event", async () => {
-      await cellar.connect(alice)["deposit(uint256)"](bigNum(1000, 6));
+      await cellar.connect(alice)["deposit(uint256)"](Num(1000, 6));
       await cellar.enterStrategy();
 
-      await expect(cellar.$_redeemFromAave(usdc.address, bigNum(1000, 6)))
+      await expect(cellar.$_redeemFromAave(usdc.address, Num(1000, 6)))
         .to.emit(cellar, "RedeemFromAave")
-        .withArgs(usdc.address, bigNum(1000, 6));
+        .withArgs(usdc.address, Num(1000, 6));
     });
   });
 
-  describe("_swap", () => {
+  describe("simple swap", () => {
     beforeEach(async () => {
       await cellar["deposit(uint256)"](
-        bigNum(1000, 6)
+        Num(1000, 6)
       );
 
       await cellar
         .connect(alice)
-        ["deposit(uint256)"](bigNum(1000, 6));
+        ["deposit(uint256)"](Num(1000, 6));
     });
 
     it("should swap input tokens for at least the minimum amount of output tokens", async () => {
-      await cellar.$_swap(usdc.address, dai.address, bigNum(1000, 6), 0);
-      expect(await usdc.balanceOf(cellar.address)).to.eq(bigNum(1000, 6));
-      expect(await dai.balanceOf(cellar.address)).to.be.at.least(bigNum(950, 18));
+      await cellar.$_swap([usdc.address, dai.address], Num(1000, 6), 0, true);
+      expect(await usdc.balanceOf(cellar.address)).to.eq(Num(1000, 6));
+      expect(await dai.balanceOf(cellar.address)).to.be.at.least(Num(950, 18));
 
       // expect fail if minimum amount of output tokens not received
       await expect(
-        cellar.$_swap(usdc.address, dai.address, bigNum(1000, 6), bigNum(2000, 18))
+        cellar.$_swap([usdc.address, dai.address], Num(1000, 6), Num(2000, 18), true)
       ).to.be.revertedWith("Too little received");
     });
 
     it("should revert if trying to swap more tokens than cellar has", async () => {
       await expect(
-        cellar.$_swap(usdc.address, dai.address, bigNum(3000, 6), bigNum(1800, 18))
+        cellar.$_swap([usdc.address, dai.address], Num(3000, 6), Num(1800, 18), true)
       ).to.be.revertedWith("STF");
     });
 
     it("should emit Swapped event", async () => {
-      await expect(cellar.$_swap(usdc.address, dai.address, bigNum(1000, 6), bigNum(950, 18)))
+      await expect(cellar.$_swap([usdc.address, dai.address], Num(1000, 6), Num(950, 18), true))
         .to.emit(cellar, "Swapped")
-        .withArgs(usdc.address, bigNum(1000, 6), dai.address, bigNum(994, 18).add('678811179279068938'));
+        .withArgs(usdc.address, Num(1000, 6), dai.address, '994678811179279068938');
     });
   });
 
-  describe("_multihopSwap", () => {
+  describe("multihop swap", () => {
     beforeEach(async () => {
       await cellar["deposit(uint256)"](
-        bigNum(1000, 6)
+        Num(1000, 6)
       );
 
       await cellar
         .connect(alice)
-        ["deposit(uint256)"](bigNum(1000, 6));
+        ["deposit(uint256)"](Num(1000, 6));
     });
 
     it("should swap input tokens for at least the minimum amount of output tokens", async () => {
       const balanceUSDCBefore = await usdc.balanceOf(cellar.address);
       const balanceUSDTBefore = await usdt.balanceOf(cellar.address);
 
-      await cellar.$_multihopSwap(
+      await cellar.$_swap(
         [usdc.address, wethAddress, usdt.address],
-        bigNum(1000, 6),
-        bigNum(950, 6)
+        Num(1000, 6),
+        Num(950, 6),
+        true
       );
 
       expect(balanceUSDTBefore).to.eq(0);
       expect(await usdc.balanceOf(cellar.address)).to.eq(
-        balanceUSDCBefore.sub(bigNum(1000, 6))
+        balanceUSDCBefore - Num(1000, 6)
       );
       expect(await usdt.balanceOf(cellar.address)).to.be.at.least(
-        balanceUSDTBefore.add(bigNum(950, 6))
+        balanceUSDTBefore + Num(950, 6)
       );
 
       await expect(
-        cellar.$_multihopSwap(
+        cellar.$_swap(
           [usdc.address, wethAddress, dai.address],
-          bigNum(1000, 6),
-          bigNum(2000, 18)
+          Num(1000, 6),
+          Num(2000, 18),
+          true
         )
       ).to.be.revertedWith("Too little received");
-    });
-
-    it("multihop swap with two tokens in the path", async () => {
-      const balanceUSDCBefore = await usdc.balanceOf(cellar.address);
-      const balanceDAIBefore = await dai.balanceOf(cellar.address);
-
-      await cellar.$_multihopSwap([usdc.address, dai.address], bigNum(1000, 6), bigNum(950, 18));
-
-      expect(await usdc.balanceOf(cellar.address)).to.eq(
-        balanceUSDCBefore.sub(bigNum(1000, 6))
-      );
-      expect(await dai.balanceOf(cellar.address)).to.be.at.least(
-        balanceDAIBefore.add(bigNum(950, 18))
-      );
     });
 
     it("multihop swap with more than three tokens in the path", async () => {
       const balanceUSDCBefore = await usdc.balanceOf(cellar.address);
       const balanceUSDTBefore = await usdt.balanceOf(cellar.address);
 
-      await cellar.$_multihopSwap(
+      await cellar.$_swap(
         [usdc.address, wethAddress, dai.address, wethAddress, usdt.address],
-        bigNum(1000, 6),
-        bigNum(950, 6)
+        Num(1000, 6),
+        Num(950, 6),
+        true
       );
       expect(await usdc.balanceOf(cellar.address)).to.eq(
-        balanceUSDCBefore.sub(bigNum(1000, 6))
+        balanceUSDCBefore - Num(1000, 6)
       );
       expect(await usdt.balanceOf(cellar.address)).to.be.at.least(
-        balanceUSDTBefore.add(bigNum(950, 6))
+        balanceUSDTBefore + Num(950, 6)
       );
     });
 
     it("should revert if trying to swap more tokens than cellar has", async () => {
       await expect(
-        cellar.$_multihopSwap(
+        cellar.$_swap(
           [usdc.address, wethAddress, dai.address],
-          bigNum(3000, 6),
-          bigNum(2800, 18)
+          Num(3000, 6),
+          Num(2800, 18),
+          true
         )
       ).to.be.revertedWith("STF");
     });
 
     it("should emit Swapped event", async () => {
       await expect(
-        cellar.$_multihopSwap(
+        cellar.$_swap(
           [usdc.address, wethAddress, dai.address],
-          bigNum(1000, 6),
-          bigNum(950, 18)
+          Num(1000, 6),
+          Num(950, 18),
+          true
         )
       )
         .to.emit(cellar, "Swapped")
-        .withArgs(usdc.address, bigNum(1000, 6), dai.address, bigNum(992, 18).add('792014394087097233'));
+        .withArgs(usdc.address, Num(1000, 6), dai.address, '992792014394087097233');
+    });
+  });
+  
+  describe("sushi swap", () => {
+    beforeEach(async () => {
+      await cellar["deposit(uint256)"](
+        Num(1000, 6)
+      );
+
+      await cellar
+        .connect(alice)
+        ["deposit(uint256)"](Num(1000, 6));
+    });
+
+    it("should swap input tokens for at least the minimum amount of output tokens", async () => {
+      const balanceUSDCBefore = await usdc.balanceOf(cellar.address);
+      const balanceUSDTBefore = await usdt.balanceOf(cellar.address);
+
+      await cellar.$_swap(
+        [usdc.address, wethAddress, usdt.address],
+        Num(1000, 6),
+        Num(950, 6),
+        false
+      );
+
+      expect(balanceUSDTBefore).to.eq(0);
+      expect(await usdc.balanceOf(cellar.address)).to.eq(
+        balanceUSDCBefore - Num(1000, 6)
+      );
+      expect(await usdt.balanceOf(cellar.address)).to.be.at.least(
+        balanceUSDTBefore + Num(950, 6)
+      );
+
+      await expect(
+        cellar.$_swap(
+          [usdc.address, wethAddress, dai.address],
+          Num(1000, 6),
+          Num(2000, 18),
+          false
+        )
+      ).to.be.revertedWith("UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
+    });
+
+    it("sushi swap with more than three tokens in the path", async () => {
+      const balanceUSDCBefore = await usdc.balanceOf(cellar.address);
+
+      await cellar.$_swap(
+        [usdc.address, usdt.address, wethAddress, aave.address],
+        Num(1000, 6),
+        Num(3, 18),
+        false
+      );
+
+      expect(await usdc.balanceOf(cellar.address)).to.eq(
+        balanceUSDCBefore - Num(1000, 6)
+      );
+      expect(await aave.balanceOf(cellar.address)).to.eq('3364818494631116837');
+
+      const balanceAAVEBefore = await aave.balanceOf(cellar.address);
+
+      await cellar.$_swap(
+        [usdc.address, usdt.address, dai.address, wethAddress, aave.address],
+        Num(1000, 6),
+        0,
+        false
+      );
+
+      expect(await usdc.balanceOf(cellar.address)).to.eq(0);
+      expect((await aave.balanceOf(cellar.address)).sub(balanceAAVEBefore)).to.eq(
+        '568434953405847983' // since the path is long, the exchange is very unprofitable
+      );
+    });
+
+    it("should raise an error for a path containing the token repetition through one element", async () => {
+      await expect(
+        cellar.$_swap(
+          [usdc.address, wethAddress, usdc.address],
+          Num(1000, 6),
+          Num(900, 6),
+          false
+        )
+      ).to.be.revertedWith("UniswapV2: INSUFFICIENT_INPUT_AMOUNT");
+
+      await cellar.$_swap(
+        [usdc.address, wethAddress, dai.address, usdc.address],
+        Num(1000, 6),
+        Num(900, 6),
+        false
+      );
+
+      expect(await usdc.balanceOf(cellar.address)).to.eq(Num(1950.581410, 6));
+    });
+
+    it("should revert if trying to swap more tokens than cellar has", async () => {
+      await expect(
+        cellar.$_swap(
+          [usdc.address, wethAddress, dai.address],
+          Num(3000, 6),
+          Num(2800, 18),
+          false
+        )
+      ).to.be.revertedWith("TransferHelper: TRANSFER_FROM_FAILED");
+    });
+
+    it("should emit Swapped event", async () => {
+      await expect(
+        cellar.$_swap(
+          [usdc.address, wethAddress, dai.address],
+          Num(1000, 6),
+          Num(950, 18),
+          false
+        )
+      )
+        .to.emit(cellar, "Swapped")
+        .withArgs(usdc.address, Num(1000, 6), dai.address, '993876181130894899796');
     });
   });
 });

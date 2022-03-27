@@ -701,7 +701,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, ReentrancyGua
         address tokenOut = path[path.length - 1];
 
         // Approve the router to spend first token in path.
-        ERC20(tokenIn).safeApprove(address(uniswapRouter), amountIn);
+        ERC20(tokenIn).safeApprove(useUniswap ? address(uniswapRouter) : address(sushiSwapRouter), amountIn);
 
         if (path.length > 2){
             if (useUniswap) {
