@@ -15,7 +15,7 @@ import "./utils/MathUtils.sol";
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
- * @notice Dynamic vault that changes strategies to always get the best yield for stablecoins on Aave.
+ * @notice Dynamic ERC4626 that adapts strategies to always get the best yield for stablecoins on Aave.
  * @author Brian Le
  */
 contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
