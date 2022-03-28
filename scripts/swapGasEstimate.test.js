@@ -3,9 +3,10 @@ const ethers = hre.ethers;
 
 let owner;
 
-let usdc;
-let usdt;
-let dai;
+let USDC;
+let USDT;
+let DAI;
+let AAVE;
 
 let swapRouter;
 let cellar;
@@ -72,7 +73,7 @@ const Num = (number, decimals) => {
   const padding = mantissa ? decimals - mantissa.length : decimals;
   return characteristic + (mantissa ?? "") + "0".repeat(padding);
 };
-  
+
 async function main() {
   const blockNumber = await ethers.provider.getBlockNumber();
   console.log("The latest block number is " + blockNumber);
@@ -90,9 +91,10 @@ async function main() {
   const Token = await ethers.getContractFactory(
     "@openzeppelin/contracts/token/ERC20/ERC20.sol:ERC20"
   );
-  usdc = await Token.attach(usdcAddress);
-  usdt = await Token.attach(usdtAddress);
-  dai = await Token.attach(daiAddress);
+  USDC = await Token.attach(usdcAddress);
+  USDT = await Token.attach(usdtAddress);
+  DAI = await Token.attach(daiAddress);
+  AAVE = await Token.attach(aaveAddress);
 
   // interface for chainlink ETH/USD price feed aggregator V3
   chainlinkETHUSDPriceFeed = await ethers.getContractAt("@chainlink/contracts/src/v0.8/interfaces/AggregatorInterface.sol:AggregatorInterface", chainlinkETHUSDPriceFeedAddress);
@@ -106,7 +108,7 @@ async function main() {
   await swapRouter.exactOutputSingle(
     [
       wethAddress, // tokenIn
-      usdc.address, // tokenOut
+      USDC.address, // tokenOut
       3000, // fee
       owner.address, // recipient
       1647479474, // deadline
@@ -117,7 +119,7 @@ async function main() {
     { value: ethers.utils.parseEther("9000") }
   );
 
-  console.log("Owner USDC balance: " + (await usdc.balanceOf(owner.address)));
+  console.log("Owner USDC balance: " + (await USDC.balanceOf(owner.address)));
 
   // Deploy cellar contract
   const AaveV2StablecoinCellarGasTest = await ethers.getContractFactory(
@@ -125,38 +127,32 @@ async function main() {
   );
 
   cellar = await AaveV2StablecoinCellarGasTest.deploy(
+    USDC.address,
     routerAddress,
     sushiSwapRouterAddress,
     lendingPoolAddress,
     incentivesControllerAddress,
     gravityBridgeAddress,
     stkAAVEAddress,
-    aaveAddress,
-    wethAddress,
-    usdc.address,
-    usdc.address
+    AAVE.address
   );
   await cellar.deployed();
 
-  await cellar.setInputToken(usdc.address, true);
-  await cellar.setInputToken(usdt.address, true);
-  await cellar.setInputToken(dai.address, true);
-
-  await usdc.approve(
+  await USDC.approve(
     cellar.address,
     Num(900000, 6)
   );
 
-  await cellar["deposit(uint256)"](Num(50000, 6));
+  await cellar["deposit(uint256,address)"](Num(50000, 6), owner.address);
 
   console.log("--------------------------------------");
 
-  // 50 usdc -> dai
-  logText = "singleSwap 50 usdc -> dai"
+  // 50 USDC -> DAI
+  logText = "singleSwap 50 USDC -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
+      [USDC.address, DAI.address],
       Num(50, 6),
       1,
       true,
@@ -164,82 +160,48 @@ async function main() {
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 50 usdc -> dai"
+  logText = "multihopSwap 50 USDC -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
+      [USDC.address, DAI.address],
       Num(50, 6),
       1,
       true,
       true
     );
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 50 usdc -> dai"
+  logText = "sushiSwap 50 USDC -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
+      [USDC.address, DAI.address],
       Num(50, 6),
       1,
       false,
       false
     );
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 50 usdc -> eth -> dai"
+  logText = "multihopSwap 50 USDC -> WETH -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, wethAddress, dai.address],
-      Num(50, 6),
-      1,
-      true,
-      true
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "sushiSwap 50 usdc -> eth -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, wethAddress, dai.address],
-      Num(50, 6),
-      1,
-      false,
-      false
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "multihopSwap 50 usdc -> usdt -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, usdt.address, dai.address],
+      [USDC.address, wethAddress, DAI.address],
       Num(50, 6),
       1,
       true,
@@ -247,16 +209,16 @@ async function main() {
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 50 usdc -> usdt -> dai"
+  logText = "sushiSwap 50 USDC -> WETH -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, usdt.address, dai.address],
+      [USDC.address, wethAddress, DAI.address],
       Num(50, 6),
       1,
       false,
@@ -264,618 +226,618 @@ async function main() {
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  console.log("--------------------------------------");
-
-  // 1000 usdc -> dai
-  logText = "singleSwap 1000 usdc -> dai"
+  logText = "multihopSwap 50 USDC -> USDT -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(1000, 6),
-      1,
-      true,
-      false
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "multihopSwap 1000 usdc -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(1000, 6),
-      1,
-      true,
-      true
-    );
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "sushiSwap 1000 usdc -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(1000, 6),
-      1,
-      false,
-      false
-    );
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "multihopSwap 1000 usdc -> eth -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, wethAddress, dai.address],
-      Num(1000, 6),
+      [USDC.address, USDT.address, DAI.address],
+      Num(50, 6),
       1,
       true,
       true
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 1000 usdc -> eth -> dai"
+  logText = "sushiSwap 50 USDC -> USDT -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, wethAddress, dai.address],
-      Num(1000, 6),
+      [USDC.address, USDT.address, DAI.address],
+      Num(50, 6),
       1,
       false,
       false
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "multihopSwap 1000 usdc -> usdt -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, usdt.address, dai.address],
-      Num(1000, 6),
-      1,
-      true,
-      true
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "sushiSwap 1000 usdc -> usdt -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, usdt.address, dai.address],
-      Num(1000, 6),
-      1,
-      false,
-      false
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
   console.log("--------------------------------------");
 
-  // 5000 usdc -> dai
-  logText = "singleSwap 5000 usdc -> dai"
+  // 1000 USDC -> DAI
+  logText = "singleSwap 1000 USDC -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(5000, 6),
+      [USDC.address, DAI.address],
+      Num(1000, 6),
       1,
       true,
       false
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 5000 usdc -> dai"
+  logText = "multihopSwap 1000 USDC -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(5000, 6),
+      [USDC.address, DAI.address],
+      Num(1000, 6),
+      1,
+      true,
+      true
+    );
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "sushiSwap 1000 USDC -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, DAI.address],
+      Num(1000, 6),
+      1,
+      false,
+      false
+    );
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "multihopSwap 1000 USDC -> WETH -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, wethAddress, DAI.address],
+      Num(1000, 6),
       1,
       true,
       true
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 5000 usdc -> dai"
+  logText = "sushiSwap 1000 USDC -> WETH -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(5000, 6),
+      [USDC.address, wethAddress, DAI.address],
+      Num(1000, 6),
       1,
       false,
       false
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-
-  logText = "multihopSwap 5000 usdc -> eth -> dai"
+  logText = "multihopSwap 1000 USDC -> USDT -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, wethAddress, dai.address],
-      Num(5000, 6),
+      [USDC.address, USDT.address, DAI.address],
+      Num(1000, 6),
       1,
       true,
       true
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 5000 usdc -> eth -> dai"
+  logText = "sushiSwap 1000 USDC -> USDT -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, wethAddress, dai.address],
-      Num(5000, 6),
+      [USDC.address, USDT.address, DAI.address],
+      Num(1000, 6),
       1,
       false,
       false
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 5000 usdc -> usdt -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, usdt.address, dai.address],
-      Num(5000, 6),
-      1,
-      true,
-      true
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "sushiSwap 5000 usdc -> usdt -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, usdt.address, dai.address],
-      Num(5000, 6),
-      1,
-      false,
-      false
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-  
   console.log("--------------------------------------");
 
-  // 10000 usdc -> dai
-  logText = "singleSwap 10000 usdc -> dai"
+  // 5000 USDC -> DAI
+  logText = "singleSwap 5000 USDC -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(10000, 6),
+      [USDC.address, DAI.address],
+      Num(5000, 6),
       1,
       true,
       false
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 10000 usdc -> dai"
+  logText = "multihopSwap 5000 USDC -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(10000, 6),
-      1,
-      true,
-      true
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "sushiSwap 10000 usdc -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, dai.address],
-      Num(10000, 6),
-      1,
-      false,
-      false
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(dai);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "multihopSwap 10000 usdc -> eth -> dai"
-  try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [usdc.address, wethAddress, dai.address],
-      Num(10000, 6),
+      [USDC.address, DAI.address],
+      Num(5000, 6),
       1,
       true,
       true
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 10000 usdc -> eth -> dai"
+  logText = "sushiSwap 5000 USDC -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, wethAddress, dai.address],
-      Num(10000, 6),
+      [USDC.address, DAI.address],
+      Num(5000, 6),
       1,
       false,
       false
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 10000 usdc -> usdt -> dai"
+
+  logText = "multihopSwap 5000 USDC -> WETH -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, usdt.address, dai.address],
-      Num(10000, 6),
+      [USDC.address, wethAddress, DAI.address],
+      Num(5000, 6),
       1,
       true,
       true
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 10000 usdc -> usdt -> dai"
+  logText = "sushiSwap 5000 USDC -> WETH -> DAI"
   try {
-    checkedBalanceBefore = await dai.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [usdc.address, usdt.address, dai.address],
-      Num(10000, 6),
+      [USDC.address, wethAddress, DAI.address],
+      Num(5000, 6),
       1,
       false,
       false
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(dai);
+    amountOutLog(DAI);
   } catch(e) {
     console.log(logText, e.message);
   }
-  
+
+  logText = "multihopSwap 5000 USDC -> USDT -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, USDT.address, DAI.address],
+      Num(5000, 6),
+      1,
+      true,
+      true
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "sushiSwap 5000 USDC -> USDT -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, USDT.address, DAI.address],
+      Num(5000, 6),
+      1,
+      false,
+      false
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
   console.log("--------------------------------------");
 
-  // 50 dai -> usdc
-  logText = "singleSwap 50 dai -> usdc"
+  // 10000 USDC -> DAI
+  logText = "singleSwap 10000 USDC -> DAI"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
+      [USDC.address, DAI.address],
+      Num(10000, 6),
+      1,
+      true,
+      false
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "multihopSwap 10000 USDC -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, DAI.address],
+      Num(10000, 6),
+      1,
+      true,
+      true
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "sushiSwap 10000 USDC -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, DAI.address],
+      Num(10000, 6),
+      1,
+      false,
+      false
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "multihopSwap 10000 USDC -> WETH -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, wethAddress, DAI.address],
+      Num(10000, 6),
+      1,
+      true,
+      true
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "sushiSwap 10000 USDC -> WETH -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, wethAddress, DAI.address],
+      Num(10000, 6),
+      1,
+      false,
+      false
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "multihopSwap 10000 USDC -> USDT -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, USDT.address, DAI.address],
+      Num(10000, 6),
+      1,
+      true,
+      true
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "sushiSwap 10000 USDC -> USDT -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [USDC.address, USDT.address, DAI.address],
+      Num(10000, 6),
+      1,
+      false,
+      false
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  console.log("--------------------------------------");
+
+  // 50 DAI -> USDC
+  logText = "singleSwap 50 DAI -> USDC"
+  try {
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [DAI.address, USDC.address],
       Num(50, 18),
       1,
       true,
       false
     );
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 50 dai -> usdc"
+  logText = "multihopSwap 50 DAI -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
+      [DAI.address, USDC.address],
       Num(50, 18),
       1,
       true,
       true
     );
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 50 dai -> usdc"
+  logText = "sushiSwap 50 DAI -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
+      [DAI.address, USDC.address],
       Num(50, 18),
       1,
       false,
       false
     );
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 50 dai -> eth -> usdc"
+  logText = "multihopSwap 50 DAI -> WETH -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, wethAddress, usdc.address],
+      [DAI.address, wethAddress, USDC.address],
       Num(50, 18),
       1,
       true,
       true
     );
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 50 dai -> eth -> usdc"
+  logText = "sushiSwap 50 DAI -> WETH -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, wethAddress, usdc.address],
+      [DAI.address, wethAddress, USDC.address],
       Num(50, 18),
       1,
       false,
       false
     );
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
-  
+
   console.log("--------------------------------------");
 
-  // 1000 dai -> usdc
-  logText = "singleSwap 1000 dai -> usdc"
+  // 1000 DAI -> USDC
+  logText = "singleSwap 1000 DAI -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
+      [DAI.address, USDC.address],
       Num(1000, 18),
       1,
       true,
       false
     );
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 1000 dai -> usdc"
+  logText = "multihopSwap 1000 DAI -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
-      Num(1000, 18),
-      1,
-      true,
-      true
-    );
-    gasUsedLog(logText, tx);
-    amountOutLog(usdc);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "sushiSwap 1000 dai -> usdc"
-  try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
-      Num(1000, 18),
-      1,
-      false,
-      false
-    );
-    gasUsedLog(logText, tx);
-    amountOutLog(usdc);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "multihopSwap 1000 dai -> eth -> usdc"
-  try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [dai.address, wethAddress, usdc.address],
+      [DAI.address, USDC.address],
       Num(1000, 18),
       1,
       true,
       true
     );
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 1000 dai -> eth -> usdc"
+  logText = "sushiSwap 1000 DAI -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, wethAddress, usdc.address],
+      [DAI.address, USDC.address],
       Num(1000, 18),
       1,
       false,
       false
     );
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
-  
+
+  logText = "multihopSwap 1000 DAI -> WETH -> USDC"
+  try {
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [DAI.address, wethAddress, USDC.address],
+      Num(1000, 18),
+      1,
+      true,
+      true
+    );
+    gasUsedLog(logText, tx);
+    amountOutLog(USDC);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "sushiSwap 1000 DAI -> WETH -> USDC"
+  try {
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [DAI.address, wethAddress, USDC.address],
+      Num(1000, 18),
+      1,
+      false,
+      false
+    );
+    gasUsedLog(logText, tx);
+    amountOutLog(USDC);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
   console.log("--------------------------------------");
 
-  // 10000 dai -> usdc
-  logText = "singleSwap 10000 dai -> usdc"
+  // 10000 DAI -> USDC
+  logText = "singleSwap 10000 DAI -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
+      [DAI.address, USDC.address],
       Num(10000, 18),
       1,
       true,
       false
     );
-    
+
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "multihopSwap 10000 dai -> usdc"
+  logText = "multihopSwap 10000 DAI -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
+      [DAI.address, USDC.address],
       Num(10000, 18),
       1,
       true,
       true
     );
-    
+
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
-  logText = "sushiSwap 10000 dai -> usdc"
+  logText = "sushiSwap 10000 DAI -> USDC"
   try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
     tx = await cellar.swapForGasTest(
-      [dai.address, usdc.address],
-      Num(10000, 18),
-      1,
-      false,
-      false
-    );
-
-    gasUsedLog(logText, tx);
-    amountOutLog(usdc);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "multihopSwap 10000 dai -> eth -> usdc"
-  try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [dai.address, wethAddress, usdc.address],
-      Num(10000, 18),
-      1,
-      true,
-      true
-    );
-    
-    gasUsedLog(logText, tx);
-    amountOutLog(usdc);
-  } catch(e) {
-    console.log(logText, e.message);
-  }
-
-  logText = "sushiSwap 10000 dai -> eth -> usdc"
-  try {
-    checkedBalanceBefore = await usdc.balanceOf(cellar.address);
-    tx = await cellar.swapForGasTest(
-      [dai.address, wethAddress, usdc.address],
+      [DAI.address, USDC.address],
       Num(10000, 18),
       1,
       false,
@@ -883,16 +845,48 @@ async function main() {
     );
 
     gasUsedLog(logText, tx);
-    amountOutLog(usdc);
+    amountOutLog(USDC);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "multihopSwap 10000 DAI -> WETH -> USDC"
+  try {
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [DAI.address, wethAddress, USDC.address],
+      Num(10000, 18),
+      1,
+      true,
+      true
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(USDC);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "sushiSwap 10000 DAI -> WETH -> USDC"
+  try {
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
+    tx = await cellar.swapForGasTest(
+      [DAI.address, wethAddress, USDC.address],
+      Num(10000, 18),
+      1,
+      false,
+      false
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(USDC);
   } catch(e) {
     console.log(logText, e.message);
   }
 
   console.log("--------------------------------------");
 
-  await cellar["deposit(uint256)"](
-    Num(1000, 6)
-  );
+  await cellar["deposit(uint256,address)"](Num(1000, 6), owner.address);
 }
 
 main()
