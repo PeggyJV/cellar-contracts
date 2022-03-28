@@ -1017,7 +1017,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         uint24 SWAP_FEE = 3000;
 
         // Approve the router to spend first token in path.
-        ERC20(tokenIn).safeApprove(address(uniswapRouter), amountIn);
+        ERC20(tokenIn).safeApprove(useUniswap ? address(uniswapRouter) : address(sushiswapRouter), amountIn);
 
         // Determine whether to use a single swap or multihop swap.
         if (path.length > 2){
