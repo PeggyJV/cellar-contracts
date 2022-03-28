@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-
 pragma solidity 0.8.11;
 
 /// @title interface for AaveV2StablecoinCellar
 interface IAaveV2StablecoinCellar {
-
     // ======================================= EVENTS =======================================
 
     /**
      * @notice Emitted when assets are deposited into cellar.
      * @param caller the address of the caller
-     * @param token the address of token the cellar receives (not necessarily the one deposited)
+     * @param token the address of token the cellar receives
      * @param owner the address of the owner of shares
      * @param assets the amount of assets being deposited
      * @param shares the amount of shares minted to owner
@@ -46,7 +44,7 @@ interface IAaveV2StablecoinCellar {
      * @param tokenOut the address of the tokenOut
      * @param amountOut the amount of the tokenOut
      */
-    event Swapped(
+    event Swap(
         address indexed tokenIn,
         uint256 amountIn,
         address tokenOut,
@@ -55,42 +53,60 @@ interface IAaveV2StablecoinCellar {
 
     /**
      * @notice Emitted on deposit to Aave.
-     * @param token the address of the token of the lending position
-     * @param assets the amount that has been deposited
+     * @param token the address of the token
+     * @param amount the amount of tokens to deposit
      */
     event DepositToAave(
         address indexed token,
-        uint256 assets
+        uint256 amount
     );
 
     /**
-     * @notice Emitted on redeem from Aave.
-     * @param token the address of the redeemed token
-     * @param assets the amount that has been redeemed
+     * @notice Emitted on withdraw from Aave.
+     * @param token the address of the token
+     * @param amount the amount of tokens to withdraw
      */
-    event RedeemFromAave(
+    event WithdrawFromAave(
         address indexed token,
-        uint256 assets
+        uint256 amount
     );
 
     /**
-     * @notice Emitted on rebalance of Aave lending position.
-     * @param oldLendingToken the address of the token of the old lending position
-     * @param newLendingToken the address of the token of the new lending position
-     * @param assets the amount of the new lending tokens that has been deposited to Aave after rebalance
+     * @notice Emitted on rebalance of Aave strategy.
+     * @param oldAsset the address of the asset for the old strategy
+     * @param newAsset the address of the asset for the new strategy
+     * @param assets the amount of the new assets that has been deposited to Aave after rebalance
      */
     event Rebalance(
-        address indexed oldLendingToken,
-        address indexed newLendingToken,
+        address indexed oldAsset,
+        address indexed newAsset,
         uint256 assets
     );
+
+    /**
+     * @notice Emitted when platform fees accrued.
+     * @param fees amount of fees accrued in shares
+     */
+    event AccruedPlatformFees(uint256 fees);
+
+    /**
+     * @notice Emitted when performance fees accrued.
+     * @param fees amount of fees accrued in shares
+     */
+    event AccruedPerformanceFees(uint256 fees);
+
+    /**
+     * @notice Emitted when performance fees burnt as insurance.
+     * @param fees amount of fees burnt in shares
+     */
+    event BurntPerformanceFees(uint256 fees);
 
     /**
      * @notice Emitted when platform fees are transferred to Cosmos.
-     * @param feeInShares amount of fees transferred (in shares)
-     * @param feeInAssets amount of fees transferred (in assets)
+     * @param platformFees amount of platform fees transferred
+     * @param performanceFees amount of performance fees transferred
      */
-    event TransferFees(uint256 feeInShares, uint256 feeInAssets);
+    event TransferFees(uint256 platformFees, uint256 performanceFees);
 
     /**
      * @notice Emitted when liquidity restriction removed.
@@ -98,39 +114,24 @@ interface IAaveV2StablecoinCellar {
     event LiquidityRestrictionRemoved();
 
     /**
-     * @notice Emitted when tokens accidently sent to cellar are recovered.
+     * @notice Emitted when tokens accidentally sent to cellar are recovered.
      * @param token the address of the token
      * @param amount amount transferred out
      */
     event Sweep(address indexed token, uint256 amount);
 
     /**
-     * @notice Emitted when an input token is approved or unapproved.
-     * @param token the address of the token
-     * @param isApproved whether it is approved
-     */
-    event SetInputToken(address token, bool isApproved);
-
-    /**
      * @notice Emitted when cellar is paused.
-     * @param caller address that set the pause
      * @param isPaused whether the contract is paused
      */
-    event Pause(address caller, bool isPaused);
+    event Pause(bool isPaused);
 
     /**
      * @notice Emitted when cellar is shutdown.
-     * @param caller address that called the shutdown
      */
-    event Shutdown(address caller);
+    event Shutdown();
 
     // ======================================= ERRORS =======================================
-
-    /**
-     * @notice Attempted an action with a token that is not approved.
-     * @param unapprovedToken address of the unapproved token
-     */
-    error UnapprovedToken(address unapprovedToken);
 
     /**
      * @notice Attempted an action with zero assets.
@@ -155,22 +156,22 @@ interface IAaveV2StablecoinCellar {
     error DepositRestricted(uint256 maxDeposit);
 
     /**
-     * @notice Current lending token is updated to an asset not supported by Aave.
+     * @notice Current asset is updated to an asset not supported by Aave.
      * @param unsupportedToken address of the unsupported token
      */
     error TokenIsNotSupportedByAave(address unsupportedToken);
 
     /**
      * @notice Attempted to sweep an asset that is managed by the cellar.
-     * @param protectedToken address of the unsupported token
+     * @param token address of the token that can't be sweeped
      */
-    error ProtectedToken(address protectedToken);
+    error ProtectedAsset(address token);
 
     /**
-     * @notice Attempted rebalance into the same lending token.
-     * @param lendingToken address of the lending token
+     * @notice Attempted rebalance into the same asset.
+     * @param asset address of the asset
      */
-    error SameLendingToken(address lendingToken);
+    error SameAsset(address asset);
 
     /**
      * @notice Specified a swap path that doesn't make sense for the action attempted.
@@ -193,26 +194,43 @@ interface IAaveV2StablecoinCellar {
      */
     error AlreadyShutdown();
 
-    // ======================================= FUNCTIONS =======================================
+    // ======================================= STRUCTS =======================================
 
-    function deposit(
-        address[] memory path,
-        uint256 minAssetsIn,
-        uint256 assets,
-        address receiver
-    ) external returns (uint256 shares);
+    /**
+     * @notice Stores user deposit data.
+     * @param assets amount of assets deposited
+     * @param shares amount of shares that were minted for their deposit
+     * @param timeDeposited timestamp of when the user deposited
+     */
+    struct UserDeposit {
+        uint112 assets;
+        uint112 shares;
+        uint32 timeDeposited;
+    }
 
-    function deposit(uint256 assets) external returns (uint256);
+    // ================================= DEPOSIT/WITHDRAWAL OPERATIONS =================================
 
     function deposit(uint256 assets, address receiver) external returns (uint256);
 
-    function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+    function mint(uint256 shares, address receiver) external returns (uint256);
 
-    function withdraw(uint256 assets) external returns (uint256 shares);
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address owner
+    ) external returns (uint256 shares);
 
-    function inactiveAssets() external view returns (uint256);
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address owner
+    ) external returns (uint256 assets);
+
+    // ==================================== ACCOUNTING OPERATIONS ====================================
 
     function activeAssets() external view returns (uint256);
+
+    function inactiveAssets() external view returns (uint256);
 
     function totalAssets() external view returns (uint256);
 
@@ -220,25 +238,65 @@ interface IAaveV2StablecoinCellar {
 
     function convertToAssets(uint256 shares) external view returns (uint256);
 
-    function enterStrategy() external;
+    function previewDeposit(uint256 assets) external view returns (uint256);
 
-    function reinvest(uint256 amount, uint256 minAssetsOut) external;
+    function previewMint(uint256 shares) external view returns (uint256);
 
-    function reinvest(uint256 minAssetsOut) external;
+    function previewWithdraw(uint256 assets) external view returns (uint256);
 
-    function claimAndUnstake(uint256 amount) external returns (uint256 claimed);
+    function previewRedeem(uint256 shares) external view returns (uint256);
 
-    function claimAndUnstake() external returns (uint256);
+    // ======================================= STATE INFORMATION =====================================
 
-    function rebalance(address[] memory path, uint256 minNewLendingTokenAmount) external;
+    function depositBalances(address user) external view returns (
+        uint256 userActiveShares,
+        uint256 userInactiveShares,
+        uint256 userActiveAssets,
+        uint256 userInactiveAssets
+    );
+
+    function numDeposits(address user) external view returns (uint256);
+
+    // ============================ DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ============================
+
+    function maxDeposit(address owner) external view returns (uint256);
+
+    function maxMint(address owner) external view returns (uint256);
+
+    function maxWithdraw(address owner) external view returns (uint256);
+
+    function maxRedeem(address owner) external view returns (uint256);
+
+    // ======================================= FEE OPERATIONS =======================================
 
     function accrueFees() external;
 
     function transferFees() external;
 
-    function setInputToken(address token, bool isApproved) external;
+    // ======================================= ADMIN OPERATIONS =======================================
+
+    function enterStrategy() external;
+
+    function rebalance(address[] memory path, uint256 minNewLendingTokenAmount) external;
+
+    function reinvest(address[] memory path, uint256 minAssetsOut) external;
+
+    function claimAndUnstake() external returns (uint256 claimed);
+
+    function sweep(address token) external;
 
     function removeLiquidityRestriction() external;
 
-    function sweep(address token) external;
+    function setPause(bool _isPaused) external;
+
+    function shutdown() external;
+
+    // ================================== SHARE TRANSFER OPERATIONS ==================================
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount,
+        bool onlyActive
+    ) external returns (bool);
 }

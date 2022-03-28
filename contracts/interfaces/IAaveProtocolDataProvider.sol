@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-
 pragma solidity 0.8.11;
 
 /**
@@ -21,7 +20,7 @@ interface IAaveProtocolDataProvider {
             uint40 stableRateLastUpdated,
             bool usageAsCollateralEnabled
         );
-        
+
     function getReserveData(address asset)
         external
         view
