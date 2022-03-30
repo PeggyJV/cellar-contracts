@@ -133,21 +133,21 @@ describe("AaveV2StablecoinCellar", () => {
     await cellar.deployed();
 
     // Mint mock tokens to signers
-    await USDC.mint(owner.address, BigNum(1000, 6));
-    await DAI.mint(owner.address, BigNum(1000, 18));
-    await WETH.mint(owner.address, BigNum(1000, 18));
-    await USDT.mint(owner.address, BigNum(1000, 6));
+    await USDC.mint(owner.address, BigNum(1_000_000, 6));
+    await DAI.mint(owner.address, BigNum(1_000_000, 18));
+    await WETH.mint(owner.address, BigNum(1_000_000, 18));
+    await USDT.mint(owner.address, BigNum(1_000_000, 6));
 
-    await USDC.mint(alice.address, BigNum(1000, 6));
-    await DAI.mint(alice.address, BigNum(1000, 18));
-    await WETH.mint(alice.address, BigNum(1000, 18));
-    await USDT.mint(alice.address, BigNum(1000, 6));
-    await USDC.mint(alice.address, BigNum(1000, 6));
+    await USDC.mint(alice.address, BigNum(1_000_000, 6));
+    await DAI.mint(alice.address, BigNum(1_000_000, 18));
+    await WETH.mint(alice.address, BigNum(1_000_000, 18));
+    await USDT.mint(alice.address, BigNum(1_000_000, 6));
+    await USDC.mint(alice.address, BigNum(1_000_000, 6));
 
-    await USDC.mint(bob.address, BigNum(1000, 6));
-    await DAI.mint(bob.address, BigNum(1000, 18));
-    await WETH.mint(bob.address, BigNum(1000, 18));
-    await USDT.mint(bob.address, BigNum(1000, 6));
+    await USDC.mint(bob.address, BigNum(1_000_000, 6));
+    await DAI.mint(bob.address, BigNum(1_000_000, 18));
+    await WETH.mint(bob.address, BigNum(1_000_000, 18));
+    await USDT.mint(bob.address, BigNum(1_000_000, 6));
 
     // Approve cellar to spend mock tokens
     await USDC.approve(cellar.address, ethers.constants.MaxUint256);
@@ -198,13 +198,13 @@ describe("AaveV2StablecoinCellar", () => {
       .approve(cellar.address, ethers.constants.MaxUint256);
 
     // Mint initial liquidity to Aave USDC lending pool
-    await USDC.mint(aUSDC.address, BigNum(5000, 6));
+    await USDC.mint(aUSDC.address, BigNum(5_000_000, 6));
 
     // Mint initial liquidity to router
-    await USDC.mint(router.address, BigNum(5000, 6));
-    await DAI.mint(router.address, BigNum(5000, 18));
-    await WETH.mint(router.address, BigNum(5000, 18));
-    await USDT.mint(router.address, BigNum(5000, 6));
+    await USDC.mint(router.address, BigNum(5_000_000, 6));
+    await DAI.mint(router.address, BigNum(5_000_000, 18));
+    await WETH.mint(router.address, BigNum(5_000_000, 18));
+    await USDT.mint(router.address, BigNum(5_000_000, 6));
   });
 
   describe("deposit", () => {
@@ -247,10 +247,16 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should deposit all user's balance if they try depositing more than their balance", async () => {
-      // owner has $1000 to deposit, withdrawing $5000 should only withdraw $1000
-      await cellar.deposit(BigNum(5000, 6), owner.address);
+      // ensure deposit restriction isn't a problem
+      await cellar.removeLiquidityRestriction();
+
+      const ownerBalance = await USDC.balanceOf(owner.address);
+      const cellarBalance = await USDC.balanceOf(cellar.address);
+      await cellar.deposit(ownerBalance.mul(2), owner.address);
       expect(await USDC.balanceOf(owner.address)).to.eq(0);
-      expect(await USDC.balanceOf(cellar.address)).to.eq(BigNum(1000, 6));
+      expect(await USDC.balanceOf(cellar.address)).to.eq(
+        cellarBalance.add(ownerBalance)
+      );
     });
 
     it("should use and store index of first non-zero deposit", async () => {
@@ -276,20 +282,34 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should emit Deposit event", async () => {
-      await cellar.connect(alice).deposit(BigNum(1000, 6), alice.address);
-
-      await cellar.enterStrategy();
-      await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
-
-      await expect(cellar.deposit(BigNum(2000, 6), alice.address))
+      await expect(cellar.deposit(BigNum(1000, 6), alice.address))
         .to.emit(cellar, "Deposit")
         .withArgs(
           owner.address,
           alice.address,
           USDC.address,
           BigNum(1000, 6),
-          BigNum(800, 18)
+          BigNum(1000, 18)
         );
+    });
+  });
+
+  describe("mint", () => {
+    it("should mint and deposit assets correctly", async () => {
+      // has been tested successfully from 1 up to 100, but set to run once to avoid long test time
+      for (let i = 100; i <= 100; i++) {
+        const ownerOldBalance = await USDC.balanceOf(owner.address);
+
+        const mintedShares = BigNum(i, 18);
+        const currentShares = await cellar.balanceOf(owner.address);
+        await cellar.mint(mintedShares, owner.address);
+        expect(await cellar.balanceOf(owner.address)).to.eq(
+          currentShares.add(mintedShares)
+        );
+        expect(await USDC.balanceOf(owner.address)).to.eq(
+          ownerOldBalance.sub(BigNum(i, 6))
+        );
+      }
     });
   });
 
@@ -451,6 +471,21 @@ describe("AaveV2StablecoinCellar", () => {
           BigNum(125, 6),
           BigNum(100, 18)
         );
+    });
+  });
+
+  describe("redeem", async () => {
+    it("should redeem shares and withdraw assets correctly", async () => {
+      // has been tested successfully from 1 up to 100, but set to run once to avoid long test time
+      for (let i = 100; i <= 100; i++) {
+        const shares = BigNum(i, 18);
+        const ownerOldBalance = await USDC.balanceOf(owner.address);
+        await cellar.mint(shares, owner.address);
+
+        await cellar.redeem(shares, owner.address, owner.address);
+        expect(await cellar.balanceOf(owner.address)).to.eq(0);
+        expect(await USDC.balanceOf(owner.address)).to.eq(ownerOldBalance);
+      }
     });
   });
 
@@ -628,22 +663,22 @@ describe("AaveV2StablecoinCellar", () => {
   });
 
   describe("enterStrategy", () => {
+    let holdingPoolAssets: BigNumber;
+    let aaveOldBalance: BigNumber;
+
     beforeEach(async () => {
-      // owner adds $100 of inactive assets
-      await cellar.deposit(BigNum(100, 6), owner.address);
+      holdingPoolAssets = BigNum(200, 6);
+      await cellar.deposit(holdingPoolAssets, owner.address);
 
-      // alice adds $100 of inactive assets
-      await cellar.connect(alice).deposit(BigNum(100, 6), alice.address);
-
-      // enter all $200 of inactive assets into a strategy
+      aaveOldBalance = await USDC.balanceOf(aUSDC.address);
       await cellar.enterStrategy();
     });
 
     it("should deposit cellar inactive assets into Aave", async () => {
-      // cellar's initial $200 - deposited $200 = $0
       expect(await USDC.balanceOf(cellar.address)).to.eq(0);
-      // aave's initial $5000 + deposited $200 = $5200
-      expect(await USDC.balanceOf(aUSDC.address)).to.eq(BigNum(5200, 6));
+      expect(await USDC.balanceOf(aUSDC.address)).to.eq(
+        aaveOldBalance.add(holdingPoolAssets)
+      );
     });
 
     it("should return correct amount of aTokens to cellar", async () => {
@@ -1069,8 +1104,8 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should accurately convert shares to assets and vice versa", async () => {
-      // has been tested successfully from 0 up to 10_000, but set to run once to avoid long test time
-      for (let i = 0; i < 1; i++) {
+      // has been tested successfully from 1 up to 100, but set to run once to avoid long test time
+      for (let i = 100; i <= 100; i++) {
         const initialAssets = BigNum(i, 6);
         const assetsToShares = await cellar.convertToShares(initialAssets);
         const sharesBackToAssets = await cellar.convertToAssets(assetsToShares);
@@ -1084,7 +1119,7 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should correctly preview deposits", async () => {
       // set to run only only once, but successfully from 1 to 1000 (max amount redeemable)
-      for (let i = 1000; i <= 1000; i++) {
+      for (let i = 100; i <= 100; i++) {
         const assets = BigNum(i, 6);
 
         const expectedShares = await cellar.previewDeposit(assets);
@@ -1101,7 +1136,7 @@ describe("AaveV2StablecoinCellar", () => {
       await USDC.mint(owner.address, BigNum(1_000_000, 6));
 
       // set to run only only once, but successfully from 1 to 1000 (max amount redeemable)
-      for (let i = 1000; i <= 1000; i++) {
+      for (let i = 100; i <= 100; i++) {
         const shares = BigNum(i, 18);
 
         const expectedAssets = await cellar.previewMint(shares);
@@ -1119,7 +1154,7 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.enterStrategy();
 
       // set to run only only once, but successfully from 1 to 1000 (max amount withdrawable)
-      for (let i = 1000; i <= 1000; i++) {
+      for (let i = 100; i <= 100; i++) {
         const assets = BigNum(i, 6);
 
         const expectedShares = await cellar.previewWithdraw(assets);
@@ -1139,7 +1174,7 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.enterStrategy();
 
       // set to run only only once, but successfully from 1 to 1000 (max amount redeemable)
-      for (let i = 1000; i <= 1000; i++) {
+      for (let i = 100; i <= 100; i++) {
         const shares = BigNum(i, 18);
 
         const expectedAssets = await cellar.previewRedeem(shares);
