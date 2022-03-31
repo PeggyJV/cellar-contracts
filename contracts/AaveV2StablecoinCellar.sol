@@ -192,7 +192,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
         // In the case where a user tries to deposit more than their balance, the desired behavior
         // is to deposit what they have instead of reverting.
-        uint256 balance = ERC20(asset).balanceOf(msg.sender);
+        uint256 balance = asset.balanceOf(msg.sender);
         if (assets > balance) assets = balance;
 
         (, shares) = _deposit(assets, 0, receiver);
@@ -207,7 +207,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function mint(uint256 shares, address receiver) external returns (uint256 assets) {
         // In the case where a user tries to mint more shares than possible, the desired behavior
         // is to mint as many shares as their balance allows instead of reverting.
-        uint256 mintable = previewDeposit(ERC20(asset).balanceOf(msg.sender));
+        uint256 mintable = previewDeposit(asset.balanceOf(msg.sender));
         if (shares > mintable) shares = mintable;
 
         (assets, ) = _deposit(0, shares, receiver);
@@ -232,7 +232,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         if (shares == 0) revert ZeroShares(); // Revert if either assets or shares is zero.
 
         // Transfers assets into the cellar.
-        ERC20(asset).safeTransferFrom(msg.sender, address(this), assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
 
         // Mint user a token that represents their share of the cellar's assets.
         _mint(receiver, shares);
@@ -388,7 +388,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         _allocateAssets(assets);
 
         // Transfer assets to receiver from the cellar's holding pool.
-        ERC20(asset).safeTransfer(receiver, assets);
+        asset.safeTransfer(receiver, assets);
 
         emit Withdraw(receiver, owner, address(asset), assets, shares);
 
@@ -417,11 +417,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // The aTokens' value is pegged to the value of the corresponding asset at a 1:1 ratio. We
         // can find the amount of assets active in a strategy simply by taking balance of aTokens
         // cellar holds.
-        return ERC20(assetAToken).balanceOf(address(this));
+        return assetAToken.balanceOf(address(this));
     }
 
     function _activeAssets() internal view returns (uint256) {
-        uint256 assets = ERC20(assetAToken).balanceOf(address(this));
+        uint256 assets = assetAToken.balanceOf(address(this));
         return assets.changeDecimals(assetDecimals, decimals);
     }
 
@@ -429,11 +429,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Total amount of inactive asset waiting in a holding pool to be entered into a strategy.
      */
     function inactiveAssets() public view returns (uint256) {
-        return ERC20(asset).balanceOf(address(this));
+        return asset.balanceOf(address(this));
     }
 
     function _inactiveAssets() internal view returns (uint256) {
-        uint256 assets = ERC20(asset).balanceOf(address(this));
+        uint256 assets = asset.balanceOf(address(this));
         return assets.changeDecimals(assetDecimals, decimals);
     }
 
@@ -765,7 +765,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         _allocateAssets(feeInAssets);
 
         // Transfer assets to a fee distributor on Cosmos.
-        ERC20(asset).approve(address(gravityBridge), feeInAssets);
+        asset.approve(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, feeInAssets);
 
         emit TransferFees(accruedPlatformFees, accruedPerformanceFees);
