@@ -189,16 +189,36 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @param receiver address receiving the shares
      * @return shares amount of shares minted
      */
-    function deposit(uint256 assets, address receiver) public returns (uint256 shares) {
-        // In case of an emergency or contract vulnerability, we don't want users to be able to
-        // deposit more assets into a compromised contract.
-        if (isPaused) revert ContractPaused();
-        if (isShutdown) revert ContractShutdown();
-
+    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
         // In the case where a user tries to deposit more than their balance, the desired behavior
         // is to deposit what they have instead of reverting.
         uint256 balance = ERC20(asset).balanceOf(msg.sender);
         if (assets > balance) assets = balance;
+
+        (, shares) = _deposit(assets, 0, receiver);
+    }
+
+    /**
+     * @notice Mints shares to receiver by depositing assets.
+     * @param shares amount of shares to mint
+     * @param receiver address receiving the shares
+     * @return assets amount of assets deposited
+     */
+    function mint(uint256 shares, address receiver) external returns (uint256 assets) {
+        // In the case where a user tries to mint more shares than possible, the desired behavior
+        // is to mint as many shares as their balance allows instead of reverting.
+        uint256 mintable = previewDeposit(ERC20(asset).balanceOf(msg.sender));
+        if (shares > mintable) shares = mintable;
+
+        (assets, ) = _deposit(0, shares, receiver);
+    }
+
+
+    function _deposit(uint256 assets, uint256 shares, address receiver) internal returns (uint256, uint256) {
+        // In case of an emergency or contract vulnerability, we don't want users to be able to
+        // deposit more assets into a compromised contract.
+        if (isPaused) revert ContractPaused();
+        if (isShutdown) revert ContractShutdown();
 
         // Check if security restrictions still apply. Enforce them if they do.
         if (maxLiquidity != type(uint256).max) {
@@ -206,8 +226,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             if (assets > maxDeposit(receiver)) revert DepositRestricted(50_000 * 10**assetDecimals);
         }
 
-        // Must calculate shares before assets are transferred in. Reverts if no assets were deposited.
-        if ((shares = previewDeposit(assets)) == 0) revert ZeroAssets();
+        // Must calculate before assets are transferred in.
+        shares > 0 ? assets = previewMint(shares) : shares = previewDeposit(assets);
+
+        if (shares == 0) revert ZeroShares(); // Revert if either assets or shares is zero.
 
         // Transfers assets into the cellar.
         ERC20(asset).safeTransferFrom(msg.sender, address(this), assets);
@@ -234,18 +256,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             assets,
             shares
         );
-    }
 
-    /**
-     * @notice Mints shares to receiver by depositing assets.
-     * @param shares amount of shares to mint
-     * @param receiver address receiving the shares
-     * @return assets amount of assets deposited
-     */
-    function mint(uint256 shares, address receiver) external returns (uint256) {
-        shares = deposit(previewMint(shares), receiver);
-
-        return convertToAssets(shares);
+        return (assets, shares);
     }
 
     /**
@@ -266,7 +278,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         uint256 maxWithdrableAssets = previewRedeem(balanceOf[owner]);
         if (assets > maxWithdrableAssets) assets = maxWithdrableAssets;
 
-        (shares, ) = _withdraw(assets, receiver, owner);
+        // Ensures proceeding calculations are done with a standard 18 decimals of precision. Will
+        // change back to the using the asset's usual decimals of precision when transferring assets
+        // after all calculations are done.
+        assets = assets.changeDecimals(assetDecimals, decimals);
+
+        (, shares) = _withdraw(assets, receiver, owner);
     }
 
     /**
@@ -287,7 +304,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         uint256 maxRedeemableShares = maxRedeem(owner);
         if (shares > maxRedeemableShares) shares = maxRedeemableShares;
 
-        (, assets) = _withdraw(previewRedeem(shares), receiver, owner);
+        (assets, ) = _withdraw(_convertToAssets(shares), receiver, owner);
     }
 
     function _withdraw(
@@ -297,11 +314,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     ) internal returns (uint256, uint256) {
         if (balanceOf[owner] == 0) revert ZeroShares();
         if (assets == 0) revert ZeroAssets();
-
-        // Ensures proceeding calculations are done with a standard 18 decimals of precision. Will
-        // change back to the using the asset's usual decimals of precision when transferring assets
-        // after all calculations are done.
-        assets = assets.changeDecimals(assetDecimals, decimals);
 
         // Tracks the total amount of shares being redeemed for the amount of assets withdrawn.
         uint256 shares;
@@ -380,10 +392,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         emit Withdraw(receiver, owner, address(asset), assets, shares);
 
-        // Returns the amount of shares redeemed and amount of assets withdrawn. The amount of
+        // Returns the amount of assets withdrawn and amount of shares redeemed. The amount of
         // assets withdrawn may differ from the amount of assets specified when calling the function
         // if the user has less assets then they tried withdrawing.
-        return (shares, assets);
+        return (assets, shares);
     }
 
     // ================================== ACCOUNTING OPERATIONS ==================================

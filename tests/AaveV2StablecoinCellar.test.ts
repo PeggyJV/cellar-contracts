@@ -277,7 +277,7 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should not allow deposits of 0", async () => {
       await expect(cellar.deposit(0, owner.address)).to.be.revertedWith(
-        "ZeroAssets()"
+        "ZeroShares()"
       );
     });
 
@@ -310,6 +310,15 @@ describe("AaveV2StablecoinCellar", () => {
           ownerOldBalance.sub(BigNum(i, 6))
         );
       }
+    });
+
+    it("should mint as much as possible if tries to mint more than they can", async () => {
+      const balance = await USDC.balanceOf(owner.address);
+      const maxShares = await cellar.previewDeposit(balance);
+
+      await cellar.mint(maxShares.mul(2), owner.address);
+
+      expect(await cellar.balanceOf(owner.address)).to.eq(maxShares);
     });
   });
 
@@ -485,6 +494,18 @@ describe("AaveV2StablecoinCellar", () => {
         await cellar.redeem(shares, owner.address, owner.address);
         expect(await cellar.balanceOf(owner.address)).to.eq(0);
         expect(await USDC.balanceOf(owner.address)).to.eq(ownerOldBalance);
+      }
+    });
+
+    it("should redeem as much as possible if tries to redeem more than they can", async () => {
+      // has been tested successfully from 1 up to 100, but set to run once to avoid long test time
+      for (let i = 100; i <= 100; i++) {
+        const shares = BigNum(i, 18);
+        await cellar.mint(shares, owner.address);
+
+        await cellar.redeem(shares.mul(2), owner.address, owner.address);
+
+        expect(await cellar.balanceOf(owner.address)).to.eq(0);
       }
     });
   });
