@@ -220,16 +220,16 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         if (isPaused) revert ContractPaused();
         if (isShutdown) revert ContractShutdown();
 
+        // Must calculate before assets are transferred in.
+        shares > 0 ? assets = previewMint(shares) : shares = previewDeposit(assets);
+
+        if (shares == 0) revert ZeroShares();
+
         // Check if security restrictions still apply. Enforce them if they do.
         if (maxLiquidity != type(uint256).max) {
             if (assets + totalAssets() > maxLiquidity) revert LiquidityRestricted(maxLiquidity);
             if (assets > maxDeposit(receiver)) revert DepositRestricted(50_000 * 10**assetDecimals);
         }
-
-        // Must calculate before assets are transferred in.
-        shares > 0 ? assets = previewMint(shares) : shares = previewDeposit(assets);
-
-        if (shares == 0) revert ZeroShares(); // Revert if either assets or shares is zero.
 
         // Transfers assets into the cellar.
         asset.safeTransferFrom(msg.sender, address(this), assets);
