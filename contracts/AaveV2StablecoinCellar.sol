@@ -336,7 +336,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             UserDeposit storage d = deposits[i];
 
             // Whether or not deposited shares are active or inactive.
-            bool isActive = d.timeDeposited < lastTimeEnteredStrategy;
+            bool isActive = d.timeDeposited <= lastTimeEnteredStrategy;
 
             // If shares are active, convert them to the amount of assets they're worth to see the
             // maximum amount of assets we can take from this deposit.
@@ -555,7 +555,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
 
             // Determine whether or not deposit is active or inactive.
-            if (d.timeDeposited < lastTimeEnteredStrategy) {
+            if (d.timeDeposited <= lastTimeEnteredStrategy) {
                 // Saves an extra SLOAD if active and cast type to uint256.
                 uint256 dShares = d.shares;
 
@@ -637,7 +637,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
             // Determine the amount of assets that can be withdrawn. Only redeem active shares for
             // assets, otherwise just withdrawn the original amount of assets that were deposited.
-            assets += d.timeDeposited < lastTimeEnteredStrategy ?
+            assets += d.timeDeposited <= lastTimeEnteredStrategy ?
                 uint256(d.shares).mulWadDown(exchangeRate) :
                 d.assets;
         }
@@ -1140,7 +1140,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             UserDeposit storage dFrom = depositsFrom[i];
 
             // If we only want to transfer active shares, skips this deposit if it is inactive.
-            bool isActive = dFrom.timeDeposited < lastTimeEnteredStrategy;
+            bool isActive = dFrom.timeDeposited <= lastTimeEnteredStrategy;
             if (onlyActive && !isActive) continue;
 
             // Saves an extra SLOAD if active and cast type to uint256.
