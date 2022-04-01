@@ -197,6 +197,21 @@ async function main() {
     console.log(logText, e.message);
   }
 
+  logText = "curveSwap 50 USDC -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapByCurve(
+      [USDC.address, DAI.address],
+      Num(50, 6),
+      1
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
   logText = "multihopSwap 50 USDC -> WETH -> DAI"
   try {
     checkedBalanceBefore = await DAI.balanceOf(cellar.address);
@@ -311,6 +326,21 @@ async function main() {
       false,
       false
     );
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "curveSwap 1000 USDC -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapByCurve(
+      [USDC.address, DAI.address],
+      Num(1000, 6),
+      1
+    );
+
     gasUsedLog(logText, tx);
     amountOutLog(DAI);
   } catch(e) {
@@ -439,6 +469,20 @@ async function main() {
     console.log(logText, e.message);
   }
 
+  logText = "curveSwap 5000 USDC -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapByCurve(
+      [USDC.address, DAI.address],
+      Num(5000, 6),
+      1
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
 
   logText = "multihopSwap 5000 USDC -> WETH -> DAI"
   try {
@@ -554,6 +598,21 @@ async function main() {
       1,
       false,
       false
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(DAI);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "curveSwap 10000 USDC -> DAI"
+  try {
+    checkedBalanceBefore = await DAI.balanceOf(cellar.address);
+    tx = await cellar.swapByCurve(
+      [USDC.address, DAI.address],
+      Num(10000, 6),
+      1
     );
 
     gasUsedLog(logText, tx);
@@ -681,6 +740,21 @@ async function main() {
     console.log(logText, e.message);
   }
 
+  logText = "curveSwap 50 DAI -> USDC"
+  try {
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
+    tx = await cellar.swapByCurve(
+      [DAI.address, USDC.address],
+      Num(50, 18),
+      1
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(USDC);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
   logText = "multihopSwap 50 DAI -> WETH -> USDC"
   try {
     checkedBalanceBefore = await USDC.balanceOf(cellar.address);
@@ -758,6 +832,21 @@ async function main() {
       false,
       false
     );
+    gasUsedLog(logText, tx);
+    amountOutLog(USDC);
+  } catch(e) {
+    console.log(logText, e.message);
+  }
+
+  logText = "curveSwap 1000 DAI -> USDC"
+  try {
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
+    tx = await cellar.swapByCurve(
+      [DAI.address, USDC.address],
+      Num(1000, 18),
+      1
+    );
+
     gasUsedLog(logText, tx);
     amountOutLog(USDC);
   } catch(e) {
@@ -849,6 +938,21 @@ async function main() {
   } catch(e) {
     console.log(logText, e.message);
   }
+
+  logText = "curveSwap 10000 DAI -> USDC"
+  try {
+    checkedBalanceBefore = await USDC.balanceOf(cellar.address);
+    tx = await cellar.swapByCurve(
+      [DAI.address, USDC.address],
+      Num(10000, 18),
+      1
+    );
+
+    gasUsedLog(logText, tx);
+    amountOutLog(USDC);
+  } catch(e) {
+    console.log(logText, e.message);
+  }  
 
   logText = "multihopSwap 10000 DAI -> WETH -> USDC"
   try {

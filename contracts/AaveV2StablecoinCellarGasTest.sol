@@ -9,6 +9,7 @@ import "./interfaces/IAaveV2StablecoinCellar.sol";
 import "./interfaces/IAaveIncentivesController.sol";
 import "./interfaces/IStakedTokenV2.sol";
 import "./interfaces/ISushiSwapRouter.sol";
+import "./interfaces/ICurveStableSwap3Pool.sol";
 import "./interfaces/IGravity.sol";
 import "./interfaces/ILendingPool.sol";
 import "./utils/MathUtils.sol";
@@ -58,6 +59,11 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
      * @dev Saves gas when looping through all user's deposits.
      */
     mapping(address => uint256) public currentDepositIndex;
+
+    /**
+     * @notice Mapping from an addresses of swappable coins within the Curve 3Pool.
+     */
+    mapping(address => int128) public curve3PoolCoins;
 
     /**
      * @notice Last time all inactive assets were entered into a strategy and made active.
@@ -132,6 +138,8 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
     ISwapRouter public immutable uniswapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
     // SushiSwap Router V2 contract
     ISushiSwapRouter public immutable sushiswapRouter; // 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
+    // Curve StableSwap3Pool contract
+    ICurveStableSwap3Pool public immutable curveStableSwap3Pool; // 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7
     // Aave Lending Pool V2 contract
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
     // Aave Incentives Controller V2 contract
@@ -171,6 +179,13 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
         gravityBridge = _gravityBridge;
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
+
+        curveStableSwap3Pool = ICurveStableSwap3Pool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7);
+
+        // Initialize Curve 3Pool swappable coins
+        for (int128 i = 0; i < 3; i++) {
+          curve3PoolCoins[curveStableSwap3Pool.coins(uint256(uint128(i)))] = i;
+        }
 
         // Initialize asset.
         _updateStrategy(address(_asset));
@@ -1169,7 +1184,40 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
 
         emit Swap(tokenIn, amountIn, tokenOut, amountOut);
     }
-    
+
+    /**
+     * @notice Swaps assets using Curve StableSwap 3Pool. 
+     * @dev Curve 3Pool only supports single swap.
+     * @param path swap path (ie. token addresses) from one asset to another
+     * @param amountIn amount of assets to be swapped
+     * @param amountOutMinimum minimum amount of assets returned
+     * @return amountOut amount of assets received after swap
+     */
+    function swapByCurve(
+        address[] memory path,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) external onlyOwner returns (uint256 amountOut) {
+        address tokenIn = path[0];
+        address tokenOut = path[path.length - 1];
+
+        // Approve the 3pool to spend first token in path.
+        ERC20(tokenIn).safeApprove(address(curveStableSwap3Pool), amountIn);
+
+        uint256 tokenOutBalance = ERC20(tokenOut).balanceOf(address(this));
+
+        curveStableSwap3Pool.exchange(
+            curve3PoolCoins[tokenIn],
+            curve3PoolCoins[tokenOut],
+            amountIn,
+            amountOutMinimum
+        );
+
+        amountOut = ERC20(tokenOut).balanceOf(address(this)) - tokenOutBalance;
+
+        emit Swap(tokenIn, amountIn, tokenOut, amountOut);
+    }
+
     // ================================= SHARE TRANSFER OPERATIONS =================================
 
     /**
