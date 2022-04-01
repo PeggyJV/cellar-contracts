@@ -223,6 +223,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Must calculate before assets are transferred in.
         shares > 0 ? assets = previewMint(shares) : shares = previewDeposit(assets);
 
+        // Check for rounding error on `deposit` since we round down in previewDeposit. No need to
+        // check for rounding error if `mint`, previewMint rounds up.
         if (shares == 0) revert ZeroShares();
 
         // Check if security restrictions still apply. Enforce them if they do.

@@ -15,8 +15,15 @@ library MathUtils {
         } else if (fromDecimals < toDecimals) {
             return amount * 10**(toDecimals - fromDecimals);
         } else {
-            return amount / 10**(fromDecimals - toDecimals);
+            return ceilDiv(amount, 10**(fromDecimals - toDecimals));
         }
+    }
+
+    // ===================================== OPENZEPPELIN'S MATH =====================================
+
+    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
+        // (a + b - 1) / b can overflow on addition, so we distribute.
+        return a / b + (a % b == 0 ? 0 : 1);
     }
 
     function min(uint256 a, uint256 b) internal pure returns (uint256) {
