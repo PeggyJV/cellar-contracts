@@ -313,6 +313,9 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should mint as much as possible if tries to mint more than they can", async () => {
+      // ensure deposit restriction isn't a problem
+      await cellar.removeLiquidityRestriction();
+
       const balance = await USDC.balanceOf(owner.address);
       const maxShares = await cellar.previewDeposit(balance);
 
