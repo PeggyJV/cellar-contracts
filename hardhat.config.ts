@@ -4,7 +4,6 @@ import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-contract-sizer";
-import "hardhat-exposed";
 
 import "./tasks/accounts";
 // import "./tasks/deploy/aaveV2Cellar";

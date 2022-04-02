@@ -54,6 +54,7 @@
     "@rari-capital/solmate": "^6.2.0",
     "@uniswap/v3-periphery": "^1.4.0",
     "dotenv": "^16.0.0",
+    "ds-test": "dapphub/ds-test",
     "hardhat-contract-sizer": "^2.5.0"
   }
 }

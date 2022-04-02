@@ -79,29 +79,37 @@ describe("AaveV2StablecoinCellar", () => {
     await WETH.deployed();
     await USDT.deployed();
 
+    // Deploy mock Aave lending pool
+    lendingPool = await new MockLendingPool__factory(owner).deploy();
+    await lendingPool.deployed();
+
     // Deploy mock aUSDC
-    aUSDC = await new MockAToken__factory(owner).deploy(USDC.address, "aUSDC");
+    aUSDC = await new MockAToken__factory(owner).deploy(
+      lendingPool.address,
+      USDC.address,
+      "aUSDC"
+    );
     await aUSDC.deployed();
 
     // Deploy mock aDAI
-    aDAI = await new MockAToken__factory(owner).deploy(DAI.address, "aDAI");
+    aDAI = await new MockAToken__factory(owner).deploy(
+      lendingPool.address,
+      DAI.address,
+      "aDAI"
+    );
     await aDAI.deployed();
 
     // Deploy mock aUSDT
-    aUSDT = await new MockAToken__factory(owner).deploy(USDT.address, "aUSDT");
+    aUSDT = await new MockAToken__factory(owner).deploy(
+      lendingPool.address,
+      USDT.address,
+      "aUSDT"
+    );
     await aUSDT.deployed();
-
-    // Deploy mock Aave USDC lending pool
-    lendingPool = await new MockLendingPool__factory(owner).deploy();
-    await lendingPool.deployed();
 
     await lendingPool.initReserve(USDC.address, aUSDC.address);
     await lendingPool.initReserve(DAI.address, aDAI.address);
     await lendingPool.initReserve(USDT.address, aUSDT.address);
-
-    await aUSDC.setLendingPool(lendingPool.address);
-    await aDAI.setLendingPool(lendingPool.address);
-    await aUSDT.setLendingPool(lendingPool.address);
 
     // Deploy mock AAVE
     AAVE = await new MockToken__factory(owner).deploy("AAVE", 18);
