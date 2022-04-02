@@ -10,6 +10,7 @@ import "./interfaces/IAaveIncentivesController.sol";
 import "./interfaces/IStakedTokenV2.sol";
 import "./interfaces/ISushiSwapRouter.sol";
 import "./interfaces/ICurveStableSwap3Pool.sol";
+import "./interfaces/ICurveStableSwapAavePool.sol";
 import "./interfaces/IGravity.sol";
 import "./interfaces/ILendingPool.sol";
 import "./utils/MathUtils.sol";
@@ -64,6 +65,11 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
      * @notice Mapping from an addresses of swappable coins within the Curve 3Pool.
      */
     mapping(address => int128) public curve3PoolCoins;
+
+    /**
+     * @notice Mapping from an addresses of wrapped coins (aTokens) within the Curve Aave Pool.
+     */
+    mapping(address => int128) public curveAavePoolCoins;
 
     /**
      * @notice Last time all inactive assets were entered into a strategy and made active.
@@ -140,6 +146,8 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
     ISushiSwapRouter public immutable sushiswapRouter; // 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
     // Curve StableSwap3Pool contract
     ICurveStableSwap3Pool public immutable curveStableSwap3Pool; // 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7
+    // Curve StableSwapAavePool contract
+    ICurveStableSwapAavePool public immutable curveStableSwapAavePool; // 0xDeBF20617708857ebe4F679508E7b7863a8A8EeE
     // Aave Lending Pool V2 contract
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
     // Aave Incentives Controller V2 contract
@@ -180,6 +188,7 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
 
+        // https://github.com/curvefi/curve-contract/tree/master/contracts/pools/3pool
         curveStableSwap3Pool = ICurveStableSwap3Pool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7);
 
         // Initialize Curve 3Pool swappable coins
@@ -187,6 +196,14 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
           curve3PoolCoins[curveStableSwap3Pool.coins(uint256(uint128(i)))] = i;
         }
 
+        // https://github.com/curvefi/curve-contract/tree/master/contracts/pools/aave
+        curveStableSwapAavePool = ICurveStableSwapAavePool(0xDeBF20617708857ebe4F679508E7b7863a8A8EeE);
+
+        // Initialize Curve Aave Pool wrapped coins (aTokens)
+        for (int128 i = 0; i < 3; i++) {
+          curveAavePoolCoins[curveStableSwapAavePool.coins(uint256(uint128(i)))] = i;
+        }
+        
         // Initialize asset.
         _updateStrategy(address(_asset));
 
@@ -838,6 +855,52 @@ contract AaveV2StablecoinCellarGasTest is IAaveV2StablecoinCellar, ERC20, Ownabl
         lastNormalizedIncome = lendingPool.getReserveNormalizedIncome(address(asset));
 
         emit Rebalance(oldAsset, newAsset, amountOut);
+    }
+
+    /**
+     * @notice Rebalances current assets into a new asset strategy by Curve StableSwap Aave Pool.
+     * @param newAssetAddress new address of asset strategy
+     * @param amountOutMinimum minimum amount of aToken returned after rebalance
+     */
+    function rebalanceByCurve(address newAssetAddress, uint256 amountOutMinimum) external onlyOwner {
+        // If the contract is shutdown, cellar shouldn't be able to rebalance assets it recently
+        // pulled out back into a new strategy.
+        if (isShutdown) revert ContractShutdown();
+
+        // Doesn't make sense to rebalance into the same asset.
+        if (newAssetAddress == address(asset)) revert SameAsset(newAssetAddress);
+
+        // Accrue any final performance fees from the current strategy before rebalancing. Otherwise
+        // those fees would be lost when we proceed to update fee data for the new strategy. Also we
+        // don't want to update the fee data here because we will do that later on after we've
+        // rebalanced into a new strategy.
+        _accruePerformanceFees(false);
+
+        // Store this later for the event we will emit.
+        ERC20 oldAsset = asset;
+
+        ERC20 oldAssetAToken = assetAToken;
+        uint256 oldAssetATokenAmount = assetAToken.balanceOf(address(this));
+
+        // Updates state for our new strategy and check to make sure Aave supports it before
+        // rebalancing.
+        _updateStrategy(newAssetAddress);
+
+        // Approve the curveStableSwapAavePool to spend first token in path.
+        oldAssetAToken.safeApprove(address(curveStableSwapAavePool), oldAssetATokenAmount);
+
+        uint256 amountOut = curveStableSwapAavePool.exchange(
+            curveAavePoolCoins[address(oldAssetAToken)],
+            curveAavePoolCoins[address(assetAToken)],
+            oldAssetATokenAmount,
+            amountOutMinimum
+        );
+
+        // Update fee data for next fee accrual with new strategy.
+        lastActiveAssets = _activeAssets();
+        lastNormalizedIncome = lendingPool.getReserveNormalizedIncome(address(asset));
+
+        emit Rebalance(address(oldAsset), newAssetAddress, amountOut);
     }
 
     /**

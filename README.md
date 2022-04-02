@@ -125,6 +125,36 @@ sushiSwap 10000 DAI -> WETH -> USDC VM Exception while processing transaction: r
 
 ```
 
+```bash
+npx hardhat --network hardhat run scripts/rebalanceGasEstimate.test.js
+
+result:
+aUSDC balance: BigNumber { value: "10000000009" }
+aDAI balance: BigNumber { value: "0" }
+totalAssets: BigNumber { value: "10000000009" }
+--------------------------------------
+cellar.rebalance tx.blockNumber: 13837543, gasUsed: 1495451 (228.73 USD)
+aUSDC balance: BigNumber { value: "0" }
+aDAI balance: BigNumber { value: "8059567655797439381374" }
+totalAssets: BigNumber { value: "8059567655797439381374" }
+--------------------------------------
+cellar.rebalance tx.blockNumber: 13837544, gasUsed: 1275334 (195.06 USD)
+aUSDC balance: BigNumber { value: "8107247329" }
+aDAI balance: BigNumber { value: "0" }
+totalAssets: BigNumber { value: "9951309496" }
+--------------------------------------
+cellar.rebalanceByCurve tx.blockNumber: 13837545, gasUsed: 543008 (83.05 USD)
+aUSDC balance: BigNumber { value: "0" }
+aDAI balance: BigNumber { value: "8105301030616713172921" }
+totalAssets: BigNumber { value: "8105301030616713172921" }
+--------------------------------------
+cellar.rebalanceByCurve tx.blockNumber: 13837546, gasUsed: 545205 (83.39 USD)
+aUSDC balance: BigNumber { value: "8100675318" }
+aDAI balance: BigNumber { value: "0" }
+totalAssets: BigNumber { value: "9944737485" }
+
+```
+
 Run tests:
 
 ```bash
