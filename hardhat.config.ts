@@ -176,6 +176,10 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
   },
+  contractSizer: {
+    runOnCompile: true,
+    only: ["AaveV2StablecoinCellar.sol"],
+  },
 };
 
 export default config;
