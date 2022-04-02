@@ -1,4 +1,5 @@
 @rari-capital/=node_modules/@rari-capital/
 @openzeppelin/=node_modules/@openzeppelin/
 @uniswap/=node_modules/@uniswap/
+ds-test/=node_modules/ds-test/src/
 hardhat/=node_modules/hardhat/

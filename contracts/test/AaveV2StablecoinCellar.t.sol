@@ -20,7 +20,7 @@ import {ILendingPool} from "../interfaces/ILendingPool.sol";
 
 import {CellarUser} from "./users/CellarUser.sol";
 
-import {DSTestPlus} from "../lib/DSTestPlus.sol";
+import {DSTestPlus} from "@rari-capital/solmate/src/test/utils/DSTestPlus.sol";
 import {MathUtils} from "../utils/MathUtils.sol";
 
 contract AaveV2StablecoinCellarTest is DSTestPlus {

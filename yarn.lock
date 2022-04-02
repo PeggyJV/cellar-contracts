@@ -3434,6 +3434,10 @@ drbg.js@^1.0.1:
     create-hash "^1.1.2"
     create-hmac "^1.1.4"
 
+ds-test@dapphub/ds-test:
+  version "0.0.0"
+  resolved "https://codeload.github.com/dapphub/ds-test/tar.gz/0a5da56b0d65960e6a994d2ec8245e6edd38c248"
+
 duplexer3@^0.1.4:
   version "0.1.4"
   resolved "https://registry.npmjs.org/duplexer3/-/duplexer3-0.1.4.tgz"
