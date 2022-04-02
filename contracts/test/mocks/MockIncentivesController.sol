@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
 
-import "contracts/interfaces/IStakedTokenV2.sol";
-import "./MockStkAAVE.sol";
-
-import "hardhat/console.sol";
+import {MockStkAAVE} from "./MockStkAAVE.sol";
 
 contract MockIncentivesController {
     MockStkAAVE public stkAAVE;

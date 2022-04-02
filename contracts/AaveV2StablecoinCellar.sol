@@ -3,15 +3,15 @@ pragma solidity ^0.8.11;
 
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import "./interfaces/IAaveV2StablecoinCellar.sol";
-import "./interfaces/IAaveIncentivesController.sol";
-import "./interfaces/IStakedTokenV2.sol";
-import "./interfaces/ISushiSwapRouter.sol";
-import "./interfaces/IGravity.sol";
-import "./interfaces/ILendingPool.sol";
-import "./utils/MathUtils.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import {IAaveV2StablecoinCellar} from "./interfaces/IAaveV2StablecoinCellar.sol";
+import {IAaveIncentivesController} from "./interfaces/IAaveIncentivesController.sol";
+import {IStakedTokenV2} from "./interfaces/IStakedTokenV2.sol";
+import {ISushiSwapRouter} from "./interfaces/ISushiSwapRouter.sol";
+import {IGravity} from "./interfaces/IGravity.sol";
+import {ILendingPool} from "./interfaces/ILendingPool.sol";
+import {MathUtils} from "./utils/MathUtils.sol";
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
@@ -137,7 +137,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     // Aave Incentives Controller V2 contract
     IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
     // Cosmos Gravity Bridge contract
-    Gravity public immutable gravityBridge; // 0x69592e6f9d21989a043646fE8225da2600e5A0f7
+    IGravity public immutable gravityBridge; // 0x69592e6f9d21989a043646fE8225da2600e5A0f7
     // Cosmos address of fee distributor
     bytes32 public feesDistributor; // TBD, then make immutable
 
@@ -160,7 +160,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         ISushiSwapRouter _sushiswapRouter,
         ILendingPool _lendingPool,
         IAaveIncentivesController _incentivesController,
-        Gravity _gravityBridge,
+        IGravity _gravityBridge,
         IStakedTokenV2 _stkAAVE,
         ERC20 _AAVE
     ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "aave2-CLR-S", 18) Ownable() {

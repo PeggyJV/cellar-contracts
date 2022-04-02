@@ -2,7 +2,7 @@
 pragma solidity 0.8.11;
 
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import "contracts/utils/MathUtils.sol";
+import {MathUtils} from "contracts/utils/MathUtils.sol";
 
 library BytesLib {
     function slice(

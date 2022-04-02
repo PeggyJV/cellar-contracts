@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
 
-import "./MockAToken.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import {MockAToken} from "./MockAToken.sol";
 
 contract MockLendingPool {
     mapping(address => address) public aTokens;
@@ -21,7 +21,7 @@ contract MockLendingPool {
         address onBehalfOf,
         uint16
     ) external {
-        IERC20(asset).transferFrom(onBehalfOf, aTokens[asset], amount);
+        ERC20(asset).transferFrom(onBehalfOf, aTokens[asset], amount);
         MockAToken(aTokens[asset]).mint(onBehalfOf, amount, index);
     }
 

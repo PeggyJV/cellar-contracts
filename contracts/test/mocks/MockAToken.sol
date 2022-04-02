@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {MockLendingPool} from "./MockLendingPool.sol";
-import "contracts/utils/MathUtils.sol";
+import {MathUtils} from "contracts/utils/MathUtils.sol";
 
 library WadRayMath {
     uint256 public constant RAY = 1e27;

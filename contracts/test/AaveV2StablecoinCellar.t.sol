@@ -15,7 +15,7 @@ import {IAaveIncentivesController} from "../interfaces/IAaveIncentivesController
 import {IStakedTokenV2} from "../interfaces/IStakedTokenV2.sol";
 import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import {ISushiSwapRouter} from "../interfaces/ISushiSwapRouter.sol";
-import {Gravity} from "../interfaces/IGravity.sol";
+import {IGravity} from "../interfaces/IGravity.sol";
 import {ILendingPool} from "../interfaces/ILendingPool.sol";
 
 import {CellarUser} from "./users/CellarUser.sol";
@@ -61,7 +61,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
             ISushiSwapRouter(address(swapRouter)),
             ILendingPool(address(lendingPool)),
             IAaveIncentivesController(address(incentivesController)),
-            Gravity(address(gravityBridge)),
+            IGravity(address(gravityBridge)),
             IStakedTokenV2(address(stkAAVE)),
             ERC20(address(AAVE))
         );
