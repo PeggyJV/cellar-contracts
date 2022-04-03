@@ -192,8 +192,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
         // In the case where a user tries to deposit more than their balance, the desired behavior
         // is to deposit what they have instead of reverting.
-        uint256 balance = asset.balanceOf(msg.sender);
-        if (assets > balance) assets = balance;
+        uint256 maxDepositable = asset.balanceOf(msg.sender);
+        if (assets > maxDepositable) assets = maxDepositable;
 
         (, shares) = _deposit(assets, 0, receiver);
     }
@@ -207,8 +207,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function mint(uint256 shares, address receiver) external returns (uint256 assets) {
         // In the case where a user tries to mint more shares than possible, the desired behavior
         // is to mint as many shares as their balance allows instead of reverting.
-        uint256 mintable = previewDeposit(asset.balanceOf(msg.sender));
-        if (shares > mintable) shares = mintable;
+        uint256 maxMintable = previewDeposit(asset.balanceOf(msg.sender));
+        if (shares > maxMintable) shares = maxMintable;
 
         (assets, ) = _deposit(0, shares, receiver);
     }
@@ -236,7 +236,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Transfers assets into the cellar.
         asset.safeTransferFrom(msg.sender, address(this), assets);
 
-        // Mint user a token that represents their share of the cellar's assets.
+        // Mint user tokens that represents their share of the cellar's assets.
         _mint(receiver, shares);
 
         // Store the user's deposit data. This will be used later on when the user wants to withdraw
@@ -277,8 +277,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // This is done to avoid the possibility of an overflow if `assets` was set to a very high
         // number (like 2**256 – 1)  when trying to change decimals. If a user tries to withdraw
         // more than their balance, the desired behavior is to withdraw as much as possible.
-        uint256 maxWithdrableAssets = previewRedeem(balanceOf[owner]);
-        if (assets > maxWithdrableAssets) assets = maxWithdrableAssets;
+        uint256 maxWithdrawable = previewRedeem(balanceOf[owner]);
+        if (assets > maxWithdrawable) assets = maxWithdrawable;
 
         // Ensures proceeding calculations are done with a standard 18 decimals of precision. Will
         // change back to the using the asset's usual decimals of precision when transferring assets
@@ -303,8 +303,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // This is done to avoid the possibility of an overflow if `shares` was set to a very high
         // number (like 2**256 – 1) when trying to change decimals. If a user tries to redeem more
         // than their balance, the desired behavior is to redeem as much as possible.
-        uint256 maxRedeemableShares = maxRedeem(owner);
-        if (shares > maxRedeemableShares) shares = maxRedeemableShares;
+        uint256 maxRedeemable = maxRedeem(owner);
+        if (shares > maxRedeemable) shares = maxRedeemable;
 
         (assets, ) = _withdraw(_convertToAssets(shares), receiver, owner);
     }
@@ -323,7 +323,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         uint256 shares;
 
         // Retrieve the user's deposits to begin looping through them, generally from oldest to
-        // newest deposits. This is not be the case though if shares have been transferred to the
+        // newest deposits. This may not be the case though if shares have been transferred to the
         // owner, which will be added to the end of the owner's deposits regardless of time
         // deposited.
         UserDeposit[] storage deposits = userDeposits[owner];
@@ -544,7 +544,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         uint256 userInactiveAssets
     ) {
         // Retrieve the user's deposits to begin looping through them, generally from oldest to
-        // newest deposits. This is not be the case though if shares have been transferred to the
+        // newest deposits. This may not be the case though if shares have been transferred to the
         // user, which will be added to the end of the user's deposits regardless of time
         // deposited.
         UserDeposit[] storage deposits = userDeposits[user];
@@ -1130,7 +1130,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         }
 
         // Retrieve the deposits from sender then begin looping through deposits, generally from
-        // oldest to newest deposits. This is not always the case though if shares have been
+        // oldest to newest deposits. This may not be the case though if shares have been
         // transferred to the sender, as they will be added to the end of the sender's deposits
         // regardless of time deposited.
         UserDeposit[] storage depositsFrom = userDeposits[from];
