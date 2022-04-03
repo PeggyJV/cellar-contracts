@@ -309,6 +309,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         (assets, ) = _withdraw(_convertToAssets(shares), receiver, owner);
     }
 
+    /// @dev `assets` must be passed in with 18 decimals of precision. Should extend/truncate decimals of
+    ///      the amount passed in if necessary to ensure this is true.
     function _withdraw(
         uint256 assets,
         address receiver,
