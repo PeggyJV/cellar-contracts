@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.11;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "./MockLendingPool.sol";
-import "../utils/MathUtils.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {MockLendingPool} from "./MockLendingPool.sol";
+import {MathUtils} from "contracts/utils/MathUtils.sol";
 
 library WadRayMath {
     uint256 public constant RAY = 1e27;
@@ -20,7 +19,7 @@ library WadRayMath {
         require(b != 0, "cannot divide by zero");
         uint256 halfB = b / 2;
 
-        require(a <= (type(uint256).max - halfB) / RAY, "math multiplicatoin overflow");
+        require(a <= (type(uint256).max - halfB) / RAY, "math multiplication overflow");
 
         return (a * RAY + halfB) / b;
     }
@@ -34,27 +33,23 @@ library WadRayMath {
     function rayMul(uint256 a, uint256 b) internal pure returns (uint256) {
         if (a == 0 || b == 0) return 0;
 
-        require(a <= (type(uint256).max - HALF_RAY) / b, "math multiplicatoin overflow");
+        require(a <= (type(uint256).max - HALF_RAY) / b, "math multiplication overflow");
 
         return (a * b + HALF_RAY) / RAY;
     }
 }
 
 contract MockAToken is ERC20 {
-    ERC20 public underlyingAsset;
+    address public underlyingAsset;
     MockLendingPool public lendingPool;
 
-    constructor(ERC20 _underlyingAsset, string memory _symbol) ERC20(_symbol, _symbol) {
+    constructor(address _lendingPool, address _underlyingAsset, string memory _symbol) ERC20(_symbol, _symbol) {
+        lendingPool = MockLendingPool(_lendingPool);
         underlyingAsset = _underlyingAsset;
     }
 
     function decimals() public view override returns (uint8) {
-        return underlyingAsset.decimals();
-    }
-
-    /// @dev For testing purposes
-    function setLendingPool(MockLendingPool _lendingPool) external {
-        lendingPool = _lendingPool;
+        return ERC20(underlyingAsset).decimals();
     }
 
     /**
@@ -97,7 +92,7 @@ contract MockAToken is ERC20 {
         require(amountScaled != 0, "CT_INVALID_BURN_AMOUNT");
         _burn(user, amountScaled);
 
-        underlyingAsset.transfer(receiverOfUnderlying, amount);
+        ERC20(underlyingAsset).transfer(receiverOfUnderlying, amount);
     }
 
     /**

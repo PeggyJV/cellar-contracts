@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.11;
 
 library MathUtils {
-    uint256 public constant RAY = 1e27;
-
-    // Used to change the decimals of precision used for an amount
+    /**
+     * @notice Used to change the decimals of precision used for an amount.
+     */
     function changeDecimals(
         uint256 amount,
         uint8 fromDecimals,
@@ -16,15 +15,29 @@ library MathUtils {
         } else if (fromDecimals < toDecimals) {
             return amount * 10**(toDecimals - fromDecimals);
         } else {
-            return amount / 10**(fromDecimals - toDecimals);
+            return ceilDiv(amount, 10**(fromDecimals - toDecimals));
         }
+    }
+
+    // ===================================== OPENZEPPELIN'S MATH =====================================
+
+    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
+        // (a + b - 1) / b can overflow on addition, so we distribute.
+        return a / b + (a % b == 0 ? 0 : 1);
     }
 
     function min(uint256 a, uint256 b) internal pure returns (uint256) {
         return a < b ? a : b;
     }
 
-    // From Solmate's FixedPointMathLib
+    // ================================= SOLMATE's FIXEDPOINTMATHLIB =================================
+
+    uint256 public constant WAD = 1e18; // The scalar of ETH and most ERC20s.
+
+    function mulWadDown(uint256 x, uint256 y) internal pure returns (uint256) {
+        return mulDivDown(x, y, WAD); // Equivalent to (x * y) / WAD rounded down.
+    }
+
     function mulDivDown(
         uint256 x,
         uint256 y,

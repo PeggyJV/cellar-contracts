@@ -4,10 +4,25 @@ import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-contract-sizer";
-import "hardhat-exposed";
 
 import "./tasks/accounts";
 // import "./tasks/deploy/aaveV2Cellar";
+
+import { TaskArguments } from "hardhat/types";
+import { subtask } from "hardhat/config";
+import { TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS } from "hardhat/builtin-tasks/task-names";
+
+// Override Hardhat compiler to ignore compiling files related to Foundry testing.
+subtask(TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS).setAction(
+  async (_: TaskArguments, __, runSuper: any) => {
+    const paths = await runSuper();
+
+    return paths.filter(
+      (p: string) =>
+        !p.endsWith(".t.sol") && !p.includes("/users/") && !p.includes("/lib/")
+    );
+  }
+);
 
 import { resolve } from "path";
 
@@ -160,6 +175,9 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
+  },
+  contractSizer: {
+    only: ["AaveV2StablecoinCellar.sol"],
   },
 };
 
