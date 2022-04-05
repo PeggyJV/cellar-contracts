@@ -13,6 +13,8 @@ import {
   MockLendingPool__factory,
   MockStkAAVE,
   MockStkAAVE__factory,
+  MockCurveSwaps,
+  MockCurveSwaps__factory,
   MockSwapRouter,
   MockSwapRouter__factory,
   MockToken,
@@ -51,7 +53,8 @@ describe("AaveV2StablecoinCellar", () => {
   let WETH: MockToken;
   let DAI: MockToken;
   let USDT: MockToken;
-  let router: MockSwapRouter;
+  let curveRegistryExchange: MockCurveSwaps;
+  let sushiswapRouter: MockSwapRouter;
   let lendingPool: MockLendingPool;
   let incentivesController: MockIncentivesController;
   let gravity: MockGravity;
@@ -64,9 +67,13 @@ describe("AaveV2StablecoinCellar", () => {
   beforeEach(async () => {
     [owner, alice, bob] = await ethers.getSigners();
 
-    // Deploy mock Uniswap router contract
-    router = await new MockSwapRouter__factory(owner).deploy();
-    await router.deployed();
+    // Deploy mock Sushiswap router contract
+    sushiswapRouter = await new MockSwapRouter__factory(owner).deploy();
+    await sushiswapRouter.deployed();
+
+    // Deploy mock Curve registry exchange contract
+    curveRegistryExchange = await new MockCurveSwaps__factory(owner).deploy();
+    await curveRegistryExchange.deployed();
 
     // Deploy mock tokens
     USDC = await new MockToken__factory(owner).deploy("USDC", 6);
@@ -130,13 +137,14 @@ describe("AaveV2StablecoinCellar", () => {
     // Deploy cellar contract
     cellar = await new AaveV2StablecoinCellar__factory(owner).deploy(
       USDC.address,
-      router.address,
-      router.address,
+      curveRegistryExchange.address,
+      sushiswapRouter.address,
       lendingPool.address,
       incentivesController.address,
       gravity.address,
       stkAAVE.address,
-      AAVE.address
+      AAVE.address,
+      WETH.address
     );
     await cellar.deployed();
 
@@ -208,11 +216,10 @@ describe("AaveV2StablecoinCellar", () => {
     // Mint initial liquidity to Aave USDC lending pool
     await USDC.mint(aUSDC.address, BigNum(5_000_000, 6));
 
-    // Mint initial liquidity to router
-    await USDC.mint(router.address, BigNum(5_000_000, 6));
-    await DAI.mint(router.address, BigNum(5_000_000, 18));
-    await WETH.mint(router.address, BigNum(5_000_000, 18));
-    await USDT.mint(router.address, BigNum(5_000_000, 6));
+    // Mint initial liquidity for swaps
+    await USDC.mint(sushiswapRouter.address, BigNum(5_000_000, 6));
+    await USDT.mint(curveRegistryExchange.address, BigNum(5_000_000, 6));
+    await DAI.mint(curveRegistryExchange.address, BigNum(5_000_000, 18));
   });
 
   describe("deposit", () => {
@@ -759,7 +766,7 @@ describe("AaveV2StablecoinCellar", () => {
 
       await timetravel(864000);
 
-      await cellar.reinvest([AAVE.address, WETH.address, USDC.address], 0);
+      await cellar.reinvest(0);
     });
 
     it("should reinvested rewards back into principal", async () => {
@@ -773,14 +780,6 @@ describe("AaveV2StablecoinCellar", () => {
       // expect $4.75 ($95 * 0.05 = $4.75) worth of fees to be minted as shares
       expect(await cellar.balanceOf(cellar.address)).to.eq(BigNum(4.75, 18));
       expect(accruedPerformanceFees).to.eq(BigNum(4.75, 18));
-    });
-
-    it("should revert with an invalid swap path", async () => {
-      await expect(
-        cellar.reinvest([WETH.address, USDC.address, AAVE.address], 0)
-      ).to.be.revertedWith(
-        `InvalidSwapPath(["${WETH.address}", "${USDC.address}", "${AAVE.address}"])`
-      );
     });
   });
 
@@ -798,7 +797,11 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await DAI.balanceOf(cellar.address)).to.eq(0);
       expect(await cellar.totalAssets()).to.eq(BigNum(1500, 6));
 
-      await cellar.rebalance([USDC.address, DAI.address], 0);
+      await cellar.rebalance(
+        "0x0000000000000000000000000000000000000000",
+        DAI.address,
+        0
+      );
 
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
       expect(await aDAI.balanceOf(cellar.address)).to.be.at.least(
@@ -807,22 +810,22 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should use a multihop swap when needed", async () => {
-      await cellar.rebalance([USDC.address, DAI.address, USDT.address], 0);
+      await cellar.rebalance(
+        "0x0000000000000000000000000000000000000000",
+        USDT.address,
+        0
+      );
     });
 
     it("should not be possible to rebalance to the same token", async () => {
       const asset = await cellar.asset();
       await expect(
-        cellar.rebalance([USDC.address, asset], BigNum(950, 18))
+        cellar.rebalance(
+          "0x0000000000000000000000000000000000000000",
+          asset,
+          BigNum(950, 18)
+        )
       ).to.be.revertedWith(`SameAsset("${asset}")`);
-    });
-
-    it("should only be able to rebalance from the current asset", async () => {
-      await expect(
-        cellar.rebalance([DAI.address, USDT.address], BigNum(950, 18))
-      ).to.be.revertedWith(
-        `InvalidSwapPath(["${DAI.address}", "${USDT.address}"])`
-      );
     });
 
     it("should have accrued performance fees", async () => {
@@ -832,7 +835,11 @@ describe("AaveV2StablecoinCellar", () => {
         await cellar.accruedPerformanceFees();
       const feesBefore = await cellar.balanceOf(cellar.address);
 
-      await cellar.rebalance([USDC.address, DAI.address], BigNum(950, 18));
+      await cellar.rebalance(
+        "0x0000000000000000000000000000000000000000",
+        DAI.address,
+        BigNum(950, 18)
+      );
 
       const accruedPerformanceFeesAfter = await cellar.accruedPerformanceFees();
       const feesAfter = await cellar.balanceOf(cellar.address);

@@ -2,22 +2,22 @@
 pragma solidity ^0.8.11;
 
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import {AaveV2StablecoinCellar} from "contracts/AaveV2StablecoinCellar.sol";
-import {MathUtils} from "../utils/MathUtils.sol";
+import {IAaveIncentivesController} from "../interfaces/IAaveIncentivesController.sol";
+import {IStakedTokenV2} from "../interfaces/IStakedTokenV2.sol";
+import {ICurveSwaps} from "../interfaces/ICurveSwaps.sol";
+import {ISushiSwapRouter} from "../interfaces/ISushiSwapRouter.sol";
+import {IGravity} from "../interfaces/IGravity.sol";
+import {ILendingPool} from "../interfaces/ILendingPool.sol";
 import {MockToken} from "./mocks/MockToken.sol";
 import {MockAToken} from "./mocks/MockAToken.sol";
+import {MockCurveSwaps} from "./mocks/MockCurveSwaps.sol";
 import {MockSwapRouter} from "./mocks/MockSwapRouter.sol";
 import {MockLendingPool} from "./mocks/MockLendingPool.sol";
 import {MockIncentivesController} from "./mocks/MockIncentivesController.sol";
 import {MockGravity} from "./mocks/MockGravity.sol";
 import {MockStkAAVE} from "./mocks/MockStkAAVE.sol";
-import {IAaveIncentivesController} from "../interfaces/IAaveIncentivesController.sol";
-import {IStakedTokenV2} from "../interfaces/IStakedTokenV2.sol";
-import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import {ISushiSwapRouter} from "../interfaces/ISushiSwapRouter.sol";
-import {IGravity} from "../interfaces/IGravity.sol";
-import {ILendingPool} from "../interfaces/ILendingPool.sol";
 
+import {AaveV2StablecoinCellar} from "../AaveV2StablecoinCellar.sol";
 import {CellarUser} from "./users/CellarUser.sol";
 
 import {DSTestPlus} from "@rari-capital/solmate/src/test/utils/DSTestPlus.sol";
@@ -29,12 +29,14 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     // Initialization Variables:
     MockToken public asset;
     MockAToken public assetAToken;
-    MockSwapRouter public swapRouter;
+    MockCurveSwaps public curveRegistryExchange;
+    MockSwapRouter public sushiSwapRouter;
     MockLendingPool public lendingPool;
     MockIncentivesController public incentivesController;
     MockGravity public gravityBridge;
     MockStkAAVE public stkAAVE;
     MockToken public AAVE;
+    MockToken public WETH;
 
     AaveV2StablecoinCellar public cellar;
 
@@ -42,11 +44,13 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     function setUp() public {
         asset = new MockToken("USDC", 6);
 
-        swapRouter = new MockSwapRouter();
+        sushiSwapRouter = new MockSwapRouter();
 
         lendingPool = new MockLendingPool();
         assetAToken = new MockAToken(address(lendingPool), address(asset), "aUSDC");
         lendingPool.initReserve(address(asset), address(assetAToken));
+
+        WETH = new MockToken("WETH", 6);
 
         AAVE = new MockToken("AAVE", 6);
         stkAAVE = new MockStkAAVE(AAVE);
@@ -57,20 +61,21 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         initializationTimestamp = block.timestamp;
         cellar = new AaveV2StablecoinCellar(
             ERC20(address(asset)),
-            ISwapRouter(address(swapRouter)),
-            ISushiSwapRouter(address(swapRouter)),
+            ICurveSwaps(address(curveRegistryExchange)),
+            ISushiSwapRouter(address(sushiSwapRouter)),
             ILendingPool(address(lendingPool)),
             IAaveIncentivesController(address(incentivesController)),
             IGravity(address(gravityBridge)),
             IStakedTokenV2(address(stkAAVE)),
-            ERC20(address(AAVE))
+            ERC20(address(AAVE)),
+            ERC20(address(WETH))
         );
     }
 
     function testInitialization() public {
         assertEq(address(cellar.asset()), address(asset));
-        assertEq(address(cellar.uniswapRouter()), address(swapRouter));
-        assertEq(address(cellar.sushiswapRouter()), address(swapRouter));
+        assertEq(address(cellar.curveRegistryExchange()), address(curveRegistryExchange));
+        assertEq(address(cellar.sushiswapRouter()), address(sushiSwapRouter));
         assertEq(address(cellar.lendingPool()), address(lendingPool));
         assertEq(address(cellar.incentivesController()), address(incentivesController));
         assertEq(address(cellar.gravityBridge()), address(gravityBridge));

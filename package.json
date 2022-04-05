@@ -13,13 +13,12 @@
     "coverage": "npx hardhat compile && npx hardhat coverage"
   },
   "devDependencies": {
-    "@openzeppelin/contracts": "^4.5.0",
-    "@rari-capital/solmate": "^6.2.0",
-    "@uniswap/v3-periphery": "^1.4.0",
     "@chainlink/contracts": "0.3.1",
     "@nomiclabs/hardhat-ethers": "^2.0.5",
     "@nomiclabs/hardhat-etherscan": "^3.0.3",
     "@nomiclabs/hardhat-waffle": "^2.0.3",
+    "@openzeppelin/contracts": "^4.5.0",
+    "@rari-capital/solmate": "^6.2.0",
     "@typechain/ethers-v5": "^9.0.0",
     "@typechain/hardhat": "^4.0.0",
     "@types/chai": "^4.3.0",
@@ -28,6 +27,8 @@
     "@typescript-eslint/eslint-plugin": "^5.13.0",
     "@typescript-eslint/parser": "^5.13.0",
     "chai": "^4.3.6",
+    "dotenv": "^16.0.0",
+    "ds-test": "dapphub/ds-test",
     "eslint": "^8.10.0",
     "eslint-config-prettier": "^8.4.0",
     "eslint-config-standard": "^16.0.3",
@@ -38,6 +39,7 @@
     "ethereum-waffle": "^3.4.0",
     "ethers": "^5.5.4",
     "hardhat": "^2.9.0",
+    "hardhat-contract-sizer": "^2.5.0",
     "hardhat-exposed": "^0.2.3",
     "hardhat-gas-reporter": "^1.0.8",
     "prettier": "^2.5.1",
@@ -46,9 +48,6 @@
     "solidity-coverage": "^0.7.20",
     "ts-node": "^10.6.0",
     "typechain": "^7.0.0",
-    "typescript": "^4.6.2",
-    "hardhat-contract-sizer": "^2.5.0",
-    "dotenv": "^16.0.0",
-    "ds-test": "dapphub/ds-test"
+    "typescript": "^4.6.2"
   }
 }

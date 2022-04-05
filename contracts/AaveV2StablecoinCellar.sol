@@ -4,10 +4,10 @@ pragma solidity ^0.8.11;
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import {IAaveV2StablecoinCellar} from "./interfaces/IAaveV2StablecoinCellar.sol";
 import {IAaveIncentivesController} from "./interfaces/IAaveIncentivesController.sol";
 import {IStakedTokenV2} from "./interfaces/IStakedTokenV2.sol";
+import {ICurveSwaps} from "./interfaces/ICurveSwaps.sol";
 import {ISushiSwapRouter} from "./interfaces/ISushiSwapRouter.sol";
 import {IGravity} from "./interfaces/IGravity.sol";
 import {ILendingPool} from "./interfaces/ILendingPool.sol";
@@ -134,8 +134,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     // ======================================== IMMUTABLES ========================================
 
-    // Uniswap Router V3 contract
-    ISwapRouter public immutable uniswapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
+    // Curve Registry Exchange contract
+    ICurveSwaps public immutable curveRegistryExchange; // 0xD1602F68CC7C4c7B59D686243EA35a9C73B0c6a2
     // SushiSwap Router V2 contract
     ISushiSwapRouter public immutable sushiswapRouter; // 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
     // Aave Lending Pool V2 contract
@@ -147,34 +147,38 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
     ERC20 public immutable AAVE; // 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9
+    ERC20 public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
     /**
      * @param _asset current asset managed by the cellar
-     * @param _uniswapRouter Uniswap V3 swap router address
+     * @param _curveRegistryExchange Curve registry exchange
      * @param _sushiswapRouter Sushiswap V2 router address
      * @param _lendingPool Aave V2 lending pool address
      * @param _incentivesController _incentivesController
      * @param _gravityBridge Cosmos Gravity Bridge address
      * @param _stkAAVE stkAAVE address
      * @param _AAVE AAVE address
+     * @param _WETH WETH address
      */
     constructor(
         ERC20 _asset,
-        ISwapRouter _uniswapRouter,
+        ICurveSwaps _curveRegistryExchange,
         ISushiSwapRouter _sushiswapRouter,
         ILendingPool _lendingPool,
         IAaveIncentivesController _incentivesController,
         IGravity _gravityBridge,
         IStakedTokenV2 _stkAAVE,
-        ERC20 _AAVE
+        ERC20 _AAVE,
+        ERC20 _WETH
     ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "aave2-CLR-S", 18) Ownable() {
-        uniswapRouter =  _uniswapRouter;
+        curveRegistryExchange =  _curveRegistryExchange;
         sushiswapRouter = _sushiswapRouter;
         lendingPool = _lendingPool;
         incentivesController = _incentivesController;
         gravityBridge = _gravityBridge;
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
+        WETH = _WETH;
 
         // Initialize asset.
         _updateStrategy(address(_asset));
@@ -802,17 +806,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Rebalances current assets into a new asset strategy.
-     * @param path path to swap from the current asset to new asset using Uniswap
-     * @param amountOutMinimum minimum amount of assets returned after swap
+     * @param pool address of the Curve pool to use for the swap
+     * @param newAsset address of the asset to rebalance to
+     * @param minAmountOut minimum amount of assets cellar should receive after swap
      */
-    function rebalance(address[] memory path, uint256 amountOutMinimum) external onlyOwner {
+    function rebalance(address pool, address newAsset, uint256 minAmountOut) external onlyOwner {
         // If the contract is shutdown, cellar shouldn't be able to rebalance assets it recently
         // pulled out back into a new strategy.
         if (isShutdown) revert ContractShutdown();
-
-        if (path[0] != address(asset)) revert InvalidSwapPath(path);
-
-        address newAsset = path[path.length - 1];
 
         // Doesn't make sense to rebalance into the same asset.
         if (newAsset == address(asset)) revert SameAsset(newAsset);
@@ -826,7 +827,21 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Pull all active assets entered into Aave back into the cellar so we can swap everything
         // into the new asset.
         _withdrawFromAave(address(asset), type(uint256).max);
-        uint256 amountOut = _swap(path, inactiveAssets(), amountOutMinimum, true);
+
+        uint256 holdingPoolAssets = inactiveAssets();
+
+        // Approve Curve to swap the cellar's assets.
+        asset.safeApprove(address(curveRegistryExchange), holdingPoolAssets);
+
+        // Perform stablecoin swap using Curve.
+        uint256 amountOut = curveRegistryExchange.exchange(
+            pool,
+            address(asset),
+            newAsset,
+            holdingPoolAssets,
+            minAmountOut,
+            address(this)
+        );
 
         // Store this later for the event we will emit.
         address oldAsset = address(asset);
@@ -848,18 +863,33 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Reinvest rewards back into cellar's current strategy.
      * @dev Must be called within 2 day unstake period 10 days after `claimAndUnstake` was run.
-     * @param path path to swap from AAVE to the current asset on Sushiswap
-     * @param minAssetsOut minimum amount of assets cellar should receive after swap
+     * @param minAmountOut minimum amount of assets cellar should receive after swap
      */
-    function reinvest(address[] memory path, uint256 minAssetsOut) public onlyOwner {
-        if (path[0] != address(AAVE) || path[path.length - 1] != address(asset))
-            revert InvalidSwapPath(path);
-
+    function reinvest(uint256 minAmountOut) public onlyOwner {
         // Redeems the cellar's stkAAVe rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
-        // Due to the lack of liquidity for AAVE on Uniswap, we use Sushiswap instead here.
-        uint256 amountOut = _swap(path, AAVE.balanceOf(address(this)), minAssetsOut, false);
+        uint256 amountIn = AAVE.balanceOf(address(this));
+
+        // Approve the Sushiswap to swap AAVE.
+        AAVE.safeApprove(address(sushiswapRouter), amountIn);
+
+        // Specify the swap path from AAVE -> WETH -> current asset.
+        address[] memory path = new address[](3);
+        path[0] = address(AAVE);
+        path[1] = address(WETH);
+        path[2] = address(asset);
+
+        // Perform a multihop swap using Sushiswap.
+        uint256[] memory amounts = sushiswapRouter.swapExactTokensForTokens(
+            amountIn,
+            minAmountOut,
+            path,
+            address(this),
+            block.timestamp + 60
+        );
+
+        uint256 amountOut = amounts[amounts.length - 1];
 
         // In the case of a shutdown, we just may want to redeem any leftover rewards for
         // shareholders to claim but without entering them back into a strategy.
@@ -1014,92 +1044,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         emit WithdrawFromAave(token, withdrawnAmount);
 
         return withdrawnAmount;
-    }
-
-    /**
-     * @notice Swaps assets using Uniswap V3 or Sushiswap V2.
-     * @param path swap path (ie. token addresses) from one asset to another
-     * @param amountIn amount of assets to be swapped
-     * @param amountOutMinimum minimum amount of assets returned
-     * @param useUniswap whether to use Uniswap or Sushiswap
-     * @return amountOut amount of assets received after swap
-     */
-    function _swap(
-        address[] memory path,
-        uint256 amountIn,
-        uint256 amountOutMinimum,
-        bool useUniswap
-    ) internal returns (uint256 amountOut) {
-        address tokenIn = path[0];
-        address tokenOut = path[path.length - 1];
-
-        // Specifies that the cellar will use the 0.30% fee pools when performing swaps on Uniswap.
-        uint24 SWAP_FEE = 3000;
-
-        // Approve the router to spend first token in path.
-        ERC20(tokenIn).safeApprove(useUniswap ? address(uniswapRouter) : address(sushiswapRouter), amountIn);
-
-        // Determine whether to use a single swap or multihop swap.
-        if (path.length > 2){
-            // Multihop:
-
-            if (useUniswap) {
-                bytes memory encodePackedPath = abi.encodePacked(tokenIn);
-                for (uint256 i = 1; i < path.length; i++) {
-                    encodePackedPath = abi.encodePacked(
-                        encodePackedPath,
-                        SWAP_FEE,
-                        path[i]
-                    );
-                }
-
-                // Multiple pool swaps are encoded through bytes called a `path`. A path is a
-                // sequence of token addresses and poolFees that define the pools used in the swaps.
-                // The format for pool encoding is (tokenIn, fee, tokenOut/tokenIn, fee, tokenOut)
-                // where tokenIn/tokenOut parameter is the shared token across the pools.
-                ISwapRouter.ExactInputParams memory params = ISwapRouter
-                    .ExactInputParams({
-                        path: encodePackedPath,
-                        recipient: address(this),
-                        deadline: block.timestamp,
-                        amountIn: amountIn,
-                        amountOutMinimum: amountOutMinimum
-                    });
-
-                // Executes a multihop swap on Uniswap.
-                amountOut = uniswapRouter.exactInput(params);
-            } else {
-                uint256[] memory amounts = sushiswapRouter.swapExactTokensForTokens(
-                    amountIn,
-                    amountOutMinimum,
-                    path,
-                    address(this),
-                    block.timestamp + 60
-                );
-
-                // Executes a multihop swap on Sushiswap.
-                amountOut = amounts[amounts.length - 1];
-            }
-        } else {
-            // Single:
-
-            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
-                .ExactInputSingleParams({
-                    tokenIn: tokenIn,
-                    tokenOut: tokenOut,
-                    fee: SWAP_FEE,
-                    recipient: address(this),
-                    deadline: block.timestamp,
-                    amountIn: amountIn,
-                    amountOutMinimum: amountOutMinimum,
-                    sqrtPriceLimitX96: 0
-                });
-
-            // Executes a single swap on Uniswap.
-            amountOut = uniswapRouter.exactInputSingle(params);
-        }
-
-        emit Swap(tokenIn, amountIn, tokenOut, amountOut);
     }
 
     // ================================= SHARE TRANSFER OPERATIONS =================================

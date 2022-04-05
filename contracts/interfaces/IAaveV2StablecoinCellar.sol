@@ -38,20 +38,6 @@ interface IAaveV2StablecoinCellar {
     );
 
     /**
-     * @notice Emitted when tokens swapped.
-     * @param tokenIn the address of the tokenIn
-     * @param amountIn the amount of the tokenIn
-     * @param tokenOut the address of the tokenOut
-     * @param amountOut the amount of the tokenOut
-     */
-    event Swap(
-        address indexed tokenIn,
-        uint256 amountIn,
-        address tokenOut,
-        uint256 amountOut
-    );
-
-    /**
      * @notice Emitted on deposit to Aave.
      * @param token the address of the token
      * @param amount the amount of tokens to deposit
@@ -174,12 +160,6 @@ interface IAaveV2StablecoinCellar {
     error SameAsset(address asset);
 
     /**
-     * @notice Specified a swap path that doesn't make sense for the action attempted.
-     * @param path the invalid swap path that was attempted
-     */
-    error InvalidSwapPath(address[] path);
-
-    /**
      * @notice Attempted action was prevented due to contract being shutdown.
      */
     error ContractShutdown();
@@ -277,9 +257,9 @@ interface IAaveV2StablecoinCellar {
 
     function enterStrategy() external;
 
-    function rebalance(address[] memory path, uint256 minNewLendingTokenAmount) external;
+    function rebalance(address pool, address newAsset, uint256 minAmountOut) external;
 
-    function reinvest(address[] memory path, uint256 minAssetsOut) external;
+    function reinvest(uint256 minAmountOut) external;
 
     function claimAndUnstake() external returns (uint256 claimed);
 
