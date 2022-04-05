@@ -806,14 +806,31 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Rebalances current assets into a new asset strategy.
-     * @param pool address of the Curve pool to use for the swap
-     * @param newAsset address of the asset to rebalance to
-     * @param minAmountOut minimum amount of assets cellar should receive after swap
+     * @param route array of [initial token, pool, token, pool, token, ...] that specifies the swap route
+     * @param swapParams multidimensional array of [i, j, swap type] where i and j are the correct
+                         values for the n'th pool in `_route` and swap type should be 1 for a
+                         stableswap `exchange`, 2 for stableswap `exchange_underlying`, 3 for a
+                         cryptoswap `exchange`, 4 for a cryptoswap `exchange_underlying` and 5 for
+                         Polygon factory metapools `exchange_underlying`
+     * @param minAmountOut minimum amount received after the final swap
      */
-    function rebalance(address pool, address newAsset, uint256 minAmountOut) external onlyOwner {
+    function rebalance(
+        address[9] memory route,
+        uint256[3][4] memory swapParams,
+        uint256 minAmountOut
+    ) external onlyOwner {
         // If the contract is shutdown, cellar shouldn't be able to rebalance assets it recently
         // pulled out back into a new strategy.
         if (isShutdown) revert ContractShutdown();
+
+        // Retrieve the last token in the route and store it as the new asset.
+        address newAsset;
+        for (uint256 i; ; i += 2) {
+            if (i == 8 || route[i+1] == address(0)) {
+                newAsset = route[i];
+                break;
+            }
+        }
 
         // Doesn't make sense to rebalance into the same asset.
         if (newAsset == address(asset)) revert SameAsset(newAsset);
@@ -834,13 +851,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         asset.safeApprove(address(curveRegistryExchange), holdingPoolAssets);
 
         // Perform stablecoin swap using Curve.
-        uint256 amountOut = curveRegistryExchange.exchange(
-            pool,
-            address(asset),
-            newAsset,
+        uint256 amountOut = curveRegistryExchange.exchange_multiple(
+            route,
+            swapParams,
             holdingPoolAssets,
-            minAmountOut,
-            address(this)
+            minAmountOut
         );
 
         // Store this later for the event we will emit.

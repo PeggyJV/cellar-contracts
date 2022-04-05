@@ -257,7 +257,11 @@ interface IAaveV2StablecoinCellar {
 
     function enterStrategy() external;
 
-    function rebalance(address pool, address newAsset, uint256 minAmountOut) external;
+    function rebalance(
+        address[9] memory route,
+        uint256[3][4] memory swapParams,
+        uint256 minAmountOut
+    ) external;
 
     function reinvest(uint256 minAmountOut) external;
 

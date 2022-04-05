@@ -793,13 +793,28 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.accrueFees();
     });
 
-    it("should rebalance all USDC liquidity into DAI", async () => {
+    it("should rebalance all cellar assets into new assets", async () => {
       expect(await DAI.balanceOf(cellar.address)).to.eq(0);
       expect(await cellar.totalAssets()).to.eq(BigNum(1500, 6));
 
       await cellar.rebalance(
-        "0x0000000000000000000000000000000000000000",
-        DAI.address,
+        [
+          USDC.address,
+          "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          DAI.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
         0
       );
 
@@ -809,21 +824,53 @@ describe("AaveV2StablecoinCellar", () => {
       );
     });
 
-    it("should use a multihop swap when needed", async () => {
-      await cellar.rebalance(
-        "0x0000000000000000000000000000000000000000",
-        USDT.address,
-        0
-      );
+    it("should not be possible to rebalance from an asset other than the current asset", async () => {
+      await expect(
+        cellar.rebalance(
+          [
+            DAI.address,
+            "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+            USDT.address,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+          ],
+          [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          0
+        )
+      ).to.be.reverted;
     });
 
     it("should not be possible to rebalance to the same token", async () => {
       const asset = await cellar.asset();
       await expect(
         cellar.rebalance(
-          "0x0000000000000000000000000000000000000000",
-          asset,
-          BigNum(950, 18)
+          [
+            asset,
+            "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+            asset,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+          ],
+          [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          0
         )
       ).to.be.revertedWith(`SameAsset("${asset}")`);
     });
@@ -836,9 +883,24 @@ describe("AaveV2StablecoinCellar", () => {
       const feesBefore = await cellar.balanceOf(cellar.address);
 
       await cellar.rebalance(
-        "0x0000000000000000000000000000000000000000",
-        DAI.address,
-        BigNum(950, 18)
+        [
+          USDC.address,
+          "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          DAI.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        0
       );
 
       const accruedPerformanceFeesAfter = await cellar.accruedPerformanceFees();
