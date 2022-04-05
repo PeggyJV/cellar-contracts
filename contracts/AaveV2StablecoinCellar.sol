@@ -110,6 +110,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     uint256 public accruedPerformanceFees;
 
     /**
+     * @notice Cosmos address of the fee distributor as a hex value.
+     * @dev The Gravity contract expects a 32-byte value formatted in a specific way.
+     */
+    bytes32 public constant feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+
+    /**
      * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same
      *         units as the current asset.
      * @dev Limited to $5m until after security audits.
@@ -138,8 +144,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
     // Cosmos Gravity Bridge contract
     IGravity public immutable gravityBridge; // 0x69592e6f9d21989a043646fE8225da2600e5A0f7
-    // Cosmos address of fee distributor
-    bytes32 public feesDistributor; // TBD, then make immutable
 
     IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
     ERC20 public immutable AAVE; // 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9
