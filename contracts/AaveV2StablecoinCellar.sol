@@ -150,6 +150,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     ERC20 public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
     /**
+     * @dev Owner of the cellar will be the Gravity contract controlled by steward:
+     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
+     *      https://github.com/PeggyJV/steward
      * @param _asset current asset managed by the cellar
      * @param _curveRegistryExchange Curve registry exchange
      * @param _sushiswapRouter Sushiswap V2 router address
