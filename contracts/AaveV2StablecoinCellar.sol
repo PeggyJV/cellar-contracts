@@ -75,9 +75,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     uint256 public constant PLATFORM_FEE = 1_00;
 
     /**
-     * @notice The percentage of performance fees (5%) taken off of cellar gains.
+     * @notice The percentage of performance fees (10%) taken off of cellar gains.
      */
-    uint256 public constant PERFORMANCE_FEE = 5_00;
+    uint256 public constant PERFORMANCE_FEE = 10_00;
 
     /**
      * @notice Timestamp of last time platform fees were accrued.
@@ -720,7 +720,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
             // Determines whether performance has been positive or negative.
             if (performanceIndex >= 1e27) {
-                // Fees taken each accrual = (updatedActiveAssets - lastActiveAssets) * 5%
+                // Fees taken each accrual = (updatedActiveAssets - lastActiveAssets) * 10%
                 uint256 gain = updatedActiveAssets - lastActiveAssets;
                 uint256 performanceFeeInAssets = gain.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
 
