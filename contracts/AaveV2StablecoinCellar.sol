@@ -135,7 +135,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     // ======================================== IMMUTABLES ========================================
 
     // Curve Registry Exchange contract
-    ICurveSwaps public immutable curveRegistryExchange; // 0xD1602F68CC7C4c7B59D686243EA35a9C73B0c6a2
+    ICurveSwaps public immutable curveRegistryExchange; // 0x8e764bE4288B842791989DB5b8ec067279829809
     // SushiSwap Router V2 contract
     ISushiSwapRouter public immutable sushiswapRouter; // 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
     // Aave Lending Pool V2 contract
