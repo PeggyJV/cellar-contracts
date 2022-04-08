@@ -6,6 +6,7 @@ import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.s
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IAaveV2StablecoinCellar} from "./interfaces/IAaveV2StablecoinCellar.sol";
 import {IAaveIncentivesController} from "./interfaces/IAaveIncentivesController.sol";
+import {IAToken} from "./interfaces/IAToken.sol";
 import {IStakedTokenV2} from "./interfaces/IStakedTokenV2.sol";
 import {ICurveSwaps} from "./interfaces/ICurveSwaps.sol";
 import {ISushiSwapRouter} from "./interfaces/ISushiSwapRouter.sol";
@@ -36,7 +37,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      *         assets. Represents cellar's portion of active assets earning yield in a lending
      *         strategy.
      */
-    ERC20 public assetAToken;
+    IAToken public assetAToken;
 
     /**
      * @notice The decimals of precision used by the current asset.
@@ -184,7 +185,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         WETH = _WETH;
 
         // Initialize asset.
-        _updateStrategy(address(_asset));
+        _updateStrategy(address(_asset), false);
 
         // Initialize starting point for platform fee accrual to time when cellar was created.
         // Otherwise it would incorrectly calculate how much platform fees to take when accrueFees
@@ -780,7 +781,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         _allocateAssets(feeInAssets);
 
         // Transfer assets to a fee distributor on Cosmos.
-        asset.approve(address(gravityBridge), feeInAssets);
+        asset.safeApprove(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, feeInAssets);
 
         emit TransferFees(accruedPlatformFees, accruedPerformanceFees);
@@ -815,13 +816,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
                          stableswap `exchange`, 2 for stableswap `exchange_underlying`, 3 for a
                          cryptoswap `exchange`, 4 for a cryptoswap `exchange_underlying` and 5 for
                          Polygon factory metapools `exchange_underlying`
+    * @param isSwappingATokensDirectly whether cellar is swapping aTokens positions directly
      * @param minAmountOut minimum amount received after the final swap
      */
     function rebalance(
         address[9] memory route,
         uint256[3][4] memory swapParams,
-        uint256 minAmountOut
-    ) external onlyOwner {
+        uint256 minAmountOut,
+        bool isSwappingATokensDirectly
+    ) public onlyOwner {
         // If the contract is shutdown, cellar shouldn't be able to rebalance assets it recently
         // pulled out back into a new strategy.
         if (isShutdown) revert ContractShutdown();
@@ -844,20 +847,38 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // rebalanced into a new strategy.
         _accruePerformanceFees(false);
 
-        // Pull all active assets entered into Aave back into the cellar so we can swap everything
-        // into the new asset.
-        _withdrawFromAave(address(asset), type(uint256).max);
+        uint256 assets;
+        if (!isSwappingATokensDirectly) {
+            // Pull all active assets entered into Aave back into the cellar so we can swap everything
+            // into the new asset.
+            _withdrawFromAave(address(asset), type(uint256).max);
 
-        uint256 holdingPoolAssets = inactiveAssets();
+            assets = inactiveAssets();
 
-        // Approve Curve to swap the cellar's assets.
-        asset.safeApprove(address(curveRegistryExchange), holdingPoolAssets);
+            // Approve Curve to swap the cellar's inactive assets.
+            asset.safeApprove(address(curveRegistryExchange), assets);
+
+        } else {
+            uint256 holdingPoolAssets = inactiveAssets();
+            if (holdingPoolAssets > 0)  {
+                // Enter all inactive assets in the holding pool into the current strategy.
+                _depositToAave(address(asset), holdingPoolAssets);
+
+                lastTimeEnteredStrategy = block.timestamp;
+            }
+
+            // No need to pull assets since we are swapping aTokens directly.
+            assets = activeAssets();
+
+            // Approve Curve to swap the cellar's active assets.
+            ERC20(address(assetAToken)).safeApprove(address(curveRegistryExchange), assets);
+        }
 
         // Perform stablecoin swap using Curve.
         uint256 amountOut = curveRegistryExchange.exchange_multiple(
             route,
             swapParams,
-            holdingPoolAssets,
+            assets,
             minAmountOut
         );
 
@@ -866,16 +887,31 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         // Updates state for our new strategy and check to make sure Aave supports it before
         // rebalancing.
-        _updateStrategy(newAsset);
+        _updateStrategy(newAsset, isSwappingATokensDirectly);
 
-        // Rebalance our assets into a new strategy.
-        _depositToAave(newAsset, amountOut);
+        if (!isSwappingATokensDirectly) {
+            // Rebalance our assets into a new strategy.
+            _depositToAave(newAsset, amountOut);
+        } else {
+            // Update `newAsset` to be the underlying of the aToken rebalanced into. No need to
+            // deposit into Aave since cellar has received aTokens directly.
+            newAsset = address(asset);
+        }
 
         // Update fee data for next fee accrual with new strategy.
         lastActiveAssets = _activeAssets();
-        lastNormalizedIncome = lendingPool.getReserveNormalizedIncome(address(asset));
+        lastNormalizedIncome = lendingPool.getReserveNormalizedIncome(newAsset);
 
         emit Rebalance(oldAsset, newAsset, amountOut);
+    }
+
+    function rebalance(
+        address[9] memory route,
+        uint256[3][4] memory swapParams,
+        uint256 minAmountOut
+    ) external onlyOwner {
+        // Defaults to not swapping aTokens directly.
+        rebalance(route, swapParams, minAmountOut, false);
     }
 
     /**
@@ -1005,18 +1041,27 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Update state variables related to the current strategy.
      * @param newAsset address of the new asset being managed by the cellar
+     * @param newAsset address of the new asset being managed by the cellar
      */
-    function _updateStrategy(address newAsset) internal {
-        // Retrieve the aToken that will represent the cellar's new strategy on Aave.
-        (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(newAsset);
+    function _updateStrategy(address newAsset, bool isAToken) internal {
+        address aTokenAddress;
+        if (!isAToken) {
+            // Retrieve the aToken that will represent the cellar's new strategy on Aave.
+            (, , , , , , , aTokenAddress, , , , ) = lendingPool.getReserveData(newAsset);
 
-        // If the address is not null, it is supported by Aave.
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave(newAsset);
+            // If the address is not null, it is supported by Aave.
+            if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave(newAsset);
+        } else {
+            // Prepare to update `assetAToken` to the new asset and `asset` to the aToken's
+            // underlying asset (eg. USDC if aUSDC). Reverts if the new asset does not have an
+            // `UNDERLYING_ASSET_ADDRESS` meaning it is not an aToken.
+            (aTokenAddress, newAsset) = (newAsset, IAToken(newAsset).UNDERLYING_ASSET_ADDRESS());
+        }
 
         // Update state related to the current strategy.
         asset = ERC20(newAsset);
         assetDecimals = ERC20(newAsset).decimals();
-        assetAToken = ERC20(aTokenAddress);
+        assetAToken = IAToken(aTokenAddress);
 
         // Update the decimals max liquidity is denoted in if restrictions are still in place.
         if (maxLiquidity != type(uint256).max) maxLiquidity = 5_000_000 * 10**assetDecimals;

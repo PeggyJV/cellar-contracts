@@ -218,6 +218,7 @@ describe("AaveV2StablecoinCellar", () => {
 
     // Mint initial liquidity for swaps
     await USDC.mint(sushiswapRouter.address, BigNum(5_000_000, 6));
+    await USDC.mint(curveRegistryExchange.address, BigNum(5_000_000, 6));
     await USDT.mint(curveRegistryExchange.address, BigNum(5_000_000, 6));
     await DAI.mint(curveRegistryExchange.address, BigNum(5_000_000, 18));
   });
@@ -777,9 +778,10 @@ describe("AaveV2StablecoinCellar", () => {
     it("should have accrued performance fees", async () => {
       const accruedPerformanceFees = await cellar.accruedPerformanceFees();
 
-      // expect $4.75 ($95 * 0.05 = $4.75) worth of fees to be minted as shares
-      expect(await cellar.balanceOf(cellar.address)).to.eq(BigNum(4.75, 18));
-      expect(accruedPerformanceFees).to.eq(BigNum(4.75, 18));
+      // expect $9.50 (10% of $95) worth of fees to be minted as shares
+      const expectedFeeShares = BigNum(9.5, 18);
+      expect(await cellar.balanceOf(cellar.address)).to.eq(expectedFeeShares);
+      expect(accruedPerformanceFees).to.eq(expectedFeeShares);
     });
   });
 
@@ -797,7 +799,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await DAI.balanceOf(cellar.address)).to.eq(0);
       expect(await cellar.totalAssets()).to.eq(BigNum(1500, 6));
 
-      await cellar.rebalance(
+      await cellar["rebalance(address[9],uint256[3][4],uint256)"](
         [
           USDC.address,
           "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
@@ -822,11 +824,17 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await aDAI.balanceOf(cellar.address)).to.be.at.least(
         BigNum(950, 18)
       );
+
+      // should have correctly updated strategy state
+      expect(await cellar.asset()).to.eq(DAI.address);
+      expect(await cellar.assetAToken()).to.eq(aDAI.address);
+      expect(await cellar.assetDecimals()).to.eq(18);
+      expect(await cellar.maxLiquidity()).to.eq(BigNum(5_000_000, 18));
     });
 
     it("should not be possible to rebalance from an asset other than the current asset", async () => {
       await expect(
-        cellar.rebalance(
+        cellar["rebalance(address[9],uint256[3][4],uint256)"](
           [
             DAI.address,
             "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
@@ -852,7 +860,7 @@ describe("AaveV2StablecoinCellar", () => {
     it("should not be possible to rebalance to the same token", async () => {
       const asset = await cellar.asset();
       await expect(
-        cellar.rebalance(
+        cellar["rebalance(address[9],uint256[3][4],uint256)"](
           [
             asset,
             "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
@@ -882,7 +890,7 @@ describe("AaveV2StablecoinCellar", () => {
         await cellar.accruedPerformanceFees();
       const feesBefore = await cellar.balanceOf(cellar.address);
 
-      await cellar.rebalance(
+      await cellar["rebalance(address[9],uint256[3][4],uint256)"](
         [
           USDC.address,
           "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
@@ -909,6 +917,137 @@ describe("AaveV2StablecoinCellar", () => {
       expect(accruedPerformanceFeesAfter.gt(accruedPerformanceFeesBefore)).to.be
         .true;
       expect(feesAfter.gt(feesBefore)).to.be.true;
+    });
+
+    it("should rebalance aTokens directly if specified", async () => {
+      // mint initial aDAI and aUSDC liquidity to Curve
+      const index = await lendingPool.index();
+      await aUSDT.mint(
+        curveRegistryExchange.address,
+        BigNum(5_000_000, 6),
+        index
+      );
+      await aDAI.mint(
+        curveRegistryExchange.address,
+        BigNum(5_000_000, 18),
+        index
+      );
+
+      // used to test whether withdrew from Aave or not
+      const lendingPoolBalanceBefore = await USDC.balanceOf(
+        lendingPool.address
+      );
+
+      await cellar["rebalance(address[9],uint256[3][4],uint256,bool)"](
+        [
+          aUSDC.address,
+          "0xDeBF20617708857ebe4F679508E7b7863a8A8EeE",
+          aDAI.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        0,
+        true
+      );
+
+      const lendingPoolBalanceAfter = await USDC.balanceOf(lendingPool.address);
+      // should not have withdrawn from Aave (no need when you are swapping aTokens directly)
+      expect(lendingPoolBalanceAfter).to.eq(lendingPoolBalanceBefore);
+
+      // should have rebalanced all previous assets into new strategy
+      expect(await USDC.balanceOf(cellar.address)).to.eq(0);
+      expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
+
+      // should have correctly updated strategy state
+      expect(await cellar.asset()).to.eq(DAI.address);
+      expect(await cellar.assetAToken()).to.eq(aDAI.address);
+      expect(await cellar.assetDecimals()).to.eq(18);
+      expect(await cellar.maxLiquidity()).to.eq(BigNum(5_000_000, 18));
+
+      // should pass
+      await cellar.callStatic[
+        "rebalance(address[9],uint256[3][4],uint256,bool)"
+      ](
+        [
+          aDAI.address,
+          "0xDeBF20617708857ebe4F679508E7b7863a8A8EeE",
+          aUSDC.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        0,
+        true
+      );
+
+      // should revert if swapping from aToken to a non-aToken
+      await expect(
+        cellar["rebalance(address[9],uint256[3][4],uint256,bool)"](
+          [
+            aDAI.address,
+            "0xDeBF20617708857ebe4F679508E7b7863a8A8EeE",
+            USDC.address,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+          ],
+          [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          0,
+          true
+        )
+      ).to.be.reverted;
+
+      // should revert if swapping from non-aToken to a aToken
+      await expect(
+        cellar["rebalance(address[9],uint256[3][4],uint256,bool)"](
+          [
+            DAI.address,
+            "0xDeBF20617708857ebe4F679508E7b7863a8A8EeE",
+            aUSDC.address,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+          ],
+          [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          0,
+          true
+        )
+      ).to.be.reverted;
     });
   });
 
@@ -946,9 +1085,9 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.accrueFees();
 
       const performanceFees = await cellar.accruedPerformanceFees();
-      // expect cellar to have received $12.5 fees in shares = $250 gain * 5%,
-      // which would be ~10 shares at the time of accrual
-      expect(performanceFees).to.be.closeTo(BigNum(10, 18), BigNum(0.001, 18));
+      // expect cellar to have received $25 fees in shares = $250 gain * 10%,
+      // which would be ~20 shares at the time of accrual
+      expect(performanceFees).to.be.closeTo(BigNum(20, 18), BigNum(0.001, 18));
 
       const ownerAssetBalance = await cellar.convertToAssets(
         await cellar.balanceOf(owner.address)

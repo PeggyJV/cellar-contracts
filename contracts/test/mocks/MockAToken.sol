@@ -40,16 +40,16 @@ library WadRayMath {
 }
 
 contract MockAToken is ERC20 {
-    address public underlyingAsset;
+    address public UNDERLYING_ASSET_ADDRESS;
     MockLendingPool public lendingPool;
 
     constructor(address _lendingPool, address _underlyingAsset, string memory _symbol) ERC20(_symbol, _symbol) {
         lendingPool = MockLendingPool(_lendingPool);
-        underlyingAsset = _underlyingAsset;
+        UNDERLYING_ASSET_ADDRESS = _underlyingAsset;
     }
 
     function decimals() public view override returns (uint8) {
-        return ERC20(underlyingAsset).decimals();
+        return ERC20(UNDERLYING_ASSET_ADDRESS).decimals();
     }
 
     /**
@@ -92,7 +92,7 @@ contract MockAToken is ERC20 {
         require(amountScaled != 0, "CT_INVALID_BURN_AMOUNT");
         _burn(user, amountScaled);
 
-        ERC20(underlyingAsset).transfer(receiverOfUnderlying, amount);
+        ERC20(UNDERLYING_ASSET_ADDRESS).transfer(receiverOfUnderlying, amount);
     }
 
     /**
