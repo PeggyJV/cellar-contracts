@@ -777,9 +777,10 @@ describe("AaveV2StablecoinCellar", () => {
     it("should have accrued performance fees", async () => {
       const accruedPerformanceFees = await cellar.accruedPerformanceFees();
 
-      // expect $4.75 ($95 * 0.05 = $4.75) worth of fees to be minted as shares
-      expect(await cellar.balanceOf(cellar.address)).to.eq(BigNum(4.75, 18));
-      expect(accruedPerformanceFees).to.eq(BigNum(4.75, 18));
+      // expect $9.50 (10% of $95) worth of fees to be minted as shares
+      const expectedFeeShares = BigNum(9.5, 18);
+      expect(await cellar.balanceOf(cellar.address)).to.eq(expectedFeeShares);
+      expect(accruedPerformanceFees).to.eq(expectedFeeShares);
     });
   });
 
@@ -946,9 +947,9 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.accrueFees();
 
       const performanceFees = await cellar.accruedPerformanceFees();
-      // expect cellar to have received $12.5 fees in shares = $250 gain * 5%,
-      // which would be ~10 shares at the time of accrual
-      expect(performanceFees).to.be.closeTo(BigNum(10, 18), BigNum(0.001, 18));
+      // expect cellar to have received $25 fees in shares = $250 gain * 10%,
+      // which would be ~20 shares at the time of accrual
+      expect(performanceFees).to.be.closeTo(BigNum(20, 18), BigNum(0.001, 18));
 
       const ownerAssetBalance = await cellar.convertToAssets(
         await cellar.balanceOf(owner.address)
