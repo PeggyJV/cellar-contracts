@@ -683,6 +683,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         uint256 platformFeeInAssets =
             (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
 
+        // Update tracking of last time platform fees were accrued.
+        lastTimeAccruedPlatformFees = block.timestamp;
+
         // The cellar accrues fees as shares instead of assets.
         uint256 platformFees = _convertToShares(platformFeeInAssets);
         _mint(address(this), platformFees);
