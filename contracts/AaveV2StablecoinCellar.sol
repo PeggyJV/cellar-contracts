@@ -1169,12 +1169,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /// @dev For compatibility with ERC20 standard.
     function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
-        // Defaults to only transferring active shares.
-        return transferFrom(from, to, amount, true);
+        // Defaults to allowing both active and inactive shares to be transferred.
+        return transferFrom(from, to, amount, false);
     }
 
     function transfer(address to, uint256 amount) public override returns (bool) {
-        // Defaults to only transferring active shares.
-        return transferFrom(msg.sender, to, amount, true);
+        // Defaults to allowing both active and inactive shares to be transferred.
+        return transferFrom(msg.sender, to, amount, false);
     }
 }
