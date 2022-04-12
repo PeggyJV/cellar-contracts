@@ -798,7 +798,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Enters into the current Aave stablecoin strategy.
      */
-    function enterStrategy() external onlyOwner {
+    function enterStrategy() public onlyOwner {
         // When the contract is shutdown, it shouldn't be allowed to enter back into a strategy with
         // the assets it just withdrew from Aave.
         if (isShutdown) revert ContractShutdown();
@@ -872,7 +872,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         _updateStrategy(newAsset);
 
         // Rebalance our assets into a new strategy.
-        _depositToAave(newAsset, amountOut);
+        enterStrategy();
 
         // Update fee data for next fee accrual with new strategy.
         lastActiveAssets = _activeAssets();
