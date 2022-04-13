@@ -803,11 +803,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // the assets it just withdrew from Aave.
         if (isShutdown) revert ContractShutdown();
 
+        uint256 holdingPoolAssets = inactiveAssets();
+
         // Deposits all inactive assets in the holding pool into the current strategy.
-        _depositToAave(address(asset), inactiveAssets());
+        _depositToAave(address(asset), holdingPoolAssets);
 
         // The cellar will use this when determining which of a user's shares are active vs inactive.
         lastTimeEnteredStrategy = block.timestamp;
+
+        emit EnterStrategy(address(asset), holdingPoolAssets);
     }
 
     /**
@@ -871,8 +875,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // rebalancing.
         _updateStrategy(newAsset);
 
-        // Rebalance our assets into a new strategy.
-        enterStrategy();
+        // Deposit all newly swapped assets into Aave.
+        _depositToAave(address(asset), amountOut);
+
+        // Update the last time all inactive assets were entered into a strategy.
+        lastTimeEnteredStrategy = block.timestamp;
 
         // Update fee data for next fee accrual with new strategy.
         lastActiveAssets = _activeAssets();
@@ -912,8 +919,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         uint256 amountOut = amounts[amounts.length - 1];
 
-        // In the case of a shutdown, we just may want to redeem any leftover rewards for
-        // shareholders to claim but without entering them back into a strategy.
+        // In the case of a shutdown, we just may want to redeem any leftover rewards for users to
+        // claim but without entering them back into a strategy.
         if (!isShutdown) {
             // Take performance fee off of rewards.
             uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
@@ -926,6 +933,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
             // Reinvest rewards back into the current strategy.
             _depositToAave(address(asset), amountOut);
+
+            emit Reinvest(address(asset), amountIn, amountOut);
         }
     }
 
@@ -943,6 +952,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         // Begin the cooldown period for unstaking stkAAVE to later redeem for AAVE.
         stkAAVE.cooldown();
+
+        emit ClaimAndUnstake(claimed);
     }
 
     /**

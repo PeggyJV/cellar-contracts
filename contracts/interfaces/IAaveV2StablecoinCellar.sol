@@ -13,13 +13,7 @@ interface IAaveV2StablecoinCellar {
      * @param assets the amount of assets being deposited
      * @param shares the amount of shares minted to owner
      */
-    event Deposit(
-        address indexed caller,
-        address indexed owner,
-        address indexed token,
-        uint256 assets,
-        uint256 shares
-    );
+    event Deposit(address indexed caller, address indexed owner, address indexed token, uint256 assets, uint256 shares);
 
     /**
      * @notice Emitted when assets are withdrawn from cellar.
@@ -42,32 +36,43 @@ interface IAaveV2StablecoinCellar {
      * @param token the address of the token
      * @param amount the amount of tokens to deposit
      */
-    event DepositToAave(
-        address indexed token,
-        uint256 amount
-    );
+    event DepositToAave(address indexed token, uint256 amount);
 
     /**
      * @notice Emitted on withdraw from Aave.
      * @param token the address of the token
      * @param amount the amount of tokens to withdraw
      */
-    event WithdrawFromAave(
-        address indexed token,
-        uint256 amount
-    );
+    event WithdrawFromAave(address indexed token, uint256 amount);
+
+    /**
+     * @notice Emitted upon entering cellar's inactive assets into the current strategy on Aave.
+     * @param token the address of the asset being entered into the current strategy
+     * @param assets amount of assets being entered
+     */
+    event EnterStrategy(address indexed token, uint256 assets);
+
+    /**
+     * @notice Emitted upon claiming rewards and beginning cooldown period to unstake them.
+     * @param rewardsClaimed amount of rewards that were claimed
+     */
+    event ClaimAndUnstake(uint256 rewardsClaimed);
+
+    /**
+     * @notice Emitted upon reinvesting rewards into the current strategy.
+     * @param token the address of the asset rewards were swapped to
+     * @param rewards amount of rewards swapped to be reinvested
+     * @param assets amount of assets received from swapping rewards
+     */
+    event Reinvest(address indexed token, uint256 rewards, uint256 assets);
 
     /**
      * @notice Emitted on rebalance of Aave strategy.
      * @param oldAsset the address of the asset for the old strategy
      * @param newAsset the address of the asset for the new strategy
-     * @param assets the amount of the new assets that has been deposited to Aave after rebalance
+     * @param assets the amount of the new assets cellar has after rebalancing
      */
-    event Rebalance(
-        address indexed oldAsset,
-        address indexed newAsset,
-        uint256 assets
-    );
+    event Rebalance(address indexed oldAsset, address indexed newAsset, uint256 assets);
 
     /**
      * @notice Emitted when platform fees accrued.
@@ -228,12 +233,15 @@ interface IAaveV2StablecoinCellar {
 
     // ======================================= STATE INFORMATION =====================================
 
-    function depositBalances(address user) external view returns (
-        uint256 userActiveShares,
-        uint256 userInactiveShares,
-        uint256 userActiveAssets,
-        uint256 userInactiveAssets
-    );
+    function depositBalances(address user)
+        external
+        view
+        returns (
+            uint256 userActiveShares,
+            uint256 userInactiveShares,
+            uint256 userActiveAssets,
+            uint256 userInactiveAssets
+        );
 
     function numDeposits(address user) external view returns (uint256);
 
