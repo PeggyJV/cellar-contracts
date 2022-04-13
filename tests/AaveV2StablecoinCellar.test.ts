@@ -811,6 +811,54 @@ describe("AaveV2StablecoinCellar", () => {
       expect(feesAfter.gt(feesBefore)).to.be.true;
     });
 
+    it("should update related state", async () => {
+      const tx = await cellar.rebalance(
+        [
+          USDC.address,
+          "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          DAI.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        0,
+      );
+
+      const receipt = await tx.wait();
+
+      // should have updated current asset
+      expect(await cellar.asset()).to.eq(DAI.address);
+
+      // should have updated asset decimals
+      expect(await cellar.assetDecimals()).to.eq(18);
+
+      // should have updated asset decimals
+      expect(await cellar.assetAToken()).to.eq(aDAI.address);
+
+      // should have updated max liquidity
+      expect(await cellar.maxLiquidity()).to.eq(BigNum(5_000_000, 18));
+
+      // should have updated lastTimeEnteredStrategy
+      expect(await cellar.lastTimeEnteredStrategy()).to.eq(
+        (await ethers.provider.getBlock(receipt.blockNumber)).timestamp,
+      );
+
+      // should have updated lastActiveAssets
+      expect(await cellar.lastActiveAssets()).to.eq(await cellar.activeAssets());
+
+      // should have updated lastNormalizedIncome
+      expect(await cellar.lastNormalizedIncome()).to.eq(await lendingPool.getReserveNormalizedIncome(DAI.address));
+    });
+
     it("should emits a Rebalance event", async () => {
       await expect(
         cellar.rebalance(
