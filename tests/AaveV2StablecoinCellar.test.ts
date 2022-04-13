@@ -618,10 +618,14 @@ describe("AaveV2StablecoinCellar", () => {
       await expect(cellar.enterStrategy()).to.be.reverted;
     });
 
-    it("should emit DepositToAave event", async () => {
+    it("should emit DepositToAave and EnterStrategy events", async () => {
       await cellar.deposit(BigNum(200, 6), owner.address);
 
       await expect(cellar.enterStrategy()).to.emit(cellar, "DepositToAave").withArgs(USDC.address, BigNum(200, 6));
+
+      await cellar.deposit(BigNum(200, 6), owner.address);
+
+      await expect(cellar.enterStrategy()).to.emit(cellar, "EnterStrategy").withArgs(USDC.address, BigNum(200, 6));
     });
   });
 
@@ -629,17 +633,23 @@ describe("AaveV2StablecoinCellar", () => {
     beforeEach(async () => {
       // simulate cellar contract having 100 stkAAVE to claim
       await incentivesController.addRewards(cellar.address, BigNum(100, 18));
-
-      await cellar.claimAndUnstake();
     });
 
     it("should claim rewards from Aave and begin unstaking", async () => {
+      await cellar.claimAndUnstake();
+
       // expect cellar to claim all 100 stkAAVE
       expect(await stkAAVE.balanceOf(cellar.address)).to.eq(BigNum(100, 18));
     });
 
     it("should have started 10 day unstaking cooldown period", async () => {
+      await cellar.claimAndUnstake();
+
       expect(await stkAAVE.stakersCooldowns(cellar.address)).to.eq(await timestamp());
+    });
+
+    it("should emits a ClaimAndUnstake event", async () => {
+      await expect(cellar.claimAndUnstake()).to.emit(cellar, "ClaimAndUnstake").withArgs(BigNum(100, 18));
     });
   });
 
@@ -650,22 +660,30 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.claimAndUnstake();
 
       await timetravel(864000);
-
-      await cellar.reinvest(0);
     });
 
     it("should reinvested rewards back into principal", async () => {
+      await cellar.reinvest(0);
+
       expect(await stkAAVE.balanceOf(cellar.address)).to.eq(0);
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(BigNum(95, 6));
     });
 
     it("should have accrued performance fees", async () => {
+      await cellar.reinvest(0);
+
       const accruedPerformanceFees = await cellar.accruedPerformanceFees();
 
       // expect $9.50 (10% of $95) worth of fees to be minted as shares
       const expectedFeeShares = BigNum(9.5, 18);
       expect(await cellar.balanceOf(cellar.address)).to.eq(expectedFeeShares);
       expect(accruedPerformanceFees).to.eq(expectedFeeShares);
+    });
+
+    it("should emits a Reinvest event", async () => {
+      await expect(cellar.reinvest(0))
+        .to.emit(cellar, "Reinvest")
+        .withArgs(USDC.address, BigNum(100, 18), BigNum(95, 6));
     });
   });
 
@@ -791,6 +809,33 @@ describe("AaveV2StablecoinCellar", () => {
 
       expect(accruedPerformanceFeesAfter.gt(accruedPerformanceFeesBefore)).to.be.true;
       expect(feesAfter.gt(feesBefore)).to.be.true;
+    });
+
+    it("should emits a Rebalance event", async () => {
+      await expect(
+        cellar.rebalance(
+          [
+            USDC.address,
+            "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+            DAI.address,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+          ],
+          [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          0,
+        ),
+      )
+        .to.emit(cellar, "Rebalance")
+        .withArgs(USDC.address, DAI.address, BigNum(1425, 18));
     });
   });
 
