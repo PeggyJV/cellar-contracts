@@ -911,7 +911,9 @@ describe("AaveV2StablecoinCellar", () => {
       // expect all performance fee shares to have been burned
       expect(performanceFees).to.eq(0);
     });
+  });
 
+  describe("transferFees", async () => {
     it("should be able to transfer fees to Cosmos", async () => {
       // accrue some platform fees
       await cellar.deposit(BigNum(1000, 6), owner.address);
