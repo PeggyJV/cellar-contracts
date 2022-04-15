@@ -208,8 +208,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
         // In the case where a user tries to deposit more than their balance, the desired behavior
         // is to deposit what they have instead of reverting.
-        uint256 maxDepositable = asset.balanceOf(msg.sender);
-        if (assets > maxDepositable) assets = maxDepositable;
+        uint256 depositableAssets = asset.balanceOf(msg.sender);
+        if (assets > depositableAssets) assets = depositableAssets;
 
         (, shares) = _deposit(assets, 0, receiver);
     }
@@ -223,8 +223,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function mint(uint256 shares, address receiver) external returns (uint256 assets) {
         // In the case where a user tries to mint more shares than possible, the desired behavior
         // is to mint as many shares as their balance allows instead of reverting.
-        uint256 maxMintable = previewDeposit(asset.balanceOf(msg.sender));
-        if (shares > maxMintable) shares = maxMintable;
+        uint256 mintableShares = previewDeposit(asset.balanceOf(msg.sender));
+        if (shares > mintableShares) shares = mintableShares;
 
         (assets, ) = _deposit(0, shares, receiver);
     }
@@ -295,8 +295,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // This is done to avoid the possibility of an overflow if `assets` was set to a very high
         // number (like 2**256 – 1)  when trying to change decimals. If a user tries to withdraw
         // more than their balance, the desired behavior is to withdraw as much as possible.
-        uint256 maxWithdrawable = previewRedeem(balanceOf[owner]);
-        if (assets > maxWithdrawable) assets = maxWithdrawable;
+        uint256 withdrawableAssets = previewRedeem(balanceOf[owner]);
+        if (assets > withdrawableAssets) assets = withdrawableAssets;
 
         // Ensures proceeding calculations are done with a standard 18 decimals of precision. Will
         // change back to the using the asset's usual decimals of precision when transferring assets
@@ -321,8 +321,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // This is done to avoid the possibility of an overflow if `shares` was set to a very high
         // number (like 2**256 – 1) when trying to change decimals. If a user tries to redeem more
         // than their balance, the desired behavior is to redeem as much as possible.
-        uint256 maxRedeemable = maxRedeem(owner);
-        if (shares > maxRedeemable) shares = maxRedeemable;
+        uint256 redeemableShares = maxRedeem(owner);
+        if (shares > redeemableShares) shares = redeemableShares;
 
         (assets, ) = _withdraw(_convertToAssets(shares), receiver, owner);
     }
@@ -620,6 +620,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Total number of shares that can be minted for owner from the cellar.
+     * @dev Limits mints to $50k of shares per wallet.
      * @param owner address of account that would receive the shares
      * @return maximum amount of shares that can be minted
      */
