@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
-import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IAaveV2StablecoinCellar} from "./interfaces/IAaveV2StablecoinCellar.sol";
-import {IAaveIncentivesController} from "./interfaces/IAaveIncentivesController.sol";
-import {IStakedTokenV2} from "./interfaces/IStakedTokenV2.sol";
-import {ICurveSwaps} from "./interfaces/ICurveSwaps.sol";
-import {ISushiSwapRouter} from "./interfaces/ISushiSwapRouter.sol";
-import {IGravity} from "./interfaces/IGravity.sol";
-import {ILendingPool} from "./interfaces/ILendingPool.sol";
-import {MathUtils} from "./utils/MathUtils.sol";
+import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
+import { IAaveIncentivesController } from "./interfaces/IAaveIncentivesController.sol";
+import { IStakedTokenV2 } from "./interfaces/IStakedTokenV2.sol";
+import { ICurveSwaps } from "./interfaces/ICurveSwaps.sol";
+import { ISushiSwapRouter } from "./interfaces/ISushiSwapRouter.sol";
+import { IGravity } from "./interfaces/IGravity.sol";
+import { ILendingPool } from "./interfaces/ILendingPool.sol";
+import { MathUtils } from "./utils/MathUtils.sol";
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar

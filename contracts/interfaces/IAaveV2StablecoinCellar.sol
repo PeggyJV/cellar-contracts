@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
 /// @title interface for AaveV2StablecoinCellar
 interface IAaveV2StablecoinCellar {
@@ -103,6 +103,11 @@ interface IAaveV2StablecoinCellar {
      * @notice Emitted when liquidity restriction removed.
      */
     event LiquidityRestrictionRemoved();
+
+    /**
+     * @notice Emitted when deposit restriction removed.
+     */
+    event DepositRestrictionRemoved();
 
     /**
      * @notice Emitted when tokens accidentally sent to cellar are recovered.

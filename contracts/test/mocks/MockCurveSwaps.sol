@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
-import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import {MathUtils} from "contracts/utils/MathUtils.sol";
+import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import { MathUtils } from "contracts/utils/MathUtils.sol";
 
 contract MockCurveSwaps {
     using MathUtils for uint256;
@@ -17,7 +17,7 @@ contract MockCurveSwaps {
 
         address tokenOut;
         for (uint256 i; ; i += 2) {
-            if (i == 8 || _route[i+1] == address(0)) {
+            if (i == 8 || _route[i + 1] == address(0)) {
                 tokenOut = _route[i];
                 break;
             }
@@ -27,7 +27,7 @@ contract MockCurveSwaps {
 
         ERC20(tokenIn).transferFrom(msg.sender, address(this), _amount);
 
-        uint256 amountOut = _amount * exchangeRate / 10000;
+        uint256 amountOut = (_amount * exchangeRate) / 10000;
 
         uint8 fromDecimals = ERC20(tokenIn).decimals();
         uint8 toDecimals = ERC20(tokenOut).decimals();

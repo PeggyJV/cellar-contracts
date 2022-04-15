@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
-import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import {AaveV2StablecoinCellar} from "contracts/AaveV2StablecoinCellar.sol";
+import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import { AaveV2StablecoinCellar } from "contracts/AaveV2StablecoinCellar.sol";
 
-import {TokenUser} from "./TokenUser.sol";
+import { TokenUser } from "./TokenUser.sol";
 
 contract CellarUser is TokenUser {
     AaveV2StablecoinCellar public cellar;

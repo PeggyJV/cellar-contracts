@@ -1,27 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
-import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import {IAaveIncentivesController} from "../interfaces/IAaveIncentivesController.sol";
-import {IStakedTokenV2} from "../interfaces/IStakedTokenV2.sol";
-import {ICurveSwaps} from "../interfaces/ICurveSwaps.sol";
-import {ISushiSwapRouter} from "../interfaces/ISushiSwapRouter.sol";
-import {IGravity} from "../interfaces/IGravity.sol";
-import {ILendingPool} from "../interfaces/ILendingPool.sol";
-import {MockToken} from "./mocks/MockToken.sol";
-import {MockAToken} from "./mocks/MockAToken.sol";
-import {MockCurveSwaps} from "./mocks/MockCurveSwaps.sol";
-import {MockSwapRouter} from "./mocks/MockSwapRouter.sol";
-import {MockLendingPool} from "./mocks/MockLendingPool.sol";
-import {MockIncentivesController} from "./mocks/MockIncentivesController.sol";
-import {MockGravity} from "./mocks/MockGravity.sol";
-import {MockStkAAVE} from "./mocks/MockStkAAVE.sol";
+import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import { IAaveIncentivesController } from "../interfaces/IAaveIncentivesController.sol";
+import { IStakedTokenV2 } from "../interfaces/IStakedTokenV2.sol";
+import { ICurveSwaps } from "../interfaces/ICurveSwaps.sol";
+import { ISushiSwapRouter } from "../interfaces/ISushiSwapRouter.sol";
+import { IGravity } from "../interfaces/IGravity.sol";
+import { ILendingPool } from "../interfaces/ILendingPool.sol";
+import { MockToken } from "./mocks/MockToken.sol";
+import { MockAToken } from "./mocks/MockAToken.sol";
+import { MockCurveSwaps } from "./mocks/MockCurveSwaps.sol";
+import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
+import { MockLendingPool } from "./mocks/MockLendingPool.sol";
+import { MockIncentivesController } from "./mocks/MockIncentivesController.sol";
+import { MockGravity } from "./mocks/MockGravity.sol";
+import { MockStkAAVE } from "./mocks/MockStkAAVE.sol";
 
-import {AaveV2StablecoinCellar} from "../AaveV2StablecoinCellar.sol";
-import {CellarUser} from "./users/CellarUser.sol";
+import { AaveV2StablecoinCellar } from "../AaveV2StablecoinCellar.sol";
+import { CellarUser } from "./users/CellarUser.sol";
 
-import {DSTestPlus} from "@rari-capital/solmate/src/test/utils/DSTestPlus.sol";
-import {MathUtils} from "../utils/MathUtils.sol";
+import { DSTestPlus } from "@rari-capital/solmate/src/test/utils/DSTestPlus.sol";
+import { MathUtils } from "../utils/MathUtils.sol";
 
 contract AaveV2StablecoinCellarTest is DSTestPlus {
     using MathUtils for uint256;
@@ -41,6 +41,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     AaveV2StablecoinCellar public cellar;
 
     uint256 public initializationTimestamp;
+
     function setUp() public {
         asset = new MockToken("USDC", 6);
 
@@ -94,9 +95,11 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     // Fuzz with maximum of uint72 to avoid decimal conversion overflow. Given the asset we are testing with
     // has 6 decimals, realistic balance should never be above 2**72 - 1.
     function testDepositAndWithdraw(uint256 assets) public {
-        assets = bound(assets, 1, type(uint72).max);
+        assets = bound(assets, 1, cellar.maxDeposit(address(this)));
 
-        cellar.removeLiquidityRestriction(); // Ensure liquidity restrictions aren't a factor.
+        // Ensure restrictions aren't a factor.
+        cellar.removeLiquidityRestriction();
+        cellar.removeDepositRestriction();
 
         asset.mint(address(this), assets);
         asset.approve(address(cellar), assets);
@@ -129,7 +132,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     function testMintAndRedeem(uint256 shares) public {
         shares = bound(shares, 1, type(uint112).max);
 
-        cellar.removeLiquidityRestriction(); // Ensure liquidity restrictions aren't a factor.
+        // Ensure restrictions aren't a factor.
+        cellar.removeLiquidityRestriction();
+        cellar.removeDepositRestriction();
 
         asset.mint(address(this), shares);
         asset.approve(address(cellar), shares);
@@ -263,15 +268,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.activeAssets(), preMutationAssets + mutationAssets);
         assertEq(cellar.totalSupply(), preMutationShares);
         assertEq(cellar.balanceOf(address(alice)), aliceShares);
-        assertEq(
-            cellar.convertToAssets(cellar.balanceOf(address(alice))),
-            aliceAssets + (mutationAssets / 3) * 1
-        );
+        assertEq(cellar.convertToAssets(cellar.balanceOf(address(alice))), aliceAssets + (mutationAssets / 3) * 1);
         assertEq(cellar.balanceOf(address(bob)), bobShares);
-        assertEq(
-            cellar.convertToAssets(cellar.balanceOf(address(bob))),
-            bobAssets + (mutationAssets / 3) * 2
-        );
+        assertEq(cellar.convertToAssets(cellar.balanceOf(address(bob))), bobAssets + (mutationAssets / 3) * 2);
 
         // 4. Alice deposits $2000 (mints 1333 shares).
         assertApproxEq(alice.deposit(2000e6, address(alice)), 1333e18, 1e18); // 1333.333...
