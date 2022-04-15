@@ -839,7 +839,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         }
 
         // Doesn't make sense to rebalance into the same asset.
-        if (newAsset == address(asset)) revert SameAsset(newAsset);
+        if (newAsset == (isSwappingATokensDirectly ? address(asset) : address(assetAToken))) revert SameAsset(newAsset);
 
         // Accrue any final performance fees from the current strategy before rebalancing. Otherwise
         // those fees would be lost when we proceed to update fee data for the new strategy. Also we

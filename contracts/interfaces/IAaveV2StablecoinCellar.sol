@@ -260,6 +260,13 @@ interface IAaveV2StablecoinCellar {
     function rebalance(
         address[9] memory route,
         uint256[3][4] memory swapParams,
+        uint256 minAmountOut,
+        bool isSwappingATokensDirectly
+    ) external;
+
+    function rebalance(
+        address[9] memory route,
+        uint256[3][4] memory swapParams,
         uint256 minAmountOut
     ) external;
 
