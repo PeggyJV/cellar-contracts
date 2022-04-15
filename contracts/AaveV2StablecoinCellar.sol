@@ -116,11 +116,16 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     bytes32 public constant feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
 
     /**
-     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same
-     *         units as the current asset.
+     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals as the *         current asset.
      * @dev Limited to $5m until after security audits.
      */
     uint256 public maxLiquidity;
+
+    /**
+     * @notice Maximum amount of deposits per wallet. Denominated in the same decimals as the current assets.
+     * @dev Limits deposits to $50k per wallet for better distribution of SOMM rewards.
+     */
+    uint256 public depositLimit;
 
     /**
      * @notice Whether or not the contract is paused in case of an emergency.
@@ -238,11 +243,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // check for rounding error if `mint`, previewMint rounds up.
         if (shares == 0) revert ZeroShares();
 
+        // Enforce deposit restrictions per wallet.
+        if (depositLimit != type(uint256).max && assets > maxDeposit(receiver))
+            revert DepositRestricted(50_000 * 10**assetDecimals);
+
         // Check if security restrictions still apply. Enforce them if they do.
-        if (maxLiquidity != type(uint256).max) {
-            if (assets + totalAssets() > maxLiquidity) revert LiquidityRestricted(maxLiquidity);
-            if (assets > maxDeposit(receiver)) revert DepositRestricted(50_000 * 10**assetDecimals);
-        }
+        if (maxLiquidity != type(uint256).max && assets + totalAssets() > maxLiquidity)
+            revert LiquidityRestricted(maxLiquidity);
 
         // Transfers assets into the cellar.
         asset.safeTransferFrom(msg.sender, address(this), assets);
@@ -566,7 +573,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         for (uint256 i = currentDepositIndex[user]; i < deposits.length; i++) {
             UserDeposit storage d = deposits[i];
 
-
             // Determine whether or not deposit is active or inactive.
             if (d.timeDeposited <= lastTimeEnteredStrategy) {
                 // Saves an extra SLOAD if active and cast type to uint256.
@@ -599,16 +605,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Total number of assets that can be deposited by owner into the cellar.
-     * @dev Until after security audits, limits deposits to $50k per wallet.
      * @param owner address of account that would receive the shares
      * @return maximum amount of assets that can be deposited
      */
     function maxDeposit(address owner) public view returns (uint256) {
         if (isShutdown || isPaused) return 0;
 
-        if (maxLiquidity == type(uint256).max) return type(uint256).max;
+        if (depositLimit == type(uint256).max) return type(uint256).max;
 
-        uint256 depositLimit = 50_000 * 10**assetDecimals;
         uint256 assets = previewRedeem(balanceOf[owner]);
 
         return depositLimit > assets ? depositLimit - assets : 0;
@@ -616,7 +620,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Total number of shares that can be minted for owner from the cellar.
-     * @dev Until after security audits, limits mints to $50k of shares per wallet.
      * @param owner address of account that would receive the shares
      * @return maximum amount of shares that can be minted
      */
@@ -983,6 +986,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     }
 
     /**
+     * @notice Removes per-wallet deposit restriction.
+     */
+    function removeDepositRestriction() external onlyOwner {
+        depositLimit = type(uint256).max;
+
+        emit DepositRestrictionRemoved();
+    }
+
+    /**
      * @notice Pause the contract to prevent deposits.
      * @param _isPaused whether the contract should be paused or unpaused
      */
@@ -1032,7 +1044,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         assetDecimals = ERC20(newAsset).decimals();
         assetAToken = ERC20(aTokenAddress);
 
-        // Update the decimals max liquidity is denoted in if restrictions are still in place.
+        // Update the decimals for max deposits.
+        depositLimit = 50_000 * 10**assetDecimals;
+
+        // Same for max liquidity, if restrictions are still in place.
         if (maxLiquidity != type(uint256).max) maxLiquidity = 5_000_000 * 10**assetDecimals;
     }
 

@@ -131,21 +131,21 @@ describe("AaveV2StablecoinCellar", () => {
     await cellar.deployed();
 
     // Mint mock tokens to signers
-    await USDC.mint(owner.address, BigNum(1_000_000, 6));
-    await DAI.mint(owner.address, BigNum(1_000_000, 18));
-    await WETH.mint(owner.address, BigNum(1_000_000, 18));
-    await USDT.mint(owner.address, BigNum(1_000_000, 6));
+    await USDC.mint(owner.address, BigNum(50_000, 6));
+    await DAI.mint(owner.address, BigNum(50_000, 18));
+    await WETH.mint(owner.address, BigNum(50_000, 18));
+    await USDT.mint(owner.address, BigNum(50_000, 6));
 
-    await USDC.mint(alice.address, BigNum(1_000_000, 6));
-    await DAI.mint(alice.address, BigNum(1_000_000, 18));
-    await WETH.mint(alice.address, BigNum(1_000_000, 18));
-    await USDT.mint(alice.address, BigNum(1_000_000, 6));
-    await USDC.mint(alice.address, BigNum(1_000_000, 6));
+    await USDC.mint(alice.address, BigNum(50_000, 6));
+    await DAI.mint(alice.address, BigNum(50_000, 18));
+    await WETH.mint(alice.address, BigNum(50_000, 18));
+    await USDT.mint(alice.address, BigNum(50_000, 6));
+    await USDC.mint(alice.address, BigNum(50_000, 6));
 
-    await USDC.mint(bob.address, BigNum(1_000_000, 6));
-    await DAI.mint(bob.address, BigNum(1_000_000, 18));
-    await WETH.mint(bob.address, BigNum(1_000_000, 18));
-    await USDT.mint(bob.address, BigNum(1_000_000, 6));
+    await USDC.mint(bob.address, BigNum(50_000, 6));
+    await DAI.mint(bob.address, BigNum(50_000, 18));
+    await WETH.mint(bob.address, BigNum(50_000, 18));
+    await USDT.mint(bob.address, BigNum(50_000, 6));
 
     // Approve cellar to spend mock tokens
     await USDC.approve(cellar.address, ethers.constants.MaxUint256);
@@ -219,9 +219,6 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should deposit all user's balance if they try depositing more than their balance", async () => {
-      // ensure deposit restriction isn't a problem
-      await cellar.removeLiquidityRestriction();
-
       const ownerBalance = await USDC.balanceOf(owner.address);
       const cellarBalance = await USDC.balanceOf(cellar.address);
       await cellar.deposit(ownerBalance.mul(2), owner.address);
@@ -269,9 +266,6 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should mint as much as possible if tries to mint more than they can", async () => {
-      // ensure deposit restriction isn't a problem
-      await cellar.removeLiquidityRestriction();
-
       const balance = await USDC.balanceOf(owner.address);
       const maxShares = await cellar.previewDeposit(balance);
 
@@ -1066,7 +1060,7 @@ describe("AaveV2StablecoinCellar", () => {
     });
   });
 
-  describe("restrictLiquidity", () => {
+  describe("restrictions", () => {
     it("should prevent deposit if greater than max liquidity", async () => {
       // mint $5m to cellar (to hit liquidity cap)
       await USDC.mint(cellar.address, BigNum(5_000_000, 6));
@@ -1084,14 +1078,22 @@ describe("AaveV2StablecoinCellar", () => {
       await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(`DepositRestricted(${BigNum(50_000, 6)})`);
     });
 
-    it("should allow deposits above max deposit and max liquidity once restriction removed", async () => {
+    it("should allow deposits above max liquidity once restriction removed", async () => {
       // mint $5m to cellar (to hit liquidity cap)
       await USDC.mint(cellar.address, BigNum(5_000_000, 6));
 
       await cellar.removeLiquidityRestriction();
 
-      // should be able to depositing past the max deposit restriction since its been removed
-      await cellar.deposit(BigNum(50_001, 6), owner.address);
+      await cellar.deposit(1, owner.address);
+    });
+
+    it("should allow deposits above max deposit once restriction removed", async () => {
+      await cellar.deposit(BigNum(50_000, 6), owner.address);
+
+      await cellar.removeDepositRestriction();
+
+      await USDC.mint(owner.address, BigNum(1, 6));
+      await cellar.deposit(1, owner.address);
     });
   });
 
@@ -1132,23 +1134,18 @@ describe("AaveV2StablecoinCellar", () => {
     let inactiveAssets: BigNumber;
 
     beforeEach(async () => {
-      // Start with some liquidity in the cellar to mimic more realistic conditions
-      await USDC.mint(bob.address, BigNum(1_000_000, 6));
-      await USDC.connect(bob).approve(cellar.address, ethers.constants.MaxUint256);
-
-      await cellar.removeLiquidityRestriction();
-
-      await cellar.connect(bob).deposit(BigNum(10_000, 6), bob.address);
+      await cellar.connect(bob).deposit(BigNum(12_345, 6), bob.address);
       await cellar.enterStrategy();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
       activeShares = await cellar.balanceOf(bob.address);
-      activeAssets = BigNum(10_000 * 1.25, 6);
+      activeAssets = await cellar.previewRedeem(activeShares);
 
-      await cellar.connect(bob).deposit(BigNum(42_069, 6), bob.address);
+      inactiveAssets = BigNum(50_000, 6).sub(activeAssets);
+
+      await cellar.connect(bob).deposit(inactiveAssets, bob.address);
 
       inactiveShares = (await cellar.balanceOf(bob.address)).sub(activeShares);
-      inactiveAssets = BigNum(42_069, 6);
     });
 
     it("should accurately convert shares to assets and vice versa", async () => {
@@ -1243,10 +1240,6 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.enterStrategy();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
       expect(await cellar.maxDeposit(owner.address)).to.eq(0);
-
-      await cellar.removeLiquidityRestriction();
-
-      expect(await cellar.maxDeposit(owner.address)).to.eq(ethers.constants.MaxUint256);
     });
 
     it("should correctly find max mint amount", async () => {
