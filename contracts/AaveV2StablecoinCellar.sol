@@ -774,9 +774,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Transfer accrued fees to Cosmos to distribute.
      */
     function transferFees() external onlyOwner {
-        // Total up all the fees this cellar has accrued and determine how much they can be redeemed
-        // for in assets.
-        uint256 fees = accruedPerformanceFees + accruedPlatformFees;
+        // Cellar fees are accrued in shares and redeemed upon transfer.
+        uint256 fees = ERC20(this).balanceOf(address(this));
         uint256 feeInAssets = previewRedeem(fees);
 
         // Redeem our fee shares for assets to transfer to Cosmos.
