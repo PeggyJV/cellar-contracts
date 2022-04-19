@@ -79,34 +79,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     uint256 public constant PERFORMANCE_FEE = 10_00;
 
     /**
-     * @notice Timestamp of last time platform fees were accrued.
+     * @notice Stores fee-related data.
      */
-    uint256 public lastTimeAccruedPlatformFees;
-
-    /**
-     * @notice Amount of active assets in cellar last time performance fees were accrued.
-     */
-    uint256 public lastActiveAssets;
-
-    /**
-     * @notice Normalized income index for the current asset on Aave recorded last time performance
-     *         fees were accrued.
-     */
-    uint256 public lastNormalizedIncome;
-
-    /**
-     * @notice Amount of platform fees that have been accrued awaiting transfer.
-     * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
-     *      the cellar to Cosmos to be distributed.
-     */
-    uint256 public accruedPlatformFees;
-
-    /**
-     * @notice Amount of performance fees that have been accrued awaiting transfer.
-     * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
-     *      the cellar to Cosmos to be distributed.
-     */
-    uint256 public accruedPerformanceFees;
+    IAaveV2StablecoinCellar.Fees public fees;
 
     /**
      * @notice Cosmos address of the fee distributor as a hex value.
@@ -191,7 +166,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // Initialize starting point for platform fee accrual to time when cellar was created.
         // Otherwise it would incorrectly calculate how much platform fees to take when accrueFees
         // is called for the first time.
-        lastTimeAccruedPlatformFees = block.timestamp;
+        fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
     }
 
     // =============================== DEPOSIT/WITHDRAWAL OPERATIONS ===============================
@@ -680,12 +655,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         if (isShutdown) revert ContractShutdown();
 
         // Platform fees taken each accrual = activeAssets * (elapsedTime * (2% / SECS_PER_YEAR)).
-        uint256 elapsedTime = block.timestamp - lastTimeAccruedPlatformFees;
+        uint256 elapsedTime = block.timestamp - fees.lastTimeAccruedPlatformFees;
         uint256 platformFeeInAssets =
             (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
 
         // Update tracking of last time platform fees were accrued.
-        lastTimeAccruedPlatformFees = block.timestamp;
+        fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
 
         // The cellar accrues fees as shares instead of assets.
         uint256 platformFees = _convertToShares(platformFeeInAssets);
@@ -693,7 +668,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
 
         // Update the tracker for total platform fees accrued that are still waiting to be
         // transferred.
-        accruedPlatformFees += platformFees;
+        fees.accruedPlatformFees += uint128(platformFees);
 
         emit AccruedPlatformFees(platformFees);
 
@@ -712,27 +687,27 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // If this is the first time the cellar is accruing performance fees, it will skip the part
         // were we take fees and should just update the fee data to set a baseline for assessing the
         // current strategy's performance.
-        if (lastActiveAssets != 0) {
+        if (fees.lastActiveAssets != 0) {
             // An index value greater than 1e27 indicates positive performance for the strategy's
             // lending position, while a value less than that indicates negative performance.
-            uint256 performanceIndex = normalizedIncome.mulDivDown(1e27, lastNormalizedIncome);
+            uint256 performanceIndex = normalizedIncome.mulDivDown(1e27, fees.lastNormalizedIncome);
 
             // This is the amount the cellar's active assets have grown to solely from performance
             // on Aave since the last time performance fees were accrued.  It does not include
             // changes from deposits and withdraws.
-            uint256 updatedActiveAssets = lastActiveAssets.mulDivUp(performanceIndex, 1e27);
+            uint256 updatedActiveAssets = uint256(fees.lastActiveAssets).mulDivUp(performanceIndex, 1e27);
 
             // Determines whether performance has been positive or negative.
             if (performanceIndex >= 1e27) {
                 // Fees taken each accrual = (updatedActiveAssets - lastActiveAssets) * 10%
-                uint256 gain = updatedActiveAssets - lastActiveAssets;
+                uint256 gain = updatedActiveAssets - fees.lastActiveAssets;
                 uint256 performanceFeeInAssets = gain.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
 
                 // The cellar accrues fees as shares instead of assets.
                 uint256 performanceFees = _convertToShares(performanceFeeInAssets);
                 _mint(address(this), performanceFees);
 
-                accruedPerformanceFees += performanceFees;
+                fees.accruedPerformanceFees += uint128(performanceFees);
 
                 emit AccruedPerformanceFees(performanceFees);
             } else {
@@ -741,18 +716,18 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
                 // in case it does, this mechanism will burn performance fees to help offset losses
                 // in proportion to those minted for previous gains.
 
-                uint256 loss = lastActiveAssets - updatedActiveAssets;
+                uint256 loss = fees.lastActiveAssets - updatedActiveAssets;
                 uint256 insuranceInAssets = loss.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
 
                 // Cannot burn more performance fees than the cellar has accrued.
                 uint256 insurance = MathUtils.min(
                     _convertToShares(insuranceInAssets),
-                    accruedPerformanceFees
+                    fees.accruedPerformanceFees
                 );
 
                 _burn(address(this), insurance);
 
-                accruedPerformanceFees -= insurance;
+                fees.accruedPerformanceFees -= uint128(insurance);
 
                 emit BurntPerformanceFees(insurance);
             }
@@ -762,8 +737,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // when we accrue performance fees before rebalancing into a new strategy since the data
         // will be outdated after the rebalance to a new strategy.
         if (updateFeeData) {
-            lastActiveAssets = _activeAssets();
-            lastNormalizedIncome = normalizedIncome;
+            fees.lastActiveAssets = uint128(_activeAssets());
+            fees.lastNormalizedIncome = uint96(normalizedIncome);
         }
     }
 
@@ -772,11 +747,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      */
     function transferFees() external onlySteward {
         // Cellar fees are accrued in shares and redeemed upon transfer.
-        uint256 fees = ERC20(this).balanceOf(address(this));
-        uint256 feeInAssets = previewRedeem(fees);
+        uint256 totalFees = ERC20(this).balanceOf(address(this));
+        uint256 feeInAssets = previewRedeem(totalFees);
 
         // Redeem our fee shares for assets to transfer to Cosmos.
-        _burn(address(this), fees);
+        _burn(address(this), totalFees);
 
         // Only withdraw assets from strategy if the holding pool does not contain enough funds.
         // Otherwise, all assets will come from the holding pool.
@@ -786,11 +761,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         asset.approve(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, feeInAssets);
 
-        emit TransferFees(accruedPlatformFees, accruedPerformanceFees);
+        emit TransferFees(fees.accruedPlatformFees, fees.accruedPerformanceFees);
 
         // Reset the tracker for fees accrued that are still waiting to be transferred.
-        accruedPlatformFees = 0;
-        accruedPerformanceFees = 0;
+        fees.accruedPlatformFees = 0;
+        fees.accruedPerformanceFees = 0;
     }
 
     // ===================================== ADMIN OPERATIONS =====================================
@@ -882,8 +857,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         lastTimeEnteredStrategy = block.timestamp;
 
         // Update fee data for next fee accrual with new strategy.
-        lastActiveAssets = _activeAssets();
-        lastNormalizedIncome = lendingPool.getReserveNormalizedIncome(address(asset));
+        fees.lastActiveAssets = uint128(_activeAssets());
+        fees.lastNormalizedIncome = uint96(lendingPool.getReserveNormalizedIncome(address(asset)));
 
         emit Rebalance(oldAsset, newAsset, amountOut);
     }
@@ -929,7 +904,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
             // Mint performance fees to cellar as shares.
             _mint(address(this), performanceFees);
 
-            accruedPerformanceFees += performanceFees;
+            fees.accruedPerformanceFees += uint128(performanceFees);
 
             // Reinvest rewards back into the current strategy.
             _depositToAave(address(asset), amountOut);

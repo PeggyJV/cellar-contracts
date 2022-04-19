@@ -689,7 +689,7 @@ describe("AaveV2StablecoinCellar", () => {
     it("should have accrued performance fees", async () => {
       await cellar.connect(await impersonateGravity()).reinvest(0);
 
-      const accruedPerformanceFees = await cellar.accruedPerformanceFees();
+      const accruedPerformanceFees = (await cellar.fees())[4];
 
       // expect $9.50 (10% of $95) worth of fees to be minted as shares
       const expectedFeeShares = BigNum(9.5, 18);
@@ -797,7 +797,7 @@ describe("AaveV2StablecoinCellar", () => {
     it("should have accrued performance fees", async () => {
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
-      const accruedPerformanceFeesBefore = await cellar.accruedPerformanceFees();
+      const accruedPerformanceFeesBefore = (await cellar.fees())[4];
       const feesBefore = await cellar.balanceOf(cellar.address);
 
       await cellar.connect(await impersonateGravity()).rebalance(
@@ -821,7 +821,7 @@ describe("AaveV2StablecoinCellar", () => {
         0,
       );
 
-      const accruedPerformanceFeesAfter = await cellar.accruedPerformanceFees();
+      const accruedPerformanceFeesAfter = (await cellar.fees())[4];
       const feesAfter = await cellar.balanceOf(cellar.address);
 
       expect(accruedPerformanceFeesAfter.gt(accruedPerformanceFeesBefore)).to.be.true;
@@ -869,11 +869,15 @@ describe("AaveV2StablecoinCellar", () => {
         (await ethers.provider.getBlock(receipt.blockNumber)).timestamp,
       );
 
+      const feeData = await cellar.fees();
+      const lastActiveAssets = feeData[2];
+      const lastNormalizedIncome = feeData[1];
+
       // should have updated lastActiveAssets
-      expect(await cellar.lastActiveAssets()).to.eq(await cellar.activeAssets());
+      expect(lastActiveAssets).to.eq(await cellar.activeAssets());
 
       // should have updated lastNormalizedIncome
-      expect(await cellar.lastNormalizedIncome()).to.eq(await lendingPool.getReserveNormalizedIncome(DAI.address));
+      expect(lastNormalizedIncome).to.eq(await lendingPool.getReserveNormalizedIncome(DAI.address));
     });
 
     it("should emits a Rebalance event", async () => {
@@ -916,7 +920,7 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.accrueFees();
 
-      const accruedPlatformFees = await cellar.accruedPlatformFees();
+      const accruedPlatformFees = (await cellar.fees())[3];
       const feesInAssets = await cellar.convertToAssets(accruedPlatformFees);
 
       // ~$0.027 worth of shares in fees = $1000 * 86400 sec * (1% / secsPerYear)
@@ -937,10 +941,10 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.accrueFees();
 
-      const performanceFees = await cellar.accruedPerformanceFees();
+      const accruedPerformanceFees = (await cellar.fees())[4];
       // expect cellar to have received $25 fees in shares = $250 gain * 10%,
       // which would be ~20 shares at the time of accrual
-      expect(performanceFees).to.be.closeTo(BigNum(20, 18), BigNum(0.001, 18));
+      expect(accruedPerformanceFees).to.be.closeTo(BigNum(20, 18), BigNum(0.001, 18));
 
       const ownerAssetBalance = await cellar.convertToAssets(await cellar.balanceOf(owner.address));
       const cellarAssetBalance = await cellar.convertToAssets(await cellar.balanceOf(cellar.address));
@@ -971,10 +975,10 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.accrueFees();
 
-      const performanceFees = await cellar.accruedPerformanceFees();
+      const accruedPerformanceFees = (await cellar.fees())[4];
 
       // expect all performance fee shares to have been burned
-      expect(performanceFees).to.eq(0);
+      expect(accruedPerformanceFees).to.eq(0);
     });
   });
 
@@ -991,8 +995,9 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.accrueFees();
 
       const fees = await cellar.balanceOf(cellar.address);
-      const accruedPlatformFees = await cellar.accruedPlatformFees();
-      const accruedPerformanceFees = await cellar.accruedPerformanceFees();
+      const accruedPlatformFees = (await cellar.fees())[3];
+      const accruedPerformanceFees = (await cellar.fees())[4];
+
       expect(fees).to.eq(accruedPlatformFees.add(accruedPerformanceFees));
 
       const feeInAssets = await cellar.convertToAssets(fees);
