@@ -163,62 +163,62 @@ interface IAaveV2StablecoinCellar {
     /**
      * @notice Attempted an action with zero assets.
      */
-    error ZeroAssets();
+    error USR_ZeroAssets();
 
     /**
      * @notice Attempted an action with zero shares.
      */
-    error ZeroShares();
-
-    /**
-     * @notice Attempted deposit more liquidity over the liquidity limit.
-     * @param maxLiquidity the max liquidity
-     */
-    error LiquidityRestricted(uint256 maxLiquidity);
+    error USR_ZeroShares();
 
     /**
      * @notice Attempted deposit more than the per wallet limit.
      * @param maxDeposit the max deposit
      */
-    error DepositRestricted(uint256 maxDeposit);
+    error USR_DepositRestricted(uint256 maxDeposit);
 
     /**
-     * @notice Current asset is updated to an asset not supported by Aave.
-     * @param unsupportedToken address of the unsupported token
+     * @notice Attempted to call a function that is restricted to Steward.
      */
-    error TokenIsNotSupportedByAave(address unsupportedToken);
+    error USR_NotSteward();
+
+    /**
+     * @notice Attempted deposit more liquidity over the liquidity limit.
+     * @param maxLiquidity the max liquidity
+     */
+    error STATE_LiquidityRestricted(uint256 maxLiquidity);
 
     /**
      * @notice Attempted to sweep an asset that is managed by the cellar.
      * @param token address of the token that can't be sweeped
      */
-    error ProtectedAsset(address token);
+    error STATE_ProtectedAsset(address token);
+
+    /**
+     * @notice Current asset is updated to an asset not supported by Aave.
+     * @param unsupportedToken address of the unsupported token
+     */
+    error STATE_TokenIsNotSupportedByAave(address unsupportedToken);
 
     /**
      * @notice Attempted rebalance into the same asset.
      * @param asset address of the asset
      */
-    error SameAsset(address asset);
+    error STATE_SameAsset(address asset);
 
     /**
      * @notice Attempted action was prevented due to contract being shutdown.
      */
-    error ContractShutdown();
+    error STATE_ContractShutdown();
 
     /**
      * @notice Attempted action was prevented due to contract being paused.
      */
-    error ContractPaused();
+    error STATE_ContractPaused();
 
     /**
      * @notice Attempted to shutdown the contract when it was already shutdown.
      */
-    error AlreadyShutdown();
-
-    /**
-     * @notice Attempted to call a function that is restricted to Steward.
-     */
-    error NotSteward();
+    error STATE_AlreadyShutdown();
 
     // ======================================= STRUCTS =======================================
 

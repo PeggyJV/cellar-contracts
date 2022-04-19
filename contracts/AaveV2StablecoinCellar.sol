@@ -205,23 +205,23 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     function _deposit(uint256 assets, uint256 shares, address receiver) internal returns (uint256, uint256) {
         // In case of an emergency or contract vulnerability, we don't want users to be able to
         // deposit more assets into a compromised contract.
-        if (isPaused) revert ContractPaused();
-        if (isShutdown) revert ContractShutdown();
+        if (isPaused) revert STATE_ContractPaused();
+        if (isShutdown) revert STATE_ContractShutdown();
 
         // Must calculate before assets are transferred in.
         shares > 0 ? assets = previewMint(shares) : shares = previewDeposit(assets);
 
         // Check for rounding error on `deposit` since we round down in previewDeposit. No need to
         // check for rounding error if `mint`, previewMint rounds up.
-        if (shares == 0) revert ZeroShares();
+        if (shares == 0) revert USR_ZeroShares();
 
         // Enforce deposit restrictions per wallet.
         if (depositLimit != type(uint256).max && assets > maxDeposit(receiver))
-            revert DepositRestricted(50_000 * 10**assetDecimals);
+            revert USR_DepositRestricted(50_000 * 10**assetDecimals);
 
         // Check if security restrictions still apply. Enforce them if they do.
         if (maxLiquidity != type(uint256).max && assets + totalAssets() > maxLiquidity)
-            revert LiquidityRestricted(maxLiquidity);
+            revert STATE_LiquidityRestricted(maxLiquidity);
 
         // Transfers assets into the cellar.
         asset.safeTransferFrom(msg.sender, address(this), assets);
@@ -306,8 +306,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         address receiver,
         address owner
     ) internal returns (uint256, uint256) {
-        if (balanceOf[owner] == 0) revert ZeroShares();
-        if (assets == 0) revert ZeroAssets();
+        if (balanceOf[owner] == 0) revert USR_ZeroShares();
+        if (assets == 0) revert USR_ZeroAssets();
 
         // Tracks the total amount of shares being redeemed for the amount of assets withdrawn.
         uint256 shares;
@@ -653,7 +653,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     function accrueFees() external {
         // When the contract is shutdown, there should be no reason to accrue fees because there
         // will be no active assets to accrue fees on.
-        if (isShutdown) revert ContractShutdown();
+        if (isShutdown) revert STATE_ContractShutdown();
 
         // Platform fees taken each accrual = activeAssets * (elapsedTime * (2% / SECS_PER_YEAR)).
         uint256 elapsedTime = block.timestamp - fees.lastTimeAccruedPlatformFees;
@@ -777,7 +777,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     function enterPosition() external onlySteward {
         // When the contract is shutdown, it shouldn't be allowed to enter back into a position with
         // the assets it just withdrew from Aave.
-        if (isShutdown) revert ContractShutdown();
+        if (isShutdown) revert STATE_ContractShutdown();
 
         uint256 holdingPoolAssets = inactiveAssets();
 
@@ -807,7 +807,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     ) external onlySteward {
         // If the contract is shutdown, cellar shouldn't be able to rebalance assets it recently
         // pulled out back into a new position.
-        if (isShutdown) revert ContractShutdown();
+        if (isShutdown) revert STATE_ContractShutdown();
 
         // Retrieve the last token in the route and store it as the new asset.
         address newAsset;
@@ -819,7 +819,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         }
 
         // Doesn't make sense to rebalance into the same asset.
-        if (newAsset == address(asset)) revert SameAsset(newAsset);
+        if (newAsset == address(asset)) revert STATE_SameAsset(newAsset);
 
         // Accrue any final performance fees from the current position before rebalancing. Otherwise
         // those fees would be lost when we proceed to update fee data for the new position. Also we
@@ -940,7 +940,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     function sweep(address token) external onlySteward {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == address(asset) || token == address(assetAToken) || token == address(this))
-            revert ProtectedAsset(token);
+            revert STATE_ProtectedAsset(token);
 
         // Transfer out tokens in this cellar that shouldn't be here.
         uint256 amount = ERC20(token).balanceOf(address(this));
@@ -972,7 +972,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @param _isPaused whether the contract should be paused or unpaused
      */
     function setPause(bool _isPaused) external onlySteward {
-        if (isShutdown) revert ContractShutdown();
+        if (isShutdown) revert STATE_ContractShutdown();
 
         isPaused = _isPaused;
 
@@ -984,7 +984,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      *         for example an irreversible accounting bug or an exploit.
      */
     function shutdown() external onlySteward {
-        if (isShutdown) revert AlreadyShutdown();
+        if (isShutdown) revert STATE_ContractShutdown();
 
         isShutdown = true;
 
@@ -1009,7 +1009,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      *      https://github.com/PeggyJV/steward
      */
     modifier onlySteward() {
-        if (msg.sender != address(gravityBridge)) revert NotSteward();
+        if (msg.sender != address(gravityBridge)) revert USR_NotSteward();
 
         _;
     }
@@ -1023,7 +1023,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(newAsset);
 
         // If the address is not null, it is supported by Aave.
-        if (aTokenAddress == address(0)) revert TokenIsNotSupportedByAave(newAsset);
+        if (aTokenAddress == address(0)) revert STATE_TokenIsNotSupportedByAave(newAsset);
 
         // Update state related to the current position.
         asset = ERC20(newAsset);

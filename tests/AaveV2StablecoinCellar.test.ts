@@ -256,7 +256,7 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should not allow deposits of 0", async () => {
-      await expect(cellar.deposit(0, owner.address)).to.be.revertedWith("ZeroShares()");
+      await expect(cellar.deposit(0, owner.address)).to.be.revertedWith("USR_ZeroShares()");
     });
 
     it("should emit Deposit event", async () => {
@@ -374,7 +374,7 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.withdraw(BigNum(100, 6), owner.address, owner.address);
       // owner should now have nothing left to withdraw
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
-      await expect(cellar.withdraw(1, owner.address, owner.address)).to.be.revertedWith("ZeroShares()");
+      await expect(cellar.withdraw(1, owner.address, owner.address)).to.be.revertedWith("USR_ZeroShares()");
 
       // alice only has $100 to withdraw, withdrawing $150 should only withdraw $100
       const aliceOldBalance = await USDC.balanceOf(alice.address);
@@ -384,7 +384,7 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should not allow withdraws of 0", async () => {
-      await expect(cellar.withdraw(0, owner.address, owner.address)).to.be.revertedWith("ZeroAssets()");
+      await expect(cellar.withdraw(0, owner.address, owner.address)).to.be.revertedWith("USR_ZeroAssets()");
     });
 
     it("should not allow unapproved account to withdraw using another's shares", async () => {
@@ -791,7 +791,7 @@ describe("AaveV2StablecoinCellar", () => {
           ],
           0,
         ),
-      ).to.be.revertedWith(`SameAsset("${asset}")`);
+      ).to.be.revertedWith(`STATE_SameAsset("${asset}")`);
     });
 
     it("should have accrued performance fees", async () => {
@@ -1040,8 +1040,8 @@ describe("AaveV2StablecoinCellar", () => {
 
   describe("onlySteward", async () => {
     it("should prevent users from calling functions only callable from the gravity bridge", async () => {
-      await expect(cellar.transferFees()).to.be.revertedWith("NotSteward()");
-      await expect(cellar.enterPosition()).to.be.revertedWith("NotSteward()");
+      await expect(cellar.transferFees()).to.be.revertedWith("USR_NotSteward()");
+      await expect(cellar.enterPosition()).to.be.revertedWith("USR_NotSteward()");
       await expect(
         cellar.rebalance(
           [
@@ -1063,22 +1063,22 @@ describe("AaveV2StablecoinCellar", () => {
           ],
           0,
         ),
-      ).to.be.revertedWith("NotSteward()");
+      ).to.be.revertedWith("USR_NotSteward()");
     });
 
-    await expect(cellar.reinvest(0)).to.be.revertedWith("NotSteward()");
-    await expect(cellar.claimAndUnstake()).to.be.revertedWith("NotSteward()");
-    await expect(cellar.sweep(DAI.address)).to.be.revertedWith("NotSteward()");
-    await expect(cellar.removeLiquidityRestriction()).to.be.revertedWith("NotSteward()");
-    await expect(cellar.removeDepositRestriction()).to.be.revertedWith("NotSteward()");
-    await expect(cellar.setPause(true)).to.be.revertedWith("NotSteward()");
-    await expect(cellar.shutdown()).to.be.revertedWith("NotSteward()");
+    await expect(cellar.reinvest(0)).to.be.revertedWith("USR_NotSteward()");
+    await expect(cellar.claimAndUnstake()).to.be.revertedWith("USR_NotSteward()");
+    await expect(cellar.sweep(DAI.address)).to.be.revertedWith("USR_NotSteward()");
+    await expect(cellar.removeLiquidityRestriction()).to.be.revertedWith("USR_NotSteward()");
+    await expect(cellar.removeDepositRestriction()).to.be.revertedWith("USR_NotSteward()");
+    await expect(cellar.setPause(true)).to.be.revertedWith("USR_NotSteward()");
+    await expect(cellar.shutdown()).to.be.revertedWith("USR_NotSteward()");
   });
 
   describe("pause", () => {
     it("should prevent users from depositing while paused", async () => {
       await cellar.connect(await impersonateGravity()).setPause(true);
-      await expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith("ContractPaused()");
+      await expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith("STATE_ContractPaused()");
     });
 
     it("should emits a Pause event", async () => {
@@ -1092,7 +1092,7 @@ describe("AaveV2StablecoinCellar", () => {
     it("should prevent users from depositing while shutdown", async () => {
       await cellar.deposit(BigNum(100, 6), owner.address);
       await cellar.connect(await impersonateGravity()).shutdown();
-      await expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith("ContractShutdown()");
+      await expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith("STATE_ContractShutdown()");
     });
 
     it("should allow users to withdraw", async () => {
@@ -1132,17 +1132,19 @@ describe("AaveV2StablecoinCellar", () => {
       // mint $5m to cellar (to hit liquidity cap)
       await USDC.mint(cellar.address, BigNum(5_000_000, 6));
 
-      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(`LiquidityRestricted(${BigNum(5_000_000, 6)})`);
+      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(
+        `STATE_LiquidityRestricted(${BigNum(5_000_000, 6)})`,
+      );
     });
 
     it("should prevent deposit if greater than max deposit", async () => {
       await USDC.mint(owner.address, BigNum(50_001, 6));
       await expect(cellar.deposit(BigNum(50_001, 6), owner.address)).to.be.revertedWith(
-        `DepositRestricted(${BigNum(50_000, 6)})`,
+        `USR_DepositRestricted(${BigNum(50_000, 6)})`,
       );
 
       await cellar.deposit(BigNum(50_000, 6), owner.address);
-      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(`DepositRestricted(${BigNum(50_000, 6)})`);
+      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(`USR_DepositRestricted(${BigNum(50_000, 6)})`);
     });
 
     it("should allow deposits above max liquidity once restriction removed", async () => {
@@ -1177,13 +1179,13 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should not allow assets managed by cellar to be transferred out", async () => {
       await expect(cellar.connect(await impersonateGravity()).sweep(USDC.address)).to.be.revertedWith(
-        `ProtectedAsset("${USDC.address}")`,
+        `STATE_ProtectedAsset("${USDC.address}")`,
       );
       await expect(cellar.connect(await impersonateGravity()).sweep(aUSDC.address)).to.be.revertedWith(
-        `ProtectedAsset("${aUSDC.address}")`,
+        `STATE_ProtectedAsset("${aUSDC.address}")`,
       );
       await expect(cellar.connect(await impersonateGravity()).sweep(cellar.address)).to.be.revertedWith(
-        `ProtectedAsset("${cellar.address}")`,
+        `STATE_ProtectedAsset("${cellar.address}")`,
       );
     });
 
