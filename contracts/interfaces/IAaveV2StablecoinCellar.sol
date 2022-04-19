@@ -77,11 +77,11 @@ interface IAaveV2StablecoinCellar {
     event WithdrawFromAave(address indexed token, uint256 amount);
 
     /**
-     * @notice Emitted upon entering cellar's inactive assets into the current strategy on Aave.
-     * @param token the address of the asset being entered into the current strategy
+     * @notice Emitted upon entering cellar's inactive assets into the current position on Aave.
+     * @param token the address of the asset being entered into the current position
      * @param assets amount of assets being entered
      */
-    event EnterStrategy(address indexed token, uint256 assets);
+    event EnterPosition(address indexed token, uint256 assets);
 
     /**
      * @notice Emitted upon claiming rewards and beginning cooldown period to unstake them.
@@ -90,7 +90,7 @@ interface IAaveV2StablecoinCellar {
     event ClaimAndUnstake(uint256 rewardsClaimed);
 
     /**
-     * @notice Emitted upon reinvesting rewards into the current strategy.
+     * @notice Emitted upon reinvesting rewards into the current position.
      * @param token the address of the asset rewards were swapped to
      * @param rewards amount of rewards swapped to be reinvested
      * @param assets amount of assets received from swapping rewards
@@ -98,9 +98,9 @@ interface IAaveV2StablecoinCellar {
     event Reinvest(address indexed token, uint256 rewards, uint256 assets);
 
     /**
-     * @notice Emitted on rebalance of Aave strategy.
-     * @param oldAsset the address of the asset for the old strategy
-     * @param newAsset the address of the asset for the new strategy
+     * @notice Emitted on rebalance of Aave poisition.
+     * @param oldAsset the address of the asset for the old position
+     * @param newAsset the address of the asset for the new position
      * @param assets the amount of the new assets cellar has after rebalancing
      */
     event Rebalance(address indexed oldAsset, address indexed newAsset, uint256 assets);
@@ -304,7 +304,7 @@ interface IAaveV2StablecoinCellar {
 
     // ======================================= ADMIN OPERATIONS =======================================
 
-    function enterStrategy() external;
+    function enterPosition() external;
 
     function rebalance(
         address[9] memory route,

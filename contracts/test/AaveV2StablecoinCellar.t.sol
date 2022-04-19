@@ -137,7 +137,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // |         6000 |    2000 |    $2000 |    4000 |    $4000 |
         // |--------------|---------|----------|---------|----------|
         // | 3. Cellar mutates by +$3000 simulated yield            |
-        // |    returned from strategy.                             |
+        // |    returned from position.                             |
         // |--------------|---------|----------|---------|----------|
         // |         6000 |    2000 |    $3000 |    4000 |    $6000 |
         // |--------------|---------|----------|---------|----------|
@@ -150,7 +150,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // |         9333 |    3333 |    $5000 |    6000 |    $9000 |
         // |--------------|---------|----------|---------|----------|
         // | 6. Cellar mutates by +$3000 simulated yield            |
-        // |    returned from strategy.                             |
+        // |    returned from position.                             |
         // |--------------|---------|----------|---------|----------|
         // |         9333 |    3333 |    $6071 |    6000 |   $10929 |
         // |--------------|---------|----------|---------|----------|
@@ -220,13 +220,13 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.totalSupply(), 6000e18);
         assertEq(cellar.totalAssets(), 6000e6);
 
-        // 3. Cellar mutates by +$3000 to simulate yield returned from strategy.
+        // 3. Cellar mutates by +$3000 to simulate yield returned from position.
         // The cellar now contains more assets than deposited which causes the exchange rate to change.
         // Alice share is 33.33% of the cellar, Bob 66.66% of the cellar.
         // Alice's share count stays the same but the asset amount changes from $2000 to $3000.
         // Bob's share count stays the same but the asset amount changes from $4000 to $6000.
         asset.mint(address(cellar), mutationAssets);
-        cellar.enterStrategy();
+        cellar.enterPosition();
         assertEq(cellar.activeAssets(), preMutationAssets + mutationAssets);
         assertEq(cellar.totalSupply(), preMutationShares);
         assertEq(cellar.balanceOf(address(alice)), aliceShares);
@@ -260,7 +260,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 6. Cellar mutates by +$3000.
         asset.mint(address(cellar), mutationAssets);
-        cellar.enterStrategy();
+        cellar.enterPosition();
         assertEq(cellar.activeAssets(), 17000e6);
         assertApproxEq(cellar.convertToAssets(cellar.balanceOf(address(alice))), 6071e6, 1e6); // 6071.429
         assertApproxEq(cellar.convertToAssets(cellar.balanceOf(address(bob))), 10929e6, 1e6); // 10928.571
