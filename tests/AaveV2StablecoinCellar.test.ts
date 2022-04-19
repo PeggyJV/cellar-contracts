@@ -501,7 +501,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(ownerNewBalance.sub(ownerOldBalance)).to.eq(transferredInactiveShares);
 
       const bobDeposit = await cellar.userDeposits(bob.address, 0);
-      ownerDeposit = await cellar.userDeposits(owner.address, (await cellar.numDeposits(owner.address)).sub(1));
+      ownerDeposit = await cellar.userDeposits(owner.address, 1);
 
       // must change decimals because deposit data is stored with 18 decimals
       expect(bobDeposit[0]).to.eq(BigNum(75, 18)); // expect 75 assets
@@ -1293,7 +1293,7 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should accurately retrieve information on a user's deposit balances", async () => {
-      const data = await cellar.depositBalances(bob.address);
+      const data = await cellar.getUserBalances(bob.address);
 
       expect(data[0].toString()).to.eq(activeShares);
       expect(data[1].toString()).to.eq(inactiveShares);

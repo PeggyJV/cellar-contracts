@@ -520,14 +520,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     // ======================================= STATE INFORMATION =====================================
 
     /**
-     * @notice Retrieve information on a user's deposits.
+     * @notice Retrieve information on a user's deposit balances.
      * @param user address of the user
      * @return userActiveShares amount of active shares the user has
      * @return userInactiveShares amount of inactive shares the user has
      * @return userActiveAssets amount of active assets the user has
      * @return userInactiveAssets amount of inactive assets the user has
      */
-    function depositBalances(address user) public view returns (
+    function getUserBalances(address user) public view returns (
         uint256 userActiveShares,
         uint256 userInactiveShares,
         uint256 userActiveAssets,
@@ -564,13 +564,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     }
 
     /**
-     * @notice Returns the number of deposits for a user. Can be used off-chain to
-     *         make iterating through user stakes easier.
+     * @notice Gets all of a user's deposits.
+     * @dev This is provided because Solidity converts public arrays into index getters,
+     *      but we need a way to allow external contracts and users to access the whole array.
      * @param user address of the user
-     * @return deposits the number of deposits for the user
+     * @return array of all the users deposits
      */
-    function numDeposits(address user) external view returns (uint256) {
-        return userDeposits[user].length;
+    function getUserDeposits(address user) external view returns (UserDeposit[] memory) {
+        return userDeposits[user];
     }
 
     // =========================== DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ===========================

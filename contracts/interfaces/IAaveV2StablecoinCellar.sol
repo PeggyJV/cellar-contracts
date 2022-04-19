@@ -274,7 +274,7 @@ interface IAaveV2StablecoinCellar {
 
     // ======================================= STATE INFORMATION =====================================
 
-    function depositBalances(address user)
+    function getUserBalances(address user)
         external
         view
         returns (
@@ -284,7 +284,7 @@ interface IAaveV2StablecoinCellar {
             uint256 userInactiveAssets
         );
 
-    function numDeposits(address user) external view returns (uint256);
+    function getUserDeposits(address user) external view returns (UserDeposit[] memory);
 
     // ============================ DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ============================
 
