@@ -774,7 +774,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Enters into the current Aave stablecoin position.
      */
-    function enterPosition() public onlySteward {
+    function enterPosition() external onlySteward {
         // When the contract is shutdown, it shouldn't be allowed to enter back into a position with
         // the assets it just withdrew from Aave.
         if (isShutdown) revert ContractShutdown();
