@@ -29,4 +29,6 @@ contract MockGravity {
             revert InvalidSendToCosmos();
         }
     }
+
+    receive() external payable {}
 }

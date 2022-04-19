@@ -29,67 +29,29 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     // Initialization Variables:
     MockToken public asset;
     MockAToken public assetAToken;
-    MockCurveSwaps public curveRegistryExchange;
-    MockSwapRouter public sushiSwapRouter;
     MockLendingPool public lendingPool;
-    MockIncentivesController public incentivesController;
-    MockGravity public gravityBridge;
-    MockStkAAVE public stkAAVE;
-    MockToken public AAVE;
-    MockToken public WETH;
 
     AaveV2StablecoinCellar public cellar;
 
-    uint256 public initializationTimestamp;
-
     function setUp() public {
         asset = new MockToken("USDC", 6);
-
-        sushiSwapRouter = new MockSwapRouter();
 
         lendingPool = new MockLendingPool();
         assetAToken = new MockAToken(address(lendingPool), address(asset), "aUSDC");
         lendingPool.initReserve(address(asset), address(assetAToken));
 
-        WETH = new MockToken("WETH", 6);
-
-        AAVE = new MockToken("AAVE", 6);
-        stkAAVE = new MockStkAAVE(AAVE);
-        incentivesController = new MockIncentivesController(stkAAVE);
-
-        gravityBridge = new MockGravity();
-
-        initializationTimestamp = block.timestamp;
+        // Declare unnecessary variables with address 0.
         cellar = new AaveV2StablecoinCellar(
             ERC20(address(asset)),
-            ICurveSwaps(address(curveRegistryExchange)),
-            ISushiSwapRouter(address(sushiSwapRouter)),
+            ICurveSwaps(address(0)),
+            ISushiSwapRouter(address(0)),
             ILendingPool(address(lendingPool)),
-            IAaveIncentivesController(address(incentivesController)),
-            IGravity(address(gravityBridge)),
-            IStakedTokenV2(address(stkAAVE)),
-            ERC20(address(AAVE)),
-            ERC20(address(WETH))
+            IAaveIncentivesController(address(0)),
+            IGravity(address(this)), // Set to this address to give contract admin privileges.
+            IStakedTokenV2(address(0)),
+            ERC20(address(0)),
+            ERC20(address(0))
         );
-    }
-
-    function testInitialization() public {
-        assertEq(address(cellar.asset()), address(asset));
-        assertEq(address(cellar.curveRegistryExchange()), address(curveRegistryExchange));
-        assertEq(address(cellar.sushiswapRouter()), address(sushiSwapRouter));
-        assertEq(address(cellar.lendingPool()), address(lendingPool));
-        assertEq(address(cellar.incentivesController()), address(incentivesController));
-        assertEq(address(cellar.gravityBridge()), address(gravityBridge));
-        assertEq(address(cellar.stkAAVE()), address(stkAAVE));
-        assertEq(address(cellar.AAVE()), address(AAVE));
-
-        assertEq(cellar.assetDecimals(), 6);
-
-        assertEq(address(cellar.assetAToken()), address(assetAToken));
-
-        assertEq(cellar.maxLiquidity(), 5_000_000e6);
-
-        assertEq(cellar.lastTimeAccruedPlatformFees(), initializationTimestamp);
     }
 
     // Fuzz with maximum of uint72 to avoid decimal conversion overflow. Given the asset we are testing with

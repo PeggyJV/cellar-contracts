@@ -3,7 +3,6 @@ pragma solidity 0.8.11;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
 import { IAaveIncentivesController } from "./interfaces/IAaveIncentivesController.sol";
 import { IStakedTokenV2 } from "./interfaces/IStakedTokenV2.sol";
@@ -18,7 +17,7 @@ import { MathUtils } from "./utils/MathUtils.sol";
  * @notice Dynamic ERC4626 that adapts strategies to always get the best yield for stablecoins on Aave.
  * @author Brian Le
  */
-contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
+contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
 
@@ -116,7 +115,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     bytes32 public constant feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
 
     /**
-     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals as the *         current asset.
+     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals as the
+     *         current asset.
      * @dev Limited to $5m until after security audits.
      */
     uint256 public maxLiquidity;
@@ -155,9 +155,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     ERC20 public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
     /**
-     * @dev Owner of the cellar will be the Gravity contract controlled by Steward:
-     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
-     *      https://github.com/PeggyJV/steward
      * @param _asset current asset managed by the cellar
      * @param _curveRegistryExchange Curve registry exchange
      * @param _sushiswapRouter Sushiswap V2 router address
@@ -178,7 +175,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         IStakedTokenV2 _stkAAVE,
         ERC20 _AAVE,
         ERC20 _WETH
-    ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "aave2-CLR-S", 18) Ownable() {
+    ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "aave2-CLR-S", 18) {
         curveRegistryExchange =  _curveRegistryExchange;
         sushiswapRouter = _sushiswapRouter;
         lendingPool = _lendingPool;
@@ -773,7 +770,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Transfer accrued fees to Cosmos to distribute.
      */
-    function transferFees() external onlyOwner {
+    function transferFees() external onlySteward {
         // Cellar fees are accrued in shares and redeemed upon transfer.
         uint256 fees = ERC20(this).balanceOf(address(this));
         uint256 feeInAssets = previewRedeem(fees);
@@ -801,7 +798,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Enters into the current Aave stablecoin strategy.
      */
-    function enterStrategy() public onlyOwner {
+    function enterStrategy() public onlySteward {
         // When the contract is shutdown, it shouldn't be allowed to enter back into a strategy with
         // the assets it just withdrew from Aave.
         if (isShutdown) revert ContractShutdown();
@@ -831,7 +828,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         address[9] memory route,
         uint256[3][4] memory swapParams,
         uint256 minAmountOut
-    ) external onlyOwner {
+    ) external onlySteward {
         // If the contract is shutdown, cellar shouldn't be able to rebalance assets it recently
         // pulled out back into a new strategy.
         if (isShutdown) revert ContractShutdown();
@@ -896,7 +893,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @dev Must be called within 2 day unstake period 10 days after `claimAndUnstake` was run.
      * @param minAmountOut minimum amount of assets cellar should receive after swap
      */
-    function reinvest(uint256 minAmountOut) public onlyOwner {
+    function reinvest(uint256 minAmountOut) public onlySteward {
         // Redeems the cellar's stkAAVe rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
@@ -945,7 +942,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Claim rewards from Aave and begin cooldown period to unstake them.
      * @return claimed amount of rewards claimed from Aave
      */
-    function claimAndUnstake() public onlyOwner returns (uint256 claimed) {
+    function claimAndUnstake() public onlySteward returns (uint256 claimed) {
         // Necessary to do as `claimRewards` accepts a dynamic array as first param.
         address[] memory aToken = new address[](1);
         aToken[0] = address(assetAToken);
@@ -964,7 +961,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @dev This may be used in case the wrong tokens are accidentally sent to this contract.
      * @param token address of token to transfer out of this cellar
      */
-    function sweep(address token) external onlyOwner {
+    function sweep(address token) external onlySteward {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == address(asset) || token == address(assetAToken) || token == address(this))
             revert ProtectedAsset(token);
@@ -979,7 +976,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Removes initial liquidity restriction.
      */
-    function removeLiquidityRestriction() external onlyOwner {
+    function removeLiquidityRestriction() external onlySteward {
         maxLiquidity = type(uint256).max;
 
         emit LiquidityRestrictionRemoved();
@@ -988,7 +985,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Removes per-wallet deposit restriction.
      */
-    function removeDepositRestriction() external onlyOwner {
+    function removeDepositRestriction() external onlySteward {
         depositLimit = type(uint256).max;
 
         emit DepositRestrictionRemoved();
@@ -998,7 +995,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Pause the contract to prevent deposits.
      * @param _isPaused whether the contract should be paused or unpaused
      */
-    function setPause(bool _isPaused) external onlyOwner {
+    function setPause(bool _isPaused) external onlySteward {
         if (isShutdown) revert ContractShutdown();
 
         isPaused = _isPaused;
@@ -1010,7 +1007,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Stops the contract - this is irreversible. Should only be used in an emergency,
      *         for example an irreversible accounting bug or an exploit.
      */
-    function shutdown() external onlyOwner {
+    function shutdown() external onlySteward {
         if (isShutdown) revert AlreadyShutdown();
 
         isShutdown = true;
@@ -1020,13 +1017,26 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         // Withdraw everything from Aave. The check is necessary to prevent a revert happening if we
         // try to withdraw from Aave without any assets entered into a strategy which would prevent
-        // the contract from being able to be shutdown in this case.
+        // the contract from being able to be shutdown in this case. asdfasdf
         if (activeAssets() > 0) _withdrawFromAave(address(asset), type(uint256).max);
 
         emit Shutdown();
     }
 
     // ========================================== HELPERS ==========================================
+
+    /**
+     * @notice Restrict to only be callable by the Gravity contract, which relays instructions from
+     *         Steward to the cellars.
+     * @dev Here are links to the contracts mentioned:
+     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
+     *      https://github.com/PeggyJV/steward
+     */
+    modifier onlySteward() {
+        if (msg.sender != address(gravityBridge)) revert NotSteward();
+
+        _;
+    }
 
     /**
      * @notice Update state variables related to the current strategy.
