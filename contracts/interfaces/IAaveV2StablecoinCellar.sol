@@ -177,9 +177,9 @@ interface IAaveV2StablecoinCellar {
     error USR_DepositRestricted(uint256 maxDeposit);
 
     /**
-     * @notice Attempted to call a function that is restricted to Steward.
+     * @notice Attempted to call a function that is restricted to Gravity.
      */
-    error USR_NotSteward();
+    error USR_NotGravityBridge();
 
     /**
      * @notice Attempted deposit more liquidity over the liquidity limit.
@@ -204,6 +204,12 @@ interface IAaveV2StablecoinCellar {
      * @param asset address of the asset
      */
     error STATE_SameAsset(address asset);
+
+    /**
+     * @notice Attempted rebalance into an untrusted position.
+     * @param asset address of the asset
+     */
+    error STATE_UntrustedPosition(address asset);
 
     /**
      * @notice Attempted action was prevented due to contract being shutdown.

@@ -718,6 +718,8 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await DAI.balanceOf(cellar.address)).to.eq(0);
       expect(await cellar.totalAssets()).to.eq(BigNum(1500, 6));
 
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
       await cellar.connect(await impersonateGravity()).rebalance(
         [
           USDC.address,
@@ -744,6 +746,8 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should not be possible to rebalance from an asset other than the current asset", async () => {
+      await cellar.connect(await impersonateGravity()).setTrust(USDT.address, true);
+
       await expect(
         cellar.connect(await impersonateGravity()).rebalance(
           [
@@ -800,6 +804,8 @@ describe("AaveV2StablecoinCellar", () => {
       const accruedPerformanceFeesBefore = (await cellar.fees())[4];
       const feesBefore = await cellar.balanceOf(cellar.address);
 
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
       await cellar.connect(await impersonateGravity()).rebalance(
         [
           USDC.address,
@@ -829,6 +835,8 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should update related state", async () => {
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
       const tx = await cellar.connect(await impersonateGravity()).rebalance(
         [
           USDC.address,
@@ -881,6 +889,8 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should emits a Rebalance event", async () => {
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
       await expect(
         cellar.connect(await impersonateGravity()).rebalance(
           [
@@ -1040,8 +1050,9 @@ describe("AaveV2StablecoinCellar", () => {
 
   describe("onlySteward", async () => {
     it("should prevent users from calling functions only callable from the gravity bridge", async () => {
-      await expect(cellar.transferFees()).to.be.revertedWith("USR_NotSteward()");
-      await expect(cellar.enterPosition()).to.be.revertedWith("USR_NotSteward()");
+      await expect(cellar.transferFees()).to.be.revertedWith("USR_NotGravityBridge()");
+      await expect(cellar.enterPosition()).to.be.revertedWith("USR_NotGravityBridge()");
+      await expect(cellar.setTrust(DAI.address, true)).to.be.revertedWith("USR_NotGravityBridge()");
       await expect(
         cellar.rebalance(
           [
@@ -1063,16 +1074,81 @@ describe("AaveV2StablecoinCellar", () => {
           ],
           0,
         ),
-      ).to.be.revertedWith("USR_NotSteward()");
+      ).to.be.revertedWith("USR_NotGravityBridge()");
     });
 
-    await expect(cellar.reinvest(0)).to.be.revertedWith("USR_NotSteward()");
-    await expect(cellar.claimAndUnstake()).to.be.revertedWith("USR_NotSteward()");
-    await expect(cellar.sweep(DAI.address)).to.be.revertedWith("USR_NotSteward()");
-    await expect(cellar.removeLiquidityRestriction()).to.be.revertedWith("USR_NotSteward()");
-    await expect(cellar.removeDepositRestriction()).to.be.revertedWith("USR_NotSteward()");
-    await expect(cellar.setPause(true)).to.be.revertedWith("USR_NotSteward()");
-    await expect(cellar.shutdown()).to.be.revertedWith("USR_NotSteward()");
+    await expect(cellar.reinvest(0)).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.claimAndUnstake()).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.sweep(DAI.address)).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.removeLiquidityRestriction()).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.removeDepositRestriction()).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.setPause(true)).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.shutdown()).to.be.revertedWith("USR_NotGravityBridge()");
+  });
+
+  describe("trust", async () => {
+    beforeEach(async () => {
+      await cellar.deposit(BigNum(1000, 6), owner.address);
+      await cellar.connect(await impersonateGravity()).enterPosition();
+    });
+
+    it("should prevent entering or rebalancing into untrusted position", async () => {
+      await expect(
+        cellar.connect(await impersonateGravity()).rebalance(
+          [
+            USDC.address,
+            "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+            DAI.address,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+          ],
+          [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          0,
+        ),
+      ).to.be.revertedWith(`STATE_UntrustedPosition("${DAI.address}")`);
+
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
+      await cellar.connect(await impersonateGravity()).rebalance(
+        [
+          USDC.address,
+          "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          DAI.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        0,
+      );
+    });
+
+    await cellar.connect(await impersonateGravity()).setTrust(DAI.address, false);
+
+    await expect(cellar.connect(await impersonateGravity()).enterPosition()).to.be.revertedWith(
+      `STATE_UntrustedPosition("${DAI.address}")`,
+    );
+
+    await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
+    await cellar.connect(await impersonateGravity()).enterPosition();
   });
 
   describe("pause", () => {

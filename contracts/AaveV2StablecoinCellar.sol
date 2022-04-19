@@ -59,7 +59,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     mapping(address => uint256) public currentDepositIndex;
 
     /**
-     * @notice Last time all inactive assets were entered into a position and made active.
+     * @notice Whether an asset position is trusted or not. Prevents cellar from rebalancing into an
+     *         asset that has not been trusted by the users. Trusting / distrusting of an asset is done
+     *         through governance.
+     */
+    mapping(address => bool) public isTrusted;
+
+    /**
+     * @notice Last time all inactive assets were entered into a strategy and made active.
      */
     uint256 public lastTimeEnteredPosition;
 
@@ -161,6 +168,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         WETH = _WETH;
 
         // Initialize asset.
+        isTrusted[address(_asset)] = true;
         _updatePosition(address(_asset));
 
         // Initialize starting point for platform fee accrual to time when cellar was created.
@@ -736,7 +744,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
 
         // There may be cases were we don't want to update fee data in this function, for example
         // when we accrue performance fees before rebalancing into a new position since the data
-        // will be outdated after the rebalance to a new position.
+        // will be outdated immediately after the rebalance to a new position.
         if (updateFeeData) {
             fees.lastActiveAssets = uint128(_activeAssets());
             fees.lastNormalizedIncome = uint96(normalizedIncome);
@@ -746,7 +754,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Transfer accrued fees to Cosmos to distribute.
      */
-    function transferFees() external onlySteward {
+    function transferFees() external onlyGravityBridge {
         // Cellar fees are accrued in shares and redeemed upon transfer.
         uint256 totalFees = ERC20(this).balanceOf(address(this));
         uint256 feeInAssets = previewRedeem(totalFees);
@@ -769,12 +777,27 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         fees.accruedPerformanceFees = 0;
     }
 
+    // =================================== GOVERNANCE OPERATIONS ===================================
+
+    /**
+     * @notice Trust or distrust an asset position on Aave (eg. FRAX, UST, FEI).
+     */
+    function setTrust(address position, bool trust) external onlyGravityBridge {
+        isTrusted[position] = trust;
+
+        // In the case that governance no longer trust the current position, pull all assets back into
+        // the cellar.
+        if (trust == false && position == address(asset)) {
+            _withdrawFromAave(address(asset), type(uint256).max);
+        }
+    }
+
     // ===================================== ADMIN OPERATIONS =====================================
 
     /**
      * @notice Enters into the current Aave stablecoin position.
      */
-    function enterPosition() external onlySteward {
+    function enterPosition() external onlyGravityBridge {
         // When the contract is shutdown, it shouldn't be allowed to enter back into a position with
         // the assets it just withdrew from Aave.
         if (isShutdown) revert STATE_ContractShutdown();
@@ -804,7 +827,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         address[9] memory route,
         uint256[3][4] memory swapParams,
         uint256 minAmountOut
-    ) external onlySteward {
+    ) external onlyGravityBridge {
         // If the contract is shutdown, cellar shouldn't be able to rebalance assets it recently
         // pulled out back into a new position.
         if (isShutdown) revert STATE_ContractShutdown();
@@ -869,7 +892,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @dev Must be called within 2 day unstake period 10 days after `claimAndUnstake` was run.
      * @param minAmountOut minimum amount of assets cellar should receive after swap
      */
-    function reinvest(uint256 minAmountOut) public onlySteward {
+    function reinvest(uint256 minAmountOut) public onlyGravityBridge {
         // Redeems the cellar's stkAAVe rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
@@ -918,7 +941,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @notice Claim rewards from Aave and begin cooldown period to unstake them.
      * @return claimed amount of rewards claimed from Aave
      */
-    function claimAndUnstake() public onlySteward returns (uint256 claimed) {
+    function claimAndUnstake() public onlyGravityBridge returns (uint256 claimed) {
         // Necessary to do as `claimRewards` accepts a dynamic array as first param.
         address[] memory aToken = new address[](1);
         aToken[0] = address(assetAToken);
@@ -937,7 +960,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @dev This may be used in case the wrong tokens are accidentally sent to this contract.
      * @param token address of token to transfer out of this cellar
      */
-    function sweep(address token) external onlySteward {
+    function sweep(address token) external onlyGravityBridge {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == address(asset) || token == address(assetAToken) || token == address(this))
             revert STATE_ProtectedAsset(token);
@@ -952,7 +975,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Removes initial liquidity restriction.
      */
-    function removeLiquidityRestriction() external onlySteward {
+    function removeLiquidityRestriction() external onlyGravityBridge {
         maxLiquidity = type(uint256).max;
 
         emit LiquidityRestrictionRemoved();
@@ -961,7 +984,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Removes per-wallet deposit restriction.
      */
-    function removeDepositRestriction() external onlySteward {
+    function removeDepositRestriction() external onlyGravityBridge {
         depositLimit = type(uint256).max;
 
         emit DepositRestrictionRemoved();
@@ -971,7 +994,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @notice Pause the contract to prevent deposits.
      * @param _isPaused whether the contract should be paused or unpaused
      */
-    function setPause(bool _isPaused) external onlySteward {
+    function setPause(bool _isPaused) external onlyGravityBridge {
         if (isShutdown) revert STATE_ContractShutdown();
 
         isPaused = _isPaused;
@@ -983,7 +1006,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @notice Stops the contract - this is irreversible. Should only be used in an emergency,
      *         for example an irreversible accounting bug or an exploit.
      */
-    function shutdown() external onlySteward {
+    function shutdown() external onlyGravityBridge {
         if (isShutdown) revert STATE_ContractShutdown();
 
         isShutdown = true;
@@ -1008,8 +1031,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
      *      https://github.com/PeggyJV/steward
      */
-    modifier onlySteward() {
-        if (msg.sender != address(gravityBridge)) revert USR_NotSteward();
+    modifier onlyGravityBridge() {
+        if (msg.sender != address(gravityBridge)) revert USR_NotGravityBridge();
 
         _;
     }
@@ -1056,6 +1079,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @param amount the amount of tokens to deposit
      */
     function _depositToAave(address token, uint256 amount) internal {
+        // Ensure the position has been trusted by governance.
+        if (!isTrusted[token]) revert STATE_UntrustedPosition(token);
+
         ERC20(token).safeApprove(address(lendingPool), amount);
 
         // Deposit tokens to Aave protocol.
