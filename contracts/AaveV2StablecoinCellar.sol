@@ -758,7 +758,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         _allocateAssets(feeInAssets);
 
         // Transfer assets to a fee distributor on Cosmos.
-        asset.approve(address(gravityBridge), feeInAssets);
+        asset.safeApprove(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, feeInAssets);
 
         emit TransferFees(fees.accruedPlatformFees, fees.accruedPerformanceFees);
