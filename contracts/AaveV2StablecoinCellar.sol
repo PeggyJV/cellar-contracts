@@ -73,17 +73,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice The value fees are divided by to get a percentage. Represents maximum percent (100%).
      */
-    uint256 public constant DENOMINATOR = 100_00;
+    uint256 private constant DENOMINATOR = 100_00;
 
     /**
      * @notice The percentage of platform fees (1%) taken off of active assets over a year.
      */
-    uint256 public constant PLATFORM_FEE = 1_00;
+    uint256 private constant PLATFORM_FEE = 1_00;
 
     /**
      * @notice The percentage of performance fees (10%) taken off of cellar gains.
      */
-    uint256 public constant PERFORMANCE_FEE = 10_00;
+    uint256 private constant PERFORMANCE_FEE = 10_00;
 
     /**
      * @notice Stores fee-related data.
@@ -535,7 +535,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @return userActiveAssets amount of active assets the user has
      * @return userInactiveAssets amount of inactive assets the user has
      */
-    function getUserBalances(address user) public view returns (
+    function getUserBalances(address user) external view returns (
         uint256 userActiveShares,
         uint256 userInactiveShares,
         uint256 userActiveAssets,
@@ -892,7 +892,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @dev Must be called within 2 day unstake period 10 days after `claimAndUnstake` was run.
      * @param minAmountOut minimum amount of assets cellar should receive after swap
      */
-    function reinvest(uint256 minAmountOut) public onlyGravityBridge {
+    function reinvest(uint256 minAmountOut) external onlyGravityBridge {
         // Redeems the cellar's stkAAVe rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
@@ -941,7 +941,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @notice Claim rewards from Aave and begin cooldown period to unstake them.
      * @return claimed amount of rewards claimed from Aave
      */
-    function claimAndUnstake() public onlyGravityBridge returns (uint256 claimed) {
+    function claimAndUnstake() external onlyGravityBridge returns (uint256 claimed) {
         // Necessary to do as `claimRewards` accepts a dynamic array as first param.
         address[] memory aToken = new address[](1);
         aToken[0] = address(assetAToken);
