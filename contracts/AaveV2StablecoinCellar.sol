@@ -170,11 +170,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // Initialize asset.
         isTrusted[address(_asset)] = true;
         _updatePosition(address(_asset));
-
-        // Initialize starting point for platform fee accrual to time when cellar was created.
-        // Otherwise it would incorrectly calculate how much platform fees to take when accrueFees
-        // is called for the first time.
-        fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
     }
 
     // =============================== DEPOSIT/WITHDRAWAL OPERATIONS ===============================
@@ -307,8 +302,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         (assets, ) = _withdraw(_convertToAssets(shares), receiver, owner);
     }
 
-    /// @dev `assets` must be passed in with 18 decimals of precision. Should extend/truncate decimals of
-    ///      the amount passed in if necessary to ensure this is true.
+    /**
+     * @dev `assets` must be passed in with 18 decimals of precision. Must extend/truncate decimals of
+     *       the amount passed in if necessary to ensure this is true.
+     */
     function _withdraw(
         uint256 assets,
         address receiver,
@@ -414,11 +411,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
 
     /**
      * @notice Total amount of active asset entered into a position.
+     * @dev The aTokens' value is pegged to the value of the corresponding asset at a 1:1 ratio. We
+     *      can find the amount of assets active in a position simply by taking balance of aTokens
+     *      cellar holds.
      */
     function activeAssets() public view returns (uint256) {
-        // The aTokens' value is pegged to the value of the corresponding asset at a 1:1 ratio. We
-        // can find the amount of assets active in a position simply by taking balance of aTokens
-        // cellar holds.
         return assetAToken.balanceOf(address(this));
     }
 
@@ -658,97 +655,57 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Take platform fees and performance fees off of cellar's active assets.
      */
-    function accrueFees() external {
+    function accrueFees() external updateYield {
         // When the contract is shutdown, there should be no reason to accrue fees because there
         // will be no active assets to accrue fees on.
         if (isShutdown) revert STATE_ContractShutdown();
 
         // Platform fees taken each accrual = activeAssets * (elapsedTime * (2% / SECS_PER_YEAR)).
         uint256 elapsedTime = block.timestamp - fees.lastTimeAccruedPlatformFees;
-        uint256 platformFeeInAssets =
-            (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
+        uint256 platformFeeInAssets = (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
+        uint256 platformFees = _convertToShares(platformFeeInAssets);
 
         // Update tracking of last time platform fees were accrued.
         fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
 
-        // The cellar accrues fees as shares instead of assets.
-        uint256 platformFees = _convertToShares(platformFeeInAssets);
+        // Mint the cellar accrued platform fees as shares.
         _mint(address(this), platformFees);
 
-        // Update the tracker for total platform fees accrued that are still waiting to be
-        // transferred.
-        fees.accruedPlatformFees += uint128(platformFees);
+        // Performance fees taken each accrual = yield * 10%
+        uint256 yield = fees.yield;
+        uint256 performanceFeeInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+        uint256 performanceFees = _convertToShares(performanceFeeInAssets);
+
+        // Reset tracking of yield since last accrual.
+        fees.yield = 0;
+
+        // Mint the cellar accrued performance fees as shares.
+        _mint(address(this), performanceFees);
+
+        // Update fees that have been accrued.
+        fees.accruedPlatformFees += uint112(platformFees);
+        fees.accruedPerformanceFees += uint112(performanceFees);
 
         emit AccruedPlatformFees(platformFees);
-
-        // Begin accrual of performance fees.
-        _accruePerformanceFees(true);
+        emit AccruedPerformanceFees(performanceFees);
     }
 
     /**
-     * @notice Accrue performance fees.
-     * @param updateFeeData whether or not to update fee data
+     * @notice Update information tracking yield the cellar has earned.
+     * @dev Must be called every time a function is called that changes `activeAssets`.
      */
-    function _accruePerformanceFees(bool updateFeeData) internal {
-        // Retrieve the current normalized income per unit of asset for the current position on Aave.
-        uint256 normalizedIncome = lendingPool.getReserveNormalizedIncome(address(asset));
+    modifier updateYield() {
+        uint256 currentActiveAssets = _activeAssets();
+        uint256 lastActiveAssets = fees.lastActiveAssets;
 
-        // If this is the first time the cellar is accruing performance fees, it will skip the part
-        // were we take fees and should just update the fee data to set a baseline for assessing the
-        // current position's performance.
-        if (fees.lastActiveAssets != 0) {
-            // An index value greater than 1e27 indicates positive performance for the lending
-            // position, while a value less than that indicates negative performance.
-            uint256 performanceIndex = normalizedIncome.mulDivDown(1e27, fees.lastNormalizedIncome);
-
-            // This is the amount the cellar's active assets have grown to solely from performance
-            // on Aave since the last time performance fees were accrued.  It does not include
-            // changes from deposits and withdraws.
-            uint256 updatedActiveAssets = uint256(fees.lastActiveAssets).mulDivUp(performanceIndex, 1e27);
-
-            // Determines whether performance has been positive or negative.
-            if (performanceIndex >= 1e27) {
-                // Fees taken each accrual = (updatedActiveAssets - lastActiveAssets) * 10%
-                uint256 gain = updatedActiveAssets - fees.lastActiveAssets;
-                uint256 performanceFeeInAssets = gain.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
-
-                // The cellar accrues fees as shares instead of assets.
-                uint256 performanceFees = _convertToShares(performanceFeeInAssets);
-                _mint(address(this), performanceFees);
-
-                fees.accruedPerformanceFees += uint128(performanceFees);
-
-                emit AccruedPerformanceFees(performanceFees);
-            } else {
-                // This would only happen if the current stablecoin position on Aave performed
-                // negatively.  This should rarely happen, if ever, for this particular cellar. But
-                // in case it does, this mechanism will burn performance fees to help offset losses
-                // in proportion to those minted for previous gains.
-
-                uint256 loss = fees.lastActiveAssets - updatedActiveAssets;
-                uint256 insuranceInAssets = loss.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
-
-                // Cannot burn more performance fees than the cellar has accrued.
-                uint256 insurance = MathUtils.min(
-                    _convertToShares(insuranceInAssets),
-                    fees.accruedPerformanceFees
-                );
-
-                _burn(address(this), insurance);
-
-                fees.accruedPerformanceFees -= uint128(insurance);
-
-                emit BurntPerformanceFees(insurance);
-            }
+        if (currentActiveAssets > lastActiveAssets) {
+            fees.yield += uint112(currentActiveAssets - lastActiveAssets);
         }
 
-        // There may be cases were we don't want to update fee data in this function, for example
-        // when we accrue performance fees before rebalancing into a new position since the data
-        // will be outdated immediately after the rebalance to a new position.
-        if (updateFeeData) {
-            fees.lastActiveAssets = uint128(_activeAssets());
-            fees.lastNormalizedIncome = uint96(normalizedIncome);
-        }
+        _;
+
+        // Update this for next performance fee accrual.
+        fees.lastActiveAssets = uint112(_activeAssets());
     }
 
     /**
@@ -802,15 +759,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // the assets it just withdrew from Aave.
         if (isShutdown) revert STATE_ContractShutdown();
 
-        uint256 holdingPoolAssets = inactiveAssets();
+        uint256 currentInactiveAssets = inactiveAssets();
 
         // Deposits all inactive assets in the holding pool into the current position.
-        _depositToAave(address(asset), holdingPoolAssets);
+        _depositToAave(address(asset), currentInactiveAssets);
 
         // The cellar will use this when determining which of a user's shares are active vs inactive.
         lastTimeEnteredPosition = block.timestamp;
 
-        emit EnterPosition(address(asset), holdingPoolAssets);
+        emit EnterPosition(address(asset), currentInactiveAssets);
     }
 
     /**
@@ -844,26 +801,20 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // Doesn't make sense to rebalance into the same asset.
         if (newAsset == address(asset)) revert STATE_SameAsset(newAsset);
 
-        // Accrue any final performance fees from the current position before rebalancing. Otherwise
-        // those fees would be lost when we proceed to update fee data for the new position. Also we
-        // don't want to update the fee data here because we will do that later on after we've
-        // rebalanced into a new position.
-        _accruePerformanceFees(false);
-
         // Pull all active assets entered into Aave back into the cellar so we can swap everything
         // into the new asset.
         _withdrawFromAave(address(asset), type(uint256).max);
 
-        uint256 holdingPoolAssets = inactiveAssets();
+        uint256 currentInactiveAssets = inactiveAssets();
 
         // Approve Curve to swap the cellar's assets.
-        asset.safeApprove(address(curveRegistryExchange), holdingPoolAssets);
+        asset.safeApprove(address(curveRegistryExchange), currentInactiveAssets);
 
         // Perform stablecoin swap using Curve.
         uint256 amountOut = curveRegistryExchange.exchange_multiple(
             route,
             swapParams,
-            holdingPoolAssets,
+            currentInactiveAssets,
             minAmountOut
         );
 
@@ -880,10 +831,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // Update the last time all inactive assets were entered into a position.
         lastTimeEnteredPosition = block.timestamp;
 
-        // Update fee data for next fee accrual with new position.
-        fees.lastActiveAssets = uint128(_activeAssets());
-        fees.lastNormalizedIncome = uint96(lendingPool.getReserveNormalizedIncome(address(asset)));
-
         emit Rebalance(oldAsset, newAsset, amountOut);
     }
 
@@ -893,7 +840,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @param minAmountOut minimum amount of assets cellar should receive after swap
      */
     function reinvest(uint256 minAmountOut) external onlyGravityBridge {
-        // Redeems the cellar's stkAAVe rewards for AAVE.
+        // Redeems the cellar's stkAAVE rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
         uint256 amountIn = AAVE.balanceOf(address(this));
@@ -921,14 +868,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // In the case of a shutdown, we just may want to redeem any leftover rewards for users to
         // claim but without entering them back into a position.
         if (!isShutdown) {
-            // Take performance fee off of rewards.
-            uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
-            uint256 performanceFees = convertToShares(performanceFeeInAssets);
-
-            // Mint performance fees to cellar as shares.
-            _mint(address(this), performanceFees);
-
-            fees.accruedPerformanceFees += uint128(performanceFees);
+            // Consider reinvested rewards yield.
+            fees.yield += uint112(amountOut.changeDecimals(assetDecimals, decimals));
 
             // Reinvest rewards back into the current position.
             _depositToAave(address(asset), amountOut);
@@ -1014,10 +955,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // Ensure contract is not paused.
         isPaused = false;
 
-        // Withdraw everything from Aave. The check is necessary to prevent a revert happening if we
-        // try to withdraw from Aave without any assets entered into a position which would prevent
-        // the contract from being able to be shutdown in this case.
-        if (activeAssets() > 0) _withdrawFromAave(address(asset), type(uint256).max);
+        // Withdraw everything from the current position on Aave.
+        _withdrawFromAave(address(asset), type(uint256).max);
 
         emit Shutdown();
     }
@@ -1066,10 +1005,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @param assets The amount of assets to allocate
      */
     function _allocateAssets(uint256 assets) internal {
-        uint256 holdingPoolAssets = inactiveAssets();
+        uint256 currentInactiveAssets = inactiveAssets();
 
-        if (assets > holdingPoolAssets) {
-            _withdrawFromAave(address(asset), assets - holdingPoolAssets);
+        if (assets > currentInactiveAssets) {
+            _withdrawFromAave(address(asset), assets - currentInactiveAssets);
         }
     }
 
@@ -1078,9 +1017,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @param token the address of the token
      * @param amount the amount of tokens to deposit
      */
-    function _depositToAave(address token, uint256 amount) internal {
+    function _depositToAave(address token, uint256 amount) internal updateYield {
         // Ensure the position has been trusted by governance.
         if (!isTrusted[token]) revert STATE_UntrustedPosition(token);
+
+        // Initialize starting point for first platform fee accrual to time when cellar first deposits
+        // assets into a position on Aave.
+        if (fees.lastTimeAccruedPlatformFees == 0) {
+            fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
+        }
 
         ERC20(token).safeApprove(address(lendingPool), amount);
 
@@ -1094,15 +1039,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @notice Withdraws assets from Aave.
      * @param token the address of the token
      * @param amount the amount of tokens to withdraw
-     * @return withdrawnAmount the withdrawn amount from Aave
      */
-    function _withdrawFromAave(address token, uint256 amount) internal returns (uint256) {
-        // Withdraw tokens from Aave protocol
-        uint256 withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
+    function _withdrawFromAave(address token, uint256 amount) internal updateYield {
+        // Skip withdrawal instead of reverting if there are no active assets to withdraw. Reverting
+        // could potentially prevent important function calls from executing, such as `shutdown`,
+        // in the case where there were no active assets because Aave would throw an error.
+        if (activeAssets() > 0) {
+            // Withdraw tokens from Aave protocol
+            uint256 withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
 
-        emit WithdrawFromAave(token, withdrawnAmount);
-
-        return withdrawnAmount;
+            emit WithdrawFromAave(token, withdrawnAmount);
+        }
     }
 
     // ================================= SHARE TRANSFER OPERATIONS =================================

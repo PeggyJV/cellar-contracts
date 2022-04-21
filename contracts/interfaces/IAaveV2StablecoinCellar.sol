@@ -8,30 +8,29 @@ interface IAaveV2StablecoinCellar {
      */
     struct Fees {
         /**
+         * @notice Amount of yield earned since last time performance fees were accrued.
+         */
+        uint112 yield;
+        /**
+         * @notice Amount of active assets in cellar since yield was last calculated.
+         */
+        uint112 lastActiveAssets;
+        /**
          * @notice Timestamp of last time platform fees were accrued.
          */
         uint32 lastTimeAccruedPlatformFees;
-        /**
-         * @notice Normalized income index for the current asset on Aave recorded last time performance
-         *         fees were accrued.
-         */
-        uint96 lastNormalizedIncome;
-        /**
-         * @notice Amount of active assets in cellar last time performance fees were accrued.
-         */
-        uint128 lastActiveAssets;
         /**
          * @notice Amount of platform fees that have been accrued awaiting transfer.
          * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
          *      the cellar to Cosmos to be distributed.
          */
-        uint128 accruedPlatformFees;
+        uint112 accruedPlatformFees;
         /**
          * @notice Amount of performance fees that have been accrued awaiting transfer.
          * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
          *      the cellar to Cosmos to be distributed.
          */
-        uint128 accruedPerformanceFees;
+        uint112 accruedPerformanceFees;
     }
 
     // ======================================= EVENTS =======================================
@@ -107,28 +106,22 @@ interface IAaveV2StablecoinCellar {
 
     /**
      * @notice Emitted when platform fees accrued.
-     * @param fees amount of fees accrued in shares
+     * @param feesInShares amount of fees accrued in shares
      */
-    event AccruedPlatformFees(uint256 fees);
+    event AccruedPlatformFees(uint256 feesInShares);
 
     /**
      * @notice Emitted when performance fees accrued.
-     * @param fees amount of fees accrued in shares
+     * @param feesInShares amount of fees accrued in shares
      */
-    event AccruedPerformanceFees(uint256 fees);
-
-    /**
-     * @notice Emitted when performance fees burnt as insurance.
-     * @param fees amount of fees burnt in shares
-     */
-    event BurntPerformanceFees(uint256 fees);
+    event AccruedPerformanceFees(uint256 feesInShares);
 
     /**
      * @notice Emitted when platform fees are transferred to Cosmos.
      * @param platformFees amount of platform fees transferred
      * @param performanceFees amount of performance fees transferred
      */
-    event TransferFees(uint128 platformFees, uint128 performanceFees);
+    event TransferFees(uint112 platformFees, uint112 performanceFees);
 
     /**
      * @notice Emitted when liquidity restriction removed.
