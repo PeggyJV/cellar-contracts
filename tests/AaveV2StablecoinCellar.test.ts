@@ -142,6 +142,8 @@ describe("AaveV2StablecoinCellar", () => {
     // Deploy cellar contract
     cellar = await new AaveV2StablecoinCellar__factory(owner).deploy(
       USDC.address,
+      BigNum(5_000_000, 6),
+      BigNum(50_000, 6),
       curveRegistryExchange.address,
       sushiswapRouter.address,
       lendingPool.address,
@@ -933,8 +935,9 @@ describe("AaveV2StablecoinCellar", () => {
       // should have updated asset decimals
       expect(await cellar.assetAToken()).to.eq(aDAI.address);
 
-      // should have updated max liquidity
-      expect(await cellar.maxLiquidity()).to.eq(BigNum(5_000_000, 18));
+      // should have updated limits
+      expect(await cellar.liquidityLimit()).to.eq(BigNum(5_000_000, 18));
+      expect(await cellar.depositLimit()).to.eq(BigNum(50_000, 18));
 
       // should have updated lastTimeEnteredPosition
       expect(await cellar.lastTimeEnteredPosition()).to.eq(
@@ -1127,8 +1130,8 @@ describe("AaveV2StablecoinCellar", () => {
     await expect(cellar.reinvest(0)).to.be.revertedWith("USR_NotGravityBridge()");
     await expect(cellar.claimAndUnstake()).to.be.revertedWith("USR_NotGravityBridge()");
     await expect(cellar.sweep(DAI.address)).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.removeLiquidityRestriction()).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.removeDepositRestriction()).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.setLiquidityLimit(0)).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.setDepositLimit(0)).to.be.revertedWith("USR_NotGravityBridge()");
     await expect(cellar.setShutdown(true, true)).to.be.revertedWith("USR_NotGravityBridge()");
   });
 
@@ -1289,19 +1292,19 @@ describe("AaveV2StablecoinCellar", () => {
       await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(`USR_DepositRestricted(${BigNum(50_000, 6)})`);
     });
 
-    it("should allow deposits above max liquidity once restriction removed", async () => {
+    it("should allow deposits above max liquidity once limit removed", async () => {
       // mint $5m to cellar (to hit liquidity cap)
       await USDC.mint(cellar.address, BigNum(5_000_000, 6));
 
-      await cellar.connect(await impersonateGravity()).removeLiquidityRestriction();
+      await cellar.connect(await impersonateGravity()).setLiquidityLimit(ethers.constants.MaxUint256);
 
       await cellar.deposit(1, owner.address);
     });
 
-    it("should allow deposits above max deposit once restriction removed", async () => {
+    it("should allow deposits above max deposit once limit removed", async () => {
       await cellar.deposit(BigNum(50_000, 6), owner.address);
 
-      await cellar.connect(await impersonateGravity()).removeDepositRestriction();
+      await cellar.connect(await impersonateGravity()).setDepositLimit(ethers.constants.MaxUint256);
 
       await USDC.mint(owner.address, BigNum(1, 6));
       await cellar.deposit(1, owner.address);
@@ -1474,7 +1477,7 @@ describe("AaveV2StablecoinCellar", () => {
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
       expect(await cellar.maxMint(owner.address)).to.eq(0);
 
-      await cellar.connect(await impersonateGravity()).removeLiquidityRestriction();
+      await cellar.connect(await impersonateGravity()).setLiquidityLimit(ethers.constants.MaxUint256);
 
       expect(await cellar.maxMint(owner.address)).to.eq(ethers.constants.MaxUint256);
     });

@@ -124,14 +124,18 @@ interface IAaveV2StablecoinCellar {
     event TransferFees(uint112 platformFees, uint112 performanceFees);
 
     /**
-     * @notice Emitted when liquidity restriction removed.
+     * @notice Emitted when the liquidity limit is changed.
+     * @param oldLimit amount the limit was changed from
+     * @param newLimit amount the limit was changed to
      */
-    event LiquidityRestrictionRemoved();
+    event LiquidityLimitChanged(uint256 oldLimit, uint256 newLimit);
 
     /**
-     * @notice Emitted when deposit restriction removed.
+     * @notice Emitted when the deposit limit is changed.
+     * @param oldLimit amount the limit was changed from
+     * @param newLimit amount the limit was changed to
      */
-    event DepositRestrictionRemoved();
+    event DepositLimitChanged(uint256 oldLimit, uint256 newLimit);
 
     /**
      * @notice Emitted when tokens accidentally sent to cellar are recovered.
@@ -308,7 +312,9 @@ interface IAaveV2StablecoinCellar {
 
     function sweep(address token) external;
 
-    function removeLiquidityRestriction() external;
+    function setLiquidityLimit(uint256 limit) external;
+
+    function setDepositLimit(uint256 limit) external;
 
     function setShutdown(bool shutdown, bool exitPosition) external;
 

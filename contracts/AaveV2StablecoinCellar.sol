@@ -14,7 +14,7 @@ import { MathUtils } from "./utils/MathUtils.sol";
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
- * @notice Dynamic ERC4626 that can adapt to the market to always get the best yield for stablecoins on Aave.
+ * @notice Dynamic ERC4626 that changes positions to always get the best yield for stablecoins on Aave.
  * @author Brian Le
  */
 contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
@@ -97,15 +97,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     bytes32 public constant feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
 
     /**
-     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals as the
-     *         current asset.
-     * @dev Limited to $5m until after security audits.
+     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals
+     *         as the current asset.
+     * @dev Set to `type(uint256).max` to have no limit.
      */
-    uint256 public maxLiquidity;
+    uint256 public liquidityLimit;
 
     /**
      * @notice Maximum amount of deposits per wallet. Denominated in the same decimals as the current assets.
-     * @dev Limits deposits to $50k per wallet for better distribution of SOMM rewards.
+     * @dev Set to `type(uint256).max` to have no limit.
      */
     uint256 public depositLimit;
 
@@ -115,7 +115,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      */
     bool public isShutdown;
 
-    // ======================================== IMMUTABLES ========================================
+    // ======================================== INITIALIZATION ========================================
 
     // Curve Registry Exchange contract
     ICurveSwaps public immutable curveRegistryExchange; // 0x8e764bE4288B842791989DB5b8ec067279829809
@@ -134,6 +134,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
 
     /**
      * @param _asset current asset managed by the cellar
+     * @param _liquidityLimit amount liquidity limit should be initialized to
+     * @param _depositLimit amount deposit limit should be initialized to
      * @param _curveRegistryExchange Curve registry exchange
      * @param _sushiswapRouter Sushiswap V2 router address
      * @param _lendingPool Aave V2 lending pool address
@@ -145,6 +147,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      */
     constructor(
         ERC20 _asset,
+        uint256 _liquidityLimit,
+        uint256 _depositLimit,
         ICurveSwaps _curveRegistryExchange,
         ISushiSwapRouter _sushiswapRouter,
         ILendingPool _lendingPool,
@@ -154,6 +158,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         ERC20 _AAVE,
         ERC20 _WETH
     ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "aave2-CLR-S", 18) {
+        // Initialize immutables.
         curveRegistryExchange =  _curveRegistryExchange;
         sushiswapRouter = _sushiswapRouter;
         lendingPool = _lendingPool;
@@ -162,6 +167,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         stkAAVE = _stkAAVE;
         AAVE = _AAVE;
         WETH = _WETH;
+
+        // Initialize limits.
+        liquidityLimit = _liquidityLimit;
+        depositLimit = _depositLimit;
 
         // Initialize asset.
         isTrusted[address(_asset)] = true;
@@ -215,11 +224,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
 
         // Enforce deposit restrictions per wallet.
         if (depositLimit != type(uint256).max && assets > maxDeposit(receiver))
-            revert USR_DepositRestricted(50_000 * 10**assetDecimals);
+            revert USR_DepositRestricted(depositLimit);
 
         // Check if security restrictions still apply. Enforce them if they do.
-        if (maxLiquidity != type(uint256).max && assets + totalAssets() > maxLiquidity)
-            revert STATE_LiquidityRestricted(maxLiquidity);
+        if (liquidityLimit != type(uint256).max && assets + totalAssets() > liquidityLimit)
+            revert STATE_LiquidityRestricted(liquidityLimit);
 
         // Transfers assets into the cellar.
         asset.safeTransferFrom(msg.sender, address(this), assets);
@@ -600,7 +609,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     function maxMint(address owner) public view returns (uint256) {
         if (isShutdown) return 0;
 
-        if (maxLiquidity == type(uint256).max) return type(uint256).max;
+        if (liquidityLimit == type(uint256).max) return type(uint256).max;
 
         uint256 mintLimit = previewDeposit(50_000 * 10**assetDecimals);
         uint256 shares = balanceOf[owner];
@@ -913,21 +922,28 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     }
 
     /**
-     * @notice Removes initial liquidity restriction.
+     * @notice Sets the maximum liquidity that cellar can manage. Careful to use the same decimals as the
+     *         current asset.
      */
-    function removeLiquidityRestriction() external onlyGravityBridge {
-        maxLiquidity = type(uint256).max;
+    function setLiquidityLimit(uint256 limit) external onlyGravityBridge {
+        // Store for emitted event.
+        uint256 oldLimit = liquidityLimit;
 
-        emit LiquidityRestrictionRemoved();
+        liquidityLimit = limit;
+
+        emit LiquidityLimitChanged(oldLimit, limit);
     }
 
     /**
-     * @notice Removes per-wallet deposit restriction.
+     * @notice Sets per-wallet deposit limit. Careful to use the same decimals as the current asset.
      */
-    function removeDepositRestriction() external onlyGravityBridge {
-        depositLimit = type(uint256).max;
+    function setDepositLimit(uint256 limit) external onlyGravityBridge {
+        // Store for emitted event.
+        uint256 oldLimit = depositLimit;
 
-        emit DepositRestrictionRemoved();
+        depositLimit = limit;
+
+        emit DepositLimitChanged(oldLimit, limit);
     }
 
     // ========================================== HELPERS ==========================================
@@ -947,6 +963,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
 
     /**
      * @notice Update state variables related to the current position.
+     * @dev Be aware that when updating to an asset that uses less decimals of precision than the
+     *      previous (eg. DAI -> USDC), `depositLimit` and `liquidityLimit` will lose some data in
+     *      the conversion.
      * @param newAsset address of the new asset being managed by the cellar
      */
     function _updatePosition(address newAsset) internal {
@@ -956,16 +975,25 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // If the address is not null, it is supported by Aave.
         if (aTokenAddress == address(0)) revert STATE_TokenIsNotSupportedByAave(newAsset);
 
+        // Update the decimals for limits if necessary.
+        uint8 oldAssetDecimals = assetDecimals;
+        uint8 newAssetDecimals = ERC20(newAsset).decimals();
+
+        // Ignore if decimals are the same or first time initializing position.
+        if (oldAssetDecimals != 0 && oldAssetDecimals != newAssetDecimals) {
+            if (depositLimit != type(uint256).max) {
+                depositLimit = depositLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
+            }
+
+            if (liquidityLimit != type(uint256).max) {
+                liquidityLimit = liquidityLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
+            }
+        }
+
         // Update state related to the current position.
         asset = ERC20(newAsset);
-        assetDecimals = ERC20(newAsset).decimals();
+        assetDecimals = newAssetDecimals;
         assetAToken = ERC20(aTokenAddress);
-
-        // Update the decimals for max deposits.
-        depositLimit = 50_000 * 10**assetDecimals;
-
-        // Same for max liquidity, if restrictions are still in place.
-        if (maxLiquidity != type(uint256).max) maxLiquidity = 5_000_000 * 10**assetDecimals;
     }
 
     /**

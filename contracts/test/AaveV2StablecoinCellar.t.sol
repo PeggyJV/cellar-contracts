@@ -43,6 +43,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // Declare unnecessary variables with address 0.
         cellar = new AaveV2StablecoinCellar(
             ERC20(address(asset)),
+            5_000_000e6,
+            50_000e6,
             ICurveSwaps(address(0)),
             ISushiSwapRouter(address(0)),
             ILendingPool(address(lendingPool)),
@@ -60,8 +62,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assets = bound(assets, 1, cellar.maxDeposit(address(this)));
 
         // Ensure restrictions aren't a factor.
-        cellar.removeLiquidityRestriction();
-        cellar.removeDepositRestriction();
+        cellar.setLiquidityLimit(type(uint256).max);
+        cellar.setDepositLimit(type(uint256).max);
 
         asset.mint(address(this), assets);
         asset.approve(address(cellar), assets);
@@ -95,8 +97,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         shares = bound(shares, 1, type(uint112).max);
 
         // Ensure restrictions aren't a factor.
-        cellar.removeLiquidityRestriction();
-        cellar.removeDepositRestriction();
+        cellar.setLiquidityLimit(type(uint256).max);
+        cellar.setDepositLimit(type(uint256).max);
 
         asset.mint(address(this), shares);
         asset.approve(address(cellar), shares);
