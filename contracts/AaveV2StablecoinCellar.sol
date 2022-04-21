@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.11;
+pragma experimental ABIEncoderV2;
 
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
@@ -9,6 +10,7 @@ import {IAaveIncentivesController} from "./interfaces/IAaveIncentivesController.
 import {IStakedTokenV2} from "./interfaces/IStakedTokenV2.sol";
 import {ICurveSwaps} from "./interfaces/ICurveSwaps.sol";
 import {ISushiSwapRouter} from "./interfaces/ISushiSwapRouter.sol";
+import {IBalancerExchangeProxy, TokenInterface, PoolInterface} from "./interfaces/BalancerInterfaces.sol";
 import {IGravity} from "./interfaces/IGravity.sol";
 import {ILendingPool} from "./interfaces/ILendingPool.sol";
 import {MathUtils} from "./utils/MathUtils.sol";
@@ -78,7 +80,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice The percentage of performance fees (10%) taken off of cellar gains.
      */
     uint256 public constant PERFORMANCE_FEE = 10_00;
-
+    
+    /**
+     * @notice Maximum amount of all deposits in dollars (with zero decimals).
+     */
+    uint256 public depositLimitUsd;
+    
     /**
      * @notice Timestamp of last time platform fees were accrued.
      */
@@ -183,6 +190,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         AAVE = _AAVE;
         WETH = _WETH;
 
+        depositLimitUsd = 50_000; // default value
+
         // Initialize asset.
         _updateStrategy(address(_asset));
 
@@ -224,7 +233,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         (assets, ) = _deposit(0, shares, receiver);
     }
 
-
     function _deposit(uint256 assets, uint256 shares, address receiver) internal returns (uint256, uint256) {
         // In case of an emergency or contract vulnerability, we don't want users to be able to
         // deposit more assets into a compromised contract.
@@ -241,7 +249,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Check if security restrictions still apply. Enforce them if they do.
         if (maxLiquidity != type(uint256).max) {
             if (assets + totalAssets() > maxLiquidity) revert LiquidityRestricted(maxLiquidity);
-            if (assets > maxDeposit(receiver)) revert DepositRestricted(50_000 * 10**assetDecimals);
+            if (assets > maxDeposit(receiver)) revert DepositRestricted(depositLimitUsd * 10**assetDecimals);
         }
 
         // Transfers assets into the cellar.
@@ -608,7 +616,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         if (maxLiquidity == type(uint256).max) return type(uint256).max;
 
-        uint256 depositLimit = 50_000 * 10**assetDecimals;
+        uint256 depositLimit = depositLimitUsd * 10**assetDecimals;
         uint256 assets = previewRedeem(balanceOf[owner]);
 
         return depositLimit > assets ? depositLimit - assets : 0;
@@ -625,7 +633,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         if (maxLiquidity == type(uint256).max) return type(uint256).max;
 
-        uint256 mintLimit = previewDeposit(50_000 * 10**assetDecimals);
+        uint256 mintLimit = previewDeposit(depositLimitUsd * 10**assetDecimals);
         uint256 shares = balanceOf[owner];
 
         return mintLimit > shares ? mintLimit - shares : 0;
@@ -846,7 +854,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         // Pull all active assets entered into Aave back into the cellar so we can swap everything
         // into the new asset.
-        _withdrawFromAave(address(asset), type(uint256).max);
+        if (activeAssets() > 0) {
+            _withdrawFromAave(address(asset), type(uint256).max);
+        }
 
         uint256 holdingPoolAssets = inactiveAssets();
 
@@ -924,6 +934,215 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Reinvest rewards back into the current strategy.
             _depositToAave(address(asset), amountOut);
         }
+    }
+
+    function reinvestByBalancer(IBalancerExchangeProxy.Swap[][] memory swapSequences) public onlyOwner {
+        // Redeems the cellar's stkAAVe rewards for AAVE.
+        stkAAVE.redeem(address(this), type(uint256).max);
+
+        uint256 amountIn = AAVE.balanceOf(address(this));
+
+        // Balancer ExchangeProxy V2 contract
+        IBalancerExchangeProxy balancerExchangeProxy = IBalancerExchangeProxy(0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21);
+
+        // Approve the ExchangeProxy to swap AAVE.
+        AAVE.safeApprove(address(balancerExchangeProxy), amountIn);
+
+        swapSequences[0][0].swapAmount = amountIn;
+        // Perform a multihop swap using Balancer.
+        uint256 amountOut = balancerExchangeProxy.multihopBatchSwapExactIn(
+            swapSequences,
+            TokenInterface(address(AAVE)),
+            TokenInterface(address(asset)),
+            amountIn,
+            swapSequences[0][1].limitReturnAmount
+        );
+
+        // In the case of a shutdown, we just may want to redeem any leftover rewards for
+        // shareholders to claim but without entering them back into a strategy.
+        if (!isShutdown) {
+            // Take performance fee off of rewards.
+            uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+            uint256 performanceFees = convertToShares(performanceFeeInAssets);
+
+            // Mint performance fees to cellar as shares.
+            _mint(address(this), performanceFees);
+
+            accruedPerformanceFees += performanceFees;
+
+            // Reinvest rewards back into the current strategy.
+            _depositToAave(address(asset), amountOut);
+        }
+    }
+
+    function reinvestByBalancer2(uint256 minAmountOut) public onlyOwner {
+        // Redeems the cellar's stkAAVe rewards for AAVE.
+        stkAAVE.redeem(address(this), type(uint256).max);
+
+        uint256 amountIn = AAVE.balanceOf(address(this));
+
+        // Balancer ExchangeProxy V2 contract
+        IBalancerExchangeProxy balancerExchangeProxy = IBalancerExchangeProxy(0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21);
+
+        // Approve the ExchangeProxy to swap AAVE.
+        AAVE.safeApprove(address(balancerExchangeProxy), amountIn);
+
+        IBalancerExchangeProxy.Swap[][] memory swapSequences = new IBalancerExchangeProxy.Swap[][](1);
+        swapSequences[0] = new IBalancerExchangeProxy.Swap[](2);
+
+        (IBalancerExchangeProxy.Swap[] memory swaps1, uint totalOutputWETH) = balancerExchangeProxy.viewSplitExactIn(address(AAVE), address(WETH), amountIn, 1);
+        (IBalancerExchangeProxy.Swap[] memory swaps2,) = balancerExchangeProxy.viewSplitExactIn(address(WETH), address(asset), totalOutputWETH, 1);
+        swaps2[0].limitReturnAmount = minAmountOut;
+
+        swapSequences[0][0] = swaps1[0];
+        swapSequences[0][1] = swaps2[0];
+
+        // Perform a multihop swap using Balancer.
+        uint256 amountOut = balancerExchangeProxy.multihopBatchSwapExactIn(
+            swapSequences,
+            TokenInterface(address(AAVE)),
+            TokenInterface(address(asset)),
+            amountIn,
+            minAmountOut
+        );
+
+        // In the case of a shutdown, we just may want to redeem any leftover rewards for
+        // shareholders to claim but without entering them back into a strategy.
+        if (!isShutdown) {
+            // Take performance fee off of rewards.
+            uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+            uint256 performanceFees = convertToShares(performanceFeeInAssets);
+
+            // Mint performance fees to cellar as shares.
+            _mint(address(this), performanceFees);
+
+            accruedPerformanceFees += performanceFees;
+
+            // Reinvest rewards back into the current strategy.
+            _depositToAave(address(asset), amountOut);
+        }
+    }
+
+//     function reinvestByBalancer3(uint256 minAmountOut) public onlyOwner {
+//         // Redeems the cellar's stkAAVe rewards for AAVE.
+//         stkAAVE.redeem(address(this), type(uint256).max);
+// 
+//         uint256 amountIn = AAVE.balanceOf(address(this));
+// 
+//         // Balancer ExchangeProxy V2 contract
+//         IBalancerExchangeProxy balancerExchangeProxy = IBalancerExchangeProxy(0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21);
+// 
+//         // Approve the ExchangeProxy to swap AAVE.
+//         AAVE.safeApprove(address(balancerExchangeProxy), amountIn);
+// 
+//         IBalancerExchangeProxy.Swap[][] memory swapSequences = new IBalancerExchangeProxy.Swap[][](1);
+//         swapSequences[0] = new IBalancerExchangeProxy.Swap[](2);
+// 
+//         swapSequences[0][0].pool = 0xC697051d1C6296C24aE3bceF39acA743861D9A81;
+//         swapSequences[0][0].tokenIn = address(AAVE);
+//         swapSequences[0][0].tokenOut = address(WETH);
+//         swapSequences[0][0].swapAmount = amountIn;
+//         swapSequences[0][0].maxPrice = type(uint256).max;
+// 
+//         (IBalancerExchangeProxy.Swap[] memory swaps,) = balancerExchangeProxy.viewSplitExactIn(address(WETH), address(asset), 1, 1);
+//         swaps[0].limitReturnAmount = minAmountOut;
+// 
+//         swapSequences[0][1] = swaps[0];
+// 
+//         // Perform a multihop swap using Balancer.
+//         uint256 amountOut = balancerExchangeProxy.multihopBatchSwapExactIn(
+//             swapSequences,
+//             TokenInterface(address(AAVE)),
+//             TokenInterface(address(asset)),
+//             amountIn,
+//             minAmountOut
+//         );
+// 
+//         // In the case of a shutdown, we just may want to redeem any leftover rewards for
+//         // shareholders to claim but without entering them back into a strategy.
+//         if (!isShutdown) {
+//             // Take performance fee off of rewards.
+//             uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+//             uint256 performanceFees = convertToShares(performanceFeeInAssets);
+// 
+//             // Mint performance fees to cellar as shares.
+//             _mint(address(this), performanceFees);
+// 
+//             accruedPerformanceFees += performanceFees;
+// 
+//             // Reinvest rewards back into the current strategy.
+//             _depositToAave(address(asset), amountOut);
+//         }
+//     }
+
+    function reinvestHybrid(uint256 minAmountOut) public onlyOwner {
+        // Redeems the cellar's stkAAVe rewards for AAVE.
+        stkAAVE.redeem(address(this), type(uint256).max);
+
+        uint256 amountIn = AAVE.balanceOf(address(this));
+
+        // Balancer ExchangeProxy V2 contract
+        IBalancerExchangeProxy balancerExchangeProxy = IBalancerExchangeProxy(0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21);
+
+        // Approve the ExchangeProxy to swap AAVE.
+        AAVE.safeApprove(address(balancerExchangeProxy), amountIn);
+
+        IBalancerExchangeProxy.Swap[][] memory swapSequences = new IBalancerExchangeProxy.Swap[][](1);
+        swapSequences[0] = new IBalancerExchangeProxy.Swap[](1);
+
+        swapSequences[0][0].pool = 0xC697051d1C6296C24aE3bceF39acA743861D9A81;
+        swapSequences[0][0].tokenIn = address(AAVE);
+        swapSequences[0][0].tokenOut = address(WETH);
+        swapSequences[0][0].swapAmount = amountIn;
+        swapSequences[0][0].maxPrice = type(uint256).max;
+
+        // Perform a multihop swap using Balancer.
+        uint256 amountOut = balancerExchangeProxy.multihopBatchSwapExactIn(
+            swapSequences,
+            TokenInterface(address(AAVE)),
+            TokenInterface(address(WETH)),
+            amountIn,
+            0
+        );
+
+        // Approve the Sushiswap to swap WETH.
+        WETH.safeApprove(address(sushiswapRouter), amountOut);
+
+        // Specify the swap path from WETH -> current asset.
+        address[] memory path = new address[](2);
+        path[0] = address(WETH);
+        path[1] = address(asset);
+
+        // Perform a multihop swap using Sushiswap.
+        uint256[] memory amounts = sushiswapRouter.swapExactTokensForTokens(
+            amountOut,
+            minAmountOut,
+            path,
+            address(this),
+            block.timestamp + 60
+        );
+
+        amountOut = amounts[amounts.length - 1];
+
+        // In the case of a shutdown, we just may want to redeem any leftover rewards for
+        // shareholders to claim but without entering them back into a strategy.
+        if (!isShutdown) {
+            // Take performance fee off of rewards.
+            uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+            uint256 performanceFees = convertToShares(performanceFeeInAssets);
+
+            // Mint performance fees to cellar as shares.
+            _mint(address(this), performanceFees);
+
+            accruedPerformanceFees += performanceFees;
+
+            // Reinvest rewards back into the current strategy.
+            _depositToAave(address(asset), amountOut);
+        }
+    }
+
+    function updateDepositLimitUsd(uint256 newDepositLimitUsd) external onlyOwner {
+        depositLimitUsd = newDepositLimitUsd;
     }
 
     /**
