@@ -1098,43 +1098,6 @@ describe("AaveV2StablecoinCellar", () => {
     });
   });
 
-  describe("onlySteward", async () => {
-    it("should prevent users from calling functions only callable from the gravity bridge", async () => {
-      await expect(cellar.transferFees()).to.be.revertedWith("USR_NotGravityBridge()");
-      await expect(cellar.enterPosition()).to.be.revertedWith("USR_NotGravityBridge()");
-      await expect(cellar.setTrust(DAI.address, true)).to.be.revertedWith("USR_NotGravityBridge()");
-      await expect(
-        cellar.rebalance(
-          [
-            USDC.address,
-            "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
-            DAI.address,
-            "0x0000000000000000000000000000000000000000",
-            "0x0000000000000000000000000000000000000000",
-            "0x0000000000000000000000000000000000000000",
-            "0x0000000000000000000000000000000000000000",
-            "0x0000000000000000000000000000000000000000",
-            "0x0000000000000000000000000000000000000000",
-          ],
-          [
-            [0, 0, 0],
-            [0, 0, 0],
-            [0, 0, 0],
-            [0, 0, 0],
-          ],
-          0,
-        ),
-      ).to.be.revertedWith("USR_NotGravityBridge()");
-    });
-
-    await expect(cellar.reinvest(0)).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.claimAndUnstake()).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.sweep(DAI.address)).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.setLiquidityLimit(0)).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.setDepositLimit(0)).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.setShutdown(true, true)).to.be.revertedWith("USR_NotGravityBridge()");
-  });
-
   describe("trust", async () => {
     beforeEach(async () => {
       await cellar.deposit(BigNum(1000, 6), owner.address);

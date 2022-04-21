@@ -3,6 +3,7 @@ pragma solidity 0.8.11;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
 import { IAaveIncentivesController } from "./interfaces/IAaveIncentivesController.sol";
 import { IStakedTokenV2 } from "./interfaces/IStakedTokenV2.sol";
@@ -17,7 +18,7 @@ import { MathUtils } from "./utils/MathUtils.sol";
  * @notice Dynamic ERC4626 that changes positions to always get the best yield for stablecoins on Aave.
  * @author Brian Le
  */
-contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
+contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
 
@@ -133,6 +134,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     ERC20 public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
     /**
+    /**
+     * @dev Owner will be set to the Gravity Bridge, which relays instructions from the Steward
+     *      module to the cellars.
+     *      https://github.com/PeggyJV/steward
+     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
      * @param _asset current asset managed by the cellar
      * @param _liquidityLimit amount liquidity limit should be initialized to
      * @param _depositLimit amount deposit limit should be initialized to
@@ -175,6 +181,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         // Initialize asset.
         isTrusted[address(_asset)] = true;
         _updatePosition(address(_asset));
+
+        // Transfer ownership to the Gravity Bridge
+        transferOwnership(address(_gravityBridge));
     }
 
     // =============================== DEPOSIT/WITHDRAWAL OPERATIONS ===============================
@@ -711,7 +720,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Transfer accrued fees to Cosmos to distribute.
      */
-    function transferFees() external onlyGravityBridge {
+    function transferFees() external onlyOwner {
         // Cellar fees are accrued in shares and redeemed upon transfer.
         uint256 totalFees = ERC20(this).balanceOf(address(this));
         uint256 feeInAssets = previewRedeem(totalFees);
@@ -739,7 +748,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Trust or distrust an asset position on Aave (eg. FRAX, UST, FEI).
      */
-    function setTrust(address position, bool trust) external onlyGravityBridge {
+    function setTrust(address position, bool trust) external onlyOwner {
         isTrusted[position] = trust;
 
         // In the case that governance no longer trust the current position, pull all assets back into
@@ -752,7 +761,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Stop or start the contract. Should only be used in an emergency,
      */
-    function setShutdown(bool shutdown, bool exitPosition) external onlyGravityBridge {
+    function setShutdown(bool shutdown, bool exitPosition) external onlyOwner {
         isShutdown = shutdown;
 
         // Withdraw everything from the current position on Aave if specified when shutting down.
@@ -766,7 +775,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Enters into the current Aave stablecoin position.
      */
-    function enterPosition() external onlyGravityBridge {
+    function enterPosition() external onlyOwner {
         if (isShutdown) revert STATE_ContractShutdown();
 
         uint256 currentInactiveAssets = inactiveAssets();
@@ -794,7 +803,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         address[9] memory route,
         uint256[3][4] memory swapParams,
         uint256 minAmountOut
-    ) external onlyGravityBridge {
+    ) external onlyOwner {
         if (isShutdown) revert STATE_ContractShutdown();
 
         // Retrieve the last token in the route and store it as the new asset.
@@ -847,7 +856,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @dev Must be called within 2 day unstake period 10 days after `claimAndUnstake` was run.
      * @param minAmountOut minimum amount of assets cellar should receive after swap
      */
-    function reinvest(uint256 minAmountOut) external onlyGravityBridge {
+    function reinvest(uint256 minAmountOut) external onlyOwner {
         // Redeems the cellar's stkAAVE rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
@@ -890,7 +899,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @notice Claim rewards from Aave and begin cooldown period to unstake them.
      * @return claimed amount of rewards claimed from Aave
      */
-    function claimAndUnstake() external onlyGravityBridge returns (uint256 claimed) {
+    function claimAndUnstake() external onlyOwner returns (uint256 claimed) {
         // Necessary to do as `claimRewards` accepts a dynamic array as first param.
         address[] memory aToken = new address[](1);
         aToken[0] = address(assetAToken);
@@ -909,7 +918,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @dev This may be used in case the wrong tokens are accidentally sent to this contract.
      * @param token address of token to transfer out of this cellar
      */
-    function sweep(address token) external onlyGravityBridge {
+    function sweep(address token) external onlyOwner {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == address(asset) || token == address(assetAToken) || token == address(this))
             revert STATE_ProtectedAsset(token);
@@ -925,7 +934,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @notice Sets the maximum liquidity that cellar can manage. Careful to use the same decimals as the
      *         current asset.
      */
-    function setLiquidityLimit(uint256 limit) external onlyGravityBridge {
+    function setLiquidityLimit(uint256 limit) external onlyOwner {
         // Store for emitted event.
         uint256 oldLimit = liquidityLimit;
 
@@ -937,7 +946,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     /**
      * @notice Sets per-wallet deposit limit. Careful to use the same decimals as the current asset.
      */
-    function setDepositLimit(uint256 limit) external onlyGravityBridge {
+    function setDepositLimit(uint256 limit) external onlyOwner {
         // Store for emitted event.
         uint256 oldLimit = depositLimit;
 
@@ -947,19 +956,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     }
 
     // ========================================== HELPERS ==========================================
-
-    /**
-     * @notice Restrict to only be callable by the Gravity contract, which relays instructions from
-     *         Steward to the cellars.
-     * @dev Here are links to the contracts mentioned:
-     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
-     *      https://github.com/PeggyJV/steward
-     */
-    modifier onlyGravityBridge() {
-        if (msg.sender != address(gravityBridge)) revert USR_NotGravityBridge();
-
-        _;
-    }
 
     /**
      * @notice Update state variables related to the current position.
