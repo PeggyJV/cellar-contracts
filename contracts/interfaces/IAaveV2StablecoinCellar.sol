@@ -141,15 +141,11 @@ interface IAaveV2StablecoinCellar {
     event Sweep(address indexed token, uint256 amount);
 
     /**
-     * @notice Emitted when cellar is paused.
-     * @param isPaused whether the contract is paused
-     */
-    event Pause(bool isPaused);
-
-    /**
      * @notice Emitted when cellar is shutdown.
+     * @param isShutdown whether the contract is shutdown
+     * @param exitPosition whether to exit the current position
      */
-    event Shutdown();
+    event Shutdown(bool isShutdown, bool exitPosition);
 
     // ======================================= ERRORS =======================================
 
@@ -208,11 +204,6 @@ interface IAaveV2StablecoinCellar {
      * @notice Attempted action was prevented due to contract being shutdown.
      */
     error STATE_ContractShutdown();
-
-    /**
-     * @notice Attempted action was prevented due to contract being paused.
-     */
-    error STATE_ContractPaused();
 
     /**
      * @notice Attempted to shutdown the contract when it was already shutdown.
@@ -319,9 +310,7 @@ interface IAaveV2StablecoinCellar {
 
     function removeLiquidityRestriction() external;
 
-    function setPause(bool _isPaused) external;
-
-    function shutdown() external;
+    function setShutdown(bool shutdown, bool exitPosition) external;
 
     // ================================== SHARE TRANSFER OPERATIONS ==================================
 

@@ -110,12 +110,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     uint256 public depositLimit;
 
     /**
-     * @notice Whether or not the contract is paused in case of an emergency.
-     */
-    bool public isPaused;
-
     /**
-     * @notice Whether or not the contract is permanently shutdown in case of an emergency.
+     * @notice Whether or not the contract is shutdown in case of an emergency.
      */
     bool public isShutdown;
 
@@ -208,7 +204,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
     function _deposit(uint256 assets, uint256 shares, address receiver) internal returns (uint256, uint256) {
         // In case of an emergency or contract vulnerability, we don't want users to be able to
         // deposit more assets into a compromised contract.
-        if (isPaused) revert STATE_ContractPaused();
         if (isShutdown) revert STATE_ContractShutdown();
 
         // Must calculate before assets are transferred in.
@@ -587,7 +582,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @return maximum amount of assets that can be deposited
      */
     function maxDeposit(address owner) public view returns (uint256) {
-        if (isShutdown || isPaused) return 0;
+        if (isShutdown) return 0;
 
         if (depositLimit == type(uint256).max) return type(uint256).max;
 
@@ -603,7 +598,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @return maximum amount of shares that can be minted
      */
     function maxMint(address owner) public view returns (uint256) {
-        if (isShutdown || isPaused) return 0;
+        if (isShutdown) return 0;
 
         if (maxLiquidity == type(uint256).max) return type(uint256).max;
 
@@ -656,10 +651,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
      * @notice Take platform fees and performance fees off of cellar's active assets.
      */
     function accrueFees() external updateYield {
-        // When the contract is shutdown, there should be no reason to accrue fees because there
-        // will be no active assets to accrue fees on.
-        if (isShutdown) revert STATE_ContractShutdown();
-
         // Platform fees taken each accrual = activeAssets * (elapsedTime * (2% / SECS_PER_YEAR)).
         uint256 elapsedTime = block.timestamp - fees.lastTimeAccruedPlatformFees;
         uint256 platformFeeInAssets = (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
@@ -749,14 +740,24 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         }
     }
 
+    /**
+     * @notice Stop or start the contract. Should only be used in an emergency,
+     */
+    function setShutdown(bool shutdown, bool exitPosition) external onlyGravityBridge {
+        isShutdown = shutdown;
+
+        // Withdraw everything from the current position on Aave if specified when shutting down.
+        if (shutdown && exitPosition) _withdrawFromAave(address(asset), type(uint256).max);
+
+        emit Shutdown(shutdown, exitPosition);
+    }
+
     // ===================================== ADMIN OPERATIONS =====================================
 
     /**
      * @notice Enters into the current Aave stablecoin position.
      */
     function enterPosition() external onlyGravityBridge {
-        // When the contract is shutdown, it shouldn't be allowed to enter back into a position with
-        // the assets it just withdrew from Aave.
         if (isShutdown) revert STATE_ContractShutdown();
 
         uint256 currentInactiveAssets = inactiveAssets();
@@ -785,8 +786,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         uint256[3][4] memory swapParams,
         uint256 minAmountOut
     ) external onlyGravityBridge {
-        // If the contract is shutdown, cellar shouldn't be able to rebalance assets it recently
-        // pulled out back into a new position.
         if (isShutdown) revert STATE_ContractShutdown();
 
         // Retrieve the last token in the route and store it as the new asset.
@@ -865,12 +864,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
 
         uint256 amountOut = amounts[amounts.length - 1];
 
-        // In the case of a shutdown, we just may want to redeem any leftover rewards for users to
-        // claim but without entering them back into a position.
-        if (!isShutdown) {
-            // Consider reinvested rewards yield.
-            fees.yield += uint112(amountOut.changeDecimals(assetDecimals, decimals));
+        // Consider reinvested rewards yield.
+        fees.yield += uint112(amountOut.changeDecimals(assetDecimals, decimals));
 
+        // In the case of a shutdown, we just may want to redeem any leftover rewards for users to
+        // claim but without entering them back into a position in case the position has been exited.
+        if (!isShutdown) {
             // Reinvest rewards back into the current position.
             _depositToAave(address(asset), amountOut);
 
@@ -929,36 +928,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20 {
         depositLimit = type(uint256).max;
 
         emit DepositRestrictionRemoved();
-    }
-
-    /**
-     * @notice Pause the contract to prevent deposits.
-     * @param _isPaused whether the contract should be paused or unpaused
-     */
-    function setPause(bool _isPaused) external onlyGravityBridge {
-        if (isShutdown) revert STATE_ContractShutdown();
-
-        isPaused = _isPaused;
-
-        emit Pause(_isPaused);
-    }
-
-    /**
-     * @notice Stops the contract - this is irreversible. Should only be used in an emergency,
-     *         for example an irreversible accounting bug or an exploit.
-     */
-    function shutdown() external onlyGravityBridge {
-        if (isShutdown) revert STATE_ContractShutdown();
-
-        isShutdown = true;
-
-        // Ensure contract is not paused.
-        isPaused = false;
-
-        // Withdraw everything from the current position on Aave.
-        _withdrawFromAave(address(asset), type(uint256).max);
-
-        emit Shutdown();
     }
 
     // ========================================== HELPERS ==========================================

@@ -1129,8 +1129,7 @@ describe("AaveV2StablecoinCellar", () => {
     await expect(cellar.sweep(DAI.address)).to.be.revertedWith("USR_NotGravityBridge()");
     await expect(cellar.removeLiquidityRestriction()).to.be.revertedWith("USR_NotGravityBridge()");
     await expect(cellar.removeDepositRestriction()).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.setPause(true)).to.be.revertedWith("USR_NotGravityBridge()");
-    await expect(cellar.shutdown()).to.be.revertedWith("USR_NotGravityBridge()");
+    await expect(cellar.setShutdown(true, true)).to.be.revertedWith("USR_NotGravityBridge()");
   });
 
   describe("trust", async () => {
@@ -1225,23 +1224,10 @@ describe("AaveV2StablecoinCellar", () => {
     });
   });
 
-  describe("pause", () => {
-    it("should prevent users from depositing while paused", async () => {
-      await cellar.connect(await impersonateGravity()).setPause(true);
-      await expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith("STATE_ContractPaused()");
-    });
-
-    it("should emits a Pause event", async () => {
-      await expect(cellar.connect(await impersonateGravity()).setPause(true))
-        .to.emit(cellar, "Pause")
-        .withArgs(true);
-    });
-  });
-
   describe("shutdown", () => {
     it("should prevent users from depositing while shutdown", async () => {
       await cellar.deposit(BigNum(100, 6), owner.address);
-      await cellar.connect(await impersonateGravity()).shutdown();
+      await cellar.connect(await impersonateGravity()).setShutdown(true, false);
       await expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith("STATE_ContractShutdown()");
     });
 
@@ -1250,12 +1236,12 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.connect(alice).deposit(BigNum(100, 6), alice.address);
 
       // cellar is shutdown
-      await cellar.connect(await impersonateGravity()).shutdown();
+      await cellar.connect(await impersonateGravity()).setShutdown(true, false);
 
       await cellar.connect(alice).withdraw(BigNum(100, 6), alice.address, alice.address);
     });
 
-    it("should withdraw all active assets from Aave and update yield", async () => {
+    it("should withdraw all active assets from Aave if specified and update yield", async () => {
       await cellar.deposit(BigNum(1000, 6), owner.address);
 
       await cellar.connect(await impersonateGravity()).enterPosition();
@@ -1263,7 +1249,7 @@ describe("AaveV2StablecoinCellar", () => {
       // mimic growth from $1000 -> $1250 (1.25x increase) while in position
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
-      await cellar.connect(await impersonateGravity()).shutdown();
+      await cellar.connect(await impersonateGravity()).setShutdown(true, true);
 
       // expect all of active liquidity to be withdrawn from Aave
       expect(await USDC.balanceOf(cellar.address)).to.eq(BigNum(1250, 6));
@@ -1277,7 +1263,9 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should emit a Shutdown event", async () => {
-      await expect(cellar.connect(await impersonateGravity()).shutdown()).to.emit(cellar, "Shutdown");
+      await expect(cellar.connect(await impersonateGravity()).setShutdown(true, false))
+        .to.emit(cellar, "Shutdown")
+        .withArgs(true, false);
     });
   });
 
@@ -1460,9 +1448,9 @@ describe("AaveV2StablecoinCellar", () => {
 
   describe("max", () => {
     it("should correctly find max deposit amount", async () => {
-      await cellar.connect(await impersonateGravity()).setPause(true);
+      await cellar.connect(await impersonateGravity()).setShutdown(true, false);
       expect(await cellar.maxDeposit(owner.address)).to.eq(0);
-      await cellar.connect(await impersonateGravity()).setPause(false);
+      await cellar.connect(await impersonateGravity()).setShutdown(false, false);
 
       const maxDeposit = BigNum(50_000, 6);
       expect(await cellar.maxDeposit(owner.address)).to.eq(maxDeposit);
@@ -1474,9 +1462,9 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should correctly find max mint amount", async () => {
-      await cellar.connect(await impersonateGravity()).setPause(true);
+      await cellar.connect(await impersonateGravity()).setShutdown(true, false);
       expect(await cellar.maxMint(owner.address)).to.eq(0);
-      await cellar.connect(await impersonateGravity()).setPause(false);
+      await cellar.connect(await impersonateGravity()).setShutdown(false, false);
 
       const maxMint = await cellar.previewDeposit(BigNum(50_000, 6));
       expect(await cellar.maxMint(owner.address)).to.eq(maxMint);
