@@ -336,7 +336,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             UserDeposit storage d = deposits[i];
 
             // Whether or not deposited shares are active or inactive.
-            bool isActive = d.timeDeposited <= lastTimeEnteredPosition;
+            bool isActive = d.timeDeposited < lastTimeEnteredPosition;
 
             // If shares are active, convert them to the amount of assets they're worth to see the
             // maximum amount of assets we can take from this deposit.
@@ -554,7 +554,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             UserDeposit storage d = deposits[i];
 
             // Determine whether or not deposit is active or inactive.
-            if (d.timeDeposited <= lastTimeEnteredPosition) {
+            if (d.timeDeposited < lastTimeEnteredPosition) {
                 // Saves an extra SLOAD if active and cast type to uint256.
                 uint256 dShares = d.shares;
 
@@ -592,7 +592,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function maxDeposit(address owner) public view returns (uint256) {
         if (isShutdown) return 0;
 
-        if (depositLimit == type(uint256).max) return type(uint256).max;
+        // Conversion to fixed point will overflow if the number being converted has more integer
+        // digits that fit in the bits reserved for them in the fixed point representation. This
+        // is the maximum assets that can be deposited without overflowing.
+        if (depositLimit == type(uint256).max) {
+            return uint256(type(uint112).max) / 10**(decimals - assetDecimals);
+        }
 
         uint256 assets = previewRedeem(balanceOf[owner]);
 
@@ -608,9 +613,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function maxMint(address owner) public view returns (uint256) {
         if (isShutdown) return 0;
 
-        if (liquidityLimit == type(uint256).max) return type(uint256).max;
+        // Conversion to fixed point will overflow if the number being converted has more integer
+        // digits that fit in the bits reserved for them in the fixed point representation. This
+        // is the maximum shares that can be minted without overflowing.
+        if (depositLimit == type(uint256).max) return convertToShares(maxDeposit(address(0)));
 
-        uint256 mintLimit = previewDeposit(50_000 * 10**assetDecimals);
+        uint256 mintLimit = convertToShares(depositLimit);
         uint256 shares = balanceOf[owner];
 
         return mintLimit > shares ? mintLimit - shares : 0;
@@ -635,7 +643,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
             // Determine the amount of assets that can be withdrawn. Only redeem active shares for
             // assets, otherwise just withdrawn the original amount of assets that were deposited.
-            assets += d.timeDeposited <= lastTimeEnteredPosition ?
+            assets += d.timeDeposited < lastTimeEnteredPosition ?
                 uint256(d.shares).mulWadDown(exchangeRate) :
                 d.assets;
         }
@@ -965,6 +973,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         uint8 oldAssetDecimals = assetDecimals;
         uint8 newAssetDecimals = ERC20(newAsset).decimals();
 
+        // Ensure the decimals of precision the position uses is compatible with the cellar.
+        if (newAssetDecimals > decimals) revert STATE_TooManyDecimals(newAssetDecimals, decimals);
+
         // Ignore if decimals are the same or first time initializing position.
         if (oldAssetDecimals != 0 && oldAssetDecimals != newAssetDecimals) {
             if (depositLimit != type(uint256).max) {
@@ -1044,9 +1055,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Transfers shares from one account to another.
-     * @dev If the sender specifies to only transfer active shares and does not have enough active
-     *      shares to transfer to meet the amount specified, the default behavior is to not to
-     *      revert but transfer as many active shares as the sender has to the receiver.
      * @param from address that is sending shares
      * @param to address that is receiving shares
      * @param amount amount of shares to transfer
@@ -1066,6 +1074,15 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
         }
 
+        // Will revert here if sender is trying to transfer more shares then they have, so no need
+        // for an explicit check.
+        balanceOf[from] -= amount;
+
+        // Cannot overflow because the sum of all user balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[to] += amount;
+        }
+
         // Retrieve the deposits from sender then begin looping through deposits, generally from
         // oldest to newest deposits. This may not be the case though if shares have been
         // transferred to the sender, as they will be added to the end of the sender's deposits
@@ -1079,7 +1096,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             UserDeposit storage dFrom = depositsFrom[i];
 
             // If we only want to transfer active shares, skips this deposit if it is inactive.
-            bool isActive = dFrom.timeDeposited <= lastTimeEnteredPosition;
+            bool isActive = dFrom.timeDeposited < lastTimeEnteredPosition;
             if (onlyActive && !isActive) continue;
 
             // Saves an extra SLOAD if active and cast type to uint256.
@@ -1110,7 +1127,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Update the counter of assets left to transfer.
             leftToTransfer -= transferredShares;
 
-            if (i == depositsFrom.length - 1 || leftToTransfer == 0) {
+            if (leftToTransfer == 0) {
                 // Only store the index for the next non-zero deposit to save gas on looping if
                 // inactive deposits weren't skipped.
                 if (!onlyActive) currentDepositIndex[from] = dFrom.shares != 0 ? i : i+1;
@@ -1118,17 +1135,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             }
         }
 
-        // Determine the total amount of shares transferred.
-        amount -= leftToTransfer;
-
-        // Will revert here if sender is trying to transfer more shares then they have, so no need
-        // for an explicit check.
-        balanceOf[from] -= amount;
-
-        // Cannot overflow because the sum of all user balances can't exceed the max uint256 value.
-        unchecked {
-            balanceOf[to] += amount;
-        }
+        if (leftToTransfer != 0) revert USR_NotEnoughActiveShares(leftToTransfer, amount);
 
         emit Transfer(from, to, amount);
 

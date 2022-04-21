@@ -565,26 +565,20 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should only transfer active shares when specified", async () => {
-      const expectedShares = await cellar.balanceOf(owner.address);
+      const activeShares = BigNum(100, 18);
+      const inactiveShares = BigNum(150, 18);
 
-      // gain $100 worth of inactive shares
-      await cellar.deposit(BigNum(100, 6), owner.address);
-
-      const aliceOldBalance = await cellar.balanceOf(alice.address);
+      // gain inactive shares
+      await cellar.mint(inactiveShares, owner.address);
 
       // attempting to transfer all shares should only transfer $100 worth of active shares (and not
       // the $100 worth of inactive shares) and not revert
-      await cellar["transferFrom(address,address,uint256,bool)"](
-        owner.address,
-        alice.address,
-        await cellar.balanceOf(owner.address),
-        true,
-      );
-
-      const aliceNewBalance = await cellar.balanceOf(alice.address);
+      await cellar["transferFrom(address,address,uint256,bool)"](owner.address, alice.address, activeShares, true);
 
       // expect alice to have received $100 worth of shares
-      expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(expectedShares);
+      expect(await cellar.balanceOf(alice.address)).to.eq(activeShares);
+      // expect to have not transferred $100 worth of inactive shares
+      expect((await cellar.getUserBalances(owner.address))[1]).to.eq(inactiveShares);
     });
 
     it("should use and store index of first non-zero deposit if not only active", async () => {
@@ -1410,6 +1404,12 @@ describe("AaveV2StablecoinCellar", () => {
       expect(data[2].toString()).to.eq(activeAssets);
       expect(data[3].toString()).to.eq(inactiveAssets);
     });
+
+    it("should retrieve all of a user's deposits", async () => {
+      const deposits = await cellar.getUserDeposits(bob.address);
+
+      expect(deposits.length).to.eq(2);
+    });
   });
 
   describe("max", () => {
@@ -1425,6 +1425,15 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.connect(await impersonateGravity()).enterPosition();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
       expect(await cellar.maxDeposit(owner.address)).to.eq(0);
+
+      await cellar.connect(await impersonateGravity()).setDepositLimit(ethers.constants.MaxUint256);
+
+      expect(await cellar.maxDeposit(owner.address)).to.eq(
+        ethers.BigNumber.from(2)
+          .pow(112)
+          .sub(1)
+          .div(10 ** 12),
+      );
     });
 
     it("should correctly find max mint amount", async () => {
@@ -1432,7 +1441,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await cellar.maxMint(owner.address)).to.eq(0);
       await cellar.connect(await impersonateGravity()).setShutdown(false, false);
 
-      const maxMint = await cellar.previewDeposit(BigNum(50_000, 6));
+      const maxMint = await cellar.convertToShares(BigNum(50_000, 6));
       expect(await cellar.maxMint(owner.address)).to.eq(maxMint);
       await USDC.mint(owner.address, maxMint);
       await cellar.mint(maxMint, owner.address);
@@ -1440,9 +1449,11 @@ describe("AaveV2StablecoinCellar", () => {
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
       expect(await cellar.maxMint(owner.address)).to.eq(0);
 
-      await cellar.connect(await impersonateGravity()).setLiquidityLimit(ethers.constants.MaxUint256);
+      await cellar.connect(await impersonateGravity()).setDepositLimit(ethers.constants.MaxUint256);
 
-      expect(await cellar.maxMint(owner.address)).to.eq(ethers.constants.MaxUint256);
+      expect(await cellar.maxMint(owner.address)).to.eq(
+        await cellar.convertToShares(await cellar.maxDeposit(owner.address)),
+      );
     });
 
     it("should correctly find max withdraw amount", async () => {

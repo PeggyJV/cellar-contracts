@@ -170,9 +170,11 @@ interface IAaveV2StablecoinCellar {
     error USR_DepositRestricted(uint256 maxDeposit);
 
     /**
-     * @notice Attempted to call a function that is restricted to Gravity.
+     * @notice Attempted to transfer more active shares than the user has.
+     * @param activeShares amount of shares user has
+     * @param attemptedActiveShares amount of shares user tried to transfer
      */
-    error USR_NotGravityBridge();
+    error USR_NotEnoughActiveShares(uint256 activeShares, uint256 attemptedActiveShares);
 
     /**
      * @notice Attempted deposit more liquidity over the liquidity limit.
@@ -191,6 +193,13 @@ interface IAaveV2StablecoinCellar {
      * @param unsupportedToken address of the unsupported token
      */
     error STATE_TokenIsNotSupportedByAave(address unsupportedToken);
+
+    /**
+     * @notice Attempted to update a position to an asset that uses an incompatible amount of decimals.
+     * @param newDecimals decimals of precision that the new position uses
+     * @param maxDecimals maximum decimals of precision for a position to be compatible with the cellar
+     */
+    error STATE_TooManyDecimals(uint8 newDecimals, uint8 maxDecimals);
 
     /**
      * @notice Attempted rebalance into the same asset.
