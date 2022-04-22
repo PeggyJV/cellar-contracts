@@ -277,62 +277,6 @@ describe("reinvest gas and profit estimate", () => {
     beforeEach(async () => {
       await enterStrategyAndClaim(100_000, USDC);
     });
-    
-//     it("cellar.reinvestByBalancer3 USDC", async () => {
-//       console.log("------------------- Test cellar.reinvestByBalancer3 -------------------");
-//       totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-//       console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-//       
-//       tx = await cellar.reinvestByBalancer3(0);
-//       await gasUsedLog("cellar.reinvestByBalancer3", tx);
-//       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-//       console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-//     });
-
-    it("cellar.reinvestByBalancer2 USDC", async () => {
-      console.log("------------------- Test cellar.reinvestByBalancer2 -------------------");
-      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-      
-      tx = await cellar.reinvestByBalancer2(1);
-      await gasUsedLog("cellar.reinvestByBalancer2", tx);
-
-      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-    });
-
-    it("cellar.reinvestByBalancer USDC", async () => {
-      console.log("------------------- Test cellar.reinvestByBalancer -------------------");
-      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-
-      const swapSequences = [
-        [
-          [
-            '0xC697051d1C6296C24aE3bceF39acA743861D9A81', // Balancer Pool: AAVE/ETH 0xC697051d1C6296C24aE3bceF39acA743861D9A81
-            AAVE.address,
-            wethAddress,
-            0, // This number should not influence the result
-            1,
-            ethers.constants.MaxUint256,
-          ],
-          [
-            '0x8a649274E4d777FFC6851F13d23A86BBFA2f2Fbf', // Balancer Pool: ETH/USDC 0x8a649274E4d777FFC6851F13d23A86BBFA2f2Fbf
-            wethAddress,
-            USDC.address,
-            0, // This number should not influence the result
-            1, // minAmountOut
-            ethers.constants.MaxUint256,
-          ]
-        ],
-      ];
-      
-      tx = await cellar.reinvestByBalancer(swapSequences);
-      await gasUsedLog("cellar.reinvestByBalancer", tx);
-
-      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-    });
 
     it("cellar.reinvest USDC", async () => {
       console.log("------------------- Test cellar.reinvest -------------------");
@@ -363,62 +307,6 @@ describe("reinvest gas and profit estimate", () => {
     beforeEach(async () => {
       await enterStrategyAndClaim(1_000_000, USDC);
     });
-    
-//     it("cellar.reinvestByBalancer3 USDC", async () => {
-//       console.log("------------------- Test cellar.reinvestByBalancer3 -------------------");
-//       totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-//       console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-//       
-//       tx = await cellar.reinvestByBalancer3(0);
-//       await gasUsedLog("cellar.reinvestByBalancer3", tx);
-//       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-//       console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-//     });
-
-    it("cellar.reinvestByBalancer2 USDC", async () => {
-      console.log("------------------- Test cellar.reinvestByBalancer2 -------------------");
-      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-      
-      tx = await cellar.reinvestByBalancer2(1);
-      await gasUsedLog("cellar.reinvestByBalancer2", tx);
-
-      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-    });
-
-    it("cellar.reinvestByBalancer USDC", async () => {
-      console.log("------------------- Test cellar.reinvestByBalancer -------------------");
-      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-
-      const swapSequences = [
-        [
-          [
-            '0xC697051d1C6296C24aE3bceF39acA743861D9A81', // Balancer Pool: AAVE/ETH 0xC697051d1C6296C24aE3bceF39acA743861D9A81
-            AAVE.address,
-            wethAddress,
-            0, // This number should not influence the result
-            1,
-            ethers.constants.MaxUint256,
-          ],
-          [
-            '0x8a649274E4d777FFC6851F13d23A86BBFA2f2Fbf', // Balancer Pool: ETH/USDC 0x8a649274E4d777FFC6851F13d23A86BBFA2f2Fbf
-            wethAddress,
-            USDC.address,
-            0, // This number should not influence the result
-            1, // minAmountOut
-            ethers.constants.MaxUint256,
-          ]
-        ],
-      ];
-      
-      tx = await cellar.reinvestByBalancer(swapSequences);
-      await gasUsedLog("cellar.reinvestByBalancer", tx);
-
-      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-    });
 
     it("cellar.reinvest USDC", async () => {
       console.log("------------------- Test cellar.reinvest -------------------");
@@ -448,62 +336,6 @@ describe("reinvest gas and profit estimate", () => {
   describe("Strategy with 8_000_000 USDC", () => {
     beforeEach(async () => {
       await enterStrategyAndClaim(8_000_000, USDC);
-    });
-    
-//     it("cellar.reinvestByBalancer3 USDC", async () => {
-//       console.log("------------------- Test cellar.reinvestByBalancer3 -------------------");
-//       totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-//       console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-//       
-//       tx = await cellar.reinvestByBalancer3(0);
-//       await gasUsedLog("cellar.reinvestByBalancer3", tx);
-//       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-//       console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-//     });
-
-    it("cellar.reinvestByBalancer2 USDC", async () => {
-      console.log("------------------- Test cellar.reinvestByBalancer2 -------------------");
-      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-      
-      tx = await cellar.reinvestByBalancer2(1);
-      await gasUsedLog("cellar.reinvestByBalancer2", tx);
-
-      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-    });
-
-    it("cellar.reinvestByBalancer USDC", async () => {
-      console.log("------------------- Test cellar.reinvestByBalancer -------------------");
-      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-
-      const swapSequences = [
-        [
-          [
-            '0xC697051d1C6296C24aE3bceF39acA743861D9A81', // Balancer Pool: AAVE/ETH 0xC697051d1C6296C24aE3bceF39acA743861D9A81
-            AAVE.address,
-            wethAddress,
-            0, // This number should not influence the result
-            1,
-            ethers.constants.MaxUint256,
-          ],
-          [
-            '0x8a649274E4d777FFC6851F13d23A86BBFA2f2Fbf', // Balancer Pool: ETH/USDC 0x8a649274E4d777FFC6851F13d23A86BBFA2f2Fbf
-            wethAddress,
-            USDC.address,
-            0, // This number should not influence the result
-            1, // minAmountOut
-            ethers.constants.MaxUint256,
-          ]
-        ],
-      ];
-      
-      tx = await cellar.reinvestByBalancer(swapSequences);
-      await gasUsedLog("cellar.reinvestByBalancer", tx);
-
-      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
     });
 
     it("cellar.reinvest USDC", async () => {
@@ -536,18 +368,6 @@ describe("reinvest gas and profit estimate", () => {
       await enterStrategyAndClaim(8_000_000, DAI);
     });
 
-    it("cellar.reinvestByBalancer2 DAI", async () => {
-      console.log("------------------- Test cellar.reinvestByBalancer2 -------------------");
-      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-      
-      tx = await cellar.reinvestByBalancer2(1);
-      await gasUsedLog("cellar.reinvestByBalancer2", tx);
-
-      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
-    });
-
     it("cellar.reinvest DAI", async () => {
       console.log("------------------- Test cellar.reinvest -------------------");
       totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
@@ -576,18 +396,6 @@ describe("reinvest gas and profit estimate", () => {
   describe("Strategy with 8_000_000 USDT", () => {
     beforeEach(async () => {
       await enterStrategyAndClaim(8_000_000, USDT);
-    });
-
-    it("cellar.reinvestByBalancer2 USDT", async () => {
-      console.log("------------------- Test cellar.reinvestByBalancer2 -------------------");
-      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
-      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
-      
-      tx = await cellar.reinvestByBalancer2(1);
-      await gasUsedLog("cellar.reinvestByBalancer2", tx);
-
-      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
-      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
     });
 
     it("cellar.reinvest USDT", async () => {
