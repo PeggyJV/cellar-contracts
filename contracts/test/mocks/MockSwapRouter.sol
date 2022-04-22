@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
-import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import {MathUtils} from "contracts/utils/MathUtils.sol";
+import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import { MathUtils } from "contracts/utils/MathUtils.sol";
 
 library BytesLib {
     function slice(
@@ -18,54 +18,54 @@ library BytesLib {
 
         assembly {
             switch iszero(_length)
-                case 0 {
-                    // Get a location of some free memory and store it in tempBytes as
-                    // Solidity does for memory variables.
-                    tempBytes := mload(0x40)
+            case 0 {
+                // Get a location of some free memory and store it in tempBytes as
+                // Solidity does for memory variables.
+                tempBytes := mload(0x40)
 
-                    // The first word of the slice result is potentially a partial
-                    // word read from the original array. To read it, we calculate
-                    // the length of that partial word and start copying that many
-                    // bytes into the array. The first word we copy will start with
-                    // data we don't care about, but the last `lengthmod` bytes will
-                    // land at the beginning of the contents of the new array. When
-                    // we're done copying, we overwrite the full first word with
-                    // the actual length of the slice.
-                    let lengthmod := and(_length, 31)
+                // The first word of the slice result is potentially a partial
+                // word read from the original array. To read it, we calculate
+                // the length of that partial word and start copying that many
+                // bytes into the array. The first word we copy will start with
+                // data we don't care about, but the last `lengthmod` bytes will
+                // land at the beginning of the contents of the new array. When
+                // we're done copying, we overwrite the full first word with
+                // the actual length of the slice.
+                let lengthmod := and(_length, 31)
 
-                    // The multiplication in the next line is necessary
-                    // because when slicing multiples of 32 bytes (lengthmod == 0)
-                    // the following copy loop was copying the origin's length
-                    // and then ending prematurely not copying everything it should.
-                    let mc := add(add(tempBytes, lengthmod), mul(0x20, iszero(lengthmod)))
-                    let end := add(mc, _length)
+                // The multiplication in the next line is necessary
+                // because when slicing multiples of 32 bytes (lengthmod == 0)
+                // the following copy loop was copying the origin's length
+                // and then ending prematurely not copying everything it should.
+                let mc := add(add(tempBytes, lengthmod), mul(0x20, iszero(lengthmod)))
+                let end := add(mc, _length)
 
-                    for {
-                        // The multiplication in the next line has the same exact purpose
-                        // as the one above.
-                        let cc := add(add(add(_bytes, lengthmod), mul(0x20, iszero(lengthmod))), _start)
-                    } lt(mc, end) {
-                        mc := add(mc, 0x20)
-                        cc := add(cc, 0x20)
-                    } {
-                        mstore(mc, mload(cc))
-                    }
-
-                    mstore(tempBytes, _length)
-
-                    //update free-memory pointer
-                    //allocating the array padded to 32 bytes like the compiler does now
-                    mstore(0x40, and(add(mc, 31), not(31)))
+                for {
+                    // The multiplication in the next line has the same exact purpose
+                    // as the one above.
+                    let cc := add(add(add(_bytes, lengthmod), mul(0x20, iszero(lengthmod))), _start)
+                } lt(mc, end) {
+                    mc := add(mc, 0x20)
+                    cc := add(cc, 0x20)
+                } {
+                    mstore(mc, mload(cc))
                 }
-                //if we want a zero-length slice let's just return a zero-length array
-                default {
-                    tempBytes := mload(0x40)
-                    //zero out the 32 bytes slice we are about to return
-                    //we need to do it because Solidity does not garbage collect
-                    mstore(tempBytes, 0)
 
-                    mstore(0x40, add(tempBytes, 0x20))
-                }
+                mstore(tempBytes, _length)
+
+                //update free-memory pointer
+                //allocating the array padded to 32 bytes like the compiler does now
+                mstore(0x40, and(add(mc, 31), not(31)))
+            }
+            //if we want a zero-length slice let's just return a zero-length array
+            default {
+                tempBytes := mload(0x40)
+                //zero out the 32 bytes slice we are about to return
+                //we need to do it because Solidity does not garbage collect
+                mstore(tempBytes, 0)
+
+                mstore(0x40, add(tempBytes, 0x20))
+            }
         }
 
         return tempBytes;
@@ -172,7 +172,7 @@ contract MockSwapRouter {
         uint256 exchangeRate = 9500;
         ERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
-        uint256 amountOut = params.amountIn * exchangeRate / 10000;
+        uint256 amountOut = (params.amountIn * exchangeRate) / 10000;
 
         uint8 fromDecimals = ERC20(params.tokenIn).decimals();
         uint8 toDecimals = ERC20(params.tokenOut).decimals();
@@ -199,12 +199,12 @@ contract MockSwapRouter {
 
         while (params.path.hasMultiplePools()) {
             params.path = params.path.skipToken();
-            (,tokenOut ,) = params.path.decodeFirstPool();
+            (, tokenOut, ) = params.path.decodeFirstPool();
         }
 
         ERC20(tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
-        uint256 amountOut = params.amountIn * exchangeRate / 10000;
+        uint256 amountOut = (params.amountIn * exchangeRate) / 10000;
 
         uint8 fromDecimals = ERC20(tokenIn).decimals();
         uint8 toDecimals = ERC20(tokenOut).decimals();
@@ -217,12 +217,12 @@ contract MockSwapRouter {
     }
 
     function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
+        uint256 amountIn,
+        uint256 amountOutMin,
         address[] calldata path,
         address to,
-        uint
-    ) external returns (uint[] memory) {
+        uint256
+    ) external returns (uint256[] memory) {
         uint256 exchangeRate = 9500;
 
         address tokenIn = path[0];
@@ -230,7 +230,7 @@ contract MockSwapRouter {
 
         ERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
 
-        uint256 amountOut = amountIn * exchangeRate / 10000;
+        uint256 amountOut = (amountIn * exchangeRate) / 10000;
 
         uint8 fromDecimals = ERC20(tokenIn).decimals();
         uint8 toDecimals = ERC20(tokenOut).decimals();

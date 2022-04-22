@@ -1,102 +1,75 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
-import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import {IAaveIncentivesController} from "../interfaces/IAaveIncentivesController.sol";
-import {IStakedTokenV2} from "../interfaces/IStakedTokenV2.sol";
-import {ICurveSwaps} from "../interfaces/ICurveSwaps.sol";
-import {ISushiSwapRouter} from "../interfaces/ISushiSwapRouter.sol";
-import {IGravity} from "../interfaces/IGravity.sol";
-import {ILendingPool} from "../interfaces/ILendingPool.sol";
-import {MockToken} from "./mocks/MockToken.sol";
-import {MockAToken} from "./mocks/MockAToken.sol";
-import {MockCurveSwaps} from "./mocks/MockCurveSwaps.sol";
-import {MockSwapRouter} from "./mocks/MockSwapRouter.sol";
-import {MockLendingPool} from "./mocks/MockLendingPool.sol";
-import {MockIncentivesController} from "./mocks/MockIncentivesController.sol";
-import {MockGravity} from "./mocks/MockGravity.sol";
-import {MockStkAAVE} from "./mocks/MockStkAAVE.sol";
+import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import { IAaveIncentivesController } from "../interfaces/IAaveIncentivesController.sol";
+import { IStakedTokenV2 } from "../interfaces/IStakedTokenV2.sol";
+import { ICurveSwaps } from "../interfaces/ICurveSwaps.sol";
+import { ISushiSwapRouter } from "../interfaces/ISushiSwapRouter.sol";
+import { IGravity } from "../interfaces/IGravity.sol";
+import { ILendingPool } from "../interfaces/ILendingPool.sol";
+import { MockToken } from "./mocks/MockToken.sol";
+import { MockAToken } from "./mocks/MockAToken.sol";
+import { MockCurveSwaps } from "./mocks/MockCurveSwaps.sol";
+import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
+import { MockLendingPool } from "./mocks/MockLendingPool.sol";
+import { MockIncentivesController } from "./mocks/MockIncentivesController.sol";
+import { MockGravity } from "./mocks/MockGravity.sol";
+import { MockStkAAVE } from "./mocks/MockStkAAVE.sol";
 
-import {AaveV2StablecoinCellar} from "../AaveV2StablecoinCellar.sol";
-import {CellarUser} from "./users/CellarUser.sol";
+import { AaveV2StablecoinCellar } from "../AaveV2StablecoinCellar.sol";
+import { CellarUser } from "./users/CellarUser.sol";
 
-import {DSTestPlus} from "@rari-capital/solmate/src/test/utils/DSTestPlus.sol";
-import {MathUtils} from "../utils/MathUtils.sol";
+import { DSTestPlus } from "@rari-capital/solmate/src/test/utils/DSTestPlus.sol";
+import { MathUtils } from "../utils/MathUtils.sol";
 
 contract AaveV2StablecoinCellarTest is DSTestPlus {
     using MathUtils for uint256;
 
     // Initialization Variables:
-    MockToken public asset;
-    MockAToken public assetAToken;
-    MockCurveSwaps public curveRegistryExchange;
-    MockSwapRouter public sushiSwapRouter;
-    MockLendingPool public lendingPool;
-    MockIncentivesController public incentivesController;
-    MockGravity public gravityBridge;
-    MockStkAAVE public stkAAVE;
-    MockToken public AAVE;
-    MockToken public WETH;
+    MockToken private asset;
+    MockAToken private assetAToken;
+    MockLendingPool private lendingPool;
 
-    AaveV2StablecoinCellar public cellar;
+    AaveV2StablecoinCellar private cellar;
 
-    uint256 public initializationTimestamp;
+    // `lastTimeEnteredPosition` must be greater than `timeDeposited` to active shares, however in
+    // a testing environment `block.timestamp` is always 0. This ensures `enterPosition` actives a
+    // users shares as expected.
+    function enterPosition() private {
+        hevm.warp(block.timestamp + 1);
+        cellar.enterPosition();
+    }
+
     function setUp() public {
         asset = new MockToken("USDC", 6);
-
-        sushiSwapRouter = new MockSwapRouter();
 
         lendingPool = new MockLendingPool();
         assetAToken = new MockAToken(address(lendingPool), address(asset), "aUSDC");
         lendingPool.initReserve(address(asset), address(assetAToken));
 
-        WETH = new MockToken("WETH", 6);
-
-        AAVE = new MockToken("AAVE", 6);
-        stkAAVE = new MockStkAAVE(AAVE);
-        incentivesController = new MockIncentivesController(stkAAVE);
-
-        gravityBridge = new MockGravity();
-
-        initializationTimestamp = block.timestamp;
+        // Declare unnecessary variables with address 0.
         cellar = new AaveV2StablecoinCellar(
             ERC20(address(asset)),
-            ICurveSwaps(address(curveRegistryExchange)),
-            ISushiSwapRouter(address(sushiSwapRouter)),
+            5_000_000e6,
+            50_000e6,
+            ICurveSwaps(address(0)),
+            ISushiSwapRouter(address(0)),
             ILendingPool(address(lendingPool)),
-            IAaveIncentivesController(address(incentivesController)),
-            IGravity(address(gravityBridge)),
-            IStakedTokenV2(address(stkAAVE)),
-            ERC20(address(AAVE)),
-            ERC20(address(WETH))
+            IAaveIncentivesController(address(0)),
+            IGravity(address(this)), // Set to this address to give contract admin privileges.
+            IStakedTokenV2(address(0)),
+            ERC20(address(0)),
+            ERC20(address(0))
         );
     }
 
-    function testInitialization() public {
-        assertEq(address(cellar.asset()), address(asset));
-        assertEq(address(cellar.curveRegistryExchange()), address(curveRegistryExchange));
-        assertEq(address(cellar.sushiswapRouter()), address(sushiSwapRouter));
-        assertEq(address(cellar.lendingPool()), address(lendingPool));
-        assertEq(address(cellar.incentivesController()), address(incentivesController));
-        assertEq(address(cellar.gravityBridge()), address(gravityBridge));
-        assertEq(address(cellar.stkAAVE()), address(stkAAVE));
-        assertEq(address(cellar.AAVE()), address(AAVE));
-
-        assertEq(cellar.assetDecimals(), 6);
-
-        assertEq(address(cellar.assetAToken()), address(assetAToken));
-
-        assertEq(cellar.maxLiquidity(), 5_000_000e6);
-
-        assertEq(cellar.lastTimeAccruedPlatformFees(), initializationTimestamp);
-    }
-
-    // Fuzz with maximum of uint72 to avoid decimal conversion overflow. Given the asset we are testing with
-    // has 6 decimals, realistic balance should never be above 2**72 - 1.
     function testDepositAndWithdraw(uint256 assets) public {
-        assets = bound(assets, 1, type(uint72).max);
+        // Ensure restrictions aren't a factor.
+        cellar.setLiquidityLimit(type(uint256).max);
+        cellar.setDepositLimit(type(uint256).max);
 
-        cellar.removeLiquidityRestriction(); // Ensure liquidity restrictions aren't a factor.
+        assets = bound(assets, 1, cellar.maxDeposit(address(this)));
 
         asset.mint(address(this), assets);
         asset.approve(address(cellar), assets);
@@ -124,14 +97,14 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(asset.balanceOf(address(this)), beforeDepositBalance);
     }
 
-    // Fuzz with maximum of uint112 to avoid decimal conversion overflow. Realistic balance should
-    // never be above 2**112 - 1.
     function testMintAndRedeem(uint256 shares) public {
-        shares = bound(shares, 1, type(uint112).max);
+        // Ensure restrictions aren't a factor.
+        cellar.setLiquidityLimit(type(uint256).max);
+        cellar.setDepositLimit(type(uint256).max);
 
-        cellar.removeLiquidityRestriction(); // Ensure liquidity restrictions aren't a factor.
+        shares = bound(shares, 1, cellar.maxMint(address(this)));
 
-        asset.mint(address(this), shares);
+        asset.mint(address(this), shares.changeDecimals(18, 6));
         asset.approve(address(cellar), shares);
 
         // Test single mint.
@@ -170,7 +143,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // |         6000 |    2000 |    $2000 |    4000 |    $4000 |
         // |--------------|---------|----------|---------|----------|
         // | 3. Cellar mutates by +$3000 simulated yield            |
-        // |    returned from strategy.                             |
+        // |    returned from position.                             |
         // |--------------|---------|----------|---------|----------|
         // |         6000 |    2000 |    $3000 |    4000 |    $6000 |
         // |--------------|---------|----------|---------|----------|
@@ -183,7 +156,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // |         9333 |    3333 |    $5000 |    6000 |    $9000 |
         // |--------------|---------|----------|---------|----------|
         // | 6. Cellar mutates by +$3000 simulated yield            |
-        // |    returned from strategy.                             |
+        // |    returned from position.                             |
         // |--------------|---------|----------|---------|----------|
         // |         9333 |    3333 |    $6071 |    6000 |   $10929 |
         // |--------------|---------|----------|---------|----------|
@@ -253,25 +226,19 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.totalSupply(), 6000e18);
         assertEq(cellar.totalAssets(), 6000e6);
 
-        // 3. Cellar mutates by +$3000 to simulate yield returned from strategy.
+        // 3. Cellar mutates by +$3000 to simulate yield returned from position.
         // The cellar now contains more assets than deposited which causes the exchange rate to change.
         // Alice share is 33.33% of the cellar, Bob 66.66% of the cellar.
         // Alice's share count stays the same but the asset amount changes from $2000 to $3000.
         // Bob's share count stays the same but the asset amount changes from $4000 to $6000.
         asset.mint(address(cellar), mutationAssets);
-        cellar.enterStrategy();
+        enterPosition();
         assertEq(cellar.activeAssets(), preMutationAssets + mutationAssets);
         assertEq(cellar.totalSupply(), preMutationShares);
         assertEq(cellar.balanceOf(address(alice)), aliceShares);
-        assertEq(
-            cellar.convertToAssets(cellar.balanceOf(address(alice))),
-            aliceAssets + (mutationAssets / 3) * 1
-        );
+        assertEq(cellar.convertToAssets(cellar.balanceOf(address(alice))), aliceAssets + (mutationAssets / 3) * 1);
         assertEq(cellar.balanceOf(address(bob)), bobShares);
-        assertEq(
-            cellar.convertToAssets(cellar.balanceOf(address(bob))),
-            bobAssets + (mutationAssets / 3) * 2
-        );
+        assertEq(cellar.convertToAssets(cellar.balanceOf(address(bob))), bobAssets + (mutationAssets / 3) * 2);
 
         // 4. Alice deposits $2000 (mints 1333 shares).
         assertApproxEq(alice.deposit(2000e6, address(alice)), 1333e18, 1e18); // 1333.333...
@@ -299,7 +266,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 6. Cellar mutates by +$3000.
         asset.mint(address(cellar), mutationAssets);
-        cellar.enterStrategy();
+        enterPosition();
         assertEq(cellar.activeAssets(), 17000e6);
         assertApproxEq(cellar.convertToAssets(cellar.balanceOf(address(alice))), 6071e6, 1e6); // 6071.429
         assertApproxEq(cellar.convertToAssets(cellar.balanceOf(address(bob))), 10929e6, 1e6); // 10928.571
@@ -345,6 +312,40 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(bob))), 0);
     }
 
+    function testCellarInteractionsFromThirdParties() public {
+        CellarUser alice = new CellarUser(cellar, asset);
+        CellarUser bob = new CellarUser(cellar, asset);
+
+        asset.mint(address(alice), 1e6);
+        asset.mint(address(bob), 1e6);
+        alice.approve(address(cellar), 1e6);
+        bob.approve(address(cellar), 1e6);
+
+        // Alice deposits $1 for Bob.
+        alice.deposit(1e6, address(bob));
+        assertEq(cellar.balanceOf(address(alice)), 0);
+        assertEq(cellar.balanceOf(address(bob)), 1e18);
+        assertEq(asset.balanceOf(address(alice)), 0);
+
+        // Bob mint 1 share for Alice.
+        bob.mint(1e18, address(alice));
+        assertEq(cellar.balanceOf(address(alice)), 1e18);
+        assertEq(cellar.balanceOf(address(bob)), 1e18);
+        assertEq(asset.balanceOf(address(bob)), 0);
+
+        // Alice redeem 1 share for Bob.
+        alice.redeem(1e18, address(bob), address(alice));
+        assertEq(cellar.balanceOf(address(alice)), 0);
+        assertEq(cellar.balanceOf(address(bob)), 1e18);
+        assertEq(asset.balanceOf(address(bob)), 1e6);
+
+        // Bob withdraw 1e18 for Alice.
+        bob.withdraw(1e6, address(alice), address(bob));
+        assertEq(cellar.balanceOf(address(alice)), 0);
+        assertEq(cellar.balanceOf(address(bob)), 0);
+        assertEq(asset.balanceOf(address(alice)), 1e6);
+    }
+
     function testDepositWithdrawWithNotEnoughAssets() public {
         asset.mint(address(this), 1e6);
         asset.approve(address(cellar), 1e6);
@@ -369,6 +370,22 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // Should redeem as much as possible without reverting.
         cellar.redeem(2e18, address(this), address(this));
         assertEq(cellar.balanceOf(address(this)), 0);
+    }
+
+    function testFailTransferSharesWithNotEnoughShares() external {
+        cellar.transfer(hevm.addr(1), 1e18);
+    }
+
+    function testFailOnlyTransferActiveSharesWithNotEnoughActiveShares() external {
+        asset.mint(address(this), 1e6);
+        asset.approve(address(cellar), 1e6);
+        cellar.mint(1e18, address(this));
+
+        (uint256 activeShares, uint256 inactiveShares, , ) = cellar.getUserBalances(address(this));
+        assertEq(activeShares, 0);
+        assertEq(inactiveShares, 1e18);
+
+        cellar.transferFrom(address(this), hevm.addr(1), 1e18, true);
     }
 
     function testFailDepositZero() public {
@@ -403,37 +420,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         cellar.redeem(0, address(this), address(this));
     }
 
-    function testCellarInteractionsFromThirdParties() public {
-        CellarUser alice = new CellarUser(cellar, asset);
-        CellarUser bob = new CellarUser(cellar, asset);
+    function testTransferSharesZero() external {
+        cellar.transfer(hevm.addr(1), 0);
 
-        asset.mint(address(alice), 1e6);
-        asset.mint(address(bob), 1e6);
-        alice.approve(address(cellar), 1e6);
-        bob.approve(address(cellar), 1e6);
-
-        // Alice deposits $1 for Bob.
-        alice.deposit(1e6, address(bob));
-        assertEq(cellar.balanceOf(address(alice)), 0);
-        assertEq(cellar.balanceOf(address(bob)), 1e18);
-        assertEq(asset.balanceOf(address(alice)), 0);
-
-        // Bob mint 1 share for Alice.
-        bob.mint(1e18, address(alice));
-        assertEq(cellar.balanceOf(address(alice)), 1e18);
-        assertEq(cellar.balanceOf(address(bob)), 1e18);
-        assertEq(asset.balanceOf(address(bob)), 0);
-
-        // Alice redeem 1 share for Bob.
-        alice.redeem(1e18, address(bob), address(alice));
-        assertEq(cellar.balanceOf(address(alice)), 0);
-        assertEq(cellar.balanceOf(address(bob)), 1e18);
-        assertEq(asset.balanceOf(address(bob)), 1e6);
-
-        // Bob withdraw 1e18 for Alice.
-        bob.withdraw(1e6, address(alice), address(bob));
-        assertEq(cellar.balanceOf(address(alice)), 0);
-        assertEq(cellar.balanceOf(address(bob)), 0);
-        assertEq(asset.balanceOf(address(alice)), 1e6);
+        assertEq(cellar.balanceOf(hevm.addr(1)), 0);
     }
 }

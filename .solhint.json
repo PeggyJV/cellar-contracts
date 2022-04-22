@@ -8,7 +8,9 @@
     "avoid-low-level-calls": "off",
     "no-inline-assembly": "off",
     "func-name-mixedcase": "off",
+    "func-param-name-mixedcase": "off",
     "var-name-mixedcase": "off",
+    "private-vars-leading-underscore": "off",
     "code-complexity": "off",
     "const-name-snakecase": "off"
   }

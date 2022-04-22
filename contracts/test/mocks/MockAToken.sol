@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {MockLendingPool} from "./MockLendingPool.sol";
-import {MathUtils} from "contracts/utils/MathUtils.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { MockLendingPool } from "./MockLendingPool.sol";
+import { MathUtils } from "contracts/utils/MathUtils.sol";
 
 library WadRayMath {
     uint256 public constant RAY = 1e27;
@@ -43,7 +43,11 @@ contract MockAToken is ERC20 {
     address public underlyingAsset;
     MockLendingPool public lendingPool;
 
-    constructor(address _lendingPool, address _underlyingAsset, string memory _symbol) ERC20(_symbol, _symbol) {
+    constructor(
+        address _lendingPool,
+        address _underlyingAsset,
+        string memory _symbol
+    ) ERC20(_symbol, _symbol) {
         lendingPool = MockLendingPool(_lendingPool);
         underlyingAsset = _underlyingAsset;
     }
