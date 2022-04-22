@@ -757,7 +757,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     }
 
     /**
-     * @notice Stop or start the contract. Should only be used in an emergency,
+     * @notice Stop or start the contract. Used in an emergency or if the cellar has been retired.
      */
     function setShutdown(bool shutdown, bool exitPosition) external onlyOwner {
         isShutdown = shutdown;
