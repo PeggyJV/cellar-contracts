@@ -1,4 +1,4 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import { expect } from "chai";
 import {
   AaveV2StablecoinCellar,
@@ -26,15 +26,11 @@ import { BigNumber } from "ethers";
 const BigNum = (number: number, decimals: number) => {
   const [characteristic, mantissa] = number.toString().split(".");
   const padding = mantissa ? decimals - mantissa.length : decimals;
-  return BigNumber.from(
-    characteristic + (mantissa ?? "") + "0".repeat(padding)
-  );
+  return BigNumber.from(characteristic + (mantissa ?? "") + "0".repeat(padding));
 };
 
 const timestamp = async () => {
-  const latestBlock = await ethers.provider.getBlock(
-    await ethers.provider.getBlockNumber()
-  );
+  const latestBlock = await ethers.provider.getBlock(await ethers.provider.getBlockNumber());
 
   return latestBlock.timestamp;
 };
@@ -43,6 +39,14 @@ const timetravel = async (addTime: number) => {
   await ethers.provider.send("evm_increaseTime", [addTime]);
   await ethers.provider.send("evm_mine", []);
 };
+
+function getRandomInt(min: number, max: number) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+
+  //The maximum is exclusive and the minimum is inclusive
+  return Math.floor(Math.random() * (max - min) + min);
+}
 
 describe("AaveV2StablecoinCellar", () => {
   let owner: SignerWithAddress;
@@ -63,6 +67,21 @@ describe("AaveV2StablecoinCellar", () => {
   let aUSDT: MockAToken;
   let stkAAVE: MockStkAAVE;
   let AAVE: MockToken;
+
+  const impersonateGravity = async () => {
+    await network.provider.request({
+      method: "hardhat_impersonateAccount",
+      params: [gravity.address],
+    });
+
+    // Sends ETH for sending transactions.
+    await owner.sendTransaction({
+      to: gravity.address,
+      value: ethers.utils.parseEther("100.0"),
+    });
+
+    return ethers.provider.getSigner(gravity.address);
+  };
 
   beforeEach(async () => {
     [owner, alice, bob] = await ethers.getSigners();
@@ -91,27 +110,15 @@ describe("AaveV2StablecoinCellar", () => {
     await lendingPool.deployed();
 
     // Deploy mock aUSDC
-    aUSDC = await new MockAToken__factory(owner).deploy(
-      lendingPool.address,
-      USDC.address,
-      "aUSDC"
-    );
+    aUSDC = await new MockAToken__factory(owner).deploy(lendingPool.address, USDC.address, "aUSDC");
     await aUSDC.deployed();
 
     // Deploy mock aDAI
-    aDAI = await new MockAToken__factory(owner).deploy(
-      lendingPool.address,
-      DAI.address,
-      "aDAI"
-    );
+    aDAI = await new MockAToken__factory(owner).deploy(lendingPool.address, DAI.address, "aDAI");
     await aDAI.deployed();
 
     // Deploy mock aUSDT
-    aUSDT = await new MockAToken__factory(owner).deploy(
-      lendingPool.address,
-      USDT.address,
-      "aUSDT"
-    );
+    aUSDT = await new MockAToken__factory(owner).deploy(lendingPool.address, USDT.address, "aUSDT");
     await aUSDT.deployed();
 
     await lendingPool.initReserve(USDC.address, aUSDC.address);
@@ -126,9 +133,7 @@ describe("AaveV2StablecoinCellar", () => {
     await stkAAVE.deployed();
 
     // Deploy mock Aave incentives controller
-    incentivesController = await new MockIncentivesController__factory(
-      owner
-    ).deploy(stkAAVE.address);
+    incentivesController = await new MockIncentivesController__factory(owner).deploy(stkAAVE.address);
     await incentivesController.deployed();
 
     gravity = await new MockGravity__factory(owner).deploy();
@@ -137,6 +142,8 @@ describe("AaveV2StablecoinCellar", () => {
     // Deploy cellar contract
     cellar = await new AaveV2StablecoinCellar__factory(owner).deploy(
       USDC.address,
+      BigNum(5_000_000, 6),
+      BigNum(50_000, 6),
       curveRegistryExchange.address,
       sushiswapRouter.address,
       lendingPool.address,
@@ -144,26 +151,26 @@ describe("AaveV2StablecoinCellar", () => {
       gravity.address,
       stkAAVE.address,
       AAVE.address,
-      WETH.address
+      WETH.address,
     );
     await cellar.deployed();
 
     // Mint mock tokens to signers
-    await USDC.mint(owner.address, BigNum(1_000_000, 6));
-    await DAI.mint(owner.address, BigNum(1_000_000, 18));
-    await WETH.mint(owner.address, BigNum(1_000_000, 18));
-    await USDT.mint(owner.address, BigNum(1_000_000, 6));
+    await USDC.mint(owner.address, BigNum(50_000, 6));
+    await DAI.mint(owner.address, BigNum(50_000, 18));
+    await WETH.mint(owner.address, BigNum(50_000, 18));
+    await USDT.mint(owner.address, BigNum(50_000, 6));
 
-    await USDC.mint(alice.address, BigNum(1_000_000, 6));
-    await DAI.mint(alice.address, BigNum(1_000_000, 18));
-    await WETH.mint(alice.address, BigNum(1_000_000, 18));
-    await USDT.mint(alice.address, BigNum(1_000_000, 6));
-    await USDC.mint(alice.address, BigNum(1_000_000, 6));
+    await USDC.mint(alice.address, BigNum(50_000, 6));
+    await DAI.mint(alice.address, BigNum(50_000, 18));
+    await WETH.mint(alice.address, BigNum(50_000, 18));
+    await USDT.mint(alice.address, BigNum(50_000, 6));
+    await USDC.mint(alice.address, BigNum(50_000, 6));
 
-    await USDC.mint(bob.address, BigNum(1_000_000, 6));
-    await DAI.mint(bob.address, BigNum(1_000_000, 18));
-    await WETH.mint(bob.address, BigNum(1_000_000, 18));
-    await USDT.mint(bob.address, BigNum(1_000_000, 6));
+    await USDC.mint(bob.address, BigNum(50_000, 6));
+    await DAI.mint(bob.address, BigNum(50_000, 18));
+    await WETH.mint(bob.address, BigNum(50_000, 18));
+    await USDT.mint(bob.address, BigNum(50_000, 6));
 
     // Approve cellar to spend mock tokens
     await USDC.approve(cellar.address, ethers.constants.MaxUint256);
@@ -171,53 +178,30 @@ describe("AaveV2StablecoinCellar", () => {
     await WETH.approve(cellar.address, ethers.constants.MaxUint256);
     await USDT.approve(cellar.address, ethers.constants.MaxUint256);
 
-    await USDC.connect(alice).approve(
-      cellar.address,
-      ethers.constants.MaxUint256
-    );
-    await DAI.connect(alice).approve(
-      cellar.address,
-      ethers.constants.MaxUint256
-    );
-    await WETH.connect(alice).approve(
-      cellar.address,
-      ethers.constants.MaxUint256
-    );
-    await USDT.connect(alice).approve(
-      cellar.address,
-      ethers.constants.MaxUint256
-    );
+    await USDC.connect(alice).approve(cellar.address, ethers.constants.MaxUint256);
+    await DAI.connect(alice).approve(cellar.address, ethers.constants.MaxUint256);
+    await WETH.connect(alice).approve(cellar.address, ethers.constants.MaxUint256);
+    await USDT.connect(alice).approve(cellar.address, ethers.constants.MaxUint256);
 
-    await USDC.connect(bob).approve(
-      cellar.address,
-      ethers.constants.MaxUint256
-    );
+    await USDC.connect(bob).approve(cellar.address, ethers.constants.MaxUint256);
     await DAI.connect(bob).approve(cellar.address, ethers.constants.MaxUint256);
-    await WETH.connect(bob).approve(
-      cellar.address,
-      ethers.constants.MaxUint256
-    );
-    await USDT.connect(bob).approve(
-      cellar.address,
-      ethers.constants.MaxUint256
-    );
+    await WETH.connect(bob).approve(cellar.address, ethers.constants.MaxUint256);
+    await USDT.connect(bob).approve(cellar.address, ethers.constants.MaxUint256);
 
     // Approve cellar to spend shares (to take as fees)
     await cellar.approve(cellar.address, ethers.constants.MaxUint256);
 
-    await cellar
-      .connect(alice)
-      .approve(cellar.address, ethers.constants.MaxUint256);
+    await cellar.connect(alice).approve(cellar.address, ethers.constants.MaxUint256);
 
-    await cellar
-      .connect(bob)
-      .approve(cellar.address, ethers.constants.MaxUint256);
+    await cellar.connect(bob).approve(cellar.address, ethers.constants.MaxUint256);
 
-    // Mint initial liquidity to Aave USDC lending pool
+    // Mint initial liquidity to Aave lending pool
     await USDC.mint(aUSDC.address, BigNum(5_000_000, 6));
+    await DAI.mint(aDAI.address, BigNum(5_000_000, 18));
 
     // Mint initial liquidity for swaps
     await USDC.mint(sushiswapRouter.address, BigNum(5_000_000, 6));
+    await USDC.mint(curveRegistryExchange.address, BigNum(5_000_000, 6));
     await USDT.mint(curveRegistryExchange.address, BigNum(5_000_000, 6));
     await DAI.mint(curveRegistryExchange.address, BigNum(5_000_000, 18));
   });
@@ -262,16 +246,11 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should deposit all user's balance if they try depositing more than their balance", async () => {
-      // ensure deposit restriction isn't a problem
-      await cellar.removeLiquidityRestriction();
-
       const ownerBalance = await USDC.balanceOf(owner.address);
       const cellarBalance = await USDC.balanceOf(cellar.address);
       await cellar.deposit(ownerBalance.mul(2), owner.address);
       expect(await USDC.balanceOf(owner.address)).to.eq(0);
-      expect(await USDC.balanceOf(cellar.address)).to.eq(
-        cellarBalance.add(ownerBalance)
-      );
+      expect(await USDC.balanceOf(cellar.address)).to.eq(cellarBalance.add(ownerBalance));
     });
 
     it("should use and store index of first non-zero deposit", async () => {
@@ -283,29 +262,19 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar.connect(alice).deposit(BigNum(100, 6), alice.address);
       // alice only withdraws half from index 0, leaving some shares remaining
-      await cellar
-        .connect(alice)
-        .withdraw(BigNum(50, 6), alice.address, alice.address);
+      await cellar.connect(alice).withdraw(BigNum(50, 6), alice.address, alice.address);
       // expect next non-zero deposit is set to index 0 since some shares still remain
       expect(await cellar.currentDepositIndex(alice.address)).to.eq(0);
     });
 
     it("should not allow deposits of 0", async () => {
-      await expect(cellar.deposit(0, owner.address)).to.be.revertedWith(
-        "ZeroShares()"
-      );
+      await expect(cellar.deposit(0, owner.address)).to.be.revertedWith("USR_ZeroShares()");
     });
 
     it("should emit Deposit event", async () => {
       await expect(cellar.deposit(BigNum(1000, 6), alice.address))
         .to.emit(cellar, "Deposit")
-        .withArgs(
-          owner.address,
-          alice.address,
-          USDC.address,
-          BigNum(1000, 6),
-          BigNum(1000, 18)
-        );
+        .withArgs(owner.address, alice.address, USDC.address, BigNum(1000, 6), BigNum(1000, 18));
     });
   });
 
@@ -318,19 +287,12 @@ describe("AaveV2StablecoinCellar", () => {
         const mintedShares = BigNum(i, 18);
         const currentShares = await cellar.balanceOf(owner.address);
         await cellar.mint(mintedShares, owner.address);
-        expect(await cellar.balanceOf(owner.address)).to.eq(
-          currentShares.add(mintedShares)
-        );
-        expect(await USDC.balanceOf(owner.address)).to.eq(
-          ownerOldBalance.sub(BigNum(i, 6))
-        );
+        expect(await cellar.balanceOf(owner.address)).to.eq(currentShares.add(mintedShares));
+        expect(await USDC.balanceOf(owner.address)).to.eq(ownerOldBalance.sub(BigNum(i, 6)));
       }
     });
 
     it("should mint as much as possible if tries to mint more than they can", async () => {
-      // ensure deposit restriction isn't a problem
-      await cellar.removeLiquidityRestriction();
-
       const balance = await USDC.balanceOf(owner.address);
       const maxShares = await cellar.previewDeposit(balance);
 
@@ -359,9 +321,7 @@ describe("AaveV2StablecoinCellar", () => {
 
       const aliceOldBalance = await USDC.balanceOf(alice.address);
       // alice should be able redeem all shares for initial $100 (50% of total)
-      await cellar
-        .connect(alice)
-        .withdraw(BigNum(100, 6), alice.address, alice.address);
+      await cellar.connect(alice).withdraw(BigNum(100, 6), alice.address, alice.address);
       const aliceNewBalance = await USDC.balanceOf(alice.address);
       // expect alice receives desired amount of tokens
       expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(BigNum(100, 6));
@@ -371,9 +331,9 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should withdraw correctly when called with all active shares", async () => {
       // convert all inactive assets -> active assets
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
 
-      // mimic growth from $200 -> $250 (1.25x increase) while in strategy
+      // mimic growth from $200 -> $250 (1.25x increase) while in position
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
       const ownerOldBalance = await USDC.balanceOf(owner.address);
@@ -385,9 +345,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
 
       const aliceOldBalance = await USDC.balanceOf(alice.address);
-      await cellar
-        .connect(alice)
-        .withdraw(BigNum(125, 6), alice.address, alice.address);
+      await cellar.connect(alice).withdraw(BigNum(125, 6), alice.address, alice.address);
       const aliceNewBalance = await USDC.balanceOf(alice.address);
       // alice should be able redeem all shares for initial $125 (50% of total)
       expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(BigNum(125, 6));
@@ -397,9 +355,9 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should withdraw correctly when called with active and inactive shares", async () => {
       // convert all inactive assets -> active assets
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
 
-      // mimic growth from $200 -> $250 (1.25x increase) while in strategy
+      // mimic growth from $200 -> $250 (1.25x increase) while in position
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
       // owner adds $100 of inactive assets
@@ -416,9 +374,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
 
       const aliceOldBalance = await USDC.balanceOf(alice.address);
-      await cellar
-        .connect(alice)
-        .withdraw(BigNum(200, 6), alice.address, alice.address);
+      await cellar.connect(alice).withdraw(BigNum(200, 6), alice.address, alice.address);
       const aliceNewBalance = await USDC.balanceOf(alice.address);
       // expect alice receives desired amount of tokens
       expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(BigNum(75 + 125, 6));
@@ -430,74 +386,71 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.withdraw(BigNum(100, 6), owner.address, owner.address);
       // owner should now have nothing left to withdraw
       expect(await cellar.balanceOf(owner.address)).to.eq(0);
-      await expect(
-        cellar.withdraw(1, owner.address, owner.address)
-      ).to.be.revertedWith("ZeroShares()");
+      await expect(cellar.withdraw(1, owner.address, owner.address)).to.be.revertedWith("USR_ZeroShares()");
 
       // alice only has $100 to withdraw, withdrawing $150 should only withdraw $100
       const aliceOldBalance = await USDC.balanceOf(alice.address);
-      await cellar
-        .connect(alice)
-        .withdraw(BigNum(150, 6), alice.address, alice.address);
+      await cellar.connect(alice).withdraw(BigNum(150, 6), alice.address, alice.address);
       const aliceNewBalance = await USDC.balanceOf(alice.address);
       expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(BigNum(100, 6));
     });
 
     it("should not allow withdraws of 0", async () => {
-      await expect(
-        cellar.withdraw(0, owner.address, owner.address)
-      ).to.be.revertedWith("ZeroAssets()");
+      await expect(cellar.withdraw(0, owner.address, owner.address)).to.be.revertedWith("USR_ZeroAssets()");
     });
 
     it("should not allow unapproved account to withdraw using another's shares", async () => {
+      const shares = BigNum(10, 18);
+
       // owner tries to withdraw alice's shares without approval (expect revert)
-      await expect(cellar.withdraw(BigNum(1, 6), owner.address, alice.address))
-        .to.be.reverted;
+      await expect(cellar.redeem(shares, owner.address, alice.address)).to.be.reverted;
 
-      cellar.connect(alice).approve(BigNum(1, 6).toString(), owner.address);
+      await cellar.connect(alice).approve(owner.address, shares);
 
-      // owner tries again after alice approved owner to withdraw $1 (expect pass)
-      cellar.withdraw(BigNum(1, 6), owner.address, alice.address);
+      // owner tries again after alice approved owner to withdraw $10 (expect pass)
+      await cellar.redeem(shares, owner.address, alice.address);
 
-      // owner tries to withdraw another $1 (expect revert)
-      await expect(cellar.withdraw(BigNum(1, 6), owner.address, alice.address))
-        .to.be.reverted;
+      // owner tries to withdraw another $10 (expect revert)
+      await expect(cellar.redeem(shares, owner.address, alice.address)).to.be.reverted;
     });
 
-    it("should only withdraw from strategy if holding pool does not contain enough funds", async () => {
-      await cellar.enterStrategy();
+    it("should only withdraw from position if holding pool does not contain enough funds", async () => {
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
       await cellar.connect(alice).deposit(BigNum(125, 6), alice.address);
 
       const beforeActiveAssets = await cellar.activeAssets();
 
-      // with $125 in strategy and $125 in holding pool, should with
       await cellar.withdraw(BigNum(125, 6), owner.address, owner.address);
 
-      const afterActiveAssets = await cellar.activeAssets();
-
-      // active assets from strategy should not have changed
-      expect(afterActiveAssets).to.eq(beforeActiveAssets);
+      // active assets from position should not have changed
+      expect(await cellar.activeAssets()).to.eq(beforeActiveAssets);
       // should have withdrawn from holding pool funds
       expect(await cellar.inactiveAssets()).to.eq(0);
+
+      const beforeAliceBalance = await USDC.balanceOf(alice.address);
+
+      const withdrawnAssets = BigNum(125, 6);
+      await cellar.connect(alice).withdraw(withdrawnAssets, alice.address, alice.address);
+
+      // should have withdrawn from Aave if holding pool is empty
+      expect(await cellar.activeAssets()).to.eq(beforeActiveAssets.sub(withdrawnAssets));
+      expect(await USDC.balanceOf(alice.address)).to.eq(beforeAliceBalance.add(withdrawnAssets));
+
+      const yieldEarned = (await cellar.fees())[0];
+
+      // should have updated yield
+      expect(yieldEarned).to.eq(BigNum(50, 18));
     });
 
     it("should emit Withdraw event", async () => {
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
-      await expect(
-        cellar.withdraw(BigNum(2000, 6), alice.address, owner.address)
-      )
+      await expect(cellar.withdraw(BigNum(2000, 6), alice.address, owner.address))
         .to.emit(cellar, "Withdraw")
-        .withArgs(
-          alice.address,
-          owner.address,
-          USDC.address,
-          BigNum(125, 6),
-          BigNum(100, 18)
-        );
+        .withArgs(alice.address, owner.address, USDC.address, BigNum(125, 6), BigNum(100, 18));
     });
   });
 
@@ -531,7 +484,7 @@ describe("AaveV2StablecoinCellar", () => {
   describe("transfer", () => {
     beforeEach(async () => {
       await cellar.deposit(BigNum(100, 6), owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
     });
 
     it("should correctly update deposit accounting upon transferring shares", async () => {
@@ -543,12 +496,10 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.transfer(alice.address, transferredActiveShares);
       const aliceNewBalance = await cellar.balanceOf(alice.address);
 
-      expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(
-        transferredActiveShares
-      );
+      expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(transferredActiveShares);
 
       let ownerDeposit = await cellar.userDeposits(owner.address, 0);
-      let aliceDeposit = await cellar.userDeposits(alice.address, 0);
+      const aliceDeposit = await cellar.userDeposits(alice.address, 0);
 
       expect(ownerDeposit[0]).to.eq(0); // expect 0 assets (should have been deleted for a gas refund)
       expect(ownerDeposit[1]).to.eq(BigNum(50, 18)); // expect 50 shares
@@ -567,23 +518,13 @@ describe("AaveV2StablecoinCellar", () => {
       const ownerOldBalance = await cellar.balanceOf(owner.address);
       await cellar
         .connect(bob)
-        ["transferFrom(address,address,uint256,bool)"](
-          bob.address,
-          owner.address,
-          transferredInactiveShares,
-          false
-        );
+        ["transferFrom(address,address,uint256,bool)"](bob.address, owner.address, transferredInactiveShares, false);
       const ownerNewBalance = await cellar.balanceOf(owner.address);
 
-      expect(ownerNewBalance.sub(ownerOldBalance)).to.eq(
-        transferredInactiveShares
-      );
+      expect(ownerNewBalance.sub(ownerOldBalance)).to.eq(transferredInactiveShares);
 
       const bobDeposit = await cellar.userDeposits(bob.address, 0);
-      ownerDeposit = await cellar.userDeposits(
-        owner.address,
-        (await cellar.numDeposits(owner.address)).sub(1)
-      );
+      ownerDeposit = await cellar.userDeposits(owner.address, 1);
 
       // must change decimals because deposit data is stored with 18 decimals
       expect(bobDeposit[0]).to.eq(BigNum(75, 18)); // expect 75 assets
@@ -606,7 +547,7 @@ describe("AaveV2StablecoinCellar", () => {
         owner.address,
         alice.address,
         await cellar.balanceOf(owner.address),
-        false
+        false,
       );
 
       const aliceOldBalance = await USDC.balanceOf(alice.address);
@@ -614,11 +555,7 @@ describe("AaveV2StablecoinCellar", () => {
       // alice redeem all the shares that have been transferred to her and withdraw all of her assets
       await cellar
         .connect(alice)
-        .withdraw(
-          await cellar.convertToAssets(await cellar.balanceOf(alice.address)),
-          alice.address,
-          alice.address
-        );
+        .withdraw(await cellar.convertToAssets(await cellar.balanceOf(alice.address)), alice.address, alice.address);
 
       const aliceNewBalance = await USDC.balanceOf(alice.address);
 
@@ -627,25 +564,21 @@ describe("AaveV2StablecoinCellar", () => {
       expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(BigNum(125 + 100, 6));
     });
 
-    it("should only transfer active shares by default", async () => {
-      const expectedShares = await cellar.balanceOf(owner.address);
+    it("should only transfer active shares when specified", async () => {
+      const activeShares = BigNum(100, 18);
+      const inactiveShares = BigNum(150, 18);
 
-      // gain $100 worth of inactive shares
-      await cellar.deposit(BigNum(100, 6), owner.address);
+      // gain inactive shares
+      await cellar.mint(inactiveShares, owner.address);
 
-      const aliceOldBalance = await cellar.balanceOf(alice.address);
-
-      // attempting to transfer all active shares should transfer $100 worth of active shares (and not the
-      // $100 worth of inactive shares) and not revert
-      await cellar.transfer(
-        alice.address,
-        await cellar.balanceOf(owner.address)
-      );
-
-      const aliceNewBalance = await cellar.balanceOf(alice.address);
+      // attempting to transfer all shares should only transfer $100 worth of active shares (and not
+      // the $100 worth of inactive shares) and not revert
+      await cellar["transferFrom(address,address,uint256,bool)"](owner.address, alice.address, activeShares, true);
 
       // expect alice to have received $100 worth of shares
-      expect(aliceNewBalance.sub(aliceOldBalance)).to.eq(expectedShares);
+      expect(await cellar.balanceOf(alice.address)).to.eq(activeShares);
+      // expect to have not transferred $100 worth of inactive shares
+      expect((await cellar.getUserBalances(owner.address))[1]).to.eq(inactiveShares);
     });
 
     it("should use and store index of first non-zero deposit if not only active", async () => {
@@ -660,7 +593,7 @@ describe("AaveV2StablecoinCellar", () => {
         owner.address,
         alice.address,
         await cellar.balanceOf(owner.address),
-        false
+        false,
       );
       // expect next non-zero deposit is set to index 2
       expect(await cellar.currentDepositIndex(owner.address)).to.eq(2);
@@ -669,12 +602,7 @@ describe("AaveV2StablecoinCellar", () => {
       // alice only transfers half from index 0, leaving some shares remaining
       await cellar
         .connect(alice)
-        ["transferFrom(address,address,uint256,bool)"](
-          alice.address,
-          owner.address,
-          BigNum(50, 6),
-          false
-        );
+        ["transferFrom(address,address,uint256,bool)"](alice.address, owner.address, BigNum(50, 6), false);
       // expect next non-zero deposit is set to index 0 since some shares still remain
       expect(await cellar.currentDepositIndex(alice.address)).to.eq(0);
     });
@@ -685,55 +613,66 @@ describe("AaveV2StablecoinCellar", () => {
 
       await cellar
         .connect(alice)
-        ["transferFrom(address,address,uint256)"](
-          owner.address,
-          alice.address,
-          BigNum(50, 18)
-        );
+        ["transferFrom(address,address,uint256)"](owner.address, alice.address, BigNum(50, 18));
 
-      await expect(
-        cellar["transferFrom(address,address,uint256)"](
-          alice.address,
-          owner.address,
-          BigNum(200, 18)
-        )
-      ).to.be.reverted;
+      await expect(cellar["transferFrom(address,address,uint256)"](alice.address, owner.address, BigNum(200, 18))).to.be
+        .reverted;
     });
   });
 
-  describe("enterStrategy", () => {
+  describe("enterPosition", () => {
     let holdingPoolAssets: BigNumber;
     let aaveOldBalance: BigNumber;
 
     beforeEach(async () => {
-      holdingPoolAssets = BigNum(200, 6);
+      holdingPoolAssets = BigNum(1000, 6);
       await cellar.deposit(holdingPoolAssets, owner.address);
 
       aaveOldBalance = await USDC.balanceOf(aUSDC.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
     });
 
     it("should deposit cellar inactive assets into Aave", async () => {
       expect(await USDC.balanceOf(cellar.address)).to.eq(0);
-      expect(await USDC.balanceOf(aUSDC.address)).to.eq(
-        aaveOldBalance.add(holdingPoolAssets)
-      );
+      expect(await USDC.balanceOf(aUSDC.address)).to.eq(aaveOldBalance.add(holdingPoolAssets));
     });
 
     it("should return correct amount of aTokens to cellar", async () => {
-      expect(await aUSDC.balanceOf(cellar.address)).to.eq(BigNum(200, 6));
+      expect(await aUSDC.balanceOf(cellar.address)).to.eq(holdingPoolAssets);
     });
 
     it("should not allow deposit if cellar does not have enough liquidity", async () => {
-      // cellar tries to enter strategy with $100 it does not have
-      await expect(cellar.enterStrategy()).to.be.reverted;
+      // cellar tries to enter position with $100 it does not have
+      await expect(cellar.connect(await impersonateGravity()).enterPosition()).to.be.reverted;
     });
 
-    it("should emit DepositToAave event", async () => {
+    it("should update yield", async () => {
+      let yieldEarned = (await cellar.fees())[0];
+
+      expect(yieldEarned).to.eq(0);
+
+      await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
+
+      await cellar.deposit(holdingPoolAssets, owner.address);
+
+      await cellar.connect(await impersonateGravity()).enterPosition();
+
+      yieldEarned = (await cellar.fees())[0];
+
+      expect(yieldEarned).to.eq(BigNum(250, 18));
+    });
+
+    it("should emit DepositToAave and EnterPosition events", async () => {
       await cellar.deposit(BigNum(200, 6), owner.address);
 
-      await expect(cellar.enterStrategy())
+      await expect(cellar.connect(await impersonateGravity()).enterPosition())
         .to.emit(cellar, "DepositToAave")
+        .withArgs(USDC.address, BigNum(200, 6));
+
+      await cellar.deposit(BigNum(200, 6), owner.address);
+
+      await expect(cellar.connect(await impersonateGravity()).enterPosition())
+        .to.emit(cellar, "EnterPosition")
         .withArgs(USDC.address, BigNum(200, 6));
     });
   });
@@ -742,19 +681,25 @@ describe("AaveV2StablecoinCellar", () => {
     beforeEach(async () => {
       // simulate cellar contract having 100 stkAAVE to claim
       await incentivesController.addRewards(cellar.address, BigNum(100, 18));
-
-      await cellar.claimAndUnstake();
     });
 
     it("should claim rewards from Aave and begin unstaking", async () => {
+      await cellar.connect(await impersonateGravity()).claimAndUnstake();
+
       // expect cellar to claim all 100 stkAAVE
       expect(await stkAAVE.balanceOf(cellar.address)).to.eq(BigNum(100, 18));
     });
 
     it("should have started 10 day unstaking cooldown period", async () => {
-      expect(await stkAAVE.stakersCooldowns(cellar.address)).to.eq(
-        await timestamp()
-      );
+      await cellar.connect(await impersonateGravity()).claimAndUnstake();
+
+      expect(await stkAAVE.stakersCooldowns(cellar.address)).to.eq(await timestamp());
+    });
+
+    it("should emits a ClaimAndUnstake event", async () => {
+      await expect(cellar.connect(await impersonateGravity()).claimAndUnstake())
+        .to.emit(cellar, "ClaimAndUnstake")
+        .withArgs(BigNum(100, 18));
     });
   });
 
@@ -762,43 +707,51 @@ describe("AaveV2StablecoinCellar", () => {
     beforeEach(async () => {
       await incentivesController.addRewards(cellar.address, BigNum(100, 18));
       // cellar claims rewards and begins the 10 day cooldown period
-      await cellar.claimAndUnstake();
+      await cellar.connect(await impersonateGravity()).claimAndUnstake();
 
       await timetravel(864000);
-
-      await cellar.reinvest(0);
     });
 
     it("should reinvested rewards back into principal", async () => {
+      await cellar.connect(await impersonateGravity()).reinvest(0);
+
       expect(await stkAAVE.balanceOf(cellar.address)).to.eq(0);
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(BigNum(95, 6));
     });
 
-    it("should have accrued performance fees", async () => {
-      const accruedPerformanceFees = await cellar.accruedPerformanceFees();
+    it("should update yield", async () => {
+      // mimic gaining $250 yield
+      await aUSDC.mint(cellar.address, BigNum(250, 6), await lendingPool.index());
 
-      // expect $9.50 (10% of $95) worth of fees to be minted as shares
-      const expectedFeeShares = BigNum(9.5, 18);
-      expect(await cellar.balanceOf(cellar.address)).to.eq(expectedFeeShares);
-      expect(accruedPerformanceFees).to.eq(expectedFeeShares);
+      await cellar.connect(await impersonateGravity()).reinvest(0);
+
+      const yieldEarned = (await cellar.fees())[0];
+
+      // $100 of reinvested rewards + $250 of interest earned - $5 lost on swap
+      expect(yieldEarned).to.eq(BigNum(100 + 250 - 5, 18));
+    });
+
+    it("should emits a Reinvest event", async () => {
+      await expect(cellar.connect(await impersonateGravity()).reinvest(0))
+        .to.emit(cellar, "Reinvest")
+        .withArgs(USDC.address, BigNum(100, 18), BigNum(95, 6));
     });
   });
 
   describe("rebalance", () => {
     beforeEach(async () => {
       await cellar.deposit(BigNum(1000, 6), owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await cellar.connect(alice).deposit(BigNum(500, 6), owner.address);
-
-      // set initial fee data
-      await cellar.accrueFees();
     });
 
     it("should rebalance all cellar assets into new assets", async () => {
       expect(await DAI.balanceOf(cellar.address)).to.eq(0);
       expect(await cellar.totalAssets()).to.eq(BigNum(1500, 6));
 
-      await cellar.rebalance(
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
+      await cellar.connect(await impersonateGravity()).rebalance(
         [
           USDC.address,
           "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
@@ -816,18 +769,18 @@ describe("AaveV2StablecoinCellar", () => {
           [0, 0, 0],
           [0, 0, 0],
         ],
-        0
+        0,
       );
 
       expect(await aUSDC.balanceOf(cellar.address)).to.eq(0);
-      expect(await aDAI.balanceOf(cellar.address)).to.be.at.least(
-        BigNum(950, 18)
-      );
+      expect(await aDAI.balanceOf(cellar.address)).to.be.at.least(BigNum(950, 18));
     });
 
     it("should not be possible to rebalance from an asset other than the current asset", async () => {
+      await cellar.connect(await impersonateGravity()).setTrust(USDT.address, true);
+
       await expect(
-        cellar.rebalance(
+        cellar.connect(await impersonateGravity()).rebalance(
           [
             DAI.address,
             "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
@@ -845,15 +798,15 @@ describe("AaveV2StablecoinCellar", () => {
             [0, 0, 0],
             [0, 0, 0],
           ],
-          0
-        )
+          0,
+        ),
       ).to.be.reverted;
     });
 
     it("should not be possible to rebalance to the same token", async () => {
       const asset = await cellar.asset();
       await expect(
-        cellar.rebalance(
+        cellar.connect(await impersonateGravity()).rebalance(
           [
             asset,
             "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
@@ -871,19 +824,18 @@ describe("AaveV2StablecoinCellar", () => {
             [0, 0, 0],
             [0, 0, 0],
           ],
-          0
-        )
-      ).to.be.revertedWith(`SameAsset("${asset}")`);
+          0,
+        ),
+      ).to.be.revertedWith(`STATE_SameAsset("${asset}")`);
     });
 
-    it("should have accrued performance fees", async () => {
-      await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
+    it("should update yield", async () => {
+      // mimic gaining $250 yield in USDC
+      await aUSDC.mint(cellar.address, BigNum(250, 6), await lendingPool.index());
 
-      const accruedPerformanceFeesBefore =
-        await cellar.accruedPerformanceFees();
-      const feesBefore = await cellar.balanceOf(cellar.address);
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
 
-      await cellar.rebalance(
+      await cellar.connect(await impersonateGravity()).rebalance(
         [
           USDC.address,
           "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
@@ -901,102 +853,194 @@ describe("AaveV2StablecoinCellar", () => {
           [0, 0, 0],
           [0, 0, 0],
         ],
-        0
+        0,
       );
 
-      const accruedPerformanceFeesAfter = await cellar.accruedPerformanceFees();
-      const feesAfter = await cellar.balanceOf(cellar.address);
+      let yieldEarned = (await cellar.fees())[0];
+      expect(yieldEarned).to.eq(BigNum(250, 18));
 
-      expect(accruedPerformanceFeesAfter.gt(accruedPerformanceFeesBefore)).to.be
-        .true;
-      expect(feesAfter.gt(feesBefore)).to.be.true;
+      let lastActiveAssets = (await cellar.fees())[1];
+      expect(lastActiveAssets).to.eq(await aDAI.balanceOf(cellar.address));
+
+      // mimic gaining $250 yield in DAI
+      await aDAI.mint(cellar.address, BigNum(250, 18), await lendingPool.index());
+
+      await cellar.connect(await impersonateGravity()).rebalance(
+        [
+          DAI.address,
+          "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          USDC.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        0,
+      );
+
+      yieldEarned = (await cellar.fees())[0];
+      expect(yieldEarned).to.eq(BigNum(500, 18));
+
+      lastActiveAssets = (await cellar.fees())[1];
+      // must convert aUSDC from 6 -> 18 decimals
+      expect(lastActiveAssets).to.eq((await aUSDC.balanceOf(cellar.address)).mul(1e12));
+    });
+
+    it("should update related state", async () => {
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
+      const tx = await cellar.connect(await impersonateGravity()).rebalance(
+        [
+          USDC.address,
+          "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          DAI.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        0,
+      );
+
+      const receipt = await tx.wait();
+
+      // should have updated current asset
+      expect(await cellar.asset()).to.eq(DAI.address);
+
+      // should have updated asset decimals
+      expect(await cellar.assetDecimals()).to.eq(18);
+
+      // should have updated asset decimals
+      expect(await cellar.assetAToken()).to.eq(aDAI.address);
+
+      // should have updated limits
+      expect(await cellar.liquidityLimit()).to.eq(BigNum(5_000_000, 18));
+      expect(await cellar.depositLimit()).to.eq(BigNum(50_000, 18));
+
+      // should have updated lastTimeEnteredPosition
+      expect(await cellar.lastTimeEnteredPosition()).to.eq(
+        (await ethers.provider.getBlock(receipt.blockNumber)).timestamp,
+      );
+    });
+
+    it("should emits a Rebalance event", async () => {
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
+      await expect(
+        cellar.connect(await impersonateGravity()).rebalance(
+          [
+            USDC.address,
+            "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+            DAI.address,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+          ],
+          [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          0,
+        ),
+      )
+        .to.emit(cellar, "Rebalance")
+        .withArgs(USDC.address, DAI.address, BigNum(1425, 18));
     });
   });
 
   describe("accrueFees", () => {
+    it("should accrue no fees when cellar has no active assets", async () => {
+      await cellar.accrueFees();
+
+      const accruedPlatformFees1 = (await cellar.fees())[3];
+      const accruedPerformanceFees1 = (await cellar.fees())[4];
+
+      expect(accruedPlatformFees1).to.eq(0);
+      expect(accruedPerformanceFees1).to.eq(0);
+    });
+
     it("should accrue platform fees", async () => {
       // owner deposits $1000
       await cellar.deposit(BigNum(1000, 6), owner.address);
 
       // convert all inactive assets -> active assets
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
 
-      await timetravel(86400); // 1 day
+      for (let i = 1; i <= 3; i++) {
+        const accruedPlatformFeesBefore = (await cellar.fees())[3];
+        const feesInAssetsBefore = await cellar.convertToAssets(accruedPlatformFeesBefore);
 
-      await cellar.accrueFees();
+        const elapsedTime = getRandomInt(1, 7) * 86400;
 
-      const accruedPlatformFees = await cellar.accruedPlatformFees();
-      const feesInAssets = await cellar.convertToAssets(accruedPlatformFees);
+        await timetravel(elapsedTime);
 
-      // ~$0.027 worth of shares in fees = $1000 * 86400 sec * (1% / secsPerYear)
-      expect(feesInAssets).to.be.closeTo(BigNum(0.027, 6), BigNum(0.001, 6));
+        await cellar.accrueFees();
+
+        const accruedPlatformFees = (await cellar.fees())[3];
+        const feesInAssets = await cellar.convertToAssets(accruedPlatformFees);
+
+        // expect ~$0.027 worth of shares ($1000 * elapsedTime * (1% / secsPerYear)) in fees per accrual
+        const expectedFeesAccrued = +(1000 * elapsedTime * (0.01 / 31536000)).toFixed(6);
+
+        expect(feesInAssets).to.be.closeTo(feesInAssetsBefore.add(BigNum(expectedFeesAccrued, 6)), 1e2);
+      }
     });
 
     it("should accrue performance fees", async () => {
-      // owner deposits $1000
-      await cellar.deposit(BigNum(1000, 6), owner.address);
+      for (let i = 1; i <= 3; i++) {
+        await cellar.deposit(BigNum(getRandomInt(201, 1000), 6), owner.address);
 
-      // convert all inactive assets -> active assets
-      await cellar.enterStrategy();
+        // convert all inactive assets -> active assets
+        await cellar.connect(await impersonateGravity()).enterPosition();
 
-      await cellar.accrueFees();
+        // mimic gaining $250 yield
+        await aUSDC.mint(cellar.address, BigNum(250, 6), await lendingPool.index());
 
-      // mimic growth from $1000 -> $1250 (1.25x increase) while in strategy
-      await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
+        await cellar.withdraw(BigNum(getRandomInt(1, 200), 6), owner.address, owner.address);
 
-      await cellar.accrueFees();
+        // should have ignored random deposits and withdraws
+        const yieldEarned = (await cellar.fees())[0];
+        expect(yieldEarned).to.eq(BigNum(250, 18));
 
-      const performanceFees = await cellar.accruedPerformanceFees();
-      // expect cellar to have received $25 fees in shares = $250 gain * 10%,
-      // which would be ~20 shares at the time of accrual
-      expect(performanceFees).to.be.closeTo(BigNum(20, 18), BigNum(0.001, 18));
+        const expectedPerformanceFeesAccrued = await cellar.convertToShares(BigNum(25, 6));
 
-      const ownerAssetBalance = await cellar.convertToAssets(
-        await cellar.balanceOf(owner.address)
-      );
-      const cellarAssetBalance = await cellar.convertToAssets(
-        await cellar.balanceOf(cellar.address)
-      );
+        const tx = await cellar.accrueFees();
+        const receipt = await tx.wait();
 
-      // expect to be ~$1250 (will be off by an extremely slight amount due to
-      // converToAssets truncating 18 decimals of precision to 6 decimals)
-      expect(
-        ethers.BigNumber.from(ownerAssetBalance).add(
-          ethers.BigNumber.from(cellarAssetBalance)
-        )
-      ).to.be.closeTo(BigNum(1250, 6), BigNum(0.001, 6));
+        const len = receipt.events?.length as number;
+        const performanceFeesAccrued = await receipt.events![len - 1].args![0];
+
+        expect(performanceFeesAccrued).to.be.closeTo(expectedPerformanceFeesAccrued, 1e11);
+      }
     });
+  });
 
-    it("should burn performance fees as insurance for negative performance", async () => {
-      // owner deposits $1000
-      await cellar.deposit(BigNum(1000, 6), owner.address);
-
-      // convert all inactive assets -> active assets
-      await cellar.enterStrategy();
-
-      await cellar.accrueFees();
-
-      // mimic growth from $1000 -> $1250 (1.25x increase) while in strategy
-      await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
-
-      await cellar.accrueFees();
-
-      await lendingPool.setLiquidityIndex(
-        ethers.BigNumber.from("1000000000000000000000000000")
-      );
-
-      await cellar.accrueFees();
-
-      const performanceFees = await cellar.accruedPerformanceFees();
-
-      // expect all performance fee shares to have been burned
-      expect(performanceFees).to.eq(0);
-    });
-
+  describe("transferFees", async () => {
     it("should be able to transfer fees to Cosmos", async () => {
       // accrue some platform fees
       await cellar.deposit(BigNum(1000, 6), owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await timetravel(86400); // 1 day
       await cellar.accrueFees();
 
@@ -1005,23 +1049,24 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.accrueFees();
 
       const fees = await cellar.balanceOf(cellar.address);
-      const accruedPlatformFees = await cellar.accruedPlatformFees();
-      const accruedPerformanceFees = await cellar.accruedPerformanceFees();
+      const accruedPlatformFees = (await cellar.fees())[3];
+      const accruedPerformanceFees = (await cellar.fees())[4];
+
       expect(fees).to.eq(accruedPlatformFees.add(accruedPerformanceFees));
 
       const feeInAssets = await cellar.convertToAssets(fees);
 
-      await cellar.transferFees();
+      await cellar.connect(await impersonateGravity()).transferFees();
 
       // expect all fee shares to be transferred out
       expect(await cellar.balanceOf(cellar.address)).to.eq(0);
       expect(await USDC.balanceOf(gravity.address)).to.eq(feeInAssets);
     });
 
-    it("should only withdraw from strategy if holding pool does not contain enough funds", async () => {
+    it("should only withdraw from position if holding pool does not contain enough funds", async () => {
       // accrue some platform fees
       await cellar.deposit(BigNum(1000, 6), owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await timetravel(86400); // 1 day
       await cellar.accrueFees();
 
@@ -1035,40 +1080,115 @@ describe("AaveV2StablecoinCellar", () => {
       const beforeInactiveAssets = await cellar.inactiveAssets();
 
       // redeems fee shares for their underlying assets and sends them to Cosmos
-      await cellar.transferFees();
+      await cellar.connect(await impersonateGravity()).transferFees();
 
       const afterActiveAssets = await cellar.activeAssets();
       const afterInactiveAssets = await cellar.inactiveAssets();
 
-      // active assets from strategy should not have changed
+      // active assets from position should not have changed
       expect(afterActiveAssets).to.eq(beforeActiveAssets);
       // should have withdrawn from holding pool funds
       expect(afterInactiveAssets.lt(beforeInactiveAssets)).to.be.true;
     });
   });
 
-  describe("pause", () => {
-    it("should prevent users from depositing while paused", async () => {
-      await cellar.setPause(true);
-      expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith(
-        "ContractPaused()"
+  describe("trust", async () => {
+    beforeEach(async () => {
+      await cellar.deposit(BigNum(1000, 6), owner.address);
+      await cellar.connect(await impersonateGravity()).enterPosition();
+    });
+
+    it("should prevent entering or rebalancing into untrusted position", async () => {
+      await expect(
+        cellar.connect(await impersonateGravity()).rebalance(
+          [
+            USDC.address,
+            "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+            DAI.address,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+          ],
+          [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          0,
+        ),
+      ).to.be.revertedWith(`STATE_UntrustedPosition("${DAI.address}")`);
+
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
+      await cellar.connect(await impersonateGravity()).rebalance(
+        [
+          USDC.address,
+          "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          DAI.address,
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000",
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        0,
       );
     });
 
-    it("should emits a Pause event", async () => {
-      await expect(cellar.setPause(true))
-        .to.emit(cellar, "Pause")
-        .withArgs(true);
+    await cellar.connect(await impersonateGravity()).setTrust(DAI.address, false);
+
+    await expect(cellar.connect(await impersonateGravity()).enterPosition()).to.be.revertedWith(
+      `STATE_UntrustedPosition("${DAI.address}")`,
+    );
+
+    await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
+
+    await cellar.connect(await impersonateGravity()).enterPosition();
+  });
+
+  describe("setTrust", async () => {
+    beforeEach(async () => {
+      const activeAssets = BigNum(1000, 6);
+
+      await cellar.deposit(activeAssets, owner.address);
+      await cellar.connect(await impersonateGravity()).enterPosition();
+
+      expect(await cellar.activeAssets()).to.eq(activeAssets);
+
+      // mimic growth from $1000 -> $1250 while in position
+      await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
+
+      // distrust current position
+      await cellar.connect(await impersonateGravity()).setTrust(USDC.address, false);
+    });
+
+    it("should withdraw all active assets if distrusting current position", async () => {
+      expect(await cellar.activeAssets()).to.eq(0);
+    });
+
+    it("should update yield if withdrawing from distrusted position", async () => {
+      const yieldEarned = (await cellar.fees())[0];
+
+      expect(yieldEarned).to.eq(BigNum(250, 18));
     });
   });
 
   describe("shutdown", () => {
     it("should prevent users from depositing while shutdown", async () => {
       await cellar.deposit(BigNum(100, 6), owner.address);
-      await cellar.shutdown();
-      expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith(
-        "ContractShutdown()"
-      );
+      await cellar.connect(await impersonateGravity()).setShutdown(true, false);
+      await expect(cellar.deposit(BigNum(100, 6), owner.address)).to.be.revertedWith("STATE_ContractShutdown()");
     });
 
     it("should allow users to withdraw", async () => {
@@ -1076,65 +1196,75 @@ describe("AaveV2StablecoinCellar", () => {
       await cellar.connect(alice).deposit(BigNum(100, 6), alice.address);
 
       // cellar is shutdown
-      await cellar.shutdown();
+      await cellar.connect(await impersonateGravity()).setShutdown(true, false);
 
-      await cellar
-        .connect(alice)
-        .withdraw(BigNum(100, 6), alice.address, alice.address);
+      await cellar.connect(alice).withdraw(BigNum(100, 6), alice.address, alice.address);
     });
 
-    it("should withdraw all active assets from Aave", async () => {
+    it("should withdraw all active assets from Aave if specified and update yield", async () => {
       await cellar.deposit(BigNum(1000, 6), owner.address);
 
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
 
-      // mimic growth from $1000 -> $1250 (1.25x increase) while in strategy
+      // mimic growth from $1000 -> $1250 (1.25x increase) while in position
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
-      await cellar.shutdown();
+      await cellar.connect(await impersonateGravity()).setShutdown(true, true);
 
       // expect all of active liquidity to be withdrawn from Aave
       expect(await USDC.balanceOf(cellar.address)).to.eq(BigNum(1250, 6));
 
       // should allow users to withdraw from holding pool
       await cellar.withdraw(BigNum(1250, 6), owner.address, owner.address);
+
+      // should update yield
+      const yieldEarned = (await cellar.fees())[0];
+      expect(yieldEarned).to.eq(BigNum(250, 18));
     });
 
     it("should emit a Shutdown event", async () => {
-      await expect(cellar.shutdown()).to.emit(cellar, "Shutdown");
+      await expect(cellar.connect(await impersonateGravity()).setShutdown(true, false))
+        .to.emit(cellar, "Shutdown")
+        .withArgs(true, false);
     });
   });
 
-  describe("restrictLiquidity", () => {
+  describe("restrictions", () => {
     it("should prevent deposit if greater than max liquidity", async () => {
       // mint $5m to cellar (to hit liquidity cap)
       await USDC.mint(cellar.address, BigNum(5_000_000, 6));
 
       await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(
-        `LiquidityRestricted(${BigNum(5_000_000, 6)})`
+        `STATE_LiquidityRestricted(${BigNum(5_000_000, 6)})`,
       );
     });
 
     it("should prevent deposit if greater than max deposit", async () => {
       await USDC.mint(owner.address, BigNum(50_001, 6));
-      await expect(
-        cellar.deposit(BigNum(50_001, 6), owner.address)
-      ).to.be.revertedWith(`DepositRestricted(${BigNum(50_000, 6)})`);
+      await expect(cellar.deposit(BigNum(50_001, 6), owner.address)).to.be.revertedWith(
+        `USR_DepositRestricted(${BigNum(50_000, 6)})`,
+      );
 
       await cellar.deposit(BigNum(50_000, 6), owner.address);
-      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(
-        `DepositRestricted(${BigNum(50_000, 6)})`
-      );
+      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(`USR_DepositRestricted(${BigNum(50_000, 6)})`);
     });
 
-    it("should allow deposits above max deposit and max liquidity once restriction removed", async () => {
+    it("should allow deposits above max liquidity once limit removed", async () => {
       // mint $5m to cellar (to hit liquidity cap)
       await USDC.mint(cellar.address, BigNum(5_000_000, 6));
 
-      await cellar.removeLiquidityRestriction();
+      await cellar.connect(await impersonateGravity()).setLiquidityLimit(ethers.constants.MaxUint256);
 
-      // should be able to depositing past the max deposit restriction since its been removed
-      await cellar.deposit(BigNum(50_001, 6), owner.address);
+      await cellar.deposit(1, owner.address);
+    });
+
+    it("should allow deposits above max deposit once limit removed", async () => {
+      await cellar.deposit(BigNum(50_000, 6), owner.address);
+
+      await cellar.connect(await impersonateGravity()).setDepositLimit(ethers.constants.MaxUint256);
+
+      await USDC.mint(owner.address, BigNum(1, 6));
+      await cellar.deposit(1, owner.address);
     });
   });
 
@@ -1150,27 +1280,27 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should not allow assets managed by cellar to be transferred out", async () => {
-      await expect(cellar.sweep(USDC.address)).to.be.revertedWith(
-        `ProtectedAsset("${USDC.address}")`
+      await expect(cellar.connect(await impersonateGravity()).sweep(USDC.address)).to.be.revertedWith(
+        `STATE_ProtectedAsset("${USDC.address}")`,
       );
-      await expect(cellar.sweep(aUSDC.address)).to.be.revertedWith(
-        `ProtectedAsset("${aUSDC.address}")`
+      await expect(cellar.connect(await impersonateGravity()).sweep(aUSDC.address)).to.be.revertedWith(
+        `STATE_ProtectedAsset("${aUSDC.address}")`,
       );
-      await expect(cellar.sweep(cellar.address)).to.be.revertedWith(
-        `ProtectedAsset("${cellar.address}")`
+      await expect(cellar.connect(await impersonateGravity()).sweep(cellar.address)).to.be.revertedWith(
+        `STATE_ProtectedAsset("${cellar.address}")`,
       );
     });
 
     it("should recover tokens accidentally transferred to the contract", async () => {
-      await cellar.sweep(SOMM.address);
+      await cellar.connect(await impersonateGravity()).sweep(SOMM.address);
 
       // expect 1000 SOMM to have been transferred from cellar to owner
-      expect(await SOMM.balanceOf(owner.address)).to.eq(1000);
+      expect(await SOMM.balanceOf(gravity.address)).to.eq(1000);
       expect(await SOMM.balanceOf(cellar.address)).to.eq(0);
     });
 
     it("should emit Sweep event", async () => {
-      await expect(cellar.sweep(SOMM.address))
+      await expect(cellar.connect(await impersonateGravity()).sweep(SOMM.address))
         .to.emit(cellar, "Sweep")
         .withArgs(SOMM.address, 1000);
     });
@@ -1183,26 +1313,18 @@ describe("AaveV2StablecoinCellar", () => {
     let inactiveAssets: BigNumber;
 
     beforeEach(async () => {
-      // Start with some liquidity in the cellar to mimic more realistic conditions
-      await USDC.mint(bob.address, BigNum(1_000_000, 6));
-      await USDC.connect(bob).approve(
-        cellar.address,
-        ethers.constants.MaxUint256
-      );
-
-      await cellar.removeLiquidityRestriction();
-
-      await cellar.connect(bob).deposit(BigNum(10_000, 6), bob.address);
-      await cellar.enterStrategy();
+      await cellar.connect(bob).deposit(BigNum(12_345, 6), bob.address);
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
 
       activeShares = await cellar.balanceOf(bob.address);
-      activeAssets = BigNum(10_000 * 1.25, 6);
+      activeAssets = await cellar.previewRedeem(activeShares);
 
-      await cellar.connect(bob).deposit(BigNum(42_069, 6), bob.address);
+      inactiveAssets = BigNum(50_000, 6).sub(activeAssets);
+
+      await cellar.connect(bob).deposit(inactiveAssets, bob.address);
 
       inactiveShares = (await cellar.balanceOf(bob.address)).sub(activeShares);
-      inactiveAssets = BigNum(42_069, 6);
     });
 
     it("should accurately convert shares to assets and vice versa", async () => {
@@ -1212,9 +1334,7 @@ describe("AaveV2StablecoinCellar", () => {
         const assetsToShares = await cellar.convertToShares(initialAssets);
         const sharesBackToAssets = await cellar.convertToAssets(assetsToShares);
         expect(sharesBackToAssets).to.eq(initialAssets);
-        const assetsBackToShares = await cellar.convertToShares(
-          sharesBackToAssets
-        );
+        const assetsBackToShares = await cellar.convertToShares(sharesBackToAssets);
         expect(assetsBackToShares).to.eq(assetsToShares);
       }
     });
@@ -1225,10 +1345,7 @@ describe("AaveV2StablecoinCellar", () => {
         const assets = BigNum(i, 6);
 
         const expectedShares = await cellar.previewDeposit(assets);
-        const mintedShares = await cellar.callStatic.deposit(
-          assets,
-          owner.address
-        );
+        const mintedShares = await cellar.callStatic.deposit(assets, owner.address);
 
         expect(expectedShares).to.eq(mintedShares);
       }
@@ -1242,10 +1359,7 @@ describe("AaveV2StablecoinCellar", () => {
         const shares = BigNum(i, 18);
 
         const expectedAssets = await cellar.previewMint(shares);
-        const depositedAssets = await cellar.callStatic.mint(
-          shares,
-          owner.address
-        );
+        const depositedAssets = await cellar.callStatic.mint(shares, owner.address);
 
         expect(depositedAssets).to.eq(expectedAssets);
       }
@@ -1253,18 +1367,14 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should correctly preview withdraws", async () => {
       await cellar.deposit(BigNum(1000, 6), owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
 
       // set to run only only once, but successfully from 1 to 1000 (max amount withdrawable)
       for (let i = 100; i <= 100; i++) {
         const assets = BigNum(i, 6);
 
         const expectedShares = await cellar.previewWithdraw(assets);
-        const redeemedShares = await cellar.callStatic.withdraw(
-          assets,
-          owner.address,
-          owner.address
-        );
+        const redeemedShares = await cellar.callStatic.withdraw(assets, owner.address, owner.address);
 
         expect(redeemedShares).to.eq(expectedShares);
       }
@@ -1273,78 +1383,83 @@ describe("AaveV2StablecoinCellar", () => {
     it("should correctly preview redeems", async () => {
       await USDC.mint(owner.address, BigNum(1_000_000, 6));
       await cellar.mint(BigNum(1000, 18), owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
 
       // set to run only only once, but successfully from 1 to 1000 (max amount redeemable)
       for (let i = 100; i <= 100; i++) {
         const shares = BigNum(i, 18);
 
         const expectedAssets = await cellar.previewRedeem(shares);
-        const withdrawnAssets = await cellar.callStatic.redeem(
-          shares,
-          owner.address,
-          owner.address
-        );
+        const withdrawnAssets = await cellar.callStatic.redeem(shares, owner.address, owner.address);
 
         expect(withdrawnAssets).to.eq(expectedAssets);
       }
     });
 
     it("should accurately retrieve information on a user's deposit balances", async () => {
-      const data = await cellar.depositBalances(bob.address);
+      const data = await cellar.getUserBalances(bob.address);
 
       expect(data[0].toString()).to.eq(activeShares);
       expect(data[1].toString()).to.eq(inactiveShares);
       expect(data[2].toString()).to.eq(activeAssets);
       expect(data[3].toString()).to.eq(inactiveAssets);
     });
+
+    it("should retrieve all of a user's deposits", async () => {
+      const deposits = await cellar.getUserDeposits(bob.address);
+
+      expect(deposits.length).to.eq(2);
+    });
   });
 
   describe("max", () => {
     it("should correctly find max deposit amount", async () => {
-      await cellar.setPause(true);
+      await cellar.connect(await impersonateGravity()).setShutdown(true, false);
       expect(await cellar.maxDeposit(owner.address)).to.eq(0);
-      await cellar.setPause(false);
+      await cellar.connect(await impersonateGravity()).setShutdown(false, false);
 
       const maxDeposit = BigNum(50_000, 6);
       expect(await cellar.maxDeposit(owner.address)).to.eq(maxDeposit);
       await USDC.mint(owner.address, maxDeposit);
       await cellar.deposit(maxDeposit, owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
       expect(await cellar.maxDeposit(owner.address)).to.eq(0);
 
-      await cellar.removeLiquidityRestriction();
+      await cellar.connect(await impersonateGravity()).setDepositLimit(ethers.constants.MaxUint256);
 
       expect(await cellar.maxDeposit(owner.address)).to.eq(
-        ethers.constants.MaxUint256
+        ethers.BigNumber.from(2)
+          .pow(112)
+          .sub(1)
+          .div(10 ** 12),
       );
     });
 
     it("should correctly find max mint amount", async () => {
-      await cellar.setPause(true);
+      await cellar.connect(await impersonateGravity()).setShutdown(true, false);
       expect(await cellar.maxMint(owner.address)).to.eq(0);
-      await cellar.setPause(false);
+      await cellar.connect(await impersonateGravity()).setShutdown(false, false);
 
-      const maxMint = await cellar.previewDeposit(BigNum(50_000, 6));
+      const maxMint = await cellar.convertToShares(BigNum(50_000, 6));
       expect(await cellar.maxMint(owner.address)).to.eq(maxMint);
       await USDC.mint(owner.address, maxMint);
       await cellar.mint(maxMint, owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
       expect(await cellar.maxMint(owner.address)).to.eq(0);
 
-      await cellar.removeLiquidityRestriction();
+      await cellar.connect(await impersonateGravity()).setDepositLimit(ethers.constants.MaxUint256);
 
       expect(await cellar.maxMint(owner.address)).to.eq(
-        ethers.constants.MaxUint256
+        await cellar.convertToShares(await cellar.maxDeposit(owner.address)),
       );
     });
 
     it("should correctly find max withdraw amount", async () => {
       // test whether correctly simulates withdrawing own assets
       await cellar.deposit(BigNum(500, 6), owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
       await cellar.deposit(BigNum(500, 6), owner.address);
 
@@ -1352,7 +1467,7 @@ describe("AaveV2StablecoinCellar", () => {
       const ownedAssets = await cellar.callStatic.redeem(
         await cellar.balanceOf(owner.address),
         owner.address,
-        owner.address
+        owner.address,
       );
 
       expect(ownedAssets).to.eq(maxAssets);
@@ -1360,7 +1475,7 @@ describe("AaveV2StablecoinCellar", () => {
 
     it("should correctly find max redeem amount", async () => {
       await cellar.deposit(BigNum(500, 6), owner.address);
-      await cellar.enterStrategy();
+      await cellar.connect(await impersonateGravity()).enterPosition();
       await lendingPool.setLiquidityIndex(BigNum(1.25, 27));
       await cellar.deposit(BigNum(500, 6), owner.address);
 

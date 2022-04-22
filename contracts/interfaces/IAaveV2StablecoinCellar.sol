@@ -1,8 +1,38 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
 /// @title interface for AaveV2StablecoinCellar
 interface IAaveV2StablecoinCellar {
+    /**
+     * @notice Stores fee-related data.
+     */
+    struct Fees {
+        /**
+         * @notice Amount of yield earned since last time performance fees were accrued.
+         */
+        uint112 yield;
+        /**
+         * @notice Amount of active assets in cellar since yield was last calculated.
+         */
+        uint112 lastActiveAssets;
+        /**
+         * @notice Timestamp of last time platform fees were accrued.
+         */
+        uint32 lastTimeAccruedPlatformFees;
+        /**
+         * @notice Amount of platform fees that have been accrued awaiting transfer.
+         * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
+         *      the cellar to Cosmos to be distributed.
+         */
+        uint112 accruedPlatformFees;
+        /**
+         * @notice Amount of performance fees that have been accrued awaiting transfer.
+         * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
+         *      the cellar to Cosmos to be distributed.
+         */
+        uint112 accruedPerformanceFees;
+    }
+
     // ======================================= EVENTS =======================================
 
     /**
@@ -13,13 +43,7 @@ interface IAaveV2StablecoinCellar {
      * @param assets the amount of assets being deposited
      * @param shares the amount of shares minted to owner
      */
-    event Deposit(
-        address indexed caller,
-        address indexed owner,
-        address indexed token,
-        uint256 assets,
-        uint256 shares
-    );
+    event Deposit(address indexed caller, address indexed owner, address indexed token, uint256 assets, uint256 shares);
 
     /**
      * @notice Emitted when assets are withdrawn from cellar.
@@ -42,62 +66,76 @@ interface IAaveV2StablecoinCellar {
      * @param token the address of the token
      * @param amount the amount of tokens to deposit
      */
-    event DepositToAave(
-        address indexed token,
-        uint256 amount
-    );
+    event DepositToAave(address indexed token, uint256 amount);
 
     /**
      * @notice Emitted on withdraw from Aave.
      * @param token the address of the token
      * @param amount the amount of tokens to withdraw
      */
-    event WithdrawFromAave(
-        address indexed token,
-        uint256 amount
-    );
+    event WithdrawFromAave(address indexed token, uint256 amount);
 
     /**
-     * @notice Emitted on rebalance of Aave strategy.
-     * @param oldAsset the address of the asset for the old strategy
-     * @param newAsset the address of the asset for the new strategy
-     * @param assets the amount of the new assets that has been deposited to Aave after rebalance
+     * @notice Emitted upon entering cellar's inactive assets into the current position on Aave.
+     * @param token the address of the asset being entered into the current position
+     * @param assets amount of assets being entered
      */
-    event Rebalance(
-        address indexed oldAsset,
-        address indexed newAsset,
-        uint256 assets
-    );
+    event EnterPosition(address indexed token, uint256 assets);
+
+    /**
+     * @notice Emitted upon claiming rewards and beginning cooldown period to unstake them.
+     * @param rewardsClaimed amount of rewards that were claimed
+     */
+    event ClaimAndUnstake(uint256 rewardsClaimed);
+
+    /**
+     * @notice Emitted upon reinvesting rewards into the current position.
+     * @param token the address of the asset rewards were swapped to
+     * @param rewards amount of rewards swapped to be reinvested
+     * @param assets amount of assets received from swapping rewards
+     */
+    event Reinvest(address indexed token, uint256 rewards, uint256 assets);
+
+    /**
+     * @notice Emitted on rebalance of Aave poisition.
+     * @param oldAsset the address of the asset for the old position
+     * @param newAsset the address of the asset for the new position
+     * @param assets the amount of the new assets cellar has after rebalancing
+     */
+    event Rebalance(address indexed oldAsset, address indexed newAsset, uint256 assets);
 
     /**
      * @notice Emitted when platform fees accrued.
-     * @param fees amount of fees accrued in shares
+     * @param feesInShares amount of fees accrued in shares
      */
-    event AccruedPlatformFees(uint256 fees);
+    event AccruedPlatformFees(uint256 feesInShares);
 
     /**
      * @notice Emitted when performance fees accrued.
-     * @param fees amount of fees accrued in shares
+     * @param feesInShares amount of fees accrued in shares
      */
-    event AccruedPerformanceFees(uint256 fees);
-
-    /**
-     * @notice Emitted when performance fees burnt as insurance.
-     * @param fees amount of fees burnt in shares
-     */
-    event BurntPerformanceFees(uint256 fees);
+    event AccruedPerformanceFees(uint256 feesInShares);
 
     /**
      * @notice Emitted when platform fees are transferred to Cosmos.
      * @param platformFees amount of platform fees transferred
      * @param performanceFees amount of performance fees transferred
      */
-    event TransferFees(uint256 platformFees, uint256 performanceFees);
+    event TransferFees(uint112 platformFees, uint112 performanceFees);
 
     /**
-     * @notice Emitted when liquidity restriction removed.
+     * @notice Emitted when the liquidity limit is changed.
+     * @param oldLimit amount the limit was changed from
+     * @param newLimit amount the limit was changed to
      */
-    event LiquidityRestrictionRemoved();
+    event LiquidityLimitChanged(uint256 oldLimit, uint256 newLimit);
+
+    /**
+     * @notice Emitted when the deposit limit is changed.
+     * @param oldLimit amount the limit was changed from
+     * @param newLimit amount the limit was changed to
+     */
+    event DepositLimitChanged(uint256 oldLimit, uint256 newLimit);
 
     /**
      * @notice Emitted when tokens accidentally sent to cellar are recovered.
@@ -107,72 +145,83 @@ interface IAaveV2StablecoinCellar {
     event Sweep(address indexed token, uint256 amount);
 
     /**
-     * @notice Emitted when cellar is paused.
-     * @param isPaused whether the contract is paused
-     */
-    event Pause(bool isPaused);
-
-    /**
      * @notice Emitted when cellar is shutdown.
+     * @param isShutdown whether the contract is shutdown
+     * @param exitPosition whether to exit the current position
      */
-    event Shutdown();
+    event Shutdown(bool isShutdown, bool exitPosition);
 
     // ======================================= ERRORS =======================================
 
     /**
      * @notice Attempted an action with zero assets.
      */
-    error ZeroAssets();
+    error USR_ZeroAssets();
 
     /**
      * @notice Attempted an action with zero shares.
      */
-    error ZeroShares();
-
-    /**
-     * @notice Attempted deposit more liquidity over the liquidity limit.
-     * @param maxLiquidity the max liquidity
-     */
-    error LiquidityRestricted(uint256 maxLiquidity);
+    error USR_ZeroShares();
 
     /**
      * @notice Attempted deposit more than the per wallet limit.
      * @param maxDeposit the max deposit
      */
-    error DepositRestricted(uint256 maxDeposit);
+    error USR_DepositRestricted(uint256 maxDeposit);
 
     /**
-     * @notice Current asset is updated to an asset not supported by Aave.
-     * @param unsupportedToken address of the unsupported token
+     * @notice Attempted to transfer more active shares than the user has.
+     * @param activeShares amount of shares user has
+     * @param attemptedActiveShares amount of shares user tried to transfer
      */
-    error TokenIsNotSupportedByAave(address unsupportedToken);
+    error USR_NotEnoughActiveShares(uint256 activeShares, uint256 attemptedActiveShares);
+
+    /**
+     * @notice Attempted deposit more liquidity over the liquidity limit.
+     * @param maxLiquidity the max liquidity
+     */
+    error STATE_LiquidityRestricted(uint256 maxLiquidity);
 
     /**
      * @notice Attempted to sweep an asset that is managed by the cellar.
      * @param token address of the token that can't be sweeped
      */
-    error ProtectedAsset(address token);
+    error STATE_ProtectedAsset(address token);
+
+    /**
+     * @notice Current asset is updated to an asset not supported by Aave.
+     * @param unsupportedToken address of the unsupported token
+     */
+    error STATE_TokenIsNotSupportedByAave(address unsupportedToken);
+
+    /**
+     * @notice Attempted to update a position to an asset that uses an incompatible amount of decimals.
+     * @param newDecimals decimals of precision that the new position uses
+     * @param maxDecimals maximum decimals of precision for a position to be compatible with the cellar
+     */
+    error STATE_TooManyDecimals(uint8 newDecimals, uint8 maxDecimals);
 
     /**
      * @notice Attempted rebalance into the same asset.
      * @param asset address of the asset
      */
-    error SameAsset(address asset);
+    error STATE_SameAsset(address asset);
+
+    /**
+     * @notice Attempted rebalance into an untrusted position.
+     * @param asset address of the asset
+     */
+    error STATE_UntrustedPosition(address asset);
 
     /**
      * @notice Attempted action was prevented due to contract being shutdown.
      */
-    error ContractShutdown();
-
-    /**
-     * @notice Attempted action was prevented due to contract being paused.
-     */
-    error ContractPaused();
+    error STATE_ContractShutdown();
 
     /**
      * @notice Attempted to shutdown the contract when it was already shutdown.
      */
-    error AlreadyShutdown();
+    error STATE_AlreadyShutdown();
 
     // ======================================= STRUCTS =======================================
 
@@ -228,14 +277,17 @@ interface IAaveV2StablecoinCellar {
 
     // ======================================= STATE INFORMATION =====================================
 
-    function depositBalances(address user) external view returns (
-        uint256 userActiveShares,
-        uint256 userInactiveShares,
-        uint256 userActiveAssets,
-        uint256 userInactiveAssets
-    );
+    function getUserBalances(address user)
+        external
+        view
+        returns (
+            uint256 userActiveShares,
+            uint256 userInactiveShares,
+            uint256 userActiveAssets,
+            uint256 userInactiveAssets
+        );
 
-    function numDeposits(address user) external view returns (uint256);
+    function getUserDeposits(address user) external view returns (UserDeposit[] memory);
 
     // ============================ DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ============================
 
@@ -255,7 +307,7 @@ interface IAaveV2StablecoinCellar {
 
     // ======================================= ADMIN OPERATIONS =======================================
 
-    function enterStrategy() external;
+    function enterPosition() external;
 
     function rebalance(
         address[9] memory route,
@@ -269,11 +321,11 @@ interface IAaveV2StablecoinCellar {
 
     function sweep(address token) external;
 
-    function removeLiquidityRestriction() external;
+    function setLiquidityLimit(uint256 limit) external;
 
-    function setPause(bool _isPaused) external;
+    function setDepositLimit(uint256 limit) external;
 
-    function shutdown() external;
+    function setShutdown(bool shutdown, bool exitPosition) external;
 
     // ================================== SHARE TRANSFER OPERATIONS ==================================
 

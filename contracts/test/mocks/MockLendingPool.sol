@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.11;
+pragma solidity 0.8.11;
 
-import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import {MockAToken} from "./MockAToken.sol";
+import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import { MockAToken } from "./MockAToken.sol";
 
 contract MockLendingPool {
     mapping(address => address) public aTokens;
     uint256 public index = 1000000000000000000000000000;
 
-    constructor() { }
+    constructor() {}
 
     // for testing purposes; not in actual contract
     function setLiquidityIndex(uint256 _index) external {
@@ -38,22 +38,22 @@ contract MockLendingPool {
     }
 
     function getReserveData(address asset)
-    external
-    view
-    returns (
-        uint256 configuration,
-        uint128 liquidityIndex,
-        uint128 variableBorrowIndex,
-        uint128 currentLiquidityRate,
-        uint128 currentVariableBorrowRate,
-        uint128 currentStableBorrowRate,
-        uint40 lastUpdateTimestamp,
-        address aTokenAddress,
-        address stableDebtTokenAddress,
-        address variableDebtTokenAddress,
-        address interestRateStrategyAddress,
-        uint8 id
-    )
+        external
+        view
+        returns (
+            uint256 configuration,
+            uint128 liquidityIndex,
+            uint128 variableBorrowIndex,
+            uint128 currentLiquidityRate,
+            uint128 currentVariableBorrowRate,
+            uint128 currentStableBorrowRate,
+            uint40 lastUpdateTimestamp,
+            address aTokenAddress,
+            address stableDebtTokenAddress,
+            address variableDebtTokenAddress,
+            address interestRateStrategyAddress,
+            uint8 id
+        )
     {
         asset;
         configuration;
@@ -74,10 +74,7 @@ contract MockLendingPool {
         return index;
     }
 
-    function initReserve(
-      address asset,
-      address aTokenAddress
-    ) external {
-      aTokens[asset] = aTokenAddress;
+    function initReserve(address asset, address aTokenAddress) external {
+        aTokens[asset] = aTokenAddress;
     }
 }
