@@ -63,24 +63,24 @@ interface IAaveV2StablecoinCellar {
 
     /**
      * @notice Emitted on deposit to Aave.
-     * @param token the address of the token
-     * @param amount the amount of tokens to deposit
+     * @param position the address of the position
+     * @param assets the amount of assets to deposit
      */
-    event DepositToAave(address indexed token, uint256 amount);
+    event DepositToAave(address indexed position, uint256 assets);
 
     /**
      * @notice Emitted on withdraw from Aave.
-     * @param token the address of the token
-     * @param amount the amount of tokens to withdraw
+     * @param position the address of the position
+     * @param assets the amount of assets to withdraw
      */
-    event WithdrawFromAave(address indexed token, uint256 amount);
+    event WithdrawFromAave(address indexed position, uint256 assets);
 
     /**
      * @notice Emitted upon entering cellar's inactive assets into the current position on Aave.
-     * @param token the address of the asset being entered into the current position
+     * @param position the address of the asset being entered into the current position
      * @param assets amount of assets being entered
      */
-    event EnterPosition(address indexed token, uint256 assets);
+    event EnterPosition(address indexed position, uint256 assets);
 
     /**
      * @notice Emitted upon claiming rewards and beginning cooldown period to unstake them.

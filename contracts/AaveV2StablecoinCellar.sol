@@ -26,36 +26,36 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice The asset that makes up the cellar's holding pool. Will change whenever the cellar
      *         rebalances into a new position.
      * @dev The cellar denotes its inactive assets in this token. While it waits in the holding pool
-     *      to be entered into a position, it is used to pay for withdraws from those redeeming their
-     *      shares.
+     *      to be entered into a position, it is used as exit liquidity from those redeeming their
+     *      shares for capital efficiency.
      */
     ERC20 public asset;
 
     /**
      * @notice An interest-bearing derivative of the current asset returned by Aave for lending
-     *         assets. Represents cellar's portion of active assets earning yield in a lending
-     *         position.
+     *         the current asset. Represents cellar's portion of active assets earning yield in a
+     *         lending position.
      */
     ERC20 public assetAToken;
 
     /**
      * @notice The decimals of precision used by the current asset.
-     * @dev Some stablecoins (eg. USDC and USDT) don't use the standard 18 decimals of precision.
-     *      This is used for converting between decimals when performing calculations in the cellar.
+     * @dev Since stablecoins don't use the standard 18 decimals of precision (eg. USDC and USDT),
+     *      we cache this to use for decimal conversions when performing calculations and storing data.
      */
     uint8 public assetDecimals;
 
     /**
      * @notice Mapping from a user's address to all their deposits and balances.
-     * @dev Used in determining which of a user's shares are active (entered into a position earning
-     *      yield vs inactive (waiting in the holding pool to be entered into a position and not
+     * @dev Used to determining which of a user's shares are active (ie. entered into a position earning
+     *      yield vs inactive (ie. waiting in the holding pool to be entered into a position and not
      *      earning yield).
      */
     mapping(address => UserDeposit[]) public userDeposits;
 
     /**
-     * @notice Mapping from user's address to the index of first non-zero deposit in `userDeposits`.
-     * @dev Saves gas when looping through all user's deposits.
+     * @notice Mapping from a user's address to the index of their first non-zero deposit in `userDeposits`.
+     * @dev Saves gas when looping through all of a user's deposits.
      */
     mapping(address => uint256) public currentDepositIndex;
 
@@ -67,24 +67,25 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     mapping(address => bool) public isTrusted;
 
     /**
-     * @notice Last time all inactive assets were entered into a strategy and made active.
+     * @notice Last time all inactive assets were entered into a strategy and made active. Used to
+     *         determining which of a user's shares are active.
      */
     uint256 public lastTimeEnteredPosition;
 
     /**
-     * @notice The value fees are divided by to get a percentage. Represents maximum percent (100%).
+     * @notice The value fees are divided by to get a percentage. Represents the maximum percent (100%).
      */
     uint256 private constant DENOMINATOR = 100_00;
 
     /**
-     * @notice The percentage of platform fees (1%) taken off of active assets over a year.
+     * @notice The percentage of platform fees taken off of active assets over a year.
      */
-    uint256 private constant PLATFORM_FEE = 1_00;
+    uint256 private constant PLATFORM_FEE = 1_00; // 1%
 
     /**
-     * @notice The percentage of performance fees (10%) taken off of cellar gains.
+     * @notice The percentage of performance fees taken off of cellar gains.
      */
-    uint256 private constant PERFORMANCE_FEE = 10_00;
+    uint256 private constant PERFORMANCE_FEE = 10_00; // 10%
 
     /**
      * @notice Stores fee-related data.
@@ -95,7 +96,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Cosmos address of the fee distributor as a hex value.
      * @dev The Gravity contract expects a 32-byte value formatted in a specific way.
      */
-    bytes32 public constant feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+    bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
 
     /**
      * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals
@@ -105,12 +106,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     uint256 public liquidityLimit;
 
     /**
-     * @notice Maximum amount of deposits per wallet. Denominated in the same decimals as the current assets.
+     * @notice Maximum amount of assets per wallet. Denominated in the same decimals as the current asset.
      * @dev Set to `type(uint256).max` to have no limit.
      */
     uint256 public depositLimit;
 
-    /**
     /**
      * @notice Whether or not the contract is shutdown in case of an emergency.
      */
@@ -118,19 +118,44 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     // ======================================== INITIALIZATION ========================================
 
-    // Curve Registry Exchange contract
+    /**
+     * @notice Curve Registry Exchange contract. Used for rebalancing positions.
+     */
     ICurveSwaps public immutable curveRegistryExchange; // 0x8e764bE4288B842791989DB5b8ec067279829809
-    // SushiSwap Router V2 contract
+
+    /**
+     * @notice SushiSwap Router V2 contract. Used for reinvesting rewards back into the current position.
+     */
     ISushiSwapRouter public immutable sushiswapRouter; // 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
-    // Aave Lending Pool V2 contract
+
+    /**
+     * @notice Aave Lending Pool V2 contract. Used to deposit and withdraw from the current position.
+     */
     ILendingPool public immutable lendingPool; // 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
-    // Aave Incentives Controller V2 contract
+
+    /**
+     * @notice Aave Incentives Controller V2 contract. Used to claim and unstake rewards to reinvest.
+     */
     IAaveIncentivesController public immutable incentivesController; // 0xd784927Ff2f95ba542BfC824c8a8a98F3495f6b5
-    // Cosmos Gravity Bridge contract
+
+    /**
+     * @notice Cosmos Gravity Bridge contract. Used to transfer fees to `feeDistributor` on the Sommelier chain.
+     */
     IGravity public immutable gravityBridge; // 0x69592e6f9d21989a043646fE8225da2600e5A0f7
 
+    /**
+     * @notice stkAAVE address. Used to swap rewards to the current asset to reinvest.
+     */
     IStakedTokenV2 public immutable stkAAVE; // 0x4da27a545c0c5B758a6BA100e3a049001de870f5
+
+    /**
+     * @notice AAVE address. Used to swap rewards to the current asset to reinvest.
+     */
     ERC20 public immutable AAVE; // 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9
+
+    /**
+     * @notice WETH address. Used to swap rewards to the current asset to reinvest.
+     */
     ERC20 public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
     /**
@@ -181,7 +206,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         isTrusted[address(_asset)] = true;
         _updatePosition(address(_asset));
 
-        // Transfer ownership to the Gravity Bridge
+        // Transfer ownership to the Gravity Bridge.
         transferOwnership(address(_gravityBridge));
     }
 
@@ -194,8 +219,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @return shares amount of shares minted
      */
     function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
-        // If a user tries to deposit more than their balance, will deposit as many assets as their balance
-        // allows instead of reverting.
+        // Depositing above balance will only deposit balance.
         uint256 depositableAssets = asset.balanceOf(msg.sender);
         if (assets > depositableAssets) assets = depositableAssets;
 
@@ -209,8 +233,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @return assets amount of assets deposited
      */
     function mint(uint256 shares, address receiver) external returns (uint256 assets) {
-        // If a user tries to mint more shares than possible, will mint as many shares as their balance
-        // allows instead of reverting.
+        // Depositing above balance will only deposit balance.
         uint256 mintableShares = previewDeposit(asset.balanceOf(msg.sender));
         if (shares > mintableShares) shares = mintableShares;
 
@@ -219,22 +242,19 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
 
     function _deposit(uint256 assets, uint256 shares, address receiver) internal returns (uint256, uint256) {
-        // In case of an emergency or contract vulnerability, we don't want users to be able to
-        // deposit more assets into a compromised contract.
         if (isShutdown) revert STATE_ContractShutdown();
 
         // Must calculate before assets are transferred in.
         shares > 0 ? assets = previewMint(shares) : shares = previewDeposit(assets);
 
-        // Check for rounding error on `deposit` since we round down in previewDeposit. No need to
-        // check for rounding error if `mint`, previewMint rounds up.
+        // Prevent event spamming and user deposit spamming.
         if (shares == 0) revert USR_ZeroShares();
 
-        // Enforce deposit restrictions per wallet.
+        // Enforce deposit restrictions per wallet if applicable.
         if (depositLimit != type(uint256).max && assets > maxDeposit(receiver))
             revert USR_DepositRestricted(depositLimit);
 
-        // Check if security restrictions still apply. Enforce them if they do.
+        // Enforce liquidity restrictions if applicable.
         if (liquidityLimit != type(uint256).max && assets + totalAssets() > liquidityLimit)
             revert STATE_LiquidityRestricted(liquidityLimit);
 
@@ -284,7 +304,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // after all calculations are done.
         assets = assets.changeDecimals(assetDecimals, decimals);
 
-        // If a user tries to withdraw more than their balance, will withdraw as many assets as possible.
+        // Withdrawing above balance will only withdraw balance.
         (, shares) = _withdraw(assets, receiver, owner);
     }
 
@@ -300,7 +320,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         address receiver,
         address owner
     ) external returns (uint256 assets) {
-        // If a user tries to redeem more than their balance, will redeem as many shares as possible.
+        // Withdrawing above balance will only withdraw balance.
         (assets, ) = _withdraw(_convertToAssets(shares), receiver, owner);
     }
 
@@ -316,13 +336,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         if (balanceOf[owner] == 0) revert USR_ZeroShares();
         if (assets == 0) revert USR_ZeroAssets();
 
-        // Tracks the total amount of shares being redeemed for the amount of assets withdrawn.
+        // Tracks amount of shares to redeem.
         uint256 shares;
 
         // Retrieve the user's deposits to begin looping through them, generally from oldest to
-        // newest deposits. This may not be the case though if shares have been transferred to the
-        // owner, which will be added to the end of the owner's deposits regardless of time
-        // deposited.
+        // newest deposits. This may not be the case if shares have been transferred to the owner,
+        // which will be added to the end of the owner's deposits regardless of time deposited.
         UserDeposit[] storage deposits = userDeposits[owner];
 
         // Tracks the amount of assets left to withdraw. Updated at the end of each loop.
@@ -337,8 +356,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Whether or not deposited shares are active or inactive.
             bool isActive = d.timeDeposited < lastTimeEnteredPosition;
 
-            // If shares are active, convert them to the amount of assets they're worth to see the
-            // maximum amount of assets we can take from this deposit.
+            // If shares are active, convert them to the amount of assets they're worth to get the
+            // maximum amount of assets withdrawable from this deposit.
             uint256 dAssets = isActive ? uint256(d.shares).mulWadDown(exchangeRate) : d.assets;
 
             // Determine the amount of assets and shares to withdraw from this deposit.
@@ -350,17 +369,18 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
                 delete d.assets;
                 delete d.timeDeposited;
             } else {
+                // Substract the amount of assets taken for this withdraw.
                 d.assets -= uint112(withdrawnAssets);
             }
 
-            // Take the shares we need from this deposit and add them to our total.
+            // Subtract shares withdrawn and add to total.
             d.shares -= uint112(withdrawnShares);
             shares += withdrawnShares;
 
-            // Update the counter of assets we have left to withdraw.
+            // Update the counter of assets left to withdraw.
             leftToWithdraw -= withdrawnAssets;
 
-            // Finish if this is the last deposit or there is nothing left to withdraw.
+            // Break if this is the last deposit or there is nothing left to withdraw.
             if (i == deposits.length - 1 || leftToWithdraw == 0) {
                 // Store the user's next non-zero deposit to save gas on future looping.
                 currentDepositIndex[owner] = d.shares != 0 ? i : i+1;
@@ -368,21 +388,20 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             }
         }
 
-        // If the caller is not the owner of the shares, check to see if the owner has approved them
-        // to spend their shares.
+        // Check to see if the caller is approved to spend shares.
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
 
-        // Redeem shares for assets.
+        // Redeem shares.
         _burn(owner, shares);
 
         // Determine the total amount of assets withdrawn.
         assets -= leftToWithdraw;
 
-        // Convert assets decimals back to get ready for transfers.
+        // Convert assets decimals back for transfers.
         assets = assets.changeDecimals(decimals, assetDecimals);
 
         // Only withdraw from position if holding pool does not contain enough funds.
@@ -393,9 +412,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         emit Withdraw(receiver, owner, address(asset), assets, shares);
 
-        // Returns the amount of assets withdrawn and amount of shares redeemed. The amount of
-        // assets withdrawn may differ from the amount of assets specified when calling the function
-        // if the user has less assets then they tried withdrawing.
+        // The amount of assets actually withdrawn may be less than assets attempted to withdraw
+        // if attempted withdraw amount was less than the withdrawable balance.
         return (assets, shares);
     }
 
@@ -412,7 +430,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
 
     /**
-     * @notice Total amount of active asset entered into a position.
+     * @notice Total amount of active asset entered into the current position.
      * @dev The aTokens' value is pegged to the value of the corresponding asset at a 1:1 ratio. We
      *      can find the amount of assets active in a position simply by taking balance of aTokens
      *      cellar holds.
@@ -421,37 +439,46 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         return assetAToken.balanceOf(address(this));
     }
 
+    /**
+     * @dev Same as `activeAssets` but forcibly denoted with 18 decimals of precision.
+     */
     function _activeAssets() internal view returns (uint256) {
         uint256 assets = assetAToken.balanceOf(address(this));
         return assets.changeDecimals(assetDecimals, decimals);
     }
 
     /**
-     * @notice Total amount of inactive asset waiting in a holding pool to be entered into a position.
+     * @notice Total amount of inactive asset in holding.
      */
     function inactiveAssets() public view returns (uint256) {
         return asset.balanceOf(address(this));
     }
 
+    /**
+     * @dev Same as `inactiveAssets` but forcibly denoted with 18 decimals of precision.
+     */
     function _inactiveAssets() internal view returns (uint256) {
         uint256 assets = asset.balanceOf(address(this));
         return assets.changeDecimals(assetDecimals, decimals);
     }
 
     /**
-     * @notice Total amount of the asset that is managed by cellar.
+     * @notice Total amount of the asset managed by the cellar.
      */
     function totalAssets() public view returns (uint256) {
         return activeAssets() + inactiveAssets();
     }
 
+    /**
+     * @dev Same as `totalAssets` but forcibly denoted with 18 decimals of precision.
+     */
     function _totalAssets() internal view returns (uint256) {
         return _activeAssets() + _inactiveAssets();
     }
 
     /**
      * @notice The amount of shares that the cellar would exchange for the amount of assets provided
-     *         ONLY if they are active.
+     *         ASSUMING they are active.
      * @param assets amount of assets to convert
      * @return shares the assets can be exchanged for
      */
@@ -460,13 +487,16 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         return _convertToShares(assets);
     }
 
+    /**
+     * @dev Same as `convertToShares` but forcibly denoted with 18 decimals of precision.
+     */
     function _convertToShares(uint256 assets) internal view returns (uint256) {
         return totalSupply == 0 ? assets : assets.mulDivDown(totalSupply, _totalAssets());
     }
 
     /**
      * @notice The amount of assets that the cellar would exchange for the amount of shares provided
-     *         ONLY if they are active.
+     *         ASSUMING they are active.
      * @param shares amount of shares to convert
      * @return assets the shares can be exchanged for
      */
@@ -475,6 +505,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         return assets.changeDecimals(decimals, assetDecimals);
     }
 
+    /**
+     * @dev Same as `convertToAssets` but forcibly denoted with 18 decimals of precision.
+     */
     function _convertToAssets(uint256 shares) internal view returns (uint256) {
         return totalSupply == 0 ? shares : shares.mulDivDown(_totalAssets(), totalSupply);
     }
@@ -504,7 +537,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
     * @notice Simulate the effects of withdrawing assets at the current block, given current
-    *         on-chain conditions. Assumes the shares being redeemed are all active.
+    *         on-chain conditions ASSUMING the shares being redeemed are all active.
      * @param assets amount of assets to withdraw
      * @return shares that will be redeemed
      */
@@ -516,7 +549,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
     * @notice Simulate the effects of redeeming shares at the current block, given current on-chain
-    *         conditions. Assumes the shares being redeemed are all active.
+    *         conditions ASSUMING the shares being redeemed are all active.
      * @param shares amount of sharers to redeem
      * @return assets that can be withdrawn
      */
@@ -558,7 +591,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
                 uint256 dShares = d.shares;
 
                 userActiveShares += dShares;
-                userActiveAssets += dShares.mulWadDown(exchangeRate); // Convert shares to assets.
+                userActiveAssets += dShares.mulWadDown(exchangeRate); // Convert active shares to assets.
             } else {
                 userInactiveShares += d.shares;
                 userInactiveAssets += d.assets;
@@ -571,7 +604,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     }
 
     /**
-     * @notice Gets all of a user's deposits.
+     * @notice Retrieve a list of all of a user's deposits.
      * @dev This is provided because Solidity converts public arrays into index getters,
      *      but we need a way to allow external contracts and users to access the whole array.
      * @param user address of the user
@@ -605,7 +638,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Total number of shares that can be minted for owner from the cellar.
-     * @dev Limits mints to $50k of shares per wallet.
      * @param owner address of account that would receive the shares
      * @return maximum amount of shares that can be minted
      */
@@ -647,7 +679,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
                 d.assets;
         }
 
-        // Return the maximum amount of assets that can be withdrawn in the assets original units.
+        // Converts back to decimals used by that asset.
         return assets.changeDecimals(decimals, assetDecimals);
     }
 
@@ -666,7 +698,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Take platform fees and performance fees off of cellar's active assets.
      */
     function accrueFees() external updateYield {
-        // Platform fees taken each accrual = activeAssets * (elapsedTime * (2% / SECS_PER_YEAR)).
+        // Platform fees taken each accrual = activeAssets * (elapsedTime * (feePercentage / SECS_PER_YEAR)).
         uint256 elapsedTime = block.timestamp - fees.lastTimeAccruedPlatformFees;
         uint256 platformFeeInAssets = (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
         uint256 platformFees = _convertToShares(platformFeeInAssets);
@@ -677,7 +709,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Mint the cellar accrued platform fees as shares.
         _mint(address(this), platformFees);
 
-        // Performance fees taken each accrual = yield * 10%
+        // Performance fees taken each accrual = yield * feePercentage
         uint256 yield = fees.yield;
         uint256 performanceFeeInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
         uint256 performanceFees = _convertToShares(performanceFeeInAssets);
@@ -697,8 +729,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     }
 
     /**
-     * @notice Update information tracking yield the cellar has earned.
-     * @dev Must be called every time a function is called that changes `activeAssets`.
+     * @notice Tracks yield the cellar has gained since the last time fees were accrued.
+     * @dev Must be called every time a function is called that updates `activeAssets`.
      */
     modifier updateYield() {
         uint256 currentActiveAssets = _activeAssets();
@@ -715,7 +747,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     }
 
     /**
-     * @notice Transfer accrued fees to Cosmos to distribute.
+     * @notice Transfer accrued fees to the Sommelier Chain to distribute.
      */
     function transferFees() external onlyOwner {
         // Cellar fees are accrued in shares and redeemed upon transfer.
@@ -729,7 +761,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Otherwise, all assets will come from the holding pool.
         _allocateAssets(feeInAssets);
 
-        // Transfer assets to a fee distributor on Cosmos.
+        // Transfer assets to a fee distributor on the Sommelier Chain.
         asset.safeApprove(address(gravityBridge), feeInAssets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, feeInAssets);
 
@@ -750,9 +782,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         // In the case that governance no longer trust the current position, pull all assets back into
         // the cellar.
-        if (trust == false && position == address(asset)) {
-            _withdrawFromAave(address(asset), type(uint256).max);
-        }
+        if (trust == false && position == address(asset)) _withdrawFromAave(address(asset), type(uint256).max);
     }
 
     /**
@@ -777,10 +807,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         uint256 currentInactiveAssets = inactiveAssets();
 
-        // Deposits all inactive assets in the holding pool into the current position.
+        // Deposits all inactive assets into the current position.
         _depositToAave(address(asset), currentInactiveAssets);
 
-        // The cellar will use this when determining which of a user's shares are active vs inactive.
+        // Update the last time cellar entered position.
         lastTimeEnteredPosition = block.timestamp;
 
         emit EnterPosition(address(asset), currentInactiveAssets);
@@ -879,17 +909,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         uint256 amountOut = amounts[amounts.length - 1];
 
-        // Consider reinvested rewards yield.
+        // Count reinvested rewards as yield.
         fees.yield += uint112(amountOut.changeDecimals(assetDecimals, decimals));
 
         // In the case of a shutdown, we just may want to redeem any leftover rewards for users to
         // claim but without entering them back into a position in case the position has been exited.
-        if (!isShutdown) {
-            // Reinvest rewards back into the current position.
-            _depositToAave(address(asset), amountOut);
+        if (!isShutdown) _depositToAave(address(asset), amountOut);
 
-            emit Reinvest(address(asset), amountIn, amountOut);
-        }
+        emit Reinvest(address(asset), amountIn, amountOut);
     }
 
     /**
@@ -935,18 +962,20 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Store for emitted event.
         uint256 oldLimit = liquidityLimit;
 
+        // Change the liquidity limit.
         liquidityLimit = limit;
 
         emit LiquidityLimitChanged(oldLimit, limit);
     }
 
     /**
-     * @notice Sets per-wallet deposit limit. Careful to use the same decimals as the current asset.
+     * @notice Sets the per-wallet deposit limit. Careful to use the same decimals as the current asset.
      */
     function setDepositLimit(uint256 limit) external onlyOwner {
         // Store for emitted event.
         uint256 oldLimit = depositLimit;
 
+        // Change the deposit limit.
         depositLimit = limit;
 
         emit DepositLimitChanged(oldLimit, limit);
@@ -956,9 +985,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Update state variables related to the current position.
-     * @dev Be aware that when updating to an asset that uses less decimals of precision than the
-     *      previous (eg. DAI -> USDC), `depositLimit` and `liquidityLimit` will lose some data in
-     *      the conversion.
+     * @dev Be aware that when updating to an asset that uses less decimals than the previous
+     *      asset (eg. DAI -> USDC), `depositLimit` and `liquidityLimit` will lose some precision
+     *      due to truncation.
      * @param newAsset address of the new asset being managed by the cellar
      */
     function _updatePosition(address newAsset) internal {
@@ -968,14 +997,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // If the address is not null, it is supported by Aave.
         if (aTokenAddress == address(0)) revert STATE_TokenIsNotSupportedByAave(newAsset);
 
-        // Update the decimals for limits if necessary.
+        // Update the decimals used by limits if necessary.
         uint8 oldAssetDecimals = assetDecimals;
         uint8 newAssetDecimals = ERC20(newAsset).decimals();
 
-        // Ensure the decimals of precision the position uses is compatible with the cellar.
+        // Ensure the decimals of precision the new position uses will not break the cellar.
         if (newAssetDecimals > decimals) revert STATE_TooManyDecimals(newAssetDecimals, decimals);
 
-        // Ignore if decimals are the same or first time initializing position.
+        // Ignore if decimals are the same or if it is the first time initializing a position.
         if (oldAssetDecimals != 0 && oldAssetDecimals != newAssetDecimals) {
             if (depositLimit != type(uint256).max) {
                 depositLimit = depositLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
@@ -994,25 +1023,24 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @notice Ensures there is enough assets in the contract available for a transfer.
-     * @dev Only withdraws from position if needed.
+     * @dev Only withdraws from the current position if necessary.
      * @param assets The amount of assets to allocate
      */
     function _allocateAssets(uint256 assets) internal {
         uint256 currentInactiveAssets = inactiveAssets();
 
-        if (assets > currentInactiveAssets) {
-            _withdrawFromAave(address(asset), assets - currentInactiveAssets);
-        }
+        // Only withdraw if not enough assets in the holding pool.
+        if (assets > currentInactiveAssets) _withdrawFromAave(address(asset), assets - currentInactiveAssets);
     }
 
     /**
      * @notice Deposits cellar holdings into an Aave lending pool.
-     * @param token the address of the token
-     * @param amount the amount of tokens to deposit
+     * @param position the address of the asset position
+     * @param assets the amount of assets to deposit
      */
-    function _depositToAave(address token, uint256 amount) internal updateYield {
+    function _depositToAave(address position, uint256 assets) internal updateYield {
         // Ensure the position has been trusted by governance.
-        if (!isTrusted[token]) revert STATE_UntrustedPosition(token);
+        if (!isTrusted[position]) revert STATE_UntrustedPosition(position);
 
         // Initialize starting point for first platform fee accrual to time when cellar first deposits
         // assets into a position on Aave.
@@ -1020,28 +1048,28 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
         }
 
-        ERC20(token).safeApprove(address(lendingPool), amount);
+        ERC20(position).safeApprove(address(lendingPool), assets);
 
-        // Deposit tokens to Aave protocol.
-        lendingPool.deposit(token, amount, address(this), 0);
+        // Deposit assets into Aave position.
+        lendingPool.deposit(position, assets, address(this), 0);
 
-        emit DepositToAave(token, amount);
+        emit DepositToAave(position, assets);
     }
 
     /**
      * @notice Withdraws assets from Aave.
-     * @param token the address of the token
-     * @param amount the amount of tokens to withdraw
+     * @param position the address of the asset position
+     * @param assets the amount of assets to withdraw
      */
-    function _withdrawFromAave(address token, uint256 amount) internal updateYield {
+    function _withdrawFromAave(address position, uint256 assets) internal updateYield {
         // Skip withdrawal instead of reverting if there are no active assets to withdraw. Reverting
-        // could potentially prevent important function calls from executing, such as `shutdown`,
-        // in the case where there were no active assets because Aave would throw an error.
+        // could potentially prevent important function calls from executing, such as `shutdown`, in
+        // the case where there were no active assets because Aave would throw an error.
         if (activeAssets() > 0) {
-            // Withdraw tokens from Aave protocol
-            uint256 withdrawnAmount = lendingPool.withdraw(token, amount, address(this));
+            // Withdraw assets from Aave position.
+            uint256 withdrawnAmount = lendingPool.withdraw(position, assets, address(this));
 
-            emit WithdrawFromAave(token, withdrawnAmount);
+            emit WithdrawFromAave(position, withdrawnAmount);
         }
     }
 
@@ -1049,7 +1077,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
     /**
      * @dev Modified versions of Solmate's ERC20 transfer and transferFrom functions to work with the
-     *      cellar's active vs inactive shares mechanic.
+     *      cellar's active vs inactive shares model.
      */
 
     /**
@@ -1116,7 +1144,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Taken shares from this deposit to transfer.
             dFrom.shares -= uint112(transferredShares);
 
-            // Transfer a new deposit to the end of receiver's list of deposits.
+            // Transfer new deposit to the end of receiver's list of deposits.
             userDeposits[to].push(UserDeposit({
                 assets: isActive ? 0 : uint112(transferredAssets),
                 shares: uint112(transferredShares),
@@ -1126,6 +1154,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Update the counter of assets left to transfer.
             leftToTransfer -= transferredShares;
 
+            // Break if not shares left to transfer.
             if (leftToTransfer == 0) {
                 // Only store the index for the next non-zero deposit to save gas on looping if
                 // inactive deposits weren't skipped.
@@ -1134,6 +1163,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             }
         }
 
+        // Will only happen if exhausted through all deposits and did not enough active shares to
+        // transfer.
         if (leftToTransfer != 0) revert USR_NotEnoughActiveShares(leftToTransfer, amount);
 
         emit Transfer(from, to, amount);
@@ -1141,7 +1172,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         return true;
     }
 
-    /// @dev For compatibility with ERC20 standard.
+    /**
+     * @dev For compatibility with ERC20 standard.
+     */
     function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
         // Defaults to allowing both active and inactive shares to be transferred.
         return transferFrom(from, to, amount, false);
