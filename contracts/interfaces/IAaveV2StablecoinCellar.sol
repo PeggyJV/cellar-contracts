@@ -140,9 +140,10 @@ interface IAaveV2StablecoinCellar {
     /**
      * @notice Emitted when tokens accidentally sent to cellar are recovered.
      * @param token the address of the token
+     * @param to the address sweeped tokens were transferred to
      * @param amount amount transferred out
      */
-    event Sweep(address indexed token, uint256 amount);
+    event Sweep(address indexed token, address indexed to, uint256 amount);
 
     /**
      * @notice Emitted when cellar is shutdown.
@@ -319,7 +320,7 @@ interface IAaveV2StablecoinCellar {
 
     function claimAndUnstake() external returns (uint256 claimed);
 
-    function sweep(address token) external;
+    function sweep(address token, address to) external;
 
     function setLiquidityLimit(uint256 limit) external;
 

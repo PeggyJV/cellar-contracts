@@ -941,17 +941,18 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice Sweep tokens sent here that are not managed by the cellar.
      * @dev This may be used in case the wrong tokens are accidentally sent to this contract.
      * @param token address of token to transfer out of this cellar
+     * @param to address to transfer sweeped tokens to
      */
-    function sweep(address token) external onlyOwner {
+    function sweep(address token, address to) external onlyOwner {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == address(asset) || token == address(assetAToken) || token == address(this))
             revert STATE_ProtectedAsset(token);
 
         // Transfer out tokens in this cellar that shouldn't be here.
         uint256 amount = ERC20(token).balanceOf(address(this));
-        ERC20(token).safeTransfer(msg.sender, amount);
+        ERC20(token).safeTransfer(to, amount);
 
-        emit Sweep(token, amount);
+        emit Sweep(token, to, amount);
     }
 
     /**
@@ -1069,6 +1070,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // Withdraw assets from Aave position.
             uint256 withdrawnAmount = lendingPool.withdraw(position, assets, address(this));
 
+            // `withdrawnAmount` may be less than `assets` if cellar tried withdrawing more than
+            // it's balance on Aave.
             emit WithdrawFromAave(position, withdrawnAmount);
         }
     }
