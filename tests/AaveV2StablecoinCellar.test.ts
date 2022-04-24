@@ -826,7 +826,7 @@ describe("AaveV2StablecoinCellar", () => {
           ],
           0,
         ),
-      ).to.be.revertedWith(`STATE_SameAsset("${asset}")`);
+      ).to.be.revertedWith(`USR_SameAsset("${asset}")`);
     });
 
     it("should update yield", async () => {
@@ -1120,7 +1120,7 @@ describe("AaveV2StablecoinCellar", () => {
           ],
           0,
         ),
-      ).to.be.revertedWith(`STATE_UntrustedPosition("${DAI.address}")`);
+      ).to.be.revertedWith(`USR_UntrustedPosition("${DAI.address}")`);
 
       await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
 
@@ -1149,7 +1149,7 @@ describe("AaveV2StablecoinCellar", () => {
     await cellar.connect(await impersonateGravity()).setTrust(DAI.address, false);
 
     await expect(cellar.connect(await impersonateGravity()).enterPosition()).to.be.revertedWith(
-      `STATE_UntrustedPosition("${DAI.address}")`,
+      `USR_UntrustedPosition("${DAI.address}")`,
     );
 
     await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
@@ -1235,7 +1235,7 @@ describe("AaveV2StablecoinCellar", () => {
       await USDC.mint(cellar.address, BigNum(5_000_000, 6));
 
       await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(
-        `STATE_LiquidityRestricted(${BigNum(5_000_000, 6)})`,
+        `USR_LiquidityRestricted(${BigNum(5_000_000, 6)})`,
       );
     });
 
@@ -1280,29 +1280,29 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should not allow assets managed by cellar to be transferred out", async () => {
-      await expect(cellar.connect(await impersonateGravity()).sweep(USDC.address)).to.be.revertedWith(
-        `STATE_ProtectedAsset("${USDC.address}")`,
+      await expect(cellar.connect(await impersonateGravity()).sweep(USDC.address, owner.address)).to.be.revertedWith(
+        `USR_ProtectedAsset("${USDC.address}")`,
       );
-      await expect(cellar.connect(await impersonateGravity()).sweep(aUSDC.address)).to.be.revertedWith(
-        `STATE_ProtectedAsset("${aUSDC.address}")`,
+      await expect(cellar.connect(await impersonateGravity()).sweep(aUSDC.address, owner.address)).to.be.revertedWith(
+        `USR_ProtectedAsset("${aUSDC.address}")`,
       );
-      await expect(cellar.connect(await impersonateGravity()).sweep(cellar.address)).to.be.revertedWith(
-        `STATE_ProtectedAsset("${cellar.address}")`,
+      await expect(cellar.connect(await impersonateGravity()).sweep(cellar.address, owner.address)).to.be.revertedWith(
+        `USR_ProtectedAsset("${cellar.address}")`,
       );
     });
 
     it("should recover tokens accidentally transferred to the contract", async () => {
-      await cellar.connect(await impersonateGravity()).sweep(SOMM.address);
+      await cellar.connect(await impersonateGravity()).sweep(SOMM.address, owner.address);
 
       // expect 1000 SOMM to have been transferred from cellar to owner
-      expect(await SOMM.balanceOf(gravity.address)).to.eq(1000);
+      expect(await SOMM.balanceOf(owner.address)).to.eq(1000);
       expect(await SOMM.balanceOf(cellar.address)).to.eq(0);
     });
 
     it("should emit Sweep event", async () => {
-      await expect(cellar.connect(await impersonateGravity()).sweep(SOMM.address))
+      await expect(cellar.connect(await impersonateGravity()).sweep(SOMM.address, owner.address))
         .to.emit(cellar, "Sweep")
-        .withArgs(SOMM.address, 1000);
+        .withArgs(SOMM.address, owner.address, 1000);
     });
   });
 
