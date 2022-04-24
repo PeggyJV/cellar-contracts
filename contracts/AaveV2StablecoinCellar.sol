@@ -4,7 +4,6 @@ pragma solidity 0.8.11;
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
 import { IAaveIncentivesController } from "./interfaces/IAaveIncentivesController.sol";
 import { IStakedTokenV2 } from "./interfaces/IStakedTokenV2.sol";
 import { ICurveSwaps } from "./interfaces/ICurveSwaps.sol";
@@ -12,6 +11,9 @@ import { ISushiSwapRouter } from "./interfaces/ISushiSwapRouter.sol";
 import { IGravity } from "./interfaces/IGravity.sol";
 import { ILendingPool } from "./interfaces/ILendingPool.sol";
 import { MathUtils } from "./utils/MathUtils.sol";
+
+import "./Errors.sol";
+import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
@@ -256,7 +258,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         // Enforce liquidity restrictions if applicable.
         if (liquidityLimit != type(uint256).max && assets + totalAssets() > liquidityLimit)
-            revert STATE_LiquidityRestricted(liquidityLimit);
+            revert USR_LiquidityRestricted(liquidityLimit);
 
         // Transfers assets into the cellar.
         asset.safeTransferFrom(msg.sender, address(this), assets);
@@ -843,7 +845,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         }
 
         // Doesn't make sense to rebalance into the same asset.
-        if (newAsset == address(asset)) revert STATE_SameAsset(newAsset);
+        if (newAsset == address(asset)) revert USR_SameAsset(newAsset);
 
         // Pull all active assets entered into Aave back into the cellar so we can swap everything
         // into the new asset.
@@ -946,7 +948,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function sweep(address token, address to) external onlyOwner {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == address(asset) || token == address(assetAToken) || token == address(this))
-            revert STATE_ProtectedAsset(token);
+            revert USR_ProtectedAsset(token);
 
         // Transfer out tokens in this cellar that shouldn't be here.
         uint256 amount = ERC20(token).balanceOf(address(this));
@@ -996,14 +998,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(newAsset);
 
         // If the address is not null, it is supported by Aave.
-        if (aTokenAddress == address(0)) revert STATE_TokenIsNotSupportedByAave(newAsset);
+        if (aTokenAddress == address(0)) revert USR_UnsupportedPosition(newAsset);
 
         // Update the decimals used by limits if necessary.
         uint8 oldAssetDecimals = assetDecimals;
         uint8 newAssetDecimals = ERC20(newAsset).decimals();
 
         // Ensure the decimals of precision the new position uses will not break the cellar.
-        if (newAssetDecimals > decimals) revert STATE_TooManyDecimals(newAssetDecimals, decimals);
+        if (newAssetDecimals > decimals) revert USR_TooManyDecimals(newAssetDecimals, decimals);
 
         // Ignore if decimals are the same or if it is the first time initializing a position.
         if (oldAssetDecimals != 0 && oldAssetDecimals != newAssetDecimals) {
@@ -1041,7 +1043,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     function _depositToAave(address position, uint256 assets) internal updateYield {
         // Ensure the position has been trusted by governance.
-        if (!isTrusted[position]) revert STATE_UntrustedPosition(position);
+        if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Initialize starting point for first platform fee accrual to time when cellar first deposits
         // assets into a position on Aave.
