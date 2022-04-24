@@ -134,7 +134,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     ERC20 public immutable WETH; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 
     /**
-    /**
      * @dev Owner will be set to the Gravity Bridge, which relays instructions from the Steward
      *      module to the cellars.
      *      https://github.com/PeggyJV/steward
@@ -852,9 +851,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Reinvest rewards back into cellar's current position.
      * @dev Must be called within 2 day unstake period 10 days after `claimAndUnstake` was run.
-     * @param minAmountOut minimum amount of assets cellar should receive after swap
+     * @param minAssetsOut minimum amount of assets received after swapping AAVE to the current asset
      */
-    function reinvest(uint256 minAmountOut) external onlyOwner {
+    function reinvest(uint256 minAssetsOut) external onlyOwner {
         // Redeems the cellar's stkAAVE rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
@@ -872,7 +871,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Perform a multihop swap using Sushiswap.
         uint256[] memory amounts = sushiswapRouter.swapExactTokensForTokens(
             amountIn,
-            minAmountOut,
+            minAssetsOut,
             path,
             address(this),
             block.timestamp + 60
