@@ -20,7 +20,7 @@ import { MockStkAAVE } from "./mocks/MockStkAAVE.sol";
 import { AaveV2StablecoinCellar } from "../AaveV2StablecoinCellar.sol";
 import { CellarUser } from "./users/CellarUser.sol";
 
-import { DSTestPlus } from "@rari-capital/solmate/src/test/utils/DSTestPlus.sol";
+import { DSTestPlus } from "./utils/DSTestPlus.sol";
 import { MathUtils } from "../utils/MathUtils.sol";
 
 contract AaveV2StablecoinCellarTest is DSTestPlus {
