@@ -799,6 +799,19 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         emit Shutdown(shutdown, exitPosition);
     }
 
+    /**
+     * @notice Update the address of the fee distributor on the Sommelier Chain. IMPORTANT: Ensure
+     *         that the address is formatted in the specific way that the Gravity contract expects
+     *         it to be.
+     */
+    function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
+        bytes32 oldFeesDistributor = feesDistributor;
+
+        feesDistributor = newFeesDistributor;
+
+        emit FeesDistributorChanged(oldFeesDistributor, newFeesDistributor);
+    }
+
     // ===================================== ADMIN OPERATIONS =====================================
 
     /**

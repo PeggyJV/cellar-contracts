@@ -1184,6 +1184,28 @@ describe("AaveV2StablecoinCellar", () => {
     });
   });
 
+  describe("setFeesDistributor", async () => {
+    let oldFeesDistributor: string;
+    let newFeesDistributor: string;
+
+    beforeEach(async () => {
+      oldFeesDistributor = await cellar.connect(await impersonateGravity()).feesDistributor();
+      newFeesDistributor = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    });
+
+    it("should change the fees distributor", async () => {
+      await cellar.connect(await impersonateGravity()).setFeesDistributor(newFeesDistributor);
+
+      expect(await cellar.feesDistributor()).to.eq(newFeesDistributor);
+    });
+
+    it("should emit FeesDistributorChanged event", async () => {
+      await expect(await cellar.connect(await impersonateGravity()).setFeesDistributor(newFeesDistributor))
+        .to.emit(cellar, "FeesDistributorChanged")
+        .withArgs(oldFeesDistributor, await cellar.feesDistributor());
+    });
+  });
+
   describe("shutdown", () => {
     it("should prevent users from depositing while shutdown", async () => {
       await cellar.deposit(BigNum(100, 6), owner.address);
