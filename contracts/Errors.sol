@@ -39,6 +39,13 @@ error USR_DepositRestricted(uint256 maxDeposit);
 error USR_NotEnoughActiveShares(uint256 activeShares, uint256 attemptedActiveShares);
 
 /**
+ * @notice Attempted swap into an asset that is not the current asset of the cellar.
+ * @param assetOut address of the asset attempted to swap to
+ * @param currentAsset address of the current asset of cellar
+ */
+error USR_InvalidSwap(address assetOut, address currentAsset);
+
+/**
  * @notice Attempted to sweep an asset that is managed by the cellar.
  * @param token address of the token that can't be sweeped
  */
