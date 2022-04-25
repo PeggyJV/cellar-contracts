@@ -157,6 +157,9 @@ contract MockSwapRouter {
     using Path for bytes;
     using MathUtils for uint256;
 
+    uint256 public EXCHANGE_RATE = 95_00;
+    uint256 public DENOMINATOR = 100_00;
+
     struct ExactInputSingleParams {
         address tokenIn;
         address tokenOut;
@@ -169,10 +172,9 @@ contract MockSwapRouter {
     }
 
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256) {
-        uint256 exchangeRate = 9500;
         ERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
-        uint256 amountOut = (params.amountIn * exchangeRate) / 10000;
+        uint256 amountOut = params.amountIn.mulDivDown(EXCHANGE_RATE, DENOMINATOR);
 
         uint8 fromDecimals = ERC20(params.tokenIn).decimals();
         uint8 toDecimals = ERC20(params.tokenOut).decimals();
@@ -193,8 +195,6 @@ contract MockSwapRouter {
     }
 
     function exactInput(ExactInputParams memory params) external payable returns (uint256) {
-        uint256 exchangeRate = 9500;
-
         (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
 
         while (params.path.hasMultiplePools()) {
@@ -204,7 +204,7 @@ contract MockSwapRouter {
 
         ERC20(tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
-        uint256 amountOut = (params.amountIn * exchangeRate) / 10000;
+        uint256 amountOut = params.amountIn.mulDivDown(EXCHANGE_RATE, DENOMINATOR);
 
         uint8 fromDecimals = ERC20(tokenIn).decimals();
         uint8 toDecimals = ERC20(tokenOut).decimals();
@@ -223,14 +223,12 @@ contract MockSwapRouter {
         address to,
         uint256
     ) external returns (uint256[] memory) {
-        uint256 exchangeRate = 9500;
-
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
         ERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
 
-        uint256 amountOut = (amountIn * exchangeRate) / 10000;
+        uint256 amountOut = amountIn.mulDivDown(EXCHANGE_RATE, DENOMINATOR);
 
         uint8 fromDecimals = ERC20(tokenIn).decimals();
         uint8 toDecimals = ERC20(tokenOut).decimals();
@@ -244,6 +242,17 @@ contract MockSwapRouter {
         amounts[0] = amountOut;
 
         return amounts;
+    }
+
+    function quote(uint256 amountIn, address[] calldata path) external view returns (uint256) {
+        address tokenIn = path[0];
+        address tokenOut = path[path.length - 1];
+
+        uint256 amountOut = (amountIn * EXCHANGE_RATE) / DENOMINATOR;
+
+        uint8 fromDecimals = ERC20(tokenIn).decimals();
+        uint8 toDecimals = ERC20(tokenOut).decimals();
+        return amountOut.changeDecimals(fromDecimals, toDecimals);
     }
 
     receive() external payable {}

@@ -17,7 +17,7 @@ import { MockIncentivesController } from "./mocks/MockIncentivesController.sol";
 import { MockGravity } from "./mocks/MockGravity.sol";
 import { MockStkAAVE } from "./mocks/MockStkAAVE.sol";
 
-import { AaveV2StablecoinCellar } from "../AaveV2StablecoinCellar.sol";
+import { MockCellar } from "./mocks/MockCellar.sol";
 import { CellarUser } from "./users/CellarUser.sol";
 
 import { DSTestPlus } from "./utils/DSTestPlus.sol";
@@ -27,11 +27,13 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     using MathUtils for uint256;
 
     // Initialization Variables:
-    MockToken private asset;
-    MockAToken private assetAToken;
+    MockToken private USDC;
+    MockToken private DAI;
+    MockAToken private aUSDC;
+    MockAToken private aDAI;
     MockLendingPool private lendingPool;
 
-    AaveV2StablecoinCellar private cellar;
+    MockCellar private cellar;
 
     // `lastTimeEnteredPosition` must be greater than `timeDeposited` to active shares, however in
     // a testing environment `block.timestamp` is always 0. This ensures `enterPosition` actives a
@@ -42,15 +44,18 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     }
 
     function setUp() public {
-        asset = new MockToken("USDC", 6);
+        USDC = new MockToken("USDC", 6);
+        DAI = new MockToken("DAI", 6);
 
         lendingPool = new MockLendingPool();
-        assetAToken = new MockAToken(address(lendingPool), address(asset), "aUSDC");
-        lendingPool.initReserve(address(asset), address(assetAToken));
+        aUSDC = new MockAToken(address(lendingPool), address(USDC), "aUSDC");
+        aDAI = new MockAToken(address(lendingPool), address(DAI), "aDAI");
+        lendingPool.initReserve(address(USDC), address(aUSDC));
+        lendingPool.initReserve(address(DAI), address(aDAI));
 
         // Declare unnecessary variables with address 0.
-        cellar = new AaveV2StablecoinCellar(
-            ERC20(address(asset)),
+        cellar = new MockCellar(
+            ERC20(address(USDC)),
             5_000_000e6,
             50_000e6,
             ICurveSwaps(address(0)),
@@ -62,31 +67,29 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
             ERC20(address(0)),
             ERC20(address(0))
         );
-    }
 
-    function testDepositAndWithdraw(uint256 assets) public {
         // Ensure restrictions aren't a factor.
         cellar.setLiquidityLimit(type(uint256).max);
         cellar.setDepositLimit(type(uint256).max);
+    }
 
+    function testDepositAndWithdraw(uint256 assets) public {
         assets = bound(assets, 1, cellar.maxDeposit(address(this)));
 
-        asset.mint(address(this), assets);
-        asset.approve(address(cellar), assets);
+        USDC.mint(address(this), assets);
+        USDC.approve(address(cellar), assets);
 
         // Test single deposit.
-        uint256 beforeDepositBalance = asset.balanceOf(address(this));
-        uint256 expectedShares = cellar.previewDeposit(assets);
         uint256 shares = cellar.deposit(assets, address(this));
 
         assertEq(shares, assets.changeDecimals(6, 18)); // Expect exchange rate to be 1:1 on initial deposit.
         assertEq(cellar.previewWithdraw(assets), shares);
-        assertEq(expectedShares, shares);
+        assertEq(cellar.previewDeposit(assets), shares);
         assertEq(cellar.totalSupply(), shares);
         assertEq(cellar.totalAssets(), assets);
         assertEq(cellar.balanceOf(address(this)), shares);
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets);
-        assertEq(asset.balanceOf(address(this)), beforeDepositBalance - assets);
+        assertEq(USDC.balanceOf(address(this)), 0);
 
         // Test single withdraw.
         cellar.withdraw(assets, address(this), address(this));
@@ -94,21 +97,46 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.totalAssets(), 0);
         assertEq(cellar.balanceOf(address(this)), 0);
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0);
-        assertEq(asset.balanceOf(address(this)), beforeDepositBalance);
+        assertEq(USDC.balanceOf(address(this)), assets);
+    }
+
+    // Test using with 18 decimals instead of 6.
+    function testDepositAndWithdrawWithDifferentDecimals(uint256 assets) public {
+        cellar.updatePosition(address(DAI));
+
+        assets = bound(assets, 1, cellar.maxDeposit(address(this)));
+
+        DAI.mint(address(this), assets);
+        DAI.approve(address(cellar), assets);
+
+        // Test single deposit.
+        uint256 shares = cellar.deposit(assets, address(this));
+
+        assertEq(shares, assets.changeDecimals(6, 18)); // Expect exchange rate to be 1:1 on initial deposit.
+        assertEq(cellar.previewWithdraw(assets), shares);
+        assertEq(cellar.previewDeposit(assets), shares);
+        assertEq(cellar.totalSupply(), shares);
+        assertEq(cellar.totalAssets(), assets);
+        assertEq(cellar.balanceOf(address(this)), shares);
+        assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets);
+        assertEq(DAI.balanceOf(address(this)), 0);
+
+        // Test single withdraw.
+        cellar.withdraw(assets, address(this), address(this));
+
+        assertEq(cellar.totalAssets(), 0);
+        assertEq(cellar.balanceOf(address(this)), 0);
+        assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0);
+        assertEq(DAI.balanceOf(address(this)), assets);
     }
 
     function testMintAndRedeem(uint256 shares) public {
-        // Ensure restrictions aren't a factor.
-        cellar.setLiquidityLimit(type(uint256).max);
-        cellar.setDepositLimit(type(uint256).max);
-
         shares = bound(shares, 1, cellar.maxMint(address(this)));
 
-        asset.mint(address(this), shares.changeDecimals(18, 6));
-        asset.approve(address(cellar), shares);
+        USDC.mint(address(this), shares.changeDecimals(18, 6));
+        USDC.approve(address(cellar), shares);
 
         // Test single mint.
-        uint256 beforeMintBalance = asset.balanceOf(address(this));
         uint256 assets = cellar.mint(shares, address(this));
 
         assertEq(shares.changeDecimals(18, 6), assets); // Expect exchange rate to be 1:1 on initial mint.
@@ -118,14 +146,43 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.totalAssets(), assets);
         assertEq(cellar.balanceOf(address(this)), shares);
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets);
-        assertEq(asset.balanceOf(address(this)), beforeMintBalance - assets);
+        assertEq(USDC.balanceOf(address(this)), 0);
 
         // Test single redeem.
         cellar.redeem(shares, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0);
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0);
-        assertEq(asset.balanceOf(address(this)), beforeMintBalance);
+        assertEq(USDC.balanceOf(address(this)), assets);
+    }
+
+    // Test using with 18 decimals instead of 6.
+    function testMintAndRedeemWithDifferentDecimals(uint256 shares) public {
+        cellar.updatePosition(address(DAI));
+
+        shares = bound(shares, 1, cellar.maxMint(address(this)));
+
+        DAI.mint(address(this), shares.changeDecimals(18, 6));
+        DAI.approve(address(cellar), shares);
+
+        // Test single mint.
+        uint256 assets = cellar.mint(shares, address(this));
+
+        assertEq(shares.changeDecimals(18, 6), assets); // Expect exchange rate to be 1:1 on initial mint.
+        assertEq(cellar.previewRedeem(shares), assets);
+        assertEq(cellar.previewMint(shares), assets);
+        assertEq(cellar.totalSupply(), shares);
+        assertEq(cellar.totalAssets(), assets);
+        assertEq(cellar.balanceOf(address(this)), shares);
+        assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets);
+        assertEq(DAI.balanceOf(address(this)), 0);
+
+        // Test single redeem.
+        cellar.redeem(shares, address(this), address(this));
+
+        assertEq(cellar.balanceOf(address(this)), 0);
+        assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0);
+        assertEq(DAI.balanceOf(address(this)), assets);
     }
 
     function testMultipleMintDepositRedeemWithdraw() public {
@@ -177,15 +234,15 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // |            0 |       0 |       $0 |       0 |       $0 |
         // |______________|_________|__________|_________|__________|
 
-        CellarUser alice = new CellarUser(cellar, asset);
-        CellarUser bob = new CellarUser(cellar, asset);
+        CellarUser alice = new CellarUser(cellar, USDC);
+        CellarUser bob = new CellarUser(cellar, USDC);
 
         uint256 mutationAssets = 3000e6;
 
-        asset.mint(address(alice), 4000e6);
+        USDC.mint(address(alice), 4000e6);
         alice.approve(address(cellar), 4000e6);
 
-        asset.mint(address(bob), 7000e6);
+        USDC.mint(address(bob), 7000e6);
         bob.approve(address(cellar), 7000e6);
 
         // 1. Alice mints 2000 shares (costs $2000).
@@ -231,7 +288,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // Alice share is 33.33% of the cellar, Bob 66.66% of the cellar.
         // Alice's share count stays the same but the asset amount changes from $2000 to $3000.
         // Bob's share count stays the same but the asset amount changes from $4000 to $6000.
-        asset.mint(address(cellar), mutationAssets);
+        USDC.mint(address(cellar), mutationAssets);
         enterPosition();
         assertEq(cellar.activeAssets(), preMutationAssets + mutationAssets);
         assertEq(cellar.totalSupply(), preMutationShares);
@@ -258,14 +315,14 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // Sanity checks:
         // Alice should have spent all her assets now.
-        assertEq(asset.balanceOf(address(alice)), 0);
+        assertEq(USDC.balanceOf(address(alice)), 0);
         // Bob should have spent all his assets now.
-        assertEq(asset.balanceOf(address(bob)), 0);
+        assertEq(USDC.balanceOf(address(bob)), 0);
         // Assets in cellar: 4k (alice) + 7k (bob) + 3k (yield).
         assertEq(cellar.totalAssets(), 14000e6);
 
         // 6. Cellar mutates by +$3000.
-        asset.mint(address(cellar), mutationAssets);
+        USDC.mint(address(cellar), mutationAssets);
         enterPosition();
         assertEq(cellar.activeAssets(), 17000e6);
         assertApproxEq(cellar.convertToAssets(cellar.balanceOf(address(alice))), 6071e6, 1e6); // 6071.429
@@ -273,7 +330,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 7. Alice redeem 1333 shares ($2428).
         assertApproxEq(alice.redeem(1333e18, address(alice), address(alice)), 2428e6, 1e6); // 2427.964
-        assertApproxEq(asset.balanceOf(address(alice)), 2428e6, 1e6); // 2427.964
+        assertApproxEq(USDC.balanceOf(address(alice)), 2428e6, 1e6); // 2427.964
         assertApproxEq(cellar.totalSupply(), 8000e18, 1e18); // 8000.333
         assertApproxEq(cellar.totalAssets(), 14572e6, 1e6); // 14572.0357
         assertApproxEq(cellar.balanceOf(address(alice)), 2000e18, 1e18); // 2000.333
@@ -283,7 +340,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 8. Bob withdraws $2929 (1608 shares)
         assertApproxEq(bob.withdraw(2929e6, address(bob), address(bob)), 1608e18, 1e18); // 1608.078
-        assertEq(asset.balanceOf(address(bob)), 2929e6);
+        assertEq(USDC.balanceOf(address(bob)), 2929e6);
         assertApproxEq(cellar.totalSupply(), 6392e18, 1e18); // 6392.255
         assertApproxEq(cellar.totalAssets(), 11643e6, 1e6); // 1164.304
         assertApproxEq(cellar.balanceOf(address(alice)), 2000e18, 1e18); // 2000.333
@@ -293,7 +350,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 9. Alice withdraws $3643 (2000 shares)
         assertApproxEq(alice.withdraw(3643e6, address(alice), address(alice)), 2000e18, 1e18); // 2000.078
-        assertApproxEq(asset.balanceOf(address(alice)), 6071e6, 1e6); // 6070.964
+        assertApproxEq(USDC.balanceOf(address(alice)), 6071e6, 1e6); // 6070.964
         assertApproxEq(cellar.totalSupply(), 4392e18, 1e18); // 4392.176
         assertApproxEq(cellar.totalAssets(), 8000e6, 1e6); // 8000.036
         assertApproxEq(cellar.balanceOf(address(alice)), 0, 1e18); // 0.255
@@ -303,7 +360,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 10. Bob redeem 4392 shares ($8000)
         assertApproxEq(bob.redeem(4392e18, address(bob), address(bob)), 8000e6, 1e6); // 7999.571
-        assertApproxEq(asset.balanceOf(address(bob)), 10928e6, 1e6); // 10928.571
+        assertApproxEq(USDC.balanceOf(address(bob)), 10928e6, 1e6); // 10928.571
         assertApproxEq(cellar.totalSupply(), 0, 1e18); // 0.255
         assertApproxEq(cellar.totalAssets(), 0, 1e6); // 0.464
         assertApproxEq(cellar.balanceOf(address(alice)), 0, 1e18); // 0.255
@@ -313,11 +370,11 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     }
 
     function testCellarInteractionsFromThirdParties() public {
-        CellarUser alice = new CellarUser(cellar, asset);
-        CellarUser bob = new CellarUser(cellar, asset);
+        CellarUser alice = new CellarUser(cellar, USDC);
+        CellarUser bob = new CellarUser(cellar, USDC);
 
-        asset.mint(address(alice), 1e6);
-        asset.mint(address(bob), 1e6);
+        USDC.mint(address(alice), 1e6);
+        USDC.mint(address(bob), 1e6);
         alice.approve(address(cellar), 1e6);
         bob.approve(address(cellar), 1e6);
 
@@ -325,43 +382,43 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         alice.deposit(1e6, address(bob));
         assertEq(cellar.balanceOf(address(alice)), 0);
         assertEq(cellar.balanceOf(address(bob)), 1e18);
-        assertEq(asset.balanceOf(address(alice)), 0);
+        assertEq(USDC.balanceOf(address(alice)), 0);
 
         // Bob mint 1 share for Alice.
         bob.mint(1e18, address(alice));
         assertEq(cellar.balanceOf(address(alice)), 1e18);
         assertEq(cellar.balanceOf(address(bob)), 1e18);
-        assertEq(asset.balanceOf(address(bob)), 0);
+        assertEq(USDC.balanceOf(address(bob)), 0);
 
         // Alice redeem 1 share for Bob.
         alice.redeem(1e18, address(bob), address(alice));
         assertEq(cellar.balanceOf(address(alice)), 0);
         assertEq(cellar.balanceOf(address(bob)), 1e18);
-        assertEq(asset.balanceOf(address(bob)), 1e6);
+        assertEq(USDC.balanceOf(address(bob)), 1e6);
 
         // Bob withdraw 1e18 for Alice.
         bob.withdraw(1e6, address(alice), address(bob));
         assertEq(cellar.balanceOf(address(alice)), 0);
         assertEq(cellar.balanceOf(address(bob)), 0);
-        assertEq(asset.balanceOf(address(alice)), 1e6);
+        assertEq(USDC.balanceOf(address(alice)), 1e6);
     }
 
     function testDepositWithdrawWithNotEnoughAssets() public {
-        asset.mint(address(this), 1e6);
-        asset.approve(address(cellar), 1e6);
+        USDC.mint(address(this), 1e6);
+        USDC.approve(address(cellar), 1e6);
 
         // Should deposit as much as possible without reverting.
         cellar.deposit(2e6, address(this));
-        assertEq(asset.balanceOf(address(this)), 0);
+        assertEq(USDC.balanceOf(address(this)), 0);
 
         // Should withdraw as much as possible without reverting.
         cellar.withdraw(2e6, address(this), address(this));
-        assertEq(asset.balanceOf(address(this)), 1e6);
+        assertEq(USDC.balanceOf(address(this)), 1e6);
     }
 
     function testRedeemWithNotEnoughShares() public {
-        asset.mint(address(this), 1e6);
-        asset.approve(address(cellar), 1e6);
+        USDC.mint(address(this), 1e6);
+        USDC.approve(address(cellar), 1e6);
 
         // Should mint as much as possible without reverting.
         cellar.mint(2e18, address(this));
@@ -377,8 +434,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     }
 
     function testFailOnlyTransferActiveSharesWithNotEnoughActiveShares() external {
-        asset.mint(address(this), 1e6);
-        asset.approve(address(cellar), 1e6);
+        USDC.mint(address(this), 1e6);
+        USDC.approve(address(cellar), 1e6);
         cellar.mint(1e18, address(this));
 
         (uint256 activeShares, uint256 inactiveShares, , ) = cellar.getUserBalances(address(this));
@@ -389,22 +446,22 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     }
 
     function testFailDepositZero() public {
-        asset.mint(address(this), 1);
-        asset.approve(address(cellar), 1);
+        USDC.mint(address(this), 1);
+        USDC.approve(address(cellar), 1);
 
         cellar.deposit(0, address(this));
     }
 
     function testFailMintZero() public {
-        asset.mint(address(this), 1);
-        asset.approve(address(cellar), 1);
+        USDC.mint(address(this), 1);
+        USDC.approve(address(cellar), 1);
 
         cellar.mint(0, address(this));
     }
 
     function testFailWithdrawZero() public {
-        asset.mint(address(this), 1);
-        asset.approve(address(cellar), 1);
+        USDC.mint(address(this), 1);
+        USDC.approve(address(cellar), 1);
 
         cellar.deposit(1, address(this));
 
@@ -412,8 +469,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     }
 
     function testFailRedeemZero() public {
-        asset.mint(address(this), 1);
-        asset.approve(address(cellar), 1);
+        USDC.mint(address(this), 1);
+        USDC.approve(address(cellar), 1);
 
         cellar.deposit(1, address(this));
 
