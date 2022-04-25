@@ -839,12 +839,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
                          stableswap `exchange`, 2 for stableswap `exchange_underlying`, 3 for a
                          cryptoswap `exchange`, 4 for a cryptoswap `exchange_underlying` and 5 for
                          Polygon factory metapools `exchange_underlying`
-     * @param minAmountOut minimum amount received after the final swap
+     * @param minAssetsOut minimum amount of assets received from swap
      */
     function rebalance(
         address[9] memory route,
         uint256[3][4] memory swapParams,
-        uint256 minAmountOut
+        uint256 minAssetsOut
     ) external onlyOwner {
         if (isShutdown) revert STATE_ContractShutdown();
 
@@ -874,7 +874,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             route,
             swapParams,
             currentInactiveAssets,
-            minAmountOut
+            minAssetsOut
         );
 
         // Store this later for the event we will emit.
