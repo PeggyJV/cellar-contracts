@@ -3,36 +3,6 @@ pragma solidity 0.8.11;
 
 /// @title interface for AaveV2StablecoinCellar
 interface IAaveV2StablecoinCellar {
-    /**
-     * @notice Stores fee-related data.
-     */
-    struct Fees {
-        /**
-         * @notice Amount of yield earned since last time performance fees were accrued.
-         */
-        uint112 yield;
-        /**
-         * @notice Amount of active assets in cellar since yield was last calculated.
-         */
-        uint112 lastActiveAssets;
-        /**
-         * @notice Timestamp of last time platform fees were accrued.
-         */
-        uint32 lastTimeAccruedPlatformFees;
-        /**
-         * @notice Amount of platform fees that have been accrued awaiting transfer.
-         * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
-         *      the cellar to Cosmos to be distributed.
-         */
-        uint112 accruedPlatformFees;
-        /**
-         * @notice Amount of performance fees that have been accrued awaiting transfer.
-         * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
-         *      the cellar to Cosmos to be distributed.
-         */
-        uint112 accruedPerformanceFees;
-    }
-
     // ======================================= EVENTS =======================================
 
     /**
@@ -138,6 +108,13 @@ interface IAaveV2StablecoinCellar {
     event DepositLimitChanged(uint256 oldLimit, uint256 newLimit);
 
     /**
+     * @notice Emitted when fees distributor is changed.
+     * @param oldFeesDistributor address of fee distributor was changed from
+     * @param newFeesDistributor address of fee distributor was changed to
+     */
+    event FeesDistributorChanged(bytes32 oldFeesDistributor, bytes32 newFeesDistributor);
+
+    /**
      * @notice Emitted when tokens accidentally sent to cellar are recovered.
      * @param token the address of the token
      * @param to the address sweeped tokens were transferred to
@@ -164,6 +141,36 @@ interface IAaveV2StablecoinCellar {
         uint112 assets;
         uint112 shares;
         uint32 timeDeposited;
+    }
+
+    /**
+     * @notice Stores fee-related data.
+     */
+    struct Fees {
+        /**
+         * @notice Amount of yield earned since last time performance fees were accrued.
+         */
+        uint112 yield;
+        /**
+         * @notice Amount of active assets in cellar since yield was last calculated.
+         */
+        uint112 lastActiveAssets;
+        /**
+         * @notice Timestamp of last time platform fees were accrued.
+         */
+        uint32 lastTimeAccruedPlatformFees;
+        /**
+         * @notice Amount of platform fees that have been accrued awaiting transfer.
+         * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
+         *      the cellar to Cosmos to be distributed.
+         */
+        uint112 accruedPlatformFees;
+        /**
+         * @notice Amount of performance fees that have been accrued awaiting transfer.
+         * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
+         *      the cellar to Cosmos to be distributed.
+         */
+        uint112 accruedPerformanceFees;
     }
 
     // ================================= DEPOSIT/WITHDRAWAL OPERATIONS =================================
