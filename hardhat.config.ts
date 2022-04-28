@@ -6,23 +6,18 @@ import "solidity-coverage";
 import "hardhat-contract-sizer";
 
 import "./tasks/accounts";
-// import "./tasks/deploy/aaveV2Cellar";
+import "./tasks/deploy";
 
 import { TaskArguments } from "hardhat/types";
 import { subtask } from "hardhat/config";
 import { TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS } from "hardhat/builtin-tasks/task-names";
 
 // Override Hardhat compiler to ignore compiling files related to Foundry testing.
-subtask(TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS).setAction(
-  async (_: TaskArguments, __, runSuper: any) => {
-    const paths = await runSuper();
+subtask(TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS).setAction(async (_: TaskArguments, __, runSuper: any) => {
+  const paths = await runSuper();
 
-    return paths.filter(
-      (p: string) =>
-        !p.endsWith(".t.sol") && !p.includes("/users/") && !p.includes("/lib/")
-    );
-  }
-);
+  return paths.filter((p: string) => !p.endsWith(".t.sol") && !p.includes("/users/") && !p.includes("/lib/"));
+});
 
 import { resolve } from "path";
 
@@ -60,9 +55,7 @@ if (forkMainnet && !process.env.ALCHEMY_API_KEY) {
   alchemyApiKey = process.env.ALCHEMY_API_KEY;
 }
 
-function createTestnetConfig(
-  network: keyof typeof chainIds
-): NetworkUserConfig {
+function createTestnetConfig(network: keyof typeof chainIds): NetworkUserConfig {
   const url = `https://eth-${network}.alchemyapi.io/v2/${alchemyApiKey}`;
   return {
     accounts: {

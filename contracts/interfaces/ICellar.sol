@@ -46,4 +46,10 @@ interface ICellar is IERC20 {
     function maxWithdraw(address owner) external view returns (uint256);
 
     function maxRedeem(address owner) external view returns (uint256);
+
+    // ======================================= CELLAR OPERATIONS =======================================
+
+    function depositLimit() external view returns (uint256);
+
+    function liquidityLimit() external view returns (uint256);
 }
