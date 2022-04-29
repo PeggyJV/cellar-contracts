@@ -199,7 +199,7 @@ describe("reinvest gas and profit estimate", () => {
     aDAI = await Token.attach(aDAIAddress);
 
     // interface for chainlink ETH/USD price feed aggregator V3
-    chainlinkETHUSDPriceFeed = await ethers.getContractAt("@chainlink/contracts/src/v0.8/interfaces/AggregatorInterface.sol:AggregatorInterface", chainlinkETHUSDPriceFeedAddress);
+    chainlinkETHUSDPriceFeed = await ethers.getContractAt("AggregatorInterface", chainlinkETHUSDPriceFeedAddress);
     ethPriceUSD = await chainlinkETHUSDPriceFeed.latestAnswer();
     console.log("ethPriceUSD: " + ethPriceUSD);
 
