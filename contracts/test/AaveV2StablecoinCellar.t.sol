@@ -71,13 +71,18 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // Ensure restrictions aren't a factor.
         cellar.setLiquidityLimit(type(uint256).max);
         cellar.setDepositLimit(type(uint256).max);
+
+        // Mint enough liquidity to the Aave lending pool.
+        USDC.mint(address(aUSDC), type(uint112).max);
+
+        // Approve cellar to spend all assets.
+        USDC.approve(address(cellar), type(uint256).max);
     }
 
     function testDepositAndWithdraw(uint256 assets) public {
         assets = bound(assets, 1, cellar.maxDeposit(address(this)));
 
         USDC.mint(address(this), assets);
-        USDC.approve(address(cellar), assets);
 
         // Test single deposit.
         uint256 shares = cellar.deposit(assets, address(this));
@@ -134,7 +139,6 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         shares = bound(shares, 1, cellar.maxMint(address(this)));
 
         USDC.mint(address(this), shares.changeDecimals(18, 6));
-        USDC.approve(address(cellar), shares);
 
         // Test single mint.
         uint256 assets = cellar.mint(shares, address(this));
@@ -405,7 +409,6 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
     function testDepositWithdrawWithNotEnoughAssets() public {
         USDC.mint(address(this), 1e6);
-        USDC.approve(address(cellar), 1e6);
 
         // Should deposit as much as possible without reverting.
         cellar.deposit(2e6, address(this));
@@ -418,7 +421,6 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
     function testRedeemWithNotEnoughShares() public {
         USDC.mint(address(this), 1e6);
-        USDC.approve(address(cellar), 1e6);
 
         // Should mint as much as possible without reverting.
         cellar.mint(2e18, address(this));
@@ -435,7 +437,6 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
     function testFailOnlyTransferActiveSharesWithNotEnoughActiveShares() external {
         USDC.mint(address(this), 1e6);
-        USDC.approve(address(cellar), 1e6);
         cellar.mint(1e18, address(this));
 
         (uint256 activeShares, uint256 inactiveShares, , ) = cellar.getUserBalances(address(this));
@@ -447,21 +448,18 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
     function testFailDepositZero() public {
         USDC.mint(address(this), 1);
-        USDC.approve(address(cellar), 1);
 
         cellar.deposit(0, address(this));
     }
 
     function testFailMintZero() public {
         USDC.mint(address(this), 1);
-        USDC.approve(address(cellar), 1);
 
         cellar.mint(0, address(this));
     }
 
     function testFailWithdrawZero() public {
         USDC.mint(address(this), 1);
-        USDC.approve(address(cellar), 1);
 
         cellar.deposit(1, address(this));
 
@@ -470,7 +468,6 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
     function testFailRedeemZero() public {
         USDC.mint(address(this), 1);
-        USDC.approve(address(cellar), 1);
 
         cellar.deposit(1, address(this));
 
@@ -481,5 +478,42 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         cellar.transfer(hevm.addr(1), 0);
 
         assertEq(cellar.balanceOf(hevm.addr(1)), 0);
+    }
+
+    // Test an edgecase where `totalSupply` can be non-zero when `totalAssets` is zero.
+    function testEdgecaseDepositWithNonZeroTotalSupply() public {
+        USDC.mint(address(this), 1000e6);
+
+        // Deposit all assets.
+        cellar.deposit(USDC.balanceOf(address(this)), address(this));
+
+        assertEq(cellar.balanceOf(address(this)), 1000e18);
+
+        // Simulate gaining $100 yield.
+        enterPosition();
+        aUSDC.mint(address(cellar), 100e6, lendingPool.index());
+
+        assertEq(cellar.activeAssets(), 1100e6);
+        assertEq(cellar.totalAssets(), 1100e6);
+
+        // Redeem all shares.
+        cellar.redeem(cellar.balanceOf(address(this)), address(this), address(this));
+
+        assertEq(USDC.balanceOf(address(this)), 1100e6);
+        assertEq(cellar.totalSupply(), 0);
+
+        // Accrue $10 of fees as shares (will be redeemable for $0, however, since there are no
+        // assets left in cellar).
+        cellar.accrueFees();
+
+        (, , , , uint256 accruedPerformanceFees) = cellar.fees();
+
+        assertEq(accruedPerformanceFees, 10e18);
+        assertEq(cellar.totalSupply(), 10e18);
+        assertEq(cellar.previewRedeem(accruedPerformanceFees), 0);
+
+        // Test depositing when `totalSupply` is non-zero but `totalAssets` is zero.
+        cellar.deposit(1e6, address(this));
+        cellar.mint(1e18, address(this));
     }
 }

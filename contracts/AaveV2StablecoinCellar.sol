@@ -493,7 +493,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @dev Same as `convertToShares` but forcibly denoted with 18 decimals of precision.
      */
     function _convertToShares(uint256 assets) internal view returns (uint256) {
-        return totalSupply == 0 ? assets : assets.mulDivDown(totalSupply, _totalAssets());
+        uint256 currentTotalAssets =  _totalAssets();
+        return currentTotalAssets == 0 || totalSupply == 0 ? assets : assets.mulDivDown(totalSupply, currentTotalAssets);
     }
 
     /**
@@ -805,8 +806,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      *         it to be.
      */
     function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
+        // Store for emitted event.
         bytes32 oldFeesDistributor = feesDistributor;
 
+        // Change the fees distributor address.
         feesDistributor = newFeesDistributor;
 
         emit FeesDistributorChanged(oldFeesDistributor, newFeesDistributor);
@@ -866,10 +869,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         uint256 currentInactiveAssets = inactiveAssets();
 
-        // Approve Curve to swap the cellar's assets.
-        asset.safeApprove(address(curveRegistryExchange), currentInactiveAssets);
-
         // Perform stablecoin swap using Curve.
+        asset.safeApprove(address(curveRegistryExchange), currentInactiveAssets);
         uint256 amountOut = curveRegistryExchange.exchange_multiple(
             route,
             swapParams,
@@ -904,9 +905,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         uint256 amountIn = AAVE.balanceOf(address(this));
 
-        // Approve the Sushiswap to swap AAVE.
-        AAVE.safeApprove(address(sushiswapRouter), amountIn);
-
         // Specify the swap path from AAVE -> WETH -> current asset.
         address[] memory path = new address[](3);
         path[0] = address(AAVE);
@@ -914,6 +912,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         path[2] = address(asset);
 
         // Perform a multihop swap using Sushiswap.
+        AAVE.safeApprove(address(sushiswapRouter), amountIn);
         uint256[] memory amounts = sushiswapRouter.swapExactTokensForTokens(
             amountIn,
             minAssetsOut,
@@ -1060,13 +1059,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         // Initialize starting point for first platform fee accrual to time when cellar first deposits
         // assets into a position on Aave.
-        if (fees.lastTimeAccruedPlatformFees == 0) {
-            fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
-        }
-
-        ERC20(position).safeApprove(address(lendingPool), assets);
+        if (fees.lastTimeAccruedPlatformFees == 0) fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
 
         // Deposit assets into Aave position.
+        ERC20(position).safeApprove(address(lendingPool), assets);
         lendingPool.deposit(position, assets, address(this), 0);
 
         emit DepositToAave(position, assets);
@@ -1084,6 +1080,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         if (activeAssets() > 0) {
             // Withdraw assets from Aave position.
             uint256 withdrawnAmount = lendingPool.withdraw(position, assets, address(this));
+
 
             // `withdrawnAmount` may be less than `assets` if cellar tried withdrawing more than
             // it's balance on Aave.
