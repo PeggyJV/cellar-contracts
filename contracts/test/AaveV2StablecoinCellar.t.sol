@@ -8,7 +8,7 @@ import { ICurveSwaps } from "../interfaces/ICurveSwaps.sol";
 import { ISushiSwapRouter } from "../interfaces/ISushiSwapRouter.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { ILendingPool } from "../interfaces/ILendingPool.sol";
-import { MockToken } from "./mocks/MockToken.sol";
+import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockAToken } from "./mocks/MockAToken.sol";
 import { MockCurveSwaps } from "./mocks/MockCurveSwaps.sol";
 import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
@@ -17,7 +17,7 @@ import { MockIncentivesController } from "./mocks/MockIncentivesController.sol";
 import { MockGravity } from "./mocks/MockGravity.sol";
 import { MockStkAAVE } from "./mocks/MockStkAAVE.sol";
 
-import { MockCellar } from "./mocks/MockCellar.sol";
+import { MockAaveCellar } from "./mocks/MockAaveCellar.sol";
 import { CellarUser } from "./users/CellarUser.sol";
 
 import { DSTestPlus } from "./utils/DSTestPlus.sol";
@@ -27,13 +27,13 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     using MathUtils for uint256;
 
     // Initialization Variables:
-    MockToken private USDC;
-    MockToken private DAI;
+    MockERC20 private USDC;
+    MockERC20 private DAI;
     MockAToken private aUSDC;
     MockAToken private aDAI;
     MockLendingPool private lendingPool;
 
-    MockCellar private cellar;
+    MockAaveCellar private cellar;
 
     // `lastTimeEnteredPosition` must be greater than `timeDeposited` to active shares, however in
     // a testing environment `block.timestamp` is always 0. This ensures `enterPosition` actives a
@@ -44,8 +44,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     }
 
     function setUp() public {
-        USDC = new MockToken("USDC", 6);
-        DAI = new MockToken("DAI", 6);
+        USDC = new MockERC20("USDC", 6);
+        DAI = new MockERC20("DAI", 6);
 
         lendingPool = new MockLendingPool();
         aUSDC = new MockAToken(address(lendingPool), address(USDC), "aUSDC");
@@ -54,7 +54,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         lendingPool.initReserve(address(DAI), address(aDAI));
 
         // Declare unnecessary variables with address 0.
-        cellar = new MockCellar(
+        cellar = new MockAaveCellar(
             ERC20(address(USDC)),
             5_000_000e6,
             50_000e6,

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.11;
 
-import { MockToken } from "./MockToken.sol";
+import { MockERC20 } from "./MockERC20.sol";
 
-contract MockStkAAVE is MockToken {
-    MockToken public immutable AAVE; // AAVE
+contract MockStkAAVE is MockERC20 {
+    MockERC20 public immutable AAVE; // AAVE
     uint256 public constant COOLDOWN_SECONDS = 864000; // 10 days
     uint256 public constant UNSTAKE_WINDOW = 172800; // 2 days
     mapping(address => uint256) public stakersCooldowns;
 
-    constructor(MockToken _AAVE) MockToken("stkAAVE", 18) {
+    constructor(MockERC20 _AAVE) MockERC20("stkAAVE", 18) {
         AAVE = _AAVE;
     }
 

@@ -17,8 +17,8 @@ import {
   MockCurveSwaps__factory,
   MockSwapRouter,
   MockSwapRouter__factory,
-  MockToken,
-  MockToken__factory,
+  MockERC20,
+  MockERC20__factory,
 } from "../src/types";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { BigNumber } from "ethers";
@@ -53,10 +53,10 @@ describe("AaveV2StablecoinCellar", () => {
   let alice: SignerWithAddress;
   let bob: SignerWithAddress;
   let cellar: AaveV2StablecoinCellar;
-  let USDC: MockToken;
-  let WETH: MockToken;
-  let DAI: MockToken;
-  let USDT: MockToken;
+  let USDC: MockERC20;
+  let WETH: MockERC20;
+  let DAI: MockERC20;
+  let USDT: MockERC20;
   let curveRegistryExchange: MockCurveSwaps;
   let sushiswapRouter: MockSwapRouter;
   let lendingPool: MockLendingPool;
@@ -66,7 +66,7 @@ describe("AaveV2StablecoinCellar", () => {
   let aDAI: MockAToken;
   let aUSDT: MockAToken;
   let stkAAVE: MockStkAAVE;
-  let AAVE: MockToken;
+  let AAVE: MockERC20;
 
   const impersonateGravity = async () => {
     await network.provider.request({
@@ -95,10 +95,10 @@ describe("AaveV2StablecoinCellar", () => {
     await curveRegistryExchange.deployed();
 
     // Deploy mock tokens
-    USDC = await new MockToken__factory(owner).deploy("USDC", 6);
-    DAI = await new MockToken__factory(owner).deploy("DAI", 18);
-    WETH = await new MockToken__factory(owner).deploy("WETH", 18);
-    USDT = await new MockToken__factory(owner).deploy("USDT", 6);
+    USDC = await new MockERC20__factory(owner).deploy("USDC", 6);
+    DAI = await new MockERC20__factory(owner).deploy("DAI", 18);
+    WETH = await new MockERC20__factory(owner).deploy("WETH", 18);
+    USDT = await new MockERC20__factory(owner).deploy("USDT", 6);
 
     await USDC.deployed();
     await DAI.deployed();
@@ -126,7 +126,7 @@ describe("AaveV2StablecoinCellar", () => {
     await lendingPool.initReserve(USDT.address, aUSDT.address);
 
     // Deploy mock AAVE
-    AAVE = await new MockToken__factory(owner).deploy("AAVE", 18);
+    AAVE = await new MockERC20__factory(owner).deploy("AAVE", 18);
 
     // Deploy mock stkAAVE
     stkAAVE = await new MockStkAAVE__factory(owner).deploy(AAVE.address);
@@ -1291,10 +1291,10 @@ describe("AaveV2StablecoinCellar", () => {
   });
 
   describe("sweep", () => {
-    let SOMM: MockToken;
+    let SOMM: MockERC20;
 
     beforeEach(async () => {
-      SOMM = await new MockToken__factory(owner).deploy("SOMM", 18);
+      SOMM = await new MockERC20__factory(owner).deploy("SOMM", 18);
       await SOMM.deployed();
 
       // mimic 1000 SOMM being transferred to the cellar contract by accident

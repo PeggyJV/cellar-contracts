@@ -9,7 +9,7 @@ import { ICurveSwaps } from "../interfaces/ICurveSwaps.sol";
 import { ISushiSwapRouter } from "../interfaces/ISushiSwapRouter.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { ILendingPool } from "../interfaces/ILendingPool.sol";
-import { MockToken } from "./mocks/MockToken.sol";
+import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockAToken } from "./mocks/MockAToken.sol";
 import { MockCurveSwaps } from "./mocks/MockCurveSwaps.sol";
 import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
@@ -19,7 +19,7 @@ import { MockGravity } from "./mocks/MockGravity.sol";
 import { MockStkAAVE } from "./mocks/MockStkAAVE.sol";
 
 import { CellarRouter } from "../CellarRouter.sol";
-import { MockCellar } from "./mocks/MockCellar.sol";
+import { MockAaveCellar } from "./mocks/MockAaveCellar.sol";
 
 import { DSTestPlus } from "./utils/DSTestPlus.sol";
 import { MathUtils } from "../utils/MathUtils.sol";
@@ -27,14 +27,14 @@ import { MathUtils } from "../utils/MathUtils.sol";
 contract CellarRouterTest is DSTestPlus {
     using MathUtils for uint256;
 
-    MockToken private USDC;
-    MockToken private DAI;
+    MockERC20 private USDC;
+    MockERC20 private DAI;
     MockAToken private aUSDC;
     MockAToken private aDAI;
     MockLendingPool private lendingPool;
     MockSwapRouter private swapRouter;
 
-    MockCellar private cellar;
+    MockAaveCellar private cellar;
     CellarRouter private router;
 
     bytes32 private constant PERMIT_TYPEHASH =
@@ -49,8 +49,8 @@ contract CellarRouterTest is DSTestPlus {
         router = new CellarRouter(ISushiSwapRouter(address(swapRouter)));
 
         // Set up a cellar:
-        USDC = new MockToken("USDC", 6);
-        DAI = new MockToken("DAI", 18);
+        USDC = new MockERC20("USDC", 6);
+        DAI = new MockERC20("DAI", 18);
         lendingPool = new MockLendingPool();
         aUSDC = new MockAToken(address(lendingPool), address(USDC), "aUSDC");
         aDAI = new MockAToken(address(lendingPool), address(DAI), "aDAI");
@@ -58,7 +58,7 @@ contract CellarRouterTest is DSTestPlus {
         lendingPool.initReserve(address(DAI), address(aDAI));
 
         // Declare unnecessary variables with address 0.
-        cellar = new MockCellar(
+        cellar = new MockAaveCellar(
             ERC20(address(USDC)),
             5_000_000e6,
             50_000e6,
