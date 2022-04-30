@@ -6,7 +6,7 @@ import "solidity-coverage";
 import "hardhat-contract-sizer";
 
 import "./tasks/accounts";
-import "./tasks/deploy";
+// import "./tasks/deploy";
 
 import { TaskArguments } from "hardhat/types";
 import { subtask } from "hardhat/config";
