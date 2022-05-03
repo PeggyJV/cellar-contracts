@@ -54,11 +54,9 @@ describe("reinvest gas and profit estimate", () => {
   const aUSDCAddress = "0xBcca60bB61934080951369a648Fb03DF4F96263C";
   const aDAIAddress = "0x028171bCA77440897B824Ca71D1c56caC55b68A3";
 
-  const BALANCER_POOL_USDC_WETH = "0x96646936b91d6b9d7d0c47c496afbf3d6ec7b6f8000200000000000000000019";
-  const BALANCER_POOL_USDT_WETH = "0x3e5fa9518ea95c3e533eb377c001702a9aacaa32000200000000000000000052";
-  const BALANCER_POOL_DAI_WETH = "0x0b09dea16768f0799065c475be02919503cb2a3500020000000000000000001a";
-
-
+  const BALANCER_POOL_ID_USDC_WETH = "0x96646936b91d6b9d7d0c47c496afbf3d6ec7b6f8000200000000000000000019";
+  const BALANCER_POOL_ID_USDT_WETH = "0x3e5fa9518ea95c3e533eb377c001702a9aacaa32000200000000000000000052";
+  const BALANCER_POOL_ID_DAI_WETH = "0x0b09dea16768f0799065c475be02919503cb2a3500020000000000000000001a";
 
   const timetravel = async (addTime) => {
     await network.provider.send("evm_increaseTime", [addTime]);
@@ -206,7 +204,7 @@ describe("reinvest gas and profit estimate", () => {
     aDAI = await Token.attach(aDAIAddress);
 
     // interface for chainlink ETH/USD price feed aggregator V3
-    chainlinkETHUSDPriceFeed = await ethers.getContractAt("@chainlink/contracts/src/v0.8/interfaces/AggregatorInterface.sol:AggregatorInterface", chainlinkETHUSDPriceFeedAddress);
+    chainlinkETHUSDPriceFeed = await ethers.getContractAt("AggregatorInterface", chainlinkETHUSDPriceFeedAddress);
     ethPriceUSD = await chainlinkETHUSDPriceFeed.latestAnswer();
     console.log("ethPriceUSD: " + ethPriceUSD);
 
@@ -402,7 +400,7 @@ describe("reinvest gas and profit estimate", () => {
       totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
       console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
 
-      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0, BALANCER_POOL_USDC_WETH);
+      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0, BALANCER_POOL_ID_USDC_WETH);
       await gasUsedLog("cellar.reinvestHybrid", tx);
 
       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
@@ -444,7 +442,7 @@ describe("reinvest gas and profit estimate", () => {
       totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
       console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
 
-      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0,BALANCER_POOL_DAI_WETH);
+      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0, BALANCER_POOL_ID_DAI_WETH);
       await gasUsedLog("cellar.reinvestBalancerProxyAndBalancerVault", tx);
 
       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
@@ -486,7 +484,7 @@ describe("reinvest gas and profit estimate", () => {
       totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
       console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
 
-      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0,BALANCER_POOL_USDT_WETH);
+      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0, BALANCER_POOL_ID_USDT_WETH);
       await gasUsedLog("cellar.reinvestBalancerProxyAndBalancerVault", tx);
 
       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
