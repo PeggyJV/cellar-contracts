@@ -13,6 +13,10 @@ import {IBalancerExchangeProxy, TokenInterface, PoolInterface} from "./interface
 import {IGravity} from "./interfaces/IGravity.sol";
 import {ILendingPool} from "./interfaces/ILendingPool.sol";
 import {MathUtils} from "./utils/MathUtils.sol";
+import "./interfaces/IBalancerVault.sol";
+import {ISwapRouter} from "./interfaces/ISwapRouter.sol";
+
+
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
@@ -79,12 +83,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @notice The percentage of performance fees (10%) taken off of cellar gains.
      */
     uint256 public constant PERFORMANCE_FEE = 10_00;
-    
+
     /**
      * @notice Maximum amount of all deposits in dollars (with zero decimals).
      */
     uint256 public depositLimitUsd;
-    
+
     /**
      * @notice Timestamp of last time platform fees were accrued.
      */
@@ -983,6 +987,106 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         );
 
         amountOut = amounts[amounts.length - 1];
+
+        // In the case of a shutdown, we just may want to redeem any leftover rewards for
+        // shareholders to claim but without entering them back into a strategy.
+        if (!isShutdown) {
+            // Take performance fee off of rewards.
+            uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+            uint256 performanceFees = convertToShares(performanceFeeInAssets);
+
+            // Mint performance fees to cellar as shares.
+            _mint(address(this), performanceFees);
+
+            accruedPerformanceFees += performanceFees;
+
+            // Reinvest rewards back into the current strategy.
+            _depositToAave(address(asset), amountOut);
+        }
+    }
+
+    function reinvestBalancerProxyAndBalancerVault(uint256 minAmountOut, bytes32 poolId) public onlyOwner {
+        // Redeems the cellar's stkAAVe rewards for AAVE.
+        stkAAVE.redeem(address(this), type(uint256).max);
+
+        uint256 amountIn = AAVE.balanceOf(address(this));
+
+        // Balancer ExchangeProxy V2 contract
+        IBalancerExchangeProxy balancerExchangeProxy = IBalancerExchangeProxy(0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21);
+
+        // Approve the ExchangeProxy to swap AAVE.
+        AAVE.safeApprove(address(balancerExchangeProxy), amountIn);
+
+        IBalancerExchangeProxy.Swap[][] memory swapSequences = new IBalancerExchangeProxy.Swap[][](1);
+        swapSequences[0] = new IBalancerExchangeProxy.Swap[](1);
+
+        swapSequences[0][0].pool = 0xC697051d1C6296C24aE3bceF39acA743861D9A81;
+        swapSequences[0][0].tokenIn = address(AAVE);
+        swapSequences[0][0].tokenOut = address(WETH);
+        swapSequences[0][0].swapAmount = amountIn;
+        swapSequences[0][0].maxPrice = type(uint256).max;
+
+        // Perform a multihop swap using Balancer.
+        uint256 amountOut = balancerExchangeProxy.multihopBatchSwapExactIn(
+            swapSequences,
+            TokenInterface(address(AAVE)),
+            TokenInterface(address(WETH)),
+            amountIn,
+            0
+        );
+
+        IBalancerVault balancerVault = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
+        WETH.safeApprove(address(balancerVault), amountOut);
+
+        IBalancerVault.SingleSwap memory singleSwap =  IBalancerVault.SingleSwap(
+                poolId,
+                IBalancerVault.SwapKind.GIVEN_IN,
+                IAsset(address(WETH)),
+                IAsset(address(asset)),
+                amountOut,
+                "");
+        IBalancerVault.FundManagement memory  fundManagement =
+            IBalancerVault.FundManagement(address(this),false, payable(address(this)), false);
+
+        amountOut = balancerVault.swap(singleSwap, fundManagement,0,type(uint256).max);
+
+
+        // In the case of a shutdown, we just may want to redeem any leftover rewards for
+        // shareholders to claim but without entering them back into a strategy.
+        if (!isShutdown) {
+            // Take performance fee off of rewards.
+            uint256 performanceFeeInAssets = amountOut.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+            uint256 performanceFees = convertToShares(performanceFeeInAssets);
+
+            // Mint performance fees to cellar as shares.
+            _mint(address(this), performanceFees);
+
+            accruedPerformanceFees += performanceFees;
+
+            // Reinvest rewards back into the current strategy.
+            _depositToAave(address(asset), amountOut);
+        }
+    }
+
+    function reinvestBalancerVault(uint256 minAmountOut, bytes32 poolId) public onlyOwner {
+        // Redeems the cellar's stkAAVe rewards for AAVE.
+        stkAAVE.redeem(address(this), type(uint256).max);
+
+        uint256 amountIn = AAVE.balanceOf(address(this));
+
+        IBalancerVault balancerVault = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
+
+        IBalancerVault.SingleSwap memory singleSwap =  IBalancerVault.SingleSwap(
+                poolId,
+                IBalancerVault.SwapKind.GIVEN_IN,
+                IAsset(address(AAVE)),
+                IAsset(address(asset)),
+                amountIn,
+                "");
+        IBalancerVault.FundManagement memory  fundManagement =
+        IBalancerVault.FundManagement(address(this),false, payable(address(this)), false);
+
+        uint256 amountOut = balancerVault.swap(singleSwap, fundManagement,0,type(uint256).max);
 
         // In the case of a shutdown, we just may want to redeem any leftover rewards for
         // shareholders to claim but without entering them back into a strategy.

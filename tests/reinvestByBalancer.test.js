@@ -2,6 +2,7 @@ const hre = require("hardhat");
 const ethers = hre.ethers;
 const { alchemyApiKey } = require('../secrets.json');
 const { expect } = require("chai");
+require( "hardhat-gas-reporter")
 
 describe("reinvest gas and profit estimate", () => {
   let blockNumber;
@@ -52,6 +53,12 @@ describe("reinvest gas and profit estimate", () => {
 
   const aUSDCAddress = "0xBcca60bB61934080951369a648Fb03DF4F96263C";
   const aDAIAddress = "0x028171bCA77440897B824Ca71D1c56caC55b68A3";
+
+  const BALANCER_POOL_USDC_WETH = "0x96646936b91d6b9d7d0c47c496afbf3d6ec7b6f8000200000000000000000019";
+  const BALANCER_POOL_USDT_WETH = "0x3e5fa9518ea95c3e533eb377c001702a9aacaa32000200000000000000000052";
+  const BALANCER_POOL_DAI_WETH = "0x0b09dea16768f0799065c475be02919503cb2a3500020000000000000000001a";
+
+
 
   const timetravel = async (addTime) => {
     await network.provider.send("evm_increaseTime", [addTime]);
@@ -301,6 +308,20 @@ describe("reinvest gas and profit estimate", () => {
       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
       console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
     });
+
+    it("cellar.reinvestBalancerProxyAndBalancerVault USDC", async () => {
+      console.log("------------------- Test cellar.reinvestBalancerProxyAndBalancerVault -------------------");
+      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
+      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
+
+      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0, BALANCER_POOL_USDC_WETH);
+      await gasUsedLog("cellar.reinvestBalancerProxyAndBalancerVault", tx);
+
+      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
+      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
+    });
+
+
   });
   
   describe("Strategy with 1_000_000 USDC", () => {
@@ -331,6 +352,20 @@ describe("reinvest gas and profit estimate", () => {
       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
       console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
     });
+
+    it("cellar.reinvestBalancerProxyAndBalancerVault USDC", async () => {
+      console.log("------------------- Test cellar.reinvestBalancerProxyAndBalancerVault -------------------");
+      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
+      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
+
+      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0, BALANCER_POOL_USDC_WETH);
+      await gasUsedLog("cellar.reinvestBalancerProxyAndBalancerVault", tx);
+
+      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
+      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
+    });
+
+
   });
   
   describe("Strategy with 8_000_000 USDC", () => {
@@ -356,6 +391,18 @@ describe("reinvest gas and profit estimate", () => {
       console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
 
       tx = await cellar.reinvestHybrid(0);
+      await gasUsedLog("cellar.reinvestHybrid", tx);
+
+      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
+      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
+    });
+
+    it("cellar.reinvestBalancerProxyAndBalancerVault USDC", async () => {
+      console.log("------------------- Test cellar.reinvestBalancerProxyAndBalancerVault -------------------");
+      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
+      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
+
+      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0, BALANCER_POOL_USDC_WETH);
       await gasUsedLog("cellar.reinvestHybrid", tx);
 
       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
@@ -391,6 +438,19 @@ describe("reinvest gas and profit estimate", () => {
       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
       console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
     });
+
+    it("cellar.reinvestBalancerProxyAndBalancerVault DAI", async () => {
+      console.log("------------------- Test cellar.reinvestBalancerProxyAndBalancerVault -------------------");
+      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
+      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
+
+      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0,BALANCER_POOL_DAI_WETH);
+      await gasUsedLog("cellar.reinvestBalancerProxyAndBalancerVault", tx);
+
+      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
+      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
+    });
+
   });
 
   describe("Strategy with 8_000_000 USDT", () => {
@@ -417,6 +477,17 @@ describe("reinvest gas and profit estimate", () => {
 
       tx = await cellar.reinvestHybrid(0);
       await gasUsedLog("cellar.reinvestHybrid", tx);
+
+      console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
+      console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
+    });
+    it("cellar.reinvestBalancerProxyAndBalancerVault USDT", async () => {
+      console.log("------------------- Test cellar.reinvestBalancerProxyAndBalancerVault -------------------");
+      totalAssetsUSD = (await cellar.totalAssets())/ 10**(await cellar.assetDecimals());
+      console.log("totalAssets:", totalAssetsUSD.toFixed(2) + "$");
+
+      tx = await cellar.reinvestBalancerProxyAndBalancerVault(0,BALANCER_POOL_USDT_WETH);
+      await gasUsedLog("cellar.reinvestBalancerProxyAndBalancerVault", tx);
 
       console.log("totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals())).toFixed(2) + "$");
       console.log("Difference totalAssets:", ((await cellar.totalAssets())/ 10**(await cellar.assetDecimals()) - totalAssetsUSD).toFixed(2) + "$");
