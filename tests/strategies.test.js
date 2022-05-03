@@ -231,18 +231,18 @@ describe("StrategiesCellar", () => {
         });
 
         it("should add base strategy", async () => {
-            expect((await strategies.getSubStrategyIds(0))[0]).to.eq(undefined);
+            expect((await strategies.getSubStrategiesIds(0))[0]).to.eq(undefined);
             expect((await strategies.getProportions(0))[0]).to.eq(undefined);
             expect((await strategies.getMaxProportions(0))[0]).to.eq(undefined);
-            expect((await strategies.getSubStrategyShares(0))[0]).to.eq(undefined);
+            expect((await strategies.getSubStrategiesShares(0))[0]).to.eq(undefined);
             expect(await strategies.getIsBase(0)).to.eq(true);
             expect(await strategies.getBaseInactiveAsset(0)).to.eq(USDC.address);
             expect(await strategies.getBaseActiveAsset(0)).to.eq(aUSDCAddress);
 
-            expect((await strategies.getSubStrategyIds(1))[0]).to.eq(undefined);
+            expect((await strategies.getSubStrategiesIds(1))[0]).to.eq(undefined);
             expect((await strategies.getProportions(1))[0]).to.eq(undefined);
             expect((await strategies.getMaxProportions(1))[0]).to.eq(undefined);
-            expect((await strategies.getSubStrategyShares(1))[0]).to.eq(undefined);
+            expect((await strategies.getSubStrategiesShares(1))[0]).to.eq(undefined);
             expect(await strategies.getIsBase(1)).to.eq(true);
             expect(await strategies.getBaseInactiveAsset(1)).to.eq(DAI.address);
             expect(await strategies.getBaseActiveAsset(1)).to.eq(aDAIAddress);
@@ -256,9 +256,9 @@ describe("StrategiesCellar", () => {
             );
             await gasUsedLog("strategies.addStrategy", tx);
 
-            expect((await strategies.getSubStrategyIds(2))[0]).to.eq(0);
-            expect((await strategies.getSubStrategyIds(2))[1]).to.eq(1);
-            expect((await strategies.getSubStrategyIds(2))[2]).to.eq(undefined);
+            expect((await strategies.getSubStrategiesIds(2))[0]).to.eq(0);
+            expect((await strategies.getSubStrategiesIds(2))[1]).to.eq(1);
+            expect((await strategies.getSubStrategiesIds(2))[2]).to.eq(undefined);
 
             expect((await strategies.getProportions(2))[0]).to.eq(90);
             expect((await strategies.getProportions(2))[1]).to.eq(10);
@@ -266,9 +266,9 @@ describe("StrategiesCellar", () => {
             expect((await strategies.getMaxProportions(2))[0]).to.eq(100);
             expect((await strategies.getMaxProportions(2))[1]).to.eq(100);
 
-            expect((await strategies.getSubStrategyShares(2))[0]).to.eq(0);
-            expect((await strategies.getSubStrategyShares(2))[1]).to.eq(0);
-            expect((await strategies.getSubStrategyShares(2))[2]).to.eq(undefined);
+            expect((await strategies.getSubStrategiesShares(2))[0]).to.eq(0);
+            expect((await strategies.getSubStrategiesShares(2))[1]).to.eq(0);
+            expect((await strategies.getSubStrategiesShares(2))[2]).to.eq(undefined);
 
             expect(await strategies.getIsBase(2)).to.eq(false);
             expect(await strategies.getBaseInactiveAsset(2)).to.eq("0x0000000000000000000000000000000000000000");
@@ -469,6 +469,110 @@ describe("StrategiesCellar", () => {
 
             expect(await USDC.balanceOf(cellar.address)).to.eq(Num(9000, 6));
             expect(await USDT.balanceOf(cellar.address)).to.eq(Num(15000, 6));
+        });
+
+        it("should compute inactiveBaseAssets correctly", async () => {
+            await strategies.deposit(0, USDC.address, Num(5000, 6), owner.address);
+
+            expect(await strategies.inactiveBaseAssets(0)).to.eq(Num(5000, 6));
+
+            await strategies.connect(alice).deposit(3, USDT.address, Num(10000, 6), alice.address);
+
+            expect(await strategies.inactiveBaseAssets(0)).to.eq(Num(13000, 6));
+            expect(await strategies.inactiveBaseAssets(1)).to.eq(Num(1000, 18));
+            expect(await strategies.inactiveBaseAssets(2)).to.eq(Num(1000, 6));
+
+            await strategies.deposit(1, USDC.address, Num(1000, 6), owner.address);
+
+            expect(await strategies.inactiveBaseAssets(1)).to.eq(Num(2000, 18));
+
+            await strategies.deposit(3, USDT.address, Num(5000, 6), owner.address);
+
+            expect(await strategies.inactiveBaseAssets(0)).to.eq(Num(17000, 6));
+            expect(await strategies.inactiveBaseAssets(1)).to.eq(Num(2500, 18));
+            expect(await strategies.inactiveBaseAssets(2)).to.eq(Num(1500, 6));
+
+            await strategies.connect(alice).deposit(2, USDC.address, Num(1000, 6), alice.address);
+
+            expect(await strategies.inactiveBaseAssets(2)).to.eq(Num(2500, 6));
+
+            await strategies.deposit(3, USDC.address, Num(2000, 6), owner.address);
+
+            expect(await strategies.inactiveBaseAssets(0)).to.eq(Num(18600, 6));
+            expect(await strategies.inactiveBaseAssets(1)).to.eq(Num(2700, 18));
+            expect(await strategies.inactiveBaseAssets(2)).to.eq(Num(2700, 6));
+        });
+
+        it("should compute strategiesTotalSupplies correctly", async () => {
+            await strategies.deposit(0, USDC.address, Num(5000, 6), owner.address);
+            await strategies.connect(alice).deposit(3, USDT.address, Num(10000, 6), alice.address);
+
+            expect(await strategies.strategiesTotalSupplies(0)).to.eq(Num(13000, 18));
+            expect(await strategies.strategiesTotalSupplies(1)).to.eq(Num(1000, 18));
+            expect(await strategies.strategiesTotalSupplies(2)).to.eq(Num(1000, 18));
+            expect(await strategies.strategiesTotalSupplies(3)).to.eq(Num(10000, 18));
+
+            await strategies.deposit(1, USDC.address, Num(1000, 6), owner.address);
+            await strategies.deposit(3, USDT.address, Num(5000, 6), owner.address);
+
+            expect(await strategies.strategiesTotalSupplies(0)).to.eq(Num(17000, 18));
+            expect(await strategies.strategiesTotalSupplies(1)).to.eq(Num(2500, 18));
+            expect(await strategies.strategiesTotalSupplies(2)).to.eq(Num(1500, 18));
+            expect(await strategies.strategiesTotalSupplies(3)).to.eq(Num(15000, 18));
+            
+            await strategies.connect(alice).deposit(2, USDC.address, Num(1000, 6), alice.address);
+            await strategies.deposit(3, USDC.address, Num(2000, 6), owner.address);
+
+            expect(await strategies.strategiesTotalSupplies(0)).to.eq(Num(18600, 18));
+            expect(await strategies.strategiesTotalSupplies(1)).to.eq(Num(2700, 18));
+            expect(await strategies.strategiesTotalSupplies(2)).to.eq(Num(2700, 18));
+            expect(await strategies.strategiesTotalSupplies(3)).to.eq(Num(17000, 18));
+        });
+
+        it("should compute users balanceOf and totalSupply of strategies correctly", async () => {
+            await strategies.deposit(0, USDC.address, Num(5000, 6), owner.address);
+            await strategies.connect(alice).deposit(3, USDT.address, Num(10000, 6), alice.address);
+
+            expect(await strategies.balanceOf(owner.address)).to.eq(Num(5000, 18));
+            expect(await strategies.balanceOf(alice.address)).to.eq(Num(10000, 18));
+            expect(await strategies.totalSupply()).to.eq(Num(15000, 18));
+
+            await strategies.deposit(1, USDC.address, Num(1000, 6), owner.address);
+            await strategies.deposit(3, USDT.address, Num(5000, 6), owner.address);
+
+            expect(await strategies.balanceOf(owner.address)).to.eq(Num(11000, 18));
+            expect(await strategies.balanceOf(alice.address)).to.eq(Num(10000, 18));
+            expect(await strategies.totalSupply()).to.eq(Num(21000, 18));
+            
+            await strategies.connect(alice).deposit(2, USDC.address, Num(1000, 6), alice.address);
+            await strategies.deposit(3, USDC.address, Num(2000, 6), owner.address);
+
+            expect(await strategies.balanceOf(owner.address)).to.eq(Num(13000, 18));
+            expect(await strategies.balanceOf(alice.address)).to.eq(Num(11000, 18));
+            expect(await strategies.totalSupply()).to.eq(Num(24000, 18));
+        });
+
+        it("should compute subStrategiesShares correctly", async () => {
+            await strategies.deposit(0, USDC.address, Num(5000, 6), owner.address);
+            await strategies.connect(alice).deposit(3, USDT.address, Num(10000, 6), alice.address);
+
+            expect((await strategies.getSubStrategiesShares(3))[0]).to.eq(Num(8000, 18));
+            expect((await strategies.getSubStrategiesShares(3))[1]).to.eq(Num(1000, 18));
+            expect((await strategies.getSubStrategiesShares(3))[2]).to.eq(Num(1000, 18));
+
+            await strategies.deposit(1, USDC.address, Num(1000, 6), owner.address);
+            await strategies.deposit(3, USDT.address, Num(5000, 6), owner.address);
+
+            expect((await strategies.getSubStrategiesShares(3))[0]).to.eq(Num(12000, 18));
+            expect((await strategies.getSubStrategiesShares(3))[1]).to.eq(Num(1500, 18));
+            expect((await strategies.getSubStrategiesShares(3))[2]).to.eq(Num(1500, 18));
+
+            await strategies.connect(alice).deposit(2, USDC.address, Num(1000, 6), alice.address);
+            await strategies.deposit(3, USDC.address, Num(2000, 6), owner.address);
+
+            expect((await strategies.getSubStrategiesShares(3))[0]).to.eq(Num(13600, 18));
+            expect((await strategies.getSubStrategiesShares(3))[1]).to.eq(Num(1700, 18));
+            expect((await strategies.getSubStrategiesShares(3))[2]).to.eq(Num(1700, 18));
         });
     });
 });

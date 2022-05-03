@@ -11,10 +11,10 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
     using MathUtils for uint256;
 
     struct Strategy {
-        uint256[] subStrategyIds; // list of lower level strategies
+        uint256[] subStrategiesIds; // list of lower level strategies
         uint8[] proportions; // percentage distribution of the deposits by strategies
         uint8[] maxProportions; // maximum allowed percentages for each subStrategy
-        uint256[] subStrategyShares; // sub strategy shares
+        uint256[] subStrategiesShares; // sub strategies shares
         bool isBase; // true if this is a base level strategy
         address baseInactiveAsset; // address(0) if isBase == false
         address baseActiveAsset; // aToken corresponding to the baseInactiveAsset
@@ -23,7 +23,6 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
     mapping(uint256 => Strategy) strategies;
     mapping(uint256 => uint256) public strategiesTotalSupplies;
     mapping(uint256 => mapping(address => uint256)) public strategiesInputTokenBalances;
-    mapping(address => uint256) public otherStrategiesInputTokenBalances;
 
     address[] inputTokens;
     uint256 public strategyCount;
@@ -69,7 +68,7 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
         uint256 assetsUSD = toUSD(inputToken, assets);
 
         // Must calculate before assets are transferred in.
-        uint256 shares = convertToShares(_strategyId, toUSD(inputToken, assetsUSD));
+        uint256 shares = convertToShares(_strategyId, assetsUSD);
 
         // Check for rounding error on `deposit` since we round down in convertToShares. No need to
         // check for rounding error if `mint`, previewMint rounds up.
@@ -106,25 +105,26 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
         strategiesTotalSupplies[_strategyId] += shares;
 
         if (strategies[_strategyId].isBase) {
-            if (strategies[_strategyId].baseInactiveAsset != inputToken) {
-                strategiesInputTokenBalances[_strategyId][inputToken] += assets;
-                otherStrategiesInputTokenBalances[inputToken] += assets;
-            }
+            strategiesInputTokenBalances[_strategyId][inputToken] += assets;
         } else {
             uint256 subStrategyAssets;
-            for (uint256 i = 0; i < strategies[_strategyId].subStrategyIds.length; i++) {
+            uint256 subStrategyShares;
+
+            for (uint256 i = 0; i < strategies[_strategyId].subStrategiesIds.length; i++) {
                 subStrategyAssets = assets.mulDivDown(strategies[_strategyId].proportions[i], uint256(100));
 
-                strategies[_strategyId].subStrategyShares[i] = previewDeposit(
-                    strategies[_strategyId].subStrategyIds[i],
+                subStrategyShares = previewDeposit(
+                    strategies[_strategyId].subStrategiesIds[i],
                     inputToken, 
                     subStrategyAssets
                 );
 
+                strategies[_strategyId].subStrategiesShares[i] += subStrategyShares;
+
                 _updateStrategiesSharesBalances(
-                    strategies[_strategyId].subStrategyIds[i],
+                    strategies[_strategyId].subStrategiesIds[i],
                     inputToken,
-                    strategies[_strategyId].subStrategyShares[i],
+                    subStrategyShares,
                     subStrategyAssets
                 );
             }
@@ -164,7 +164,11 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
     }
 
     function toUSD(address token, uint256 amount) internal view returns (uint256) {
-        return tokenPrice(token)*amount / 10**(ERC20(token).decimals());
+        return tokenPrice(token).mulDivDown(amount, 10**ERC20(token).decimals());
+    }
+
+    function toAsset(address token, uint256 amountUSD) internal view returns (uint256) {
+        return amountUSD.mulDivDown(10**ERC20(token).decimals(), tokenPrice(token));
     }
 
     function activeBaseAssets(uint256 _baseStrategyId) public view returns (uint256) {
@@ -173,19 +177,14 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
     }
 
     function _activeBaseAssetsUSD(uint256 _baseStrategyId) internal view returns (uint256) {
-        return toUSD(strategies[_baseStrategyId].baseActiveAsset, activeBaseAssets(_baseStrategyId));
+        return toUSD(strategies[_baseStrategyId].baseInactiveAsset, activeBaseAssets(_baseStrategyId));
     }
 
     function inactiveBaseAssets(uint256 _baseStrategyId) public view returns (uint256) {
-        return ERC20(strategies[_baseStrategyId].baseInactiveAsset).
-            balanceOf(cellarVault);
+        return toAsset(strategies[_baseStrategyId].baseInactiveAsset, _inactiveBaseAssetsUSD(_baseStrategyId));
     }
 
     function _inactiveBaseAssetsUSD(uint256 _baseStrategyId) internal view returns (uint256) {
-        return toUSD(strategies[_baseStrategyId].baseActiveAsset, inactiveBaseAssets(_baseStrategyId));
-    }
-
-    function _strategyTotalInputTokenBalanceUSD(uint256 _baseStrategyId) internal view returns (uint256) {
         uint256 balanceUSD;
 
         for (uint256 i = 0; i < inputTokens.length; i++) {
@@ -198,23 +197,12 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
         return balanceUSD;
     }
 
-    function _otherStrategyTotalInputTokenBalanceUSD(uint256 _baseStrategyId) internal view returns (uint256) {
-        return toUSD(
-            strategies[_baseStrategyId].baseInactiveAsset,
-            otherStrategiesInputTokenBalances[strategies[_baseStrategyId].baseInactiveAsset]
-        );
-    }
-
     function totalBaseAssets(uint256 _baseStrategyId) public view returns (uint256) {
         return activeBaseAssets(_baseStrategyId) + inactiveBaseAssets(_baseStrategyId);
     }
 
     function _totalBaseAssetsUSD(uint256 _baseStrategyId) internal view returns (uint256) {
-        return toUSD(
-            strategies[_baseStrategyId].baseInactiveAsset,
-            totalBaseAssets(_baseStrategyId)
-        ) + _strategyTotalInputTokenBalanceUSD(_baseStrategyId) -
-            _otherStrategyTotalInputTokenBalanceUSD(_baseStrategyId);
+        return _activeBaseAssetsUSD(_baseStrategyId) + _inactiveBaseAssetsUSD(_baseStrategyId);
     }
 
     function _baseSharesToUSD(uint256 _baseStrategyId, uint256 shares) internal view returns (uint256) {
@@ -229,14 +217,14 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
             uint256 subStrategyShares;
             uint256 subStrategiesSumBalanceUSD;
 
-            for (uint256 i = 0; i < strategies[_strategyId].subStrategyIds.length; i++) {
+            for (uint256 i = 0; i < strategies[_strategyId].subStrategiesIds.length; i++) {
                 subStrategyShares = shares.mulDivDown(
-                    strategies[_strategyId].subStrategyShares[i],
+                    strategies[_strategyId].subStrategiesShares[i],
                     strategiesTotalSupplies[_strategyId]
                 );
 
                 subStrategiesSumBalanceUSD += _subStrategyTotalAssetsUSD(
-                    strategies[_strategyId].subStrategyIds[i],
+                    strategies[_strategyId].subStrategiesIds[i],
                     subStrategyShares
                 );
             }
@@ -251,10 +239,10 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
         } else {
             uint256 subStrategiesSumBalanceUSD;
 
-            for (uint256 i = 0; i < strategies[_strategyId].subStrategyIds.length; i++) {
+            for (uint256 i = 0; i < strategies[_strategyId].subStrategiesIds.length; i++) {
                 subStrategiesSumBalanceUSD += _subStrategyTotalAssetsUSD(
-                    strategies[_strategyId].subStrategyIds[i],
-                    strategies[_strategyId].subStrategyShares[i]
+                    strategies[_strategyId].subStrategiesIds[i],
+                    strategies[_strategyId].subStrategiesShares[i]
                 );
             }
 
@@ -281,22 +269,22 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
 
     // creates a new strategy
     function addStrategy(
-        uint256[] memory _subStrategyIds,
+        uint256[] memory _subStrategiesIds,
         uint8[] memory _proportions,
         uint8[] memory _maxProportions
     ) onlyStrategyProvider external {
-        if (_subStrategyIds.length != _proportions.length ||
-            _subStrategyIds.length != _maxProportions.length) revert IncorrectArrayLength();
+        if (_subStrategiesIds.length != _proportions.length ||
+            _subStrategiesIds.length != _maxProportions.length) revert IncorrectArrayLength();
 
         uint8 sum;
         for (uint256 i = 0; i < _proportions.length; i++) {
             if (_maxProportions[i] > uint8(100)) revert IncorrectPercentageValue();
-            strategies[strategyCount].subStrategyShares.push(0);
+            strategies[strategyCount].subStrategiesShares.push(0);
             sum += _proportions[i];
         }
         if (sum != uint8(100)) revert IncorrectPercentageSum();
 
-        strategies[strategyCount].subStrategyIds = _subStrategyIds;
+        strategies[strategyCount].subStrategiesIds = _subStrategiesIds;
         strategies[strategyCount].proportions = _proportions;
         strategies[strategyCount].maxProportions = _maxProportions;
 
@@ -340,8 +328,8 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
     // deletes a strategy. All assets remain in cellar but are inactive.
     // function removeStrategy(uint256 strategyId) onlyStrategyProvider external {}
 
-    function getSubStrategyIds(uint256 strategyId) view external returns(uint256[] memory) {
-        return strategies[strategyId].subStrategyIds;
+    function getSubStrategiesIds(uint256 strategyId) view external returns(uint256[] memory) {
+        return strategies[strategyId].subStrategiesIds;
     }
 
     function getProportions(uint256 strategyId) view external returns(uint8[] memory) {
@@ -352,8 +340,8 @@ contract StrategiesCellar is IStrategiesCellar, ERC20 {
         return strategies[strategyId].maxProportions;
     }
 
-    function getSubStrategyShares(uint256 strategyId) view external returns(uint256[] memory) {
-        return strategies[strategyId].subStrategyShares;
+    function getSubStrategiesShares(uint256 strategyId) view external returns(uint256[] memory) {
+        return strategies[strategyId].subStrategiesShares;
     }
 
     function getIsBase(uint256 strategyId) view external returns(bool) {
