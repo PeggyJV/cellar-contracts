@@ -3,6 +3,13 @@ pragma solidity 0.8.11;
 
 library MathUtils {
     /**
+     * @notice Substract and return 0 instead if results are negative.
+     */
+    function subMin0(uint256 x, uint256 y) internal pure returns (uint256) {
+        return x > y ? x - y : 0;
+    }
+
+    /**
      * @notice Used to change the decimals of precision used for an amount.
      */
     function changeDecimals(

@@ -20,16 +20,11 @@ error USR_ZeroAssets();
 error USR_ZeroShares();
 
 /**
- * @notice Attempted deposit more liquidity over the liquidity limit.
- * @param maxLiquidity the max liquidity
+ * @notice Attempted deposit more than the max deposit.
+ * @param assets the assets user attempted to deposit
+ * @param maxDeposit the max assets that can be deposited
  */
-error USR_LiquidityRestricted(uint256 maxLiquidity);
-
-/**
- * @notice Attempted deposit more than the per wallet limit.
- * @param maxDeposit the max deposit
- */
-error USR_DepositRestricted(uint256 maxDeposit);
+error USR_DepositRestricted(uint256 assets, uint256 maxDeposit);
 
 /**
  * @notice Attempted to transfer more active shares than the user has.

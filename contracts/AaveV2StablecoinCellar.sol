@@ -252,13 +252,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         // Prevent event spamming and user deposit spamming.
         if (shares == 0) revert USR_ZeroShares();
 
-        // Enforce deposit restrictions per wallet if applicable.
-        if (depositLimit != type(uint256).max && assets > maxDeposit(receiver))
-            revert USR_DepositRestricted(depositLimit);
-
-        // Enforce liquidity restrictions if applicable.
-        if (liquidityLimit != type(uint256).max && assets + totalAssets() > liquidityLimit)
-            revert USR_LiquidityRestricted(liquidityLimit);
+        // Enforce global liquidity restrictions and deposit restrictions per wallet.
+        if (assets > maxDeposit(receiver)) revert USR_DepositRestricted(assets, maxDeposit(receiver));
 
         // Transfers assets into the cellar.
         asset.safeTransferFrom(msg.sender, address(this), assets);
@@ -494,7 +489,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     function _convertToShares(uint256 assets) internal view returns (uint256) {
         uint256 currentTotalAssets =  _totalAssets();
-        return currentTotalAssets == 0 || totalSupply == 0 ? assets : assets.mulDivDown(totalSupply, currentTotalAssets);
+        return currentTotalAssets == 0 || totalSupply == 0 ?
+            assets :
+            assets.mulDivDown(totalSupply, currentTotalAssets);
     }
 
     /**
@@ -627,16 +624,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     function maxDeposit(address owner) public view returns (uint256) {
         if (isShutdown) return 0;
 
-        // Conversion to fixed point will overflow if the number being converted has more integer
-        // digits that fit in the bits reserved for them in the fixed point representation. This
-        // is the maximum assets that can be deposited without overflowing.
-        if (depositLimit == type(uint256).max) {
+        if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max)
+            // Conversion to fixed point will overflow if the number being converted has more integer
+            // digits that fit in the bits reserved for them in the fixed point representation. This
+            // is the maximum assets that can be deposited without overflowing.
             return uint256(type(uint112).max) / 10**(decimals - assetDecimals);
-        }
 
-        uint256 assets = previewRedeem(balanceOf[owner]);
+        uint256 leftUntilDepositLimit = depositLimit.subMin0(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.subMin0(totalAssets());
 
-        return depositLimit > assets ? depositLimit - assets : 0;
+        // Only return the more relevant of the two.
+        return MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
     }
 
     /**
@@ -645,17 +643,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      * @return maximum amount of shares that can be minted
      */
     function maxMint(address owner) public view returns (uint256) {
-        if (isShutdown) return 0;
-
-        // Conversion to fixed point will overflow if the number being converted has more integer
-        // digits that fit in the bits reserved for them in the fixed point representation. This
-        // is the maximum shares that can be minted without overflowing.
-        if (depositLimit == type(uint256).max) return convertToShares(maxDeposit(address(0)));
-
-        uint256 mintLimit = convertToShares(depositLimit);
-        uint256 shares = balanceOf[owner];
-
-        return mintLimit > shares ? mintLimit - shares : 0;
+        return convertToShares(maxDeposit(owner));
     }
 
     /**

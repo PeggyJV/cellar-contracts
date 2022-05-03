@@ -1256,19 +1256,17 @@ describe("AaveV2StablecoinCellar", () => {
       // mint $5m to cellar (to hit liquidity cap)
       await USDC.mint(cellar.address, BigNum(5_000_000, 6));
 
-      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(
-        `USR_LiquidityRestricted(${BigNum(5_000_000, 6)})`,
-      );
+      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith("USR_DepositRestricted(1, 0)");
     });
 
     it("should prevent deposit if greater than max deposit", async () => {
       await USDC.mint(owner.address, BigNum(50_001, 6));
       await expect(cellar.deposit(BigNum(50_001, 6), owner.address)).to.be.revertedWith(
-        `USR_DepositRestricted(${BigNum(50_000, 6)})`,
+        "USR_DepositRestricted(50001000000, 50000000000)",
       );
 
       await cellar.deposit(BigNum(50_000, 6), owner.address);
-      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith(`USR_DepositRestricted(${BigNum(50_000, 6)})`);
+      await expect(cellar.deposit(1, owner.address)).to.be.revertedWith("USR_DepositRestricted(1, 0)");
     });
 
     it("should allow deposits above max liquidity once limit removed", async () => {
@@ -1449,6 +1447,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await cellar.maxDeposit(owner.address)).to.eq(0);
 
       await cellar.connect(await impersonateGravity()).setDepositLimit(ethers.constants.MaxUint256);
+      await cellar.connect(await impersonateGravity()).setLiquidityLimit(ethers.constants.MaxUint256);
 
       expect(await cellar.maxDeposit(owner.address)).to.eq(
         ethers.BigNumber.from(2)
@@ -1472,6 +1471,7 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await cellar.maxMint(owner.address)).to.eq(0);
 
       await cellar.connect(await impersonateGravity()).setDepositLimit(ethers.constants.MaxUint256);
+      await cellar.connect(await impersonateGravity()).setLiquidityLimit(ethers.constants.MaxUint256);
 
       expect(await cellar.maxMint(owner.address)).to.eq(
         await cellar.convertToShares(await cellar.maxDeposit(owner.address)),
