@@ -1039,17 +1039,18 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         WETH.safeApprove(address(balancerVault), amountOut);
 
         IBalancerVault.SingleSwap memory singleSwap =  IBalancerVault.SingleSwap(
-                poolId,
-                IBalancerVault.SwapKind.GIVEN_IN,
-                IAsset(address(WETH)),
-                IAsset(address(asset)),
-                amountOut,
-                "");
+            poolId,
+            IBalancerVault.SwapKind.GIVEN_IN,
+            IAsset(address(WETH)),
+            IAsset(address(asset)),
+            amountOut,
+            ""
+        );
+
         IBalancerVault.FundManagement memory  fundManagement =
-            IBalancerVault.FundManagement(address(this),false, payable(address(this)), false);
+            IBalancerVault.FundManagement(address(this), false, payable(address(this)), false);
 
-        amountOut = balancerVault.swap(singleSwap, fundManagement,0,type(uint256).max);
-
+        amountOut = balancerVault.swap(singleSwap, fundManagement, 0, type(uint256).max);
 
         // In the case of a shutdown, we just may want to redeem any leftover rewards for
         // shareholders to claim but without entering them back into a strategy.
