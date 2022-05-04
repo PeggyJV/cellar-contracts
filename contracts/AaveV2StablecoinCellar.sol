@@ -1068,7 +1068,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         }
     }
 
-    function reinvestBalancerVault(uint256 minAmountOut, bytes32 poolId) public onlyOwner {
+    function reinvestBalancerVault(uint256 minAmountOut, bytes32 aavePoolId, bytes32 stablePoolId) public onlyOwner {
         // Redeems the cellar's stkAAVe rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
@@ -1076,17 +1076,38 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
 
         IBalancerVault balancerVault = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
-        IBalancerVault.SingleSwap memory singleSwap =  IBalancerVault.SingleSwap(
-                poolId,
-                IBalancerVault.SwapKind.GIVEN_IN,
-                IAsset(address(AAVE)),
-                IAsset(address(asset)),
-                amountIn,
-                "");
-        IBalancerVault.FundManagement memory  fundManagement =
-        IBalancerVault.FundManagement(address(this),false, payable(address(this)), false);
+        AAVE.safeApprove(address(balancerVault), amountIn);
 
-        uint256 amountOut = balancerVault.swap(singleSwap, fundManagement,0,type(uint256).max);
+
+        IBalancerVault.FundManagement memory  fundManagement =
+            IBalancerVault.FundManagement(address(this),false, payable(address(this)), false);
+
+        IAsset[] memory assets = new IAsset[](3);
+        assets[0] = IAsset(address(AAVE));
+        assets[1] = IAsset(address(WETH));
+        assets[2] = IAsset(address(asset));
+
+        int256[] memory limits = new int256[](3);
+        limits[0] = type(int256).max;
+        limits[1] = type(int256).max;
+        limits[2] = type(int256).max;
+
+
+
+    IBalancerVault.BatchSwapStep[] memory batchSteps = new IBalancerVault.BatchSwapStep[](2);
+        batchSteps[0] =  IBalancerVault.BatchSwapStep(aavePoolId, 0, 1, amountIn, "");
+
+        batchSteps[1] =  IBalancerVault.BatchSwapStep(stablePoolId, 1, 2, 0, "");
+
+        int256[] memory swapResult = balancerVault.batchSwap(
+            IBalancerVault.SwapKind.GIVEN_IN,
+            batchSteps,
+            assets,
+            fundManagement,
+            limits,
+            type(uint256).max);
+
+        uint256 amountOut = uint256(-swapResult[2]);
 
         // In the case of a shutdown, we just may want to redeem any leftover rewards for
         // shareholders to claim but without entering them back into a strategy.
