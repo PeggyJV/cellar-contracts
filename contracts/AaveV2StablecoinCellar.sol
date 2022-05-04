@@ -77,17 +77,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice The value fees are divided by to get a percentage. Represents the maximum percent (100%).
      */
-    uint256 private constant DENOMINATOR = 100_00;
+    uint256 public constant DENOMINATOR = 100_00;
 
     /**
      * @notice The percentage of platform fees taken off of active assets over a year.
      */
-    uint256 private constant PLATFORM_FEE = 1_00; // 1%
+    uint256 public constant PLATFORM_FEE = 1_00; // 1%
 
     /**
      * @notice The percentage of performance fees taken off of cellar gains.
      */
-    uint256 private constant PERFORMANCE_FEE = 10_00; // 10%
+    uint256 public constant PERFORMANCE_FEE = 10_00; // 10%
 
     /**
      * @notice Stores fee-related data.
