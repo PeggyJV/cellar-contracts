@@ -47,10 +47,10 @@ describe("CellarStaking", () => {
     const user = signers[1];
 
     // Bootstrap staking and distribution tokens
-    const tokenStake = <MockERC20>await deploy("MockERC20", admin, ["staking", "stk"]);
+    const tokenStake = <MockERC20>await deploy("MockERC20", admin, ["stk", 18]);
     await tokenStake.mint(user.address, initialTokenAmount);
 
-    const tokenDist = <MockERC20>await deploy("MockERC20", admin, ["distribution", "dist"]);
+    const tokenDist = <MockERC20>await deploy("MockERC20", admin, ["dist", 18]);
     await tokenDist.mint(admin.address, initialTokenAmount);
 
     // Bootstrap CellarStaking contract
@@ -75,12 +75,12 @@ describe("CellarStaking", () => {
 
     // Allow staking contract to transfer on behalf of user
     const tokenStakeUser = await tokenStake.connect(user);
-    await tokenStakeUser.increaseAllowance(staking.address, initialTokenAmount);
+    await tokenStakeUser.approve(staking.address, initialTokenAmount);
 
     const connectUser = async (signer: SignerWithAddress): Promise<CellarStaking> => {
       const stake = await tokenStake.connect(signer);
       await stake.mint(signer.address, initialTokenAmount);
-      await stake.increaseAllowance(staking.address, initialTokenAmount);
+      await stake.approve(staking.address, initialTokenAmount);
 
       return staking.connect(signer);
     };
@@ -1621,7 +1621,7 @@ describe("CellarStaking", () => {
           .withArgs(await staking.signer.getAddress(), true);
 
         // Try to stop again
-        await expect(staking.emergencyStop(true)).to.be.revertedWith("STATE_AlreadyStopped");
+        await expect(staking.emergencyStop(true)).to.be.revertedWith("STATE_AlreadyShutdown");
       });
     });
   });
