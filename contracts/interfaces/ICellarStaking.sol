@@ -22,14 +22,13 @@ interface ICellarStaking {
     event EmergencyUnstake(address indexed user, uint256 depositId, uint256 amount);
     event EmergencyClaim(address indexed user, uint256 amount);
     event EpochDurationChange(uint256 duration);
-    event DistributorSet(address indexed distributor, bool isSet);
 
     // ===================== Structs ======================
 
     enum Lock {
-        day,
-        week,
-        twoWeeks
+        short,
+        medium,
+        long
     }
 
     struct UserStake {
@@ -67,8 +66,6 @@ interface ICellarStaking {
 
     function claimable() external returns (bool);
 
-    function isRewardDistributor(address user) external returns (bool);
-
     // ================ User Functions ================
 
     function stake(uint256 amount, Lock lock) external;
@@ -98,8 +95,6 @@ interface ICellarStaking {
     function notifyRewardAmount(uint256 reward) external;
 
     function setRewardsDuration(uint256 _epochDuration) external;
-
-    function setRewardsDistribution(address _rewardsDistribution, bool _set) external;
 
     function setMinimumDeposit(uint256 _minimum) external;
 
