@@ -132,13 +132,6 @@ error USR_ZeroRewardsPerEpoch();
  */
 error USR_InvalidLockValue(uint256 lock);
 
-/**
- * @notice The caller attempted to call a reward distribution function,
- *         but was not the designated distributor.
- *
- */
-error USR_NotDistributor();
-
 // ========================================== STATE ERRORS ===========================================
 
 /**
@@ -156,6 +149,15 @@ error STATE_ContractShutdown();
  * @notice Attempted to shutdown the contract when it was already shutdown.
  */
 error STATE_AlreadyShutdown();
+
+/**
+ * @notice The caller attempted to start a reward period, but the contract did not have enough tokens
+ *         for the specified amount of rewards.
+ *
+ * @param rewardBalance         The amount of distributionToken held by the contract.
+ * @param reward                The amount of rewards the caller attempted to distribute.
+ */
+error STATE_RewardsNotFunded(uint256 rewardBalance, uint256 reward);
 
 /**
  * @notice The caller attempted to change the epoch length, but current reward epochs were active.
