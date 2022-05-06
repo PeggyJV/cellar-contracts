@@ -110,6 +110,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                     for (i; i < positions.length - 1; i++) positions[i] = positions[i + 1];
 
                     positions.pop();
+
+                    break;
                 }
             }
         }
