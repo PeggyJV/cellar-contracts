@@ -103,8 +103,10 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(shares, assets); // Expect exchange rate to be 1:1 on initial deposit.
         assertEq(cellar.previewWithdraw(assets), shares);
         assertEq(cellar.previewDeposit(assets), shares);
-        assertEq(cellar.totalSupply(), shares);
+        assertEq(cellar.totalBalance(), 0);
+        assertEq(cellar.totalHoldings(), assets);
         assertEq(cellar.totalAssets(), assets);
+        assertEq(cellar.totalSupply(), shares);
         assertEq(cellar.balanceOf(address(this)), shares);
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets);
         assertEq(USDC.balanceOf(address(this)), 0);
@@ -112,7 +114,10 @@ contract MultipositionCellarTest is DSTestPlus {
         // Test single withdraw.
         cellar.withdraw(assets, address(this), address(this));
 
+        assertEq(cellar.totalBalance(), 0);
+        assertEq(cellar.totalHoldings(), 0);
         assertEq(cellar.totalAssets(), 0);
+        assertEq(cellar.totalSupply(), 0);
         assertEq(cellar.balanceOf(address(this)), 0);
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0);
         assertEq(USDC.balanceOf(address(this)), assets);
@@ -268,6 +273,44 @@ contract MultipositionCellarTest is DSTestPlus {
 
         ERC4626[] memory positions = cellar.getPositions();
         for (uint256 i; i < positions.length; i++) assertTrue(positions[i] != distrustedPosition);
+    }
+
+    function testFailDepositWithNotEnoughApproval(uint256 amount) public {
+        USDC.mint(address(this), amount / 2);
+        USDC.approve(address(cellar), amount / 2);
+
+        cellar.deposit(amount, address(this));
+    }
+
+    function testFailWithdrawWithNotEnoughBalance(uint256 amount) public {
+        USDC.mint(address(this), amount / 2);
+        USDC.approve(address(cellar), amount / 2);
+
+        cellar.deposit(amount / 2, address(this));
+
+        cellar.withdraw(amount, address(this), address(this));
+    }
+
+    function testFailRedeemWithNotEnoughBalance(uint256 amount) public {
+        USDC.mint(address(this), amount / 2);
+        USDC.approve(address(cellar), amount / 2);
+
+        cellar.deposit(amount / 2, address(this));
+
+        cellar.redeem(amount, address(this), address(this));
+    }
+
+    function testFailWithdrawWithNoBalance(uint256 amount) public {
+        if (amount == 0) amount = 1;
+        cellar.withdraw(amount, address(this), address(this));
+    }
+
+    function testFailRedeemWithNoBalance(uint256 amount) public {
+        cellar.redeem(amount, address(this), address(this));
+    }
+
+    function testFailDepositWithNoApproval(uint256 amount) public {
+        cellar.deposit(amount, address(this));
     }
 
     // // TODO:
