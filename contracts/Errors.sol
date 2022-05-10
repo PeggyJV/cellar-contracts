@@ -59,10 +59,10 @@ error USR_SameAsset(address asset);
 error USR_UnsupportedPosition(address unsupportedPosition);
 
 /**
- * @notice Attempted rebalance into an untrusted position.
- * @param asset address of the asset
+ * @notice Attempted an operation on an untrusted position.
+ * @param position address of the position
  */
-error USR_UntrustedPosition(address asset);
+error USR_UntrustedPosition(address position);
 
 /**
  * @notice Attempted to update a position to an asset that uses an incompatible amount of decimals.

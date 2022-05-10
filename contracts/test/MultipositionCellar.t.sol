@@ -123,6 +123,44 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(USDC.balanceOf(address(this)), assets);
     }
 
+    function testFailDepositWithNotEnoughApproval(uint256 amount) public {
+        USDC.mint(address(this), amount / 2);
+        USDC.approve(address(cellar), amount / 2);
+
+        cellar.deposit(amount, address(this));
+    }
+
+    function testFailWithdrawWithNotEnoughBalance(uint256 amount) public {
+        USDC.mint(address(this), amount / 2);
+        USDC.approve(address(cellar), amount / 2);
+
+        cellar.deposit(amount / 2, address(this));
+
+        cellar.withdraw(amount, address(this), address(this));
+    }
+
+    function testFailRedeemWithNotEnoughBalance(uint256 amount) public {
+        USDC.mint(address(this), amount / 2);
+        USDC.approve(address(cellar), amount / 2);
+
+        cellar.deposit(amount / 2, address(this));
+
+        cellar.redeem(amount, address(this), address(this));
+    }
+
+    function testFailWithdrawWithNoBalance(uint256 amount) public {
+        if (amount == 0) amount = 1;
+        cellar.withdraw(amount, address(this), address(this));
+    }
+
+    function testFailRedeemWithNoBalance(uint256 amount) public {
+        cellar.redeem(amount, address(this), address(this));
+    }
+
+    function testFailDepositWithNoApproval(uint256 amount) public {
+        cellar.deposit(amount, address(this));
+    }
+
     // TODO: test with fuzzing
     function testRebalance() external {
         uint256 assets = 100e18;
@@ -178,6 +216,29 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(cellar.totalHoldings(), assetsRebalanced);
         (, , toBalance) = cellar.getPositionData(positionTo);
         assertEq(toBalance, 0);
+    }
+
+    function testFailRebalanceIntoUntrustedPosition() external {
+        uint256 assets = 100e18;
+
+        ERC4626[] memory positions = cellar.getPositions();
+        ERC4626 untrustedPosition = positions[positions.length - 1];
+
+        cellar.setTrust(untrustedPosition, false);
+
+        MockERC20 asset = MockERC20(address(cellar.asset()));
+
+        asset.mint(address(this), assets);
+        asset.approve(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+
+        address[] memory path = new address[](2);
+
+        // Test rebalancing from holding position to untrusted position.
+        path[0] = address(asset);
+        path[1] = address(untrustedPosition.asset());
+
+        cellar.rebalance(cellar, untrustedPosition, assets, 0, path);
     }
 
     function testAccrue() external {
@@ -273,44 +334,6 @@ contract MultipositionCellarTest is DSTestPlus {
 
         ERC4626[] memory positions = cellar.getPositions();
         for (uint256 i; i < positions.length; i++) assertTrue(positions[i] != distrustedPosition);
-    }
-
-    function testFailDepositWithNotEnoughApproval(uint256 amount) public {
-        USDC.mint(address(this), amount / 2);
-        USDC.approve(address(cellar), amount / 2);
-
-        cellar.deposit(amount, address(this));
-    }
-
-    function testFailWithdrawWithNotEnoughBalance(uint256 amount) public {
-        USDC.mint(address(this), amount / 2);
-        USDC.approve(address(cellar), amount / 2);
-
-        cellar.deposit(amount / 2, address(this));
-
-        cellar.withdraw(amount, address(this), address(this));
-    }
-
-    function testFailRedeemWithNotEnoughBalance(uint256 amount) public {
-        USDC.mint(address(this), amount / 2);
-        USDC.approve(address(cellar), amount / 2);
-
-        cellar.deposit(amount / 2, address(this));
-
-        cellar.redeem(amount, address(this), address(this));
-    }
-
-    function testFailWithdrawWithNoBalance(uint256 amount) public {
-        if (amount == 0) amount = 1;
-        cellar.withdraw(amount, address(this), address(this));
-    }
-
-    function testFailRedeemWithNoBalance(uint256 amount) public {
-        cellar.redeem(amount, address(this), address(this));
-    }
-
-    function testFailDepositWithNoApproval(uint256 amount) public {
-        cellar.deposit(amount, address(this));
     }
 
     // // TODO:

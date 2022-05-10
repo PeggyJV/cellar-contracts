@@ -27,7 +27,6 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ============================================ HOLDINGS CONFIG ============================================
 
-    // TODO: make adjustable by SP
     // TODO: consider changing default
     uint256 public targetHoldingsPercent = 5_00;
 
@@ -338,6 +337,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     // ======================================== HELPER FUNCTIONS ========================================
 
     function _depositIntoPosition(ERC4626 position, uint256 assets) internal virtual {
+        if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
+
         getPositionData[position].balance += uint112(assets);
         totalBalance += assets;
 
