@@ -73,26 +73,26 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         bool isTrusted;
         uint32 maxSlippage;
         uint112 balance;
-        address[] path;
+        address[] pathToAsset;
     }
 
     mapping(ERC4626 => PositionData) public getPositionData;
 
-    function setPositions(ERC4626[] calldata newPositions, address[][] calldata paths) public virtual onlyOwner {
+    function setPositions(ERC4626[] calldata newPositions, address[][] calldata pathsToAsset) public virtual onlyOwner {
         for (uint256 i; i < newPositions.length; i++) {
             PositionData storage positionData = getPositionData[newPositions[i]];
 
             // Ensure position is trusted.
             if (!positionData.isTrusted) revert USR_UntrustedPosition(address(newPositions[i]));
 
-            positionData.path = paths[i];
+            positionData.pathToAsset = pathsToAsset[i];
         }
 
         positions = newPositions;
     }
 
-    function setPositionPath(ERC4626 position, address[] memory path) public virtual onlyOwner {
-        getPositionData[position].path = path;
+    function setPositionPath(ERC4626 position, address[] memory pathToAsset) public virtual onlyOwner {
+        getPositionData[position].pathToAsset = pathToAsset;
     }
 
     function setPositionMaxSlippage(ERC4626 position, uint32 maxSlippage) public virtual onlyOwner {
@@ -182,7 +182,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     constructor(
         ERC20 _asset,
         ERC4626[] memory _positions,
-        address[][] memory _paths,
+        address[][] memory _pathsToAsset,
         uint32[] memory _maxSlippages, // Recommended default is 1%.
         string memory _name,
         string memory _symbol,
@@ -196,7 +196,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 isTrusted: true,
                 maxSlippage: _maxSlippages[i],
                 balance: 0,
-                path: _paths[i]
+                pathToAsset: _pathsToAsset[i]
             });
 
         // Transfer ownership to the Gravity Bridge.
@@ -271,7 +271,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 uint256 assetsOutMin = assetsToWithdraw.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
 
                 // Perform a swap to the to cellar's asset if necessary.
-                address[] memory path = positionData.path;
+                address[] memory path = positionData.pathToAsset;
                 if (path[0] != path[path.length - 1]) SwapUtils.swap(assetsToWithdraw, assetsOutMin, path);
 
                 if (leftToWithdraw == 0) break;
