@@ -123,7 +123,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Curve Registry Exchange contract. Used for rebalancing positions.
      */
-    ICurveSwaps public immutable curveRegistryExchange; // 0x8e764bE4288B842791989DB5b8ec067279829809
+    ICurveSwaps public immutable curveRegistryExchange; // 0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7
 
     /**
      * @notice SushiSwap Router V2 contract. Used for reinvesting rewards back into the current position.
