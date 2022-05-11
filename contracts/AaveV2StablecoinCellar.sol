@@ -489,9 +489,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     function _convertToShares(uint256 assets) internal view returns (uint256) {
         uint256 currentTotalAssets =  _totalAssets();
-        return currentTotalAssets == 0 || totalSupply == 0 ?
+        uint256 currentTotalSupply = totalSupply;
+        return currentTotalAssets == 0 || currentTotalSupply == 0 ?
             assets :
-            assets.mulDivDown(totalSupply, currentTotalAssets);
+            assets.mulDivDown(currentTotalSupply, currentTotalAssets);
     }
 
     /**
