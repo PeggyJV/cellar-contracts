@@ -307,7 +307,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         uint256 yield;
         uint256 currentTotalBalance = totalBalance;
 
-        for (uint256 i = 0; i < positions.length; i++) {
+        for (uint256 i; i < positions.length; i++) {
             ERC4626 position = positions[i];
 
             uint256 lastBalance = getPositionData[position].balance;
@@ -332,6 +332,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         totalBalance = currentTotalBalance;
 
         lastAccrual = uint64(block.timestamp);
+    }
+
+    // =========================================== FEE LOGIC ===========================================
+
+    function accruedPerformanceFees() public view virtual returns (uint256) {
+        return balanceOf[address(this)];
     }
 
     // ======================================== HELPER FUNCTIONS ========================================
