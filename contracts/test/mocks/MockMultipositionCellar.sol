@@ -44,6 +44,28 @@ contract MockMultipositionCellar is MultipositionCellar {
         _depositIntoPosition(position, assets);
     }
 
+    function withdrawFromPosition(
+        ERC4626 position,
+        uint256 assets,
+        address receiver,
+        address owner
+    ) external returns (uint256 shares) {
+        shares = previewWithdraw(assets);
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
+        _burn(owner, shares);
+
+        _withdrawFromPosition(position, assets);
+
+        ERC20 positionAsset = position.asset();
+        positionAsset.safeTransfer(receiver, assets);
+    }
+
     function beforeWithdraw(uint256 assets, uint256) internal override {
         uint256 currentHoldings = totalHoldings();
 
@@ -72,7 +94,7 @@ contract MockMultipositionCellar is MultipositionCellar {
 
                 uint256 assetsOutMin = assetsToWithdraw.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
 
-                address[] memory path = positionData.path;
+                address[] memory path = positionData.pathToAsset;
                 if (path[0] != path[path.length - 1]) swap(assetsToWithdraw, assetsOutMin, path);
 
                 if (leftToWithdraw == 0) break;

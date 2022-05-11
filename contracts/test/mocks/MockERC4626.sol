@@ -13,7 +13,7 @@ contract MockERC4626 is ERC4626 {
         uint8 _decimals
     ) ERC4626(_asset, _name, _symbol, _decimals) {}
 
-    function simulateDeposit(uint256 assets, address receiver) external returns (uint256 shares) {
+    function freeDeposit(uint256 assets, address receiver) external returns (uint256 shares) {
         require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
 
         MockERC20(address(asset)).mint(address(this), assets);

@@ -242,62 +242,152 @@ contract MultipositionCellarTest is DSTestPlus {
     }
 
     function testAccrue() external {
-        uint256 assets = 100e18;
-        uint256 yield = 25e18;
+        // Scenario:
+        // - Multiposition cellar has 3 positions.
+        //
+        // +==============+==============+==================+
+        // | Total Assets | Total Locked | Performance Fees |
+        // +==============+==============+==================+
+        // | 1. Deposit 100 assets into each position.      |
+        // +--------------+--------------+------------------+
+        // |          300 |            0 |                0 |
+        // +--------------+--------------+------------------+
+        // | 2. Each position gains 50 assets of yield.     |
+        // +--------------+--------------+------------------+
+        // |          300 |            0 |                0 |
+        // +--------------+--------------+------------------+
+        // | 3. Accrue fees and begin accruing yield.       |
+        // +--------------+--------------+------------------+
+        // |          315 |          135 |               15 |
+        // +--------------+--------------+------------------+
+        // | 4. Half of first accrual period passes.        |
+        // +--------------+--------------+------------------+
+        // |        382.5 |         67.5 |               15 |
+        // +--------------+--------------+------------------+
+        // | 5. Deposit 200 assets into a position.         |
+        // |    NOTE: For testing that deposit does not     |
+        // |          effect yield and is not factored in   |
+        // |          to later accrual.                     |
+        // +--------------+--------------+------------------+
+        // |        582.5 |         67.5 |               15 |
+        // +--------------+--------------+------------------+
+        // | 6. First accrual period passes.                |
+        // +--------------+--------------+------------------+
+        // |          650 |            0 |               15 |
+        // +--------------+--------------+------------------+
+        // | 7. Withdraw 100 assets from a position.        |
+        // |    NOTE: For testing that withdraw does not    |
+        // |          effect yield and is not factored in   |
+        // |          to later accrual.                     |
+        // +--------------+--------------+------------------+
+        // |          550 |            0 |               15 |
+        // +--------------+--------------+------------------+
+        // | 8. Accrue fees and begin accruing yield.       |
+        // |    NOTE: Should not accrue any yield or fees   |
+        // |          since user deposits / withdraws are   |
+        // |          not factored into yield.              |
+        // +--------------+--------------+------------------+
+        // |          550 |            0 |               15 |
+        // +--------------+--------------+------------------+
+        // | 9. Second accrual period passes.               |
+        // +--------------+--------------+------------------+
+        // |          550 |            0 |               15 |
+        // +--------------+--------------+------------------+
 
         ERC4626[] memory positions = cellar.getPositions();
         for (uint256 i; i < positions.length; i++) {
             ERC4626 position = positions[i];
             MockERC20 asset = MockERC20(address(position.asset()));
 
-            // Deposit assets directly into position.
-            asset.mint(address(this), assets);
-            asset.approve(address(cellar), assets);
-            cellar.depositIntoPosition(position, assets, address(this));
+            // 1. Deposit 100 assets into each position.
+            asset.mint(address(this), 100e18);
+            asset.approve(address(cellar), 100e18);
+            cellar.depositIntoPosition(position, 100e18, address(this));
 
-            assertEq(position.totalAssets(), assets);
+            assertEq(position.totalAssets(), 100e18);
             (, , uint112 balance) = cellar.getPositionData(position);
-            assertEq(balance, assets);
-            assertEq(cellar.totalBalance(), assets * (i + 1));
+            assertEq(balance, 100e18);
+            assertEq(cellar.totalBalance(), 100e18 * (i + 1));
 
-            // Simulate position accruing yield.
-            MockERC4626(address(position)).simulateDeposit(yield, address(cellar));
+            // 2. Each position gains 50 assets of yield.
+            MockERC4626(address(position)).freeDeposit(50e18, address(cellar));
 
-            assertEq(position.maxWithdraw(address(cellar)), assets + yield);
+            assertEq(position.maxWithdraw(address(cellar)), 150e18);
         }
 
-        uint256 totalAssetsBefore = cellar.totalAssets();
-        assertEq(totalAssetsBefore, assets * positions.length);
+        assertEq(cellar.totalAssets(), 300e18);
 
-        uint256 expectedYield = yield * positions.length;
-        uint256 expectedPerformanceFeesInAssets = expectedYield.mulDivDown(
-            cellar.PERFORMANCE_FEE(),
-            cellar.DENOMINATOR()
-        );
-        uint256 expectedPerformanceFees = cellar.convertToShares(expectedPerformanceFeesInAssets);
         uint256 priceOfShareBefore = cellar.convertToShares(1e18);
 
-        // Test accrue.
+        // 3. Accrue fees and begin accruing yield.
         cellar.accrue();
 
         uint256 priceOfShareAfter = cellar.convertToShares(1e18);
         assertEq(priceOfShareAfter, priceOfShareBefore);
-        assertEq(cellar.totalLocked(), expectedYield - expectedPerformanceFeesInAssets);
-        assertEq(cellar.totalAssets(), totalAssetsBefore + expectedPerformanceFeesInAssets);
-        assertEq(cellar.maxRedeem(address(cellar)), expectedPerformanceFees);
-        assertEq(cellar.maxWithdraw(address(cellar)), expectedPerformanceFeesInAssets);
+        assertEq(cellar.lastAccrual(), block.timestamp);
+        assertEq(cellar.totalLocked(), 135e18);
+        assertEq(cellar.totalAssets(), 315e18);
+        assertEq(cellar.totalBalance(), 450e18);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
 
-        hevm.warp(block.timestamp + cellar.accrualPeriod());
-
-        assertEq(cellar.totalLocked(), 0);
-        assertEq(cellar.totalAssets(), totalAssetsBefore + expectedYield);
-
+        // Position balances should have updated to reflect yield accrued per position.
         for (uint256 i; i < positions.length; i++) {
             ERC4626 position = positions[i];
 
             (, , uint112 balance) = cellar.getPositionData(position);
-            assertEq(balance, assets + yield);
+            assertEq(balance, 150e18);
         }
+
+        // 4. Half of first accrual period passes.
+        uint256 accrualPeriod = cellar.accrualPeriod();
+        hevm.warp(block.timestamp + accrualPeriod / 2);
+
+        assertEq(cellar.totalLocked(), 67.5e18);
+        assertApproxEq(cellar.totalAssets(), 382.5e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 450e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
+
+        // 5. Deposit 200 assets into a position.
+        USDC.mint(address(this), 200e18);
+        USDC.approve(address(cellar), 200e18);
+        cellar.depositIntoPosition(usdcCLR, 200e18, address(this));
+
+        assertEq(cellar.totalLocked(), 67.5e18);
+        assertApproxEq(cellar.totalAssets(), 582.5e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 650e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
+
+        // 6. First accrual period passes.
+        hevm.warp(block.timestamp + accrualPeriod / 2);
+
+        assertEq(cellar.totalLocked(), 0);
+        assertApproxEq(cellar.totalAssets(), 650e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 650e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
+
+        // 7. Withdraw 100 assets from a position.
+        cellar.withdrawFromPosition(fraxCLR, 100e18, address(this), address(this));
+
+        assertEq(cellar.totalLocked(), 0);
+        assertApproxEq(cellar.totalAssets(), 550e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
+
+        // 8. Accrue fees and begin accruing yield.
+        cellar.accrue();
+
+        assertEq(cellar.totalLocked(), 0);
+        assertApproxEq(cellar.totalAssets(), 550e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
+
+        // 9. Second accrual period passes.
+        hevm.warp(block.timestamp + accrualPeriod);
+
+        assertEq(cellar.totalLocked(), 0);
+        assertApproxEq(cellar.totalAssets(), 550e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
     }
 
     // TODO: address possible error that could happen if not enough to withdraw from all positions
