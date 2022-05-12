@@ -13,6 +13,16 @@ task("deploy:AaveV2StablecoinCellar").setAction(async function (args: TaskArgume
 
   const cellar = <AaveV2StablecoinCellar>await factory.deploy(
     "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
+    [
+      "0x056fd409e1d7a124bd7017459dfea2f387b6d5cd", // GUSD
+      "0x4fabb145d64652a948d72533023f6e7a623c7c53", // BUSD
+      "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT
+      "0x6b175474e89094c44da98b954eedeac495271d0f", // DAI
+      "0x956f47f50a910163d8bf957cf5846d573e7f87ca", // FEI
+      "0x853d955acef822db058eb8505911ed77f175b99e", // FRAX
+      "0x57ab1ec28d129707052df4df418d58a2d46d5f51", // sUSD
+      "0x8e870d67f660d95d5be530380d0ec0bd388289e1", // USDP
+    ],
     ethers.BigNumber.from("50000000000"), // $50k
     ethers.BigNumber.from("5000000000000"), // $5m
     "0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7", // Curve registry exchange

@@ -14,8 +14,7 @@ import { AaveV2StablecoinCellar } from "../../AaveV2StablecoinCellar.sol";
 contract MockAaveCellar is AaveV2StablecoinCellar {
     constructor(
         ERC20 _asset,
-        uint256 _liquidityLimit,
-        uint256 _depositLimit,
+        address[] memory _approvedPositions,
         ICurveSwaps _curveRegistryExchange,
         ISushiSwapRouter _sushiswapRouter,
         ILendingPool _lendingPool,
@@ -27,8 +26,7 @@ contract MockAaveCellar is AaveV2StablecoinCellar {
     )
         AaveV2StablecoinCellar(
             _asset,
-            _liquidityLimit,
-            _depositLimit,
+            _approvedPositions,
             _curveRegistryExchange,
             _sushiswapRouter,
             _lendingPool,

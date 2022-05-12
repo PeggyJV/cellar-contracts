@@ -166,8 +166,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      *      https://github.com/PeggyJV/steward
      *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
      * @param _asset current asset managed by the cellar
-     * @param _liquidityLimit amount liquidity limit should be initialized to
-     * @param _depositLimit amount deposit limit should be initialized to
+     * @param _approvedPositions list of approved positions to start with
      * @param _curveRegistryExchange Curve registry exchange
      * @param _sushiswapRouter Sushiswap V2 router address
      * @param _lendingPool Aave V2 lending pool address
@@ -179,8 +178,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     constructor(
         ERC20 _asset,
-        uint256 _liquidityLimit,
-        uint256 _depositLimit,
+        address[] memory _approvedPositions,
         ICurveSwaps _curveRegistryExchange,
         ISushiSwapRouter _sushiswapRouter,
         ILendingPool _lendingPool,
@@ -200,13 +198,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         AAVE = _AAVE;
         WETH = _WETH;
 
-        // Initialize limits.
-        liquidityLimit = _liquidityLimit;
-        depositLimit = _depositLimit;
-
         // Initialize asset.
         isTrusted[address(_asset)] = true;
         _updatePosition(address(_asset));
+
+        // Initialize limits.
+        uint256 powOfAssetDecimals = 10**assetDecimals;
+        liquidityLimit = 5_000_000 * powOfAssetDecimals;
+        depositLimit = 50_000 * powOfAssetDecimals;
+
+        // Initialize approved positions.
+        for (uint256 i; i < _approvedPositions.length; i++) isTrusted[_approvedPositions[i]] = true;
 
         // Transfer ownership to the Gravity Bridge.
         transferOwnership(address(_gravityBridge));

@@ -48,16 +48,20 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         DAI = new MockERC20("DAI", 6);
 
         lendingPool = new MockLendingPool();
+
         aUSDC = new MockAToken(address(lendingPool), address(USDC), "aUSDC");
         aDAI = new MockAToken(address(lendingPool), address(DAI), "aDAI");
+
         lendingPool.initReserve(address(USDC), address(aUSDC));
         lendingPool.initReserve(address(DAI), address(aDAI));
+
+        address[] memory approvedPositions = new address[](1);
+        approvedPositions[0] = address(DAI);
 
         // Declare unnecessary variables with address 0.
         cellar = new MockAaveCellar(
             ERC20(address(USDC)),
-            5_000_000e6,
-            50_000e6,
+            approvedPositions,
             ICurveSwaps(address(0)),
             ISushiSwapRouter(address(0)),
             ILendingPool(address(lendingPool)),
@@ -68,6 +72,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
             ERC20(address(0))
         );
 
+        assertEq(cellar.liquidityLimit(), 5_000_000e6);
+        assertEq(cellar.depositLimit(), 50_000e6);
+
         // Ensure restrictions aren't a factor.
         cellar.setLiquidityLimit(type(uint256).max);
         cellar.setDepositLimit(type(uint256).max);
@@ -77,6 +84,21 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
+    }
+
+    function testInitialization() external {
+        assertEq(address(cellar.asset()), address(USDC));
+        assertEq(address(cellar.assetAToken()), address(aUSDC));
+        assertEq(cellar.decimals(), 18);
+        assertEq(cellar.assetDecimals(), USDC.decimals());
+
+        assertEq(cellar.liquidityLimit(), type(uint256).max);
+        assertEq(cellar.depositLimit(), type(uint256).max);
+
+        assertTrue(cellar.isTrusted(address(USDC)));
+        assertTrue(cellar.isTrusted(address(DAI)));
+
+        assertEq(cellar.owner(), address(this));
     }
 
     function testDepositAndWithdraw(uint256 assets) public {
