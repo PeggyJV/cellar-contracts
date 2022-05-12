@@ -4,7 +4,7 @@ pragma solidity 0.8.11;
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { ICellar } from "./interfaces/ICellar.sol";
-import { ISushiSwapRouter } from "./interfaces/ISushiSwapRouter.sol";
+import { SwapUtils } from "./utils/SwapUtils.sol";
 
 import "./Errors.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
@@ -12,19 +12,7 @@ import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
 
-    // ======================================== INITIALIZATION ========================================
 
-    /**
-     * @notice SushiSwap Router V2 contract. Used for swapping into the current asset of a given cellar.
-     */
-    ISushiSwapRouter public immutable sushiswapRouter; // 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
-
-    /**
-     * @param _sushiswapRouter Sushiswap V2 router address
-     */
-    constructor(ISushiSwapRouter _sushiswapRouter) {
-        sushiswapRouter = _sushiswapRouter;
-    }
 
     // ======================================= ROUTER OPERATIONS =======================================
 
@@ -101,20 +89,8 @@ contract CellarRouter is ICellarRouter {
             // Transfer assets from the user to the router.
             assetIn.safeTransferFrom(owner, address(this), assets);
 
-            // Approve assets to be swapped.
-            assetIn.safeApprove(address(sushiswapRouter), assets);
-
-            // Perform swap to cellar's current asset.
-            uint256[] memory swapOutput = sushiswapRouter.swapExactTokensForTokens(
-                assets,
-                minAssetsOut,
-                path,
-                address(this),
-                block.timestamp + 60
-            );
-
-            // Retrieve the final assets received from swap.
-            assets = swapOutput[swapOutput.length - 1];
+            // swap assets using the swap utility
+            assets = SwapUtils.swap(assets, minAssetsOut, path);
         }
 
         // Approve the cellar to spend assets.

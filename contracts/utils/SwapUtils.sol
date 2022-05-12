@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.11;
 
-import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import { ERC4626 } from "../interfaces/ERC4626.sol";
-import { ISushiSwapRouter } from "../interfaces/ISushiSwapRouter.sol";
+import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
+import {ERC4626} from "../interfaces/ERC4626.sol";
 
 import "../Errors.sol";
+import "../interfaces/ISwapRouter.sol";
 
-// TODO: use uniswap instead of sushiswap
-// TODO: update router to use this library
 library SwapUtils {
     using SafeTransferLib for ERC20;
 
-    ISushiSwapRouter public constant swapRouter = ISushiSwapRouter(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    // Uniswap V3 contract
+    ISwapRouter public constant swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
     // TODO: add natspec
     function swap(
@@ -21,20 +20,20 @@ library SwapUtils {
         uint256 assetsOutMin,
         address[] memory path
     ) internal returns (uint256) {
-        // Approve assets to be swapped.
+
         ERC20(path[0]).safeApprove(address(swapRouter), assetsIn);
 
-        // Perform swap to position's current asset.
-        uint256[] memory swapOutput = swapRouter.swapExactTokensForTokens(
-            assetsIn,
-            assetsOutMin,
-            path,
-            address(this),
-            block.timestamp + 60
-        );
+        ISwapRouter.ExactInputParams memory params =
+        ISwapRouter.ExactInputParams({
+        path : abi.encodePacked(path),
+        recipient : msg.sender,
+        deadline : block.timestamp + 60,
+        amountIn : assetsIn,
+        amountOutMinimum : assetsOutMin
+        });
 
-        // Retrieve the final assets received from swap.
-        return swapOutput[swapOutput.length - 1];
+        // Executes the swap.
+        return swapRouter.exactInput(params);
     }
 
     /**

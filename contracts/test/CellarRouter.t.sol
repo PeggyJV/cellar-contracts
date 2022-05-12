@@ -46,7 +46,7 @@ contract CellarRouterTest is DSTestPlus {
         // Set up cellar router:
         swapRouter = new MockSwapRouter();
 
-        router = new CellarRouter(ISushiSwapRouter(address(swapRouter)));
+        router = new CellarRouter();
 
         // Set up a cellar:
         USDC = new MockERC20("USDC", 6);
