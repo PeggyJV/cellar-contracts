@@ -142,8 +142,7 @@ describe("AaveV2StablecoinCellar", () => {
     // Deploy cellar contract
     cellar = await new AaveV2StablecoinCellar__factory(owner).deploy(
       USDC.address,
-      BigNum(5_000_000, 6),
-      BigNum(50_000, 6),
+      [DAI.address, USDT.address],
       curveRegistryExchange.address,
       sushiswapRouter.address,
       lendingPool.address,
@@ -749,8 +748,6 @@ describe("AaveV2StablecoinCellar", () => {
       expect(await DAI.balanceOf(cellar.address)).to.eq(0);
       expect(await cellar.totalAssets()).to.eq(BigNum(1500, 6));
 
-      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
-
       await cellar.connect(await impersonateGravity()).rebalance(
         [
           USDC.address,
@@ -777,8 +774,6 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should not be possible to rebalance from an asset other than the current asset", async () => {
-      await cellar.connect(await impersonateGravity()).setTrust(USDT.address, true);
-
       await expect(
         cellar.connect(await impersonateGravity()).rebalance(
           [
@@ -832,8 +827,6 @@ describe("AaveV2StablecoinCellar", () => {
     it("should update yield", async () => {
       // mimic gaining $250 yield in USDC
       await aUSDC.mint(cellar.address, BigNum(250, 6), await lendingPool.index());
-
-      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
 
       await cellar.connect(await impersonateGravity()).rebalance(
         [
@@ -895,8 +888,6 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should update related state", async () => {
-      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
-
       const tx = await cellar.connect(await impersonateGravity()).rebalance(
         [
           USDC.address,
@@ -940,8 +931,6 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should emits a Rebalance event", async () => {
-      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
-
       await expect(
         cellar.connect(await impersonateGravity()).rebalance(
           [
@@ -1099,6 +1088,8 @@ describe("AaveV2StablecoinCellar", () => {
     });
 
     it("should prevent entering or rebalancing into untrusted position", async () => {
+      await cellar.connect(await impersonateGravity()).setTrust(DAI.address, false);
+
       await expect(
         cellar.connect(await impersonateGravity()).rebalance(
           [
@@ -1151,8 +1142,6 @@ describe("AaveV2StablecoinCellar", () => {
     await expect(cellar.connect(await impersonateGravity()).enterPosition()).to.be.revertedWith(
       `USR_UntrustedPosition("${DAI.address}")`,
     );
-
-    await cellar.connect(await impersonateGravity()).setTrust(DAI.address, true);
 
     await cellar.connect(await impersonateGravity()).enterPosition();
   });
