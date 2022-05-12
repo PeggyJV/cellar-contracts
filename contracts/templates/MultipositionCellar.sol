@@ -17,6 +17,9 @@ import "../Errors.sol";
 // TODO: add sweep
 // TODO: add events
 
+// TODO: delete
+import "hardhat/console.sol";
+
 abstract contract MultipositionCellar is ERC4626, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
@@ -27,6 +30,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ============================================ HOLDINGS CONFIG ============================================
 
+    /**
+     * @dev Should be set high enough that the holding pool can cover the majority of weekly
+     *      withdraw volume without needing to pull from positions. See `beforeWithdraw` for
+     *      more information as to why.
+     */
     // TODO: consider changing default
     uint256 public targetHoldingsPercent = 5_00;
 
@@ -36,8 +44,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ============================================ ACCRUAL STORAGE ============================================
 
-    // Yield is unlocked gradually over an accrual period to prevent frontrunning and sandwich attacks.
+    /**
+     * @dev Yield is distributed gradually over an accrual period to prevent frontrunning and sandwich attacks.
+     *      Losses are realized immediately to prevent users from timing exits to sidestep losses.
+     */
 
+    // TODO: consider changing default accrual period and have it be configuarable
     uint64 public constant accrualPeriod = 7 days;
 
     uint64 public lastAccrual;
@@ -46,10 +58,10 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ============================================= FEES CONFIG =============================================
 
-    uint256 public constant DENOMINATOR = 100_00;
-
     // TODO: have fees read from the default set by the registry
     // TODO: experiment with accruing platform fees from all cellar at once through registry / another module
+
+    uint256 public constant DENOMINATOR = 100_00;
 
     /**
      * @notice The percentage of platform fees taken off of active assets over a year.
@@ -69,6 +81,10 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         return positions;
     }
 
+    /**
+     * @dev `maxSlippage` should not be set too low as to cause all withdraws involving a swap to
+     *      revert or too high as to have swaps be sandwich attacked.
+     */
     struct PositionData {
         bool isTrusted;
         uint32 maxSlippage;
@@ -230,25 +246,35 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // =========================================== CORE LOGIC ===========================================
 
-    // TODO: write more thorough test for withdraws. spidey senses are tingling here
+    /**
+     *  @dev Although this behavior is not desired, it should be noted that attempting to withdraw
+     *       exactly the cellar's total assets from positions using a different underlying asset as
+     *       the holding position will likely revert due to a discrepency in the total assets
+     *       reported by the cellar and the total assets that can actually be withdrawn when swap
+     *       slippage is factored in. In this case, the withdrawn amount needed to empty the cellar
+     *       (or get as close as possible to it) would need to factor in swap slippage.  Normal
+     *       withdraws, luckily, do not need to worry about this. If the holding position cannot
+     *       already cover a withdraw in full, the cellar will withdraw an excess amount from
+     *       positions until it can cover not just that single withdraw but also subsequent
+     *       withdraws up to configurable target. This is much more economic for users as it batches
+     *       withdraws instead of doing potentially hundreds of withdraws from positions.
+     */
     function beforeWithdraw(uint256 assets, uint256) internal virtual override {
         uint256 currentHoldings = totalHoldings();
 
-        // TODO: make note that when factoring in swap slippage, totalAssets is almost always going
-        // to be slightly less than the reported amount (approx. <0.5% less). therefore, there is an
-        // invisible "buffer" of the cellar's assets that should be maintained to provide enough exit
-        // liquidity for withdraws. think about how to alleviate this
-
-        // Only triggers if there are not enough assets in the holding position to cover the withdraw.
+        // Only triggers if there are not enough assets in the holding position to cover the
+        // withdraw. Ideally, this would rarely trigger if the cellar is active with deposits and
+        // the strategy provider sets a high enough target holdings percentage.
         if (assets > currentHoldings) {
-            // The amount needed to cover this withdraw.
+            uint256 currentTotalAssets = totalAssets();
+
+            // The amounts needed to cover this withdraw and reach the target holdings percentage.
             uint256 holdingsMissingForWithdraw = assets - currentHoldings;
+            uint256 holdingsMissingForTarget = currentTotalAssets.mulDivDown(targetHoldingsPercent, DENOMINATOR);
 
-            // The amount needed to reach the target holdings percentage.
-            uint256 holdingsMissingForTarget = (totalAssets() - assets).mulDivDown(targetHoldingsPercent, DENOMINATOR);
-
-            // Pull enough to cover the withdraw and reach the target holdings percentage.
-            uint256 leftToWithdraw = holdingsMissingForWithdraw + holdingsMissingForTarget;
+            // Pull enough to cover the withdraw and reach the target holdings percentage if possible.
+            assets = MathUtils.min(holdingsMissingForWithdraw + holdingsMissingForTarget, currentTotalAssets);
+            uint256 leftToWithdraw = assets;
 
             for (uint256 i = positions.length - 1; ; i--) {
                 ERC4626 position = positions[i];
@@ -256,26 +282,30 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
                 uint256 positionBalance = positionData.balance;
 
+                // Move on if this position is empty.
                 if (positionBalance == 0) continue;
 
-                // We want to pull as much as we can from the strategy, but no more than we need.
+                // We want to pull as much as we can from the strategy, but no more than needed.
                 uint256 assetsToWithdraw = MathUtils.min(positionBalance, leftToWithdraw);
-
                 leftToWithdraw -= assetsToWithdraw;
 
-                _withdrawFromPosition(position, assetsToWithdraw);
+                // Withdraw and update position balances accordingly.
+                getPositionData[position].balance -= uint112(assetsToWithdraw);
+                position.withdraw(assetsToWithdraw, address(this), address(this));
 
-                // TODO: make note of vulnerability introduced by SP setting maxSlippage too low and
-                // preventing withdraws or too high to be sandwich attacked
                 // TODO: make this compatible with positions not all priced in a common denom
+                // TODO: test that withdraws involving swaps revert when min expected assets are not received
+                // The minimum assets that can be received from this swap before it reverts.
                 uint256 assetsOutMin = assetsToWithdraw.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
 
-                // Perform a swap to the to cellar's asset if necessary.
+                // If necessary, perform a swap to the to cellar's asset.
                 address[] memory path = positionData.pathToAsset;
                 if (path[0] != path[path.length - 1]) SwapUtils.swap(assetsToWithdraw, assetsOutMin, path);
 
                 if (leftToWithdraw == 0) break;
             }
+
+            totalBalance -= assets;
         }
     }
 

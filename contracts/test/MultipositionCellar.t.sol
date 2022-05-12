@@ -242,8 +242,14 @@ contract MultipositionCellarTest is DSTestPlus {
     }
 
     function testAccrue() external {
-        // Scenario:
-        // - Multiposition cellar has 3 positions.
+        // Scenario: Multiposition cellar has 3 positions.
+        // - Test accrual with positive performance.
+        // - Test accrual with negative performance.
+        // - Test accrual with no performance (nothing changes).
+        // - Test accrual for single position.
+        // - Test accrual for multiple positions.
+        // - Test accrued yield is distributed linearly as expected.
+        // - Test deposits / withdraws do not effect accrual and yield distribution.
         //
         // +==============+==============+==================+
         // | Total Assets | Total Locked | Performance Fees |
@@ -256,7 +262,7 @@ contract MultipositionCellarTest is DSTestPlus {
         // +--------------+--------------+------------------+
         // |          300 |            0 |                0 |
         // +--------------+--------------+------------------+
-        // | 3. Accrue fees and begin accruing yield.       |
+        // | 3. Accrue for positive performance.            |
         // +--------------+--------------+------------------+
         // |          315 |          135 |               15 |
         // +--------------+--------------+------------------+
@@ -282,7 +288,7 @@ contract MultipositionCellarTest is DSTestPlus {
         // +--------------+--------------+------------------+
         // |          550 |            0 |               15 |
         // +--------------+--------------+------------------+
-        // | 8. Accrue fees and begin accruing yield.       |
+        // | 8. Accrue for no performance.                  |
         // |    NOTE: Should not accrue any yield or fees   |
         // |          since user deposits / withdraws are   |
         // |          not factored into yield.              |
@@ -292,6 +298,22 @@ contract MultipositionCellarTest is DSTestPlus {
         // | 9. Second accrual period passes.               |
         // +--------------+--------------+------------------+
         // |          550 |            0 |               15 |
+        // +--------------+--------------+------------------+
+        // | 10. A position loses 150 assets of yield.      |
+        // |    NOTE: Nothing should change because         |
+        // |          accrual has not been done.            |
+        // +--------------+--------------+------------------+
+        // |          550 |            0 |               15 |
+        // +--------------+--------------+------------------+
+        // | 11. Accrue for negative performance.           |
+        // |    NOTE: Losses should be realized immediately |
+        // |          (unlike gains) sidestepping losses.   |
+        // +--------------+--------------+------------------+
+        // |          400 |            0 |               15 |
+        // +--------------+--------------+------------------+
+        // | 12. Third accrual period passes.               |
+        // +--------------+--------------+------------------+
+        // |          400 |            0 |               15 |
         // +--------------+--------------+------------------+
 
         ERC4626[] memory positions = cellar.getPositions();
@@ -310,7 +332,7 @@ contract MultipositionCellarTest is DSTestPlus {
             assertEq(cellar.totalBalance(), 100e18 * (i + 1));
 
             // 2. Each position gains 50 assets of yield.
-            MockERC4626(address(position)).freeDeposit(50e18, address(cellar));
+            MockERC4626(address(position)).simulateGain(50e18, address(cellar));
 
             assertEq(position.maxWithdraw(address(cellar)), 150e18);
         }
@@ -319,7 +341,7 @@ contract MultipositionCellarTest is DSTestPlus {
 
         uint256 priceOfShareBefore = cellar.convertToShares(1e18);
 
-        // 3. Accrue fees and begin accruing yield.
+        // 3. Accrue for positive performance.
         cellar.accrue();
 
         uint256 priceOfShareAfter = cellar.convertToShares(1e18);
@@ -373,7 +395,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
         assertEq(cellar.accruedPerformanceFees(), 15e18);
 
-        // 8. Accrue fees and begin accruing yield.
+        // 8. Accrue for no performance.
         cellar.accrue();
 
         assertEq(cellar.totalLocked(), 0);
@@ -387,6 +409,30 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(cellar.totalLocked(), 0);
         assertApproxEq(cellar.totalAssets(), 550e18, 1e17);
         assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
+
+        // 10. A position loses 150 assets of yield.
+        MockERC4626(address(feiCLR)).simulateLoss(150e18);
+
+        assertEq(cellar.totalLocked(), 0);
+        assertApproxEq(cellar.totalAssets(), 550e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
+
+        // 11. Accrue for negative performance.
+        cellar.accrue();
+
+        assertEq(cellar.totalLocked(), 0);
+        assertApproxEq(cellar.totalAssets(), 400e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 400e18, 1e17);
+        assertEq(cellar.accruedPerformanceFees(), 15e18);
+
+        // 12. Third accrual period passes.
+        hevm.warp(block.timestamp + accrualPeriod);
+
+        assertEq(cellar.totalLocked(), 0);
+        assertApproxEq(cellar.totalAssets(), 400e18, 1e17);
+        assertApproxEq(cellar.totalBalance(), 400e18, 1e17);
         assertEq(cellar.accruedPerformanceFees(), 15e18);
     }
 
@@ -405,13 +451,48 @@ contract MultipositionCellarTest is DSTestPlus {
         cellar.depositIntoPosition(feiCLR, assets, address(this));
 
         assertEq(cellar.totalHoldings(), 0);
+        assertEq(cellar.totalAssets(), 200e18);
 
-        // TODO: test withdrawing everything
         uint256 assetsToWithdraw = 10e18;
+
+        // Test withdraw returns assets to receiver and replenishes holding position.
         cellar.withdraw(assetsToWithdraw, address(this), address(this));
 
-        // TODO: check if totalHoldings percentage approximately equal to the target
         assertEq(USDC.balanceOf(address(this)), assetsToWithdraw);
+        // 10 assets = 5% of 200 total assets (tolerate some assets loss swap slippage)
+        assertApproxEq(USDC.balanceOf(address(cellar)), 10e18, 1e18);
+    }
+
+    function testWithdrawAllWithHomogenousPositions() external {
+        USDC.mint(address(this), 100e18);
+        USDC.approve(address(cellar), 100e18);
+        cellar.depositIntoPosition(usdcCLR, 100e18, address(this));
+
+        assertEq(cellar.totalAssets(), 100e18);
+
+        cellar.withdraw(100e18, address(this), address(this));
+
+        assertEq(USDC.balanceOf(address(this)), 100e18);
+    }
+
+    // NOTE: Although this behavior is not desired, it should be anticipated that this will occur when
+    //       withdrawing from a cellar with positions that are not all in the same asset as the holding
+    //       position due to the swap slippage involved in needing to convert them all to single asset
+    //       received by the user.
+    function testFailWithdrawAllWithHeterogenousPositions() external {
+        ERC4626[] memory positions = cellar.getPositions();
+        for (uint256 i; i < positions.length; i++) {
+            ERC4626 position = positions[i];
+            MockERC20 asset = MockERC20(address(position.asset()));
+
+            asset.mint(address(this), 100e18);
+            asset.approve(address(cellar), 100e18);
+            cellar.depositIntoPosition(position, 100e18, address(this));
+        }
+
+        assertEq(cellar.totalAssets(), 300e18);
+
+        cellar.withdraw(300e18, address(this), address(this));
     }
 
     function testDistrustingPosition() external {

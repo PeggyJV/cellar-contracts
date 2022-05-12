@@ -10,6 +10,9 @@ import { MathUtils } from "../../utils/MathUtils.sol";
 
 import "../../Errors.sol";
 
+// TODO: delete
+import "hardhat/console.sol";
+
 contract MockMultipositionCellar is MultipositionCellar {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
@@ -70,11 +73,14 @@ contract MockMultipositionCellar is MultipositionCellar {
         uint256 currentHoldings = totalHoldings();
 
         if (assets > currentHoldings) {
+            uint256 currentTotalAssets = totalAssets();
+
             uint256 holdingsMissingForWithdraw = assets - currentHoldings;
+            uint256 holdingsMissingForTarget = currentTotalAssets.mulDivDown(targetHoldingsPercent, DENOMINATOR);
 
-            uint256 holdingsMissingForTarget = (totalAssets() - assets).mulDivDown(targetHoldingsPercent, DENOMINATOR);
+            assets = MathUtils.min(holdingsMissingForWithdraw + holdingsMissingForTarget, currentTotalAssets);
 
-            uint256 leftToWithdraw = holdingsMissingForWithdraw + holdingsMissingForTarget;
+            uint256 leftToWithdraw = assets;
 
             for (uint256 i = positions.length - 1; ; i--) {
                 ERC4626 position = positions[i];
@@ -100,7 +106,7 @@ contract MockMultipositionCellar is MultipositionCellar {
                 if (leftToWithdraw == 0) break;
             }
 
-            totalBalance -= holdingsMissingForWithdraw + holdingsMissingForTarget;
+            totalBalance -= assets;
         }
     }
 
