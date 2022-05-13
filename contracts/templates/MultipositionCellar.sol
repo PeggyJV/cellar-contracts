@@ -17,9 +17,6 @@ import "../Errors.sol";
 // TODO: add sweep
 // TODO: add events
 
-// TODO: delete
-import "hardhat/console.sol";
-
 abstract contract MultipositionCellar is ERC4626, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
@@ -94,6 +91,26 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     mapping(ERC4626 => PositionData) public getPositionData;
 
+    // TODO: consider moving position funcitons to own module
+    // TODO: test all setter functions
+    function setPositions(
+        ERC4626[] calldata newPositions,
+        address[][] calldata pathsToAsset,
+        uint32[] calldata maxSlippages
+    ) public virtual onlyOwner {
+        for (uint256 i; i < newPositions.length; i++) {
+            PositionData storage positionData = getPositionData[newPositions[i]];
+
+            // Ensure position is trusted.
+            if (!positionData.isTrusted) revert USR_UntrustedPosition(address(newPositions[i]));
+
+            positionData.maxSlippage = maxSlippages[i];
+            positionData.pathToAsset = pathsToAsset[i];
+        }
+
+        positions = newPositions;
+    }
+
     function setPositions(ERC4626[] calldata newPositions, address[][] calldata pathsToAsset) public virtual onlyOwner {
         for (uint256 i; i < newPositions.length; i++) {
             PositionData storage positionData = getPositionData[newPositions[i]];
@@ -107,29 +124,32 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         positions = newPositions;
     }
 
-    function setPositionPath(ERC4626 position, address[] memory pathToAsset) public virtual onlyOwner {
+    function setPositions(ERC4626[] calldata newPositions) public virtual onlyOwner {
+        for (uint256 i; i < newPositions.length; i++)
+            // Ensure position is trusted.
+            if (!getPositionData[newPositions[i]].isTrusted) revert USR_UntrustedPosition(address(newPositions[i]));
+
+        positions = newPositions;
+    }
+
+    function removePosition(ERC4626 position) public virtual onlyOwner {
+        _removePosition(position);
+    }
+
+    function setPathToAsset(ERC4626 position, address[] memory pathToAsset) public virtual onlyOwner {
         getPositionData[position].pathToAsset = pathToAsset;
     }
 
-    function setPositionMaxSlippage(ERC4626 position, uint32 maxSlippage) public virtual onlyOwner {
+    function setMaxSlippage(ERC4626 position, uint32 maxSlippage) public virtual onlyOwner {
         getPositionData[position].maxSlippage = maxSlippage;
     }
 
+    // TODO: split into trust and distrust functions
     function setTrust(ERC4626 position, bool trust) public virtual onlyOwner {
         getPositionData[position].isTrusted = trust;
 
         // Remove the untrusted position.
-        if (!trust) {
-            for (uint256 i; i < positions.length; i++) {
-                if (positions[i] == position) {
-                    for (i; i < positions.length - 1; i++) positions[i] = positions[i + 1];
-
-                    positions.pop();
-
-                    break;
-                }
-            }
-        }
+        if (!trust) _removePosition(position);
     }
 
     // ====================================== CELLAR LIMIT LOGIC ======================================
@@ -297,6 +317,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 uint256 assetsOutMin = assetsToWithdraw.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
 
                 // If necessary, perform a swap to the to cellar's asset.
+                // TODO: prevent swap if it is not the holding position asset
                 address[] memory path = positionData.pathToAsset;
                 if (path[0] != path[path.length - 1]) SwapUtils.swap(assetsToWithdraw, assetsOutMin, path);
 
@@ -394,5 +415,17 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         totalBalance -= assets;
 
         position.withdraw(assets, address(this), address(this));
+    }
+
+    function _removePosition(ERC4626 position) internal virtual {
+        for (uint256 i; i < positions.length; i++) {
+            if (positions[i] == position) {
+                for (i; i < positions.length - 1; i++) positions[i] = positions[i + 1];
+
+                positions.pop();
+
+                break;
+            }
+        }
     }
 }
