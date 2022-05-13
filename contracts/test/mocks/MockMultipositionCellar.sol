@@ -14,7 +14,7 @@ contract MockMultipositionCellar is MultipositionCellar {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
 
-    ISushiSwapRouter public swapRouter;
+    ISushiSwapRouter public immutable swapRouter;
 
     constructor(
         ERC20 _asset,
@@ -66,78 +66,37 @@ contract MockMultipositionCellar is MultipositionCellar {
         positionAsset.safeTransfer(receiver, assets);
     }
 
-    function beforeWithdraw(uint256 assets, uint256) internal override {
-        uint256 currentHoldings = totalHoldings();
-
-        if (assets > currentHoldings) {
-            uint256 currentTotalAssets = totalAssets();
-
-            uint256 holdingsMissingForWithdraw = assets - currentHoldings;
-            uint256 holdingsMissingForTarget = currentTotalAssets.mulDivDown(targetHoldingsPercent, DENOMINATOR);
-
-            assets = MathUtils.min(holdingsMissingForWithdraw + holdingsMissingForTarget, currentTotalAssets);
-
-            uint256 leftToWithdraw = assets;
-
-            for (uint256 i = positions.length - 1; ; i--) {
-                ERC4626 position = positions[i];
-                PositionData memory positionData = getPositionData[position];
-
-                uint256 positionBalance = positionData.balance;
-
-                if (positionBalance == 0) continue;
-
-                uint256 assetsToWithdraw = MathUtils.min(positionBalance, leftToWithdraw);
-
-                getPositionData[position].balance -= uint112(assetsToWithdraw);
-
-                leftToWithdraw -= assetsToWithdraw;
-
-                position.withdraw(assetsToWithdraw, address(this), address(this));
-
-                uint256 assetsOutMin = assetsToWithdraw.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
-
-                address[] memory path = positionData.pathToAsset;
-                if (path[0] != path[path.length - 1]) swap(assetsToWithdraw, assetsOutMin, path);
-
-                if (leftToWithdraw == 0) break;
-            }
-
-            totalBalance -= assets;
-        }
-    }
-
-    function rebalance(
-        ERC4626 fromPosition,
-        ERC4626 toPosition,
-        uint256 assetsFrom,
-        uint256 assetsToMin,
-        address[] memory path
-    ) public override onlyOwner returns (uint256 assetsTo) {
-        if (address(fromPosition) != address(this)) _withdrawFromPosition(fromPosition, assetsFrom);
-
-        assetsTo = ERC20(path[0]) != ERC20(path[path.length - 1]) ? swap(assetsFrom, assetsToMin, path) : assetsFrom;
-
-        if (address(toPosition) != address(this)) _depositIntoPosition(toPosition, assetsTo);
-    }
-
     // ============================================= SWAP UTILS =============================================
 
-    function swap(
+    function _swap(
+        ERC4626 position,
         uint256 assets,
-        uint256 assetsToMin,
+        uint256 assetsOutMin,
         address[] memory path
-    ) internal returns (uint256) {
-        ERC20(path[0]).safeApprove(address(swapRouter), assets);
+    ) internal override returns (uint256) {
+        ERC20 assetIn = ERC20(path[0]);
+        ERC20 assetOut = ERC20(path[path.length - 1]);
+        ERC20 asset = position.asset();
 
+        // Ensure that the asset being swapped matches the asset received by the position.
+        if (assetOut != asset) revert USR_InvalidSwap(address(assetOut), address(asset));
+
+        // Check whether a swap is necessary. If not, just return back assets.
+        if (assetIn == assetOut) return assets;
+
+        // Approve assets to be swapped.
+        assetIn.safeApprove(address(swapRouter), assets);
+
+        // Perform swap to position's current asset.
         uint256[] memory swapOutput = swapRouter.swapExactTokensForTokens(
             assets,
-            assetsToMin,
+            assetsOutMin,
             path,
             address(this),
             block.timestamp + 60
         );
 
+        // Retrieve the final assets received from swap.
         return swapOutput[swapOutput.length - 1];
     }
 }
