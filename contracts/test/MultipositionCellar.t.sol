@@ -62,7 +62,7 @@ contract MultipositionCellarTest is DSTestPlus {
         for (uint256 i; i < len; i++) maxSlippages[i] = uint32(swapRouter.EXCHANGE_RATE());
 
         cellar = new MockMultipositionCellar(
-            USDC, // TODO: change
+            USDC,
             positions,
             paths,
             maxSlippages,
@@ -167,7 +167,7 @@ contract MultipositionCellarTest is DSTestPlus {
 
         assertEq(cellar.totalAssets(), 100e18);
 
-        cellar.setPositionMaxSlippage(fraxCLR, 0);
+        cellar.setMaxSlippage(fraxCLR, 0);
 
         cellar.withdraw(50e18, address(this), address(this));
     }
@@ -508,12 +508,39 @@ contract MultipositionCellarTest is DSTestPlus {
         for (uint256 i; i < positions.length; i++) assertTrue(positions[i] != distrustedPosition);
     }
 
-    // // TODO:
-    // // [ ] test hitting depositLimit
-    // // [ ] test hitting liquidityLimit
+    function testSweep() external {
+        feiCLR.mint(address(cellar), 100e18);
+
+        cellar.removePosition(feiCLR);
+
+        // Test sweep.
+        cellar.sweep(address(feiCLR), address(this));
+
+        assertEq(feiCLR.balanceOf(address(this)), 100e18);
+    }
+
+    function testFailSweepingProtectedAsset() public {
+        address[] memory tokensToTrySweeping = new address[](5);
+        ERC4626[] memory positions = cellar.getPositions();
+        for (uint256 i; i < positions.length; i++) tokensToTrySweeping[i] = address(positions[i]);
+        tokensToTrySweeping[3] = address(USDC);
+        tokensToTrySweeping[4] = address(cellar);
+
+        for (uint256 i; i < tokensToTrySweeping.length; i++) {
+            MockERC20 token = MockERC20(address(tokensToTrySweeping[i]));
+
+            token.mint(address(cellar), 100e18);
+            cellar.sweep(address(token), address(this));
+        }
+    }
+
+    // TODO: when base cellar is implemented
+    // [ ] test hitting depositLimit
+    // [ ] test hitting liquidityLimit
 
     // // Test deposit hitting liquidity limit.
     // function testDepositWithDepositLimits(uint256 assets) public {
+    //     // TODO: fuzz with `maxDeposit` as upper board instead
     //     assets = bound(assets, 1, type(uint128).max);
 
     //     uint248 depositLimit = 50_000e18;

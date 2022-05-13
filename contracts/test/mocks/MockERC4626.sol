@@ -13,6 +13,14 @@ contract MockERC4626 is ERC4626 {
         uint8 _decimals
     ) ERC4626(_asset, _name, _symbol, _decimals) {}
 
+    function mint(address to, uint256 value) external {
+        _mint(to, value);
+    }
+
+    function burn(address from, uint256 value) external {
+        _burn(from, value);
+    }
+
     function simulateGain(uint256 assets, address receiver) external returns (uint256 shares) {
         require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
 

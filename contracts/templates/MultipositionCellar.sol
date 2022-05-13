@@ -400,6 +400,16 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ======================================== HELPER FUNCTIONS ========================================
 
+    function sweep(address token, address to) public virtual onlyOwner {
+        // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
+        if (token == address(asset) || token == address(this)) revert USR_ProtectedAsset(token);
+        for (uint256 i; i < positions.length; i++) if (token == address(positions[i])) revert USR_ProtectedAsset(token);
+
+        // Transfer out tokens in this cellar that shouldn't be here.
+        uint256 amount = ERC20(token).balanceOf(address(this));
+        ERC20(token).safeTransfer(to, amount);
+    }
+
     function _depositIntoPosition(ERC4626 position, uint256 assets) internal virtual {
         if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
 

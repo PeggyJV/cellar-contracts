@@ -10,9 +10,6 @@ import { MathUtils } from "../../utils/MathUtils.sol";
 
 import "../../Errors.sol";
 
-// TODO: delete
-import "hardhat/console.sol";
-
 contract MockMultipositionCellar is MultipositionCellar {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
