@@ -93,6 +93,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     mapping(ERC4626 => PositionData) public getPositionData;
 
     function addPosition(ERC4626 position) external virtual onlyOwner {
+        if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
+
         positions.push(position);
     }
 
@@ -120,18 +122,14 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         positions = newPositions;
     }
 
-    function setPositions(ERC4626[] calldata newPositions, address[][] calldata pathsToAsset)
-        external
-        virtual
-        onlyOwner
-    {
+    function setPositions(ERC4626[] calldata newPositions, uint32[] calldata maxSlippages) external virtual onlyOwner {
         for (uint256 i; i < newPositions.length; i++) {
             PositionData storage positionData = getPositionData[newPositions[i]];
 
             // Ensure position is trusted.
             if (!positionData.isTrusted) revert USR_UntrustedPosition(address(newPositions[i]));
 
-            positionData.pathToAsset = pathsToAsset[i];
+            positionData.maxSlippage = maxSlippages[i];
         }
 
         positions = newPositions;

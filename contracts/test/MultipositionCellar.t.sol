@@ -59,7 +59,7 @@ contract MultipositionCellarTest is DSTestPlus {
         }
 
         uint32[] memory maxSlippages = new uint32[](len);
-        for (uint256 i; i < len; i++) maxSlippages[i] = uint32(swapRouter.EXCHANGE_RATE());
+        for (uint256 i; i < len; i++) maxSlippages[i] = uint32(swapRouter.DENOMINATOR() - swapRouter.EXCHANGE_RATE());
 
         cellar = new MockMultipositionCellar(
             USDC,
@@ -172,7 +172,7 @@ contract MultipositionCellarTest is DSTestPlus {
         cellar.withdraw(50e18, address(this), address(this));
     }
 
-    function xtestWithdrawWithoutEnoughHoldings() public {
+    function testWithdrawWithoutEnoughHoldings() public {
         uint256 assets = 100e18;
 
         // Deposit assets directly into position.
@@ -496,6 +496,57 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(cellar.lastAccrual(), 12345678);
     }
 
+    function testSetPositions() public {
+        ERC4626[] memory positions = new ERC4626[](3);
+        positions[0] = ERC4626(address(fraxCLR));
+        positions[1] = ERC4626(address(usdcCLR));
+        positions[2] = ERC4626(address(feiCLR));
+
+        uint32[] memory maxSlippages = new uint32[](3);
+        for (uint256 i; i < 3; i++) maxSlippages[i] = 1_00;
+
+        cellar.setPositions(positions, maxSlippages);
+
+        // Test that positions were updated.
+        ERC4626[] memory newPositions = cellar.getPositions();
+        uint32 maxSlippage;
+        for (uint256 i; i < 3; i++) {
+            ERC4626 position = positions[i];
+
+            assertEq(address(position), address(newPositions[i]));
+            (, maxSlippage, ) = cellar.getPositionData(position);
+            assertEq(maxSlippage, 1_00);
+        }
+    }
+
+    function testFailSetUntrustedPosition() public {
+        MockERC20 XYZ = new MockERC20("XYZ", 18);
+        MockERC4626 xyzCLR = new MockERC4626(ERC20(address(XYZ)), "XYZ Cellar LP Token", "XYZ-CLR", 18);
+
+        (bool isTrusted, , ) = cellar.getPositionData(xyzCLR);
+        assertFalse(isTrusted);
+
+        ERC4626[] memory positions = new ERC4626[](4);
+        positions[0] = ERC4626(address(fraxCLR));
+        positions[1] = ERC4626(address(usdcCLR));
+        positions[2] = ERC4626(address(feiCLR));
+        positions[3] = ERC4626(address(xyzCLR));
+
+        // Test attempting to setting with an untrusted position.
+        cellar.setPositions(positions);
+    }
+
+    function testFailAddingUntrustedPosition() public {
+        MockERC20 XYZ = new MockERC20("XYZ", 18);
+        MockERC4626 xyzCLR = new MockERC4626(ERC20(address(XYZ)), "XYZ Cellar LP Token", "XYZ-CLR", 18);
+
+        (bool isTrusted, , ) = cellar.getPositionData(xyzCLR);
+        assertFalse(isTrusted);
+
+        // Test attempting to add untrusted position.
+        cellar.addPosition(xyzCLR);
+    }
+
     function testTrustingPosition() public {
         MockERC20 XYZ = new MockERC20("XYZ", 18);
         MockERC4626 xyzCLR = new MockERC4626(ERC20(address(XYZ)), "XYZ Cellar LP Token", "XYZ-CLR", 18);
@@ -552,7 +603,7 @@ contract MultipositionCellarTest is DSTestPlus {
         for (uint256 i; i < positions.length; i++) assertTrue(positions[i] != distrustedPosition);
     }
 
-    function testSweep() external {
+    function testSweep() public {
         feiCLR.mint(address(cellar), 100e18);
 
         cellar.removePosition(feiCLR);
