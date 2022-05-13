@@ -330,6 +330,13 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ========================================= ACCRUAL LOGIC =========================================
 
+    /**
+     * @dev Accrual with positive performance will accrue yield, accrue fees, and start an accrual
+     *      period over which yield is linearly distributed over the entirety of that period. Accrual
+     *      with negative performance will realize losses immediately, accrue no fees, and not start an
+     *      accrual period. Accrual with no performance will accrue no yield, accrue no fees, and not
+     *      start an accrual period.
+     */
     function accrue() public virtual onlyOwner {
         uint256 remainingAccrualPeriod = uint256(accrualPeriod).subMin0(block.timestamp - lastAccrual);
         if (remainingAccrualPeriod != 0) revert STATE_AccrualOngoing(remainingAccrualPeriod);
@@ -350,18 +357,20 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
             yield += currentBalance.subMin0(lastBalance);
         }
 
-        // Accrue any performance fees as shares minted to the cellar.
-        uint256 performanceFeesInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
-        uint256 performanceFees = convertToShares(performanceFeesInAssets);
+        if (yield != 0) {
+            // Accrue any performance fees as shares minted to the cellar.
+            uint256 performanceFeesInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+            uint256 performanceFees = convertToShares(performanceFeesInAssets);
 
-        _mint(address(this), performanceFees);
+            _mint(address(this), performanceFees);
 
-        maxLocked = uint128(totalLocked() + yield - performanceFeesInAssets);
+            maxLocked = uint128(totalLocked() + yield - performanceFeesInAssets);
+
+            lastAccrual = uint64(block.timestamp);
+        }
 
         // Update cellar's total balance.
         totalBalance = currentTotalBalance;
-
-        lastAccrual = uint64(block.timestamp);
     }
 
     // =========================================== FEE LOGIC ===========================================
