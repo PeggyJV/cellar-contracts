@@ -346,7 +346,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      *      start an accrual period.
      */
     function accrue() external virtual onlyOwner {
-        uint256 remainingAccrualPeriod = uint256(accrualPeriod).subMin0(block.timestamp - lastAccrual);
+        uint256 remainingAccrualPeriod = uint256(accrualPeriod).subFloor(block.timestamp - lastAccrual);
         if (remainingAccrualPeriod != 0) revert STATE_AccrualOngoing(remainingAccrualPeriod);
 
         uint256 yield;
@@ -362,7 +362,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
             currentTotalBalance = currentTotalBalance + currentBalance - lastBalance;
 
-            yield += currentBalance.subMin0(lastBalance);
+            yield += currentBalance.subFloor(lastBalance);
         }
 
         if (yield != 0) {
@@ -389,13 +389,16 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ======================================== HELPER FUNCTIONS ========================================
 
-    function sweep(address token, address to) external virtual onlyOwner {
+    function sweep(
+        address token,
+        uint256 amount,
+        address to
+    ) external virtual onlyOwner {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == address(asset) || token == address(this)) revert USR_ProtectedAsset(token);
         for (uint256 i; i < positions.length; i++) if (token == address(positions[i])) revert USR_ProtectedAsset(token);
 
         // Transfer out tokens in this cellar that shouldn't be here.
-        uint256 amount = ERC20(token).balanceOf(address(this));
         ERC20(token).safeTransfer(to, amount);
     }
 
@@ -445,26 +448,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     function _removePosition(ERC4626 position) internal virtual {
-        // Remove position from list of positions.
-        uint256 len = positions.length;
-
-        if (position != positions[len - 1]) {
-            for (uint256 i; i < len; i++) {
-                if (positions[i] == position) {
-                    for (i; i < len - 1; i++) positions[i] = positions[i + 1];
-
-                    break;
-                }
-            }
-        }
-
-        positions.pop();
-
-        // Pull all assets from the removed position to the holding pool if non-empty.
-        PositionData memory positionData = getPositionData[position];
+        // Pull any assets that were in the removed position to the holding pool.
         uint256 sharesOwned = position.balanceOf(address(this));
 
         if (sharesOwned != 0) {
+            PositionData memory positionData = getPositionData[position];
+
             totalBalance -= getPositionData[position].balance;
             getPositionData[position].balance = 0;
 
@@ -472,6 +461,22 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
             uint256 assetsOutMin = assets.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
             _swap(ERC4626(this), assets, assetsOutMin, positionData.pathToAsset);
+        }
+
+        // Remove position from the list of positions if it is present.
+        uint256 len = positions.length;
+        if (position == positions[len - 1]) {
+            positions.pop();
+        } else {
+            for (uint256 i; i < len; i++) {
+                if (positions[i] == position) {
+                    for (i; i < len - 1; i++) positions[i] = positions[i + 1];
+
+                    positions.pop();
+
+                    break;
+                }
+            }
         }
     }
 }

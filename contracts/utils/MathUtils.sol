@@ -3,9 +3,9 @@ pragma solidity 0.8.11;
 
 library MathUtils {
     /**
-     * @notice Substract and return 0 instead if results are negative.
+     * @notice Substract with a floor of 0 for the result.
      */
-    function subMin0(uint256 x, uint256 y) internal pure returns (uint256) {
+    function subFloor(uint256 x, uint256 y) internal pure returns (uint256) {
         return x > y ? x - y : 0;
     }
 

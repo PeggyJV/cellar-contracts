@@ -592,6 +592,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(cellar.totalAssets(), 100e18);
         assertEq(cellar.totalHoldings(), 0);
 
+        // Distrust and removing position.
         cellar.setTrust(distrustedPosition, false);
 
         // Test that assets have been pulled from untrusted position and state has updated accordingly.
@@ -607,8 +608,12 @@ contract MultipositionCellarTest is DSTestPlus {
         assertFalse(isTrusted);
 
         // Test that position has been removed from list of positions.
+        ERC4626[] memory expectedPositions = new ERC4626[](2);
+        expectedPositions[0] = ERC4626(address(usdcCLR));
+        expectedPositions[1] = ERC4626(address(feiCLR));
+
         ERC4626[] memory positions = cellar.getPositions();
-        for (uint256 i; i < positions.length; i++) assertTrue(positions[i] != distrustedPosition);
+        for (uint256 i; i < positions.length; i++) assertTrue(positions[i] == expectedPositions[i]);
     }
 
     // ============================================== SWEEP TEST ==============================================
@@ -618,7 +623,7 @@ contract MultipositionCellarTest is DSTestPlus {
         XYZ.mint(address(cellar), 100e18);
 
         // Test sweep.
-        cellar.sweep(address(XYZ), address(this));
+        cellar.sweep(address(XYZ), 100e18, address(this));
 
         assertEq(XYZ.balanceOf(address(this)), 100e18);
     }
@@ -627,10 +632,10 @@ contract MultipositionCellarTest is DSTestPlus {
         feiCLR.mint(address(cellar), 100e18);
 
         // Test sweep of protected asset.
-        cellar.sweep(address(feiCLR), address(this));
+        cellar.sweep(address(feiCLR), 100e18, address(this));
     }
 
-    function testAttemptingToStealFundsByRemovingPositionThenSweeping() public {
+    function testFailAttemptingToStealFundsByRemovingPositionThenSweeping() public {
         // Deposit assets into position before distrusting.
         FEI.mint(address(this), 100e18);
         FEI.approve(address(cellar), 100e18);
@@ -644,14 +649,8 @@ contract MultipositionCellarTest is DSTestPlus {
         // Remove position.
         cellar.removePosition(feiCLR);
 
-        // Attempt to steal assets after removing position from list.
-        uint256 positionBalanceBefore = feiCLR.balanceOf(address(cellar));
-        cellar.sweep(address(feiCLR), address(this));
-        uint256 positionBalanceAfter = feiCLR.balanceOf(address(cellar));
-
-        // Test that no funds were able to be stolen.
-        assertEq(positionBalanceBefore, positionBalanceAfter);
-        assertEq(feiCLR.balanceOf(address(this)), 0);
+        // Test attempting to steal assets after removing position from list.
+        cellar.sweep(address(feiCLR), 100e18, address(this));
     }
 
     // ============================================== LIMITS TEST ==============================================
