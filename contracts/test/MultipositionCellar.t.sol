@@ -83,6 +83,8 @@ contract MultipositionCellarTest is DSTestPlus {
         }
     }
 
+    // ========================================= DEPOSIT/WITHDRAW TEST =========================================
+
     // TODO: test with fuzzing
     // function testDepositWithdraw(uint256 assets) public {
     function testDepositWithdraw() public {
@@ -229,6 +231,8 @@ contract MultipositionCellarTest is DSTestPlus {
         cellar.withdraw(300e18, address(this), address(this));
     }
 
+    // =========================================== REBALANCE TEST ===========================================
+
     // TODO: test with fuzzing
     function testRebalance() public {
         uint256 assets = 100e18;
@@ -308,6 +312,8 @@ contract MultipositionCellarTest is DSTestPlus {
 
         cellar.rebalance(cellar, untrustedPosition, assets, 0, path);
     }
+
+    // ============================================= ACCRUE TEST =============================================
 
     function testAccrue() public {
         // Scenario:
@@ -496,6 +502,8 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(cellar.lastAccrual(), 12345678);
     }
 
+    // ============================================= POSITIONS TEST =============================================
+
     function testSetPositions() public {
         ERC4626[] memory positions = new ERC4626[](3);
         positions[0] = ERC4626(address(fraxCLR));
@@ -567,7 +575,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(address(positions[positions.length - 1]), address(xyzCLR));
     }
 
-    function testDistrustingPosition() public {
+    function testDistrustingAndRemovingPosition() public {
         ERC4626 distrustedPosition = fraxCLR;
 
         // Deposit assets into position before distrusting.
@@ -603,15 +611,16 @@ contract MultipositionCellarTest is DSTestPlus {
         for (uint256 i; i < positions.length; i++) assertTrue(positions[i] != distrustedPosition);
     }
 
-    function testSweep() public {
-        feiCLR.mint(address(cellar), 100e18);
+    // ============================================== SWEEP TEST ==============================================
 
-        cellar.removePosition(feiCLR);
+    function testSweep() public {
+        MockERC20 XYZ = new MockERC20("XYZ", 18);
+        XYZ.mint(address(cellar), 100e18);
 
         // Test sweep.
-        cellar.sweep(address(feiCLR), address(this));
+        cellar.sweep(address(XYZ), address(this));
 
-        assertEq(feiCLR.balanceOf(address(this)), 100e18);
+        assertEq(XYZ.balanceOf(address(this)), 100e18);
     }
 
     function testFailSweep() public {
@@ -621,7 +630,33 @@ contract MultipositionCellarTest is DSTestPlus {
         cellar.sweep(address(feiCLR), address(this));
     }
 
-    // TODO: when base cellar is implemented
+    function testAttemptingToStealFundsByRemovingPositionThenSweeping() public {
+        // Deposit assets into position before distrusting.
+        FEI.mint(address(this), 100e18);
+        FEI.approve(address(cellar), 100e18);
+        cellar.depositIntoPosition(feiCLR, 100e18, address(this));
+
+        // Simulate position gaining yield.
+        MockERC4626(address(feiCLR)).simulateGain(50e18, address(cellar));
+
+        assertEq(feiCLR.balanceOf(address(cellar)), 150e18);
+
+        // Remove position.
+        cellar.removePosition(feiCLR);
+
+        // Attempt to steal assets after removing position from list.
+        uint256 positionBalanceBefore = feiCLR.balanceOf(address(cellar));
+        cellar.sweep(address(feiCLR), address(this));
+        uint256 positionBalanceAfter = feiCLR.balanceOf(address(cellar));
+
+        // Test that no funds were able to be stolen.
+        assertEq(positionBalanceBefore, positionBalanceAfter);
+        assertEq(feiCLR.balanceOf(address(this)), 0);
+    }
+
+    // ============================================== LIMITS TEST ==============================================
+
+    // TODO: when base cellar is implemented...
     // [ ] test hitting depositLimit
     // [ ] test hitting liquidityLimit
 

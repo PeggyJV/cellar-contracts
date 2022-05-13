@@ -17,6 +17,9 @@ import "../Errors.sol";
 // TODO: add sweep
 // TODO: add events
 
+// TODO: delete
+import "hardhat/console.sol";
+
 abstract contract MultipositionCellar is ERC4626, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
@@ -154,24 +157,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     function setTrust(ERC4626 position, bool isTrusted) external virtual onlyOwner {
         getPositionData[position].isTrusted = isTrusted;
 
-        if (!isTrusted) {
-            // Remove the untrusted position.
-            _removePosition(position);
-
-            PositionData memory positionData = getPositionData[position];
-            uint256 positionBalance = positionData.balance;
-
-            // Pull all assets from the untrusted position to holding pool.
-            if (positionBalance != 0) {
-                getPositionData[position].balance = 0;
-                totalBalance -= positionBalance;
-
-                uint256 assets = position.redeem(position.balanceOf(address(this)), address(this), address(this));
-
-                uint256 assetsOutMin = assets.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
-                _swap(ERC4626(this), assets, assetsOutMin, positionData.pathToAsset);
-            }
-        }
+        if (!isTrusted) _removePosition(position);
     }
 
     // ====================================== CELLAR LIMIT LOGIC ======================================
@@ -459,6 +445,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     function _removePosition(ERC4626 position) internal virtual {
+        // Remove position from list of positions.
         uint256 len = positions.length;
 
         if (position != positions[len - 1]) {
@@ -472,5 +459,19 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         }
 
         positions.pop();
+
+        // Pull all assets from the removed position to the holding pool if non-empty.
+        PositionData memory positionData = getPositionData[position];
+        uint256 sharesOwned = position.balanceOf(address(this));
+
+        if (sharesOwned != 0) {
+            totalBalance -= getPositionData[position].balance;
+            getPositionData[position].balance = 0;
+
+            uint256 assets = position.redeem(sharesOwned, address(this), address(this));
+
+            uint256 assetsOutMin = assets.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
+            _swap(ERC4626(this), assets, assetsOutMin, positionData.pathToAsset);
+        }
     }
 }
