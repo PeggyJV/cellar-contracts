@@ -294,8 +294,6 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 position.withdraw(assetsToWithdraw, address(this), address(this));
 
                 // TODO: make this compatible with positions not all priced in a common denom
-                // TODO: test that withdraws involving swaps revert when min expected assets are not received
-                // The minimum assets that can be received from this swap before it reverts.
                 uint256 assetsOutMin = assetsToWithdraw.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
 
                 // If necessary, perform a swap to the to cellar's asset.

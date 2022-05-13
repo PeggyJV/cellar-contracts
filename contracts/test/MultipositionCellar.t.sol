@@ -158,8 +158,79 @@ contract MultipositionCellarTest is DSTestPlus {
         cellar.deposit(amount, address(this));
     }
 
+    function testFailWithdrawWithSwapOverMaxSlippage() public {
+        uint256 assets = 100e18;
+
+        FRAX.mint(address(this), assets);
+        FRAX.approve(address(cellar), assets);
+        cellar.depositIntoPosition(fraxCLR, assets, address(this));
+
+        assertEq(cellar.totalAssets(), 100e18);
+
+        cellar.setPositionMaxSlippage(fraxCLR, 0);
+
+        cellar.withdraw(50e18, address(this), address(this));
+    }
+
+    function testWithdrawWithoutEnoughHoldings() public {
+        uint256 assets = 100e18;
+
+        // Deposit assets directly into position.
+        FRAX.mint(address(this), assets);
+        FRAX.approve(address(cellar), assets);
+        cellar.depositIntoPosition(fraxCLR, assets, address(this));
+
+        FEI.mint(address(this), assets);
+        FEI.approve(address(cellar), assets);
+        cellar.depositIntoPosition(feiCLR, assets, address(this));
+
+        assertEq(cellar.totalHoldings(), 0);
+        assertEq(cellar.totalAssets(), 200e18);
+
+        uint256 assetsToWithdraw = 10e18;
+
+        // Test withdraw returns assets to receiver and replenishes holding position.
+        cellar.withdraw(assetsToWithdraw, address(this), address(this));
+
+        assertEq(USDC.balanceOf(address(this)), assetsToWithdraw);
+        // 10 assets = 5% of 200 total assets (tolerate some assets loss swap slippage)
+        assertApproxEq(USDC.balanceOf(address(cellar)), 10e18, 1e18);
+    }
+
+    function testWithdrawAllWithHomogenousPositions() public {
+        USDC.mint(address(this), 100e18);
+        USDC.approve(address(cellar), 100e18);
+        cellar.depositIntoPosition(usdcCLR, 100e18, address(this));
+
+        assertEq(cellar.totalAssets(), 100e18);
+
+        cellar.withdraw(100e18, address(this), address(this));
+
+        assertEq(USDC.balanceOf(address(this)), 100e18);
+    }
+
+    // NOTE: Although this behavior is not desired, it should be anticipated that this will occur when
+    //       withdrawing from a cellar with positions that are not all in the same asset as the holding
+    //       position due to the swap slippage involved in needing to convert them all to single asset
+    //       received by the user.
+    function testFailWithdrawAllWithHeterogenousPositions() public {
+        ERC4626[] memory positions = cellar.getPositions();
+        for (uint256 i; i < positions.length; i++) {
+            ERC4626 position = positions[i];
+            MockERC20 asset = MockERC20(address(position.asset()));
+
+            asset.mint(address(this), 100e18);
+            asset.approve(address(cellar), 100e18);
+            cellar.depositIntoPosition(position, 100e18, address(this));
+        }
+
+        assertEq(cellar.totalAssets(), 300e18);
+
+        cellar.withdraw(300e18, address(this), address(this));
+    }
+
     // TODO: test with fuzzing
-    function testRebalance() external {
+    function testRebalance() public {
         uint256 assets = 100e18;
 
         ERC4626[] memory positions = cellar.getPositions();
@@ -215,7 +286,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(toBalance, 0);
     }
 
-    function testFailRebalanceIntoUntrustedPosition() external {
+    function testFailRebalanceIntoUntrustedPosition() public {
         uint256 assets = 100e18;
 
         ERC4626[] memory positions = cellar.getPositions();
@@ -238,7 +309,7 @@ contract MultipositionCellarTest is DSTestPlus {
         cellar.rebalance(cellar, untrustedPosition, assets, 0, path);
     }
 
-    function testAccrue() external {
+    function testAccrue() public {
         // Scenario:
         //  - Multiposition cellar has 3 positions.
         //  - Current Unix timestamp of test environment is 12345678.
@@ -425,66 +496,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(cellar.lastAccrual(), 12345678);
     }
 
-    // TODO: address possible error that could happen if not enough to withdraw from all positions
-    // due to swap slippage while converting
-    function testWithdrawWithoutEnoughHoldings() external {
-        uint256 assets = 100e18;
-
-        // Deposit assets directly into position.
-        FRAX.mint(address(this), assets);
-        FRAX.approve(address(cellar), assets);
-        cellar.depositIntoPosition(fraxCLR, assets, address(this));
-
-        FEI.mint(address(this), assets);
-        FEI.approve(address(cellar), assets);
-        cellar.depositIntoPosition(feiCLR, assets, address(this));
-
-        assertEq(cellar.totalHoldings(), 0);
-        assertEq(cellar.totalAssets(), 200e18);
-
-        uint256 assetsToWithdraw = 10e18;
-
-        // Test withdraw returns assets to receiver and replenishes holding position.
-        cellar.withdraw(assetsToWithdraw, address(this), address(this));
-
-        assertEq(USDC.balanceOf(address(this)), assetsToWithdraw);
-        // 10 assets = 5% of 200 total assets (tolerate some assets loss swap slippage)
-        assertApproxEq(USDC.balanceOf(address(cellar)), 10e18, 1e18);
-    }
-
-    function testWithdrawAllWithHomogenousPositions() external {
-        USDC.mint(address(this), 100e18);
-        USDC.approve(address(cellar), 100e18);
-        cellar.depositIntoPosition(usdcCLR, 100e18, address(this));
-
-        assertEq(cellar.totalAssets(), 100e18);
-
-        cellar.withdraw(100e18, address(this), address(this));
-
-        assertEq(USDC.balanceOf(address(this)), 100e18);
-    }
-
-    // NOTE: Although this behavior is not desired, it should be anticipated that this will occur when
-    //       withdrawing from a cellar with positions that are not all in the same asset as the holding
-    //       position due to the swap slippage involved in needing to convert them all to single asset
-    //       received by the user.
-    function testFailWithdrawAllWithHeterogenousPositions() external {
-        ERC4626[] memory positions = cellar.getPositions();
-        for (uint256 i; i < positions.length; i++) {
-            ERC4626 position = positions[i];
-            MockERC20 asset = MockERC20(address(position.asset()));
-
-            asset.mint(address(this), 100e18);
-            asset.approve(address(cellar), 100e18);
-            cellar.depositIntoPosition(position, 100e18, address(this));
-        }
-
-        assertEq(cellar.totalAssets(), 300e18);
-
-        cellar.withdraw(300e18, address(this), address(this));
-    }
-
-    function testDistrustingPosition() external {
+    function testDistrustingPosition() public {
         ERC4626 distrustedPosition = fraxCLR;
 
         cellar.setTrust(distrustedPosition, false);
@@ -501,7 +513,7 @@ contract MultipositionCellarTest is DSTestPlus {
     // // [ ] test hitting liquidityLimit
 
     // // Test deposit hitting liquidity limit.
-    // function testDepositWithDepositLimits(uint256 assets) external {
+    // function testDepositWithDepositLimits(uint256 assets) public {
     //     assets = bound(assets, 1, type(uint128).max);
 
     //     uint248 depositLimit = 50_000e18;
@@ -519,7 +531,7 @@ contract MultipositionCellarTest is DSTestPlus {
     // }
 
     // // Test deposit hitting deposit limit.
-    // function testDepositWithLiquidityLimits(uint256 assets) external {
+    // function testDepositWithLiquidityLimits(uint256 assets) public {
     //     assets = bound(assets, 1, type(uint128).max);
 
     //     uint248 liquidityLimit = 75_000e18;
@@ -537,7 +549,7 @@ contract MultipositionCellarTest is DSTestPlus {
     // }
 
     // // Test deposit hitting both limits.
-    // function testDepositWithAllLimits(uint256 assets) external {
+    // function testDepositWithAllLimits(uint256 assets) public {
     //     assets = bound(assets, 1, type(uint128).max);
 
     //     uint248 holdingsLimit = 25_000e18;
