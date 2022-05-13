@@ -519,19 +519,11 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(feiCLR.balanceOf(address(this)), 100e18);
     }
 
-    function testFailSweepingProtectedAsset() public {
-        address[] memory tokensToTrySweeping = new address[](5);
-        ERC4626[] memory positions = cellar.getPositions();
-        for (uint256 i; i < positions.length; i++) tokensToTrySweeping[i] = address(positions[i]);
-        tokensToTrySweeping[3] = address(USDC);
-        tokensToTrySweeping[4] = address(cellar);
+    function testFailSweep() public {
+        feiCLR.mint(address(cellar), 100e18);
 
-        for (uint256 i; i < tokensToTrySweeping.length; i++) {
-            MockERC20 token = MockERC20(address(tokensToTrySweeping[i]));
-
-            token.mint(address(cellar), 100e18);
-            cellar.sweep(address(token), address(this));
-        }
+        // Test sweep of protected asset.
+        cellar.sweep(address(feiCLR), address(this));
     }
 
     // TODO: when base cellar is implemented
