@@ -17,10 +17,7 @@ import "../Errors.sol";
 // TODO: add sweep
 // TODO: add events
 
-// TODO: delete
-import "hardhat/console.sol";
-
-abstract contract MultipositionCellar is ERC4626, Ownable {
+contract MultipositionCellar is ERC4626, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
     using SwapUtils for ERC4626;
@@ -50,12 +47,17 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      *      Losses are realized immediately to prevent users from timing exits to sidestep losses.
      */
 
-    // TODO: consider changing default accrual period and have it be configuarable
-    uint64 public constant accrualPeriod = 7 days;
+    uint32 public accrualPeriod = 7 days;
+
+    uint32 public nextAccrualPeriod;
 
     uint64 public lastAccrual;
 
     uint128 public maxLocked;
+
+    function setAccrualPeriod(uint32 newAccrualPeriod) external virtual onlyOwner {
+        nextAccrualPeriod = newAccrualPeriod;
+    }
 
     // ============================================= FEES CONFIG =============================================
 
@@ -160,7 +162,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         if (!isTrusted) _removePosition(position);
     }
 
-    // ============================================= LIMIT LOGIC =============================================
+    // ============================================= LIMITS CONFIG =============================================
 
     /**
      * @notice Emitted when the liquidity limit is changed.
@@ -288,8 +290,15 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // =========================================== CORE LOGIC ===========================================
 
-    function beforeDeposit(uint256, uint256) internal virtual override {
+    function beforeDeposit(
+        uint256 assets,
+        uint256,
+        address receiver
+    ) internal virtual override {
         if (isShutdown) revert STATE_ContractShutdown();
+
+        uint256 maxDepositable = maxDeposit(receiver);
+        if (assets > maxDepositable) revert USR_DepositRestricted(assets, maxDepositable);
     }
 
     /**
@@ -305,7 +314,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      *       withdraws up to configurable target. This is much more economic for users as it batches
      *       withdraws instead of doing potentially hundreds of withdraws from positions.
      */
-    function beforeWithdraw(uint256 assets, uint256) internal virtual override {
+    function beforeWithdraw(
+        uint256 assets,
+        uint256,
+        address,
+        address
+    ) internal virtual override {
         uint256 currentHoldings = totalHoldings();
 
         // Only triggers if there are not enough assets in the holding position to cover the
@@ -364,7 +378,33 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         if (address(toPosition) != address(this)) _depositIntoPosition(toPosition, assetsTo);
     }
 
-    // ========================================= ACCRUAL LOGIC =========================================
+    // ============================================ LIMITS LOGIC ============================================
+
+    function maxDeposit(address owner) public view virtual override returns (uint256) {
+        if (isShutdown) return 0;
+
+        if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max) return type(uint256).max;
+
+        uint256 leftUntilDepositLimit = depositLimit.subFloor(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.subFloor(totalAssets());
+
+        // Only return the more relevant of the two.
+        return MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
+    }
+
+    function maxMint(address owner) public view virtual override returns (uint256) {
+        if (isShutdown) return 0;
+
+        if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max) return type(uint256).max;
+
+        uint256 leftUntilDepositLimit = depositLimit.subFloor(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.subFloor(totalAssets());
+
+        // Only return the more relevant of the two.
+        return convertToShares(MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit));
+    }
+
+    // =========================================== ACCRUAL LOGIC ===========================================
 
     /**
      * @dev Accrual with positive performance will accrue yield, accrue fees, and start an accrual
@@ -407,6 +447,14 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         // Update cellar's total balance.
         totalBalance = currentTotalBalance;
+
+        // Update the accrual period if it was changed.
+        uint32 newAccrualPeriod = nextAccrualPeriod;
+        if (newAccrualPeriod != 0) {
+            accrualPeriod = newAccrualPeriod;
+
+            nextAccrualPeriod = 0;
+        }
     }
 
     // =========================================== FEE LOGIC ===========================================
