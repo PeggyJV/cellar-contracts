@@ -676,6 +676,64 @@ contract MultipositionCellarTest is DSTestPlus {
         cellar.sweep(address(feiCLR), 100e18, address(this));
     }
 
+    // ============================================= EMERGENCY TEST =============================================
+
+    function testFailShutdownDeposit() public {
+        cellar.setShutdown(true, false);
+
+        USDC.mint(address(this), 1e18);
+        USDC.approve(address(cellar), 1e18);
+        cellar.deposit(1e18, address(this));
+    }
+
+    function testFailShutdownDepositIntoPosition() public {
+        USDC.mint(address(this), 1e18);
+        USDC.approve(address(cellar), 1e18);
+        cellar.deposit(1e18, address(this));
+
+        cellar.setShutdown(true, false);
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(USDC);
+
+        cellar.rebalance(cellar, usdcCLR, 1e18, 0, path);
+    }
+
+    function testShutdownExitsAllPositions() public {
+        ERC4626[] memory positions = cellar.getPositions();
+
+        // Deposit 100 assets into each position with 50 assets of unrealized yield.
+        for (uint256 i; i < positions.length; i++) {
+            ERC4626 position = positions[i];
+            MockERC20 asset = MockERC20(address(position.asset()));
+
+            asset.mint(address(this), 100e18);
+            asset.approve(address(cellar), 100e18);
+            cellar.depositIntoPosition(position, 100e18, address(this));
+
+            MockERC4626(address(position)).simulateGain(50e18, address(cellar));
+        }
+
+        assertEq(cellar.totalBalance(), 300e18);
+        assertEq(cellar.totalAssets(), 300e18);
+        assertEq(cellar.totalHoldings(), 0);
+
+        cellar.setShutdown(true, true);
+
+        assertTrue(cellar.isShutdown());
+        assertEq(cellar.totalBalance(), 0);
+        // Expect to receive 435 assets after 450 total assets from positions are swapped with 5% slippage.
+        assertEq(cellar.totalAssets(), 435e18);
+        assertEq(cellar.totalHoldings(), 435e18);
+    }
+
+    function testShutdownExitsAllPositionsWithNoBalances() public {
+        cellar.setShutdown(true, true);
+
+        assertTrue(cellar.isShutdown());
+    }
+
     // ============================================== LIMITS TEST ==============================================
 
     // TODO: when base cellar is implemented...

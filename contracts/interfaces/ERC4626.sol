@@ -48,6 +48,8 @@ abstract contract ERC4626 is ERC20 {
         // Check for rounding error since we round down in previewDeposit.
         require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
 
+        beforeDeposit(assets, shares);
+
         // Need to transfer before minting or ERC777s could reenter.
         asset.safeTransferFrom(msg.sender, address(this), assets);
 
@@ -60,6 +62,8 @@ abstract contract ERC4626 is ERC20 {
 
     function mint(uint256 shares, address receiver) public virtual returns (uint256 assets) {
         assets = previewMint(shares); // No need to check for rounding error, previewMint rounds up.
+
+        beforeDeposit(assets, shares);
 
         // Need to transfer before minting or ERC777s could reenter.
         asset.safeTransferFrom(msg.sender, address(this), assets);
@@ -91,6 +95,8 @@ abstract contract ERC4626 is ERC20 {
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
         asset.safeTransfer(receiver, assets);
+
+        afterWithdraw(assets, shares);
     }
 
     function redeem(
@@ -114,6 +120,8 @@ abstract contract ERC4626 is ERC20 {
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
         asset.safeTransfer(receiver, assets);
+
+        afterWithdraw(assets, shares);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -178,7 +186,11 @@ abstract contract ERC4626 is ERC20 {
                           INTERNAL HOOKS LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function beforeWithdraw(uint256 assets, uint256 shares) internal virtual {}
+    function beforeDeposit(uint256 assets, uint256 shares) internal virtual {}
 
     function afterDeposit(uint256 assets, uint256 shares) internal virtual {}
+
+    function beforeWithdraw(uint256 assets, uint256 shares) internal virtual {}
+
+    function afterWithdraw(uint256 assets, uint256 shares) internal virtual {}
 }

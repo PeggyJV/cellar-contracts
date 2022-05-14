@@ -160,7 +160,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         if (!isTrusted) _removePosition(position);
     }
 
-    // ====================================== CELLAR LIMIT LOGIC ======================================
+    // ============================================= LIMIT LOGIC =============================================
 
     /**
      * @notice Emitted when the liquidity limit is changed.
@@ -207,6 +207,20 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         depositLimit = limit;
 
         emit DepositLimitChanged(oldLimit, limit);
+    }
+
+    // =========================================== EMERGENCY LOGIC ===========================================
+
+    bool public isShutdown;
+
+    /**
+     * @notice Stop or start the contract. Used in an emergency or if the cellar has been depreciated.
+     */
+    function setShutdown(bool shutdown, bool exitPositions) external virtual onlyOwner {
+        isShutdown = shutdown;
+
+        // Exit all positions.
+        if (shutdown && exitPositions) for (uint256 i; i < positions.length; i++) _emptyPosition(positions[i]);
     }
 
     // =========================================== CONSTRUCTOR ===========================================
@@ -273,6 +287,10 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     // =========================================== CORE LOGIC ===========================================
+
+    function beforeDeposit(uint256, uint256) internal virtual override {
+        if (isShutdown) revert STATE_ContractShutdown();
+    }
 
     /**
      *  @dev Although this behavior is not desired, it should be noted that attempting to withdraw
@@ -419,6 +437,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      */
     function _depositIntoPosition(ERC4626 position, uint256 assets) internal virtual {
         if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
+        if (isShutdown) revert STATE_ContractShutdown();
 
         getPositionData[position].balance += uint112(assets);
         totalBalance += assets;
@@ -446,8 +465,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         return position.safeSwap(assets, assetsOutMin, path);
     }
 
-    function _removePosition(ERC4626 position) internal virtual {
-        // Pull any assets that were in the removed position to the holding pool.
+    function _emptyPosition(ERC4626 position) internal virtual {
         uint256 sharesOwned = position.balanceOf(address(this));
 
         if (sharesOwned != 0) {
@@ -461,6 +479,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
             uint256 assetsOutMin = assets.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
             _swap(ERC4626(this), assets, assetsOutMin, positionData.pathToAsset);
         }
+    }
+
+    function _removePosition(ERC4626 position) internal virtual {
+        // Pull any assets that were in the removed position to the holding pool.
+        _emptyPosition(position);
 
         // Remove position from the list of positions if it is present.
         uint256 len = positions.length;
