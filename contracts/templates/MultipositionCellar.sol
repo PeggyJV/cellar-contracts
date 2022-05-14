@@ -404,6 +404,9 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ======================================== INTERNAL HOOKS ========================================
 
+    /**
+     * @notice Deposits into an ERC4626-compatible position.
+     */
     function _depositIntoPosition(ERC4626 position, uint256 assets) internal virtual {
         if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
 
@@ -414,6 +417,9 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         position.deposit(assets, address(this));
     }
 
+    /**
+     * @notice Withdraws from an ERC4626-compatible position.
+     */
     function _withdrawFromPosition(ERC4626 position, uint256 assets) internal virtual {
         getPositionData[position].balance -= uint112(assets);
         totalBalance -= assets;
@@ -437,13 +443,13 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         uint256 assetsToMin,
         address[] memory path
     ) internal virtual returns (uint256 assetsTo) {
-        // Skip withdraw if rebalancing from holding position.
+        // Withdraw from specified position if it is not the holding position.
         if (address(fromPosition) != address(this)) _withdrawFromPosition(fromPosition, assetsFrom);
 
-        // Performing a swap to the receiving position's asset if necessary.
+        // Perform a swap to receiving position's asset if necessary.
         assetsTo = _swap(toPosition, assetsFrom, assetsToMin, path);
 
-        // Skip deposit if rebalancing to holding position.
+        // Deposit to destination if it is not the holding position.
         if (address(toPosition) != address(this)) _depositIntoPosition(toPosition, assetsTo);
     }
 

@@ -290,6 +290,22 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(toBalance, 0);
     }
 
+    function testFailRebalanceFromPositionWithNotEnoughBalance() public {
+        uint256 assets = 100e18;
+
+        USDC.mint(address(this), assets / 2);
+        USDC.approve(address(cellar), assets / 2);
+
+        cellar.depositIntoPosition(usdcCLR, assets / 2, address(this));
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(FEI);
+
+        uint256 expectedAssetsOut = swapRouter.quote(assets, path);
+        cellar.rebalance(usdcCLR, feiCLR, assets, expectedAssetsOut, path);
+    }
+
     function testFailRebalanceIntoUntrustedPosition() public {
         uint256 assets = 100e18;
 
