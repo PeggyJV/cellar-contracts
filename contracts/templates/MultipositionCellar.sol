@@ -335,8 +335,15 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         uint256 assetsFrom,
         uint256 assetsToMin,
         address[] memory path
-    ) external virtual onlyOwner returns (uint256) {
-        return _rebalance(fromPosition, toPosition, assetsFrom, assetsToMin, path);
+    ) external virtual onlyOwner returns (uint256 assetsTo) {
+        // Withdraw from specified position if it is not the holding position.
+        if (address(fromPosition) != address(this)) _withdrawFromPosition(fromPosition, assetsFrom);
+
+        // Perform a swap to receiving position's asset if necessary.
+        assetsTo = _swap(toPosition, assetsFrom, assetsToMin, path);
+
+        // Deposit to destination if it is not the holding position.
+        if (address(toPosition) != address(this)) _depositIntoPosition(toPosition, assetsTo);
     }
 
     // ========================================= ACCRUAL LOGIC =========================================
@@ -437,23 +444,6 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         address[] memory path
     ) internal virtual returns (uint256) {
         return position.safeSwap(assets, assetsOutMin, path);
-    }
-
-    function _rebalance(
-        ERC4626 fromPosition,
-        ERC4626 toPosition,
-        uint256 assetsFrom,
-        uint256 assetsToMin,
-        address[] memory path
-    ) internal virtual returns (uint256 assetsTo) {
-        // Withdraw from specified position if it is not the holding position.
-        if (address(fromPosition) != address(this)) _withdrawFromPosition(fromPosition, assetsFrom);
-
-        // Perform a swap to receiving position's asset if necessary.
-        assetsTo = _swap(toPosition, assetsFrom, assetsToMin, path);
-
-        // Deposit to destination if it is not the holding position.
-        if (address(toPosition) != address(this)) _depositIntoPosition(toPosition, assetsTo);
     }
 
     function _removePosition(ERC4626 position) internal virtual {
