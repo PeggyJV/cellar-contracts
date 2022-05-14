@@ -317,9 +317,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 uint256 assetsToWithdraw = MathUtils.min(positionBalance, leftToWithdraw);
                 leftToWithdraw -= assetsToWithdraw;
 
-                // Pull from this position to the holding position.
+                // Pull from this position.
+                _withdrawFromPosition(position, assetsToWithdraw);
+
+                // Perform a swap to holding position asset if necessary.
                 uint256 assetsOutMin = assetsToWithdraw.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
-                _rebalance(position, ERC4626(this), assetsToWithdraw, assetsOutMin, positionData.pathToAsset);
+                _swap(ERC4626(this), assetsToWithdraw, assetsOutMin, positionData.pathToAsset);
 
                 if (leftToWithdraw == 0) break;
             }

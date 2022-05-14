@@ -31,13 +31,19 @@ contract MultipositionCellarTest is DSTestPlus {
     function setUp() public {
         // TODO: test USDC with 6 decimals once cellar can handle multiple decimals
         USDC = new MockERC20("USDC", 18);
+        hevm.label(address(USDC), "USDC");
         usdcCLR = new MockERC4626(ERC20(address(USDC)), "USDC Cellar LP Token", "USDC-CLR", 18);
+        hevm.label(address(usdcCLR), "usdcCLR");
 
         FRAX = new MockERC20("FRAX", 18);
+        hevm.label(address(FRAX), "FRAX");
         fraxCLR = new MockERC4626(ERC20(address(FRAX)), "FRAX Cellar LP Token", "FRAX-CLR", 18);
+        hevm.label(address(fraxCLR), "fraxCLR");
 
         FEI = new MockERC20("FEI", 18);
+        hevm.label(address(FEI), "FEI");
         feiCLR = new MockERC4626(ERC20(address(FEI)), "FEI Cellar LP Token", "FEI-CLR", 18);
+        hevm.label(address(feiCLR), "feiCLR");
 
         // Set up stablecoin cellar:
         swapRouter = new MockSwapRouter();
@@ -71,6 +77,7 @@ contract MultipositionCellarTest is DSTestPlus {
             18,
             ISushiSwapRouter(address(swapRouter))
         );
+        hevm.label(address(cellar), "cellar");
 
         // Transfer ownership to this contract for testing.
         hevm.prank(address(cellar.gravityBridge()));
