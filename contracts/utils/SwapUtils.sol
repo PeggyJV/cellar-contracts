@@ -20,12 +20,13 @@ library SwapUtils {
     /**
      * @dev swaps input token by Uniswap V3, Includes checks to ensure that the asset being swapped to matches the asset received by
      *       the position and that a swap is necessary in the first place.
-     * @param assetsIn amount of the incoming token
+     * @param position ERC4626
+     * @param assets amount of the incoming token
      * @param assetsOutMin minimum value of the the
      * @param path address array, token exchange path
      * @return amountOut  actual received amount of outgoing token (>=assetsOutMin)
      **/
-    function swap(
+    function safeSwap(
         ERC4626 position,
         uint256 assets,
         uint256 assetsOutMin,
@@ -43,7 +44,7 @@ library SwapUtils {
         if (assetIn == assetOut) return assets;
 
 
-        assetIn.safeApprove(address(swapRouter), assetsIn);
+        assetIn.safeApprove(address(swapRouter), assets);
 
         bytes memory encodePackedPath = abi.encodePacked(path[0]);
         for (uint256 i = 1; i < path.length; i++) {
@@ -59,7 +60,7 @@ library SwapUtils {
         path : encodePackedPath,
         recipient : address(this),
         deadline : block.timestamp + 60,
-        amountIn : assetsIn,
+        amountIn : assets,
         amountOutMinimum : assetsOutMin
         });
 

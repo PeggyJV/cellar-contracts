@@ -16,6 +16,8 @@ describe("SwapUtils", () => {
     let swapUtils: Contract;
     let dai: Contract;
     let usdc: Contract;
+    let daiERC4626: Contract;
+    let usdcERC4626: Contract;
 
 
     const bigNum = (number: number, decimals: number) => {
@@ -52,6 +54,17 @@ describe("SwapUtils", () => {
         );
         swapUtils = await SwapUtils.deploy();
 
+
+        const DaiERC4626 = await ethers.getContractFactory(
+            "MockERC4626"
+        );
+        daiERC4626 = await DaiERC4626.deploy(dai.address,"dai4626","dai4626",18);
+
+        const UsdcERC4626 = await ethers.getContractFactory(
+            "MockERC4626"
+        );
+        usdcERC4626 = await UsdcERC4626.deploy(usdc.address,"usdc4626","usdc4626",6);
+
         // Set DAI balance for owner (1000$)
         let index = ethers.utils.solidityKeccak256(
             ["uint256", "uint256"],
@@ -77,10 +90,10 @@ describe("SwapUtils", () => {
 
     });
 
-    describe("swap", () => {
+    describe("safeSwap", () => {
         it("should successful swap dai to usdc", async () => {
             await dai.transfer(swapUtils.address, bigNum(10000, 18));
-            await swapUtils.$swap(bigNum(10000, 18), bigNum(6500, 6),
+            await swapUtils.$safeSwap(usdcERC4626.address,bigNum(10000, 18), bigNum(6500, 6),
                 [dai.address, usdc.address]);
             await expect(await usdc.balanceOf(swapUtils.address)).to.be.above(bigNum(6500, 6));
 
@@ -88,7 +101,7 @@ describe("SwapUtils", () => {
         });
         it("should successful swap usdc to dai", async () => {
             await usdc.transfer(swapUtils.address, bigNum(10000, 6));
-            await swapUtils.$swap(bigNum(10000, 6), bigNum(9500, 18),
+            await swapUtils.$safeSwap(daiERC4626.address,bigNum(10000, 6), bigNum(9500, 18),
                 [usdc.address, dai.address]);
             await expect(await dai.balanceOf(swapUtils.address)).to.be.above(bigNum(9500, 18));
 

@@ -5,6 +5,7 @@ import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { ICellar } from "./interfaces/ICellar.sol";
 import { SwapUtils } from "./utils/SwapUtils.sol";
+import {ERC4626} from "./interfaces/ERC4626.sol";
 
 import "./Errors.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
@@ -90,7 +91,7 @@ contract CellarRouter is ICellarRouter {
             assetIn.safeTransferFrom(owner, address(this), assets);
 
             // swap assets using the swap utility
-            assets = SwapUtils.swap(assets, minAssetsOut, path);
+            assets = SwapUtils.safeSwap(ERC4626(address (assetOut)),assets, minAssetsOut, path);
         }
 
         // Approve the cellar to spend assets.
