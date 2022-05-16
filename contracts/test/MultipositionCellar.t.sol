@@ -13,6 +13,10 @@ import { ERC4626 } from "../interfaces/ERC4626.sol";
 import { DSTestPlus } from "./utils/DSTestPlus.sol";
 import { MathUtils } from "../utils/MathUtils.sol";
 
+// TODO: test positions that are all in different denominations (eg. ETH, USDC, AAVE...)
+// TODO: test USDC with 6 decimals once cellar can handle multiple decimals
+// TODO: test with fuzzing
+
 contract MultipositionCellarTest is DSTestPlus {
     using MathUtils for uint256;
 
@@ -29,7 +33,6 @@ contract MultipositionCellarTest is DSTestPlus {
     MockERC4626 private feiCLR;
 
     function setUp() public {
-        // TODO: test USDC with 6 decimals once cellar can handle multiple decimals
         USDC = new MockERC20("USDC", 18);
         hevm.label(address(USDC), "USDC");
         usdcCLR = new MockERC4626(ERC20(address(USDC)), "USDC Cellar LP Token", "USDC-CLR", 18);
@@ -92,10 +95,8 @@ contract MultipositionCellarTest is DSTestPlus {
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
 
-    // TODO: test with fuzzing
     // function testDepositWithdraw(uint256 assets) public {
     function testDepositWithdraw() public {
-        // TODO: implement maxDeposit
         // assets = bound(assets, 1, cellar.maxDeposit(address(this)));
         // NOTE: last time this was run, all test pass with the line below uncommented
         // assets = bound(assets, 1, type(uint128).max);
@@ -240,7 +241,6 @@ contract MultipositionCellarTest is DSTestPlus {
 
     // =========================================== REBALANCE TEST ===========================================
 
-    // TODO: test with fuzzing
     function testRebalance() public {
         uint256 assets = 100e18;
 

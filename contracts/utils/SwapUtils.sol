@@ -21,17 +21,16 @@ library SwapUtils {
      *       the position and that a swap is necessary in the first place.
      */
     function safeSwap(
-        ERC4626 position,
+        ERC20 positionAsset,
         uint256 assets,
         uint256 assetsOutMin,
         address[] memory path
     ) internal returns (uint256) {
         ERC20 assetIn = ERC20(path[0]);
         ERC20 assetOut = ERC20(path[path.length - 1]);
-        ERC20 asset = position.asset();
 
         // Ensure that the asset being swapped matches the asset received by the position.
-        if (assetOut != asset) revert USR_InvalidSwap(address(assetOut), address(asset));
+        if (assetOut != positionAsset) revert USR_InvalidSwap(address(assetOut), address(positionAsset));
 
         // Check whether a swap is necessary. If not, just return back assets.
         if (assetIn == assetOut) return assets;

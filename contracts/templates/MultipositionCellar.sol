@@ -12,15 +12,12 @@ import { SwapUtils } from "../utils/SwapUtils.sol";
 
 import "../Errors.sol";
 
-// TODO: price all balances according to cellar's `asset` (the common denom)
 // TODO: add extensive documentation for cellar creators
-// TODO: add sweep
 // TODO: add events
 
-contract MultipositionCellar is ERC4626, Ownable {
+abstract contract MultipositionCellar is ERC4626, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
-    using SwapUtils for ERC4626;
 
     // ============================================ ACCOUNTING STATE ============================================
 
@@ -91,7 +88,7 @@ contract MultipositionCellar is ERC4626, Ownable {
     struct PositionData {
         bool isTrusted;
         uint32 maxSlippage;
-        uint112 balance;
+        uint112 assets;
         address[] pathToAsset;
     }
 
@@ -108,7 +105,6 @@ contract MultipositionCellar is ERC4626, Ownable {
     }
 
     // TODO: consider moving position funcitons to own module
-    // TODO: test all setter functions
     function setPositions(
         ERC4626[] calldata newPositions,
         address[][] calldata pathsToAsset,
@@ -255,7 +251,7 @@ contract MultipositionCellar is ERC4626, Ownable {
             getPositionData[_positions[i]] = PositionData({
                 isTrusted: true,
                 maxSlippage: _maxSlippages[i],
-                balance: 0,
+                assets: 0,
                 pathToAsset: _pathsToAsset[i]
             });
 
@@ -287,6 +283,15 @@ contract MultipositionCellar is ERC4626, Ownable {
         // Get how much yield remains locked.
         return maxLockedYield - (maxLockedYield * (block.timestamp - previousAccrual)) / accrualInterval;
     }
+
+    /**
+     * @notice Price assets in another asset denomination.
+     */
+    function priceAssetsFrom(
+        ERC20 fromAsset,
+        ERC20 toAsset,
+        uint256 assets
+    ) public view virtual returns (uint256);
 
     // =========================================== CORE LOGIC ===========================================
 
@@ -340,21 +345,33 @@ contract MultipositionCellar is ERC4626, Ownable {
                 ERC4626 position = positions[i];
                 PositionData memory positionData = getPositionData[position];
 
-                uint256 positionBalance = positionData.balance;
+                uint256 totalPositionAssets = positionData.assets;
 
                 // Move on if this position is empty.
-                if (positionBalance == 0) continue;
+                if (totalPositionAssets == 0) continue;
+
+                // Exchange rate between the position asset and cellar's asset.
+                uint256 onePositionAsset = 10**position.decimals();
+                uint256 exchangeRate = priceAssetsFrom(position.asset(), asset, onePositionAsset);
 
                 // We want to pull as much as we can from this position, but no more than needed.
-                uint256 assetsToWithdraw = MathUtils.min(positionBalance, leftToWithdraw);
-                leftToWithdraw -= assetsToWithdraw;
+                // TODO: test rounding here
+                uint256 positionAssetsWithdrawn = MathUtils.min(
+                    totalPositionAssets,
+                    leftToWithdraw.mulDivUp(exchangeRate, onePositionAsset)
+                );
+                uint256 assetsWithdrawn = positionAssetsWithdrawn.mulDivDown(exchangeRate, 10**decimals);
+
+                leftToWithdraw -= assetsWithdrawn;
 
                 // Pull from this position.
-                _withdrawFromPosition(position, assetsToWithdraw);
+                _withdrawFromPosition(position, positionAssetsWithdrawn);
+
+                // Minimum assets to receive from swap based on the max slippage set for this position.
+                uint256 assetsOutMin = assetsWithdrawn.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
 
                 // Perform a swap to holding position asset if necessary.
-                uint256 assetsOutMin = assetsToWithdraw.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
-                _swap(ERC4626(this), assetsToWithdraw, assetsOutMin, positionData.pathToAsset);
+                _swap(asset, positionAssetsWithdrawn, assetsOutMin, positionData.pathToAsset);
 
                 if (leftToWithdraw == 0) break;
             }
@@ -372,7 +389,7 @@ contract MultipositionCellar is ERC4626, Ownable {
         if (address(fromPosition) != address(this)) _withdrawFromPosition(fromPosition, assetsFrom);
 
         // Perform a swap to receiving position's asset if necessary.
-        assetsTo = _swap(toPosition, assetsFrom, assetsToMin, path);
+        assetsTo = _swap(toPosition.asset(), assetsFrom, assetsToMin, path);
 
         // Deposit to destination if it is not the holding position.
         if (address(toPosition) != address(this)) _depositIntoPosition(toPosition, assetsTo);
@@ -423,14 +440,20 @@ contract MultipositionCellar is ERC4626, Ownable {
         for (uint256 i; i < positions.length; i++) {
             ERC4626 position = positions[i];
 
-            uint256 lastBalance = getPositionData[position].balance;
-            uint256 currentBalance = position.maxWithdraw(address(this));
+            uint256 lastPositionAssets = getPositionData[position].assets;
+            uint256 currentPositionAssets = position.maxWithdraw(address(this));
 
-            getPositionData[position].balance = uint112(currentBalance);
+            getPositionData[position].assets = uint112(currentPositionAssets);
 
-            currentTotalBalance = currentTotalBalance + currentBalance - lastBalance;
+            uint256 oneAsset = 10**decimals;
+            uint256 exchangeRate = priceAssetsFrom(asset, position.asset(), oneAsset);
 
-            yield += currentBalance.subFloor(lastBalance);
+            uint256 lastAssets = lastPositionAssets.mulDivDown(exchangeRate, oneAsset);
+            uint256 currentAssets = currentPositionAssets.mulDivDown(exchangeRate, oneAsset);
+
+            currentTotalBalance = currentTotalBalance + currentAssets - lastAssets;
+
+            yield += currentAssets.subFloor(lastAssets);
         }
 
         if (yield != 0) {
@@ -483,34 +506,37 @@ contract MultipositionCellar is ERC4626, Ownable {
     /**
      * @notice Deposits into an ERC4626-compatible position.
      */
-    function _depositIntoPosition(ERC4626 position, uint256 assets) internal virtual {
+    function _depositIntoPosition(ERC4626 position, uint256 positionAssets) internal virtual {
         if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
         if (isShutdown) revert STATE_ContractShutdown();
 
-        getPositionData[position].balance += uint112(assets);
-        totalBalance += assets;
+        getPositionData[position].assets += uint112(positionAssets);
+        ERC20 positionAsset = position.asset();
+        // TODO: test rounding here
+        totalBalance += priceAssetsFrom(positionAsset, asset, positionAssets);
 
-        position.asset().safeApprove(address(position), assets);
-        position.deposit(assets, address(this));
+        positionAsset.safeApprove(address(position), positionAssets);
+        position.deposit(positionAssets, address(this));
     }
 
     /**
      * @notice Withdraws from an ERC4626-compatible position.
      */
-    function _withdrawFromPosition(ERC4626 position, uint256 assets) internal virtual {
-        getPositionData[position].balance -= uint112(assets);
-        totalBalance -= assets;
+    function _withdrawFromPosition(ERC4626 position, uint256 positionAssets) internal virtual {
+        getPositionData[position].assets -= uint112(positionAssets);
+        // TODO: test rounding here
+        totalBalance -= priceAssetsFrom(position.asset(), asset, positionAssets);
 
-        position.withdraw(assets, address(this), address(this));
+        position.withdraw(positionAssets, address(this), address(this));
     }
 
     function _swap(
-        ERC4626 position,
+        ERC20 positionAsset,
         uint256 assets,
         uint256 assetsOutMin,
         address[] memory path
     ) internal virtual returns (uint256) {
-        return position.safeSwap(assets, assetsOutMin, path);
+        return SwapUtils.safeSwap(positionAsset, assets, assetsOutMin, path);
     }
 
     function _emptyPosition(ERC4626 position) internal virtual {
@@ -519,13 +545,15 @@ contract MultipositionCellar is ERC4626, Ownable {
         if (sharesOwned != 0) {
             PositionData memory positionData = getPositionData[position];
 
-            totalBalance -= getPositionData[position].balance;
-            getPositionData[position].balance = 0;
+            uint256 assets = priceAssetsFrom(position.asset(), asset, getPositionData[position].assets);
 
-            uint256 assets = position.redeem(sharesOwned, address(this), address(this));
+            totalBalance -= assets;
+            getPositionData[position].assets = 0;
+
+            uint256 totalPositionAssets = position.redeem(sharesOwned, address(this), address(this));
 
             uint256 assetsOutMin = assets.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
-            _swap(ERC4626(this), assets, assetsOutMin, positionData.pathToAsset);
+            _swap(asset, totalPositionAssets, assetsOutMin, positionData.pathToAsset);
         }
     }
 

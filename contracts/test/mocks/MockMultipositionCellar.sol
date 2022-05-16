@@ -29,6 +29,15 @@ contract MockMultipositionCellar is MultipositionCellar {
         swapRouter = _swapRouter;
     }
 
+    // TODO: update this when testing positions in different denoms
+    function priceAssetsFrom(
+        ERC20,
+        ERC20,
+        uint256 assets
+    ) public pure override returns (uint256) {
+        return assets;
+    }
+
     function depositIntoPosition(
         ERC4626 position,
         uint256 assets,
@@ -69,17 +78,16 @@ contract MockMultipositionCellar is MultipositionCellar {
     // ============================================= SWAP UTILS =============================================
 
     function _swap(
-        ERC4626 position,
+        ERC20 positionAsset,
         uint256 assets,
         uint256 assetsOutMin,
         address[] memory path
     ) internal override returns (uint256) {
         ERC20 assetIn = ERC20(path[0]);
         ERC20 assetOut = ERC20(path[path.length - 1]);
-        ERC20 asset = position.asset();
 
         // Ensure that the asset being swapped matches the asset received by the position.
-        if (assetOut != asset) revert USR_InvalidSwap(address(assetOut), address(asset));
+        if (assetOut != positionAsset) revert USR_InvalidSwap(address(assetOut), address(positionAsset));
 
         // Check whether a swap is necessary. If not, just return back assets.
         if (assetIn == assetOut) return assets;
