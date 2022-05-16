@@ -5,16 +5,25 @@ import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import {ERC4626} from "../interfaces/ERC4626.sol";
 
+
 import "../Errors.sol";
 import "../interfaces/ISwapRouter.sol";
 
 library SwapUtils {
     using SafeTransferLib for ERC20;
 
+    uint24 public constant POOL_FEE = 3000;
+
     // Uniswap V3 contract
     ISwapRouter public constant swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
-    // TODO: add natspec
+    /**
+     * @dev swaps input token by Uniswap V3
+     * @param assetsIn amount of the incoming token
+     * @param assetsOutMin minimum value of the the
+     * @param path address array, token exchange path
+     * @return amountOut  actual received amount of outgoing token (>=assetsOutMin)
+     **/
     function swap(
         uint256 assetsIn,
         uint256 assetsOutMin,
@@ -23,10 +32,19 @@ library SwapUtils {
 
         ERC20(path[0]).safeApprove(address(swapRouter), assetsIn);
 
+        bytes memory encodePackedPath = abi.encodePacked(path[0]);
+        for (uint256 i = 1; i < path.length; i++) {
+            encodePackedPath = abi.encodePacked(
+                encodePackedPath,
+                POOL_FEE,
+                path[i]
+            );
+        }
+
         ISwapRouter.ExactInputParams memory params =
         ISwapRouter.ExactInputParams({
-        path : abi.encodePacked(path),
-        recipient : msg.sender,
+        path : encodePackedPath,
+        recipient : address(this),
         deadline : block.timestamp + 60,
         amountIn : assetsIn,
         amountOutMinimum : assetsOutMin
