@@ -57,11 +57,13 @@ contract CellarRouterTest is DSTestPlus {
         lendingPool.initReserve(address(USDC), address(aUSDC));
         lendingPool.initReserve(address(DAI), address(aDAI));
 
+        address[] memory approvedPositions = new address[](1);
+        approvedPositions[0] = address(DAI);
+
         // Declare unnecessary variables with address 0.
         cellar = new MockAaveCellar(
             ERC20(address(USDC)),
-            5_000_000e6,
-            50_000e6,
+            approvedPositions,
             ICurveSwaps(address(0)),
             ISushiSwapRouter(address(0)),
             ILendingPool(address(lendingPool)),

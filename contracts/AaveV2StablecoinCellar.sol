@@ -123,7 +123,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     /**
      * @notice Curve Registry Exchange contract. Used for rebalancing positions.
      */
-    ICurveSwaps public immutable curveRegistryExchange; // 0x8e764bE4288B842791989DB5b8ec067279829809
+    ICurveSwaps public immutable curveRegistryExchange; // 0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7
 
     /**
      * @notice SushiSwap Router V2 contract. Used for reinvesting rewards back into the current position.
@@ -166,8 +166,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      *      https://github.com/PeggyJV/steward
      *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
      * @param _asset current asset managed by the cellar
-     * @param _liquidityLimit amount liquidity limit should be initialized to
-     * @param _depositLimit amount deposit limit should be initialized to
+     * @param _approvedPositions list of approved positions to start with
      * @param _curveRegistryExchange Curve registry exchange
      * @param _sushiswapRouter Sushiswap V2 router address
      * @param _lendingPool Aave V2 lending pool address
@@ -179,8 +178,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     constructor(
         ERC20 _asset,
-        uint256 _liquidityLimit,
-        uint256 _depositLimit,
+        address[] memory _approvedPositions,
         ICurveSwaps _curveRegistryExchange,
         ISushiSwapRouter _sushiswapRouter,
         ILendingPool _lendingPool,
@@ -200,13 +198,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         AAVE = _AAVE;
         WETH = _WETH;
 
-        // Initialize limits.
-        liquidityLimit = _liquidityLimit;
-        depositLimit = _depositLimit;
-
         // Initialize asset.
         isTrusted[address(_asset)] = true;
         _updatePosition(address(_asset));
+
+        // Initialize limits.
+        uint256 powOfAssetDecimals = 10**assetDecimals;
+        liquidityLimit = 5_000_000 * powOfAssetDecimals;
+        depositLimit = 50_000 * powOfAssetDecimals;
+
+        // Initialize approved positions.
+        for (uint256 i; i < _approvedPositions.length; i++) isTrusted[_approvedPositions[i]] = true;
 
         // Transfer ownership to the Gravity Bridge.
         transferOwnership(address(_gravityBridge));
@@ -489,9 +491,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     function _convertToShares(uint256 assets) internal view returns (uint256) {
         uint256 currentTotalAssets =  _totalAssets();
-        return currentTotalAssets == 0 || totalSupply == 0 ?
+        uint256 currentTotalSupply = totalSupply;
+        return currentTotalAssets == 0 || currentTotalSupply == 0 ?
             assets :
-            assets.mulDivDown(totalSupply, currentTotalAssets);
+            assets.mulDivDown(currentTotalSupply, currentTotalAssets);
     }
 
     /**
@@ -630,8 +633,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // is the maximum assets that can be deposited without overflowing.
             return uint256(type(uint112).max) / 10**(decimals - assetDecimals);
 
-        uint256 leftUntilDepositLimit = depositLimit.subMin0(maxWithdraw(owner));
-        uint256 leftUntilLiquidityLimit = liquidityLimit.subMin0(totalAssets());
+        uint256 leftUntilDepositLimit = depositLimit.subFloor(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.subFloor(totalAssets());
 
         // Only return the more relevant of the two.
         return MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit);

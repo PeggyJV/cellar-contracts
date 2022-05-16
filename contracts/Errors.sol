@@ -34,9 +34,9 @@ error USR_DepositRestricted(uint256 assets, uint256 maxDeposit);
 error USR_NotEnoughActiveShares(uint256 activeShares, uint256 attemptedActiveShares);
 
 /**
- * @notice Attempted swap into an asset that is not the current asset of the cellar.
+ * @notice Attempted swap into an asset that is not the current asset of the position.
  * @param assetOut address of the asset attempted to swap to
- * @param currentAsset address of the current asset of cellar
+ * @param currentAsset address of the current asset of position
  */
 error USR_InvalidSwap(address assetOut, address currentAsset);
 
