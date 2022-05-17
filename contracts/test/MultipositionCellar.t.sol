@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.11;
+pragma solidity 0.8.13;
 
 import { MultipositionCellar } from "../templates/MultipositionCellar.sol";
 import { MockERC20 } from "./mocks/MockERC20.sol";
@@ -12,6 +12,10 @@ import { ERC4626 } from "../interfaces/ERC4626.sol";
 
 import { DSTestPlus } from "./utils/DSTestPlus.sol";
 import { MathUtils } from "../utils/MathUtils.sol";
+
+// TODO: test positions that are all in different denominations (eg. ETH, USDC, AAVE...)
+// TODO: test USDC with 6 decimals once cellar can handle multiple decimals
+// TODO: test with fuzzing
 
 contract MultipositionCellarTest is DSTestPlus {
     using MathUtils for uint256;
@@ -29,7 +33,6 @@ contract MultipositionCellarTest is DSTestPlus {
     MockERC4626 private feiCLR;
 
     function setUp() public {
-        // TODO: test USDC with 6 decimals once cellar can handle multiple decimals
         USDC = new MockERC20("USDC", 18);
         hevm.label(address(USDC), "USDC");
         usdcCLR = new MockERC4626(ERC20(address(USDC)), "USDC Cellar LP Token", "USDC-CLR", 18);
@@ -92,10 +95,8 @@ contract MultipositionCellarTest is DSTestPlus {
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
 
-    // TODO: test with fuzzing
     // function testDepositWithdraw(uint256 assets) public {
     function testDepositWithdraw() public {
-        // TODO: implement maxDeposit
         // assets = bound(assets, 1, cellar.maxDeposit(address(this)));
         // NOTE: last time this was run, all test pass with the line below uncommented
         // assets = bound(assets, 1, type(uint128).max);
@@ -240,7 +241,6 @@ contract MultipositionCellarTest is DSTestPlus {
 
     // =========================================== REBALANCE TEST ===========================================
 
-    // TODO: test with fuzzing
     function testRebalance() public {
         uint256 assets = 100e18;
 
@@ -676,70 +676,124 @@ contract MultipositionCellarTest is DSTestPlus {
         cellar.sweep(address(feiCLR), 100e18, address(this));
     }
 
+    // ============================================= EMERGENCY TEST =============================================
+
+    function testFailShutdownDeposit() public {
+        cellar.setShutdown(true, false);
+
+        USDC.mint(address(this), 1e18);
+        USDC.approve(address(cellar), 1e18);
+        cellar.deposit(1e18, address(this));
+    }
+
+    function testFailShutdownDepositIntoPosition() public {
+        USDC.mint(address(this), 1e18);
+        USDC.approve(address(cellar), 1e18);
+        cellar.deposit(1e18, address(this));
+
+        cellar.setShutdown(true, false);
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(USDC);
+
+        cellar.rebalance(cellar, usdcCLR, 1e18, 0, path);
+    }
+
+    function testShutdownExitsAllPositions() public {
+        ERC4626[] memory positions = cellar.getPositions();
+
+        // Deposit 100 assets into each position with 50 assets of unrealized yield.
+        for (uint256 i; i < positions.length; i++) {
+            ERC4626 position = positions[i];
+            MockERC20 asset = MockERC20(address(position.asset()));
+
+            asset.mint(address(this), 100e18);
+            asset.approve(address(cellar), 100e18);
+            cellar.depositIntoPosition(position, 100e18, address(this));
+
+            MockERC4626(address(position)).simulateGain(50e18, address(cellar));
+        }
+
+        assertEq(cellar.totalBalance(), 300e18);
+        assertEq(cellar.totalAssets(), 300e18);
+        assertEq(cellar.totalHoldings(), 0);
+
+        cellar.setShutdown(true, true);
+
+        assertTrue(cellar.isShutdown());
+        assertEq(cellar.totalBalance(), 0);
+        // Expect to receive 435 assets after 450 total assets from positions are swapped with 5% slippage.
+        assertEq(cellar.totalAssets(), 435e18);
+        assertEq(cellar.totalHoldings(), 435e18);
+    }
+
+    function testShutdownExitsAllPositionsWithNoBalances() public {
+        cellar.setShutdown(true, true);
+
+        assertTrue(cellar.isShutdown());
+    }
+
     // ============================================== LIMITS TEST ==============================================
 
-    // TODO: when base cellar is implemented...
-    // [ ] test hitting depositLimit
-    // [ ] test hitting liquidityLimit
+    function testLimits() external {
+        USDC.mint(address(this), 100e18);
+        USDC.approve(address(cellar), 100e18);
+        cellar.deposit(100e18, address(this));
 
-    // // Test deposit hitting liquidity limit.
-    // function testDepositWithDepositLimits(uint256 assets) public {
-    //     // TODO: fuzz with `maxDeposit` as upper board instead
-    //     assets = bound(assets, 1, type(uint128).max);
+        assertEq(cellar.maxDeposit(address(this)), type(uint256).max);
+        assertEq(cellar.maxMint(address(this)), type(uint256).max);
 
-    //     uint248 depositLimit = 50_000e18;
-    //     usdcCLR.setDepositLimit(depositLimit);
+        cellar.setDepositLimit(200e18);
+        cellar.setLiquidityLimit(100e18);
 
-    //     uint256 expectedAssets = MathUtils.min(depositLimit, assets);
+        assertEq(cellar.depositLimit(), 200e18);
+        assertEq(cellar.liquidityLimit(), 100e18);
+        assertEq(cellar.maxDeposit(address(this)), 0);
+        assertEq(cellar.maxMint(address(this)), 0);
 
-    //     // Test with holdings limit.
-    //     USDC.mint(address(this), assets);
-    //     USDC.approve(address(cellar), assets);
-    //     uint256 shares = cellar.deposit(assets, address(this));
+        cellar.setLiquidityLimit(300e18);
 
-    //     assertEq(cellar.totalAssets(), expectedAssets);
-    //     assertEq(cellar.previewDeposit(expectedAssets), shares);
-    // }
+        assertEq(cellar.depositLimit(), 200e18);
+        assertEq(cellar.liquidityLimit(), 300e18);
+        assertEq(cellar.maxDeposit(address(this)), 100e18);
+        assertEq(cellar.maxMint(address(this)), 100e18);
 
-    // // Test deposit hitting deposit limit.
-    // function testDepositWithLiquidityLimits(uint256 assets) public {
-    //     assets = bound(assets, 1, type(uint128).max);
+        cellar.setShutdown(true, false);
 
-    //     uint248 liquidityLimit = 75_000e18;
-    //     usdcCLR.setLiquidityLimit(liquidityLimit);
+        assertEq(cellar.maxDeposit(address(this)), 0);
+        assertEq(cellar.maxMint(address(this)), 0);
+    }
 
-    //     uint256 expectedAssets = MathUtils.min(liquidityLimit, assets);
+    function testFailDepositAboveDepositLimit() public {
+        cellar.setDepositLimit(100e18);
 
-    //     // Test with liquidity limit.
-    //     USDC.mint(address(this), assets);
-    //     USDC.approve(address(cellar), assets);
-    //     uint256 shares = cellar.deposit(assets, address(this));
+        USDC.mint(address(this), 101e18);
+        USDC.approve(address(cellar), 101e18);
+        cellar.deposit(101e18, address(this));
+    }
 
-    //     assertEq(cellar.totalAssets(), expectedAssets);
-    //     assertEq(cellar.previewDeposit(expectedAssets), shares);
-    // }
+    function testFailMintAboveDepositLimit() public {
+        cellar.setDepositLimit(100e18);
 
-    // // Test deposit hitting both limits.
-    // function testDepositWithAllLimits(uint256 assets) public {
-    //     assets = bound(assets, 1, type(uint128).max);
+        USDC.mint(address(this), 101e18);
+        USDC.approve(address(cellar), 101e18);
+        cellar.mint(101e18, address(this));
+    }
 
-    //     uint248 holdingsLimit = 25_000e18;
-    //     cellar.setHoldingLimit(ERC4626(address(usdcCLR)), holdingsLimit);
+    function testFailDepositAboveLiquidityLimit() public {
+        cellar.setLiquidityLimit(100e18);
 
-    //     uint248 depositLimit = 50_000e18;
-    //     usdcCLR.setDepositLimit(depositLimit);
+        USDC.mint(address(this), 101e18);
+        USDC.approve(address(cellar), 101e18);
+        cellar.deposit(101e18, address(this));
+    }
 
-    //     uint248 liquidityLimit = 75_000e18;
-    //     usdcCLR.setLiquidityLimit(liquidityLimit);
+    function testFailMintAboveLiquidityLimit() public {
+        cellar.setLiquidityLimit(100e18);
 
-    //     uint256 expectedAssets = MathUtils.min(holdingsLimit, assets);
-
-    //     // Test with liquidity limit.
-    //     USDC.mint(address(this), assets);
-    //     USDC.approve(address(cellar), assets);
-    //     uint256 shares = cellar.deposit(assets, address(this));
-
-    //     assertEq(cellar.totalAssets(), expectedAssets);
-    //     assertEq(cellar.previewDeposit(expectedAssets), shares);
-    // }
+        USDC.mint(address(this), 101e18);
+        USDC.approve(address(cellar), 101e18);
+        cellar.mint(101e18, address(this));
+    }
 }

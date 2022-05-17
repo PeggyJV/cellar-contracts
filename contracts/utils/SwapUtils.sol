@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.11;
+pragma solidity 0.8.13;
 
 import {ERC20} from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
@@ -27,7 +27,7 @@ library SwapUtils {
      * @return amountOut  actual received amount of outgoing token (>=assetsOutMin)
      **/
     function safeSwap(
-        ERC4626 position,
+        ERC20 positionAsset,
         uint256 assets,
         uint256 assetsOutMin,
         address[] memory path
@@ -35,10 +35,9 @@ library SwapUtils {
 
         ERC20 assetIn = ERC20(path[0]);
         ERC20 assetOut = ERC20(path[path.length - 1]);
-        ERC20 asset = position.asset();
 
         // Ensure that the asset being swapped matches the asset received by the position.
-        if (assetOut != asset) revert USR_InvalidSwap(address(assetOut), address(asset));
+        if (assetOut != positionAsset) revert USR_InvalidSwap(address(assetOut), address(positionAsset));
 
         // Check whether a swap is necessary. If not, just return back assets.
         if (assetIn == assetOut) return assets;

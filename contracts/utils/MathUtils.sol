@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.11;
+pragma solidity 0.8.13;
 
 library MathUtils {
     /**
      * @notice Substract with a floor of 0 for the result.
      */
     function subFloor(uint256 x, uint256 y) internal pure returns (uint256) {
-        return x > y ? x - y : 0;
+        return x >= y ? x - y : 0;
     }
 
     /**

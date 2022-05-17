@@ -8,6 +8,8 @@ import "hardhat-exposed";
 
 
 import "./tasks/accounts";
+// NOTE: Commented out to fix compile error with Hardhat that occurs when using Foundry.
+//       Uncomment when deploying.
 // import "./tasks/deploy";
 
 import { TaskArguments } from "hardhat/types";
@@ -137,7 +139,7 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.8.11",
+        version: "0.8.13",
         settings: {
           metadata: {
             // Not including the metadata hash
