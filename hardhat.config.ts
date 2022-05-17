@@ -6,6 +6,8 @@ import "solidity-coverage";
 import "hardhat-contract-sizer";
 
 import "./tasks/accounts";
+// NOTE: Commented out to fix compile error with Hardhat that occurs when using Foundry.
+//       Uncomment when deploying.
 // import "./tasks/deploy";
 
 import { TaskArguments } from "hardhat/types";

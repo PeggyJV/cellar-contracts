@@ -23,8 +23,6 @@ task("deploy:AaveV2StablecoinCellar").setAction(async function (args: TaskArgume
       "0x57ab1ec28d129707052df4df418d58a2d46d5f51", // sUSD
       "0x8e870d67f660d95d5be530380d0ec0bd388289e1", // USDP
     ],
-    ethers.BigNumber.from("50000000000"), // $50k
-    ethers.BigNumber.from("5000000000000"), // $5m
     "0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7", // Curve registry exchange
     "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F", // Sushiswap Router
     "0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9", // Aave V2 Lending Pool
