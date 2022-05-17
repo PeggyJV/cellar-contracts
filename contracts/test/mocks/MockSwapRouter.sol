@@ -3,6 +3,7 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { MathUtils } from "contracts/utils/MathUtils.sol";
+import { ISwapRouter } from "../../interfaces/ISwapRouter.sol";
 
 library BytesLib {
     function slice(
@@ -186,15 +187,7 @@ contract MockSwapRouter {
         return amountOut;
     }
 
-    struct ExactInputParams {
-        bytes path;
-        address recipient;
-        uint256 deadline;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-    }
-
-    function exactInput(ExactInputParams memory params) external payable returns (uint256) {
+    function exactInput(ISwapRouter.ExactInputParams memory params) external payable returns (uint256) {
         (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
 
         while (params.path.hasMultiplePools()) {
