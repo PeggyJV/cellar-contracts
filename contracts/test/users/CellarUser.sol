@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.11;
+pragma solidity 0.8.13;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { AaveV2StablecoinCellar } from "contracts/AaveV2StablecoinCellar.sol";
