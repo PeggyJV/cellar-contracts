@@ -5,15 +5,13 @@ import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { ICellar } from "./interfaces/ICellar.sol";
 import { SwapUtils } from "./utils/SwapUtils.sol";
-import {ERC4626} from "./interfaces/ERC4626.sol";
+import { ERC4626 } from "./interfaces/ERC4626.sol";
 
 import "./Errors.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
-
-
 
     // ======================================= ROUTER OPERATIONS =======================================
 
@@ -73,26 +71,14 @@ contract CellarRouter is ICellarRouter {
         address receiver,
         address owner
     ) public returns (uint256 shares) {
-        // Retrieve the asset being swapped.
-        ERC20 assetIn = ERC20(path[0]);
-
         // Retrieve the cellar's current asset.
         ERC20 asset = cellar.asset();
 
-        // Check to make sure a swap is necessary
-        if (assetIn != asset) {
-            // Retrieve the asset received after the swap.
-            ERC20 assetOut = ERC20(path[path.length - 1]);
+        // Transfer assets from the user to the router.
+        ERC20(path[0]).safeTransferFrom(owner, address(this), assets);
 
-            // Ensure that the asset that will be deposited into the cellar is valid.
-            if (assetOut != asset) revert USR_InvalidSwap(address(assetOut), address(asset));
-
-            // Transfer assets from the user to the router.
-            assetIn.safeTransferFrom(owner, address(this), assets);
-
-            // swap assets using the swap utility
-            assets = SwapUtils.safeSwap(ERC4626(address (assetOut)),assets, minAssetsOut, path);
-        }
+        // Perform swap if to cellar's asset if necessary.
+        assets = SwapUtils.safeSwap(asset, assets, minAssetsOut, path);
 
         // Approve the cellar to spend assets.
         asset.safeApprove(address(cellar), assets);
