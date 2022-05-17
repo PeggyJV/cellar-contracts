@@ -18,7 +18,7 @@ import { MockIncentivesController } from "./mocks/MockIncentivesController.sol";
 import { MockGravity } from "./mocks/MockGravity.sol";
 import { MockStkAAVE } from "./mocks/MockStkAAVE.sol";
 
-import { CellarRouter } from "../CellarRouter.sol";
+import { MockCellarRouter } from "./mocks/MockCellarRouter.sol";
 import { MockAaveCellar } from "./mocks/MockAaveCellar.sol";
 
 import { DSTestPlus } from "./utils/DSTestPlus.sol";
@@ -35,7 +35,7 @@ contract CellarRouterTest is DSTestPlus {
     MockSwapRouter private swapRouter;
 
     MockAaveCellar private cellar;
-    CellarRouter private router;
+    MockCellarRouter private router;
 
     bytes32 private constant PERMIT_TYPEHASH =
         keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
@@ -46,7 +46,7 @@ contract CellarRouterTest is DSTestPlus {
         // Set up cellar router:
         swapRouter = new MockSwapRouter();
 
-        router = new CellarRouter(ISushiSwapRouter(address(swapRouter)));
+        router = new MockCellarRouter(swapRouter);
 
         // Set up a cellar:
         USDC = new MockERC20("USDC", 6);
@@ -149,6 +149,31 @@ contract CellarRouterTest is DSTestPlus {
         assertEq(cellar.balanceOf(owner), shares);
         assertEq(cellar.convertToAssets(cellar.balanceOf(owner)), assetsReceived);
         assertEq(DAI.balanceOf(owner), 0);
+    }
+
+    function testDepositAndSwapIntoCellarWhenSwapUnnecessary(uint256 assets) external {
+        assets = bound(assets, 2, cellar.maxDeposit(owner));
+
+        // Specify the swap path.
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(USDC);
+
+        // Test deposit without needing to swap.
+        hevm.prank(owner);
+        USDC.approve(address(router), assets);
+        USDC.mint(owner, assets);
+        uint256 shares = router.depositAndSwapIntoCellar(ICellar(address(cellar)), path, assets, assets, owner, owner);
+
+        // Run test.
+        assertEq(shares, assets.changeDecimals(6, 18)); // Expect exchange rate to be 1:1 on initial deposit.
+        assertEq(cellar.previewWithdraw(assets), shares);
+        assertEq(cellar.previewDeposit(assets), shares);
+        assertEq(cellar.totalSupply(), shares);
+        assertEq(cellar.totalAssets(), assets);
+        assertEq(cellar.balanceOf(owner), shares);
+        assertEq(cellar.convertToAssets(cellar.balanceOf(owner)), assets);
+        assertEq(USDC.balanceOf(owner), 0);
     }
 
     // Test using with 18 decimals instead of 6.

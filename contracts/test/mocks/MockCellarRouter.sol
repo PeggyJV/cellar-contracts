@@ -3,15 +3,61 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import { ICellar } from "./interfaces/ICellar.sol";
-import { SwapUtils } from "./utils/SwapUtils.sol";
-import { ERC4626 } from "./interfaces/ERC4626.sol";
+import { ICellar } from "../../interfaces/ICellar.sol";
+import { ERC4626 } from "../../interfaces/ERC4626.sol";
+import { MockSwapRouter } from "./MockSwapRouter.sol";
+import { ISwapRouter } from "../../interfaces/ISwapRouter.sol";
 
-import "./Errors.sol";
-import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
+import "../../Errors.sol";
+import { ICellarRouter } from "../../interfaces/ICellarRouter.sol";
 
-contract CellarRouter is ICellarRouter {
+contract MockCellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
+
+    // ========================================= SWAP OPERATIONS =========================================
+
+    MockSwapRouter public immutable swapRouter;
+
+    constructor(MockSwapRouter _swapRouter) {
+        swapRouter = _swapRouter;
+    }
+
+    function safeSwap(
+        ERC20 positionAsset,
+        uint256 assets,
+        uint256 assetsOutMin,
+        address[] memory path
+    ) internal returns (uint256) {
+        ERC20 assetIn = ERC20(path[0]);
+        ERC20 assetOut = ERC20(path[path.length - 1]);
+
+        // Ensure that the asset being swapped matches the asset received by the position.
+        if (assetOut != positionAsset) revert USR_InvalidSwap(address(assetOut), address(positionAsset));
+
+        // Check whether a swap is necessary. If not, just return back assets.
+        if (assetIn == assetOut) return assets;
+
+        // Approve assets to be swapped through the router.
+        assetIn.safeApprove(address(swapRouter), assets);
+
+        bytes memory encodePackedPath = abi.encodePacked(path[0]);
+        uint24 POOL_FEE = 3000;
+        for (uint256 i = 1; i < path.length; i++) {
+            encodePackedPath = abi.encodePacked(encodePackedPath, POOL_FEE, path[i]);
+        }
+
+        // Prepare the parameters for the swap.
+        ISwapRouter.ExactInputParams memory params = ISwapRouter.ExactInputParams({
+            path: encodePackedPath,
+            recipient: address(this),
+            deadline: block.timestamp + 60,
+            amountIn: assets,
+            amountOutMinimum: assetsOutMin
+        });
+
+        // Executes the swap.
+        return swapRouter.exactInput(params);
+    }
 
     // ======================================= ROUTER OPERATIONS =======================================
 
@@ -78,7 +124,7 @@ contract CellarRouter is ICellarRouter {
         ERC20(path[0]).safeTransferFrom(owner, address(this), assets);
 
         // Perform swap if to cellar's asset if necessary.
-        assets = SwapUtils.safeSwap(asset, assets, minAssetsOut, path);
+        assets = safeSwap(asset, assets, minAssetsOut, path);
 
         // Approve the cellar to spend assets.
         asset.safeApprove(address(cellar), assets);

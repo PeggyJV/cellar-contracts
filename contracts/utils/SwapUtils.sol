@@ -4,22 +4,26 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { ERC4626 } from "../interfaces/ERC4626.sol";
-import { ISushiSwapRouter } from "../interfaces/ISushiSwapRouter.sol";
+import { ISwapRouter } from "../interfaces/ISwapRouter.sol";
 
 import "../Errors.sol";
 
-// TODO: use uniswap instead of sushiswap
-// TODO: update router to use this library
 library SwapUtils {
     using SafeTransferLib for ERC20;
 
-    ISushiSwapRouter public constant swapRouter = ISushiSwapRouter(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    // Uniswap V3 contract
+    ISwapRouter public constant swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
-    // TODO: add natspec
     /**
-     *  @dev Includes checks to ensure that the asset being swapped to matches the asset received by
-     *       the position and that a swap is necessary in the first place.
-     */
+     * @notice Swaps assets using Uniswap V3.
+     * @dev Includes checks to ensure that the asset being swapped to matches the asset received by
+     *      the position and that a swap is necessary in the first place.
+     * @param positionAsset asset that the position expects to receive from swap
+     * @param assets amount of the incoming token
+     * @param assetsOutMin minimum value of the the
+     * @param path list of addresses that specify the swap path on Uniswap V3
+     * @return amountOut  actual received amount of outgoing token (>=assetsOutMin)
+     **/
     function safeSwap(
         ERC20 positionAsset,
         uint256 assets,
@@ -35,19 +39,25 @@ library SwapUtils {
         // Check whether a swap is necessary. If not, just return back assets.
         if (assetIn == assetOut) return assets;
 
-        // Approve assets to be swapped.
+        // Approve assets to be swapped through the router.
         assetIn.safeApprove(address(swapRouter), assets);
 
-        // Perform swap to position's current asset.
-        uint256[] memory swapOutput = swapRouter.swapExactTokensForTokens(
-            assets,
-            assetsOutMin,
-            path,
-            address(this),
-            block.timestamp + 60
-        );
+        bytes memory encodePackedPath = abi.encodePacked(path[0]);
+        uint24 POOL_FEE = 3000;
+        for (uint256 i = 1; i < path.length; i++) {
+            encodePackedPath = abi.encodePacked(encodePackedPath, POOL_FEE, path[i]);
+        }
 
-        // Retrieve the final assets received from swap.
-        return swapOutput[swapOutput.length - 1];
+        // Prepare the parameters for the swap.
+        ISwapRouter.ExactInputParams memory params = ISwapRouter.ExactInputParams({
+            path: encodePackedPath,
+            recipient: address(this),
+            deadline: block.timestamp + 60,
+            amountIn: assets,
+            amountOutMinimum: assetsOutMin
+        });
+
+        // Executes the swap and return the amount out.
+        return swapRouter.exactInput(params);
     }
 }

@@ -4,6 +4,8 @@ import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-contract-sizer";
+import "hardhat-exposed";
+
 
 import "./tasks/accounts";
 // NOTE: Commented out to fix compile error with Hardhat that occurs when using Foundry.
