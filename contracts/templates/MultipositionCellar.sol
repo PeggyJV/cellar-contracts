@@ -285,13 +285,9 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     /**
-     * @notice Price assets in another asset denomination.
+     * @notice Denomination position assets in the cellar's asset.
      */
-    function priceAssetsFrom(
-        ERC20 fromAsset,
-        ERC20 toAsset,
-        uint256 assets
-    ) public view virtual returns (uint256);
+    function convertToAssets(ERC20 positionAsset, uint256 positionAssets) public view virtual returns (uint256);
 
     // =========================================== CORE LOGIC ===========================================
 
@@ -352,7 +348,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
                 // Exchange rate between the position asset and cellar's asset.
                 uint256 onePositionAsset = 10**position.decimals();
-                uint256 exchangeRate = priceAssetsFrom(position.asset(), asset, onePositionAsset);
+                uint256 exchangeRate = convertToAssets(position.asset(), onePositionAsset);
 
                 // We want to pull as much as we can from this position, but no more than needed.
                 // TODO: test rounding here
@@ -445,11 +441,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
             getPositionData[position].assets = uint112(currentPositionAssets);
 
-            uint256 oneAsset = 10**decimals;
-            uint256 exchangeRate = priceAssetsFrom(asset, position.asset(), oneAsset);
+            uint256 onePositionAsset = 10**position.decimals();
+            uint256 exchangeRate = convertToAssets(position.asset(), onePositionAsset);
 
-            uint256 lastAssets = lastPositionAssets.mulDivDown(exchangeRate, oneAsset);
-            uint256 currentAssets = currentPositionAssets.mulDivDown(exchangeRate, oneAsset);
+            uint256 lastAssets = lastPositionAssets.mulDivDown(onePositionAsset, exchangeRate);
+            uint256 currentAssets = currentPositionAssets.mulDivDown(onePositionAsset, exchangeRate);
 
             currentTotalBalance = currentTotalBalance + currentAssets - lastAssets;
 
@@ -486,7 +482,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         return balanceOf[address(this)];
     }
 
-    // ======================================== HELPER FUNCTIONS ========================================
+    // ======================================== SWEEP LOGIC ========================================
 
     function sweep(
         address token,
@@ -501,7 +497,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         ERC20(token).safeTransfer(to, amount);
     }
 
-    // ======================================== INTERNAL HOOKS ========================================
+    // ======================================== HELPER FUNCTIONS ========================================
 
     /**
      * @notice Deposits into an ERC4626-compatible position.
@@ -513,7 +509,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         getPositionData[position].assets += uint112(positionAssets);
         ERC20 positionAsset = position.asset();
         // TODO: test rounding here
-        totalBalance += priceAssetsFrom(positionAsset, asset, positionAssets);
+        totalBalance += convertToAssets(positionAsset, positionAssets);
 
         positionAsset.safeApprove(address(position), positionAssets);
         position.deposit(positionAssets, address(this));
@@ -525,7 +521,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     function _withdrawFromPosition(ERC4626 position, uint256 positionAssets) internal virtual {
         getPositionData[position].assets -= uint112(positionAssets);
         // TODO: test rounding here
-        totalBalance -= priceAssetsFrom(position.asset(), asset, positionAssets);
+        totalBalance -= convertToAssets(position.asset(), positionAssets);
 
         position.withdraw(positionAssets, address(this), address(this));
     }
@@ -545,7 +541,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         if (sharesOwned != 0) {
             PositionData memory positionData = getPositionData[position];
 
-            uint256 assets = priceAssetsFrom(position.asset(), asset, getPositionData[position].assets);
+            uint256 assets = convertToAssets(position.asset(), getPositionData[position].assets);
 
             totalBalance -= assets;
             getPositionData[position].assets = 0;
