@@ -13,6 +13,7 @@ import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockAToken } from "./mocks/MockAToken.sol";
 import { MockCurveSwaps } from "./mocks/MockCurveSwaps.sol";
 import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
+import { MockPriceOracle } from "./mocks/MockPriceOracle.sol";
 import { MockLendingPool } from "./mocks/MockLendingPool.sol";
 import { MockIncentivesController } from "./mocks/MockIncentivesController.sol";
 import { MockGravity } from "./mocks/MockGravity.sol";
@@ -32,6 +33,7 @@ contract CellarRouterTest is DSTestPlus {
     MockAToken private aUSDC;
     MockAToken private aDAI;
     MockLendingPool private lendingPool;
+    MockPriceOracle private priceOracle;
     MockSwapRouter private swapRouter;
 
     MockAaveCellar private cellar;
@@ -43,12 +45,10 @@ contract CellarRouterTest is DSTestPlus {
     address private owner = hevm.addr(privateKey);
 
     function setUp() public {
-        // Set up cellar router:
         swapRouter = new MockSwapRouter();
 
         router = new MockCellarRouter(swapRouter);
 
-        // Set up a cellar:
         USDC = new MockERC20("USDC", 6);
         DAI = new MockERC20("DAI", 18);
         lendingPool = new MockLendingPool();
@@ -57,13 +57,18 @@ contract CellarRouterTest is DSTestPlus {
         lendingPool.initReserve(address(USDC), address(aUSDC));
         lendingPool.initReserve(address(DAI), address(aDAI));
 
+        // Setup exchange rates:
+        swapRouter.setExchangeRate(address(USDC), address(DAI), 1e18);
+        swapRouter.setExchangeRate(address(DAI), address(USDC), 1e6);
+
+        // Set up a cellar:
         address[] memory approvedPositions = new address[](1);
         approvedPositions[0] = address(DAI);
 
-        // Declare unnecessary variables with address 0.
         cellar = new MockAaveCellar(
             ERC20(address(USDC)),
             approvedPositions,
+            // Declare unnecessary variables with address 0.
             ICurveSwaps(address(0)),
             ISushiSwapRouter(address(0)),
             ILendingPool(address(lendingPool)),

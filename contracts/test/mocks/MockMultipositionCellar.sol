@@ -5,8 +5,10 @@ import { MultipositionCellar } from "../../templates/MultipositionCellar.sol";
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { ERC4626 } from "../../interfaces/ERC4626.sol";
-import { ISushiSwapRouter } from "../../interfaces/ISushiSwapRouter.sol";
 import { MathUtils } from "../../utils/MathUtils.sol";
+
+import { MockSwapRouter } from "./MockSwapRouter.sol";
+import { MockPriceOracle } from "./MockPriceOracle.sol";
 
 import "../../Errors.sol";
 
@@ -14,7 +16,8 @@ contract MockMultipositionCellar is MultipositionCellar {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
 
-    ISushiSwapRouter public immutable swapRouter;
+    MockSwapRouter public immutable swapRouter;
+    MockPriceOracle public immutable priceOracle;
 
     constructor(
         ERC20 _asset,
@@ -24,18 +27,21 @@ contract MockMultipositionCellar is MultipositionCellar {
         string memory _name,
         string memory _symbol,
         uint8 _decimals,
-        ISushiSwapRouter _swapRouter
+        MockSwapRouter _swapRouter,
+        MockPriceOracle _priceOracle
     ) MultipositionCellar(_asset, _positions, _paths, _maxSlippages, _name, _symbol, _decimals) {
         swapRouter = _swapRouter;
+        priceOracle = _priceOracle;
     }
 
-    // TODO: update this when testing positions in different denoms
-    function priceAssetsFrom(
-        ERC20,
-        ERC20,
-        uint256 assets
-    ) public pure override returns (uint256) {
-        return assets;
+    function convertToAssets(ERC20 positionAsset, uint256 assets) public view override returns (uint256) {
+        return
+            MathUtils.changeDecimals(
+                // Use 1e8 pairs with non-ETH denominations (eg. USDC).
+                assets.mulDivDown(priceOracle.getLatestPrice(address(positionAsset)), 1e8),
+                positionAsset.decimals(),
+                decimals
+            );
     }
 
     function depositIntoPosition(
@@ -43,7 +49,7 @@ contract MockMultipositionCellar is MultipositionCellar {
         uint256 assets,
         address receiver
     ) external returns (uint256 shares) {
-        require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
+        require((shares = previewDeposit(convertToAssets(position.asset(), assets))) != 0, "ZERO_SHARES");
 
         ERC20 positionAsset = position.asset();
         positionAsset.safeTransferFrom(msg.sender, address(this), assets);
@@ -59,7 +65,7 @@ contract MockMultipositionCellar is MultipositionCellar {
         address receiver,
         address owner
     ) external returns (uint256 shares) {
-        shares = previewWithdraw(assets);
+        shares = previewWithdraw(convertToAssets(position.asset(), assets));
 
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
