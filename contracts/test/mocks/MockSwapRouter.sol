@@ -5,9 +5,6 @@ import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { MathUtils } from "contracts/utils/MathUtils.sol";
 import { ISwapRouter } from "../../interfaces/ISwapRouter.sol";
 
-// TODO: delete
-import "hardhat/console.sol";
-
 library BytesLib {
     function slice(
         bytes memory _bytes,
@@ -192,8 +189,6 @@ contract MockSwapRouter {
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;
     }
-
-    // TODO: price assets upon swap
 
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256) {
         ERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
