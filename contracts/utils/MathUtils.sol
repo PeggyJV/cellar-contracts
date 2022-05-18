@@ -5,7 +5,7 @@ library MathUtils {
     /**
      * @notice Substract with a floor of 0 for the result.
      */
-    function subFloor(uint256 x, uint256 y) internal pure returns (uint256) {
+    function floorSub(uint256 x, uint256 y) internal pure returns (uint256) {
         return x >= y ? x - y : 0;
     }
 

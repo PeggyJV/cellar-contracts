@@ -633,8 +633,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
             // is the maximum assets that can be deposited without overflowing.
             return uint256(type(uint112).max) / 10**(decimals - assetDecimals);
 
-        uint256 leftUntilDepositLimit = depositLimit.subFloor(maxWithdraw(owner));
-        uint256 leftUntilLiquidityLimit = liquidityLimit.subFloor(totalAssets());
+        uint256 leftUntilDepositLimit = depositLimit.floorSub(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.floorSub(totalAssets());
 
         // Only return the more relevant of the two.
         return MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit);

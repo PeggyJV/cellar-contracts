@@ -399,8 +399,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max) return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = depositLimit.subFloor(maxWithdraw(owner));
-        uint256 leftUntilLiquidityLimit = liquidityLimit.subFloor(totalAssets());
+        uint256 leftUntilDepositLimit = depositLimit.floorSub(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.floorSub(totalAssets());
 
         // Only return the more relevant of the two.
         return MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
@@ -411,8 +411,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max) return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = depositLimit.subFloor(maxWithdraw(owner));
-        uint256 leftUntilLiquidityLimit = liquidityLimit.subFloor(totalAssets());
+        uint256 leftUntilDepositLimit = depositLimit.floorSub(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.floorSub(totalAssets());
 
         // Only return the more relevant of the two.
         return convertToShares(MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit));
@@ -428,7 +428,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      *      start an accrual period.
      */
     function accrue() external virtual onlyOwner {
-        uint256 remainingAccrualPeriod = uint256(accrualPeriod).subFloor(block.timestamp - lastAccrual);
+        uint256 remainingAccrualPeriod = uint256(accrualPeriod).floorSub(block.timestamp - lastAccrual);
         if (remainingAccrualPeriod != 0) revert STATE_AccrualOngoing(remainingAccrualPeriod);
 
         uint256 yield;
@@ -450,7 +450,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
             currentTotalBalance = currentTotalBalance + currentAssets - lastAssets;
 
-            yield += currentAssets.subFloor(lastAssets);
+            yield += currentAssets.floorSub(lastAssets);
         }
 
         if (yield != 0) {
