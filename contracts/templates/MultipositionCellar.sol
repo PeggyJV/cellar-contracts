@@ -12,15 +12,19 @@ import { SwapUtils } from "../utils/SwapUtils.sol";
 
 import "../Errors.sol";
 
-// TODO: add extensive documentation for cellar creators
-// TODO: add events
-
+/**
+ * @title MultipositionCellar
+ * @dev Implements the logic of interaction with different positions.
+ */
 abstract contract MultipositionCellar is ERC4626, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
 
     // ============================================ ACCOUNTING STATE ============================================
 
+    /**
+     * @notice Cellar total balance.
+     */
     uint256 public totalBalance;
 
     // ============================================ HOLDINGS CONFIG ============================================
@@ -33,6 +37,10 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     // TODO: consider changing default
     uint256 public targetHoldingsPercent = 5_00;
 
+    /**
+     * @notice Sets target holdings percent.
+     * @param targetPercent new value of target holdings percent
+     */
     function setTargetHoldings(uint256 targetPercent) external virtual onlyOwner {
         targetHoldingsPercent = targetPercent;
     }
@@ -44,14 +52,30 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      *      Losses are realized immediately to prevent users from timing exits to sidestep losses.
      */
 
+    /**
+     * @notice Initial value of the accrual period.
+     */
     uint32 public accrualPeriod = 7 days;
 
+    /**
+     * @notice New value of the accrual period.
+     */
     uint32 public nextAccrualPeriod;
 
+    /**
+     * @notice Timestamp of last accrual.
+     */
     uint64 public lastAccrual;
 
+    /**
+     * @notice Maximum amount we could return.
+     */
     uint128 public maxLocked;
 
+    /**
+     * @notice Sets new accrual period.
+     * @param newAccrualPeriod new accrual period
+     */
     function setAccrualPeriod(uint32 newAccrualPeriod) external virtual onlyOwner {
         nextAccrualPeriod = newAccrualPeriod;
     }
@@ -61,6 +85,9 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     // TODO: have fees read from the default set by the registry
     // TODO: experiment with accruing platform fees from all cellar at once through registry / another module
 
+    /**
+     * @notice The value fees are divided by to get a percentage. Represents the maximum percent (100%).
+     */
     uint256 public constant DENOMINATOR = 100_00;
 
     /**
@@ -75,8 +102,15 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ========================================= MULTI-POSITION CONFIG =========================================
 
+    /**
+     * @notice List of ERC4626-compatible positions.
+     */
     ERC4626[] public positions;
 
+    /**
+     * @notice Gets current positions.
+     * @return list of ERC4626-compatible positions
+     */
     function getPositions() external view returns (ERC4626[] memory) {
         return positions;
     }
@@ -94,17 +128,47 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     mapping(ERC4626 => PositionData) public getPositionData;
 
+    /**
+     * @notice Emitted when the position added.
+     * @param position the address of the position whose have been added
+     */
+    event AddPosition(address position);
+
+    /**
+     * @notice Emitted when the position removed.
+     * @param position the address of the position whose have been removed
+     */
+    event RemovePosition(address position);
+
+    /**
+     * @notice Add position.
+     * @param position ERC4626-compatible position to be added
+     **/
     function addPosition(ERC4626 position) external virtual onlyOwner {
         if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
 
         positions.push(position);
+        
+        emit AddPosition(address(position));
     }
 
+    /**
+     * @notice Removes position.
+     * @param position ERC4626-compatible position to be removed
+     **/
     function removePosition(ERC4626 position) external virtual onlyOwner {
         _removePosition(position);
+        
+        emit RemovePosition(address(position));
     }
 
     // TODO: consider moving position funcitons to own module
+    /**
+     * @notice Sets new positions with paths and max slippages settings.
+     * @param newPositions new list of ERC4626-compatible positions
+     * @param pathsToAsset the array of swap paths
+     * @param maxSlippages the array of maximum slippages values
+     */
     function setPositions(
         ERC4626[] calldata newPositions,
         address[][] calldata pathsToAsset,
@@ -123,6 +187,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         positions = newPositions;
     }
 
+    /**
+     * @notice Sets new positions with max slippages setting.
+     * @param newPositions new list of ERC4626-compatible positions
+     * @param maxSlippages the array of maximum slippages values
+     */
     function setPositions(ERC4626[] calldata newPositions, uint32[] calldata maxSlippages) external virtual onlyOwner {
         for (uint256 i; i < newPositions.length; i++) {
             PositionData storage positionData = getPositionData[newPositions[i]];
@@ -136,6 +205,10 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         positions = newPositions;
     }
 
+    /**
+     * @notice Sets new positions.
+     * @param newPositions new list of ERC4626-compatible positions
+     */
     function setPositions(ERC4626[] calldata newPositions) external virtual onlyOwner {
         for (uint256 i; i < newPositions.length; i++)
             // Ensure position is trusted.
@@ -144,14 +217,29 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         positions = newPositions;
     }
 
+    /**
+     * @notice Sets position swap path to asset.
+     * @param position ERC4626-compatible position
+     * @param pathToAsset list of addresses that specify the position swap path to asset
+     */
     function setPathToAsset(ERC4626 position, address[] memory pathToAsset) external virtual onlyOwner {
         getPositionData[position].pathToAsset = pathToAsset;
     }
 
+    /**
+     * @notice Sets position max slippage.
+     * @param position ERC4626-compatible position
+     * @param maxSlippage value of the max slippage
+     */
     function setMaxSlippage(ERC4626 position, uint32 maxSlippage) external virtual onlyOwner {
         getPositionData[position].maxSlippage = maxSlippage;
     }
 
+    /**
+     * @notice Sets position trust.
+     * @param position ERC4626-compatible position
+     * @param isTrusted true to set position as trusted
+     */
     function setTrust(ERC4626 position, bool isTrusted) external virtual onlyOwner {
         getPositionData[position].isTrusted = isTrusted;
 
@@ -181,6 +269,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      */
     uint256 public liquidityLimit = type(uint256).max;
 
+    /**
+     * @notice Sets the maximum liquidity that cellar can manage.
+     *         Careful to use the same decimals as the current asset.
+     * @param limit amount the limit
+     */
     function setLiquidityLimit(uint256 limit) external virtual onlyOwner {
         // Store for emitted event.
         uint256 oldLimit = liquidityLimit;
@@ -197,6 +290,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      */
     uint256 public depositLimit = type(uint256).max;
 
+    /**
+     * @notice Sets the per-wallet deposit limit.
+     *         Careful to use the same decimals as the current asset.
+     * @param limit amount the limit
+     */
     function setDepositLimit(uint256 limit) external virtual onlyOwner {
         // Store for emitted event.
         uint256 oldLimit = depositLimit;
@@ -212,13 +310,24 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     bool public isShutdown;
 
     /**
+     * @notice Emitted when cellar contract is shutdown or started after shutdown.
+     * @param isShutdown whether the contract is shutdown
+     * @param exitPositions whether to exit all current positions
+     */
+    event Shutdown(bool isShutdown, bool exitPositions);
+
+    /**
      * @notice Stop or start the contract. Used in an emergency or if the cellar has been depreciated.
+     * @param shutdown true so that the contract is shutdown
+     * @param exitPositions true to exit all current positions
      */
     function setShutdown(bool shutdown, bool exitPositions) external virtual onlyOwner {
         isShutdown = shutdown;
 
         // Exit all positions.
         if (shutdown && exitPositions) for (uint256 i; i < positions.length; i++) _emptyPosition(positions[i]);
+        
+        emit Shutdown(shutdown, exitPositions);
     }
 
     // =========================================== CONSTRUCTOR ===========================================
@@ -261,14 +370,26 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // ========================================= ACCOUNTING LOGIC =========================================
 
+    /**
+     * @notice Gets total assets.
+     * @return the amount of total assets
+     */
     function totalAssets() public view virtual override returns (uint256) {
         return totalBalance - totalLocked() + totalHoldings();
     }
 
+    /**
+     * @notice Gets total holdings.
+     * @return the amount of total holdings
+     */
     function totalHoldings() public view virtual returns (uint256) {
         return asset.balanceOf(address(this));
     }
 
+    /**
+     * @notice Gets how much yield remains locked.
+     * @return the amount of locked yield
+     */
     function totalLocked() public view virtual returns (uint256) {
         // Get the last accrual and accrual period.
         uint256 previousAccrual = lastAccrual;
@@ -286,6 +407,10 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     /**
      * @notice Price assets in another asset denomination.
+     * @param fromAsset the address of asset to be converted
+     * @param toAsset the address of asset to which to convert
+     * @param assets the amount of assets
+     * @return the amount of assets in another asset denomination
      */
     function priceAssetsFrom(
         ERC20 fromAsset,
@@ -294,7 +419,26 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     ) public view virtual returns (uint256);
 
     // =========================================== CORE LOGIC ===========================================
+    
+    /**
+     * @notice Emitted on rebalance of position.
+     * @param fromPosition the address of the position whose assets have been rebalanced
+     * @param toPosition the address of the position into which assets have been rebalanced
+     * @param assetsFrom the amount of assets that has been rebalanced
+     * @param assetsTo the amount of the assets received from swap has after rebalancing
+     */
+    event Rebalance(
+        address indexed fromPosition,
+        address indexed toPosition,
+        uint256 assetsFrom,
+        uint256 assetsTo
+    );    
 
+    /**
+     * @notice Internal hook before deposit to position
+     * @param assets the amount of assets to deposit
+     * @param receiver address receiving the shares
+     */
     function beforeDeposit(
         uint256 assets,
         uint256,
@@ -307,7 +451,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     /**
-     *  @dev Although this behavior is not desired, it should be noted that attempting to withdraw
+     * @notice Internal hook before withdraw
+     * @dev Although this behavior is not desired, it should be noted that attempting to withdraw
      *       exactly the cellar's total assets from positions using a different underlying asset as
      *       the holding position will likely revert due to a discrepency in the total assets
      *       reported by the cellar and the total assets that can actually be withdrawn when swap
@@ -318,6 +463,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      *       positions until it can cover not just that single withdraw but also subsequent
      *       withdraws up to configurable target. This is much more economic for users as it batches
      *       withdraws instead of doing potentially hundreds of withdraws from positions.
+     * @param assets the amount of assets
      */
     function beforeWithdraw(
         uint256 assets,
@@ -378,6 +524,15 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         }
     }
 
+    /**
+     * @notice Rebalances the selected asset position to another asset position.
+     * @param fromPosition position whose assets will be rebalanced
+     * @param toPosition the position into which assets will be rebalanced
+     * @param assetsFrom the amount of assets to be rebalanced
+     * @param assetsToMin the minimum amount of assets received from swap
+     * @param path list of addresses that specify the swap path on Uniswap V3
+     * @return assetsTo amount of assets received from swap
+     */
     function rebalance(
         ERC4626 fromPosition,
         ERC4626 toPosition,
@@ -393,10 +548,17 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         // Deposit to destination if it is not the holding position.
         if (address(toPosition) != address(this)) _depositIntoPosition(toPosition, assetsTo);
+
+        emit Rebalance(address(fromPosition), address(toPosition), assetsFrom, assetsTo);
     }
 
     // ============================================ LIMITS LOGIC ============================================
 
+    /**
+     * @notice Total number of assets that can be deposited by owner into the cellar.
+     * @param owner address of account that would receive the shares
+     * @return maximum amount of assets that can be deposited
+     */
     function maxDeposit(address owner) public view virtual override returns (uint256) {
         if (isShutdown) return 0;
 
@@ -409,6 +571,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         return MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
     }
 
+    /**
+     * @notice Total number of shares that can be minted for owner from the cellar.
+     * @param owner address of account that would receive the shares
+     * @return maximum amount of shares that can be minted
+     */
     function maxMint(address owner) public view virtual override returns (uint256) {
         if (isShutdown) return 0;
 
@@ -422,6 +589,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     // =========================================== ACCRUAL LOGIC ===========================================
+
+    /**
+     * @notice Emitted when performance fees accrued.
+     * @param performanceFees amount of fees accrued on positive performance
+     */
+    event AccruedPerformanceFees(uint256 performanceFees);
 
     /**
      * @dev Accrual with positive performance will accrue yield, accrue fees, and start an accrual
@@ -463,6 +636,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
             _mint(address(this), performanceFees);
 
+            emit AccruedPerformanceFees(performanceFees);
+
             maxLocked = uint128(totalLocked() + yield - performanceFeesInAssets);
 
             lastAccrual = uint64(block.timestamp);
@@ -482,12 +657,33 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // =========================================== FEE LOGIC ===========================================
 
+    /**
+     * @notice Amount of performance fees that have been accrued awaiting transfer.
+     * @dev Fees are taken in shares and redeemed for assets at the time they are transferred from
+     *      the cellar to Cosmos to be distributed.
+     * @return accrued performance fees
+     */
     function accruedPerformanceFees() public view virtual returns (uint256) {
         return balanceOf[address(this)];
     }
 
     // ======================================== HELPER FUNCTIONS ========================================
 
+    /**
+     * @notice Emitted when tokens accidentally sent to cellar are recovered.
+     * @param token the address of the token
+     * @param amount amount transferred out
+     * @param to the address sweeped tokens were transferred to
+     */
+    event Sweep(address indexed token, uint256 amount, address indexed to);
+
+    /**
+     * @notice Sweep tokens sent here that are not managed by the cellar.
+     * @dev This may be used in case the wrong tokens are accidentally sent to this contract.
+     * @param token address of token to transfer out of this cellar
+     * @param amount amount of token to transfer
+     * @param to address to transfer sweeped tokens to
+     */
     function sweep(
         address token,
         uint256 amount,
@@ -499,12 +695,16 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         // Transfer out tokens in this cellar that shouldn't be here.
         ERC20(token).safeTransfer(to, amount);
+        
+        emit Sweep(token, amount, to);
     }
 
     // ======================================== INTERNAL HOOKS ========================================
 
     /**
      * @notice Deposits into an ERC4626-compatible position.
+     * @param position ERC4626-compatible position for deposit
+     * @param positionAssets amount of deposit assets
      */
     function _depositIntoPosition(ERC4626 position, uint256 positionAssets) internal virtual {
         if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
@@ -521,6 +721,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     /**
      * @notice Withdraws from an ERC4626-compatible position.
+     * @param position ERC4626-compatible position to withdrawal
+     * @param positionAssets amount of assets to withdrawal
      */
     function _withdrawFromPosition(ERC4626 position, uint256 positionAssets) internal virtual {
         getPositionData[position].assets -= uint112(positionAssets);
@@ -530,6 +732,14 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         position.withdraw(positionAssets, address(this), address(this));
     }
 
+    /**
+     * @notice Swaps assets.
+     * @param positionAsset asset that the position expects to receive from swap
+     * @param assets amount of the incoming token
+     * @param assetsOutMin minimum value of the outgoing token
+     * @param path list of addresses that specify the swap path
+     * @return actual received amount of outgoing token (>=assetsOutMin)
+     **/
     function _swap(
         ERC20 positionAsset,
         uint256 assets,
@@ -539,6 +749,10 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         return SwapUtils.safeSwap(positionAsset, assets, assetsOutMin, path);
     }
 
+    /**
+     * @notice Pulls any assets that were in the removed position to the holding pool.
+     * @param position the removed position
+     **/
     function _emptyPosition(ERC4626 position) internal virtual {
         uint256 sharesOwned = position.balanceOf(address(this));
 
@@ -557,6 +771,10 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         }
     }
 
+    /**
+     * @notice Internal function to remove position
+     * @param position ERC4626-compatible position to be removed
+     **/
     function _removePosition(ERC4626 position) internal virtual {
         // Pull any assets that were in the removed position to the holding pool.
         _emptyPosition(position);
