@@ -332,7 +332,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // =========================================== CONSTRUCTOR ===========================================
 
-    // TODO: have cellar read gravity address from registry instead of declaring it within every contract
+    // TODO: have cellar read gravity address from registry
     /**
      * @notice Cosmos Gravity Bridge contract. Used to transfer fees to `feeDistributor` on the Sommelier chain.
      */
@@ -406,17 +406,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     /**
-     * @notice Price assets in another asset denomination.
-     * @param fromAsset the address of asset to be converted
-     * @param toAsset the address of asset to which to convert
+     * @notice Denomination position assets in the cellar's asset.
+     * @param positionAsset the position asset
      * @param assets the amount of assets
      * @return the amount of assets in another asset denomination
      */
-    function priceAssetsFrom(
-        ERC20 fromAsset,
-        ERC20 toAsset,
-        uint256 assets
-    ) public view virtual returns (uint256);
+    function convertToAssets(ERC20 positionAsset, uint256 assets) public view virtual returns (uint256);
 
     // =========================================== CORE LOGIC ===========================================
     
@@ -497,16 +492,17 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 if (totalPositionAssets == 0) continue;
 
                 // Exchange rate between the position asset and cellar's asset.
+                ERC20 positionAsset = position.asset();
                 uint256 onePositionAsset = 10**position.decimals();
-                uint256 exchangeRate = priceAssetsFrom(position.asset(), asset, onePositionAsset);
+                uint256 exchangeRate = convertToAssets(positionAsset, onePositionAsset);
 
                 // We want to pull as much as we can from this position, but no more than needed.
-                // TODO: test rounding here
                 uint256 positionAssetsWithdrawn = MathUtils.min(
                     totalPositionAssets,
-                    leftToWithdraw.mulDivUp(exchangeRate, onePositionAsset)
+                    leftToWithdraw.mulDivDown(onePositionAsset, exchangeRate)
                 );
-                uint256 assetsWithdrawn = positionAssetsWithdrawn.mulDivDown(exchangeRate, 10**decimals);
+
+                uint256 assetsWithdrawn = positionAssetsWithdrawn.mulDivDown(exchangeRate, onePositionAsset);
 
                 leftToWithdraw -= assetsWithdrawn;
 
@@ -618,11 +614,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
             getPositionData[position].assets = uint112(currentPositionAssets);
 
-            uint256 oneAsset = 10**decimals;
-            uint256 exchangeRate = priceAssetsFrom(asset, position.asset(), oneAsset);
+            uint256 onePositionAsset = 10**position.decimals();
+            uint256 exchangeRate = convertToAssets(position.asset(), onePositionAsset);
 
-            uint256 lastAssets = lastPositionAssets.mulDivDown(exchangeRate, oneAsset);
-            uint256 currentAssets = currentPositionAssets.mulDivDown(exchangeRate, oneAsset);
+            uint256 lastAssets = lastPositionAssets.mulDivDown(exchangeRate, onePositionAsset);
+            uint256 currentAssets = currentPositionAssets.mulDivDown(exchangeRate, onePositionAsset);
 
             currentTotalBalance = currentTotalBalance + currentAssets - lastAssets;
 
@@ -667,7 +663,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         return balanceOf[address(this)];
     }
 
-    // ======================================== HELPER FUNCTIONS ========================================
+    // ======================================== SWEEP LOGIC ========================================
 
     /**
      * @notice Emitted when tokens accidentally sent to cellar are recovered.
@@ -699,24 +695,23 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         emit Sweep(token, amount, to);
     }
 
-    // ======================================== INTERNAL HOOKS ========================================
+    // ======================================== HELPER FUNCTIONS ========================================
 
     /**
      * @notice Deposits into an ERC4626-compatible position.
      * @param position ERC4626-compatible position for deposit
      * @param positionAssets amount of deposit assets
      */
-    function _depositIntoPosition(ERC4626 position, uint256 positionAssets) internal virtual {
+    function _depositIntoPosition(ERC4626 position, uint256 assets) internal virtual {
         if (!getPositionData[position].isTrusted) revert USR_UntrustedPosition(address(position));
         if (isShutdown) revert STATE_ContractShutdown();
 
-        getPositionData[position].assets += uint112(positionAssets);
+        getPositionData[position].assets += uint112(assets);
         ERC20 positionAsset = position.asset();
-        // TODO: test rounding here
-        totalBalance += priceAssetsFrom(positionAsset, asset, positionAssets);
+        totalBalance += convertToAssets(positionAsset, assets);
 
-        positionAsset.safeApprove(address(position), positionAssets);
-        position.deposit(positionAssets, address(this));
+        positionAsset.safeApprove(address(position), assets);
+        position.deposit(assets, address(this));
     }
 
     /**
@@ -724,12 +719,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      * @param position ERC4626-compatible position to withdrawal
      * @param positionAssets amount of assets to withdrawal
      */
-    function _withdrawFromPosition(ERC4626 position, uint256 positionAssets) internal virtual {
-        getPositionData[position].assets -= uint112(positionAssets);
-        // TODO: test rounding here
-        totalBalance -= priceAssetsFrom(position.asset(), asset, positionAssets);
+    function _withdrawFromPosition(ERC4626 position, uint256 assets) internal virtual {
+        getPositionData[position].assets -= uint112(assets);
+        totalBalance -= convertToAssets(position.asset(), assets);
 
-        position.withdraw(positionAssets, address(this), address(this));
+        position.withdraw(assets, address(this), address(this));
     }
 
     /**
@@ -759,7 +753,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         if (sharesOwned != 0) {
             PositionData memory positionData = getPositionData[position];
 
-            uint256 assets = priceAssetsFrom(position.asset(), asset, getPositionData[position].assets);
+            uint256 assets = convertToAssets(position.asset(), getPositionData[position].assets);
 
             totalBalance -= assets;
             getPositionData[position].assets = 0;

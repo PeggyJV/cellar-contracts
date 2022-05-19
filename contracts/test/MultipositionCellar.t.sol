@@ -6,19 +6,19 @@ import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockMultipositionCellar } from "./mocks/MockMultipositionCellar.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
 import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
+import { MockPriceOracle } from "./mocks/MockPriceOracle.sol";
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { ISushiSwapRouter } from "../interfaces/ISushiSwapRouter.sol";
 import { ERC4626 } from "../interfaces/ERC4626.sol";
 
 import { DSTestPlus } from "./utils/DSTestPlus.sol";
 import { MathUtils } from "../utils/MathUtils.sol";
 
-// TODO: test positions that are all in different denominations (eg. ETH, USDC, AAVE...)
-// TODO: test USDC with 6 decimals once cellar can handle multiple decimals
 // TODO: test with fuzzing
 
 contract MultipositionCellarTest is DSTestPlus {
     using MathUtils for uint256;
+
+    MockPriceOracle private priceOracle;
 
     MockMultipositionCellar private cellar;
     MockSwapRouter private swapRouter;
@@ -26,35 +26,56 @@ contract MultipositionCellarTest is DSTestPlus {
     MockERC20 private USDC;
     MockERC4626 private usdcCLR;
 
-    MockERC20 private FRAX;
-    MockERC4626 private fraxCLR;
+    MockERC20 private WETH;
+    MockERC4626 private wethCLR;
 
-    MockERC20 private FEI;
-    MockERC4626 private feiCLR;
+    MockERC20 private WBTC;
+    MockERC4626 private wbtcCLR;
 
     function setUp() public {
-        USDC = new MockERC20("USDC", 18);
+        priceOracle = new MockPriceOracle();
+        hevm.label(address(priceOracle), "oracle");
+
+        swapRouter = new MockSwapRouter();
+        hevm.label(address(swapRouter), "swapRouter");
+
+        USDC = new MockERC20("USDC", 6);
         hevm.label(address(USDC), "USDC");
-        usdcCLR = new MockERC4626(ERC20(address(USDC)), "USDC Cellar LP Token", "USDC-CLR", 18);
+        usdcCLR = new MockERC4626(ERC20(address(USDC)), "USDC Cellar LP Token", "USDC-CLR", 6);
+        priceOracle.setPrice(address(USDC), 1e8);
         hevm.label(address(usdcCLR), "usdcCLR");
 
-        FRAX = new MockERC20("FRAX", 18);
-        hevm.label(address(FRAX), "FRAX");
-        fraxCLR = new MockERC4626(ERC20(address(FRAX)), "FRAX Cellar LP Token", "FRAX-CLR", 18);
-        hevm.label(address(fraxCLR), "fraxCLR");
+        WETH = new MockERC20("WETH", 18);
+        hevm.label(address(WETH), "WETH");
+        wethCLR = new MockERC4626(ERC20(address(WETH)), "WETH Cellar LP Token", "WETH-CLR", 18);
+        priceOracle.setPrice(address(WETH), 2000e8);
+        hevm.label(address(wethCLR), "wethCLR");
 
-        FEI = new MockERC20("FEI", 18);
-        hevm.label(address(FEI), "FEI");
-        feiCLR = new MockERC4626(ERC20(address(FEI)), "FEI Cellar LP Token", "FEI-CLR", 18);
-        hevm.label(address(feiCLR), "feiCLR");
+        WBTC = new MockERC20("WBTC", 8);
+        hevm.label(address(WBTC), "WBTC");
+        wbtcCLR = new MockERC4626(ERC20(address(WBTC)), "WBTC Cellar LP Token", "WBTC-CLR", 8);
+        priceOracle.setPrice(address(WBTC), 30_000e8);
+        hevm.label(address(wbtcCLR), "wbtcCLR");
 
-        // Set up stablecoin cellar:
-        swapRouter = new MockSwapRouter();
+        // Setup exchange rates:
+        swapRouter.setExchangeRate(address(USDC), address(USDC), 1e6);
+        swapRouter.setExchangeRate(address(WETH), address(WETH), 1e18);
+        swapRouter.setExchangeRate(address(WBTC), address(WBTC), 1e8);
 
+        swapRouter.setExchangeRate(address(USDC), address(WETH), 0.0005e18);
+        swapRouter.setExchangeRate(address(WETH), address(USDC), 2000e6);
+
+        swapRouter.setExchangeRate(address(USDC), address(WBTC), 0.000033e8);
+        swapRouter.setExchangeRate(address(WBTC), address(USDC), 30_000e6);
+
+        swapRouter.setExchangeRate(address(WETH), address(WBTC), 0.06666666e8);
+        swapRouter.setExchangeRate(address(WBTC), address(WETH), 15e18);
+
+        // Setup cellar:
         ERC4626[] memory positions = new ERC4626[](3);
         positions[0] = ERC4626(address(usdcCLR));
-        positions[1] = ERC4626(address(fraxCLR));
-        positions[2] = ERC4626(address(feiCLR));
+        positions[1] = ERC4626(address(wethCLR));
+        positions[2] = ERC4626(address(wbtcCLR));
 
         uint256 len = positions.length;
 
@@ -68,17 +89,18 @@ contract MultipositionCellarTest is DSTestPlus {
         }
 
         uint32[] memory maxSlippages = new uint32[](len);
-        for (uint256 i; i < len; i++) maxSlippages[i] = uint32(swapRouter.DENOMINATOR() - swapRouter.EXCHANGE_RATE());
+        for (uint256 i; i < len; i++) maxSlippages[i] = uint32(swapRouter.PRICE_IMPACT());
 
         cellar = new MockMultipositionCellar(
             USDC,
             positions,
             paths,
             maxSlippages,
-            "Ultimate Stablecoin Cellar LP Token",
-            "stble-CLR",
-            18,
-            ISushiSwapRouter(address(swapRouter))
+            "Multiposition Cellar LP Token",
+            "multiposition-CLR",
+            6,
+            swapRouter,
+            priceOracle
         );
         hevm.label(address(cellar), "cellar");
 
@@ -95,7 +117,6 @@ contract MultipositionCellarTest is DSTestPlus {
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
 
-    // function testDepositWithdraw(uint256 assets) public {
     function testDepositWithdraw() public {
         // assets = bound(assets, 1, cellar.maxDeposit(address(this)));
         // NOTE: last time this was run, all test pass with the line below uncommented
@@ -130,81 +151,75 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(USDC.balanceOf(address(this)), assets);
     }
 
-    function testFailDepositWithNotEnoughApproval(uint256 amount) public {
-        USDC.mint(address(this), amount / 2);
-        USDC.approve(address(cellar), amount / 2);
+    function testFailDepositWithNotEnoughApproval(uint256 assets) public {
+        USDC.mint(address(this), assets / 2);
+        USDC.approve(address(cellar), assets / 2);
 
-        cellar.deposit(amount, address(this));
+        cellar.deposit(assets, address(this));
     }
 
-    function testFailWithdrawWithNotEnoughBalance(uint256 amount) public {
-        USDC.mint(address(this), amount / 2);
-        USDC.approve(address(cellar), amount / 2);
+    function testFailWithdrawWithNotEnoughBalance(uint256 assets) public {
+        USDC.mint(address(this), assets / 2);
+        USDC.approve(address(cellar), assets / 2);
 
-        cellar.deposit(amount / 2, address(this));
+        cellar.deposit(assets / 2, address(this));
 
-        cellar.withdraw(amount, address(this), address(this));
+        cellar.withdraw(assets, address(this), address(this));
     }
 
-    function testFailRedeemWithNotEnoughBalance(uint256 amount) public {
-        USDC.mint(address(this), amount / 2);
-        USDC.approve(address(cellar), amount / 2);
+    function testFailRedeemWithNotEnoughBalance(uint256 assets) public {
+        USDC.mint(address(this), assets / 2);
+        USDC.approve(address(cellar), assets / 2);
 
-        cellar.deposit(amount / 2, address(this));
+        cellar.deposit(assets / 2, address(this));
 
-        cellar.redeem(amount, address(this), address(this));
+        cellar.redeem(assets, address(this), address(this));
     }
 
-    function testFailWithdrawWithNoBalance(uint256 amount) public {
-        if (amount == 0) amount = 1;
-        cellar.withdraw(amount, address(this), address(this));
+    function testFailWithdrawWithNoBalance(uint256 assets) public {
+        if (assets == 0) assets = 1;
+        cellar.withdraw(assets, address(this), address(this));
     }
 
-    function testFailRedeemWithNoBalance(uint256 amount) public {
-        cellar.redeem(amount, address(this), address(this));
+    function testFailRedeemWithNoBalance(uint256 assets) public {
+        cellar.redeem(assets, address(this), address(this));
     }
 
-    function testFailDepositWithNoApproval(uint256 amount) public {
-        cellar.deposit(amount, address(this));
+    function testFailDepositWithNoApproval(uint256 assets) public {
+        cellar.deposit(assets, address(this));
     }
 
     function testFailWithdrawWithSwapOverMaxSlippage() public {
-        uint256 assets = 100e18;
+        WETH.mint(address(this), 1e18);
+        WETH.approve(address(cellar), 1e18);
+        cellar.depositIntoPosition(wethCLR, 1e18, address(this));
 
-        FRAX.mint(address(this), assets);
-        FRAX.approve(address(cellar), assets);
-        cellar.depositIntoPosition(fraxCLR, assets, address(this));
+        assertEq(cellar.totalAssets(), 2000e6);
 
-        assertEq(cellar.totalAssets(), 100e18);
+        cellar.setMaxSlippage(wethCLR, 0);
 
-        cellar.setMaxSlippage(fraxCLR, 0);
-
-        cellar.withdraw(50e18, address(this), address(this));
+        cellar.withdraw(1e6, address(this), address(this));
     }
 
     function testWithdrawWithoutEnoughHoldings() public {
-        uint256 assets = 100e18;
-
         // Deposit assets directly into position.
-        FRAX.mint(address(this), assets);
-        FRAX.approve(address(cellar), assets);
-        cellar.depositIntoPosition(fraxCLR, assets, address(this));
+        WETH.mint(address(this), 1e18);
+        WETH.approve(address(cellar), 1e18);
+        cellar.depositIntoPosition(wethCLR, 1e18, address(this)); // $2000
 
-        FEI.mint(address(this), assets);
-        FEI.approve(address(cellar), assets);
-        cellar.depositIntoPosition(feiCLR, assets, address(this));
+        WBTC.mint(address(this), 1e8);
+        WBTC.approve(address(cellar), 1e8);
+        cellar.depositIntoPosition(wbtcCLR, 1e8, address(this)); // $30,000
 
         assertEq(cellar.totalHoldings(), 0);
-        assertEq(cellar.totalAssets(), 200e18);
-
-        uint256 assetsToWithdraw = 10e18;
+        assertEq(cellar.totalAssets(), 32_000e6);
 
         // Test withdraw returns assets to receiver and replenishes holding position.
-        cellar.withdraw(assetsToWithdraw, address(this), address(this));
+        cellar.withdraw(10e6, address(this), address(this));
 
-        assertEq(USDC.balanceOf(address(this)), assetsToWithdraw);
-        // 10 assets = 5% of 200 total assets (tolerate some assets loss swap slippage)
-        assertApproxEq(USDC.balanceOf(address(cellar)), 10e18, 1e18);
+        assertEq(USDC.balanceOf(address(this)), 10e6);
+        // $1,600 = 5% of $32,000 (tolerate some assets loss due to swap slippage).
+        assertApproxEq(USDC.balanceOf(address(cellar)), 1600e6, 100e6);
     }
 
     function testWithdrawAllWithHomogenousPositions() public {
@@ -224,76 +239,70 @@ contract MultipositionCellarTest is DSTestPlus {
     //       position due to the swap slippage involved in needing to convert them all to single asset
     //       received by the user.
     function testFailWithdrawAllWithHeterogenousPositions() public {
-        ERC4626[] memory positions = cellar.getPositions();
-        for (uint256 i; i < positions.length; i++) {
-            ERC4626 position = positions[i];
-            MockERC20 asset = MockERC20(address(position.asset()));
+        USDC.mint(address(this), 100e6);
+        USDC.approve(address(cellar), 100e6);
+        cellar.depositIntoPosition(usdcCLR, 100e6, address(this)); // $100
 
-            asset.mint(address(this), 100e18);
-            asset.approve(address(cellar), 100e18);
-            cellar.depositIntoPosition(position, 100e18, address(this));
-        }
+        WETH.mint(address(this), 1e18);
+        WETH.approve(address(cellar), 1e18);
+        cellar.depositIntoPosition(wethCLR, 1e18, address(this)); // $2,000
 
-        assertEq(cellar.totalAssets(), 300e18);
+        WBTC.mint(address(this), 1e8);
+        WBTC.approve(address(cellar), 1e8);
+        cellar.depositIntoPosition(wbtcCLR, 1e8, address(this)); // $30,000
 
-        cellar.withdraw(300e18, address(this), address(this));
+        assertEq(cellar.totalAssets(), 32_100e6);
+
+        cellar.withdraw(32_100e6, address(this), address(this));
     }
 
     // =========================================== REBALANCE TEST ===========================================
 
     function testRebalance() public {
-        uint256 assets = 100e18;
-
-        ERC4626[] memory positions = cellar.getPositions();
-        ERC4626 positionFrom = positions[0];
-        ERC4626 positionTo = positions[1];
-
-        MockERC20 assetFrom = MockERC20(address(positionFrom.asset()));
-
-        assetFrom.mint(address(this), assets);
-        assetFrom.approve(address(cellar), assets);
-        cellar.deposit(assets, address(this));
+        USDC.mint(address(this), 10_000e6);
+        USDC.approve(address(cellar), 10_000e6);
+        cellar.deposit(10_000e6, address(this));
 
         address[] memory path = new address[](2);
 
         // Test rebalancing from holding position.
-        path[0] = address(assetFrom);
-        path[1] = address(assetFrom);
+        path[0] = address(USDC);
+        path[1] = address(USDC);
 
-        uint256 assetsRebalanced = cellar.rebalance(cellar, positionFrom, assets, assets, path);
+        uint256 assetsRebalanced = cellar.rebalance(cellar, usdcCLR, 10_000e6, 10_000e6, path);
 
-        assertEq(assetsRebalanced, assets);
+        assertEq(assetsRebalanced, 10_000e6);
         assertEq(cellar.totalHoldings(), 0);
-        assertEq(positionFrom.balanceOf(address(cellar)), assets);
-        (, , uint112 fromBalance) = cellar.getPositionData(positionFrom);
-        assertEq(fromBalance, assets);
+        assertEq(usdcCLR.balanceOf(address(cellar)), 10_000e6);
+        (, , uint112 fromBalance) = cellar.getPositionData(usdcCLR);
+        assertEq(fromBalance, 10_000e6);
 
         // Test rebalancing between positions.
-        path[0] = address(assetFrom);
-        path[1] = address(positionTo.asset());
+        path[0] = address(USDC);
+        path[1] = address(WETH);
 
-        uint256 expectedAssetsOut = swapRouter.quote(assets, path);
-        assetsRebalanced = cellar.rebalance(positionFrom, positionTo, assets, expectedAssetsOut, path);
+        uint256 expectedAssetsOut = swapRouter.quote(10_000e6, path);
+        assetsRebalanced = cellar.rebalance(usdcCLR, wethCLR, 10_000e6, expectedAssetsOut, path);
 
         assertEq(assetsRebalanced, expectedAssetsOut);
-        assertEq(positionFrom.balanceOf(address(cellar)), 0);
-        assertEq(positionTo.balanceOf(address(cellar)), assetsRebalanced);
-        (, , fromBalance) = cellar.getPositionData(positionFrom);
+        assertEq(usdcCLR.balanceOf(address(cellar)), 0);
+        assertEq(wethCLR.balanceOf(address(cellar)), assetsRebalanced);
+        (, , fromBalance) = cellar.getPositionData(usdcCLR);
         assertEq(fromBalance, 0);
-        (, , uint112 toBalance) = cellar.getPositionData(positionTo);
+        (, , uint112 toBalance) = cellar.getPositionData(wethCLR);
         assertEq(toBalance, assetsRebalanced);
 
         // Test rebalancing back to holding position.
-        path[0] = address(positionTo.asset());
-        path[1] = address(assetFrom);
+        path[0] = address(WETH);
+        path[1] = address(USDC);
 
         expectedAssetsOut = swapRouter.quote(assetsRebalanced, path);
-        assetsRebalanced = cellar.rebalance(positionTo, cellar, assetsRebalanced, expectedAssetsOut, path);
+        assetsRebalanced = cellar.rebalance(wethCLR, cellar, assetsRebalanced, expectedAssetsOut, path);
 
         assertEq(assetsRebalanced, expectedAssetsOut);
-        assertEq(positionTo.balanceOf(address(cellar)), 0);
+        assertEq(wethCLR.balanceOf(address(cellar)), 0);
         assertEq(cellar.totalHoldings(), assetsRebalanced);
-        (, , toBalance) = cellar.getPositionData(positionTo);
+        (, , toBalance) = cellar.getPositionData(wethCLR);
         assertEq(toBalance, 0);
     }
 
@@ -307,10 +316,10 @@ contract MultipositionCellarTest is DSTestPlus {
 
         address[] memory path = new address[](2);
         path[0] = address(USDC);
-        path[1] = address(FEI);
+        path[1] = address(WBTC);
 
         uint256 expectedAssetsOut = swapRouter.quote(assets, path);
-        cellar.rebalance(usdcCLR, feiCLR, assets, expectedAssetsOut, path);
+        cellar.rebalance(usdcCLR, wbtcCLR, assets, expectedAssetsOut, path);
     }
 
     function testFailRebalanceIntoUntrustedPosition() public {
@@ -354,42 +363,44 @@ contract MultipositionCellarTest is DSTestPlus {
         // - Test accrued yield is distributed linearly as expected.
         // - Test deposits / withdraws do not effect accrual and yield distribution.
         //
+        // NOTE: The amounts in each column are approximations. Actual results may differ due
+        //       to swaps and decimal conversions, however, it should not be significant.
         // +==============+==============+==================+=====================+
         // | Total Assets | Total Locked | Performance Fees |  Last Accrual Time  |
-        // |  (in assets) |  (in assets) |    (in shares)   |    (in seconds)     |
+        // |   (in USD)   |   (in USD)    |   (in shares)   |    (in seconds)     |
         // +==============+==============+==================+=====================+
-        // | 1. Deposit 100 assets into each position.                            |
+        // | 1. Deposit $100 worth of assets into each position.                  |
         // +--------------+--------------+------------------+---------------------+
-        // |          300 |            0 |                0 |                   0 |
+        // |         $300 |            0 |                0 |                   0 |
         // +--------------+--------------+------------------+---------------------+
         // | 2. Each position gains 50 assets of yield.                           |
         // |    NOTE: Nothing should change because yield has not been accrued.   |
         // +--------------+--------------+------------------+---------------------+
-        // |          300 |            0 |                0 |                   0 |
+        // |         $300 |            0 |                0 |                   0 |
         // +--------------+--------------+------------------+---------------------+
         // | 3. Accrue with positive performance.                                 |
         // +--------------+--------------+------------------+---------------------+
-        // |          315 |          135 |               15 |                   0 |
+        // |         $315 |         $135 |              $15 |                   0 |
         // +--------------+--------------+------------------+---------------------+
         // | 4. Half of accrual period passes.                                    |
         // +--------------+--------------+------------------+---------------------+
-        // |        382.5 |         67.5 |               15 |            12345678 |
+        // |       $382.5 |        $67.5 |              $15 |            12345678 |
         // +--------------+--------------+------------------+---------------------+
         // | 5. Deposit 200 assets into a position.                               |
         // |    NOTE: For testing that deposit does not effect yield and is not   |
         // |          factored in to later accrual.                               |
         // +--------------+--------------+------------------+---------------------+
-        // |        582.5 |         67.5 |               15 |            12345678 |
+        // |       $582.5 |        $67.5 |              $15 |            12345678 |
         // +--------------+--------------+------------------+---------------------+
         // | 6. Entire accrual period passes.                                     |
         // +--------------+--------------+------------------+---------------------+
-        // |          650 |            0 |               15 |            12345678 |
+        // |         $650 |           $0 |              $15 |            12345678 |
         // +--------------+--------------+------------------+---------------------+
         // | 7. Withdraw 100 assets from a position.                              |
         // |    NOTE: For testing that withdraw does not effect yield and is not  |
         // |          factored in to later accrual.                               |
         // +--------------+--------------+------------------+---------------------+
-        // |          550 |            0 |               15 |            12345678 |
+        // |         $550 |           $0 |              $15 |            12345678 |
         // +--------------+--------------+------------------+---------------------+
         // | 8. Accrue with no performance.                                       |
         // |    NOTE: Should not accrue any yield or fees since user deposits     |
@@ -397,18 +408,18 @@ contract MultipositionCellarTest is DSTestPlus {
         // |          not start an accural period since there was no yield        |
         // |          to distribute.                                              |
         // +--------------+--------------+------------------+---------------------+
-        // |          550 |            0 |               15 |            12345678 |
+        // |         $550 |           $0 |              $15 |            12345678 |
         // +--------------+--------------+------------------+---------------------+
         // | 9. A position loses 150 assets of yield.                             |
         // |    NOTE: Nothing should change because losses have not been accrued. |
         // +--------------+--------------+------------------+---------------------+
-        // |          550 |            0 |               15 |            12345678 |
+        // |         $550 |           $0 |              $15 |            12345678 |
         // +--------------+--------------+------------------+---------------------+
         // | 10. Accrue with negative performance.                                |
         // |    NOTE: Should not start an accrual period since losses are         |
         // |          realized immediately.                                       |
         // +--------------+--------------+------------------+---------------------+
-        // |          400 |            0 |               15 |            12345678 |
+        // |         $400 |           $0 |              $15 |            12345678 |
         // +--------------+--------------+------------------+---------------------+
 
         // Initialize timestamp of test environment to 12345678.
@@ -417,37 +428,37 @@ contract MultipositionCellarTest is DSTestPlus {
         ERC4626[] memory positions = cellar.getPositions();
         for (uint256 i; i < positions.length; i++) {
             ERC4626 position = positions[i];
-            MockERC20 asset = MockERC20(address(position.asset()));
+            MockERC20 positionAsset = MockERC20(address(position.asset()));
 
-            // 1. Deposit 100 assets into each position.
-            asset.mint(address(this), 100e18);
-            asset.approve(address(cellar), 100e18);
-            cellar.depositIntoPosition(position, 100e18, address(this));
+            // 1. Deposit $100 of assets into each position.
+            uint256 assets = swapRouter.convert(address(USDC), address(positionAsset), 100e6);
+            positionAsset.mint(address(this), assets);
+            positionAsset.approve(address(cellar), assets);
+            cellar.depositIntoPosition(position, assets, address(this));
 
-            assertEq(position.totalAssets(), 100e18);
+            assertEq(position.totalAssets(), assets);
             (, , uint112 balance) = cellar.getPositionData(position);
-            assertEq(balance, 100e18);
-            assertEq(cellar.totalBalance(), 100e18 * (i + 1));
+            assertEq(balance, assets);
+            assertApproxEq(cellar.totalBalance(), 100e6 * (i + 1), 1e6);
 
-            // 2. Each position gains 50 assets of yield.
-            MockERC4626(address(position)).simulateGain(50e18, address(cellar));
-
-            assertEq(position.maxWithdraw(address(cellar)), 150e18);
+            // 2. Each position gains $50 assets of yield.
+            MockERC4626(address(position)).simulateGain(assets / 2, address(cellar));
+            assertApproxEq(cellar.convertToAssets(positionAsset, position.maxWithdraw(address(cellar))), 150e6, 2e6);
         }
 
-        assertEq(cellar.totalAssets(), 300e18);
+        assertApproxEq(cellar.totalAssets(), 300e6, 1e6);
 
-        uint256 priceOfShareBefore = cellar.convertToShares(1e18);
+        uint256 priceOfShareBefore = cellar.convertToShares(1e6);
 
         // 3. Accrue with positive performance.
         cellar.accrue();
 
-        uint256 priceOfShareAfter = cellar.convertToShares(1e18);
-        assertEq(priceOfShareAfter, priceOfShareBefore);
-        assertEq(cellar.totalLocked(), 135e18);
-        assertEq(cellar.totalAssets(), 315e18);
-        assertEq(cellar.totalBalance(), 450e18);
-        assertEq(cellar.accruedPerformanceFees(), 15e18);
+        uint256 priceOfShareAfter = cellar.convertToShares(1e6);
+        assertApproxEq(priceOfShareAfter, priceOfShareBefore, 1e6);
+        assertApproxEq(cellar.totalLocked(), 135e6, 1e6);
+        assertApproxEq(cellar.totalAssets(), 315e6, 2e6);
+        assertApproxEq(cellar.totalBalance(), 450e6, 2e6);
+        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
         assertEq(cellar.lastAccrual(), 12345678);
 
         // Position balances should have updated to reflect yield accrued per position.
@@ -455,73 +466,78 @@ contract MultipositionCellarTest is DSTestPlus {
             ERC4626 position = positions[i];
 
             (, , uint112 balance) = cellar.getPositionData(position);
-            assertEq(balance, 150e18);
+            assertApproxEq(cellar.convertToAssets(position.asset(), balance), 150e6, 2e6);
         }
 
         // 4. Half of accrual period passes.
         uint256 accrualPeriod = cellar.accrualPeriod();
         hevm.warp(block.timestamp + accrualPeriod / 2);
 
-        assertEq(cellar.totalLocked(), 67.5e18);
-        assertApproxEq(cellar.totalAssets(), 382.5e18, 1e17);
-        assertApproxEq(cellar.totalBalance(), 450e18, 1e17);
-        assertEq(cellar.accruedPerformanceFees(), 15e18);
+        assertApproxEq(cellar.totalLocked(), 67.5e6, 1e6);
+        assertApproxEq(cellar.totalAssets(), 382.5e6, 2e6);
+        assertApproxEq(cellar.totalBalance(), 450e6, 2e6);
+        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
         assertEq(cellar.lastAccrual(), 12345678);
 
         // 5. Deposit 200 assets into a position.
-        USDC.mint(address(this), 200e18);
-        USDC.approve(address(cellar), 200e18);
-        cellar.depositIntoPosition(usdcCLR, 200e18, address(this));
+        USDC.mint(address(this), 200e6);
+        USDC.approve(address(cellar), 200e6);
+        cellar.depositIntoPosition(usdcCLR, 200e6, address(this));
 
-        assertEq(cellar.totalLocked(), 67.5e18);
-        assertApproxEq(cellar.totalAssets(), 582.5e18, 1e17);
-        assertApproxEq(cellar.totalBalance(), 650e18, 1e17);
-        assertEq(cellar.accruedPerformanceFees(), 15e18);
+        assertApproxEq(cellar.totalLocked(), 67.5e6, 1e6);
+        assertApproxEq(cellar.totalAssets(), 582.5e6, 2e6);
+        assertApproxEq(cellar.totalBalance(), 650e6, 2e6);
+        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
         assertEq(cellar.lastAccrual(), 12345678);
 
         // 6. Entire accrual period passes.
         hevm.warp(block.timestamp + accrualPeriod / 2);
 
         assertEq(cellar.totalLocked(), 0);
-        assertApproxEq(cellar.totalAssets(), 650e18, 1e17);
-        assertApproxEq(cellar.totalBalance(), 650e18, 1e17);
-        assertEq(cellar.accruedPerformanceFees(), 15e18);
+        assertApproxEq(cellar.totalAssets(), 650e6, 2e6);
+        assertApproxEq(cellar.totalBalance(), 650e6, 2e6);
+        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
         assertEq(cellar.lastAccrual(), 12345678);
 
         // 7. Withdraw 100 assets from a position.
-        cellar.withdrawFromPosition(fraxCLR, 100e18, address(this), address(this));
+        cellar.withdrawFromPosition(
+            wethCLR,
+            swapRouter.convert(address(USDC), address(WETH), 100e6),
+            address(this),
+            address(this)
+        );
 
         assertEq(cellar.totalLocked(), 0);
-        assertApproxEq(cellar.totalAssets(), 550e18, 1e17);
-        assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
-        assertEq(cellar.accruedPerformanceFees(), 15e18);
+        assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
+        assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
+        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
         assertEq(cellar.lastAccrual(), 12345678);
 
         // 8. Accrue with no performance.
         cellar.accrue();
 
         assertEq(cellar.totalLocked(), 0);
-        assertApproxEq(cellar.totalAssets(), 550e18, 1e17);
-        assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
-        assertEq(cellar.accruedPerformanceFees(), 15e18);
+        assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
+        assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
+        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
         assertEq(cellar.lastAccrual(), 12345678);
 
         // 9. A position loses 150 assets of yield.
-        MockERC4626(address(feiCLR)).simulateLoss(150e18);
+        MockERC4626(address(usdcCLR)).simulateLoss(150e6);
 
         assertEq(cellar.totalLocked(), 0);
-        assertApproxEq(cellar.totalAssets(), 550e18, 1e17);
-        assertApproxEq(cellar.totalBalance(), 550e18, 1e17);
-        assertEq(cellar.accruedPerformanceFees(), 15e18);
+        assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
+        assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
+        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
         assertEq(cellar.lastAccrual(), 12345678);
 
-        // 10. Accrue with negative performance.
+        // // 10. Accrue with negative performance.
         cellar.accrue();
 
         assertEq(cellar.totalLocked(), 0);
-        assertApproxEq(cellar.totalAssets(), 400e18, 1e17);
-        assertApproxEq(cellar.totalBalance(), 400e18, 1e17);
-        assertEq(cellar.accruedPerformanceFees(), 15e18);
+        assertApproxEq(cellar.totalAssets(), 400e6, 2e6);
+        assertApproxEq(cellar.totalBalance(), 400e6, 2e6);
+        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
         assertEq(cellar.lastAccrual(), 12345678);
     }
 
@@ -529,9 +545,9 @@ contract MultipositionCellarTest is DSTestPlus {
 
     function testSetPositions() public {
         ERC4626[] memory positions = new ERC4626[](3);
-        positions[0] = ERC4626(address(fraxCLR));
+        positions[0] = ERC4626(address(wethCLR));
         positions[1] = ERC4626(address(usdcCLR));
-        positions[2] = ERC4626(address(feiCLR));
+        positions[2] = ERC4626(address(wbtcCLR));
 
         uint32[] memory maxSlippages = new uint32[](3);
         for (uint256 i; i < 3; i++) maxSlippages[i] = 1_00;
@@ -558,9 +574,9 @@ contract MultipositionCellarTest is DSTestPlus {
         assertFalse(isTrusted);
 
         ERC4626[] memory positions = new ERC4626[](4);
-        positions[0] = ERC4626(address(fraxCLR));
+        positions[0] = ERC4626(address(wethCLR));
         positions[1] = ERC4626(address(usdcCLR));
-        positions[2] = ERC4626(address(feiCLR));
+        positions[2] = ERC4626(address(wbtcCLR));
         positions[3] = ERC4626(address(xyzCLR));
 
         // Test attempting to setting with an untrusted position.
@@ -599,20 +615,21 @@ contract MultipositionCellarTest is DSTestPlus {
     }
 
     function testDistrustingAndRemovingPosition() public {
-        ERC4626 distrustedPosition = fraxCLR;
+        ERC4626 distrustedPosition = wethCLR;
 
         // Deposit assets into position before distrusting.
-        FRAX.mint(address(this), 100e18);
-        FRAX.approve(address(cellar), 100e18);
-        cellar.depositIntoPosition(distrustedPosition, 100e18, address(this));
+        uint256 assets = swapRouter.convert(address(USDC), address(WETH), 100e6);
+        WETH.mint(address(this), assets);
+        WETH.approve(address(cellar), assets);
+        cellar.depositIntoPosition(distrustedPosition, assets, address(this));
 
         // Simulate position gaining yield.
-        MockERC4626(address(distrustedPosition)).simulateGain(50e18, address(cellar));
+        MockERC4626(address(distrustedPosition)).simulateGain(assets / 2, address(cellar));
 
         (, , uint112 balance) = cellar.getPositionData(distrustedPosition);
-        assertEq(balance, 100e18);
-        assertEq(cellar.totalBalance(), 100e18);
-        assertEq(cellar.totalAssets(), 100e18);
+        assertEq(balance, assets);
+        assertEq(cellar.totalBalance(), 100e6);
+        assertEq(cellar.totalAssets(), 100e6);
         assertEq(cellar.totalHoldings(), 0);
 
         // Distrust and removing position.
@@ -623,8 +640,8 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(balance, 0);
         // Expected 142.5 assets to be received after swapping 150 assets with simulated 5% slippage.
         assertEq(cellar.totalBalance(), 0);
-        assertEq(cellar.totalAssets(), 142.5e18);
-        assertEq(cellar.totalHoldings(), 142.5e18);
+        assertEq(cellar.totalAssets(), 142.5e6);
+        assertEq(cellar.totalHoldings(), 142.5e6);
 
         // Test that position has been distrusted.
         (bool isTrusted, , ) = cellar.getPositionData(distrustedPosition);
@@ -633,7 +650,7 @@ contract MultipositionCellarTest is DSTestPlus {
         // Test that position has been removed from list of positions.
         ERC4626[] memory expectedPositions = new ERC4626[](2);
         expectedPositions[0] = ERC4626(address(usdcCLR));
-        expectedPositions[1] = ERC4626(address(feiCLR));
+        expectedPositions[1] = ERC4626(address(wbtcCLR));
 
         ERC4626[] memory positions = cellar.getPositions();
         for (uint256 i; i < positions.length; i++) assertTrue(positions[i] == expectedPositions[i]);
@@ -652,28 +669,32 @@ contract MultipositionCellarTest is DSTestPlus {
     }
 
     function testFailSweep() public {
-        feiCLR.mint(address(cellar), 100e18);
+        wbtcCLR.mint(address(cellar), 100e18);
 
         // Test sweep of protected asset.
-        cellar.sweep(address(feiCLR), 100e18, address(this));
+        cellar.sweep(address(wbtcCLR), 100e18, address(this));
     }
 
     function testFailAttemptingToStealFundsByRemovingPositionThenSweeping() public {
         // Deposit assets into position before distrusting.
-        FEI.mint(address(this), 100e18);
-        FEI.approve(address(cellar), 100e18);
-        cellar.depositIntoPosition(feiCLR, 100e18, address(this));
+        uint256 assets = swapRouter.convert(address(USDC), address(WBTC), 100e6);
+        WBTC.mint(address(this), assets);
+        WBTC.approve(address(cellar), assets);
+        cellar.depositIntoPosition(wbtcCLR, assets, address(this));
 
         // Simulate position gaining yield.
-        MockERC4626(address(feiCLR)).simulateGain(50e18, address(cellar));
+        MockERC4626(address(wbtcCLR)).simulateGain(assets / 2, address(cellar));
 
-        assertEq(feiCLR.balanceOf(address(cellar)), 150e18);
+        uint256 totalAssets = assets + assets / 2;
+        assertEq(wbtcCLR.balanceOf(address(cellar)), totalAssets);
 
         // Remove position.
-        cellar.removePosition(feiCLR);
+        cellar.removePosition(wbtcCLR);
+
+        assertEq(wbtcCLR.balanceOf(address(cellar)), 0);
 
         // Test attempting to steal assets after removing position from list.
-        cellar.sweep(address(feiCLR), 100e18, address(this));
+        cellar.sweep(address(wbtcCLR), totalAssets, address(this));
     }
 
     // ============================================= EMERGENCY TEST =============================================
@@ -681,9 +702,9 @@ contract MultipositionCellarTest is DSTestPlus {
     function testFailShutdownDeposit() public {
         cellar.setShutdown(true, false);
 
-        USDC.mint(address(this), 1e18);
-        USDC.approve(address(cellar), 1e18);
-        cellar.deposit(1e18, address(this));
+        USDC.mint(address(this), 1);
+        USDC.approve(address(cellar), 1);
+        cellar.deposit(1, address(this));
     }
 
     function testFailShutdownDepositIntoPosition() public {
@@ -701,22 +722,22 @@ contract MultipositionCellarTest is DSTestPlus {
     }
 
     function testShutdownExitsAllPositions() public {
-        ERC4626[] memory positions = cellar.getPositions();
-
         // Deposit 100 assets into each position with 50 assets of unrealized yield.
+        ERC4626[] memory positions = cellar.getPositions();
         for (uint256 i; i < positions.length; i++) {
             ERC4626 position = positions[i];
-            MockERC20 asset = MockERC20(address(position.asset()));
+            MockERC20 positionAsset = MockERC20(address(position.asset()));
 
-            asset.mint(address(this), 100e18);
-            asset.approve(address(cellar), 100e18);
-            cellar.depositIntoPosition(position, 100e18, address(this));
+            uint256 assets = swapRouter.convert(address(USDC), address(positionAsset), 100e6);
+            positionAsset.mint(address(this), assets);
+            positionAsset.approve(address(cellar), assets);
+            cellar.depositIntoPosition(position, assets, address(this));
 
-            MockERC4626(address(position)).simulateGain(50e18, address(cellar));
+            MockERC4626(address(position)).simulateGain(assets / 2, address(cellar));
         }
 
-        assertEq(cellar.totalBalance(), 300e18);
-        assertEq(cellar.totalAssets(), 300e18);
+        assertApproxEq(cellar.totalBalance(), 300e6, 1e6);
+        assertApproxEq(cellar.totalAssets(), 300e6, 1e6);
         assertEq(cellar.totalHoldings(), 0);
 
         cellar.setShutdown(true, true);
@@ -724,8 +745,8 @@ contract MultipositionCellarTest is DSTestPlus {
         assertTrue(cellar.isShutdown());
         assertEq(cellar.totalBalance(), 0);
         // Expect to receive 435 assets after 450 total assets from positions are swapped with 5% slippage.
-        assertEq(cellar.totalAssets(), 435e18);
-        assertEq(cellar.totalHoldings(), 435e18);
+        assertApproxEq(cellar.totalAssets(), 435e6, 2e6);
+        assertApproxEq(cellar.totalHoldings(), 435e6, 2e6);
     }
 
     function testShutdownExitsAllPositionsWithNoBalances() public {
@@ -737,27 +758,27 @@ contract MultipositionCellarTest is DSTestPlus {
     // ============================================== LIMITS TEST ==============================================
 
     function testLimits() external {
-        USDC.mint(address(this), 100e18);
-        USDC.approve(address(cellar), 100e18);
-        cellar.deposit(100e18, address(this));
+        USDC.mint(address(this), 100e6);
+        USDC.approve(address(cellar), 100e6);
+        cellar.deposit(100e6, address(this));
 
         assertEq(cellar.maxDeposit(address(this)), type(uint256).max);
         assertEq(cellar.maxMint(address(this)), type(uint256).max);
 
-        cellar.setDepositLimit(200e18);
-        cellar.setLiquidityLimit(100e18);
+        cellar.setDepositLimit(200e6);
+        cellar.setLiquidityLimit(100e6);
 
-        assertEq(cellar.depositLimit(), 200e18);
-        assertEq(cellar.liquidityLimit(), 100e18);
+        assertEq(cellar.depositLimit(), 200e6);
+        assertEq(cellar.liquidityLimit(), 100e6);
         assertEq(cellar.maxDeposit(address(this)), 0);
         assertEq(cellar.maxMint(address(this)), 0);
 
-        cellar.setLiquidityLimit(300e18);
+        cellar.setLiquidityLimit(300e6);
 
-        assertEq(cellar.depositLimit(), 200e18);
-        assertEq(cellar.liquidityLimit(), 300e18);
-        assertEq(cellar.maxDeposit(address(this)), 100e18);
-        assertEq(cellar.maxMint(address(this)), 100e18);
+        assertEq(cellar.depositLimit(), 200e6);
+        assertEq(cellar.liquidityLimit(), 300e6);
+        assertEq(cellar.maxDeposit(address(this)), 100e6);
+        assertEq(cellar.maxMint(address(this)), 100e6);
 
         cellar.setShutdown(true, false);
 
@@ -766,34 +787,34 @@ contract MultipositionCellarTest is DSTestPlus {
     }
 
     function testFailDepositAboveDepositLimit() public {
-        cellar.setDepositLimit(100e18);
+        cellar.setDepositLimit(100e6);
 
-        USDC.mint(address(this), 101e18);
-        USDC.approve(address(cellar), 101e18);
-        cellar.deposit(101e18, address(this));
+        USDC.mint(address(this), 101e6);
+        USDC.approve(address(cellar), 101e6);
+        cellar.deposit(101e6, address(this));
     }
 
     function testFailMintAboveDepositLimit() public {
-        cellar.setDepositLimit(100e18);
+        cellar.setDepositLimit(100e6);
 
-        USDC.mint(address(this), 101e18);
-        USDC.approve(address(cellar), 101e18);
-        cellar.mint(101e18, address(this));
+        USDC.mint(address(this), 101e6);
+        USDC.approve(address(cellar), 101e6);
+        cellar.mint(101e6, address(this));
     }
 
     function testFailDepositAboveLiquidityLimit() public {
-        cellar.setLiquidityLimit(100e18);
+        cellar.setLiquidityLimit(100e6);
 
-        USDC.mint(address(this), 101e18);
-        USDC.approve(address(cellar), 101e18);
-        cellar.deposit(101e18, address(this));
+        USDC.mint(address(this), 101e6);
+        USDC.approve(address(cellar), 101e6);
+        cellar.deposit(101e6, address(this));
     }
 
     function testFailMintAboveLiquidityLimit() public {
-        cellar.setLiquidityLimit(100e18);
+        cellar.setLiquidityLimit(100e6);
 
-        USDC.mint(address(this), 101e18);
-        USDC.approve(address(cellar), 101e18);
-        cellar.mint(101e18, address(this));
+        USDC.mint(address(this), 101e6);
+        USDC.approve(address(cellar), 101e6);
+        cellar.mint(101e6, address(this));
     }
 }
