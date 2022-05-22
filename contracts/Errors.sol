@@ -162,7 +162,7 @@ error STATE_RewardsNotFunded(uint256 rewardBalance, uint256 reward);
 /**
  * @notice Attempted to accrue yield while previous yield was still unlocking.
  */
-error STATE_AccrualOngoing(uint256 remainingAccrualPeriod);
+error STATE_AccrualOngoing();
 
 /**
  * @notice The caller attempted to change the epoch length, but current reward epochs were active.

@@ -15,6 +15,9 @@ import "../Errors.sol";
 // TODO: add extensive documentation for cellar creators
 // TODO: add events
 
+// TODO: delete
+import "hardhat/console.sol";
+
 abstract contract MultipositionCellar is ERC4626, Ownable {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
@@ -255,6 +258,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 pathToAsset: _pathsToAsset[i]
             });
 
+        lastAccrual = uint64(block.timestamp);
+
         // Transfer ownership to the Gravity Bridge.
         transferOwnership(address(gravityBridge));
     }
@@ -285,7 +290,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     /**
-     * @notice Denomination position assets in the cellar's asset.
+     * @notice Denominate position assets in the cellar's asset.
      */
     function convertToAssets(ERC20 positionAsset, uint256 assets) public view virtual returns (uint256);
 
@@ -308,12 +313,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      *       the holding position will likely revert due to a discrepency in the total assets
      *       reported by the cellar and the total assets that can actually be withdrawn when swap
      *       slippage is factored in. In this case, the withdrawn amount needed to empty the cellar
-     *       (or get as close as possible to it) would need to factor in swap slippage.  Normal
-     *       withdraws, luckily, do not need to worry about this. If the holding position cannot
-     *       already cover a withdraw in full, the cellar will withdraw an excess amount from
-     *       positions until it can cover not just that single withdraw but also subsequent
-     *       withdraws up to configurable target. This is much more economic for users as it batches
-     *       withdraws instead of doing potentially hundreds of withdraws from positions.
+     *       (or get as close as possible to it) would need to factor in swap slippage. Normal
+     *       withdraws do not need to worry about this. If the holding position cannot already cover
+     *       a withdraw in full, the cellar will withdraw an excess amount from positions until it
+     *       can cover not just that single withdraw but also subsequent withdraws up to
+     *       configurable target. This is much more economic for users as it batches withdraws
+     *       instead of doing potentially hundreds of withdraws from positions.
      */
     function beforeWithdraw(
         uint256 assets,
@@ -347,9 +352,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 if (totalPositionAssets == 0) continue;
 
                 // Exchange rate between the position asset and cellar's asset.
-                ERC20 positionAsset = position.asset();
                 uint256 onePositionAsset = 10**position.decimals();
-                uint256 exchangeRate = convertToAssets(positionAsset, onePositionAsset);
+                uint256 exchangeRate = convertToAssets(position.asset(), onePositionAsset);
 
                 // We want to pull as much as we can from this position, but no more than needed.
                 uint256 positionAssetsWithdrawn = MathUtils.min(
@@ -420,16 +424,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // =========================================== ACCRUAL LOGIC ===========================================
 
-    /**
-     * @dev Accrual with positive performance will accrue yield, accrue fees, and start an accrual
-     *      period over which yield is linearly distributed over the entirety of that period. Accrual
-     *      with negative performance will realize losses immediately, accrue no fees, and not start an
-     *      accrual period. Accrual with no performance will accrue no yield, accrue no fees, and not
-     *      start an accrual period.
-     */
     function accrue() external virtual onlyOwner {
-        uint256 remainingAccrualPeriod = uint256(accrualPeriod).subFloor(block.timestamp - lastAccrual);
-        if (remainingAccrualPeriod != 0) revert STATE_AccrualOngoing(remainingAccrualPeriod);
+        if (totalLocked() != 0) revert STATE_AccrualOngoing();
 
         uint256 yield;
         uint256 currentTotalBalance = totalBalance;
@@ -453,17 +449,24 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
             yield += currentAssets.subFloor(lastAssets);
         }
 
+        // Accrue performance and platform fees as shares minted to the cellar.
+
+        uint256 performanceFeesInAssets;
+        uint256 performanceFees;
         if (yield != 0) {
-            // Accrue any performance fees as shares minted to the cellar.
-            uint256 performanceFeesInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
-            uint256 performanceFees = convertToShares(performanceFeesInAssets);
-
-            _mint(address(this), performanceFees);
-
-            maxLocked = uint128(totalLocked() + yield - performanceFeesInAssets);
-
-            lastAccrual = uint64(block.timestamp);
+            performanceFeesInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+            performanceFees = convertToShares(performanceFeesInAssets);
         }
+
+        uint256 elapsedTime = block.timestamp - lastAccrual;
+        uint256 platformFeeInAssets = (totalAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
+        uint256 platformFees = convertToShares(platformFeeInAssets);
+
+        _mint(address(this), performanceFees + platformFees);
+
+        maxLocked = uint128(yield.subFloor(performanceFeesInAssets + platformFeeInAssets));
+
+        lastAccrual = uint64(block.timestamp);
 
         // Update cellar's total balance.
         totalBalance = currentTotalBalance;
@@ -473,14 +476,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         if (newAccrualPeriod != 0) {
             accrualPeriod = newAccrualPeriod;
 
-            nextAccrualPeriod = 0;
+            delete nextAccrualPeriod;
         }
-    }
-
-    // =========================================== FEE LOGIC ===========================================
-
-    function accruedPerformanceFees() public view virtual returns (uint256) {
-        return balanceOf[address(this)];
     }
 
     // ======================================== SWEEP LOGIC ========================================

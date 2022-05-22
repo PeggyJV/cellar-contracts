@@ -350,7 +350,6 @@ contract MultipositionCellarTest is DSTestPlus {
     function testAccrue() public {
         // Scenario:
         //  - Multiposition cellar has 3 positions.
-        //  - Current Unix timestamp of test environment is 12345678.
         //
         // Testcases Covered:
         // - Test accrual with positive performance.
@@ -362,75 +361,76 @@ contract MultipositionCellarTest is DSTestPlus {
         // - Test accrual for multiple positions.
         // - Test accrued yield is distributed linearly as expected.
         // - Test deposits / withdraws do not effect accrual and yield distribution.
-        //
+
         // NOTE: The amounts in each column are approximations. Actual results may differ due
         //       to swaps and decimal conversions, however, it should not be significant.
-        // +==============+==============+==================+=====================+
-        // | Total Assets | Total Locked | Performance Fees |  Last Accrual Time  |
-        // |   (in USD)   |   (in USD)    |   (in shares)   |    (in seconds)     |
-        // +==============+==============+==================+=====================+
-        // | 1. Deposit $100 worth of assets into each position.                  |
-        // +--------------+--------------+------------------+---------------------+
-        // |         $300 |            0 |                0 |                   0 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 2. Each position gains 50 assets of yield.                           |
-        // |    NOTE: Nothing should change because yield has not been accrued.   |
-        // +--------------+--------------+------------------+---------------------+
-        // |         $300 |            0 |                0 |                   0 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 3. Accrue with positive performance.                                 |
-        // +--------------+--------------+------------------+---------------------+
-        // |         $315 |         $135 |              $15 |                   0 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 4. Half of accrual period passes.                                    |
-        // +--------------+--------------+------------------+---------------------+
-        // |       $382.5 |        $67.5 |              $15 |            12345678 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 5. Deposit 200 assets into a position.                               |
-        // |    NOTE: For testing that deposit does not effect yield and is not   |
-        // |          factored in to later accrual.                               |
-        // +--------------+--------------+------------------+---------------------+
-        // |       $582.5 |        $67.5 |              $15 |            12345678 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 6. Entire accrual period passes.                                     |
-        // +--------------+--------------+------------------+---------------------+
-        // |         $650 |           $0 |              $15 |            12345678 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 7. Withdraw 100 assets from a position.                              |
-        // |    NOTE: For testing that withdraw does not effect yield and is not  |
-        // |          factored in to later accrual.                               |
-        // +--------------+--------------+------------------+---------------------+
-        // |         $550 |           $0 |              $15 |            12345678 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 8. Accrue with no performance.                                       |
-        // |    NOTE: Should not accrue any yield or fees since user deposits     |
-        // |          and withdraws are not factored into yield. Also should      |
-        // |          not start an accural period since there was no yield        |
-        // |          to distribute.                                              |
-        // +--------------+--------------+------------------+---------------------+
-        // |         $550 |           $0 |              $15 |            12345678 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 9. A position loses 150 assets of yield.                             |
-        // |    NOTE: Nothing should change because losses have not been accrued. |
-        // +--------------+--------------+------------------+---------------------+
-        // |         $550 |           $0 |              $15 |            12345678 |
-        // +--------------+--------------+------------------+---------------------+
-        // | 10. Accrue with negative performance.                                |
-        // |    NOTE: Should not start an accrual period since losses are         |
-        // |          realized immediately.                                       |
-        // +--------------+--------------+------------------+---------------------+
-        // |         $400 |           $0 |              $15 |            12345678 |
-        // +--------------+--------------+------------------+---------------------+
-
-        // Initialize timestamp of test environment to 12345678.
-        hevm.warp(12345678);
+        // +==============+==============+==================+================+===================+==============+
+        // | Total Assets | Total Locked | Performance Fees | Platform Fees  | Last Accrual Time | Current Time |
+        // |   (in USD)   |   (in USD)   |    (in shares)   |  (in shares)   |   (in seconds)    | (in seconds) |
+        // +==============+==============+==================+================+===================+==============+
+        // | 1. Deposit $100 worth of assets into each position.                                                |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $300 |           $0 |                0 |              0 |                 0 |            0 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 2. An entire year passes.                                                                          |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $300 |           $0 |                0 |              0 |                 0 |     31536000 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 3. Test accrual of platform fees.                                                                  |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $300 |           $0 |                0 |              3 |          31536000 |     31536000 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 4. Each position gains $50 worth of assets of yield.                                               |
+        // |    NOTE: Nothing should change because yield has not been accrued.                                 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $300 |           $0 |                0 |              3 |          31536000 |     31536000 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 5. Accrue with positive performance.                                                               |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $315 |         $135 |               15 |              3 |          31536000 |     31536000 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 6. Half of accrual period passes.                                                                  |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |       $382.5 |        $67.5 |               15 |              3 |          31536000 |     31838400 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 7. Deposit $200 worth of assets into a position.                                                   |
+        // |    NOTE: For testing that deposit does not effect yield and is not factored in to later accrual.   |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |       $582.5 |        $67.5 |               15 |              3 |          31536000 |     31838400 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 8. Entire accrual period passes.                                                                   |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $650 |           $0 |               15 |              3 |          31536000 |     32140800 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 9. Withdraw $100 worth of assets from a position.                                                  |
+        // |    NOTE: For testing that withdraw does not effect yield and is not factored in to later accrual.  |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $550 |           $0 |               15 |              3 |          31536000 |     32140800 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 10. Accrue with no performance.                                                                    |
+        // |    NOTE: Ignore platform fees from now on because we've already tested they work and amounts at    |
+        // |          this timescale are very small.                                                            |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $550 |           $0 |               15 |              3 |          32140800 |     32140800 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 11. A position loses $150 worth of assets of yield.                                                |
+        // |    NOTE: Nothing should change because losses have not been accrued.                               |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $550 |           $0 |               15 |              3 |          32140800 |     32140800 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // | 12. Accrue with negative performance.                                                              |
+        // |    NOTE: Losses are realized immediately.                                                          |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
+        // |         $400 |           $0 |               15 |              3 |          32745600 |     32745600 |
+        // +--------------+--------------+------------------+----------------+-------------------+--------------+
 
         ERC4626[] memory positions = cellar.getPositions();
+
+        // 1. Deposit $100 worth of assets into each position.
         for (uint256 i; i < positions.length; i++) {
             ERC4626 position = positions[i];
             MockERC20 positionAsset = MockERC20(address(position.asset()));
 
-            // 1. Deposit $100 of assets into each position.
             uint256 assets = swapRouter.convert(address(USDC), address(positionAsset), 100e6);
             positionAsset.mint(address(this), assets);
             positionAsset.approve(address(cellar), assets);
@@ -440,26 +440,45 @@ contract MultipositionCellarTest is DSTestPlus {
             (, , uint112 balance) = cellar.getPositionData(position);
             assertEq(balance, assets);
             assertApproxEq(cellar.totalBalance(), 100e6 * (i + 1), 1e6);
-
-            // 2. Each position gains $50 assets of yield.
-            MockERC4626(address(position)).simulateGain(assets / 2, address(cellar));
-            assertApproxEq(cellar.convertToAssets(positionAsset, position.maxWithdraw(address(cellar))), 150e6, 2e6);
         }
 
         assertApproxEq(cellar.totalAssets(), 300e6, 1e6);
 
+        // 2. An entire year passes.
+        hevm.warp(block.timestamp + 365 days);
+        assertEq(block.timestamp, 31536000);
+
+        // 3. Accrue platform fees.
+        cellar.accrue();
+
+        assertEq(cellar.totalLocked(), 0);
+        assertApproxEq(cellar.totalAssets(), 300e6, 1e6);
+        assertApproxEq(cellar.totalBalance(), 300e6, 1e6);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 3e6, 0.01e6);
+        assertEq(cellar.lastAccrual(), 31536000);
+
+        // 4. Each position gains $50 worth of assets of yield.
+        for (uint256 i; i < positions.length; i++) {
+            ERC4626 position = positions[i];
+            MockERC20 positionAsset = MockERC20(address(position.asset()));
+
+            uint256 assets = swapRouter.convert(address(USDC), address(positionAsset), 50e6);
+            MockERC4626(address(position)).simulateGain(assets, address(cellar));
+            assertApproxEq(cellar.convertToAssets(positionAsset, position.maxWithdraw(address(cellar))), 150e6, 2e6);
+        }
+
         uint256 priceOfShareBefore = cellar.convertToShares(1e6);
 
-        // 3. Accrue with positive performance.
+        // 5. Accrue with positive performance.
         cellar.accrue();
 
         uint256 priceOfShareAfter = cellar.convertToShares(1e6);
-        assertApproxEq(priceOfShareAfter, priceOfShareBefore, 1e6);
+        assertEq(priceOfShareAfter, priceOfShareBefore);
         assertApproxEq(cellar.totalLocked(), 135e6, 1e6);
         assertApproxEq(cellar.totalAssets(), 315e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 450e6, 2e6);
-        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
-        assertEq(cellar.lastAccrual(), 12345678);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
+        assertEq(cellar.lastAccrual(), 31536000);
 
         // Position balances should have updated to reflect yield accrued per position.
         for (uint256 i; i < positions.length; i++) {
@@ -469,17 +488,18 @@ contract MultipositionCellarTest is DSTestPlus {
             assertApproxEq(cellar.convertToAssets(position.asset(), balance), 150e6, 2e6);
         }
 
-        // 4. Half of accrual period passes.
+        // 6. Half of accrual period passes.
         uint256 accrualPeriod = cellar.accrualPeriod();
         hevm.warp(block.timestamp + accrualPeriod / 2);
+        assertEq(block.timestamp, 31838400);
 
         assertApproxEq(cellar.totalLocked(), 67.5e6, 1e6);
         assertApproxEq(cellar.totalAssets(), 382.5e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 450e6, 2e6);
-        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
-        assertEq(cellar.lastAccrual(), 12345678);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
+        assertEq(cellar.lastAccrual(), 31536000);
 
-        // 5. Deposit 200 assets into a position.
+        // 7. Deposit $200 worth of assets into a position.
         USDC.mint(address(this), 200e6);
         USDC.approve(address(cellar), 200e6);
         cellar.depositIntoPosition(usdcCLR, 200e6, address(this));
@@ -487,19 +507,20 @@ contract MultipositionCellarTest is DSTestPlus {
         assertApproxEq(cellar.totalLocked(), 67.5e6, 1e6);
         assertApproxEq(cellar.totalAssets(), 582.5e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 650e6, 2e6);
-        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
-        assertEq(cellar.lastAccrual(), 12345678);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
+        assertEq(cellar.lastAccrual(), 31536000);
 
-        // 6. Entire accrual period passes.
+        // 8. Entire accrual period passes.
         hevm.warp(block.timestamp + accrualPeriod / 2);
+        assertEq(block.timestamp, 32140800);
 
         assertEq(cellar.totalLocked(), 0);
         assertApproxEq(cellar.totalAssets(), 650e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 650e6, 2e6);
-        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
-        assertEq(cellar.lastAccrual(), 12345678);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
+        assertEq(cellar.lastAccrual(), 31536000);
 
-        // 7. Withdraw 100 assets from a position.
+        // 9. Withdraw $100 worth of assets from a position.
         cellar.withdrawFromPosition(
             wethCLR,
             swapRouter.convert(address(USDC), address(WETH), 100e6),
@@ -510,35 +531,35 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(cellar.totalLocked(), 0);
         assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
-        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
-        assertEq(cellar.lastAccrual(), 12345678);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
+        assertEq(cellar.lastAccrual(), 31536000);
 
-        // 8. Accrue with no performance.
+        // 10. Accrue with no performance.
         cellar.accrue();
 
         assertEq(cellar.totalLocked(), 0);
         assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
-        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
-        assertEq(cellar.lastAccrual(), 12345678);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
+        assertEq(cellar.lastAccrual(), 32140800);
 
-        // 9. A position loses 150 assets of yield.
+        // 11. A position loses $150 worth of assets of yield.
         MockERC4626(address(usdcCLR)).simulateLoss(150e6);
 
         assertEq(cellar.totalLocked(), 0);
         assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
-        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
-        assertEq(cellar.lastAccrual(), 12345678);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
+        assertEq(cellar.lastAccrual(), 32140800);
 
-        // // 10. Accrue with negative performance.
+        // 12. Accrue with negative performance.
         cellar.accrue();
 
         assertEq(cellar.totalLocked(), 0);
         assertApproxEq(cellar.totalAssets(), 400e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 400e6, 2e6);
-        assertApproxEq(cellar.accruedPerformanceFees(), 15e6, 1e6);
-        assertEq(cellar.lastAccrual(), 12345678);
+        assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
+        assertEq(cellar.lastAccrual(), 32140800);
     }
 
     // ============================================= POSITIONS TEST =============================================
