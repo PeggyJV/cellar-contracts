@@ -7,7 +7,7 @@ import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib
 import { ERC4626 } from "../../interfaces/ERC4626.sol";
 import { MathUtils } from "../../utils/MathUtils.sol";
 
-import { MockSwapRouter } from "./MockSwapRouter.sol";
+import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { MockPriceOracle } from "./MockPriceOracle.sol";
 
 import "../../Errors.sol";
@@ -16,7 +16,6 @@ contract MockMultipositionCellar is MultipositionCellar {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
 
-    MockSwapRouter public immutable swapRouter;
     MockPriceOracle public immutable priceOracle;
 
     constructor(
@@ -24,13 +23,12 @@ contract MockMultipositionCellar is MultipositionCellar {
         ERC4626[] memory _positions,
         address[][] memory _paths,
         uint32[] memory _maxSlippages,
+        ISwapRouter _swapRouter,
         string memory _name,
         string memory _symbol,
         uint8 _decimals,
-        MockSwapRouter _swapRouter,
         MockPriceOracle _priceOracle
-    ) MultipositionCellar(_asset, _positions, _paths, _maxSlippages, _name, _symbol, _decimals) {
-        swapRouter = _swapRouter;
+    ) MultipositionCellar(_asset, _positions, _paths, _maxSlippages, _swapRouter, _name, _symbol, _decimals) {
         priceOracle = _priceOracle;
     }
 
@@ -79,38 +77,5 @@ contract MockMultipositionCellar is MultipositionCellar {
 
         ERC20 positionAsset = position.asset();
         positionAsset.safeTransfer(receiver, assets);
-    }
-
-    // ============================================= SWAP UTILS =============================================
-
-    function _swap(
-        ERC20 positionAsset,
-        uint256 assets,
-        uint256 assetsOutMin,
-        address[] memory path
-    ) internal override returns (uint256) {
-        ERC20 assetIn = ERC20(path[0]);
-        ERC20 assetOut = ERC20(path[path.length - 1]);
-
-        // Ensure that the asset being swapped matches the asset received by the position.
-        if (assetOut != positionAsset) revert USR_InvalidSwap(address(assetOut), address(positionAsset));
-
-        // Check whether a swap is necessary. If not, just return back assets.
-        if (assetIn == assetOut) return assets;
-
-        // Approve assets to be swapped.
-        assetIn.safeApprove(address(swapRouter), assets);
-
-        // Perform swap to position's current asset.
-        uint256[] memory swapOutput = swapRouter.swapExactTokensForTokens(
-            assets,
-            assetsOutMin,
-            path,
-            address(this),
-            block.timestamp + 60
-        );
-
-        // Retrieve the final assets received from swap.
-        return swapOutput[swapOutput.length - 1];
     }
 }

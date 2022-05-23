@@ -6,6 +6,7 @@ import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockMultipositionCellar } from "./mocks/MockMultipositionCellar.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
 import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
+import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { MockPriceOracle } from "./mocks/MockPriceOracle.sol";
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { ERC4626 } from "../interfaces/ERC4626.sol";
@@ -96,10 +97,10 @@ contract MultipositionCellarTest is DSTestPlus {
             positions,
             paths,
             maxSlippages,
+            ISwapRouter(address(swapRouter)),
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             6,
-            swapRouter,
             priceOracle
         );
         hevm.label(address(cellar), "cellar");

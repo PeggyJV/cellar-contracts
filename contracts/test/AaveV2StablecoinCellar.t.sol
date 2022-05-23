@@ -127,7 +127,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(USDC.balanceOf(address(this)), assets);
     }
 
-    // Test using with 18 decimals instead of 6.
+    // Test using asset with 18 decimals instead of 6.
     function testDepositAndWithdrawWithDifferentDecimals(uint256 assets) public {
         cellar.updatePosition(address(DAI));
 
@@ -182,7 +182,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(USDC.balanceOf(address(this)), assets);
     }
 
-    // Test using with 18 decimals instead of 6.
+    // Test using asset with 18 decimals instead of 6.
     function testMintAndRedeemWithDifferentDecimals(uint256 shares) public {
         cellar.updatePosition(address(DAI));
 

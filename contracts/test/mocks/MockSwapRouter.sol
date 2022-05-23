@@ -172,8 +172,8 @@ contract MockSwapRouter {
     }
 
     function convert(
-        address fromToken, // USDC
-        address toToken, // ETH
+        address fromToken,
+        address toToken,
         uint256 amount
     ) public view returns (uint256) {
         return (amount * getExchangeRate[fromToken][toToken]) / 10**ERC20(fromToken).decimals();
