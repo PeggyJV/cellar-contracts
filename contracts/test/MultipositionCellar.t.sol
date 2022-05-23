@@ -563,6 +563,24 @@ contract MultipositionCellarTest is DSTestPlus {
         assertEq(cellar.lastAccrual(), 32140800);
     }
 
+    function testAccrueWithZeroTotalLocked() public {
+        cellar.accrue();
+
+        assertEq(cellar.totalLocked(), 0);
+
+        cellar.accrue();
+    }
+
+    function testFailAccrueWithNonzeroTotalLocked() public {
+        MockERC4626(address(usdcCLR)).simulateGain(100e6, address(cellar));
+        cellar.accrue();
+
+        // $90 locked after taking $10 for 10% performance fees.
+        assertEq(cellar.totalLocked(), 90e6);
+
+        cellar.accrue();
+    }
+
     // ============================================= POSITIONS TEST =============================================
 
     function testSetPositions() public {
@@ -779,7 +797,7 @@ contract MultipositionCellarTest is DSTestPlus {
 
     // ============================================== LIMITS TEST ==============================================
 
-    function testLimits() external {
+    function testLimits() public {
         USDC.mint(address(this), 100e6);
         USDC.approve(address(cellar), 100e6);
         cellar.deposit(100e6, address(this));

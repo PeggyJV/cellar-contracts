@@ -426,8 +426,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     // =========================================== ACCRUAL LOGIC ===========================================
 
     function accrue() external virtual onlyOwner {
-        uint256 previousAccrual = lastAccrual;
-        if (block.timestamp < previousAccrual + accrualPeriod) revert STATE_AccrualOngoing();
+        if (totalLocked() > 0) revert STATE_AccrualOngoing();
 
         uint256 yield;
         uint256 currentTotalBalance = totalBalance;
@@ -460,7 +459,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
             performanceFees = convertToShares(performanceFeesInAssets);
         }
 
-        uint256 elapsedTime = block.timestamp - previousAccrual;
+        uint256 elapsedTime = block.timestamp - lastAccrual;
         uint256 platformFeeInAssets = (totalAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
         uint256 platformFees = convertToShares(platformFeeInAssets);
 
