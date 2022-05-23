@@ -2,7 +2,7 @@
 pragma solidity 0.8.13;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { ICellar } from "../interfaces/ICellar.sol";
+import { ERC4626 } from "../interfaces/ERC4626.sol";
 import { IAaveIncentivesController } from "../interfaces/IAaveIncentivesController.sol";
 import { IStakedTokenV2 } from "../interfaces/IStakedTokenV2.sol";
 import { ICurveSwaps } from "../interfaces/ICurveSwaps.sol";
@@ -105,7 +105,7 @@ contract CellarRouterTest is DSTestPlus {
         // Test deposit with permit.
         USDC.mint(owner, assets);
         uint256 shares = router.depositIntoCellarWithPermit(
-            ICellar(address(cellar)),
+            ERC4626(address(cellar)),
             assets,
             owner,
             owner,
@@ -141,7 +141,7 @@ contract CellarRouterTest is DSTestPlus {
         hevm.prank(owner);
         DAI.approve(address(router), assets);
         DAI.mint(owner, assets);
-        uint256 shares = router.depositAndSwapIntoCellar(ICellar(address(cellar)), path, assets, 0, owner, owner);
+        uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, assets, 0, owner, owner);
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
         // to deposit due to slippage swaps.
@@ -170,7 +170,7 @@ contract CellarRouterTest is DSTestPlus {
         hevm.prank(owner);
         USDC.approve(address(router), assets);
         USDC.mint(owner, assets);
-        uint256 shares = router.depositAndSwapIntoCellar(ICellar(address(cellar)), path, assets, assets, owner, owner);
+        uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, assets, assets, owner, owner);
 
         // Run test.
         assertEq(shares, assets.changeDecimals(6, 18)); // Expect exchange rate to be 1:1 on initial deposit.
@@ -193,7 +193,7 @@ contract CellarRouterTest is DSTestPlus {
         hevm.prank(owner);
         DAI.approve(address(router), 1e18);
         DAI.mint(owner, 1e18);
-        router.depositAndSwapIntoCellar(ICellar(address(cellar)), path, 1e18, 0, owner, owner);
+        router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, 1e18, 0, owner, owner);
     }
 
     // Test using asset with 18 decimals instead of 6.
@@ -215,7 +215,7 @@ contract CellarRouterTest is DSTestPlus {
         hevm.prank(owner);
         USDC.approve(address(router), assets);
         USDC.mint(owner, assets);
-        uint256 shares = router.depositAndSwapIntoCellar(ICellar(address(cellar)), path, assets, 0, owner, owner);
+        uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, assets, 0, owner, owner);
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
         // to deposit due to slippage swaps.
@@ -257,7 +257,7 @@ contract CellarRouterTest is DSTestPlus {
         // Test deposit and swap with permit.
         DAI.mint(owner, assets);
         uint256 shares = router.depositAndSwapIntoCellarWithPermit(
-            ICellar(address(cellar)),
+            ERC4626(address(cellar)),
             path,
             assets,
             0,

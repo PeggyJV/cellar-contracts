@@ -2,10 +2,9 @@
 pragma solidity 0.8.13;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import { ICellar } from "./interfaces/ICellar.sol";
-import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { ERC4626 } from "./interfaces/ERC4626.sol";
+import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
+import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 
@@ -40,7 +39,7 @@ contract CellarRouter is ICellarRouter {
      * @return shares amount of shares minted
      */
     function depositIntoCellarWithPermit(
-        ICellar cellar,
+        ERC4626 cellar,
         uint256 assets,
         address receiver,
         address owner,
@@ -76,7 +75,7 @@ contract CellarRouter is ICellarRouter {
      * @return shares amount of shares minted
      */
     function depositAndSwapIntoCellar(
-        ICellar cellar,
+        ERC4626 cellar,
         address[] calldata path,
         uint256 assets,
         uint256 assetsOutMin,
@@ -135,7 +134,7 @@ contract CellarRouter is ICellarRouter {
      * @return shares amount of shares minted
      */
     function depositAndSwapIntoCellarWithPermit(
-        ICellar cellar,
+        ERC4626 cellar,
         address[] calldata path,
         uint256 assets,
         uint256 assetsOutMin,
