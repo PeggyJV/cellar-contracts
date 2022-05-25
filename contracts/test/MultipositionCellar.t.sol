@@ -7,7 +7,6 @@ import { MockMultipositionCellar } from "./mocks/MockMultipositionCellar.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
 import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
 import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import { MockPriceOracle } from "./mocks/MockPriceOracle.sol";
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { ERC4626 } from "../interfaces/ERC4626.sol";
 
@@ -18,8 +17,6 @@ import { MathUtils } from "../utils/MathUtils.sol";
 
 contract MultipositionCellarTest is DSTestPlus {
     using MathUtils for uint256;
-
-    MockPriceOracle private priceOracle;
 
     MockMultipositionCellar private cellar;
     MockSwapRouter private swapRouter;
@@ -34,28 +31,22 @@ contract MultipositionCellarTest is DSTestPlus {
     MockERC4626 private wbtcCLR;
 
     function setUp() public {
-        priceOracle = new MockPriceOracle();
-        hevm.label(address(priceOracle), "oracle");
-
         swapRouter = new MockSwapRouter();
         hevm.label(address(swapRouter), "swapRouter");
 
         USDC = new MockERC20("USDC", 6);
         hevm.label(address(USDC), "USDC");
         usdcCLR = new MockERC4626(ERC20(address(USDC)), "USDC Cellar LP Token", "USDC-CLR", 6);
-        priceOracle.setPrice(address(USDC), 1e8);
         hevm.label(address(usdcCLR), "usdcCLR");
 
         WETH = new MockERC20("WETH", 18);
         hevm.label(address(WETH), "WETH");
         wethCLR = new MockERC4626(ERC20(address(WETH)), "WETH Cellar LP Token", "WETH-CLR", 18);
-        priceOracle.setPrice(address(WETH), 2000e8);
         hevm.label(address(wethCLR), "wethCLR");
 
         WBTC = new MockERC20("WBTC", 8);
         hevm.label(address(WBTC), "WBTC");
         wbtcCLR = new MockERC4626(ERC20(address(WBTC)), "WBTC Cellar LP Token", "WBTC-CLR", 8);
-        priceOracle.setPrice(address(WBTC), 30_000e8);
         hevm.label(address(wbtcCLR), "wbtcCLR");
 
         // Setup exchange rates:
@@ -100,8 +91,7 @@ contract MultipositionCellarTest is DSTestPlus {
             ISwapRouter(address(swapRouter)),
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            6,
-            priceOracle
+            6
         );
         hevm.label(address(cellar), "cellar");
 
@@ -375,38 +365,38 @@ contract MultipositionCellarTest is DSTestPlus {
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 2. An entire year passes.                                                                          |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
-        // |         $300 |           $0 |                0 |              0 |                 0 |     31536000 |
+        // |         $300 |           $0 |                0 |              0 |                 0 |     lastAccrualTimestamp |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 3. Test accrual of platform fees.                                                                  |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
-        // |         $300 |           $0 |                0 |              3 |          31536000 |     31536000 |
+        // |         $300 |           $0 |                0 |              3 |          lastAccrualTimestamp |     lastAccrualTimestamp |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 4. Each position gains $50 worth of assets of yield.                                               |
         // |    NOTE: Nothing should change because yield has not been accrued.                                 |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
-        // |         $300 |           $0 |                0 |              3 |          31536000 |     31536000 |
+        // |         $300 |           $0 |                0 |              3 |          lastAccrualTimestamp |     lastAccrualTimestamp |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 5. Accrue with positive performance.                                                               |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
-        // |         $315 |         $135 |               15 |              3 |          31536000 |     31536000 |
+        // |         $315 |         $135 |               15 |              3 |          lastAccrualTimestamp |     lastAccrualTimestamp |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 6. Half of accrual period passes.                                                                  |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
-        // |       $382.5 |        $67.5 |               15 |              3 |          31536000 |     31838400 |
+        // |       $382.5 |        $67.5 |               15 |              3 |          lastAccrualTimestamp |     31838400 |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 7. Deposit $200 worth of assets into a position.                                                   |
         // |    NOTE: For testing that deposit does not effect yield and is not factored in to later accrual.   |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
-        // |       $582.5 |        $67.5 |               15 |              3 |          31536000 |     31838400 |
+        // |       $582.5 |        $67.5 |               15 |              3 |          lastAccrualTimestamp |     31838400 |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 8. Entire accrual period passes.                                                                   |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
-        // |         $650 |           $0 |               15 |              3 |          31536000 |     32140800 |
+        // |         $650 |           $0 |               15 |              3 |          lastAccrualTimestamp |     32140800 |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 9. Withdraw $100 worth of assets from a position.                                                  |
         // |    NOTE: For testing that withdraw does not effect yield and is not factored in to later accrual.  |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
-        // |         $550 |           $0 |               15 |              3 |          31536000 |     32140800 |
+        // |         $550 |           $0 |               15 |              3 |          lastAccrualTimestamp |     32140800 |
         // +--------------+--------------+------------------+----------------+-------------------+--------------+
         // | 10. Accrue with no performance.                                                                    |
         // |    NOTE: Ignore platform fees from now on because we've already tested they work and amounts at    |
@@ -447,7 +437,7 @@ contract MultipositionCellarTest is DSTestPlus {
 
         // 2. An entire year passes.
         hevm.warp(block.timestamp + 365 days);
-        assertEq(block.timestamp, 31536000);
+        uint256 lastAccrualTimestamp = block.timestamp;
 
         // 3. Accrue platform fees.
         cellar.accrue();
@@ -456,7 +446,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertApproxEq(cellar.totalAssets(), 300e6, 1e6);
         assertApproxEq(cellar.totalBalance(), 300e6, 1e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 3e6, 0.01e6);
-        assertEq(cellar.lastAccrual(), 31536000);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
 
         // 4. Each position gains $50 worth of assets of yield.
         for (uint256 i; i < positions.length; i++) {
@@ -479,7 +469,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertApproxEq(cellar.totalAssets(), 315e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 450e6, 2e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
-        assertEq(cellar.lastAccrual(), 31536000);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
 
         // Position balances should have updated to reflect yield accrued per position.
         for (uint256 i; i < positions.length; i++) {
@@ -492,13 +482,12 @@ contract MultipositionCellarTest is DSTestPlus {
         // 6. Half of accrual period passes.
         uint256 accrualPeriod = cellar.accrualPeriod();
         hevm.warp(block.timestamp + accrualPeriod / 2);
-        assertEq(block.timestamp, 31838400);
 
         assertApproxEq(cellar.totalLocked(), 67.5e6, 1e6);
         assertApproxEq(cellar.totalAssets(), 382.5e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 450e6, 2e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
-        assertEq(cellar.lastAccrual(), 31536000);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
 
         // 7. Deposit $200 worth of assets into a position.
         USDC.mint(address(this), 200e6);
@@ -509,17 +498,16 @@ contract MultipositionCellarTest is DSTestPlus {
         assertApproxEq(cellar.totalAssets(), 582.5e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 650e6, 2e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
-        assertEq(cellar.lastAccrual(), 31536000);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
 
         // 8. Entire accrual period passes.
         hevm.warp(block.timestamp + accrualPeriod / 2);
-        assertEq(block.timestamp, 32140800);
 
         assertEq(cellar.totalLocked(), 0);
         assertApproxEq(cellar.totalAssets(), 650e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 650e6, 2e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
-        assertEq(cellar.lastAccrual(), 31536000);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
 
         // 9. Withdraw $100 worth of assets from a position.
         cellar.withdrawFromPosition(
@@ -533,16 +521,17 @@ contract MultipositionCellarTest is DSTestPlus {
         assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
-        assertEq(cellar.lastAccrual(), 31536000);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
 
         // 10. Accrue with no performance.
         cellar.accrue();
+        lastAccrualTimestamp = block.timestamp;
 
         assertEq(cellar.totalLocked(), 0);
         assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
-        assertEq(cellar.lastAccrual(), 32140800);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
 
         // 11. A position loses $150 worth of assets of yield.
         MockERC4626(address(usdcCLR)).simulateLoss(150e6);
@@ -551,7 +540,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertApproxEq(cellar.totalAssets(), 550e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 550e6, 2e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
-        assertEq(cellar.lastAccrual(), 32140800);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
 
         // 12. Accrue with negative performance.
         cellar.accrue();
@@ -560,7 +549,7 @@ contract MultipositionCellarTest is DSTestPlus {
         assertApproxEq(cellar.totalAssets(), 400e6, 2e6);
         assertApproxEq(cellar.totalBalance(), 400e6, 2e6);
         assertApproxEq(cellar.balanceOf(address(cellar)), 18e6, 1e6);
-        assertEq(cellar.lastAccrual(), 32140800);
+        assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
     }
 
     function testAccrueWithZeroTotalLocked() public {

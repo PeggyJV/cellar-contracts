@@ -8,15 +8,13 @@ import { ERC4626 } from "../../interfaces/ERC4626.sol";
 import { MathUtils } from "../../utils/MathUtils.sol";
 
 import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import { MockPriceOracle } from "./MockPriceOracle.sol";
+import { MockSwapRouter } from "./MockSwapRouter.sol";
 
 import "../../Errors.sol";
 
 contract MockMultipositionCellar is MultipositionCellar {
     using SafeTransferLib for ERC20;
     using MathUtils for uint256;
-
-    MockPriceOracle public immutable priceOracle;
 
     constructor(
         ERC20 _asset,
@@ -26,20 +24,11 @@ contract MockMultipositionCellar is MultipositionCellar {
         ISwapRouter _swapRouter,
         string memory _name,
         string memory _symbol,
-        uint8 _decimals,
-        MockPriceOracle _priceOracle
-    ) MultipositionCellar(_asset, _positions, _paths, _maxSlippages, _swapRouter, _name, _symbol, _decimals) {
-        priceOracle = _priceOracle;
-    }
+        uint8 _decimals
+    ) MultipositionCellar(_asset, _positions, _paths, _maxSlippages, _swapRouter, _name, _symbol, _decimals) {}
 
     function convertToAssets(ERC20 positionAsset, uint256 assets) public view override returns (uint256) {
-        return
-            MathUtils.changeDecimals(
-                // Use 1e8 pairs with non-ETH denominations (eg. USDC).
-                assets.mulDivDown(priceOracle.getLatestPrice(address(positionAsset)), 1e8),
-                positionAsset.decimals(),
-                decimals
-            );
+        return MockSwapRouter(address(swapRouter)).convert(address(positionAsset), address(asset), assets);
     }
 
     function depositIntoPosition(

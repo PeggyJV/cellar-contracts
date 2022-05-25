@@ -304,8 +304,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     ) internal virtual override {
         if (isShutdown) revert STATE_ContractShutdown();
 
-        uint256 maxDepositable = maxDeposit(receiver);
-        if (assets > maxDepositable) revert USR_DepositRestricted(assets, maxDepositable);
+        uint256 maxAssets = maxDeposit(receiver);
+        if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
     }
 
     /**
