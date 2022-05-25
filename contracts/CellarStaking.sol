@@ -712,7 +712,7 @@ contract CellarStaking is ICellarStaking, Ownable {
      */
     function _earned(UserStake memory s) internal view returns (uint256) {
         uint256 rewardPerTokenAcc = rewardPerTokenStored - s.rewardPerTokenPaid;
-        uint256 newRewards = s.amountWithBoost * (rewardPerTokenAcc / ONE);
+        uint256 newRewards = s.amountWithBoost * rewardPerTokenAcc / ONE;
 
         return newRewards;
     }
