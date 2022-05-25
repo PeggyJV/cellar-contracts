@@ -553,19 +553,17 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @param reward                The amount of rewards to distribute per second.
      */
     function notifyRewardAmount(uint256 reward) external override onlyOwner updateRewards {
-        if (reward < epochDuration) revert USR_ZeroRewardsPerEpoch();
+        if (block.timestamp < endTimestamp) {
+            uint256 remaining = endTimestamp - block.timestamp;
+            uint256 leftover = remaining * rewardRate;
+            reward += leftover;
+        }
 
+        if (reward < epochDuration) revert USR_ZeroRewardsPerEpoch();
         uint256 rewardBalance = distributionToken.balanceOf(address(this));
         if (rewardBalance < reward) revert STATE_RewardsNotFunded(rewardBalance, reward);
 
-        if (block.timestamp >= endTimestamp) {
-            // Set new rate bc previous has already expired
-            rewardRate = reward / epochDuration;
-        } else {
-            uint256 remaining = endTimestamp - block.timestamp;
-            uint256 leftover = remaining * rewardRate;
-            rewardRate = (reward + leftover) / epochDuration;
-        }
+        rewardRate = reward / epochDuration;
 
         // prevent overflow when computing rewardPerToken
         if (rewardRate >= ((type(uint256).max / ONE) / epochDuration)) {

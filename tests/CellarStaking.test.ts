@@ -1410,6 +1410,16 @@ describe("CellarStaking", () => {
         expect(balanceBefore.sub(balanceAfter)).to.equal(rewards);
       });
 
+      it("should revert if the staking contract is not funded with enough tokens, counting an existing schedule", async () => {
+        // Call notify reward amount once
+        await stakingDist.notifyRewardAmount(initialTokenAmount);
+
+        // Schedule initialTokenAmount / 2 new rewards. Should fail because in total we need 3 * initialTokenAmount / 2 rewards
+        await expect(
+          stakingDist.notifyRewardAmount(initialTokenAmount.div(2))
+        ).to.be.revertedWith("STATE_RewardsNotFunded");
+      });
+
       it("should update and extend existing schedule", async () => {
         const { tokenDist, stakingUser } = ctx;
 
