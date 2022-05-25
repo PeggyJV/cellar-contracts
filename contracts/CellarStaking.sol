@@ -8,6 +8,8 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import "./Errors.sol";
 import { ICellarStaking } from "./interfaces/ICellarStaking.sol";
 
+import "hardhat/console.sol";
+
 /**
  * @title Sommelier Staking
  * @author Kevin Kennis
@@ -511,11 +513,18 @@ contract CellarStaking is ICellarStaking, Ownable {
 
         UserStake[] storage userStakes = stakes[msg.sender];
         for (uint256 i = 0; i < userStakes.length; i++) {
+            if (claimable) _updateRewardForStake(msg.sender, i);
+
             UserStake storage s = userStakes[i];
             uint256 amount = s.amount;
 
             if (amount > 0) {
+                // Update global state
+                totalDeposits -= amount;
+                totalDepositsWithBoost -= s.amountWithBoost;
+
                 s.amount = 0;
+                s.amountWithBoost = 0;
 
                 stakingToken.transfer(msg.sender, amount);
 
@@ -539,6 +548,8 @@ contract CellarStaking is ICellarStaking, Ownable {
 
         UserStake[] storage userStakes = stakes[msg.sender];
         for (uint256 i = 0; i < userStakes.length; i++) {
+            _updateRewardForStake(msg.sender, i);
+
             UserStake storage s = userStakes[i];
 
             reward += s.rewards;
@@ -634,11 +645,34 @@ contract CellarStaking is ICellarStaking, Ownable {
         // Update state and put in irreversible emergency mode
         ended = true;
         claimable = makeRewardsClaimable;
+        uint256 amountToReturn = distributionToken.balanceOf(address(this));
 
-        if (!claimable) {
-            // Send distribution token back to owner
-            distributionToken.transfer(msg.sender, distributionToken.balanceOf(address(this)));
+        if (claimable) {
+            // Update rewards one more time
+            rewardPerTokenStored = rewardPerToken();
+            lastAccountingTimestamp = latestRewardsTimestamp();
+
+            // Return any remaining, since new calculation is stopped
+            uint256 remaining = endTimestamp > block.timestamp ?
+                    (endTimestamp - block.timestamp) * rewardRate : 0;
+
+            console.log("Remaining:", remaining);
+
+            // Make sure any rewards except for remaining are kept for claims
+            uint256 amountToKeep = (rewardRate * epochDuration) - remaining;
+
+            console.log("Need to keep:", amountToKeep);
+
+            amountToReturn -= amountToKeep;
         }
+
+        console.log("Total balance:", distributionToken.balanceOf(address(this)));
+        console.log("Going to return:", amountToReturn);
+
+        // Send distribution token back to owner
+        distributionToken.transfer(msg.sender, amountToReturn);
+
+        console.log("Total balance after return:", distributionToken.balanceOf(address(this)));
 
         emit EmergencyStop(msg.sender, makeRewardsClaimable);
     }

@@ -1159,7 +1159,7 @@ describe("CellarStaking", () => {
       });
     });
 
-    describe("emergencyUnstake", () => {
+    describe.only("emergencyUnstake", () => {
       const rewardPerEpoch = ether(oneWeekSec.toString());
 
       beforeEach(async () => {
@@ -1264,9 +1264,6 @@ describe("CellarStaking", () => {
         // Move forward one week - rewards should be emitted
         await increaseTime(oneWeekSec * 2);
 
-        // Unbond to update reward
-        await stakingUser.unbondAll();
-
         await staking.emergencyStop(true);
         await stakingUser.emergencyUnstake();
 
@@ -1287,6 +1284,47 @@ describe("CellarStaking", () => {
         const balanceAfter = await tokenDist.balanceOf(user.address);
 
         expectRoundedEqual(balanceAfter.sub(balanceBefore), rewardPerEpoch);
+
+        console.log("Total deposits:", await staking.totalDeposits());
+        console.log("Reward claimed:", balanceAfter.sub(balanceBefore));
+
+        const contractBalanceAfter = await tokenDist.balanceOf(staking.address);
+        expectRoundedEqual(contractBalanceAfter, 0);
+      });
+
+      it("should allow rewards to be claimable, up until the moment of emergencyStop", async () => {
+        const { staking, stakingUser, tokenDist, user } = ctx;
+
+        await stakingUser.stake(ether("10000"), lockTwoWeeks);
+
+        const balanceBefore = await tokenDist.balanceOf(user.address);
+
+        // Move forward 1/2 week - 1/2 rewards should be emitted
+        await increaseTime(oneWeekSec / 2);
+
+        await staking.emergencyStop(true);
+        await stakingUser.emergencyUnstake();
+
+        // Try to claim rewards normally
+        await expect(stakingUser.claim(0)).to.be.revertedWith("STATE_ContractKilled");
+        await expect(stakingUser.claimAll()).to.be.revertedWith("STATE_ContractKilled");
+
+        // Try to claim rewards thru emergency
+        const tx = await stakingUser.emergencyClaim();
+        const receipt = await tx.wait();
+
+        const claimEvent = receipt.events?.find(e => e.event === "EmergencyClaim");
+
+        expect(claimEvent).to.not.be.undefined;
+        expect(claimEvent?.args?.[0]).to.equal(user.address);
+        expectRoundedEqual(claimEvent?.args?.[1], rewardPerEpoch.div(2)); // now half, since program was stopped halfway through
+
+        const balanceAfter = await tokenDist.balanceOf(user.address);
+
+        expectRoundedEqual(balanceAfter.sub(balanceBefore), rewardPerEpoch.div(2));
+
+        const contractBalanceAfter = await tokenDist.balanceOf(staking.address);
+        expectRoundedEqual(contractBalanceAfter, 0);
       });
     });
 
