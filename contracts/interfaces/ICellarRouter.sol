@@ -2,13 +2,13 @@
 pragma solidity 0.8.13;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { ICellar } from "../interfaces/ICellar.sol";
+import { ERC4626 } from "../interfaces/ERC4626.sol";
 
 interface ICellarRouter {
     // ======================================= ROUTER OPERATIONS =======================================
 
     function depositIntoCellarWithPermit(
-        ICellar cellar,
+        ERC4626 cellar,
         uint256 assets,
         address receiver,
         address owner,
@@ -19,19 +19,19 @@ interface ICellarRouter {
     ) external returns (uint256 shares);
 
     function depositAndSwapIntoCellar(
-        ICellar cellar,
+        ERC4626 cellar,
         address[] calldata path,
         uint256 assets,
-        uint256 minAssetsOut,
+        uint256 assetsOutMin,
         address receiver,
         address owner
     ) external returns (uint256 shares);
 
     function depositAndSwapIntoCellarWithPermit(
-        ICellar cellar,
+        ERC4626 cellar,
         address[] calldata path,
         uint256 assets,
-        uint256 minAssetsOut,
+        uint256 assetsOutMin,
         address receiver,
         address owner,
         uint256 deadline,

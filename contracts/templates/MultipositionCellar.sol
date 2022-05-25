@@ -7,8 +7,8 @@ import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ERC4626 } from "../interfaces/ERC4626.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
+import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { MathUtils } from "../utils/MathUtils.sol";
-import { SwapUtils } from "../utils/SwapUtils.sol";
 
 import "../Errors.sol";
 
@@ -227,7 +227,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     /**
      * @notice Cosmos Gravity Bridge contract. Used to transfer fees to `feeDistributor` on the Sommelier chain.
      */
-    IGravity public immutable gravityBridge = IGravity(0x69592e6f9d21989a043646fE8225da2600e5A0f7);
+    IGravity public constant gravityBridge = IGravity(0x69592e6f9d21989a043646fE8225da2600e5A0f7);
+    ISwapRouter public immutable swapRouter;
 
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
@@ -239,13 +240,16 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         ERC20 _asset,
         ERC4626[] memory _positions,
         address[][] memory _pathsToAsset,
-        uint32[] memory _maxSlippages, // Recommended default is 1%.
+        uint32[] memory _maxSlippages,
+        ISwapRouter _swapRouter,
         string memory _name,
         string memory _symbol,
         uint8 _decimals
     ) ERC4626(_asset, _name, _symbol, _decimals) Ownable() {
         positions = _positions;
+        swapRouter = _swapRouter;
 
+        // TODO: add checks that maxSlippages are within a healthy range and that pathToAsset is to asset
         // Set holding limits for each position and trust all initial positions.
         for (uint256 i; i < _positions.length; i++)
             getPositionData[_positions[i]] = PositionData({
@@ -254,6 +258,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 assets: 0,
                 pathToAsset: _pathsToAsset[i]
             });
+
+        lastAccrual = uint64(block.timestamp);
 
         // Transfer ownership to the Gravity Bridge.
         transferOwnership(address(gravityBridge));
@@ -285,7 +291,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     /**
-     * @notice Denomination position assets in the cellar's asset.
+     * @notice Denominate position assets in the cellar's asset.
      */
     function convertToAssets(ERC20 positionAsset, uint256 assets) public view virtual returns (uint256);
 
@@ -298,8 +304,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     ) internal virtual override {
         if (isShutdown) revert STATE_ContractShutdown();
 
-        uint256 maxDepositable = maxDeposit(receiver);
-        if (assets > maxDepositable) revert USR_DepositRestricted(assets, maxDepositable);
+        uint256 maxAssets = maxDeposit(receiver);
+        if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
     }
 
     /**
@@ -308,12 +314,12 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
      *       the holding position will likely revert due to a discrepency in the total assets
      *       reported by the cellar and the total assets that can actually be withdrawn when swap
      *       slippage is factored in. In this case, the withdrawn amount needed to empty the cellar
-     *       (or get as close as possible to it) would need to factor in swap slippage.  Normal
-     *       withdraws, luckily, do not need to worry about this. If the holding position cannot
-     *       already cover a withdraw in full, the cellar will withdraw an excess amount from
-     *       positions until it can cover not just that single withdraw but also subsequent
-     *       withdraws up to configurable target. This is much more economic for users as it batches
-     *       withdraws instead of doing potentially hundreds of withdraws from positions.
+     *       (or get as close as possible to it) would need to factor in swap slippage. Normal
+     *       withdraws do not need to worry about this. If the holding position cannot already cover
+     *       a withdraw in full, the cellar will withdraw an excess amount from positions until it
+     *       can cover not just that single withdraw but also subsequent withdraws up to
+     *       configurable target. This is much more economic for users as it batches withdraws
+     *       instead of doing potentially hundreds of withdraws from positions.
      */
     function beforeWithdraw(
         uint256 assets,
@@ -347,9 +353,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 if (totalPositionAssets == 0) continue;
 
                 // Exchange rate between the position asset and cellar's asset.
-                ERC20 positionAsset = position.asset();
                 uint256 onePositionAsset = 10**position.decimals();
-                uint256 exchangeRate = convertToAssets(positionAsset, onePositionAsset);
+                uint256 exchangeRate = convertToAssets(position.asset(), onePositionAsset);
 
                 // We want to pull as much as we can from this position, but no more than needed.
                 uint256 positionAssetsWithdrawn = MathUtils.min(
@@ -368,7 +373,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 uint256 assetsOutMin = assetsWithdrawn.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
 
                 // Perform a swap to holding position asset if necessary.
-                _swap(asset, positionAssetsWithdrawn, assetsOutMin, positionData.pathToAsset);
+                _swapTo(asset, positionAssetsWithdrawn, assetsOutMin, positionData.pathToAsset);
 
                 if (leftToWithdraw == 0) break;
             }
@@ -386,7 +391,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         if (address(fromPosition) != address(this)) _withdrawFromPosition(fromPosition, assetsFrom);
 
         // Perform a swap to receiving position's asset if necessary.
-        assetsTo = _swap(toPosition.asset(), assetsFrom, assetsToMin, path);
+        assetsTo = _swapTo(toPosition.asset(), assetsFrom, assetsToMin, path);
 
         // Deposit to destination if it is not the holding position.
         if (address(toPosition) != address(this)) _depositIntoPosition(toPosition, assetsTo);
@@ -420,16 +425,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
     // =========================================== ACCRUAL LOGIC ===========================================
 
-    /**
-     * @dev Accrual with positive performance will accrue yield, accrue fees, and start an accrual
-     *      period over which yield is linearly distributed over the entirety of that period. Accrual
-     *      with negative performance will realize losses immediately, accrue no fees, and not start an
-     *      accrual period. Accrual with no performance will accrue no yield, accrue no fees, and not
-     *      start an accrual period.
-     */
     function accrue() external virtual onlyOwner {
-        uint256 remainingAccrualPeriod = uint256(accrualPeriod).floorSub(block.timestamp - lastAccrual);
-        if (remainingAccrualPeriod != 0) revert STATE_AccrualOngoing(remainingAccrualPeriod);
+        if (totalLocked() > 0) revert STATE_AccrualOngoing();
 
         uint256 yield;
         uint256 currentTotalBalance = totalBalance;
@@ -453,17 +450,24 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
             yield += currentAssets.floorSub(lastAssets);
         }
 
+        // Accrue performance and platform fees as shares minted to the cellar.
+
+        uint256 performanceFeesInAssets;
+        uint256 performanceFees;
         if (yield != 0) {
-            // Accrue any performance fees as shares minted to the cellar.
-            uint256 performanceFeesInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
-            uint256 performanceFees = convertToShares(performanceFeesInAssets);
-
-            _mint(address(this), performanceFees);
-
-            maxLocked = uint128(totalLocked() + yield - performanceFeesInAssets);
-
-            lastAccrual = uint64(block.timestamp);
+            performanceFeesInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
+            performanceFees = convertToShares(performanceFeesInAssets);
         }
+
+        uint256 elapsedTime = block.timestamp - lastAccrual;
+        uint256 platformFeeInAssets = (totalAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
+        uint256 platformFees = convertToShares(platformFeeInAssets);
+
+        _mint(address(this), performanceFees + platformFees);
+
+        maxLocked = uint128(yield.floorSub(performanceFeesInAssets + platformFeeInAssets));
+
+        lastAccrual = uint64(block.timestamp);
 
         // Update cellar's total balance.
         totalBalance = currentTotalBalance;
@@ -473,14 +477,8 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         if (newAccrualPeriod != 0) {
             accrualPeriod = newAccrualPeriod;
 
-            nextAccrualPeriod = 0;
+            delete nextAccrualPeriod;
         }
-    }
-
-    // =========================================== FEE LOGIC ===========================================
-
-    function accruedPerformanceFees() public view virtual returns (uint256) {
-        return balanceOf[address(this)];
     }
 
     // ======================================== SWEEP LOGIC ========================================
@@ -525,13 +523,41 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         position.withdraw(assets, address(this), address(this));
     }
 
-    function _swap(
-        ERC20 positionAsset,
+    function _swapTo(
+        ERC20 toAsset,
         uint256 assets,
         uint256 assetsOutMin,
         address[] memory path
-    ) internal virtual returns (uint256) {
-        return SwapUtils.safeSwap(positionAsset, assets, assetsOutMin, path);
+    ) internal virtual returns (uint256 assetsOut) {
+        ERC20 assetIn = ERC20(path[0]);
+        ERC20 assetOut = ERC20(path[path.length - 1]);
+
+        // Check whether a swap is necessary. If not, just return back assets.
+        if (assetIn == toAsset) return assets;
+
+        // Ensure that the asset being swapped to is the asset expected.
+        if (assetOut != toAsset) revert USR_InvalidSwap(address(assetOut), address(toAsset));
+
+        // Approve assets to be swapped through the router.
+        assetIn.safeApprove(address(swapRouter), assets);
+
+        // Prepare the parameters for the swap.
+        uint24 POOL_FEE = 3000;
+        bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
+        for (uint256 i = 1; i < path.length; i++) {
+            encodePackedPath = abi.encodePacked(encodePackedPath, POOL_FEE, path[i]);
+        }
+
+        ISwapRouter.ExactInputParams memory params = ISwapRouter.ExactInputParams({
+            path: encodePackedPath,
+            recipient: address(this),
+            deadline: block.timestamp + 60,
+            amountIn: assets,
+            amountOutMinimum: assetsOutMin
+        });
+
+        // Executes the swap and return the amount out.
+        assetsOut = swapRouter.exactInput(params);
     }
 
     function _emptyPosition(ERC4626 position) internal virtual {
@@ -548,7 +574,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
             uint256 totalPositionAssets = position.redeem(sharesOwned, address(this), address(this));
 
             uint256 assetsOutMin = assets.mulDivDown(DENOMINATOR - positionData.maxSlippage, DENOMINATOR);
-            _swap(asset, totalPositionAssets, assetsOutMin, positionData.pathToAsset);
+            _swapTo(asset, totalPositionAssets, assetsOutMin, positionData.pathToAsset);
         }
     }
 

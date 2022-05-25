@@ -172,8 +172,8 @@ contract MockSwapRouter {
     }
 
     function convert(
-        address fromToken, // USDC
-        address toToken, // ETH
+        address fromToken,
+        address toToken,
         uint256 amount
     ) public view returns (uint256) {
         return (amount * getExchangeRate[fromToken][toToken]) / 10**ERC20(fromToken).decimals();
@@ -190,7 +190,7 @@ contract MockSwapRouter {
         uint160 sqrtPriceLimitX96;
     }
 
-    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256) {
+    function exactInputSingle(ExactInputSingleParams calldata params) external returns (uint256) {
         ERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
         uint256 amountOut = convert(params.tokenIn, params.tokenOut, params.amountIn);
@@ -202,7 +202,7 @@ contract MockSwapRouter {
         return amountOut;
     }
 
-    function exactInput(ISwapRouter.ExactInputParams memory params) external payable returns (uint256) {
+    function exactInput(ISwapRouter.ExactInputParams memory params) external returns (uint256) {
         (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
 
         while (params.path.hasMultiplePools()) {
@@ -253,6 +253,4 @@ contract MockSwapRouter {
         uint256 amountOut = convert(tokenIn, tokenOut, amountIn);
         return amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
     }
-
-    receive() external payable {}
 }
