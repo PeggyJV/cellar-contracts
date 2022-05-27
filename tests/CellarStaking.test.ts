@@ -1249,8 +1249,11 @@ describe("CellarStaking", () => {
         await expect(stakingUser.emergencyClaim()).to.be.revertedWith("STATE_NoEmergencyClaim");
       });
 
-      it("should allow rewards to be claimable", async () => {
+      it.only("should allow rewards to be claimable", async () => {
         const { staking, stakingUser, tokenDist, user } = ctx;
+
+        // Wait to ensure that depositor not immediately depositing
+        await increaseTime(oneWeekSec / 2);
 
         await stakingUser.stake(ether("10000"), lockTwoWeeks);
 
@@ -1277,7 +1280,7 @@ describe("CellarStaking", () => {
 
         expect(claimEvent).to.not.be.undefined;
         expect(claimEvent?.args?.[0]).to.equal(user.address);
-        expectRoundedEqual(claimEvent?.args?.[1], rewardPerEpoch);
+        expect(claimEvent?.args?.[1]).to.equal(rewardPerEpoch);
 
         const balanceAfter = await tokenDist.balanceOf(user.address);
 

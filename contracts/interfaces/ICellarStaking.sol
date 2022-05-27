@@ -48,6 +48,8 @@ interface ICellarStaking {
 
     function epochDuration() external returns (uint256);
 
+    function rewardsReady() external returns (uint256);
+
     function minimumDeposit() external returns (uint256);
 
     function endTimestamp() external returns (uint256);

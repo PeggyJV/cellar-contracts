@@ -8,6 +8,8 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import "./Errors.sol";
 import { ICellarStaking } from "./interfaces/ICellarStaking.sol";
 
+import "hardhat/console.sol";
+
 /**
  * @title Sommelier Staking
  * @author Kevin Kennis
@@ -139,6 +141,7 @@ contract CellarStaking is ICellarStaking, Ownable {
     ERC20 public immutable override stakingToken;
     ERC20 public immutable override distributionToken;
     uint256 public override epochDuration;
+    uint256 public override rewardsReady;
 
     uint256 public override minimumDeposit;
     uint256 public override endTimestamp;
@@ -213,7 +216,17 @@ contract CellarStaking is ICellarStaking, Ownable {
     function stake(uint256 amount, Lock lock) external override whenNotPaused updateRewards {
         if (amount == 0) revert USR_ZeroDeposit();
         if (amount < minimumDeposit) revert USR_MinimumDeposit(amount, minimumDeposit);
-        if (block.timestamp > endTimestamp) revert STATE_NoRewardsLeft();
+
+        if (totalDeposits == 0 && rewardsReady > 0) {
+            _startProgram(rewardsReady);
+            rewardsReady = 0;
+
+            // Need to run updateRewards again
+            rewardPerTokenStored = rewardPerToken();
+            lastAccountingTimestamp = latestRewardsTimestamp();
+        } else if (block.timestamp > endTimestamp) {
+            revert STATE_NoRewardsLeft();
+        }
 
         // Do share accounting and populate user stake information
         (uint256 boost, ) = _getBoost(lock);
@@ -535,6 +548,7 @@ contract CellarStaking is ICellarStaking, Ownable {
         }
 
         if (reward > 0) {
+            console.log("Reward:", reward);
             distributionToken.safeTransfer(msg.sender, reward);
 
             // No need for per-stake events like emergencyUnstake:
@@ -563,16 +577,22 @@ contract CellarStaking is ICellarStaking, Ownable {
         uint256 rewardBalance = distributionToken.balanceOf(address(this));
         if (rewardBalance < reward) revert STATE_RewardsNotFunded(rewardBalance, reward);
 
-        rewardRate = reward / epochDuration;
-
+        uint256 proposedRewardRate = reward / epochDuration;
         // prevent overflow when computing rewardPerToken
-        if (rewardRate >= ((type(uint256).max / ONE) / epochDuration)) {
+        if (proposedRewardRate >= ((type(uint256).max / ONE) / epochDuration)) {
             revert USR_RewardTooLarge();
         }
 
-        endTimestamp = block.timestamp + epochDuration;
+        if (totalDeposits == 0 && endTimestamp == 0) {
+            // No deposits yet, so keep rewards pending until first deposit
+            rewardsReady = reward;
+        } else {
+            // Ready to start
+            rewardRate = proposedRewardRate;
+            endTimestamp = block.timestamp + epochDuration;
 
-        emit Funding(reward, endTimestamp);
+            emit Funding(reward, endTimestamp);
+        }
     }
 
     /**
@@ -693,6 +713,25 @@ contract CellarStaking is ICellarStaking, Ownable {
     }
 
     /**
+     * @dev On initial deposit, start the rewards program.
+     *
+     * @param reward                    The pending rewards to start distributing.
+     */
+    function _startProgram(uint256 reward) internal {
+        // Assumptions
+        // Total deposits are now not 0, no ongoing program
+        // Rewards are already funded (since checked in notifyRewardAmount)
+
+        // Set new rate bc previous has already expired
+        rewardRate = reward / epochDuration;
+        endTimestamp = block.timestamp + epochDuration;
+
+        console.log("Started", rewardRate, epochDuration);
+
+        emit Funding(reward, endTimestamp);
+    }
+
+    /**
      * @dev Update reward for a specific user stake.
      */
     function _updateRewardForStake(address user, uint256 depositId) internal {
@@ -710,7 +749,7 @@ contract CellarStaking is ICellarStaking, Ownable {
      */
     function _earned(UserStake memory s) internal view returns (uint256) {
         uint256 rewardPerTokenAcc = rewardPerTokenStored - s.rewardPerTokenPaid;
-        uint256 newRewards = s.amountWithBoost * (rewardPerTokenAcc / ONE);
+        uint256 newRewards = s.amountWithBoost * rewardPerTokenAcc / ONE;
 
         return newRewards;
     }
