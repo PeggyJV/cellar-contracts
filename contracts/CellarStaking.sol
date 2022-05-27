@@ -8,8 +8,6 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import "./Errors.sol";
 import { ICellarStaking } from "./interfaces/ICellarStaking.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title Sommelier Staking
  * @author Kevin Kennis
@@ -548,7 +546,6 @@ contract CellarStaking is ICellarStaking, Ownable {
         }
 
         if (reward > 0) {
-            console.log("Reward:", reward);
             distributionToken.safeTransfer(msg.sender, reward);
 
             // No need for per-stake events like emergencyUnstake:
@@ -588,10 +585,7 @@ contract CellarStaking is ICellarStaking, Ownable {
             rewardsReady = reward;
         } else {
             // Ready to start
-            rewardRate = proposedRewardRate;
-            endTimestamp = block.timestamp + epochDuration;
-
-            emit Funding(reward, endTimestamp);
+            _startProgram(reward);
         }
     }
 
@@ -719,14 +713,11 @@ contract CellarStaking is ICellarStaking, Ownable {
      */
     function _startProgram(uint256 reward) internal {
         // Assumptions
-        // Total deposits are now not 0, no ongoing program
+        // Total deposits are now (mod current tx), no ongoing program
         // Rewards are already funded (since checked in notifyRewardAmount)
 
-        // Set new rate bc previous has already expired
         rewardRate = reward / epochDuration;
         endTimestamp = block.timestamp + epochDuration;
-
-        console.log("Started", rewardRate, epochDuration);
 
         emit Funding(reward, endTimestamp);
     }

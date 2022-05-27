@@ -1249,7 +1249,7 @@ describe("CellarStaking", () => {
         await expect(stakingUser.emergencyClaim()).to.be.revertedWith("STATE_NoEmergencyClaim");
       });
 
-      it.only("should allow rewards to be claimable", async () => {
+      it("should allow rewards to be claimable", async () => {
         const { staking, stakingUser, tokenDist, user } = ctx;
 
         // Wait to ensure that depositor not immediately depositing
