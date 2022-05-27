@@ -590,7 +590,8 @@ contract CellarStaking is ICellarStaking, Ownable {
 
         if (totalDeposits == 0 && endTimestamp == 0) {
             // No deposits yet, so keep rewards pending until first deposit
-            rewardsReady = reward;
+            // Incrementing in case it is called twice
+            rewardsReady += reward;
         } else {
             // Ready to start
             _startProgram(reward);
