@@ -588,7 +588,7 @@ contract CellarStaking is ICellarStaking, Ownable {
             revert USR_RewardTooLarge();
         }
 
-        if (totalDeposits == 0 && endTimestamp == 0) {
+        if (totalDeposits == 0) {
             // No deposits yet, so keep rewards pending until first deposit
             // Incrementing in case it is called twice
             rewardsReady += reward;
