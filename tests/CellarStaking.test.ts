@@ -1159,7 +1159,7 @@ describe("CellarStaking", () => {
       });
     });
 
-    describe.only("emergencyUnstake", () => {
+    describe("emergencyUnstake", () => {
       const rewardPerEpoch = ether(oneWeekSec.toString());
 
       beforeEach(async () => {
@@ -1284,9 +1284,6 @@ describe("CellarStaking", () => {
         const balanceAfter = await tokenDist.balanceOf(user.address);
 
         expectRoundedEqual(balanceAfter.sub(balanceBefore), rewardPerEpoch);
-
-        console.log("Total deposits:", await staking.totalDeposits());
-        console.log("Reward claimed:", balanceAfter.sub(balanceBefore));
 
         const contractBalanceAfter = await tokenDist.balanceOf(staking.address);
         expectRoundedEqual(contractBalanceAfter, 0);

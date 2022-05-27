@@ -8,8 +8,6 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import "./Errors.sol";
 import { ICellarStaking } from "./interfaces/ICellarStaking.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title Sommelier Staking
  * @author Kevin Kennis
@@ -222,8 +220,7 @@ contract CellarStaking is ICellarStaking, Ownable {
             rewardsReady = 0;
 
             // Need to run updateRewards again
-            rewardPerTokenStored = rewardPerToken();
-            lastAccountingTimestamp = latestRewardsTimestamp();
+            _updateRewards();
         } else if (block.timestamp > endTimestamp) {
             revert STATE_NoRewardsLeft();
         }
@@ -649,30 +646,20 @@ contract CellarStaking is ICellarStaking, Ownable {
 
         if (claimable) {
             // Update rewards one more time
-            rewardPerTokenStored = rewardPerToken();
-            lastAccountingTimestamp = latestRewardsTimestamp();
+            _updateRewards();
 
             // Return any remaining, since new calculation is stopped
             uint256 remaining = endTimestamp > block.timestamp ?
                     (endTimestamp - block.timestamp) * rewardRate : 0;
 
-            console.log("Remaining:", remaining);
-
             // Make sure any rewards except for remaining are kept for claims
             uint256 amountToKeep = (rewardRate * epochDuration) - remaining;
-
-            console.log("Need to keep:", amountToKeep);
 
             amountToReturn -= amountToKeep;
         }
 
-        console.log("Total balance:", distributionToken.balanceOf(address(this)));
-        console.log("Going to return:", amountToReturn);
-
         // Send distribution token back to owner
         distributionToken.transfer(msg.sender, amountToReturn);
-
-        console.log("Total balance after return:", distributionToken.balanceOf(address(this)));
 
         emit EmergencyStop(msg.sender, makeRewardsClaimable);
     }
@@ -722,12 +709,10 @@ contract CellarStaking is ICellarStaking, Ownable {
     // ============================================ HELPERS ============================================
 
     /**
-     * @dev Update reward accounting for the global state totals.
+     * @dev Modifier to apply reward updates before functions that change accounts.
      */
     modifier updateRewards() {
-        rewardPerTokenStored = rewardPerToken();
-        lastAccountingTimestamp = latestRewardsTimestamp();
-
+        _updateRewards();
         _;
     }
 
@@ -738,6 +723,14 @@ contract CellarStaking is ICellarStaking, Ownable {
         if (paused) revert STATE_ContractPaused();
         if (ended) revert STATE_ContractKilled();
         _;
+    }
+
+    /**
+     * @dev Update reward accounting for the global state totals.
+     */
+    function _updateRewards() internal {
+        rewardPerTokenStored = rewardPerToken();
+        lastAccountingTimestamp = latestRewardsTimestamp();
     }
 
     /**
