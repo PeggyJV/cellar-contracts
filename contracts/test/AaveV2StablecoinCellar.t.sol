@@ -77,6 +77,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // Setup exchange rates:
         swapRouter.setExchangeRate(address(USDC), address(DAI), 1e18);
         swapRouter.setExchangeRate(address(DAI), address(USDC), 1e6);
+        swapRouter.setExchangeRate(address(AAVE), address(USDC), 100e6);
+        swapRouter.setExchangeRate(address(AAVE), address(DAI), 100e18);
 
         // Declare unnecessary variables with address 0.
         cellar = new AaveV2StablecoinCellar(
@@ -851,7 +853,10 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     // ========================================= REBALANCE TESTS =========================================
 
     function testRebalance(uint256 assets) external {
-        assets = bound(assets, 1e6, type(uint72).max);
+        // assets = bound(assets, 1e6, type(uint72).max);
+        assets = 100e6;
+
+        emit log_named_uint("assets", assets);
 
         USDC.mint(address(this), assets);
 
@@ -1073,25 +1078,25 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
     // ========================================= REINVEST TESTS =========================================
 
     function testReinvest() external {
-        incentivesController.addRewards(address(cellar), 100e18);
+        incentivesController.addRewards(address(cellar), 10e18);
         cellar.claimAndUnstake();
 
-        assertEq(stkAAVE.balanceOf(address(cellar)), 100e18, "Should have gained stkAAVE rewards.");
+        assertEq(stkAAVE.balanceOf(address(cellar)), 10e18, "Should have gained stkAAVE rewards.");
 
         hevm.warp(block.timestamp + 10 days + 1);
 
         cellar.reinvest(0);
 
         assertEq(stkAAVE.balanceOf(address(cellar)), 0, "Should have reinvested all stkAAVE.");
-        assertEq(aUSDC.balanceOf(address(cellar)), 95e6, "Should have reinvested into current position.");
+        assertEq(aUSDC.balanceOf(address(cellar)), 950e6, "Should have reinvested into current position.");
         assertEq(cellar.totalAssets(), 0, "Should have not updated total assets because its unrealized gains.");
 
         // Test that reinvested rewards are counted as yield.
         cellar.accrue();
 
-        assertEq(cellar.totalAssets(), 9.5e6, "Should have updated total assets after accrual.");
-        assertEq(cellar.totalLocked(), 85.5e6, "Should have realized gains.");
-        assertEq(cellar.totalBalance(), 95e6, "Should have updated total balance after accrual.");
+        assertEq(cellar.totalAssets(), 95e6, "Should have updated total assets after accrual.");
+        assertEq(cellar.totalLocked(), 855e6, "Should have realized gains.");
+        assertEq(cellar.totalBalance(), 950e6, "Should have updated total balance after accrual.");
     }
 
     // =========================================== FEES TESTS ===========================================

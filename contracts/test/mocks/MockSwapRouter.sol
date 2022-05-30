@@ -267,10 +267,6 @@ contract MockSwapRouter {
         uint256 amountOut = convert(tokenIn, tokenOut, _amount);
         amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
 
-        uint8 fromDecimals = ERC20(tokenIn).decimals();
-        uint8 toDecimals = ERC20(tokenOut).decimals();
-        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
-
         require(amountOut > _expected, "received less than expected");
 
         ERC20(tokenOut).transfer(msg.sender, amountOut);
@@ -283,10 +279,6 @@ contract MockSwapRouter {
         address tokenOut = path[path.length - 1];
 
         amountOut = convert(tokenIn, tokenOut, amountIn);
-        amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
-
-        uint8 fromDecimals = ERC20(tokenIn).decimals();
-        uint8 toDecimals = ERC20(tokenOut).decimals();
-        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+        amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
     }
 }

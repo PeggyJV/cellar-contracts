@@ -33,10 +33,14 @@ contract CellarRouterTest is DSTestPlus {
 
         router = new CellarRouter(ISwapRouter(address(swapRouter)));
 
-        // Set up a cellar:
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
 
+        // Setup exchange rates:
+        swapRouter.setExchangeRate(address(ABC), address(XYZ), 1e18);
+        swapRouter.setExchangeRate(address(XYZ), address(ABC), 1e18);
+
+        // Set up a cellar:
         cellar = new MockERC4626(ERC20(address(ABC)), "ABC Cellar", "abcCLR", 18);
     }
 
@@ -80,11 +84,10 @@ contract CellarRouterTest is DSTestPlus {
     }
 
     function testDepositAndSwapIntoCellar(uint256 assets) external {
-        // Attempting to swap 1 will round down to 0 when due to simulating a 95% exchange rate on swaps.
         assets = bound(assets, 1e18, type(uint72).max);
 
         // Mint liquidity for swap.
-        ABC.mint(address(swapRouter), assets.changeDecimals(XYZ.decimals(), ABC.decimals()));
+        ABC.mint(address(swapRouter), assets);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -113,8 +116,7 @@ contract CellarRouterTest is DSTestPlus {
     }
 
     function testDepositAndSwapIntoCellarWithPermit(uint256 assets) external {
-        // Attempting to swap 1 will round down to 0 when due to simulating a 95% exchange rate on swaps.
-        assets = bound(assets, 2, type(uint72).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         (uint8 v, bytes32 r, bytes32 s) = hevm.sign(
             privateKey,
@@ -128,7 +130,7 @@ contract CellarRouterTest is DSTestPlus {
         );
 
         // Mint liquidity for swap.
-        ABC.mint(address(swapRouter), assets.changeDecimals(XYZ.decimals(), ABC.decimals()));
+        ABC.mint(address(swapRouter), assets);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
