@@ -2,8 +2,8 @@
 pragma solidity 0.8.13;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { MathUtils } from "contracts/utils/MathUtils.sol";
-import { ISwapRouter } from "../../interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import { Math } from "contracts/utils/Math.sol";
 
 library BytesLib {
     function slice(
@@ -156,7 +156,7 @@ library Path {
 
 contract MockSwapRouter {
     using Path for bytes;
-    using MathUtils for uint256;
+    using Math for uint256;
 
     uint256 public constant PRICE_IMPACT = 5_00;
     uint256 public constant DENOMINATOR = 100_00;
@@ -246,11 +246,47 @@ contract MockSwapRouter {
         return amounts;
     }
 
-    function quote(uint256 amountIn, address[] calldata path) external view returns (uint256) {
+    function exchange_multiple(
+        address[9] memory _route,
+        uint256[3][4] memory,
+        uint256 _amount,
+        uint256 _expected
+    ) external returns (uint256) {
+        address tokenIn = _route[0];
+
+        address tokenOut;
+        for (uint256 i; ; i += 2) {
+            if (i == 8 || _route[i + 1] == address(0)) {
+                tokenOut = _route[i];
+                break;
+            }
+        }
+
+        ERC20(tokenIn).transferFrom(msg.sender, address(this), _amount);
+
+        uint256 amountOut = convert(tokenIn, tokenOut, _amount);
+        amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
+
+        uint8 fromDecimals = ERC20(tokenIn).decimals();
+        uint8 toDecimals = ERC20(tokenOut).decimals();
+        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+
+        require(amountOut > _expected, "received less than expected");
+
+        ERC20(tokenOut).transfer(msg.sender, amountOut);
+
+        return amountOut;
+    }
+
+    function quote(uint256 amountIn, address[] calldata path) external view returns (uint256 amountOut) {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
-        uint256 amountOut = convert(tokenIn, tokenOut, amountIn);
-        return amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
+        amountOut = convert(tokenIn, tokenOut, amountIn);
+        amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
+
+        uint8 fromDecimals = ERC20(tokenIn).decimals();
+        uint8 toDecimals = ERC20(tokenOut).decimals();
+        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
     }
 }

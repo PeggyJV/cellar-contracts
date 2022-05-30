@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
-import { ERC4626 } from "../../interfaces/ERC4626.sol";
+import { ERC4626 } from "../../base/ERC4626.sol";
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { MockERC20 } from "./MockERC20.sol";
 

@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
-import { MultipositionCellar } from "../templates/MultipositionCellar.sol";
+import { MultipositionCellar } from "../base/MultipositionCellar.sol";
 import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockMultipositionCellar } from "./mocks/MockMultipositionCellar.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
 import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
 import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { ERC4626 } from "../interfaces/ERC4626.sol";
+import { ERC4626 } from "../base/ERC4626.sol";
 
 import { DSTestPlus } from "./utils/DSTestPlus.sol";
-import { MathUtils } from "../utils/MathUtils.sol";
+import { Math } from "../utils/Math.sol";
 
 // TODO: test with fuzzing
 
 contract MultipositionCellarTest is DSTestPlus {
-    using MathUtils for uint256;
+    using Math for uint256;
 
     MockMultipositionCellar private cellar;
     MockSwapRouter private swapRouter;

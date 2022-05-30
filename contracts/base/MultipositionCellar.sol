@@ -2,13 +2,12 @@
 pragma solidity 0.8.13;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { ERC4626 } from "../interfaces/ERC4626.sol";
+import { ERC4626 } from "./ERC4626.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ERC4626 } from "../interfaces/ERC4626.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import { MathUtils } from "../utils/MathUtils.sol";
+import { Math } from "../utils/Math.sol";
 
 import "../Errors.sol";
 
@@ -17,7 +16,7 @@ import "../Errors.sol";
 
 abstract contract MultipositionCellar is ERC4626, Ownable {
     using SafeTransferLib for ERC20;
-    using MathUtils for uint256;
+    using Math for uint256;
 
     // ============================================ ACCOUNTING STATE ============================================
 
@@ -340,7 +339,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
             uint256 holdingsMissingForTarget = currentTotalAssets.mulDivDown(targetHoldingsPercent, DENOMINATOR);
 
             // Pull enough to cover the withdraw and reach the target holdings percentage if possible.
-            assets = MathUtils.min(holdingsMissingForWithdraw + holdingsMissingForTarget, currentTotalAssets);
+            assets = Math.min(holdingsMissingForWithdraw + holdingsMissingForTarget, currentTotalAssets);
             uint256 leftToWithdraw = assets;
 
             for (uint256 i = positions.length - 1; ; i--) {
@@ -357,7 +356,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
                 uint256 exchangeRate = convertToAssets(position.asset(), onePositionAsset);
 
                 // We want to pull as much as we can from this position, but no more than needed.
-                uint256 positionAssetsWithdrawn = MathUtils.min(
+                uint256 positionAssetsWithdrawn = Math.min(
                     totalPositionAssets,
                     leftToWithdraw.mulDivDown(onePositionAsset, exchangeRate)
                 );
@@ -404,11 +403,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max) return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = depositLimit.floorSub(maxWithdraw(owner));
-        uint256 leftUntilLiquidityLimit = liquidityLimit.floorSub(totalAssets());
+        uint256 leftUntilDepositLimit = depositLimit.subMinZero(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.subMinZero(totalAssets());
 
         // Only return the more relevant of the two.
-        return MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
+        return Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
     }
 
     function maxMint(address owner) public view virtual override returns (uint256) {
@@ -416,11 +415,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max) return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = depositLimit.floorSub(maxWithdraw(owner));
-        uint256 leftUntilLiquidityLimit = liquidityLimit.floorSub(totalAssets());
+        uint256 leftUntilDepositLimit = depositLimit.subMinZero(maxWithdraw(owner));
+        uint256 leftUntilLiquidityLimit = liquidityLimit.subMinZero(totalAssets());
 
         // Only return the more relevant of the two.
-        return convertToShares(MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit));
+        return convertToShares(Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit));
     }
 
     // =========================================== ACCRUAL LOGIC ===========================================
@@ -447,7 +446,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
             currentTotalBalance = currentTotalBalance + currentAssets - lastAssets;
 
-            yield += currentAssets.floorSub(lastAssets);
+            yield += currentAssets.subMinZero(lastAssets);
         }
 
         // Accrue performance and platform fees as shares minted to the cellar.
@@ -465,7 +464,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         _mint(address(this), performanceFees + platformFees);
 
-        maxLocked = uint128(yield.floorSub(performanceFeesInAssets + platformFeeInAssets));
+        maxLocked = uint128(yield.subMinZero(performanceFeesInAssets + platformFeeInAssets));
 
         lastAccrual = uint64(block.timestamp);
 

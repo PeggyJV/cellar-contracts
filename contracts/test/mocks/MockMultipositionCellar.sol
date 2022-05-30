@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
-import { MultipositionCellar } from "../../templates/MultipositionCellar.sol";
+import { MultipositionCellar } from "../../base/MultipositionCellar.sol";
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import { ERC4626 } from "../../interfaces/ERC4626.sol";
-import { MathUtils } from "../../utils/MathUtils.sol";
+import { ERC4626 } from "../../base/ERC4626.sol";
+import { Math } from "../../utils/Math.sol";
 
 import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { MockSwapRouter } from "./MockSwapRouter.sol";
@@ -14,7 +14,7 @@ import "../../Errors.sol";
 
 contract MockMultipositionCellar is MultipositionCellar {
     using SafeTransferLib for ERC20;
-    using MathUtils for uint256;
+    using Math for uint256;
 
     constructor(
         ERC20 _asset,

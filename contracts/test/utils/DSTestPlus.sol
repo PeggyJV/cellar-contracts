@@ -37,6 +37,10 @@ contract DSTestPlus is DSTest {
         assertTrue(!data);
     }
 
+    function assertFalse(bool data, string memory err) internal virtual {
+        assertTrue(!data, err);
+    }
+
     function assertUint128Eq(uint128 a, uint128 b) internal virtual {
         assertEq(uint256(a), uint256(b));
     }
@@ -71,6 +75,20 @@ contract DSTestPlus is DSTest {
             emit log_named_uint(" Max Delta", maxDelta);
             emit log_named_uint("     Delta", delta);
             fail();
+        }
+    }
+
+    function assertApproxEq(
+        uint256 a,
+        uint256 b,
+        uint256 maxDelta,
+        string memory err
+    ) internal virtual {
+        uint256 delta = a > b ? a - b : b - a;
+
+        if (delta > maxDelta) {
+            emit log_named_string("Error", err);
+            assertApproxEq(a, b, maxDelta);
         }
     }
 

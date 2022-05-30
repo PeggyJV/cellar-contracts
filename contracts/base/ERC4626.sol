@@ -3,13 +3,13 @@ pragma solidity >=0.8.0;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import { MathUtils } from "../utils/MathUtils.sol";
+import { Math } from "../utils/Math.sol";
 
 /// @notice Minimal ERC4626 tokenized Vault implementation.
 /// @author Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/mixins/ERC4626.sol)
 abstract contract ERC4626 is ERC20 {
     using SafeTransferLib for ERC20;
-    using MathUtils for uint256;
+    using Math for uint256;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -29,7 +29,7 @@ abstract contract ERC4626 is ERC20 {
                                IMMUTABLES
     //////////////////////////////////////////////////////////////*/
 
-    ERC20 public immutable asset;
+    ERC20 public asset;
 
     constructor(
         ERC20 _asset,

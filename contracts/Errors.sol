@@ -47,10 +47,10 @@ error USR_InvalidSwap(address assetOut, address currentAsset);
 error USR_ProtectedAsset(address token);
 
 /**
- * @notice Attempted rebalance into the same asset.
- * @param asset address of the asset
+ * @notice Attempted rebalance into the same position.
+ * @param position address of the position
  */
-error USR_SameAsset(address asset);
+error USR_SamePosition(address position);
 
 /**
  * @notice Attempted to update the position to one that is not supported by the platform.
@@ -160,7 +160,7 @@ error STATE_AlreadyShutdown();
 error STATE_RewardsNotFunded(uint256 rewardBalance, uint256 reward);
 
 /**
- * @notice Attempted to accrue yield while previous yield was still unlocking.
+ * @notice Attempted an operation that is prohibited while yield is still being distributed from the last accrual.
  */
 error STATE_AccrualOngoing();
 

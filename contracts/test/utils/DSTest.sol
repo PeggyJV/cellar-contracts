@@ -15,6 +15,8 @@
 
 pragma solidity >=0.8.0;
 
+/* solhint-disable */
+
 contract DSTest {
     event log(string);
     event logs(bytes);

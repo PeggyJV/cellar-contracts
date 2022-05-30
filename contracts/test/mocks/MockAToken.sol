@@ -3,7 +3,7 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { MockLendingPool } from "./MockLendingPool.sol";
-import { MathUtils } from "contracts/utils/MathUtils.sol";
+import { Math } from "contracts/utils/Math.sol";
 
 library WadRayMath {
     uint256 public constant RAY = 1e27;
@@ -54,6 +54,18 @@ contract MockAToken is ERC20 {
 
     function decimals() public view override returns (uint8) {
         return ERC20(underlyingAsset).decimals();
+    }
+
+    function mint(address user, uint256 amount) external {
+        uint256 amountScaled = WadRayMath.rayDiv(amount, lendingPool.index());
+        require(amountScaled != 0, "CT_INVALID_MINT_AMOUNT");
+        _mint(user, amountScaled);
+    }
+
+    function burn(address user, uint256 amount) external {
+        uint256 amountScaled = WadRayMath.rayDiv(amount, lendingPool.index());
+        require(amountScaled != 0, "CT_INVALID_BURN_AMOUNT");
+        _burn(user, amountScaled);
     }
 
     /**
