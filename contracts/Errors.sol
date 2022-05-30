@@ -34,9 +34,9 @@ error USR_DepositRestricted(uint256 assets, uint256 maxDeposit);
 error USR_NotEnoughActiveShares(uint256 activeShares, uint256 attemptedActiveShares);
 
 /**
- * @notice Attempted swap into an asset that is not the current asset of the cellar.
+ * @notice Attempted swap into an asset that is not the current asset of the position.
  * @param assetOut address of the asset attempted to swap to
- * @param currentAsset address of the current asset of cellar
+ * @param currentAsset address of the current asset of position
  */
 error USR_InvalidSwap(address assetOut, address currentAsset);
 
@@ -47,10 +47,10 @@ error USR_InvalidSwap(address assetOut, address currentAsset);
 error USR_ProtectedAsset(address token);
 
 /**
- * @notice Attempted rebalance into the same asset.
- * @param asset address of the asset
+ * @notice Attempted rebalance into the same position.
+ * @param position address of the position
  */
-error USR_SameAsset(address asset);
+error USR_SamePosition(address position);
 
 /**
  * @notice Attempted to update the position to one that is not supported by the platform.
@@ -59,10 +59,10 @@ error USR_SameAsset(address asset);
 error USR_UnsupportedPosition(address unsupportedPosition);
 
 /**
- * @notice Attempted rebalance into an untrusted position.
- * @param asset address of the asset
+ * @notice Attempted an operation on an untrusted position.
+ * @param position address of the position
  */
-error USR_UntrustedPosition(address asset);
+error USR_UntrustedPosition(address position);
 
 /**
  * @notice Attempted to update a position to an asset that uses an incompatible amount of decimals.
@@ -158,6 +158,11 @@ error STATE_AlreadyShutdown();
  * @param reward                The amount of rewards the caller attempted to distribute.
  */
 error STATE_RewardsNotFunded(uint256 rewardBalance, uint256 reward);
+
+/**
+ * @notice Attempted an operation that is prohibited while yield is still being distributed from the last accrual.
+ */
+error STATE_AccrualOngoing();
 
 /**
  * @notice The caller attempted to change the epoch length, but current reward epochs were active.

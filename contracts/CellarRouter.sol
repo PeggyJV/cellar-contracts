@@ -2,28 +2,26 @@
 pragma solidity 0.8.11;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
+import { ERC4626 } from "./base/ERC4626.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
-import { ICellar } from "./interfaces/ICellar.sol";
-import { ISushiSwapRouter } from "./interfaces/ISushiSwapRouter.sol";
+import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 
-import "./Errors.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
 
-    // ======================================== INITIALIZATION ========================================
+    // ========================================== CONSTRUCTOR ==========================================
+    /**
+     * @notice Uniswap V3 swap router contract. Used for swapping into the current asset of a given cellar.
+     */
+    ISwapRouter public swapRouter; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
     /**
-     * @notice SushiSwap Router V2 contract. Used for swapping into the current asset of a given cellar.
+     * @param _swapRouter Uniswap V3 swap router address
      */
-    ISushiSwapRouter public immutable sushiswapRouter; // 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F
-
-    /**
-     * @param _sushiswapRouter Sushiswap V2 router address
-     */
-    constructor(ISushiSwapRouter _sushiswapRouter) {
-        sushiswapRouter = _sushiswapRouter;
+    constructor(ISwapRouter _swapRouter) {
+        swapRouter = _swapRouter;
     }
 
     // ======================================= ROUTER OPERATIONS =======================================
@@ -41,7 +39,7 @@ contract CellarRouter is ICellarRouter {
      * @return shares amount of shares minted
      */
     function depositIntoCellarWithPermit(
-        ICellar cellar,
+        ERC4626 cellar,
         uint256 assets,
         address receiver,
         address owner,
@@ -71,50 +69,47 @@ contract CellarRouter is ICellarRouter {
      * @param cellar address of the cellar to deposit into
      * @param path array of [token1, token2, token3] that specifies the swap path on Sushiswap
      * @param assets amount of assets to deposit
-     * @param minAssetsOut minimum amount of assets received from swap
+     * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the shares
      * @param owner address that owns the assets being deposited
      * @return shares amount of shares minted
      */
     function depositAndSwapIntoCellar(
-        ICellar cellar,
+        ERC4626 cellar,
         address[] calldata path,
         uint256 assets,
-        uint256 minAssetsOut,
+        uint256 assetsOutMin,
         address receiver,
         address owner
     ) public returns (uint256 shares) {
-        // Retrieve the asset being swapped.
+        ERC20 asset = cellar.asset();
         ERC20 assetIn = ERC20(path[0]);
 
-        // Retrieve the cellar's current asset.
-        ERC20 asset = cellar.asset();
+        // Transfer assets from the user to the router.
+        assetIn.safeTransferFrom(owner, address(this), assets);
 
-        // Check to make sure a swap is necessary
+        // Check whether a swap is necessary. If not, skip swap and deposit into cellar directly.
         if (assetIn != asset) {
-            // Retrieve the asset received after the swap.
-            ERC20 assetOut = ERC20(path[path.length - 1]);
+            // Approve assets to be swapped through the router.
+            assetIn.safeApprove(address(swapRouter), assets);
 
-            // Ensure that the asset that will be deposited into the cellar is valid.
-            if (assetOut != asset) revert USR_InvalidSwap(address(assetOut), address(asset));
+            // Prepare the parameters for the swap.
+            uint24 POOL_FEE = 3000;
+            bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
+            for (uint256 i = 1; i < path.length; i++) {
+                encodePackedPath = abi.encodePacked(encodePackedPath, POOL_FEE, path[i]);
+            }
 
-            // Transfer assets from the user to the router.
-            assetIn.safeTransferFrom(owner, address(this), assets);
+            ISwapRouter.ExactInputParams memory params = ISwapRouter.ExactInputParams({
+                path: encodePackedPath,
+                recipient: address(this),
+                deadline: block.timestamp + 60,
+                amountIn: assets,
+                amountOutMinimum: assetsOutMin
+            });
 
-            // Approve assets to be swapped.
-            assetIn.safeApprove(address(sushiswapRouter), assets);
-
-            // Perform swap to cellar's current asset.
-            uint256[] memory swapOutput = sushiswapRouter.swapExactTokensForTokens(
-                assets,
-                minAssetsOut,
-                path,
-                address(this),
-                block.timestamp + 60
-            );
-
-            // Retrieve the final assets received from swap.
-            assets = swapOutput[swapOutput.length - 1];
+            // Executes the swap and return the amount out.
+            assets = swapRouter.exactInput(params);
         }
 
         // Approve the cellar to spend assets.
@@ -129,7 +124,7 @@ contract CellarRouter is ICellarRouter {
      * @param cellar address of the cellar to deposit into
      * @param path array of [token1, token2, token3] that specifies the swap path on Sushiswap
      * @param assets amount of assets to deposit
-     * @param minAssetsOut minimum amount of assets received from swap
+     * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the shares
      * @param owner address that owns the assets being deposited
      * @param deadline timestamp after which permit is invalid
@@ -139,10 +134,10 @@ contract CellarRouter is ICellarRouter {
      * @return shares amount of shares minted
      */
     function depositAndSwapIntoCellarWithPermit(
-        ICellar cellar,
+        ERC4626 cellar,
         address[] calldata path,
         uint256 assets,
-        uint256 minAssetsOut,
+        uint256 assetsOutMin,
         address receiver,
         address owner,
         uint256 deadline,
@@ -157,6 +152,6 @@ contract CellarRouter is ICellarRouter {
         assetIn.permit(owner, address(this), assets, deadline, v, r, s);
 
         // Deposit assets into the cellar using a swap if necessary.
-        shares = depositAndSwapIntoCellar(cellar, path, assets, minAssetsOut, receiver, owner);
+        shares = depositAndSwapIntoCellar(cellar, path, assets, assetsOutMin, receiver, owner);
     }
 }

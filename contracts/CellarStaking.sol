@@ -3,10 +3,10 @@ pragma solidity 0.8.11;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
+import { ICellarStaking } from "./interfaces/ICellarStaking.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 import "./Errors.sol";
-import { ICellarStaking } from "./interfaces/ICellarStaking.sol";
 
 /**
  * @title Sommelier Staking

@@ -2,7 +2,7 @@
 pragma solidity 0.8.11;
 
 import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
-import { MathUtils } from "contracts/utils/MathUtils.sol";
+import { Math } from "contracts/utils/Math.sol";
 
 library BytesLib {
     function slice(
@@ -155,10 +155,9 @@ library Path {
 
 contract MockSwapRouter {
     using Path for bytes;
-    using MathUtils for uint256;
+    using Math for uint256;
 
-    uint256 public EXCHANGE_RATE = 95_00;
-    uint256 public DENOMINATOR = 100_00;
+    uint256 public constant EXCHANGE_RATE = 0.95e18;
 
     struct ExactInputSingleParams {
         address tokenIn;
@@ -174,7 +173,7 @@ contract MockSwapRouter {
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256) {
         ERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
-        uint256 amountOut = params.amountIn.mulDivDown(EXCHANGE_RATE, DENOMINATOR);
+        uint256 amountOut = params.amountIn.mulWadDown(EXCHANGE_RATE);
 
         uint8 fromDecimals = ERC20(params.tokenIn).decimals();
         uint8 toDecimals = ERC20(params.tokenOut).decimals();
@@ -204,7 +203,7 @@ contract MockSwapRouter {
 
         ERC20(tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
-        uint256 amountOut = params.amountIn.mulDivDown(EXCHANGE_RATE, DENOMINATOR);
+        uint256 amountOut = params.amountIn.mulWadDown(EXCHANGE_RATE);
 
         uint8 fromDecimals = ERC20(tokenIn).decimals();
         uint8 toDecimals = ERC20(tokenOut).decimals();
@@ -228,7 +227,7 @@ contract MockSwapRouter {
 
         ERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
 
-        uint256 amountOut = amountIn.mulDivDown(EXCHANGE_RATE, DENOMINATOR);
+        uint256 amountOut = amountIn.mulWadDown(EXCHANGE_RATE);
 
         uint8 fromDecimals = ERC20(tokenIn).decimals();
         uint8 toDecimals = ERC20(tokenOut).decimals();
@@ -244,11 +243,42 @@ contract MockSwapRouter {
         return amounts;
     }
 
+    function exchange_multiple(
+        address[9] memory _route,
+        uint256[3][4] memory,
+        uint256 _amount,
+        uint256 _expected
+    ) external returns (uint256) {
+        address tokenIn = _route[0];
+
+        address tokenOut;
+        for (uint256 i; ; i += 2) {
+            if (i == 8 || _route[i + 1] == address(0)) {
+                tokenOut = _route[i];
+                break;
+            }
+        }
+
+        ERC20(tokenIn).transferFrom(msg.sender, address(this), _amount);
+
+        uint256 amountOut = _amount.mulWadDown(EXCHANGE_RATE);
+
+        uint8 fromDecimals = ERC20(tokenIn).decimals();
+        uint8 toDecimals = ERC20(tokenOut).decimals();
+        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+
+        require(amountOut > _expected, "received less than expected");
+
+        ERC20(tokenOut).transfer(msg.sender, amountOut);
+
+        return amountOut;
+    }
+
     function quote(uint256 amountIn, address[] calldata path) external view returns (uint256) {
         address tokenIn = path[0];
         address tokenOut = path[path.length - 1];
 
-        uint256 amountOut = (amountIn * EXCHANGE_RATE) / DENOMINATOR;
+        uint256 amountOut = amountIn.mulWadDown(EXCHANGE_RATE);
 
         uint8 fromDecimals = ERC20(tokenIn).decimals();
         uint8 toDecimals = ERC20(tokenOut).decimals();
