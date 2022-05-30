@@ -450,8 +450,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (asssetDepositLimit == type(uint128).max && asssetLiquidityLimit == type(uint128).max)
             return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMin0(maxWithdraw(receiver));
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMin0(totalAssets());
+        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
+        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(totalAssets());
 
         // Only return the more relevant of the two.
         assets = Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
@@ -470,8 +470,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (asssetDepositLimit == type(uint128).max && asssetLiquidityLimit == type(uint128).max)
             return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMin0(maxWithdraw(receiver));
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMin0(totalAssets());
+        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
+        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(totalAssets());
 
         // Only return the more relevant of the two.
         shares = convertToShares(Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit));
@@ -502,7 +502,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         // Calculate performance fees accrued.
         uint256 balanceThisAccrual = assetAToken.balanceOf(address(this));
-        uint256 yield = balanceThisAccrual.subMin0(totalBalance);
+        uint256 yield = balanceThisAccrual.subMinZero(totalBalance);
         uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
         uint256 performanceFees = performanceFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
 
@@ -510,7 +510,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         _mint(address(this), platformFees + performanceFees);
 
         // Do not count assets set aside for fees as yield. Allows fees to be immediately withdrawable.
-        maxLocked = uint160(totalLockedYield + yield.subMin0(platformFeeInAssets + performanceFeeInAssets));
+        maxLocked = uint160(totalLockedYield + yield.subMinZero(platformFeeInAssets + performanceFeeInAssets));
 
         lastAccrual = uint32(block.timestamp);
 

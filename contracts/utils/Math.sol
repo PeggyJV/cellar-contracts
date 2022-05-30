@@ -5,7 +5,7 @@ library Math {
     /**
      * @notice Substract and return 0 instead if results are negative.
      */
-    function subMin0(uint256 x, uint256 y) internal pure returns (uint256) {
+    function subMinZero(uint256 x, uint256 y) internal pure returns (uint256) {
         return x > y ? x - y : 0;
     }
 
