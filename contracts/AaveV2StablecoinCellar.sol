@@ -17,9 +17,6 @@ import { Math } from "./utils/Math.sol";
 
 import "./Errors.sol";
 
-// NOTE:
-// - Multicallable
-
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
  * @notice Dynamic ERC4626 that changes positions to always get the best yield for stablecoins on Aave.
@@ -191,12 +188,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         _;
     }
 
-    // NOTE:
-    // - `setShutdown` has been separated into `initiateShutdown` and `liftShutdown` to allow them
-    //   to be restricted differently.
-    //     - `initiateShutdown` should be callable by both governance and SPs
-    //     - `liftShutdown` should only be callable by governance
-
     /**
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been depreciated.
      * @param emptyPosition whether to pull all assets back into the cellar from the current position
@@ -320,14 +311,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
     // ============================================ CORE LOGIC ============================================
 
-    // NOTE:
-    // - The core logic of the cellar, depositing and withdrawing, have been simplified to 16 lines
-    //   of code down from the previous 300+.
-    //     - Can be attributed to:
-    //         1. Removing the inactive/active share logic.
-    //         2. Inheriting from the ERC4626 standard instead of reimplementing it.
-    // - Result: Cheaper for users, less complex, more efficient, more secure.
-
     /**
      * @dev Check that the deposit is not restricted by a deposit limit or liquidity limit and
      *      prevent deposits during a shutdown.
@@ -368,10 +351,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @dev Excludes locked yield that hasn't been distributed.
      */
     function totalAssets() public view override returns (uint256) {
-        // NOTE:
-        //  + total balance in the lending position (since last accrual)
-        //  + total balance in the holding position
-        //  - yield that hasn't been distributed yet (since last accrual)
         return totalBalance + totalHoldings() - totalLocked();
     }
 
@@ -396,17 +375,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         // Get the maximum amount we could return.
         uint256 maxLockedYield = maxLocked;
 
-        // NOTE: Yield is distributed linearly over an a period of time (the "accrual period").
-        //  - amount of yield distributed = yield * (elapsed time since last accrual / accrual period)
-        //  - amount of yield locked = yield - amount of yield distributed
-
         // Get how much yield remains locked.
         return maxLockedYield - (maxLockedYield * (block.timestamp - previousAccrual)) / accrualInterval;
     }
-
-    // NOTE:
-    // shares minted = assets deposited * (total shares / total assets)
-    // assets deposited = shares minted * (total assets / total shares)
 
     /**
      * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
@@ -568,13 +539,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function enterPosition() external {
         enterPosition(totalHoldings());
     }
-
-    // NOTE:
-    // - Added new exit position functions.
-    //     - This might be be done if a SP wants to pull some assets to replenish the holding
-    //       position to make withdraws cheaper for users.
-    //     - This will not be as useful for this cellar since withdraws from Aave are not too
-    //       expensive but will for future cellars.
 
     /**
      * @notice Pulls assets from the current Aave lending position.
