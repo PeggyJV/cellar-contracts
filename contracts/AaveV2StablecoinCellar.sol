@@ -495,7 +495,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 oneAsset = 10**assetDecimals;
         uint256 exchangeRate = convertToShares(oneAsset);
 
-        // Get balances current balance since last accrual and update balance for this accrual.
+        // Get balance since last accrual and updated balance for this accrual.
         uint256 balanceLastAccrual = totalBalance;
         uint256 balanceThisAccrual = assetAToken.balanceOf(address(this));
 
