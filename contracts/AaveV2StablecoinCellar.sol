@@ -189,7 +189,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     }
 
     /**
-     * @notice Shutdown the cellar. Used in an emergency or if the cellar has been depreciated.
+     * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @param emptyPosition whether to pull all assets back into the cellar from the current position
      */
     function initiateShutdown(bool emptyPosition) external whenNotShutdown onlyOwner {
