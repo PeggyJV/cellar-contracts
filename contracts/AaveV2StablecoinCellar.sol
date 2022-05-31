@@ -793,6 +793,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
     /**
      * @notice Pull all assets from the current lending position on Aave back into holding.
+     * @param position the address of the asset position to pull from
      */
     function _emptyPosition(ERC20 position) internal {
         uint256 totalPositionBalance = totalBalance;
