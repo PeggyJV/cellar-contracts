@@ -495,14 +495,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 oneAsset = 10**assetDecimals;
         uint256 exchangeRate = convertToShares(oneAsset);
 
+        // Get balances current balance since last accrual and update balance for this accrual.
+        uint256 balanceLastAccrual = totalBalance;
+        uint256 balanceThisAccrual = assetAToken.balanceOf(address(this));
+
         // Calculate platform fees accrued.
         uint256 elapsedTime = block.timestamp - lastAccrual;
-        uint256 platformFeeInAssets = (totalAssets() * elapsedTime * platformFee) / 1e18 / 365 days;
+        uint256 platformFeeInAssets = (balanceThisAccrual * elapsedTime * platformFee) / 1e18 / 365 days;
         uint256 platformFees = platformFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
 
         // Calculate performance fees accrued.
-        uint256 balanceThisAccrual = assetAToken.balanceOf(address(this));
-        uint256 yield = balanceThisAccrual.subMinZero(totalBalance);
+        uint256 yield = balanceThisAccrual.subMinZero(balanceLastAccrual);
         uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
         uint256 performanceFees = performanceFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
 
