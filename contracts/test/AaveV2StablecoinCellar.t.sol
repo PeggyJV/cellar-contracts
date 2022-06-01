@@ -1056,6 +1056,10 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         uint256[3][4] memory swapParams;
 
         cellar.rebalance(route, swapParams, 0);
+
+        assertEq(USDC.balanceOf(address(cellar)), 0, "Should have zero assets in old holding position.");
+        assertEq(aUSDC.balanceOf(address(cellar)), 0, "Should have zero assets in old lending position.");
+        assertGt(aDAI.balanceOf(address(cellar)), 0, "Should have non-zero assets in new lending position.");
     }
 
     function testFailRebalanceIntoSamePosition() external {
