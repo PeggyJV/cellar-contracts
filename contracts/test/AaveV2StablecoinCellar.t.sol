@@ -1094,9 +1094,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // Test that reinvested rewards are counted as yield.
         cellar.accrue();
 
-        assertEq(cellar.totalAssets(), 95e6, "Should have updated total assets after accrual.");
-        assertEq(cellar.totalLocked(), 855e6, "Should have realized gains.");
-        assertEq(cellar.totalBalance(), 950e6, "Should have updated total balance after accrual.");
+        assertApproxEq(cellar.totalAssets(), 9.5e6, 0.1e6, "Should have updated total assets after accrual.");
+        assertApproxEq(cellar.totalLocked(), 85.5e6, 0.1e6, "Should have realized gains.");
+        assertApproxEq(cellar.totalBalance(), 95e6, 0.1e6, "Should have updated total balance after accrual.");
     }
 
     // =========================================== FEES TESTS ===========================================
@@ -1283,36 +1283,21 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         hevm.prank(alice);
         cellar.deposit(amount, alice);
 
-        // 2. Bob mints.
-        amount = mutate(amount);
-        hevm.prank(bob);
-        cellar.mint(amount, bob);
-
-        // 3. Enters position.
+        // 2. Cellar enters position.
         cellar.enterPosition(cellar.totalHoldings() / 2);
 
-        // 4. Gains yield.
+        // 3. Cellar gains yield.
         amount = mutate(amount);
         MockERC20(address(cellar.assetAToken())).mint(address(cellar), amount);
 
-        // 5. Bob withdraws.
-        hevm.startPrank(bob);
-        cellar.withdraw(cellar.maxWithdraw(bob) / 3, bob, bob);
-        hevm.stopPrank();
-
-        // 6. Charlie deposits.
-        amount = mutate(amount);
-        hevm.prank(charlie);
-        cellar.deposit(amount, charlie);
-
-        // 7. Accrue.
+        // 4. Cellar accrues.
         cellar.accrue();
         hevm.warp(block.timestamp + cellar.accrualPeriod());
 
-        // 8. Distrust current position.
+        // 5. Distrust current position.
         cellar.setTrust(cellar.asset(), false);
 
-        // 9. Rebalance into DAI.
+        // 6. Cellar rebalances into DAI.
         address[9] memory route;
         route[0] = address(USDC);
         route[1] = address(1);
@@ -1322,21 +1307,22 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         cellar.rebalance(route, swapParams, 0);
 
-        // 10. Charlie redeems.
-        hevm.startPrank(charlie);
-        cellar.redeem(cellar.maxRedeem(charlie) / 4, charlie, charlie);
-        hevm.stopPrank();
+        // 7. Bob mints.
+        amount = mutate(amount);
+        hevm.prank(bob);
+        cellar.mint(amount, bob);
 
-        // 11. Gains yield.
+        // 8. Cellar gains yield.
         amount = mutate(amount);
         MockERC20(address(cellar.assetAToken())).mint(address(cellar), amount);
 
-        // 12. Alice withdraws.
-        hevm.startPrank(alice);
-        cellar.withdraw(cellar.maxWithdraw(alice) / 5, alice, alice);
-        hevm.stopPrank();
+        // 9. Cellar claims rewards.
+        amount = mutate(amount);
+        incentivesController.addRewards(address(cellar), amount);
+        cellar.claimAndUnstake();
+        hevm.warp(block.timestamp + 10 days + 1);
 
-        // 13. Rebalance into USDC.
+        // 10. Cellar rebalance into USDC.
         cellar.setTrust(ERC20(address(USDC)), true);
 
         route[0] = address(DAI);
@@ -1344,15 +1330,26 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         cellar.rebalance(route, swapParams, 0);
 
-        // 14. Alice mints.
+        // 11. Charlie deposits.
         amount = mutate(amount);
-        hevm.prank(alice);
-        cellar.mint(amount, alice);
+        hevm.prank(charlie);
+        cellar.deposit(amount, charlie);
 
-        // 15. Enters position.
-        cellar.enterPosition(cellar.totalHoldings() / 6);
+        // 12. Cellar exits position.
+        cellar.exitPosition(cellar.totalBalance() / 4);
 
-        // 16. Shuts down.
+        // 13. Cellar reinvest rewards.
+        cellar.reinvest(0);
+
+        // 14. Bob withdraws.
+        hevm.startPrank(bob);
+        cellar.withdraw(cellar.maxWithdraw(bob) / 3, bob, bob);
+        hevm.stopPrank();
+
+        // 15. Cellar enters position.
+        cellar.enterPosition(cellar.totalHoldings() / 5);
+
+        // 16. Cellar shuts down.
         cellar.initiateShutdown(true);
 
         // 17. Alice redeems all.
@@ -1375,9 +1372,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // ====================== FINAL CHECKS ======================
 
-        assertApproxEq(cellar.totalSupply(), 0, 1e18, "Check total supply is what is expected.");
-        assertApproxEq(cellar.totalAssets(), 0, 1e6, "Check total assets is what is expected.");
-        assertApproxEq(cellar.totalBalance(), 0, 1e6, "Check total balance is what is expected.");
-        assertApproxEq(cellar.totalHoldings(), 0, 1e6, "Check total holdings is what is expected.");
+        assertApproxEq(cellar.totalSupply(), 0, 0.0001e18, "Check total supply is what is expected.");
+        assertApproxEq(cellar.totalAssets(), 0, 0.0001e6, "Check total assets is what is expected.");
+        assertApproxEq(cellar.totalBalance(), 0, 0.0001e6, "Check total balance is what is expected.");
+        assertApproxEq(cellar.totalHoldings(), 0, 0.0001e6, "Check total holdings is what is expected.");
     }
 }

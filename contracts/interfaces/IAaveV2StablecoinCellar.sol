@@ -98,13 +98,13 @@ interface IAaveV2StablecoinCellar {
      */
     event DepositLimitChanged(uint256 oldLimit, uint256 newLimit);
 
-    function liquidityLimit() external view returns (uint128);
+    function liquidityLimit() external view returns (uint256);
 
-    function depositLimit() external view returns (uint128);
+    function depositLimit() external view returns (uint256);
 
-    function setLiquidityLimit(uint128 newLimit) external;
+    function setLiquidityLimit(uint256 newLimit) external;
 
-    function setDepositLimit(uint128 newLimit) external;
+    function setDepositLimit(uint256 newLimit) external;
 
     // ======================================== EMERGENCY LOGIC ========================================
 

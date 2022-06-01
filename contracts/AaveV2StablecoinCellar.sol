@@ -95,7 +95,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     uint64 public constant performanceFee = 0.1e18; // 10%
 
     /**
-     * @notice Cosmos address of module that distrbiutes fees, specified as a hex value.
+     * @notice Cosmos address of module that distributes fees, specified as a hex value.
      * @dev The Gravity contract expects a 32-byte value formatted in a specific way.
      */
     bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
@@ -142,21 +142,21 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     /**
      * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals
      *         as the current asset.
-     * @dev Set to `type(uint128).max` to have no limit.
+     * @dev Set to `type(uint256).max` to have no limit.
      */
-    uint128 public liquidityLimit;
+    uint256 public liquidityLimit;
 
     /**
      * @notice Maximum amount of assets per wallet. Denominated in the same decimals as the current asset.
-     * @dev Set to `type(uint128).max` to have no limit.
+     * @dev Set to `type(uint256).max` to have no limit.
      */
-    uint128 public depositLimit;
+    uint256 public depositLimit;
 
     /**
      * @notice Set the maximum liquidity that cellar can manage. Uses the same decimals as the current asset.
      * @param newLimit amount of assets to set as the new limit
      */
-    function setLiquidityLimit(uint128 newLimit) external onlyOwner {
+    function setLiquidityLimit(uint256 newLimit) external onlyOwner {
         emit LiquidityLimitChanged(liquidityLimit, newLimit);
 
         liquidityLimit = newLimit;
@@ -166,7 +166,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @notice Set the per-wallet deposit limit. Uses the same decimals as the current asset.
      * @param newLimit amount of assets to set as the new limit
      */
-    function setDepositLimit(uint128 newLimit) external onlyOwner {
+    function setDepositLimit(uint256 newLimit) external onlyOwner {
         emit DepositLimitChanged(depositLimit, newLimit);
 
         depositLimit = newLimit;
@@ -189,7 +189,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     }
 
     /**
-     * @notice Shutdown the cellar. Used in an emergency or if the cellar has been depreciated.
+     * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @param emptyPosition whether to pull all assets back into the cellar from the current position
      */
     function initiateShutdown(bool emptyPosition) external whenNotShutdown onlyOwner {
@@ -296,8 +296,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         // Initialize limits.
         uint256 powOfAssetDecimals = 10**_assetDecimals;
-        liquidityLimit = uint128(5_000_000 * powOfAssetDecimals);
-        depositLimit = uint128(50_000 * powOfAssetDecimals);
+        liquidityLimit = 5_000_000 * powOfAssetDecimals;
+        depositLimit = 50_000 * powOfAssetDecimals;
 
         // Initialize approved positions.
         for (uint256 i; i < _approvedPositions.length; i++) isTrusted[_approvedPositions[i]] = true;
@@ -341,7 +341,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 holdings = totalHoldings();
 
         // Only withdraw if not enough assets in the holding pool.
-        if (assets > holdings) _withdrawFromPosition(currentPosition, assets - holdings, true);
+        if (assets > holdings) totalBalance -= uint240(_withdrawFromPosition(currentPosition, assets - holdings));
     }
 
     // ======================================= ACCOUNTING LOGIC =======================================
@@ -447,7 +447,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         uint256 asssetDepositLimit = depositLimit;
         uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint128).max && asssetLiquidityLimit == type(uint128).max)
+        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
             return type(uint256).max;
 
         uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
@@ -467,7 +467,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         uint256 asssetDepositLimit = depositLimit;
         uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint128).max && asssetLiquidityLimit == type(uint128).max)
+        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
             return type(uint256).max;
 
         uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
@@ -495,14 +495,17 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 oneAsset = 10**assetDecimals;
         uint256 exchangeRate = convertToShares(oneAsset);
 
+        // Get balance since last accrual and updated balance for this accrual.
+        uint256 balanceLastAccrual = totalBalance;
+        uint256 balanceThisAccrual = assetAToken.balanceOf(address(this));
+
         // Calculate platform fees accrued.
         uint256 elapsedTime = block.timestamp - lastAccrual;
-        uint256 platformFeeInAssets = (totalAssets() * elapsedTime * platformFee) / 1e18 / 365 days;
+        uint256 platformFeeInAssets = (balanceThisAccrual * elapsedTime * platformFee) / 1e18 / 365 days;
         uint256 platformFees = platformFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
 
         // Calculate performance fees accrued.
-        uint256 balanceThisAccrual = assetAToken.balanceOf(address(this));
-        uint256 yield = balanceThisAccrual.subMinZero(totalBalance);
+        uint256 yield = balanceThisAccrual.subMinZero(balanceLastAccrual);
         uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
         uint256 performanceFees = performanceFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
 
@@ -528,7 +531,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function enterPosition(uint256 assets) public whenNotShutdown onlyOwner {
         ERC20 currentPosition = asset;
 
-        _depositIntoPosition(currentPosition, assets, true);
+        totalBalance += uint240(assets);
+
+        _depositIntoPosition(currentPosition, assets);
 
         emit EnterPosition(address(currentPosition), assets);
     }
@@ -547,7 +552,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function exitPosition(uint256 assets) public whenNotShutdown onlyOwner {
         ERC20 currentPosition = asset;
 
-        _withdrawFromPosition(currentPosition, assets, true);
+        totalBalance -= uint240(_withdrawFromPosition(currentPosition, assets));
 
         emit ExitPosition(address(currentPosition), assets);
     }
@@ -600,9 +605,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 totalBalanceIncludingHoldings = totalPositionBalance + totalAssetsInHolding;
 
         // Pull all assets back into the cellar to swap everything into the new position.
-        uint256 withdrawnAssets = totalPositionBalance > 0
-            ? _withdrawFromPosition(oldPosition, type(uint256).max, false)
-            : 0;
+        uint256 withdrawnAssets = totalPositionBalance > 0 ? _withdrawFromPosition(oldPosition, type(uint256).max) : 0;
 
         // Get amount of all the assets in the cellar.
         uint256 assetsBeforeSwap = withdrawnAssets + totalAssetsInHolding;
@@ -622,7 +625,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint8 newPositionDecimals = _updatePosition(newPosition);
 
         // Deposit all newly swapped assets into Aave.
-        _depositIntoPosition(newPosition, assetsAfterSwap, false);
+        _depositIntoPosition(newPosition, assetsAfterSwap);
 
         // Update maximum locked yield to scale accordingly to the decimals of the new asset.
         maxLocked = uint160(uint256(maxLocked).changeDecimals(oldPositionDecimals, newPositionDecimals));
@@ -697,7 +700,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         // claim but without entering them back into a position in case the position has been
         // exited. Also, for the purposes of performance fee calculation, we count reinvested
         // rewards as yield so do not update balance.
-        if (!isShutdown) _depositIntoPosition(currentAsset, assetsOut, false);
+        if (!isShutdown) _depositIntoPosition(currentAsset, assetsOut);
 
         emit Reinvest(address(currentAsset), rewardsIn, assetsOut);
     }
@@ -755,14 +758,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @param position the address of the asset position
      * @param assets the amount of assets to deposit
      */
-    function _depositIntoPosition(
-        ERC20 position,
-        uint256 assets,
-        bool updateBalance
-    ) internal {
-        // Update balance used to calculate yield earned since last accrual.
-        if (updateBalance) totalBalance += uint240(assets);
-
+    function _depositIntoPosition(ERC20 position, uint256 assets) internal {
         // Deposit assets into Aave position.
         position.safeApprove(address(lendingPool), assets);
         lendingPool.deposit(address(position), assets, address(this), 0);
@@ -777,22 +773,16 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @param assets amount of assets to withdraw
      * @return withdrawnAssets amount of assets actually withdrawn
      */
-    function _withdrawFromPosition(
-        ERC20 position,
-        uint256 assets,
-        bool updateBalance
-    ) internal returns (uint256 withdrawnAssets) {
+    function _withdrawFromPosition(ERC20 position, uint256 assets) internal returns (uint256 withdrawnAssets) {
         // Withdraw assets from Aave position.
         withdrawnAssets = lendingPool.withdraw(address(position), assets, address(this));
-
-        // Update balance used to calculate yield earned since last accrual if specified.
-        if (updateBalance) totalBalance -= uint240(withdrawnAssets);
 
         emit WithdrawFromPosition(address(position), withdrawnAssets);
     }
 
     /**
      * @notice Pull all assets from the current lending position on Aave back into holding.
+     * @param position the address of the asset position to pull from
      */
     function _emptyPosition(ERC20 position) internal {
         uint256 totalPositionBalance = totalBalance;
@@ -800,7 +790,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (totalPositionBalance > 0) {
             accrue();
 
-            _withdrawFromPosition(position, type(uint256).max, false);
+            _withdrawFromPosition(position, type(uint256).max);
 
             totalBalance = 0;
         }
@@ -831,11 +821,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (oldAssetDecimals != 0 && oldAssetDecimals != newAssetDecimals) {
             uint256 asssetDepositLimit = depositLimit;
             uint256 asssetLiquidityLimit = liquidityLimit;
-            if (asssetDepositLimit != type(uint128).max)
-                depositLimit = uint128(asssetDepositLimit.changeDecimals(oldAssetDecimals, newAssetDecimals));
+            if (asssetDepositLimit != type(uint256).max)
+                depositLimit = asssetDepositLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
 
-            if (asssetLiquidityLimit != type(uint128).max)
-                liquidityLimit = uint128(asssetLiquidityLimit.changeDecimals(oldAssetDecimals, newAssetDecimals));
+            if (asssetLiquidityLimit != type(uint256).max)
+                liquidityLimit = asssetLiquidityLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
         }
 
         // Update state related to the current position.
