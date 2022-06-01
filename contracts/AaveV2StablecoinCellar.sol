@@ -600,15 +600,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (newPosition == oldPosition) revert USR_SamePosition(address(oldPosition));
 
         // Store this for later when updating total balance.
-        uint256 totalPositionBalance = totalBalance;
         uint256 totalAssetsInHolding = totalHoldings();
-        uint256 totalBalanceIncludingHoldings = totalPositionBalance + totalAssetsInHolding;
+        uint256 totalBalanceIncludingHoldings = totalBalance + totalAssetsInHolding;
 
-        // Pull all assets back into the cellar to swap everything into the new position.
-        uint256 withdrawnAssets = totalPositionBalance > 0 ? _withdrawFromPosition(oldPosition, type(uint256).max) : 0;
-
-        // Get amount of all the assets in the cellar.
-        uint256 assetsBeforeSwap = withdrawnAssets + totalAssetsInHolding;
+        // Pull any assets in the lending position back in to swap everything into the new position.
+        uint256 assetsBeforeSwap = assetAToken.balanceOf(address(this)) > 0
+            ? _withdrawFromPosition(oldPosition, type(uint256).max) + totalAssetsInHolding
+            : totalAssetsInHolding;
 
         // Perform stablecoin swap using Curve.
         oldPosition.safeApprove(address(curveRegistryExchange), assetsBeforeSwap);
