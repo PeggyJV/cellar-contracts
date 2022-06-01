@@ -1006,7 +1006,6 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assets = bound(assets, 1e6, type(uint72).max);
 
         USDC.mint(address(this), assets);
-
         cellar.deposit(assets, address(this));
 
         address[9] memory route;
@@ -1030,6 +1029,33 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
             assetsAfterRebalance, // Simulating 5% price impact on swap.
             "Should have deposited all assets into new position."
         );
+    }
+
+    function testRebalanceWithEmptyCellarWithOngoingAccrual(uint256 assets) external {
+        assets = bound(assets, 1e6, type(uint72).max);
+
+        USDC.mint(address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate gaining yield.
+        aUSDC.mint(address(cellar), assets / 2);
+
+        cellar.accrue();
+
+        cellar.withdraw(assets, address(this), address(this));
+        cellar.sendFees();
+
+        assertEq(cellar.totalAssets(), 0, "Should have zero total assets.");
+        assertGt(cellar.totalLocked(), 0, "Should have non-zero yield accruing.");
+
+        address[9] memory route;
+        route[0] = address(USDC);
+        route[1] = address(1);
+        route[2] = address(DAI);
+
+        uint256[3][4] memory swapParams;
+
+        cellar.rebalance(route, swapParams, 0);
     }
 
     function testFailRebalanceIntoSamePosition() external {
