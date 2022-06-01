@@ -142,21 +142,21 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     /**
      * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals
      *         as the current asset.
-     * @dev Set to `type(uint128).max` to have no limit.
+     * @dev Set to `type(uint256).max` to have no limit.
      */
-    uint128 public liquidityLimit;
+    uint256 public liquidityLimit;
 
     /**
      * @notice Maximum amount of assets per wallet. Denominated in the same decimals as the current asset.
-     * @dev Set to `type(uint128).max` to have no limit.
+     * @dev Set to `type(uint256).max` to have no limit.
      */
-    uint128 public depositLimit;
+    uint256 public depositLimit;
 
     /**
      * @notice Set the maximum liquidity that cellar can manage. Uses the same decimals as the current asset.
      * @param newLimit amount of assets to set as the new limit
      */
-    function setLiquidityLimit(uint128 newLimit) external onlyOwner {
+    function setLiquidityLimit(uint256 newLimit) external onlyOwner {
         emit LiquidityLimitChanged(liquidityLimit, newLimit);
 
         liquidityLimit = newLimit;
@@ -166,7 +166,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @notice Set the per-wallet deposit limit. Uses the same decimals as the current asset.
      * @param newLimit amount of assets to set as the new limit
      */
-    function setDepositLimit(uint128 newLimit) external onlyOwner {
+    function setDepositLimit(uint256 newLimit) external onlyOwner {
         emit DepositLimitChanged(depositLimit, newLimit);
 
         depositLimit = newLimit;
@@ -296,8 +296,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         // Initialize limits.
         uint256 powOfAssetDecimals = 10**_assetDecimals;
-        liquidityLimit = uint128(5_000_000 * powOfAssetDecimals);
-        depositLimit = uint128(50_000 * powOfAssetDecimals);
+        liquidityLimit = 5_000_000 * powOfAssetDecimals;
+        depositLimit = 50_000 * powOfAssetDecimals;
 
         // Initialize approved positions.
         for (uint256 i; i < _approvedPositions.length; i++) isTrusted[_approvedPositions[i]] = true;
@@ -447,7 +447,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         uint256 asssetDepositLimit = depositLimit;
         uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint128).max && asssetLiquidityLimit == type(uint128).max)
+        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
             return type(uint256).max;
 
         uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
@@ -467,7 +467,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         uint256 asssetDepositLimit = depositLimit;
         uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint128).max && asssetLiquidityLimit == type(uint128).max)
+        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
             return type(uint256).max;
 
         uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
@@ -821,11 +821,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (oldAssetDecimals != 0 && oldAssetDecimals != newAssetDecimals) {
             uint256 asssetDepositLimit = depositLimit;
             uint256 asssetLiquidityLimit = liquidityLimit;
-            if (asssetDepositLimit != type(uint128).max)
-                depositLimit = uint128(asssetDepositLimit.changeDecimals(oldAssetDecimals, newAssetDecimals));
+            if (asssetDepositLimit != type(uint256).max)
+                depositLimit = asssetDepositLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
 
-            if (asssetLiquidityLimit != type(uint128).max)
-                liquidityLimit = uint128(asssetLiquidityLimit.changeDecimals(oldAssetDecimals, newAssetDecimals));
+            if (asssetLiquidityLimit != type(uint256).max)
+                liquidityLimit = asssetLiquidityLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
         }
 
         // Update state related to the current position.
