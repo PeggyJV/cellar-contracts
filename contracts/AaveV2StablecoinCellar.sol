@@ -95,7 +95,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     uint64 public constant performanceFee = 0.1e18; // 10%
 
     /**
-     * @notice Cosmos address of module that distrbiutes fees, specified as a hex value.
+     * @notice Cosmos address of module that distributes fees, specified as a hex value.
      * @dev The Gravity contract expects a 32-byte value formatted in a specific way.
      */
     bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
@@ -189,7 +189,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     }
 
     /**
-     * @notice Shutdown the cellar. Used in an emergency or if the cellar has been depreciated.
+     * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @param emptyPosition whether to pull all assets back into the cellar from the current position
      */
     function initiateShutdown(bool emptyPosition) external whenNotShutdown onlyOwner {
