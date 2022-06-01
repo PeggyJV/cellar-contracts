@@ -341,7 +341,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 holdings = totalHoldings();
 
         // Only withdraw if not enough assets in the holding pool.
-        if (assets > holdings) _withdrawFromPosition(currentPosition, assets - holdings, true);
+        if (assets > holdings) totalBalance -= uint240(_withdrawFromPosition(currentPosition, assets - holdings));
     }
 
     // ======================================= ACCOUNTING LOGIC =======================================
@@ -531,7 +531,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function enterPosition(uint256 assets) public whenNotShutdown onlyOwner {
         ERC20 currentPosition = asset;
 
-        _depositIntoPosition(currentPosition, assets, true);
+        totalBalance += uint240(assets);
+
+        _depositIntoPosition(currentPosition, assets);
 
         emit EnterPosition(address(currentPosition), assets);
     }
@@ -550,7 +552,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function exitPosition(uint256 assets) public whenNotShutdown onlyOwner {
         ERC20 currentPosition = asset;
 
-        _withdrawFromPosition(currentPosition, assets, true);
+        totalBalance -= uint240(_withdrawFromPosition(currentPosition, assets));
 
         emit ExitPosition(address(currentPosition), assets);
     }
@@ -603,9 +605,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 totalBalanceIncludingHoldings = totalPositionBalance + totalAssetsInHolding;
 
         // Pull all assets back into the cellar to swap everything into the new position.
-        uint256 withdrawnAssets = totalPositionBalance > 0
-            ? _withdrawFromPosition(oldPosition, type(uint256).max, false)
-            : 0;
+        uint256 withdrawnAssets = totalPositionBalance > 0 ? _withdrawFromPosition(oldPosition, type(uint256).max) : 0;
 
         // Get amount of all the assets in the cellar.
         uint256 assetsBeforeSwap = withdrawnAssets + totalAssetsInHolding;
@@ -625,7 +625,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint8 newPositionDecimals = _updatePosition(newPosition);
 
         // Deposit all newly swapped assets into Aave.
-        _depositIntoPosition(newPosition, assetsAfterSwap, false);
+        _depositIntoPosition(newPosition, assetsAfterSwap);
 
         // Update maximum locked yield to scale accordingly to the decimals of the new asset.
         maxLocked = uint160(uint256(maxLocked).changeDecimals(oldPositionDecimals, newPositionDecimals));
@@ -700,7 +700,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         // claim but without entering them back into a position in case the position has been
         // exited. Also, for the purposes of performance fee calculation, we count reinvested
         // rewards as yield so do not update balance.
-        if (!isShutdown) _depositIntoPosition(currentAsset, assetsOut, false);
+        if (!isShutdown) _depositIntoPosition(currentAsset, assetsOut);
 
         emit Reinvest(address(currentAsset), rewardsIn, assetsOut);
     }
@@ -758,14 +758,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @param position the address of the asset position
      * @param assets the amount of assets to deposit
      */
-    function _depositIntoPosition(
-        ERC20 position,
-        uint256 assets,
-        bool updateBalance
-    ) internal {
-        // Update balance used to calculate yield earned since last accrual.
-        if (updateBalance) totalBalance += uint240(assets);
-
+    function _depositIntoPosition(ERC20 position, uint256 assets) internal {
         // Deposit assets into Aave position.
         position.safeApprove(address(lendingPool), assets);
         lendingPool.deposit(address(position), assets, address(this), 0);
@@ -780,16 +773,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @param assets amount of assets to withdraw
      * @return withdrawnAssets amount of assets actually withdrawn
      */
-    function _withdrawFromPosition(
-        ERC20 position,
-        uint256 assets,
-        bool updateBalance
-    ) internal returns (uint256 withdrawnAssets) {
+    function _withdrawFromPosition(ERC20 position, uint256 assets) internal returns (uint256 withdrawnAssets) {
         // Withdraw assets from Aave position.
         withdrawnAssets = lendingPool.withdraw(address(position), assets, address(this));
-
-        // Update balance used to calculate yield earned since last accrual if specified.
-        if (updateBalance) totalBalance -= uint240(withdrawnAssets);
 
         emit WithdrawFromPosition(address(position), withdrawnAssets);
     }
@@ -804,7 +790,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (totalPositionBalance > 0) {
             accrue();
 
-            _withdrawFromPosition(position, type(uint256).max, false);
+            _withdrawFromPosition(position, type(uint256).max);
 
             totalBalance = 0;
         }
