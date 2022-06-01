@@ -102,8 +102,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         cellar.transferOwnership(address(this));
 
         // Ensure restrictions aren't a factor.
-        cellar.setLiquidityLimit(type(uint128).max);
-        cellar.setDepositLimit(type(uint128).max);
+        cellar.setLiquidityLimit(type(uint256).max);
+        cellar.setDepositLimit(type(uint256).max);
 
         // Mint enough liquidity to the Aave lending pool.
         USDC.mint(address(aUSDC), type(uint224).max);
@@ -123,8 +123,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.decimals(), 18, "Should initialize decimals to be 18.");
         assertEq(cellar.assetDecimals(), 6, "Should initialize asset decimals to be 6.");
 
-        assertEq(cellar.liquidityLimit(), type(uint128).max, "Should initialize liquidity limit to be max.");
-        assertEq(cellar.depositLimit(), type(uint128).max, "Should initialize deposit limit to be max.");
+        assertEq(cellar.liquidityLimit(), type(uint256).max, "Should initialize liquidity limit to be max.");
+        assertEq(cellar.depositLimit(), type(uint256).max, "Should initialize deposit limit to be max.");
 
         assertTrue(cellar.isTrusted(ERC20(USDC)), "Should initialize USDC to be trusted.");
         assertTrue(cellar.isTrusted(ERC20(DAI)), "Should initialize DAI to be trusted.");
@@ -498,15 +498,15 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.maxDeposit(address(this)), type(uint256).max, "Should have no max deposit.");
         assertEq(cellar.maxMint(address(this)), type(uint256).max, "Should have no max mint.");
 
-        cellar.setDepositLimit(uint128(amount * 2));
-        cellar.setLiquidityLimit(uint128(amount / 2));
+        cellar.setDepositLimit(amount * 2);
+        cellar.setLiquidityLimit(amount / 2);
 
         assertEq(cellar.depositLimit(), amount * 2, "Should have changed the deposit limit.");
         assertEq(cellar.liquidityLimit(), amount / 2, "Should have changed the liquidity limit.");
         assertEq(cellar.maxDeposit(address(this)), 0, "Should have reached new max deposit.");
         assertEq(cellar.maxMint(address(this)), 0, "Should have reached new max mint.");
 
-        cellar.setLiquidityLimit(uint128(amount * 3));
+        cellar.setLiquidityLimit(amount * 3);
 
         assertEq(cellar.maxDeposit(address(this)), amount, "Should not have reached new max deposit.");
         assertEq(cellar.maxMint(address(this)), amount.changeDecimals(6, 18), "Should not have reached new max mint.");
