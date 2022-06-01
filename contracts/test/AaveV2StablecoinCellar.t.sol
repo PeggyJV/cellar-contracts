@@ -1094,9 +1094,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // Test that reinvested rewards are counted as yield.
         cellar.accrue();
 
-        assertApproxEq(cellar.totalAssets(), 9.5e6, 0.1e6, "Should have updated total assets after accrual.");
-        assertApproxEq(cellar.totalLocked(), 85.5e6, 0.1e6, "Should have realized gains.");
-        assertApproxEq(cellar.totalBalance(), 95e6, 0.1e6, "Should have updated total balance after accrual.");
+        assertApproxEq(cellar.totalAssets(), 95e6, 0.1e6, "Should have updated total assets after accrual.");
+        assertApproxEq(cellar.totalLocked(), 855e6, 0.1e6, "Should have realized gains.");
+        assertApproxEq(cellar.totalBalance(), 950e6, 0.1e6, "Should have updated total balance after accrual.");
     }
 
     // =========================================== FEES TESTS ===========================================
