@@ -7,7 +7,7 @@
     "url": "https://www.sommelier.finance/"
   },
   "scripts": {
-    "setup": "forge install && npm install",
+    "setup": "forge install && npm install && npm run build",
     "build": "forge build && npx hardhat compile",
     "test": "forge test -vv && npx hardhat compile && npx hardhat test",
     "coverage": "npx hardhat compile && npx hardhat coverage",
@@ -16,7 +16,7 @@
     "update": "forge update && npm upgrade",
     "clean": "forge clean && npx hardhat clean",
     "clear": "npm run clean && rm -rf node_modules cache_hardhat",
-    "reinstall": "npm run clear && npm run setup && npm run build"
+    "reinstall": "npm run clear && npm run setup"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.6",
