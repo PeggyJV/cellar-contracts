@@ -3,12 +3,7 @@
 # This overrides the `auto_detect_solc` value
 solc_version = '0.8.13'
 auto_detect_solc = false
-# Increase optimizer_runs
-optimizer = true
-optimizer_runs = 1_000
-# Fuzz more than the default 256
-fuzz_runs = 1_000
 
-# Perform extreme fuzzing on CI runs
 [ci]
+# Perform extreme fuzzing on CI runs
 fuzz_runs = 100_000
