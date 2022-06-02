@@ -1,3 +1,11 @@
 {
-  "solidity.compileUsingRemoteVersion": "v0.8.13+commit.fc410830"
+  "solidity.packageDefaultDependenciesContractsDirectory": "src",
+  "solidity.packageDefaultDependenciesDirectory": "lib",
+  "solidity.compileUsingRemoteVersion": "v0.8.13",
+  "search.exclude": { "lib": true },
+  "editor.formatOnSave": true,
+  "solidity.formatter": "prettier",
+  "[solidity]": {
+    "editor.defaultFormatter": "JuanBlanco.solidity"
+  }
 }

@@ -1,7 +1,9 @@
 [default]
-src = 'contracts'
-libs = ['lib']
-out = 'out'
-solc_version = "0.8.13"
+# Sets the concrete solc version to use
+# This overrides the `auto_detect_solc` value
+solc_version = '0.8.13'
+auto_detect_solc = false
 
-# See more config options https://github.com/gakonst/foundry/tree/master/config
+[ci]
+# Perform extreme fuzzing on CI runs
+fuzz_runs = 100_000

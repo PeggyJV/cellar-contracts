@@ -1,8 +1,7 @@
 import { task } from "hardhat/config";
 import { TaskArguments } from "hardhat/types";
 
-import { AaveV2StablecoinCellar } from "../../src/types/AaveV2StablecoinCellar";
-import { AaveV2StablecoinCellar__factory } from "../../src/types/factories/AaveV2StablecoinCellar__factory";
+import { AaveV2StablecoinCellar, AaveV2StablecoinCellar__factory } from "../../typechain-types";
 
 task("deploy:AaveV2StablecoinCellar").setAction(async function (args: TaskArguments, { ethers }) {
   const signers = await ethers.getSigners();

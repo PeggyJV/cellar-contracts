@@ -3,20 +3,16 @@
     "declaration": true,
     "declarationMap": true,
     "emitDecoratorMetadata": true,
-    "esModuleInterop": true,
     "experimentalDecorators": true,
     "forceConsistentCasingInFileNames": true,
     "lib": ["es6"],
+    "target": "es2018",
     "module": "commonjs",
-    "moduleResolution": "node",
-    "noImplicitAny": true,
-    "removeComments": true,
-    "resolveJsonModule": true,
-    "sourceMap": true,
+    "esModuleInterop": true,
+    "outDir": "dist",
     "strict": true,
-    "target": "es6"
+    "resolveJsonModule": true
   },
-  "exclude": ["node_modules"],
-  "files": ["./hardhat.config.ts"],
-  "include": ["tasks/**/*", "tests/**/*", "types/**/*"]
+  "include": ["./tasks", "./test", "./typechain-types"],
+  "files": ["./hardhat.config.ts"]
 }
