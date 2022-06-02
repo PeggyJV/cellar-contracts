@@ -1,6 +1,6 @@
 # Sommelier Cellar Contracts • [![tests](https://github.com/PeggyJV/cellar-contracts/actions/workflows/tests.yml/badge.svg)](https://github.com/PeggyJV/cellar-contracts/actions/workflows/tests.yml) [![lints](https://github.com/PeggyJV/cellar-contracts/actions/workflows/lints.yml/badge.svg)](https://github.com/PeggyJV/cellar-contracts/actions/workflows/lints.yml) ![license](https://img.shields.io/github/license/PeggyJV/cellar-contracts)
 
-Cellar contracts for Sommelier Network
+Cellar contracts for the Sommelier Network.
 
 ### Development
 
@@ -18,7 +18,7 @@ Install libraries with Foundry which work with Hardhat:
 forge install rari-capital/solmate # Already in this repo, just an example.
 ```
 
-Whenever you install new libraries using Foundry, make sure to update your `remappings.txt` file by running `forge remappings > remappings.txt`. This is required because we use `hardhat-preprocessor` and the `remappings.txt` file to allow Hardhat to resolve libraries you install with Foundry.
+Whenever you install new libraries using Foundry, make sure to update your `remappings.txt` file. This repo uses `hardhat-preprocessor` and the `remappings.txt` file to allow Hardhat to resolve libraries you install with Foundry.
 
 **Testing**
 
@@ -42,7 +42,8 @@ Use Hardhat's task framework:
 
 ```bash
 npx hardhat compile
-# Before running the next command, go to `hardhat.config.ts` and uncomment "./tasks" imports. This is initially commented to fix initial compile errors with Hardhat.
+# Before running the next command, go to `hardhat.config.ts` and uncomment "./tasks" imports.
+# This is initially commented to fix initial compile errors with Hardhat.
 npx hardhat example
 ```
 
@@ -52,8 +53,8 @@ Inside the [`scripts/`](./scripts/) directory are a few preconfigured scripts th
 
 Scripts take inputs from the CLI, using silent mode to hide any sensitive information.
 
-NOTE: These scripts are required to be _executable_ meaning they must be made executable by running `chmod +x ./scripts/*`.
+> NOTE: These scripts are required to be _executable_ meaning they must be made executable by running `chmod +x ./scripts/*`.
 
-NOTE: For local deployment, make sure to run `npm install` before running the `deploy_local.sh` script. Otherwise, hardhat will error due to missing dependencies.
+> NOTE: For local deployment, make sure to run `npm install` before running the `deploy_local.sh` script. Otherwise, hardhat will error due to missing dependencies.
 
-NOTE: these scripts will prompt you for the contract name and deployed addresses (when verifying). Also, they use the `-i` flag on `forge` to ask for your private key for deployment. This uses silent mode which keeps your private key from being printed to the console (and visible in logs).
+> NOTE: These scripts will prompt you for the contract name and deployed addresses (when verifying). Also, they use the `-i` flag on `forge` to ask for your private key for deployment. This uses silent mode which keeps your private key from being printed to the console (and visible in logs).
