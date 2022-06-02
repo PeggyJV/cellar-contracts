@@ -2,3 +2,5 @@
 @forge-std/=lib/forge-std/src/
 @ds-test/=lib/forge-std/lib/ds-test/src/
 @openzeppelin/=lib/openzeppelin-contracts/contracts/
+@uniswap/v3-periphery/=lib/v3-periphery/contracts/
+@uniswap/v3-core/=lib/v3-core/

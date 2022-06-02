@@ -5,7 +5,7 @@ import { Artifact } from "hardhat/types";
 import { Contract, Signer, BigNumberish, ContractTransaction } from "ethers";
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 
-import type { CellarStaking, MockERC20 } from "../typechain-types";
+import type { CellarStaking, MockERC20 } from "../../typechain-types";
 
 const { deployContract } = hre.waffle;
 

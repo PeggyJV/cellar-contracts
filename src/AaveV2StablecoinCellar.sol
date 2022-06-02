@@ -1,104 +1,141 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.11;
+pragma solidity 0.8.13;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC4626, ERC20, SafeTransferLib } from "./base/ERC4626.sol";
+import { Multicall } from "./base/Multicall.sol";
 import { Ownable } from "@openzeppelin/access/Ownable.sol";
+import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
 import { IAaveIncentivesController } from "./interfaces/IAaveIncentivesController.sol";
 import { IStakedTokenV2 } from "./interfaces/IStakedTokenV2.sol";
 import { ICurveSwaps } from "./interfaces/ICurveSwaps.sol";
 import { ISushiSwapRouter } from "./interfaces/ISushiSwapRouter.sol";
 import { IGravity } from "./interfaces/IGravity.sol";
 import { ILendingPool } from "./interfaces/ILendingPool.sol";
-import { MathUtils } from "./utils/MathUtils.sol";
+import { Math } from "./utils/Math.sol";
 
 import "./Errors.sol";
-import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
  * @notice Dynamic ERC4626 that changes positions to always get the best yield for stablecoins on Aave.
  * @author Brian Le
  */
-contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
+contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, Ownable {
     using SafeTransferLib for ERC20;
-    using MathUtils for uint256;
+    using Math for uint256;
 
-    /**
-     * @notice The asset that makes up the cellar's holding pool. Will change whenever the cellar
-     *         rebalances into a new position.
-     * @dev The cellar denotes its inactive assets in this token. While it waits in the holding pool
-     *      to be entered into a position, it is used as exit liquidity from those redeeming their
-     *      shares for capital efficiency.
-     */
-    ERC20 public asset;
+    // ======================================== POSITION STORAGE ========================================
 
     /**
      * @notice An interest-bearing derivative of the current asset returned by Aave for lending
-     *         the current asset. Represents cellar's portion of active assets earning yield in a
-     *         lending position.
+     *         the current asset. Represents cellar's portion of assets earning yield in a lending
+     *         position.
      */
     ERC20 public assetAToken;
 
     /**
-     * @notice The decimals of precision used by the current asset.
-     * @dev Since stablecoins don't use the standard 18 decimals of precision (eg. USDC and USDT),
-     *      we cache this to use for decimal conversions when performing calculations and storing data.
+     * @notice The decimals of precision used by the current position's asset.
+     * @dev Since some stablecoins don't use the standard 18 decimals of precision (eg. USDC and USDT),
+     *      we cache this to use for more efficient decimal conversions.
      */
     uint8 public assetDecimals;
 
     /**
-     * @notice Mapping from a user's address to all their deposits and balances.
-     * @dev Used to determining which of a user's shares are active (ie. entered into a position earning
-     *      yield vs inactive (ie. waiting in the holding pool to be entered into a position and not
-     *      earning yield).
+     * @notice The total amount of assets held in the current position since the time of last accrual.
+     * @dev Unlike `totalAssets`, this includes locked yield that hasn't been distributed.
      */
-    mapping(address => UserDeposit[]) public userDeposits;
+    uint240 public totalBalance;
+
+    // ======================================== ACCRUAL CONFIG ========================================
 
     /**
-     * @notice Mapping from a user's address to the index of their first non-zero deposit in `userDeposits`.
-     * @dev Saves gas when looping through all of a user's deposits.
+     * @notice Period of time over which yield since the last accrual is linearly distributed to the cellar.
+     * @dev Net gains are distributed gradually over a period to prevent frontrunning and sandwich attacks.
+     *      Net losses are realized immediately otherwise users could time exits to sidestep losses.
      */
-    mapping(address => uint256) public currentDepositIndex;
+    uint32 public accrualPeriod = 7 days;
+
+    /**
+     * @notice Timestamp of when the last accrual occurred.
+     */
+    uint64 public lastAccrual;
+
+    /**
+     * @notice The amount of yield to be distributed to the cellar from the last accrual.
+     */
+    uint160 public maxLocked;
+
+    /**
+     * @notice Set the accrual period over which yield is distributed.
+     * @param newAccrualPeriod period of time in seconds of the new accrual period
+     */
+    function setAccrualPeriod(uint32 newAccrualPeriod) external onlyOwner {
+        // Ensure that the change is not disrupting a currently ongoing distribution of accrued yield.
+        if (totalLocked() > 0) revert STATE_AccrualOngoing();
+
+        emit AccrualPeriodChanged(accrualPeriod, newAccrualPeriod);
+
+        accrualPeriod = newAccrualPeriod;
+    }
+
+    // ========================================= FEES CONFIG =========================================
+
+    /**
+     *  @notice The percentage of yield accrued as performance fees.
+     *  @dev This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
+     */
+    uint64 public constant platformFee = 0.0025e18; // 0.25%
+
+    /**
+     * @notice The percentage of total assets accrued as platform fees over a year.
+     * @dev This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
+     */
+    uint64 public constant performanceFee = 0.1e18; // 10%
+
+    /**
+     * @notice Cosmos address of module that distributes fees, specified as a hex value.
+     * @dev The Gravity contract expects a 32-byte value formatted in a specific way.
+     */
+    bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+
+    /**
+     * @notice Set the address of the fee distributor on the Sommelier chain.
+     * @dev IMPORTANT: Ensure that the address is formatted in the specific way that the Gravity contract
+     *      expects it to be.
+     * @param newFeesDistributor formatted address of the new fee distributor module
+     */
+    function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
+        emit FeesDistributorChanged(feesDistributor, newFeesDistributor);
+
+        feesDistributor = newFeesDistributor;
+    }
+
+    // ======================================== TRUST CONFIG ========================================
 
     /**
      * @notice Whether an asset position is trusted or not. Prevents cellar from rebalancing into an
      *         asset that has not been trusted by the users. Trusting / distrusting of an asset is done
      *         through governance.
      */
-    mapping(address => bool) public isTrusted;
+    mapping(ERC20 => bool) public isTrusted;
 
     /**
-     * @notice Last time all inactive assets were entered into a strategy and made active. Used to
-     *         determining which of a user's shares are active.
+     * @notice Set the trust for a position.
+     * @param position address of an asset position on Aave (eg. FRAX, UST, FEI).
+     * @param trust whether to trust or distrust
      */
-    uint256 public lastTimeEnteredPosition;
+    function setTrust(ERC20 position, bool trust) external onlyOwner {
+        isTrusted[position] = trust;
 
-    /**
-     * @notice The value fees are divided by to get a percentage. Represents the maximum percent (100%).
-     */
-    uint256 public constant DENOMINATOR = 100_00;
+        // In the case that validators no longer trust the current position, pull all assets back
+        // into the cellar.
+        ERC20 currentPosition = asset;
+        if (trust == false && position == currentPosition) _emptyPosition(currentPosition);
 
-    /**
-     * @notice The percentage of platform fees taken off of active assets over a year.
-     */
-    uint256 public constant PLATFORM_FEE = 1_00; // 1%
+        emit TrustChanged(address(position), trust);
+    }
 
-    /**
-     * @notice The percentage of performance fees taken off of cellar gains.
-     */
-    uint256 public constant PERFORMANCE_FEE = 10_00; // 10%
-
-    /**
-     * @notice Stores fee-related data.
-     */
-    IAaveV2StablecoinCellar.Fees public fees;
-
-    /**
-     * @notice Cosmos address of the fee distributor as a hex value.
-     * @dev The Gravity contract expects a 32-byte value formatted in a specific way.
-     */
-    bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+    // ======================================== LIMITS CONFIG ========================================
 
     /**
      * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals
@@ -114,9 +151,62 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
     uint256 public depositLimit;
 
     /**
+     * @notice Set the maximum liquidity that cellar can manage. Uses the same decimals as the current asset.
+     * @param newLimit amount of assets to set as the new limit
+     */
+    function setLiquidityLimit(uint256 newLimit) external onlyOwner {
+        emit LiquidityLimitChanged(liquidityLimit, newLimit);
+
+        liquidityLimit = newLimit;
+    }
+
+    /**
+     * @notice Set the per-wallet deposit limit. Uses the same decimals as the current asset.
+     * @param newLimit amount of assets to set as the new limit
+     */
+    function setDepositLimit(uint256 newLimit) external onlyOwner {
+        emit DepositLimitChanged(depositLimit, newLimit);
+
+        depositLimit = newLimit;
+    }
+
+    // ======================================== EMERGENCY LOGIC ========================================
+
+    /**
      * @notice Whether or not the contract is shutdown in case of an emergency.
      */
     bool public isShutdown;
+
+    /**
+     * @notice Prevent a function from being called during a shutdown.
+     */
+    modifier whenNotShutdown() {
+        if (isShutdown) revert STATE_ContractShutdown();
+
+        _;
+    }
+
+    /**
+     * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
+     * @param emptyPosition whether to pull all assets back into the cellar from the current position
+     */
+    function initiateShutdown(bool emptyPosition) external whenNotShutdown onlyOwner {
+        // Pull all assets from a position.
+        if (emptyPosition) _emptyPosition(asset);
+
+        isShutdown = true;
+
+        emit ShutdownInitiated(emptyPosition);
+    }
+
+    /**
+     * @notice Restart the cellar.
+     */
+    function liftShutdown() external onlyOwner {
+        isShutdown = false;
+
+        emit ShutdownLifted();
+    }
 
     // ======================================== INITIALIZATION ========================================
 
@@ -178,7 +268,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
      */
     constructor(
         ERC20 _asset,
-        address[] memory _approvedPositions,
+        ERC20[] memory _approvedPositions,
         ICurveSwaps _curveRegistryExchange,
         ISushiSwapRouter _sushiswapRouter,
         ILendingPool _lendingPool,
@@ -187,7 +277,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         IStakedTokenV2 _stkAAVE,
         ERC20 _AAVE,
         ERC20 _WETH
-    ) ERC20("Sommelier Aave V2 Stablecoin Cellar LP Token", "aave2-CLR-S", 18) {
+    ) ERC4626(_asset, "Sommelier Aave V2 Stablecoin Cellar LP Token", "aave2-CLR-S", 18) {
         // Initialize immutables.
         curveRegistryExchange = _curveRegistryExchange;
         sushiswapRouter = _sushiswapRouter;
@@ -199,999 +289,544 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC20, Ownable {
         WETH = _WETH;
 
         // Initialize asset.
-        isTrusted[address(_asset)] = true;
-        _updatePosition(address(_asset));
+        isTrusted[_asset] = true;
+        uint8 _assetDecimals = _updatePosition(_asset);
 
         // Initialize limits.
-        uint256 powOfAssetDecimals = 10**assetDecimals;
+        uint256 powOfAssetDecimals = 10**_assetDecimals;
         liquidityLimit = 5_000_000 * powOfAssetDecimals;
         depositLimit = 50_000 * powOfAssetDecimals;
 
         // Initialize approved positions.
         for (uint256 i; i < _approvedPositions.length; i++) isTrusted[_approvedPositions[i]] = true;
 
+        // Initialize starting timestamp for first accrual.
+        lastAccrual = uint32(block.timestamp);
+
         // Transfer ownership to the Gravity Bridge.
         transferOwnership(address(_gravityBridge));
     }
 
-    // =============================== DEPOSIT/WITHDRAWAL OPERATIONS ===============================
+    // ============================================ CORE LOGIC ============================================
 
     /**
-     * @notice Deposits assets and mints the shares to receiver.
+     * @dev Check that the deposit is not restricted by a deposit limit or liquidity limit and
+     *      prevent deposits during a shutdown.
      * @param assets amount of assets to deposit
-     * @param receiver address receiving the shares
-     * @return shares amount of shares minted
+     * @param receiver address that will receive minted shares
      */
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
-        // Depositing above balance will only deposit balance.
-        uint256 depositableAssets = asset.balanceOf(msg.sender);
-        if (assets > depositableAssets) assets = depositableAssets;
-
-        (, shares) = _deposit(assets, 0, receiver);
-    }
-
-    /**
-     * @notice Mints shares to receiver by depositing assets.
-     * @param shares amount of shares to mint
-     * @param receiver address receiving the shares
-     * @return assets amount of assets deposited
-     */
-    function mint(uint256 shares, address receiver) external returns (uint256 assets) {
-        // Depositing above balance will only deposit balance.
-        uint256 mintableShares = previewDeposit(asset.balanceOf(msg.sender));
-        if (shares > mintableShares) shares = mintableShares;
-
-        (assets, ) = _deposit(0, shares, receiver);
-    }
-
-    function _deposit(
+    function beforeDeposit(
         uint256 assets,
-        uint256 shares,
+        uint256,
         address receiver
-    ) internal returns (uint256, uint256) {
-        if (isShutdown) revert STATE_ContractShutdown();
-
-        // Must calculate before assets are transferred in.
-        shares > 0 ? assets = previewMint(shares) : shares = previewDeposit(assets);
-
-        // Prevent event spamming and user deposit spamming.
-        if (shares == 0) revert USR_ZeroShares();
-
-        // Enforce global liquidity restrictions and deposit restrictions per wallet.
-        if (assets > maxDeposit(receiver)) revert USR_DepositRestricted(assets, maxDeposit(receiver));
-
-        // Transfers assets into the cellar.
-        asset.safeTransferFrom(msg.sender, address(this), assets);
-
-        // Mint user tokens that represents their share of the cellar's assets.
-        _mint(receiver, shares);
-
-        // Store the user's deposit data. This will be used later on when the user wants to withdraw
-        // their assets or transfer their shares.
-        UserDeposit[] storage deposits = userDeposits[receiver];
-        deposits.push(
-            UserDeposit({
-                assets: uint112(assets.changeDecimals(assetDecimals, decimals)),
-                shares: uint112(shares),
-                timeDeposited: uint32(block.timestamp)
-            })
-        );
-
-        emit Deposit(msg.sender, receiver, address(asset), assets, shares);
-
-        return (assets, shares);
+    ) internal view override whenNotShutdown {
+        uint256 maxAssets = maxDeposit(receiver);
+        if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
     }
 
     /**
-     * @notice Withdraws assets to receiver by redeeming shares from owner.
-     * @param assets amount of assets being withdrawn
-     * @param receiver address of account receiving the assets
-     * @param owner address of the owner of the shares being redeemed
-     * @return shares amount of shares redeemed
+     * @dev Check if holding position has enough funds to cover the withdraw and only pull from the
+     *      current lending position if needed.
+     * @param assets amount of assets to withdraw
      */
-    function withdraw(
+    function beforeWithdraw(
         uint256 assets,
-        address receiver,
-        address owner
-    ) external returns (uint256 shares) {
-        // Ensures proceeding calculations are done with a standard 18 decimals of precision. Will
-        // change back to the using the asset's usual decimals of precision when transferring assets
-        // after all calculations are done.
-        assets = assets.changeDecimals(assetDecimals, decimals);
+        uint256,
+        address,
+        address
+    ) internal override {
+        ERC20 currentPosition = asset;
+        uint256 holdings = totalHoldings();
 
-        // Withdrawing above balance will only withdraw balance.
-        (, shares) = _withdraw(assets, receiver, owner);
+        // Only withdraw if not enough assets in the holding pool.
+        if (assets > holdings) totalBalance -= uint240(_withdrawFromPosition(currentPosition, assets - holdings));
+    }
+
+    // ======================================= ACCOUNTING LOGIC =======================================
+
+    /**
+     * @notice The total amount of assets in the cellar.
+     * @dev Excludes locked yield that hasn't been distributed.
+     */
+    function totalAssets() public view override returns (uint256) {
+        return totalBalance + totalHoldings() - totalLocked();
     }
 
     /**
-     * @notice Redeems shares from owner to withdraw assets to receiver.
-     * @param shares amount of shares redeemed
-     * @param receiver address of account receiving the assets
-     * @param owner address of the owner of the shares being redeemed
-     * @return assets amount of assets sent to receiver
+     * @notice The total amount of assets in holding position.
      */
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) external returns (uint256 assets) {
-        // Withdrawing above balance will only withdraw balance.
-        (assets, ) = _withdraw(_convertToAssets(shares), receiver, owner);
-    }
-
-    /**
-     * @dev `assets` must be passed in with 18 decimals of precision. Must extend/truncate decimals of
-     *       the amount passed in if necessary to ensure this is true.
-     */
-    function _withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) internal returns (uint256, uint256) {
-        if (balanceOf[owner] == 0) revert USR_ZeroShares();
-        if (assets == 0) revert USR_ZeroAssets();
-
-        // Tracks amount of shares to redeem.
-        uint256 shares;
-
-        // Retrieve the user's deposits to begin looping through them, generally from oldest to
-        // newest deposits. This may not be the case if shares have been transferred to the owner,
-        // which will be added to the end of the owner's deposits regardless of time deposited.
-        UserDeposit[] storage deposits = userDeposits[owner];
-
-        // Tracks the amount of assets left to withdraw. Updated at the end of each loop.
-        uint256 leftToWithdraw = assets;
-
-        // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
-        uint256 exchangeRate = _convertToAssets(1e18);
-
-        for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
-            UserDeposit storage d = deposits[i];
-
-            // Whether or not deposited shares are active or inactive.
-            bool isActive = d.timeDeposited < lastTimeEnteredPosition;
-
-            // If shares are active, convert them to the amount of assets they're worth to get the
-            // maximum amount of assets withdrawable from this deposit.
-            uint256 dAssets = isActive ? uint256(d.shares).mulWadDown(exchangeRate) : d.assets;
-
-            // Determine the amount of assets and shares to withdraw from this deposit.
-            uint256 withdrawnAssets = MathUtils.min(leftToWithdraw, dAssets);
-            uint256 withdrawnShares = uint256(d.shares).mulDivUp(withdrawnAssets, dAssets);
-
-            // For active shares, deletes the deposit data we don't need anymore for a gas refund.
-            if (isActive) {
-                delete d.assets;
-                delete d.timeDeposited;
-            } else {
-                // Substract the amount of assets taken for this withdraw.
-                d.assets -= uint112(withdrawnAssets);
-            }
-
-            // Subtract shares withdrawn and add to total.
-            d.shares -= uint112(withdrawnShares);
-            shares += withdrawnShares;
-
-            // Update the counter of assets left to withdraw.
-            leftToWithdraw -= withdrawnAssets;
-
-            // Break if this is the last deposit or there is nothing left to withdraw.
-            if (i == deposits.length - 1 || leftToWithdraw == 0) {
-                // Store the user's next non-zero deposit to save gas on future looping.
-                currentDepositIndex[owner] = d.shares != 0 ? i : i + 1;
-                break;
-            }
-        }
-
-        // Check to see if the caller is approved to spend shares.
-        if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
-        }
-
-        // Redeem shares.
-        _burn(owner, shares);
-
-        // Determine the total amount of assets withdrawn.
-        assets -= leftToWithdraw;
-
-        // Convert assets decimals back for transfers.
-        assets = assets.changeDecimals(decimals, assetDecimals);
-
-        // Only withdraw from position if holding pool does not contain enough funds.
-        _allocateAssets(assets);
-
-        // Transfer assets to receiver from the cellar's holding pool.
-        asset.safeTransfer(receiver, assets);
-
-        emit Withdraw(receiver, owner, address(asset), assets, shares);
-
-        // The amount of assets actually withdrawn may be less than assets attempted to withdraw
-        // if attempted withdraw amount was less than the withdrawable balance.
-        return (assets, shares);
-    }
-
-    // ================================== ACCOUNTING OPERATIONS ==================================
-
-    /**
-     * @dev The internal functions always use 18 decimals of precision while the public functions use
-     *      as many decimals as the current asset (aka they don't change the decimals). This is
-     *      because we want the user deposit data the cellar stores to be usable across different
-     *      assets regardless of the decimals used. This means the cellar will always perform
-     *      calculations and store data with a standard of 18 decimals of precision but will change
-     *      the decimals back when transferring assets outside the contract or returning data
-     *      through public view functions.
-     */
-
-    /**
-     * @notice Total amount of active asset entered into the current position.
-     * @dev The aTokens' value is pegged to the value of the corresponding asset at a 1:1 ratio. We
-     *      can find the amount of assets active in a position simply by taking balance of aTokens
-     *      cellar holds.
-     */
-    function activeAssets() public view returns (uint256) {
-        return assetAToken.balanceOf(address(this));
-    }
-
-    /**
-     * @dev Same as `activeAssets` but forcibly denoted with 18 decimals of precision.
-     */
-    function _activeAssets() internal view returns (uint256) {
-        uint256 assets = assetAToken.balanceOf(address(this));
-        return assets.changeDecimals(assetDecimals, decimals);
-    }
-
-    /**
-     * @notice Total amount of inactive asset in holding.
-     */
-    function inactiveAssets() public view returns (uint256) {
+    function totalHoldings() public view returns (uint256) {
         return asset.balanceOf(address(this));
     }
 
     /**
-     * @dev Same as `inactiveAssets` but forcibly denoted with 18 decimals of precision.
+     * @notice The total amount of locked yield still being distributed.
      */
-    function _inactiveAssets() internal view returns (uint256) {
-        uint256 assets = asset.balanceOf(address(this));
-        return assets.changeDecimals(assetDecimals, decimals);
+    function totalLocked() public view returns (uint256) {
+        // Get the last accrual and accrual period.
+        uint256 previousAccrual = lastAccrual;
+        uint256 accrualInterval = accrualPeriod;
+
+        // If the accrual period has passed, there is no locked yield.
+        if (block.timestamp >= previousAccrual + accrualInterval) return 0;
+
+        // Get the maximum amount we could return.
+        uint256 maxLockedYield = maxLocked;
+
+        // Get how much yield remains locked.
+        return maxLockedYield - (maxLockedYield * (block.timestamp - previousAccrual)) / accrualInterval;
     }
 
     /**
-     * @notice Total amount of the asset managed by the cellar.
-     */
-    function totalAssets() public view returns (uint256) {
-        return activeAssets() + inactiveAssets();
-    }
-
-    /**
-     * @dev Same as `totalAssets` but forcibly denoted with 18 decimals of precision.
-     */
-    function _totalAssets() internal view returns (uint256) {
-        return _activeAssets() + _inactiveAssets();
-    }
-
-    /**
-     * @notice The amount of shares that the cellar would exchange for the amount of assets provided
-     *         ASSUMING they are active.
-     * @param assets amount of assets to convert
-     * @return shares the assets can be exchanged for
-     */
-    function convertToShares(uint256 assets) public view returns (uint256) {
-        assets = assets.changeDecimals(assetDecimals, decimals);
-        return _convertToShares(assets);
-    }
-
-    /**
-     * @dev Same as `convertToShares` but forcibly denoted with 18 decimals of precision.
-     */
-    function _convertToShares(uint256 assets) internal view returns (uint256) {
-        uint256 currentTotalAssets = _totalAssets();
-        uint256 currentTotalSupply = totalSupply;
-        return
-            currentTotalAssets == 0 || currentTotalSupply == 0
-                ? assets
-                : assets.mulDivDown(currentTotalSupply, currentTotalAssets);
-    }
-
-    /**
-     * @notice The amount of assets that the cellar would exchange for the amount of shares provided
-     *         ASSUMING they are active.
+     * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
      * @param shares amount of shares to convert
      * @return assets the shares can be exchanged for
      */
-    function convertToAssets(uint256 shares) public view returns (uint256) {
-        uint256 assets = _convertToAssets(shares);
-        return assets.changeDecimals(decimals, assetDecimals);
+    function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 positionDecimals = assetDecimals;
+        uint256 totalAssetsNormalized = totalAssets().changeDecimals(positionDecimals, 18);
+
+        assets = totalShares == 0 ? shares : shares.mulDivDown(totalAssetsNormalized, totalShares);
+        assets = assets.changeDecimals(18, positionDecimals);
     }
 
     /**
-     * @dev Same as `convertToAssets` but forcibly denoted with 18 decimals of precision.
+     * @notice The amount of shares that the cellar would exchange for the amount of assets provided.
+     * @param assets amount of assets to convert
+     * @return shares the assets can be exchanged for
      */
-    function _convertToAssets(uint256 shares) internal view returns (uint256) {
-        return totalSupply == 0 ? shares : shares.mulDivDown(_totalAssets(), totalSupply);
+    function convertToShares(uint256 assets) public view override returns (uint256 shares) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 positionDecimals = assetDecimals;
+        uint256 assetsNormalized = assets.changeDecimals(positionDecimals, 18);
+        uint256 totalAssetsNormalized = totalAssets().changeDecimals(positionDecimals, 18);
+
+        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivDown(totalShares, totalAssetsNormalized);
     }
 
     /**
-     * @notice Simulate the effects of depositing assets at the current block, given current on-chain
-     *         conditions.
-     * @param assets amount of assets to deposit
-     * @return shares that will be minted
-     */
-    function previewDeposit(uint256 assets) public view returns (uint256) {
-        return convertToShares(assets);
-    }
-
-    /**
-     * @notice Simulate the effects of minting shares at the current block, given current on-chain
-     *         conditions.
+     * @notice Simulate the effects of minting shares at the current block, given current on-chain conditions.
      * @param shares amount of shares to mint
      * @return assets that will be deposited
      */
-    function previewMint(uint256 shares) public view returns (uint256) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+    function previewMint(uint256 shares) public view override returns (uint256 assets) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 positionDecimals = assetDecimals;
+        uint256 totalAssetsNormalized = totalAssets().changeDecimals(positionDecimals, 18);
 
-        uint256 assets = supply == 0 ? shares : shares.mulDivUp(_totalAssets(), supply);
-        return assets.changeDecimals(decimals, assetDecimals);
+        assets = totalShares == 0 ? shares : shares.mulDivUp(totalAssetsNormalized, totalShares);
+        assets = assets.changeDecimals(18, positionDecimals);
     }
 
     /**
-     * @notice Simulate the effects of withdrawing assets at the current block, given current
-     *         on-chain conditions ASSUMING the shares being redeemed are all active.
+     * @notice Simulate the effects of withdrawing assets at the current block, given current on-chain conditions.
      * @param assets amount of assets to withdraw
      * @return shares that will be redeemed
      */
-    function previewWithdraw(uint256 assets) public view returns (uint256) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+    function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 positionDecimals = assetDecimals;
+        uint256 assetsNormalized = assets.changeDecimals(positionDecimals, 18);
+        uint256 totalAssetsNormalized = totalAssets().changeDecimals(positionDecimals, 18);
 
-        return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
+        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivUp(totalShares, totalAssetsNormalized);
     }
 
-    /**
-     * @notice Simulate the effects of redeeming shares at the current block, given current on-chain
-     *         conditions ASSUMING the shares being redeemed are all active.
-     * @param shares amount of sharers to redeem
-     * @return assets that can be withdrawn
-     */
-    function previewRedeem(uint256 shares) public view returns (uint256) {
-        return convertToAssets(shares);
-    }
-
-    // ======================================= STATE INFORMATION =====================================
+    // ========================================= LIMITS LOGIC =========================================
 
     /**
-     * @notice Retrieve information on a user's deposit balances.
-     * @param user address of the user
-     * @return userActiveShares amount of active shares the user has
-     * @return userInactiveShares amount of inactive shares the user has
-     * @return userActiveAssets amount of active assets the user has
-     * @return userInactiveAssets amount of inactive assets the user has
+     * @notice Total amount of assets that can be deposited for a user.
+     * @param receiver address of account that would receive the shares
+     * @return assets maximum amount of assets that can be deposited
      */
-    function getUserBalances(address user)
-        external
-        view
-        returns (
-            uint256 userActiveShares,
-            uint256 userInactiveShares,
-            uint256 userActiveAssets,
-            uint256 userInactiveAssets
-        )
-    {
-        // Retrieve the user's deposits to begin looping through them, generally from oldest to
-        // newest deposits. This may not be the case though if shares have been transferred to the
-        // user, which will be added to the end of the user's deposits regardless of time
-        // deposited.
-        UserDeposit[] storage deposits = userDeposits[user];
-
-        // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
-        uint256 exchangeRate = _convertToAssets(1e18);
-
-        for (uint256 i = currentDepositIndex[user]; i < deposits.length; i++) {
-            UserDeposit storage d = deposits[i];
-
-            // Determine whether or not deposit is active or inactive.
-            if (d.timeDeposited < lastTimeEnteredPosition) {
-                // Saves an extra SLOAD if active and cast type to uint256.
-                uint256 dShares = d.shares;
-
-                userActiveShares += dShares;
-                userActiveAssets += dShares.mulWadDown(exchangeRate); // Convert active shares to assets.
-            } else {
-                userInactiveShares += d.shares;
-                userInactiveAssets += d.assets;
-            }
-        }
-
-        // Return assets in their original units.
-        userActiveAssets = userActiveAssets.changeDecimals(decimals, assetDecimals);
-        userInactiveAssets = userInactiveAssets.changeDecimals(decimals, assetDecimals);
-    }
-
-    /**
-     * @notice Retrieve a list of all of a user's deposits.
-     * @dev This is provided because Solidity converts public arrays into index getters,
-     *      but we need a way to allow external contracts and users to access the whole array.
-     * @param user address of the user
-     * @return array of all the users deposits
-     */
-    function getUserDeposits(address user) external view returns (UserDeposit[] memory) {
-        return userDeposits[user];
-    }
-
-    // =========================== DEPOSIT/WITHDRAWAL LIMIT OPERATIONS ===========================
-
-    /**
-     * @notice Total number of assets that can be deposited by owner into the cellar.
-     * @param owner address of account that would receive the shares
-     * @return maximum amount of assets that can be deposited
-     */
-    function maxDeposit(address owner) public view returns (uint256) {
+    function maxDeposit(address receiver) public view override returns (uint256 assets) {
         if (isShutdown) return 0;
 
-        if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max)
-            // Conversion to fixed point will overflow if the number being converted has more integer
-            // digits that fit in the bits reserved for them in the fixed point representation. This
-            // is the maximum assets that can be deposited without overflowing.
-            return uint256(type(uint112).max) / 10**(decimals - assetDecimals);
+        uint256 asssetDepositLimit = depositLimit;
+        uint256 asssetLiquidityLimit = liquidityLimit;
+        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
+            return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = depositLimit.subMin0(maxWithdraw(owner));
-        uint256 leftUntilLiquidityLimit = liquidityLimit.subMin0(totalAssets());
+        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
+        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(totalAssets());
 
         // Only return the more relevant of the two.
-        return MathUtils.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
+        assets = Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
     }
 
     /**
-     * @notice Total number of shares that can be minted for owner from the cellar.
-     * @param owner address of account that would receive the shares
-     * @return maximum amount of shares that can be minted
+     * @notice Total amount of shares that can be minted for a user.
+     * @param receiver address of account that would receive the shares
+     * @return shares maximum amount of shares that can be minted
      */
-    function maxMint(address owner) public view returns (uint256) {
-        return convertToShares(maxDeposit(owner));
+    function maxMint(address receiver) public view override returns (uint256 shares) {
+        if (isShutdown) return 0;
+
+        uint256 asssetDepositLimit = depositLimit;
+        uint256 asssetLiquidityLimit = liquidityLimit;
+        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
+            return type(uint256).max;
+
+        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
+        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(totalAssets());
+
+        // Only return the more relevant of the two.
+        shares = convertToShares(Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit));
     }
 
+    // ========================================== ACCRUAL LOGIC ==========================================
+
     /**
-     * @notice Total number of assets that can be withdrawn from the cellar.
-     * @param owner address of account that would holds the shares
-     * @return maximum amount of assets that can be withdrawn
+     * @notice Accrue yield, platform fees, and performance fees.
+     * @dev Since this is the function responsible for distributing yield to shareholders and
+     *      updating the cellar's balance, it is important to make sure it gets called regularly.
      */
-    function maxWithdraw(address owner) public view returns (uint256) {
-        UserDeposit[] storage deposits = userDeposits[owner];
+    function accrue() public {
+        uint256 totalLockedYield = totalLocked();
 
-        // Track max assets that can be withdrawn.
-        uint256 assets;
+        // Without this check, malicious actors could do a slowdown attack on the distribution of
+        // yield by continuously resetting the accrual period.
+        if (msg.sender != owner() && totalLockedYield > 0) revert STATE_AccrualOngoing();
 
-        // Saves gas by avoiding calling `_convertToAssets` on active shares during each loop.
-        uint256 exchangeRate = _convertToAssets(1e18);
+        // Compute and store current exchange rate between assets and shares for gas efficiency.
+        uint256 oneAsset = 10**assetDecimals;
+        uint256 exchangeRate = convertToShares(oneAsset);
 
-        for (uint256 i = currentDepositIndex[owner]; i < deposits.length; i++) {
-            UserDeposit storage d = deposits[i];
+        // Get balance since last accrual and updated balance for this accrual.
+        uint256 balanceLastAccrual = totalBalance;
+        uint256 balanceThisAccrual = assetAToken.balanceOf(address(this));
 
-            // Determine the amount of assets that can be withdrawn. Only redeem active shares for
-            // assets, otherwise just withdrawn the original amount of assets that were deposited.
-            assets += d.timeDeposited < lastTimeEnteredPosition ? uint256(d.shares).mulWadDown(exchangeRate) : d.assets;
-        }
+        // Calculate platform fees accrued.
+        uint256 elapsedTime = block.timestamp - lastAccrual;
+        uint256 platformFeeInAssets = (balanceThisAccrual * elapsedTime * platformFee) / 1e18 / 365 days;
+        uint256 platformFees = platformFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
 
-        // Converts back to decimals used by that asset.
-        return assets.changeDecimals(decimals, assetDecimals);
+        // Calculate performance fees accrued.
+        uint256 yield = balanceThisAccrual.subMinZero(balanceLastAccrual);
+        uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
+        uint256 performanceFees = performanceFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
+
+        // Mint accrued fees as shares.
+        _mint(address(this), platformFees + performanceFees);
+
+        // Do not count assets set aside for fees as yield. Allows fees to be immediately withdrawable.
+        maxLocked = uint160(totalLockedYield + yield.subMinZero(platformFeeInAssets + performanceFeeInAssets));
+
+        lastAccrual = uint32(block.timestamp);
+
+        totalBalance = uint240(balanceThisAccrual);
+
+        emit Accrual(platformFees, performanceFees, yield);
     }
 
+    // ========================================= POSITION LOGIC =========================================
+
     /**
-     * @notice Total number of shares that can be redeemed from the cellar.
-     * @param owner address of account that would holds the shares
-     * @return maximum amount of shares that can be redeemed
+     * @notice Pushes assets into the current Aave lending position.
+     * @param assets amount of assets to enter into the current position
      */
-    function maxRedeem(address owner) public view returns (uint256) {
-        return balanceOf[owner];
+    function enterPosition(uint256 assets) public whenNotShutdown onlyOwner {
+        ERC20 currentPosition = asset;
+
+        totalBalance += uint240(assets);
+
+        _depositIntoPosition(currentPosition, assets);
+
+        emit EnterPosition(address(currentPosition), assets);
     }
 
-    // ====================================== FEE OPERATIONS ======================================
-
     /**
-     * @notice Take platform fees and performance fees off of cellar's active assets.
+     * @notice Pushes all assets in holding into the current Aave lending position.
      */
-    function accrueFees() external updateYield {
-        // Platform fees taken each accrual = activeAssets * (elapsedTime * (feePercentage / SECS_PER_YEAR)).
-        uint256 elapsedTime = block.timestamp - fees.lastTimeAccruedPlatformFees;
-        uint256 platformFeeInAssets = (_activeAssets() * elapsedTime * PLATFORM_FEE) / DENOMINATOR / 365 days;
-        uint256 platformFees = _convertToShares(platformFeeInAssets);
-
-        // Update tracking of last time platform fees were accrued.
-        fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
-
-        // Mint the cellar accrued platform fees as shares.
-        _mint(address(this), platformFees);
-
-        // Performance fees taken each accrual = yield * feePercentage
-        uint256 yield = fees.yield;
-        uint256 performanceFeeInAssets = yield.mulDivDown(PERFORMANCE_FEE, DENOMINATOR);
-        uint256 performanceFees = _convertToShares(performanceFeeInAssets);
-
-        // Reset tracking of yield since last accrual.
-        fees.yield = 0;
-
-        // Mint the cellar accrued performance fees as shares.
-        _mint(address(this), performanceFees);
-
-        // Update fees that have been accrued.
-        fees.accruedPlatformFees += uint112(platformFees);
-        fees.accruedPerformanceFees += uint112(performanceFees);
-
-        emit AccruedPlatformFees(platformFees);
-        emit AccruedPerformanceFees(performanceFees);
+    function enterPosition() external {
+        enterPosition(totalHoldings());
     }
 
     /**
-     * @notice Tracks yield the cellar has gained since the last time fees were accrued.
-     * @dev Must be called every time a function is called that updates `activeAssets`.
+     * @notice Pulls assets from the current Aave lending position.
+     * @param assets amount of assets to exit from the current position
      */
-    modifier updateYield() {
-        uint256 currentActiveAssets = _activeAssets();
-        uint256 lastActiveAssets = fees.lastActiveAssets;
+    function exitPosition(uint256 assets) public whenNotShutdown onlyOwner {
+        ERC20 currentPosition = asset;
 
-        if (currentActiveAssets > lastActiveAssets) {
-            fees.yield += uint112(currentActiveAssets - lastActiveAssets);
-        }
+        totalBalance -= uint240(_withdrawFromPosition(currentPosition, assets));
 
-        _;
-
-        // Update this for next performance fee accrual.
-        fees.lastActiveAssets = uint112(_activeAssets());
+        emit ExitPosition(address(currentPosition), assets);
     }
 
     /**
-     * @notice Transfer accrued fees to the Sommelier Chain to distribute.
+     * @notice Pulls all assets from the current Aave lending position.
+     * @dev Strategy providers should not assume the position is empty after this call. If there is
+     *      unrealized yield, that will still remain in the position. To completely empty the cellar,
+     *      multicall accrue and this.
      */
-    function transferFees() external onlyOwner {
-        // Cellar fees are accrued in shares and redeemed upon transfer.
-        uint256 totalFees = ERC20(this).balanceOf(address(this));
-        uint256 feeInAssets = previewRedeem(totalFees);
-
-        // Redeem our fee shares for assets to transfer to Cosmos.
-        _burn(address(this), totalFees);
-
-        // Only withdraw assets from position if the holding pool does not contain enough funds.
-        // Otherwise, all assets will come from the holding pool.
-        _allocateAssets(feeInAssets);
-
-        // Transfer assets to a fee distributor on the Sommelier Chain.
-        asset.safeApprove(address(gravityBridge), feeInAssets);
-        gravityBridge.sendToCosmos(address(asset), feesDistributor, feeInAssets);
-
-        emit TransferFees(fees.accruedPlatformFees, fees.accruedPerformanceFees);
-
-        // Reset the tracker for fees accrued that are still waiting to be transferred.
-        fees.accruedPlatformFees = 0;
-        fees.accruedPerformanceFees = 0;
-    }
-
-    // =================================== GOVERNANCE OPERATIONS ===================================
-
-    /**
-     * @notice Trust or distrust an asset position on Aave (eg. FRAX, UST, FEI).
-     */
-    function setTrust(address position, bool trust) external onlyOwner {
-        isTrusted[position] = trust;
-
-        // In the case that governance no longer trust the current position, pull all assets back into
-        // the cellar.
-        if (trust == false && position == address(asset)) _withdrawFromAave(address(asset), type(uint256).max);
+    function exitPosition() external {
+        exitPosition(totalBalance);
     }
 
     /**
-     * @notice Stop or start the contract. Used in an emergency or if the cellar has been retired.
-     */
-    function setShutdown(bool shutdown, bool exitPosition) external onlyOwner {
-        isShutdown = shutdown;
-
-        // Withdraw everything from the current position on Aave if specified when shutting down.
-        if (shutdown && exitPosition) _withdrawFromAave(address(asset), type(uint256).max);
-
-        emit Shutdown(shutdown, exitPosition);
-    }
-
-    /**
-     * @notice Update the address of the fee distributor on the Sommelier Chain. IMPORTANT: Ensure
-     *         that the address is formatted in the specific way that the Gravity contract expects
-     *         it to be.
-     */
-    function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
-        // Store for emitted event.
-        bytes32 oldFeesDistributor = feesDistributor;
-
-        // Change the fees distributor address.
-        feesDistributor = newFeesDistributor;
-
-        emit FeesDistributorChanged(oldFeesDistributor, newFeesDistributor);
-    }
-
-    // ===================================== ADMIN OPERATIONS =====================================
-
-    /**
-     * @notice Enters into the current Aave stablecoin position.
-     */
-    function enterPosition() external onlyOwner {
-        if (isShutdown) revert STATE_ContractShutdown();
-
-        uint256 currentInactiveAssets = inactiveAssets();
-
-        // Deposits all inactive assets into the current position.
-        _depositToAave(address(asset), currentInactiveAssets);
-
-        // Update the last time cellar entered position.
-        lastTimeEnteredPosition = block.timestamp;
-
-        emit EnterPosition(address(asset), currentInactiveAssets);
-    }
-
-    /**
-     * @notice Rebalances current assets into a new asset position.
-     * @param route array of [initial token, pool, token, pool, token, ...] that specifies the swap route
+     * @notice Rebalances current assets into a new position.
+     * @param route array of [initial token, pool, token, pool, token, ...] that specifies the swap route on Curve.
      * @param swapParams multidimensional array of [i, j, swap type] where i and j are the correct
                          values for the n'th pool in `_route` and swap type should be 1 for a
                          stableswap `exchange`, 2 for stableswap `exchange_underlying`, 3 for a
                          cryptoswap `exchange`, 4 for a cryptoswap `exchange_underlying` and 5 for
                          Polygon factory metapools `exchange_underlying`
-     * @param minAssetsOut minimum amount of assets received from swap
+     * @param minAssetsOut minimum amount of assets received after swap
      */
     function rebalance(
         address[9] memory route,
         uint256[3][4] memory swapParams,
         uint256 minAssetsOut
-    ) external onlyOwner {
-        if (isShutdown) revert STATE_ContractShutdown();
-
-        // Retrieve the last token in the route and store it as the new asset.
-        address newAsset;
+    ) external whenNotShutdown onlyOwner {
+        // Retrieve the last token in the route and store it as the new asset position.
+        ERC20 newPosition;
         for (uint256 i; ; i += 2) {
             if (i == 8 || route[i + 1] == address(0)) {
-                newAsset = route[i];
+                newPosition = ERC20(route[i]);
                 break;
             }
         }
 
-        // Doesn't make sense to rebalance into the same asset.
-        if (newAsset == address(asset)) revert USR_SameAsset(newAsset);
+        // Ensure the asset position is trusted.
+        if (!isTrusted[newPosition]) revert USR_UntrustedPosition(address(newPosition));
 
-        // Pull all active assets entered into Aave back into the cellar so we can swap everything
-        // into the new asset.
-        _withdrawFromAave(address(asset), type(uint256).max);
+        ERC20 oldPosition = asset;
 
-        uint256 currentInactiveAssets = inactiveAssets();
+        // Doesn't make sense to rebalance into the same position.
+        if (newPosition == oldPosition) revert USR_SamePosition(address(oldPosition));
+
+        // Store this for later when updating total balance.
+        uint256 totalAssetsInHolding = totalHoldings();
+        uint256 totalBalanceIncludingHoldings = totalBalance + totalAssetsInHolding;
+
+        // Pull any assets in the lending position back in to swap everything into the new position.
+        uint256 assetsBeforeSwap = assetAToken.balanceOf(address(this)) > 0
+            ? _withdrawFromPosition(oldPosition, type(uint256).max) + totalAssetsInHolding
+            : totalAssetsInHolding;
 
         // Perform stablecoin swap using Curve.
-        asset.safeApprove(address(curveRegistryExchange), currentInactiveAssets);
-        uint256 amountOut = curveRegistryExchange.exchange_multiple(
+        oldPosition.safeApprove(address(curveRegistryExchange), assetsBeforeSwap);
+        uint256 assetsAfterSwap = curveRegistryExchange.exchange_multiple(
             route,
             swapParams,
-            currentInactiveAssets,
+            assetsBeforeSwap,
             minAssetsOut
         );
 
-        // Store this later for the event we will emit.
-        address oldAsset = address(asset);
+        uint8 oldPositionDecimals = assetDecimals;
 
-        // Updates state for our new position and check to make sure Aave supports it before
-        // rebalancing.
-        _updatePosition(newAsset);
+        // Updates state for new position and check that Aave supports it.
+        uint8 newPositionDecimals = _updatePosition(newPosition);
 
         // Deposit all newly swapped assets into Aave.
-        _depositToAave(address(asset), amountOut);
+        _depositIntoPosition(newPosition, assetsAfterSwap);
 
-        // Update the last time all inactive assets were entered into a position.
-        lastTimeEnteredPosition = block.timestamp;
+        // Update maximum locked yield to scale accordingly to the decimals of the new asset.
+        maxLocked = uint160(uint256(maxLocked).changeDecimals(oldPositionDecimals, newPositionDecimals));
 
-        emit Rebalance(oldAsset, newAsset, amountOut);
+        // Update the cellar's balance. If the unrealized gains before rebalancing exceed the losses
+        // from the swap, then losses will be taken from the unrealized gains during next accrual
+        // and this rebalance will not effect the exchange rate of shares to assets. Otherwise, the
+        // losses from this rebalance will be realized and factored into the new balance.
+        uint256 newTotalBalance = Math.min(
+            totalBalanceIncludingHoldings.changeDecimals(oldPositionDecimals, newPositionDecimals),
+            assetsAfterSwap
+        );
+
+        totalBalance = uint240(newTotalBalance);
+
+        emit Rebalance(address(oldPosition), address(newPosition), newTotalBalance);
+    }
+
+    // ======================================= REINVEST LOGIC =======================================
+
+    /**
+     * @notice Claim rewards from Aave and begin cooldown period to unstake them.
+     * @return rewards amount of stkAAVE rewards claimed from Aave
+     */
+    function claimAndUnstake() external onlyOwner returns (uint256 rewards) {
+        // Necessary to do as `claimRewards` accepts a dynamic array as first param.
+        address[] memory aToken = new address[](1);
+        aToken[0] = address(assetAToken);
+
+        // Claim all stkAAVE rewards.
+        rewards = incentivesController.claimRewards(aToken, type(uint256).max, address(this));
+
+        // Begin the 10 day cooldown period for unstaking stkAAVE for AAVE.
+        stkAAVE.cooldown();
+
+        emit ClaimAndUnstake(rewards);
     }
 
     /**
      * @notice Reinvest rewards back into cellar's current position.
      * @dev Must be called within 2 day unstake period 10 days after `claimAndUnstake` was run.
-     * @param minAssetsOut minimum amount of assets received after swapping AAVE to the current asset
+     * @param minAssetsOut minimum amount of assets to receive after swapping AAVE to the current asset
      */
     function reinvest(uint256 minAssetsOut) external onlyOwner {
         // Redeems the cellar's stkAAVE rewards for AAVE.
         stkAAVE.redeem(address(this), type(uint256).max);
 
-        uint256 amountIn = AAVE.balanceOf(address(this));
+        // Get the amount of AAVE rewards going in to be swap for the current asset.
+        uint256 rewardsIn = AAVE.balanceOf(address(this));
+
+        ERC20 currentAsset = asset;
 
         // Specify the swap path from AAVE -> WETH -> current asset.
         address[] memory path = new address[](3);
         path[0] = address(AAVE);
         path[1] = address(WETH);
-        path[2] = address(asset);
+        path[2] = address(currentAsset);
 
         // Perform a multihop swap using Sushiswap.
-        AAVE.safeApprove(address(sushiswapRouter), amountIn);
+        AAVE.safeApprove(address(sushiswapRouter), rewardsIn);
         uint256[] memory amounts = sushiswapRouter.swapExactTokensForTokens(
-            amountIn,
+            rewardsIn,
             minAssetsOut,
             path,
             address(this),
             block.timestamp + 60
         );
 
-        uint256 amountOut = amounts[amounts.length - 1];
-
-        // Count reinvested rewards as yield.
-        fees.yield += uint112(amountOut.changeDecimals(assetDecimals, decimals));
+        uint256 assetsOut = amounts[amounts.length - 1];
 
         // In the case of a shutdown, we just may want to redeem any leftover rewards for users to
-        // claim but without entering them back into a position in case the position has been exited.
-        if (!isShutdown) _depositToAave(address(asset), amountOut);
+        // claim but without entering them back into a position in case the position has been
+        // exited. Also, for the purposes of performance fee calculation, we count reinvested
+        // rewards as yield so do not update balance.
+        if (!isShutdown) _depositIntoPosition(currentAsset, assetsOut);
 
-        emit Reinvest(address(asset), amountIn, amountOut);
+        emit Reinvest(address(currentAsset), rewardsIn, assetsOut);
     }
 
+    // ========================================= FEES LOGIC =========================================
+
     /**
-     * @notice Claim rewards from Aave and begin cooldown period to unstake them.
-     * @return claimed amount of rewards claimed from Aave
+     * @notice Transfer accrued fees to the Sommelier chain to distribute.
+     * @dev Fees are accrued as shares and redeemed upon transfer.
      */
-    function claimAndUnstake() external onlyOwner returns (uint256 claimed) {
-        // Necessary to do as `claimRewards` accepts a dynamic array as first param.
-        address[] memory aToken = new address[](1);
-        aToken[0] = address(assetAToken);
+    function sendFees() external onlyOwner {
+        // Redeem our fee shares for assets to send to the fee distributor module.
+        uint256 totalFees = balanceOf[address(this)];
+        uint256 assets = previewRedeem(totalFees);
+        require(assets != 0, "ZERO_ASSETS");
 
-        // Claim all stkAAVE rewards.
-        claimed = incentivesController.claimRewards(aToken, type(uint256).max, address(this));
+        // Only withdraw assets from position if the holding position does not contain enough funds.
+        // Pass in only the amount of assets withdrawn, the rest doesn't matter.
+        beforeWithdraw(assets, 0, address(0), address(0));
 
-        // Begin the cooldown period for unstaking stkAAVE to later redeem for AAVE.
-        stkAAVE.cooldown();
+        _burn(address(this), totalFees);
 
-        emit ClaimAndUnstake(claimed);
+        // Transfer assets to a fee distributor on the Sommelier chain.
+        ERC20 positionAsset = asset;
+        positionAsset.safeApprove(address(gravityBridge), assets);
+        gravityBridge.sendToCosmos(address(positionAsset), feesDistributor, assets);
+
+        emit SendFees(totalFees, assets);
     }
 
+    // ====================================== RECOVERY LOGIC ======================================
+
     /**
-     * @notice Sweep tokens sent here that are not managed by the cellar.
-     * @dev This may be used in case the wrong tokens are accidentally sent to this contract.
+     * @notice Sweep tokens that are not suppose to be in the cellar.
+     * @dev This may be used in case the wrong tokens are accidentally sent.
      * @param token address of token to transfer out of this cellar
      * @param to address to transfer sweeped tokens to
      */
-    function sweep(address token, address to) external onlyOwner {
+    function sweep(ERC20 token, address to) external onlyOwner {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
-        if (token == address(asset) || token == address(assetAToken) || token == address(this))
-            revert USR_ProtectedAsset(token);
+        if (token == asset || token == assetAToken || token == this || address(token) == address(stkAAVE))
+            revert USR_ProtectedAsset(address(token));
 
         // Transfer out tokens in this cellar that shouldn't be here.
-        uint256 amount = ERC20(token).balanceOf(address(this));
-        ERC20(token).safeTransfer(to, amount);
+        uint256 amount = token.balanceOf(address(this));
+        token.safeTransfer(to, amount);
 
-        emit Sweep(token, to, amount);
+        emit Sweep(address(token), to, amount);
+    }
+
+    // ===================================== HELPER FUNCTIONS =====================================
+
+    /**
+     * @notice Deposits cellar holdings into an Aave lending position.
+     * @param position the address of the asset position
+     * @param assets the amount of assets to deposit
+     */
+    function _depositIntoPosition(ERC20 position, uint256 assets) internal {
+        // Deposit assets into Aave position.
+        position.safeApprove(address(lendingPool), assets);
+        lendingPool.deposit(address(position), assets, address(this), 0);
+
+        emit DepositIntoPosition(address(position), assets);
     }
 
     /**
-     * @notice Sets the maximum liquidity that cellar can manage. Careful to use the same decimals as the
-     *         current asset.
+     * @notice Withdraws assets from an Aave lending position.
+     * @dev The assets withdrawn differs from the assets specified if withdrawing `type(uint256).max`.
+     * @param position the address of the asset position
+     * @param assets amount of assets to withdraw
+     * @return withdrawnAssets amount of assets actually withdrawn
      */
-    function setLiquidityLimit(uint256 limit) external onlyOwner {
-        // Store for emitted event.
-        uint256 oldLimit = liquidityLimit;
+    function _withdrawFromPosition(ERC20 position, uint256 assets) internal returns (uint256 withdrawnAssets) {
+        // Withdraw assets from Aave position.
+        withdrawnAssets = lendingPool.withdraw(address(position), assets, address(this));
 
-        // Change the liquidity limit.
-        liquidityLimit = limit;
-
-        emit LiquidityLimitChanged(oldLimit, limit);
+        emit WithdrawFromPosition(address(position), withdrawnAssets);
     }
 
     /**
-     * @notice Sets the per-wallet deposit limit. Careful to use the same decimals as the current asset.
+     * @notice Pull all assets from the current lending position on Aave back into holding.
+     * @param position the address of the asset position to pull from
      */
-    function setDepositLimit(uint256 limit) external onlyOwner {
-        // Store for emitted event.
-        uint256 oldLimit = depositLimit;
+    function _emptyPosition(ERC20 position) internal {
+        uint256 totalPositionBalance = totalBalance;
 
-        // Change the deposit limit.
-        depositLimit = limit;
+        if (totalPositionBalance > 0) {
+            accrue();
 
-        emit DepositLimitChanged(oldLimit, limit);
+            _withdrawFromPosition(position, type(uint256).max);
+
+            totalBalance = 0;
+        }
     }
-
-    // ========================================== HELPERS ==========================================
 
     /**
      * @notice Update state variables related to the current position.
      * @dev Be aware that when updating to an asset that uses less decimals than the previous
      *      asset (eg. DAI -> USDC), `depositLimit` and `liquidityLimit` will lose some precision
      *      due to truncation.
-     * @param newAsset address of the new asset being managed by the cellar
+     * @param newPosition address of the new asset being managed by the cellar
      */
-    function _updatePosition(address newAsset) internal {
+    function _updatePosition(ERC20 newPosition) internal returns (uint8 newAssetDecimals) {
         // Retrieve the aToken that will represent the cellar's new position on Aave.
-        (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(newAsset);
+        (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(address(newPosition));
 
         // If the address is not null, it is supported by Aave.
-        if (aTokenAddress == address(0)) revert USR_UnsupportedPosition(newAsset);
+        if (aTokenAddress == address(0)) revert USR_UnsupportedPosition(address(newPosition));
 
         // Update the decimals used by limits if necessary.
         uint8 oldAssetDecimals = assetDecimals;
-        uint8 newAssetDecimals = ERC20(newAsset).decimals();
+        newAssetDecimals = newPosition.decimals();
 
-        // Ensure the decimals of precision the new position uses will not break the cellar.
-        if (newAssetDecimals > decimals) revert USR_TooManyDecimals(newAssetDecimals, decimals);
+        // Ensure the decimals of precision of the new position uses will not break the cellar.
+        if (newAssetDecimals > 18) revert USR_TooManyDecimals(newAssetDecimals, 18);
 
         // Ignore if decimals are the same or if it is the first time initializing a position.
         if (oldAssetDecimals != 0 && oldAssetDecimals != newAssetDecimals) {
-            if (depositLimit != type(uint256).max) {
-                depositLimit = depositLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
-            }
+            uint256 asssetDepositLimit = depositLimit;
+            uint256 asssetLiquidityLimit = liquidityLimit;
+            if (asssetDepositLimit != type(uint256).max)
+                depositLimit = asssetDepositLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
 
-            if (liquidityLimit != type(uint256).max) {
-                liquidityLimit = liquidityLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
-            }
+            if (asssetLiquidityLimit != type(uint256).max)
+                liquidityLimit = asssetLiquidityLimit.changeDecimals(oldAssetDecimals, newAssetDecimals);
         }
 
         // Update state related to the current position.
-        asset = ERC20(newAsset);
+        asset = newPosition;
         assetDecimals = newAssetDecimals;
         assetAToken = ERC20(aTokenAddress);
-    }
-
-    /**
-     * @notice Ensures there is enough assets in the contract available for a transfer.
-     * @dev Only withdraws from the current position if necessary.
-     * @param assets The amount of assets to allocate
-     */
-    function _allocateAssets(uint256 assets) internal {
-        uint256 currentInactiveAssets = inactiveAssets();
-
-        // Only withdraw if not enough assets in the holding pool.
-        if (assets > currentInactiveAssets) _withdrawFromAave(address(asset), assets - currentInactiveAssets);
-    }
-
-    /**
-     * @notice Deposits cellar holdings into an Aave lending pool.
-     * @param position the address of the asset position
-     * @param assets the amount of assets to deposit
-     */
-    function _depositToAave(address position, uint256 assets) internal updateYield {
-        // Ensure the position has been trusted by governance.
-        if (!isTrusted[position]) revert USR_UntrustedPosition(position);
-
-        // Initialize starting point for first platform fee accrual to time when cellar first deposits
-        // assets into a position on Aave.
-        if (fees.lastTimeAccruedPlatformFees == 0) fees.lastTimeAccruedPlatformFees = uint32(block.timestamp);
-
-        // Deposit assets into Aave position.
-        ERC20(position).safeApprove(address(lendingPool), assets);
-        lendingPool.deposit(position, assets, address(this), 0);
-
-        emit DepositToAave(position, assets);
-    }
-
-    /**
-     * @notice Withdraws assets from Aave.
-     * @param position the address of the asset position
-     * @param assets the amount of assets to withdraw
-     */
-    function _withdrawFromAave(address position, uint256 assets) internal updateYield {
-        // Skip withdrawal instead of reverting if there are no active assets to withdraw. Reverting
-        // could potentially prevent important function calls from executing, such as `shutdown`, in
-        // the case where there were no active assets because Aave would throw an error.
-        if (activeAssets() > 0) {
-            // Withdraw assets from Aave position.
-            uint256 withdrawnAmount = lendingPool.withdraw(position, assets, address(this));
-
-            // `withdrawnAmount` may be less than `assets` if cellar tried withdrawing more than
-            // it's balance on Aave.
-            emit WithdrawFromAave(position, withdrawnAmount);
-        }
-    }
-
-    // ================================= SHARE TRANSFER OPERATIONS =================================
-
-    /**
-     * @dev Modified versions of Solmate's ERC20 transfer and transferFrom functions to work with the
-     *      cellar's active vs inactive shares model.
-     */
-
-    /**
-     * @notice Transfers shares from one account to another.
-     * @param from address that is sending shares
-     * @param to address that is receiving shares
-     * @param amount amount of shares to transfer
-     * @param onlyActive whether to only transfer active shares
-     */
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount,
-        bool onlyActive
-    ) public returns (bool) {
-        // If the sender is not the owner of the shares, check to see if the owner has approved them
-        // to spend their shares.
-        if (from != msg.sender) {
-            uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
-        }
-
-        // Will revert here if sender is trying to transfer more shares then they have, so no need
-        // for an explicit check.
-        balanceOf[from] -= amount;
-
-        // Cannot overflow because the sum of all user balances can't exceed the max uint256 value.
-        unchecked {
-            balanceOf[to] += amount;
-        }
-
-        // Retrieve the deposits from sender then begin looping through deposits, generally from
-        // oldest to newest deposits. This may not be the case though if shares have been
-        // transferred to the sender, as they will be added to the end of the sender's deposits
-        // regardless of time deposited.
-        UserDeposit[] storage depositsFrom = userDeposits[from];
-
-        // Tracks the amount of shares left to transfer; updated at the end of each loop.
-        uint256 leftToTransfer = amount;
-
-        for (uint256 i = currentDepositIndex[from]; i < depositsFrom.length; i++) {
-            UserDeposit storage dFrom = depositsFrom[i];
-
-            // If we only want to transfer active shares, skips this deposit if it is inactive.
-            bool isActive = dFrom.timeDeposited < lastTimeEnteredPosition;
-            if (onlyActive && !isActive) continue;
-
-            // Saves an extra SLOAD if active and cast type to uint256.
-            uint256 dFromShares = dFrom.shares;
-
-            // Determine the amount of assets and shares to transfer from this deposit.
-            uint256 transferredShares = MathUtils.min(leftToTransfer, dFromShares);
-            uint256 transferredAssets = uint256(dFrom.assets).mulDivUp(transferredShares, dFromShares);
-
-            // For active shares, deletes the deposit data we don't need anymore for a gas refund.
-            if (isActive) {
-                delete dFrom.assets;
-                delete dFrom.timeDeposited;
-            } else {
-                dFrom.assets -= uint112(transferredAssets);
-            }
-
-            // Taken shares from this deposit to transfer.
-            dFrom.shares -= uint112(transferredShares);
-
-            // Transfer new deposit to the end of receiver's list of deposits.
-            userDeposits[to].push(
-                UserDeposit({
-                    assets: isActive ? 0 : uint112(transferredAssets),
-                    shares: uint112(transferredShares),
-                    timeDeposited: isActive ? 0 : dFrom.timeDeposited
-                })
-            );
-
-            // Update the counter of assets left to transfer.
-            leftToTransfer -= transferredShares;
-
-            // Break if not shares left to transfer.
-            if (leftToTransfer == 0) {
-                // Only store the index for the next non-zero deposit to save gas on looping if
-                // inactive deposits weren't skipped.
-                if (!onlyActive) currentDepositIndex[from] = dFrom.shares != 0 ? i : i + 1;
-                break;
-            }
-        }
-
-        // Will only happen if exhausted through all deposits and did not enough active shares to
-        // transfer.
-        if (leftToTransfer != 0) revert USR_NotEnoughActiveShares(leftToTransfer, amount);
-
-        emit Transfer(from, to, amount);
-
-        return true;
-    }
-
-    /**
-     * @dev For compatibility with ERC20 standard.
-     */
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public override returns (bool) {
-        // Defaults to allowing both active and inactive shares to be transferred.
-        return transferFrom(from, to, amount, false);
-    }
-
-    function transfer(address to, uint256 amount) public override returns (bool) {
-        // Defaults to allowing both active and inactive shares to be transferred.
-        return transferFrom(msg.sender, to, amount, false);
     }
 }
