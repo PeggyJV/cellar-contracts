@@ -1,31 +1,29 @@
+import fs from "fs";
+import { resolve } from "path";
+import { NetworkUserConfig, HardhatNetworkUserConfig } from "hardhat/types";
+import { HardhatUserConfig } from "hardhat/config";
+import { config as dotenvConfig } from "dotenv";
 import "@typechain/hardhat";
 import "@nomiclabs/hardhat-waffle";
 import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
+import "@nomiclabs/hardhat-waffle";
+import "@typechain/hardhat";
+import "hardhat-preprocessor";
 import "hardhat-contract-sizer";
 
-import "./tasks/accounts";
-// NOTE: Commented out to fix compile error with Hardhat that occurs when using Foundry.
-//       Uncomment when deploying.
+// Commented out to fix initial compile error with Hardhat, uncomment after compiling with `npx hardhat compile`.
+// import "./tasks/accounts";
 // import "./tasks/deploy";
 
-import { TaskArguments } from "hardhat/types";
-import { subtask } from "hardhat/config";
-import { TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS } from "hardhat/builtin-tasks/task-names";
-
-// Override Hardhat compiler to ignore compiling files related to Foundry testing.
-subtask(TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS).setAction(async (_: TaskArguments, __, runSuper: any) => {
-  const paths = await runSuper();
-
-  return paths.filter((p: string) => !p.endsWith(".t.sol") && !p.includes("/users/") && !p.includes("/lib/"));
-});
-
-import { resolve } from "path";
-
-import { config as dotenvConfig } from "dotenv";
-import { HardhatUserConfig } from "hardhat/config";
-import { NetworkUserConfig, HardhatNetworkUserConfig } from "hardhat/types";
+function getRemappings() {
+  return fs
+    .readFileSync("remappings.txt", "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map(line => line.trim().split("="));
+}
 
 dotenvConfig({ path: resolve(__dirname, "./.env") });
 
@@ -104,15 +102,31 @@ function createMainnetConfig(): NetworkUserConfig {
 const optimizerEnabled = process.env.DISABLE_OPTIMIZER ? false : true;
 
 const config: HardhatUserConfig = {
-  defaultNetwork: "hardhat",
-  gasReporter: {
-    currency: "USD",
-    enabled: process.env.REPORT_GAS ? true : false,
-    excludeContracts: [],
-    src: "./contracts",
-    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
-    outputFile: process.env.REPORT_GAS_OUTPUT,
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.11",
+        settings: {
+          optimizer: {
+            enabled: optimizerEnabled,
+            runs: 200,
+            details: {
+              // Enabled to fix stack errors when attempting to run test coverage.
+              yul: true,
+              yulDetails: {
+                stackAllocation: true,
+              },
+            },
+          },
+        },
+      },
+    ],
   },
+  paths: {
+    sources: "./src", // Use ./src rather than ./contracts as Hardhat expects
+    cache: "./cache_hardhat", // Use a different cache for Hardhat than Foundry
+  },
+  defaultNetwork: "hardhat",
   networks: {
     mainnet: createMainnetConfig(),
     hardhat: createHardhatConfig(),
@@ -128,51 +142,34 @@ const config: HardhatUserConfig = {
       gasMultiplier: 10,
     },
   },
-  paths: {
-    artifacts: "./artifacts",
-    cache: "./cache",
-    sources: "./contracts",
-    tests: "./tests",
-  },
-  solidity: {
-    compilers: [
-      {
-        version: "0.8.11",
-        settings: {
-          metadata: {
-            // Not including the metadata hash
-            // https://github.com/paulrberg/solidity-template/issues/31
-            bytecodeHash: "none",
-          },
-          // You should disable the optimizer when debugging
-          // https://hardhat.org/hardhat-network/#solidity-optimizer-support
-          optimizer: {
-            enabled: optimizerEnabled,
-            runs: 100,
-            details: {
-              // Enabled to fix stack errors when attempting to run test coverage
-              yul: true,
-              yulDetails: {
-                stackAllocation: true,
-              },
-            },
-          },
-        },
-      },
-      {
-        version: "0.4.12",
-      },
-    ],
-  },
-  typechain: {
-    outDir: "src/types",
-    target: "ethers-v5",
-  },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
   },
   contractSizer: {
     only: ["AaveV2StablecoinCellar.sol"],
+  },
+  gasReporter: {
+    currency: "USD",
+    enabled: process.env.REPORT_GAS ? true : false,
+    excludeContracts: [],
+    src: "./src",
+    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
+    outputFile: process.env.REPORT_GAS_OUTPUT,
+  },
+  // This fully resolves paths for imports in the ./lib directory for Hardhat
+  preprocess: {
+    eachLine: hre => ({
+      transform: (line: string) => {
+        if (line.match(/^\s*import /i)) {
+          getRemappings().forEach(([find, replace]) => {
+            if (line.match('"' + find)) {
+              line = line.replace('"' + find, '"' + replace);
+            }
+          });
+        }
+        return line;
+      },
+    }),
   },
 };
 

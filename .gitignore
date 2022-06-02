@@ -1,42 +1,25 @@
-# directories
-.yarn/*
-!.yarn/patches
-!.yarn/releases
-!.yarn/plugins
-!.yarn/sdks
-!.yarn/versions
-**/artifacts
-**/build
-**/cache
-**/coverage
-**/.coverage_artifacts
-**/.coverage_cache
-**/.coverage_contracts
-**/dist
-**/node_modules
-**/out
+# Foundry
+cache/
+out/
 
-# files
-*.env
-*.log
-.pnp.*
-coverage.json
+# Environment variables!
+.env
+.env.prod
+
+# JS
+node_modules/
+
+# Hardhat files
+cache_hardhat/
+artifacts/
+
+# Hardhat plugin files
+typechain-types/
+
+# Flattened files
+flattened.txt
+
+# Package Manager files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-gas-report
-.DS_Store
-
-# types
-src/types/*
-!src/types/common.ts
-!src/types/Greeter.ts
-
-# factories
-!src/types/factories
-src/types/factories/*
-!src/types/factories/Greeter__factory.ts
-
-package-lock.json
-secrets.json
-contracts-exposed

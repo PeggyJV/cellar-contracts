@@ -1,8 +1,7 @@
 import { task } from "hardhat/config";
 import { TaskArguments } from "hardhat/types";
 
-import { CellarStaking } from "../../src/types/CellarStaking";
-import { CellarStaking__factory } from "../../src/types/factories/CellarStaking__factory";
+import { CellarStaking, CellarStaking__factory } from "../../typechain-types";
 
 const oneDaySec = 60 * 60 * 24;
 const oneWeekSec = oneDaySec * 7;

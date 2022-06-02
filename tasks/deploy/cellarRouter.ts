@@ -1,8 +1,7 @@
 import { task } from "hardhat/config";
 import { TaskArguments } from "hardhat/types";
 
-import { CellarRouter } from "../../src/types/CellarRouter";
-import { CellarRouter__factory } from "../../src/types/factories/CellarRouter__factory";
+import { CellarRouter, CellarRouter__factory } from "../../typechain-types";
 
 task("deploy:CellarRouter").setAction(async function (args: TaskArguments, { ethers }) {
   const signers = await ethers.getSigners();
