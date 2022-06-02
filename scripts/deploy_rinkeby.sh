@@ -15,7 +15,7 @@ read -ra args
 
 if [ -z "$args" ]
 then
-  forge create ./src/${contract}.sol:${contract} -i --rpc-url $rpc
+  forge create ./src/${contract}.sol:${contract} -i --rpc-url $rpc --verify
 else
-  forge create ./src/${contract}.sol:${contract} -i --rpc-url $rpc --constructor-args ${args}
+  forge create ./src/${contract}.sol:${contract} -i --rpc-url $rpc --constructor-args ${args} --verify
 fi
