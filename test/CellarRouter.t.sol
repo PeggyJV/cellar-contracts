@@ -9,10 +9,10 @@ import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
 
-import { DSTestPlus } from "./utils/DSTestPlus.sol";
+import { Test } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-contract CellarRouterTest is DSTestPlus {
+contract CellarRouterTest is Test {
     using Math for uint256;
 
     MockERC20 private ABC;
@@ -25,7 +25,7 @@ contract CellarRouterTest is DSTestPlus {
     bytes32 private constant PERMIT_TYPEHASH =
         keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     uint256 private privateKey = 0xBEEF;
-    address private owner = hevm.addr(privateKey);
+    address private owner = vm.addr(privateKey);
 
     function setUp() public {
         // Set up cellar router:
@@ -44,7 +44,7 @@ contract CellarRouterTest is DSTestPlus {
         assets = bound(assets, 1e18, type(uint72).max);
 
         // Retrieve signature for permit.
-        (uint8 v, bytes32 r, bytes32 s) = hevm.sign(
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
             privateKey,
             keccak256(
                 abi.encodePacked(
@@ -92,7 +92,7 @@ contract CellarRouterTest is DSTestPlus {
         path[1] = address(ABC);
 
         // Test deposit and swap.
-        hevm.prank(owner);
+        vm.prank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
         uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, assets, 0, owner, owner);
@@ -116,7 +116,7 @@ contract CellarRouterTest is DSTestPlus {
         // Attempting to swap 1 will round down to 0 when due to simulating a 95% exchange rate on swaps.
         assets = bound(assets, 2, type(uint72).max);
 
-        (uint8 v, bytes32 r, bytes32 s) = hevm.sign(
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
             privateKey,
             keccak256(
                 abi.encodePacked(

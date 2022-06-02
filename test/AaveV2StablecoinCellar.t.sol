@@ -17,10 +17,10 @@ import { MockIncentivesController } from "src/mocks/MockIncentivesController.sol
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockStkAAVE } from "src/mocks/MockStkAAVE.sol";
 
-import { DSTestPlus } from "./utils/DSTestPlus.sol";
+import { Test } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-contract AaveV2StablecoinCellarTest is DSTestPlus {
+contract AaveV2StablecoinCellarTest is Test {
     using Math for uint256;
 
     // Initialization Variables:
@@ -40,19 +40,19 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
     function setUp() external {
         USDC = new MockERC20("USDC", 6);
-        hevm.label(address(USDC), "USDC");
+        vm.label(address(USDC), "USDC");
         DAI = new MockERC20("DAI", 18);
-        hevm.label(address(DAI), "DAI");
+        vm.label(address(DAI), "DAI");
         WETH = new MockERC20("WETH", 18);
-        hevm.label(address(WETH), "WETH");
+        vm.label(address(WETH), "WETH");
 
         lendingPool = new MockLendingPool();
-        hevm.label(address(lendingPool), "lendingPool");
+        vm.label(address(lendingPool), "lendingPool");
 
         aUSDC = new MockAToken(address(lendingPool), address(USDC), "aUSDC");
-        hevm.label(address(aUSDC), "aUSDC");
+        vm.label(address(aUSDC), "aUSDC");
         aDAI = new MockAToken(address(lendingPool), address(DAI), "aDAI");
-        hevm.label(address(aDAI), "aDAI");
+        vm.label(address(aDAI), "aDAI");
 
         lendingPool.initReserve(address(USDC), address(aUSDC));
         lendingPool.initReserve(address(DAI), address(aDAI));
@@ -61,17 +61,17 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         approvedPositions[0] = ERC20(DAI);
 
         swapRouter = new MockSwapRouter();
-        hevm.label(address(swapRouter), "swapRouter");
+        vm.label(address(swapRouter), "swapRouter");
 
         AAVE = new MockERC20("AAVE", 18);
-        hevm.label(address(AAVE), "AAVE");
+        vm.label(address(AAVE), "AAVE");
         stkAAVE = new MockStkAAVE(AAVE);
-        hevm.label(address(stkAAVE), "stkAAVE");
+        vm.label(address(stkAAVE), "stkAAVE");
         incentivesController = new MockIncentivesController(stkAAVE);
-        hevm.label(address(incentivesController), "incentivesController");
+        vm.label(address(incentivesController), "incentivesController");
 
         gravity = new MockGravity();
-        hevm.label(address(gravity), "gravity");
+        vm.label(address(gravity), "gravity");
 
         // Declare unnecessary variables with address 0.
         cellar = new AaveV2StablecoinCellar(
@@ -91,7 +91,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.depositLimit(), 50_000e6);
 
         // Transfer ownership to this contract for testing.
-        hevm.prank(address(cellar.gravityBridge()));
+        vm.prank(address(cellar.gravityBridge()));
         cellar.transferOwnership(address(this));
 
         // Ensure restrictions aren't a factor.
@@ -225,22 +225,22 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // |            0 |       0 |       $0 |       0 |       $0 |
         // |______________|_________|__________|_________|__________|
 
-        address alice = hevm.addr(1);
-        address bob = hevm.addr(2);
+        address alice = vm.addr(1);
+        address bob = vm.addr(2);
 
         uint256 mutationAssets = 3000e6;
 
         // Mint each user an extra asset to account for rounding up of assets deposited when minting shares.
         USDC.mint(alice, 4000e6 + 1);
-        hevm.prank(alice);
+        vm.prank(alice);
         USDC.approve(address(cellar), type(uint256).max);
 
         USDC.mint(bob, 7000e6 + 1);
-        hevm.prank(bob);
+        vm.prank(bob);
         USDC.approve(address(cellar), type(uint256).max);
 
         // 1. Alice mints 2000 shares (costs $2000).
-        hevm.prank(alice);
+        vm.prank(alice);
         uint256 aliceAssets = cellar.mint(2000e18, alice);
         uint256 aliceShares = cellar.previewDeposit(aliceAssets);
 
@@ -263,7 +263,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.totalAssets(), aliceAssets, "1. Total assets should be $2000.");
 
         // 2. Bob deposits $4000 (mints 4000 shares).
-        hevm.prank(bob);
+        vm.prank(bob);
         uint256 bobShares = cellar.deposit(4000e6, bob);
         uint256 bobAssets = cellar.previewRedeem(bobShares);
 
@@ -308,21 +308,21 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         );
 
         // 4. Alice deposits $2000 (mints 1333 shares).
-        hevm.prank(alice);
-        assertApproxEq(
+        vm.prank(alice);
+        assertApproxEqAbs(
             cellar.deposit(2000e6, alice),
             1333e18,
             1e18,
             "4. Alice should have been minted approximately 1333 shares."
         );
-        assertApproxEq(cellar.totalSupply(), 7333e18, 1e18, "4. Total supply should be approximately 7333 shares.");
-        assertApproxEq(
+        assertApproxEqAbs(cellar.totalSupply(), 7333e18, 1e18, "4. Total supply should be approximately 7333 shares.");
+        assertApproxEqAbs(
             cellar.balanceOf(alice),
             3333e18,
             1e18,
             "4. Alice's share balance should be approximately 3333 shares."
         );
-        assertApproxEq(
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(alice)),
             5000e6,
             1e6,
@@ -332,23 +332,23 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.convertToAssets(cellar.balanceOf(bob)), 6000e6, "4. Bob's shares should be worth $6000.");
 
         // 5. Bob mints 2000 shares (costs $3000).
-        hevm.prank(bob);
-        assertApproxEq(cellar.mint(2000e18, bob), 3000e6, 1e6, "5. Bob should have deposited approximately $3000.");
-        assertApproxEq(cellar.balanceOf(bob), 6000e18, 1e18, "5. Bob's share balance should be approximately 6000.");
-        assertApproxEq(cellar.totalSupply(), 9333e18, 1e18, "5. Total supply should be approximately 9333 shares.");
-        assertApproxEq(
+        vm.prank(bob);
+        assertApproxEqAbs(cellar.mint(2000e18, bob), 3000e6, 1e6, "5. Bob should have deposited approximately $3000.");
+        assertApproxEqAbs(cellar.balanceOf(bob), 6000e18, 1e18, "5. Bob's share balance should be approximately 6000.");
+        assertApproxEqAbs(cellar.totalSupply(), 9333e18, 1e18, "5. Total supply should be approximately 9333 shares.");
+        assertApproxEqAbs(
             cellar.balanceOf(alice),
             3333e18,
             1e18,
             "5. Alice's share balance should be approximately 3333 shares."
         );
-        assertApproxEq(
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(alice)),
             5000e6,
             1e6,
             "5. Alice's shares should be worth approximately $5000"
         );
-        assertApproxEq(
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(bob)),
             9000e6,
             1e6,
@@ -357,21 +357,21 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // Sanity checks:
 
-        assertApproxEq(USDC.balanceOf(alice), 0, 1e6, "5. Alice should have spent practically all her assets now.");
-        assertApproxEq(USDC.balanceOf(bob), 0, 1e6, "5. Bob should have spent practically all his assets now.");
-        assertApproxEq(cellar.totalAssets(), 14000e6, 1e6, "5. Total asset should be approximately $14000.");
+        assertApproxEqAbs(USDC.balanceOf(alice), 0, 1e6, "5. Alice should have spent practically all her assets now.");
+        assertApproxEqAbs(USDC.balanceOf(bob), 0, 1e6, "5. Bob should have spent practically all his assets now.");
+        assertApproxEqAbs(cellar.totalAssets(), 14000e6, 1e6, "5. Total asset should be approximately $14000.");
 
         // 6. Cellar mutates by +$3000.
         USDC.mint(address(cellar), mutationAssets);
 
-        assertApproxEq(cellar.totalAssets(), 17000e6, 1e6, "6. Total assets should have updated.");
-        assertApproxEq(
+        assertApproxEqAbs(cellar.totalAssets(), 17000e6, 1e6, "6. Total assets should have updated.");
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(alice)),
             6071e6,
             1e6,
             "6. Alice's asset balance should have mutated."
         );
-        assertApproxEq(
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(bob)),
             10929e6,
             1e6,
@@ -379,30 +379,30 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         );
 
         // 7. Alice redeem 1333 shares ($2428).
-        hevm.prank(alice);
-        assertApproxEq(
+        vm.prank(alice);
+        assertApproxEqAbs(
             cellar.redeem(1333e18, alice, alice),
             2428e6,
             1e6,
             "7. Alice should have withdrawn approximately $2428 assets."
         );
-        assertApproxEq(USDC.balanceOf(alice), 2428e6, 1e6, "7. Alice's balance should be $2428.");
-        assertApproxEq(cellar.totalSupply(), 8000e18, 1e18, "7. Total supply should be approximately 8000 shares.");
-        assertApproxEq(cellar.totalAssets(), 14572e6, 1e6, "7. Total assets should be approximately $14572.");
-        assertApproxEq(
+        assertApproxEqAbs(USDC.balanceOf(alice), 2428e6, 1e6, "7. Alice's balance should be $2428.");
+        assertApproxEqAbs(cellar.totalSupply(), 8000e18, 1e18, "7. Total supply should be approximately 8000 shares.");
+        assertApproxEqAbs(cellar.totalAssets(), 14572e6, 1e6, "7. Total assets should be approximately $14572.");
+        assertApproxEqAbs(
             cellar.balanceOf(alice),
             2000e18,
             1e18,
             "7. Alice's share balance should be approximately 2000."
         );
-        assertApproxEq(
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(alice)),
             3643e6,
             1e6,
             "7. Alice's shares should be worth approximately $3643."
         );
-        assertApproxEq(cellar.balanceOf(bob), 6000e18, 1e18, "7. Bob's share balance should be approximately 6000.");
-        assertApproxEq(
+        assertApproxEqAbs(cellar.balanceOf(bob), 6000e18, 1e18, "7. Bob's share balance should be approximately 6000.");
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(bob)),
             10929e6,
             1e6,
@@ -410,20 +410,20 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         );
 
         // 8. Bob withdraws $2929 (1608 shares)
-        hevm.prank(bob);
-        assertApproxEq(cellar.withdraw(2929e6, bob, bob), 1608e18, 1e18, "8. Bob should have redeemed 1608.");
-        assertApproxEq(USDC.balanceOf(bob), 2929e6, 1e6, "8. Bob's balance should be approximately $2929.");
-        assertApproxEq(cellar.totalSupply(), 6392e18, 1e18, "8. Total supply should be approximately 6392 shares.");
-        assertApproxEq(cellar.totalAssets(), 11643e6, 1e6, "8. Total assets should be approximately $11643.");
-        assertApproxEq(cellar.balanceOf(alice), 2000e18, 1e18, "8. Alice's share balance should be 2000.");
-        assertApproxEq(
+        vm.prank(bob);
+        assertApproxEqAbs(cellar.withdraw(2929e6, bob, bob), 1608e18, 1e18, "8. Bob should have redeemed 1608.");
+        assertApproxEqAbs(USDC.balanceOf(bob), 2929e6, 1e6, "8. Bob's balance should be approximately $2929.");
+        assertApproxEqAbs(cellar.totalSupply(), 6392e18, 1e18, "8. Total supply should be approximately 6392 shares.");
+        assertApproxEqAbs(cellar.totalAssets(), 11643e6, 1e6, "8. Total assets should be approximately $11643.");
+        assertApproxEqAbs(cellar.balanceOf(alice), 2000e18, 1e18, "8. Alice's share balance should be 2000.");
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(alice)),
             3643e6,
             1e6,
             "8. Alice's shares should be worth approximately $3643."
         );
-        assertApproxEq(cellar.balanceOf(bob), 4392e18, 1e18, "8. Bob's share balance should be approximately 4392.");
-        assertApproxEq(
+        assertApproxEqAbs(cellar.balanceOf(bob), 4392e18, 1e18, "8. Bob's share balance should be approximately 4392.");
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(bob)),
             8000e6,
             1e6,
@@ -431,25 +431,25 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         );
 
         // 9. Alice withdraws $3643 (2000 shares)
-        hevm.prank(alice);
-        assertApproxEq(
+        vm.prank(alice);
+        assertApproxEqAbs(
             cellar.withdraw(3643e6, alice, alice),
             2000e18,
             1e18,
             "9. Alice should have withdrawn approximately 2000."
         );
-        assertApproxEq(USDC.balanceOf(alice), 6071e6, 1e6, "9. Alice's balance should be approximately $6071.");
-        assertApproxEq(cellar.totalSupply(), 4392e18, 1e18, "9. Total supply should be approximately 4392.");
-        assertApproxEq(cellar.totalAssets(), 8000e6, 1e6, "9. Total assets should be approximately $8000.");
-        assertApproxEq(cellar.balanceOf(alice), 0, 1e18, "9. Alice's share balance should be approximately 0.");
-        assertApproxEq(
+        assertApproxEqAbs(USDC.balanceOf(alice), 6071e6, 1e6, "9. Alice's balance should be approximately $6071.");
+        assertApproxEqAbs(cellar.totalSupply(), 4392e18, 1e18, "9. Total supply should be approximately 4392.");
+        assertApproxEqAbs(cellar.totalAssets(), 8000e6, 1e6, "9. Total assets should be approximately $8000.");
+        assertApproxEqAbs(cellar.balanceOf(alice), 0, 1e18, "9. Alice's share balance should be approximately 0.");
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(alice)),
             0,
             1e6,
             "9. Alice's shares should be worth approximately 0."
         );
-        assertApproxEq(cellar.balanceOf(bob), 4392e18, 1e18, "9. Bob's share balance should be 4392.");
-        assertApproxEq(
+        assertApproxEqAbs(cellar.balanceOf(bob), 4392e18, 1e18, "9. Bob's share balance should be 4392.");
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(bob)),
             8000e6,
             1e6,
@@ -457,19 +457,19 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         );
 
         // 10. Bob redeem 4392 shares ($8000)
-        hevm.startPrank(bob);
-        assertApproxEq(
+        vm.startPrank(bob);
+        assertApproxEqAbs(
             cellar.redeem(cellar.balanceOf(bob), bob, bob),
             8000e6,
             1e6,
             "10. Bob should have redeemed approximately $8000."
         );
-        hevm.stopPrank();
-        assertApproxEq(USDC.balanceOf(bob), 10928e6, 1e6, "10. Bob's balance should be $10928.");
-        assertApproxEq(cellar.totalSupply(), 0, 1e18, "10. Total supply should be approximately 0.");
-        assertApproxEq(cellar.totalAssets(), 0, 1e6, "10. Total assets should be approximately $0.");
-        assertApproxEq(cellar.balanceOf(alice), 0, 1e18, "10. Alice's share balance should be approximately 0.");
-        assertApproxEq(
+        vm.stopPrank();
+        assertApproxEqAbs(USDC.balanceOf(bob), 10928e6, 1e6, "10. Bob's balance should be $10928.");
+        assertApproxEqAbs(cellar.totalSupply(), 0, 1e18, "10. Total supply should be approximately 0.");
+        assertApproxEqAbs(cellar.totalAssets(), 0, 1e6, "10. Total assets should be approximately $0.");
+        assertApproxEqAbs(cellar.balanceOf(alice), 0, 1e18, "10. Alice's share balance should be approximately 0.");
+        assertApproxEqAbs(
             cellar.convertToAssets(cellar.balanceOf(alice)),
             0,
             1e6,
@@ -504,7 +504,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.maxDeposit(address(this)), amount, "Should not have reached new max deposit.");
         assertEq(cellar.maxMint(address(this)), amount.changeDecimals(6, 18), "Should not have reached new max mint.");
 
-        address otherUser = hevm.addr(1);
+        address otherUser = vm.addr(1);
 
         assertEq(cellar.maxDeposit(otherUser), amount * 2, "Should have different max deposits for other user.");
         assertEq(
@@ -514,11 +514,11 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         );
 
         // Hit global liquidity limit and deposit limit for other user.
-        hevm.startPrank(otherUser);
+        vm.startPrank(otherUser);
         USDC.mint(otherUser, amount * 2);
         USDC.approve(address(cellar), amount * 2);
         cellar.deposit(amount * 2, otherUser);
-        hevm.stopPrank();
+        vm.stopPrank();
 
         assertEq(cellar.maxDeposit(address(this)), 0, "Should have hit liquidity limit for max deposit.");
         assertEq(cellar.maxMint(address(this)), 0, "Should have hit liquidity limit for max mint.");
@@ -672,15 +672,15 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         assertEq(cellar.totalAssets(), 300e6, "1. Total assets should be $300.");
 
         // 2. An entire year passes.
-        hevm.warp(block.timestamp + 365 days);
+        vm.warp(block.timestamp + 365 days);
         uint256 lastAccrualTimestamp = block.timestamp;
 
         // 3. Accrue platform fees.
         cellar.accrue();
 
         assertEq(cellar.totalLocked(), 0, "3. Total locked should be $0.");
-        assertApproxEq(cellar.totalAssets(), 300e6, 1e6, "3. Total assets should be $300.");
-        assertApproxEq(cellar.totalBalance(), 300e6, 1e6, "3. Total balance should be $300.");
+        assertApproxEqAbs(cellar.totalAssets(), 300e6, 1e6, "3. Total assets should be $300.");
+        assertApproxEqAbs(cellar.totalBalance(), 300e6, 1e6, "3. Total balance should be $300.");
         assertEq(cellar.balanceOf(address(cellar)), 0.75e18, "3. Should have 0.75 shares of platform fees.");
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp, "3. Should have updated timestamp of last accrual.");
 
@@ -688,8 +688,8 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         aUSDC.mint(address(cellar), 150e6, lendingPool.index());
 
         assertEq(cellar.totalLocked(), 0, "4. Total locked should be $0.");
-        assertApproxEq(cellar.totalAssets(), 300e6, 1e6, "4. Total assets should be approximately $300.");
-        assertApproxEq(cellar.totalBalance(), 300e6, 1e6, "4. Total balance should be approximately $300.");
+        assertApproxEqAbs(cellar.totalAssets(), 300e6, 1e6, "4. Total assets should be approximately $300.");
+        assertApproxEqAbs(cellar.totalBalance(), 300e6, 1e6, "4. Total balance should be approximately $300.");
         assertEq(cellar.balanceOf(address(cellar)), 0.75e18, "4. Should have 0.75 shares of platform fees.");
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp, "4. Should not have changed timestamp of last accrual.");
 
@@ -699,48 +699,73 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         uint256 priceOfShareAfter = cellar.convertToShares(1e6);
 
         assertEq(priceOfShareAfter, priceOfShareBefore, "5. Should not have changed worth of share immediately.");
-        assertApproxEq(cellar.totalLocked(), 135e6, 1e6, "5. Total locked should be $135.");
-        assertApproxEq(cellar.totalAssets(), 315e6, 2e6, "5. Total assets should be approximately $315.");
-        assertApproxEq(cellar.totalBalance(), 450e6, 2e6, "5. Total balance should be approximately $450.");
-        assertApproxEq(cellar.balanceOf(address(cellar)), 15e18, 1e18, "5. Should have 15 shares of performance fees.");
+        assertApproxEqAbs(cellar.totalLocked(), 135e6, 1e6, "5. Total locked should be $135.");
+        assertApproxEqAbs(cellar.totalAssets(), 315e6, 2e6, "5. Total assets should be approximately $315.");
+        assertApproxEqAbs(cellar.totalBalance(), 450e6, 2e6, "5. Total balance should be approximately $450.");
+        assertApproxEqAbs(
+            cellar.balanceOf(address(cellar)),
+            15e18,
+            1e18,
+            "5. Should have 15 shares of performance fees."
+        );
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp, "5. Should have changed timestamp of last accrual.");
 
         // 6. Half of accrual period passes.
         uint256 accrualPeriod = cellar.accrualPeriod();
-        hevm.warp(block.timestamp + accrualPeriod / 2);
+        vm.warp(block.timestamp + accrualPeriod / 2);
 
-        assertApproxEq(cellar.totalLocked(), 67.5e6, 1e6, "6. Total locked should be $67.5.");
-        assertApproxEq(cellar.totalAssets(), 382.5e6, 2e6, "6. Total assets should be approximately $382.5.");
-        assertApproxEq(cellar.totalBalance(), 450e6, 2e6, "6. Total balance should be approximately $450.");
-        assertApproxEq(cellar.balanceOf(address(cellar)), 15e18, 1e18, "6. Should have 15 shares of performance fees.");
+        assertApproxEqAbs(cellar.totalLocked(), 67.5e6, 1e6, "6. Total locked should be $67.5.");
+        assertApproxEqAbs(cellar.totalAssets(), 382.5e6, 2e6, "6. Total assets should be approximately $382.5.");
+        assertApproxEqAbs(cellar.totalBalance(), 450e6, 2e6, "6. Total balance should be approximately $450.");
+        assertApproxEqAbs(
+            cellar.balanceOf(address(cellar)),
+            15e18,
+            1e18,
+            "6. Should have 15 shares of performance fees."
+        );
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp, "6. Should not have changed timestamp of last accrual.");
 
         // 7. Deposit $200 worth of assets.
         cellar.deposit(200e6, address(this));
         cellar.enterPosition();
 
-        assertApproxEq(cellar.totalLocked(), 67.5e6, 1e6, "7. Total locked should be $67.5.");
-        assertApproxEq(cellar.totalAssets(), 582.5e6, 2e6, "7. Total assets should be approximately $582.5.");
-        assertApproxEq(cellar.totalBalance(), 650e6, 2e6, "7. Total balance should be approximately $650.");
-        assertApproxEq(cellar.balanceOf(address(cellar)), 15e18, 1e18, "7. Should have 15 shares of performance fees.");
+        assertApproxEqAbs(cellar.totalLocked(), 67.5e6, 1e6, "7. Total locked should be $67.5.");
+        assertApproxEqAbs(cellar.totalAssets(), 582.5e6, 2e6, "7. Total assets should be approximately $582.5.");
+        assertApproxEqAbs(cellar.totalBalance(), 650e6, 2e6, "7. Total balance should be approximately $650.");
+        assertApproxEqAbs(
+            cellar.balanceOf(address(cellar)),
+            15e18,
+            1e18,
+            "7. Should have 15 shares of performance fees."
+        );
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp, "7. Should not have changed timestamp of last accrual.");
 
         // 8. Entire accrual period passes.
-        hevm.warp(block.timestamp + accrualPeriod / 2);
+        vm.warp(block.timestamp + accrualPeriod / 2);
 
         assertEq(cellar.totalLocked(), 0, "8. Total locked should be $0.");
-        assertApproxEq(cellar.totalAssets(), 650e6, 2e6, "8. Total assets should be approximately $650.");
-        assertApproxEq(cellar.totalBalance(), 650e6, 2e6, "8. Total balance should be approximately $650.");
-        assertApproxEq(cellar.balanceOf(address(cellar)), 15e18, 1e18, "8. Should have 15 shares of performance fees.");
+        assertApproxEqAbs(cellar.totalAssets(), 650e6, 2e6, "8. Total assets should be approximately $650.");
+        assertApproxEqAbs(cellar.totalBalance(), 650e6, 2e6, "8. Total balance should be approximately $650.");
+        assertApproxEqAbs(
+            cellar.balanceOf(address(cellar)),
+            15e18,
+            1e18,
+            "8. Should have 15 shares of performance fees."
+        );
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp, "8. Should not have changed timestamp of last accrual.");
 
         // 9. Withdraw $100 worth of assets.
         cellar.withdraw(100e6, address(this), address(this));
 
         assertEq(cellar.totalLocked(), 0, "9. Total locked should be $0.");
-        assertApproxEq(cellar.totalAssets(), 550e6, 2e6, "9. Total assets should be approximately $550.");
-        assertApproxEq(cellar.totalBalance(), 550e6, 2e6, "9. Total balance should be approximately $550.");
-        assertApproxEq(cellar.balanceOf(address(cellar)), 15e18, 1e18, "9. Should have 15 shares of performance fees.");
+        assertApproxEqAbs(cellar.totalAssets(), 550e6, 2e6, "9. Total assets should be approximately $550.");
+        assertApproxEqAbs(cellar.totalBalance(), 550e6, 2e6, "9. Total balance should be approximately $550.");
+        assertApproxEqAbs(
+            cellar.balanceOf(address(cellar)),
+            15e18,
+            1e18,
+            "9. Should have 15 shares of performance fees."
+        );
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp, "9. Should not have changed timestamp of last accrual.");
 
         // 10. Accrue with no performance.
@@ -748,9 +773,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         lastAccrualTimestamp = block.timestamp;
 
         assertEq(cellar.totalLocked(), 0, "10. Total locked should be $0.");
-        assertApproxEq(cellar.totalAssets(), 550e6, 2e6, "10. Total assets should be approximately $550.");
-        assertApproxEq(cellar.totalBalance(), 550e6, 2e6, "10. Total balance should be approximately $550.");
-        assertApproxEq(
+        assertApproxEqAbs(cellar.totalAssets(), 550e6, 2e6, "10. Total assets should be approximately $550.");
+        assertApproxEqAbs(cellar.totalBalance(), 550e6, 2e6, "10. Total balance should be approximately $550.");
+        assertApproxEqAbs(
             cellar.balanceOf(address(cellar)),
             15e18,
             1e18,
@@ -762,9 +787,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         aUSDC.burn(address(cellar), 150e6);
 
         assertEq(cellar.totalLocked(), 0, "11. Total locked should be $0.");
-        assertApproxEq(cellar.totalAssets(), 550e6, 2e6, "11. Total assets should be approximately $550.");
-        assertApproxEq(cellar.totalBalance(), 550e6, 2e6, "11. Total balance should be approximately $550.");
-        assertApproxEq(
+        assertApproxEqAbs(cellar.totalAssets(), 550e6, 2e6, "11. Total assets should be approximately $550.");
+        assertApproxEqAbs(cellar.totalBalance(), 550e6, 2e6, "11. Total balance should be approximately $550.");
+        assertApproxEqAbs(
             cellar.balanceOf(address(cellar)),
             15e18,
             1e18,
@@ -776,9 +801,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         cellar.accrue();
 
         assertEq(cellar.totalLocked(), 0, "12. Total locked should be $0.");
-        assertApproxEq(cellar.totalAssets(), 400e6, 2e6, "12. Total assets should be approximately $400.");
-        assertApproxEq(cellar.totalBalance(), 400e6, 2e6, "12. Total balance should be approximately $400.");
-        assertApproxEq(
+        assertApproxEqAbs(cellar.totalAssets(), 400e6, 2e6, "12. Total assets should be approximately $400.");
+        assertApproxEqAbs(cellar.totalBalance(), 400e6, 2e6, "12. Total balance should be approximately $400.");
+        assertApproxEqAbs(
             cellar.balanceOf(address(cellar)),
             15e18,
             1e18,
@@ -1103,7 +1128,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         assertEq(stkAAVE.balanceOf(address(cellar)), 100e18, "Should have gained stkAAVE rewards.");
 
-        hevm.warp(block.timestamp + 10 days + 1);
+        vm.warp(block.timestamp + 10 days + 1);
 
         cellar.reinvest(0);
 
@@ -1114,9 +1139,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         // Test that reinvested rewards are counted as yield.
         cellar.accrue();
 
-        assertApproxEq(cellar.totalAssets(), 9.5e6, 0.1e6, "Should have updated total assets after accrual.");
-        assertApproxEq(cellar.totalLocked(), 85.5e6, 0.1e6, "Should have realized gains.");
-        assertApproxEq(cellar.totalBalance(), 95e6, 0.1e6, "Should have updated total balance after accrual.");
+        assertApproxEqAbs(cellar.totalAssets(), 9.5e6, 0.1e6, "Should have updated total assets after accrual.");
+        assertApproxEqAbs(cellar.totalLocked(), 85.5e6, 0.1e6, "Should have realized gains.");
+        assertApproxEqAbs(cellar.totalBalance(), 95e6, 0.1e6, "Should have updated total balance after accrual.");
     }
 
     // =========================================== FEES TESTS ===========================================
@@ -1270,9 +1295,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
     function testIntegration(uint8 salt) external {
         // Initialize users.
-        address alice = hevm.addr(1);
-        address bob = hevm.addr(2);
-        address charlie = hevm.addr(3);
+        address alice = vm.addr(1);
+        address bob = vm.addr(2);
+        address charlie = vm.addr(3);
 
         // Mint initial balance to users.
         USDC.mint(alice, type(uint112).max);
@@ -1283,24 +1308,24 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         DAI.mint(charlie, type(uint112).max);
 
         // Approve cellar to send user assets.
-        hevm.startPrank(alice);
+        vm.startPrank(alice);
         USDC.approve(address(cellar), type(uint256).max);
         DAI.approve(address(cellar), type(uint256).max);
-        hevm.stopPrank();
-        hevm.startPrank(bob);
+        vm.stopPrank();
+        vm.startPrank(bob);
         USDC.approve(address(cellar), type(uint256).max);
         DAI.approve(address(cellar), type(uint256).max);
-        hevm.stopPrank();
-        hevm.startPrank(charlie);
+        vm.stopPrank();
+        vm.startPrank(charlie);
         USDC.approve(address(cellar), type(uint256).max);
         DAI.approve(address(cellar), type(uint256).max);
-        hevm.stopPrank();
+        vm.stopPrank();
 
         // ====================== BEGIN SCENERIO ======================
 
         // 1. Alice deposits.
         uint256 amount = mutate(salt);
-        hevm.prank(alice);
+        vm.prank(alice);
         cellar.deposit(amount, alice);
 
         // 2. Cellar enters position.
@@ -1312,7 +1337,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 4. Cellar accrues.
         cellar.accrue();
-        hevm.warp(block.timestamp + cellar.accrualPeriod());
+        vm.warp(block.timestamp + cellar.accrualPeriod());
 
         // 5. Distrust current position.
         cellar.setTrust(cellar.asset(), false);
@@ -1329,7 +1354,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 7. Bob mints.
         amount = mutate(amount);
-        hevm.prank(bob);
+        vm.prank(bob);
         cellar.mint(amount, bob);
 
         // 8. Cellar gains yield.
@@ -1340,7 +1365,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         amount = mutate(amount);
         incentivesController.addRewards(address(cellar), amount);
         cellar.claimAndUnstake();
-        hevm.warp(block.timestamp + 10 days + 1);
+        vm.warp(block.timestamp + 10 days + 1);
 
         // 10. Cellar rebalance into USDC.
         cellar.setTrust(ERC20(address(USDC)), true);
@@ -1352,7 +1377,7 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
 
         // 11. Charlie deposits.
         amount = mutate(amount);
-        hevm.prank(charlie);
+        vm.prank(charlie);
         cellar.deposit(amount, charlie);
 
         // 12. Cellar exits position.
@@ -1362,9 +1387,9 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         cellar.reinvest(0);
 
         // 14. Bob withdraws.
-        hevm.startPrank(bob);
+        vm.startPrank(bob);
         cellar.withdraw(cellar.maxWithdraw(bob) / 3, bob, bob);
-        hevm.stopPrank();
+        vm.stopPrank();
 
         // 15. Cellar enters position.
         cellar.enterPosition(cellar.totalHoldings() / 5);
@@ -1373,28 +1398,28 @@ contract AaveV2StablecoinCellarTest is DSTestPlus {
         cellar.initiateShutdown(true);
 
         // 17. Alice redeems all.
-        hevm.startPrank(alice);
+        vm.startPrank(alice);
         cellar.redeem(cellar.maxRedeem(alice), alice, alice);
-        hevm.stopPrank();
+        vm.stopPrank();
 
         // 18. Bob withdraws all.
-        hevm.startPrank(bob);
+        vm.startPrank(bob);
         cellar.withdraw(cellar.maxWithdraw(bob), bob, bob);
-        hevm.stopPrank();
+        vm.stopPrank();
 
         // 19. Charlie withdraws all.
-        hevm.startPrank(charlie);
+        vm.startPrank(charlie);
         cellar.withdraw(cellar.maxWithdraw(charlie), charlie, charlie);
-        hevm.stopPrank();
+        vm.stopPrank();
 
         // 20. Sends fees.
         cellar.sendFees();
 
         // ====================== FINAL CHECKS ======================
 
-        assertApproxEq(cellar.totalSupply(), 0, 0.0001e18, "Check total supply is what is expected.");
-        assertApproxEq(cellar.totalAssets(), 0, 0.0001e6, "Check total assets is what is expected.");
-        assertApproxEq(cellar.totalBalance(), 0, 0.0001e6, "Check total balance is what is expected.");
-        assertApproxEq(cellar.totalHoldings(), 0, 0.0001e6, "Check total holdings is what is expected.");
+        assertApproxEqAbs(cellar.totalSupply(), 0, 0.0001e18, "Check total supply is what is expected.");
+        assertApproxEqAbs(cellar.totalAssets(), 0, 0.0001e6, "Check total assets is what is expected.");
+        assertApproxEqAbs(cellar.totalBalance(), 0, 0.0001e6, "Check total balance is what is expected.");
+        assertApproxEqAbs(cellar.totalHoldings(), 0, 0.0001e6, "Check total holdings is what is expected.");
     }
 }
