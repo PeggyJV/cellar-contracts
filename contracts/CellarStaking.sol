@@ -138,7 +138,8 @@ contract CellarStaking is ICellarStaking, Ownable {
 
     ERC20 public immutable override stakingToken;
     ERC20 public immutable override distributionToken;
-    uint256 public override epochDuration;
+    uint256 public override currentEpochDuration;
+    uint256 public override nextEpochDuration;
     uint256 public override rewardsReady;
 
     uint256 public override minimumDeposit;
@@ -188,7 +189,7 @@ contract CellarStaking is ICellarStaking, Ownable {
     ) {
         stakingToken = _stakingToken;
         distributionToken = _distributionToken;
-        epochDuration = _epochDuration;
+        nextEpochDuration = _epochDuration;
 
         SHORT_BOOST = shortBoost;
         MEDIUM_BOOST = mediumBoost;
@@ -578,13 +579,15 @@ contract CellarStaking is ICellarStaking, Ownable {
             reward += leftover;
         }
 
-        if (reward < epochDuration) revert USR_ZeroRewardsPerEpoch();
-        uint256 rewardBalance = distributionToken.balanceOf(address(this));
-        if (rewardBalance < reward) revert STATE_RewardsNotFunded(rewardBalance, reward);
+        if (reward < nextEpochDuration) revert USR_ZeroRewardsPerEpoch();
 
-        uint256 proposedRewardRate = reward / epochDuration;
+        uint256 rewardBalance = distributionToken.balanceOf(address(this));
+        uint256 pendingRewards = reward + rewardsReady;
+        if (rewardBalance < pendingRewards) revert STATE_RewardsNotFunded(rewardBalance, pendingRewards);
+
         // prevent overflow when computing rewardPerToken
-        if (proposedRewardRate >= ((type(uint256).max / ONE) / epochDuration)) {
+        uint256 proposedRewardRate = reward / nextEpochDuration;
+        if (proposedRewardRate >= ((type(uint256).max / ONE) / nextEpochDuration)) {
             revert USR_RewardTooLarge();
         }
 
@@ -604,8 +607,8 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @param _epochDuration        The new duration for reward schedules.
      */
     function setRewardsDuration(uint256 _epochDuration) external override onlyOwner {
-        epochDuration = _epochDuration;
-        emit EpochDurationChange(epochDuration);
+        nextEpochDuration = _epochDuration;
+        emit EpochDurationChange(nextEpochDuration);
     }
 
     /**
@@ -654,7 +657,7 @@ contract CellarStaking is ICellarStaking, Ownable {
                     (endTimestamp - block.timestamp) * rewardRate : 0;
 
             // Make sure any rewards except for remaining are kept for claims
-            uint256 amountToKeep = (rewardRate * epochDuration) - remaining;
+            uint256 amountToKeep = rewardRate * currentEpochDuration - remaining;
 
             amountToReturn -= amountToKeep;
         }
@@ -744,8 +747,9 @@ contract CellarStaking is ICellarStaking, Ownable {
         // Total deposits are now (mod current tx), no ongoing program
         // Rewards are already funded (since checked in notifyRewardAmount)
 
-        rewardRate = reward / epochDuration;
-        endTimestamp = block.timestamp + epochDuration;
+        rewardRate = reward / nextEpochDuration;
+        endTimestamp = block.timestamp + nextEpochDuration;
+        currentEpochDuration = nextEpochDuration;
 
         emit Funding(reward, endTimestamp);
     }

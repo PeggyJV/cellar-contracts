@@ -46,7 +46,9 @@ interface ICellarStaking {
 
     function distributionToken() external returns (ERC20);
 
-    function epochDuration() external returns (uint256);
+    function currentEpochDuration() external returns (uint256);
+
+    function nextEpochDuration() external returns (uint256);
 
     function rewardsReady() external returns (uint256);
 
