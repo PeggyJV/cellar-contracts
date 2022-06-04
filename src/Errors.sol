@@ -44,6 +44,7 @@ error USR_InvalidSwap(address assetOut, address currentAsset);
  * @notice Attempted to sweep an asset that is managed by the cellar.
  * @param token address of the token that can't be sweeped
  */
+// TODO: change to ERC20
 error USR_ProtectedAsset(address token);
 
 /**
@@ -62,6 +63,7 @@ error USR_UnsupportedPosition(address unsupportedPosition);
  * @notice Attempted an operation on an untrusted position.
  * @param position address of the position
  */
+// TODO: change to ERC4626
 error USR_UntrustedPosition(address position);
 
 /**
@@ -72,7 +74,14 @@ error USR_UntrustedPosition(address position);
 error USR_TooManyDecimals(uint8 newDecimals, uint8 maxDecimals);
 
 /**
- * @notice User attempted to stake zero amout.
+ * @notice Attempted set the cellar's asset to WETH with an asset that is not WETH compatible.
+ * @param asset address of the asset that is not WETH compatible
+ */
+// TODO: change to ERC20
+error USR_AssetNotWETH(address asset);
+
+/**
+ * @notice User attempted to stake zero amount.
  */
 error USR_ZeroDeposit();
 

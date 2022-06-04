@@ -2,6 +2,7 @@
 pragma solidity 0.8.13;
 
 import { ERC4626, ERC20 } from "./ERC4626.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/access/Ownable.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { Math } from "../utils/Math.sol";
@@ -9,8 +10,10 @@ import { Math } from "../utils/Math.sol";
 import "../Errors.sol";
 
 // TODO: add extensive documentation for cellar creators
+// - list functions that still need to be implemented.
 
 abstract contract Cellar is ERC4626, Ownable {
+    using SafeTransferLib for ERC20;
     using Math for uint256;
 
     // ========================================= FEES CONFIG =========================================
@@ -107,13 +110,13 @@ abstract contract Cellar is ERC4626, Ownable {
      *         as the current asset.
      * @dev Set to `type(uint256).max` to have no limit.
      */
-    uint256 public liquidityLimit;
+    uint256 public liquidityLimit = type(uint256).max;
 
     /**
      * @notice Maximum amount of assets per wallet. Denominated in the same decimals as the current asset.
      * @dev Set to `type(uint256).max` to have no limit.
      */
-    uint256 public depositLimit;
+    uint256 public depositLimit = type(uint256).max;
 
     /**
      * @notice Set the maximum liquidity that cellar can manage. Uses the same decimals as the current asset.
@@ -135,17 +138,34 @@ abstract contract Cellar is ERC4626, Ownable {
         depositLimit = newLimit;
     }
 
+    // ============================================ TRUST CONFIG ============================================
+
+    /**
+     * @notice Emitted when trust for a position is changed.
+     * @param position address of position that trust was changed for
+     * @param isTrusted whether the position is trusted
+     */
+    event TrustChanged(ERC4626 indexed position, bool isTrusted);
+
+    /**
+     * @dev MUST be implemented with `onlyOwner` modifier to allow Steward to define call permissions.
+     * @dev MUST emit the `TrustChanged` event.
+     */
+    function trustPosition(ERC4626 position) public virtual;
+
+    /**
+     * @dev MUST be implemented with `onlyOwner` modifier to allow Steward to define call permissions.
+     * @dev MUST emit the `TrustChanged` event.
+     */
+    function distrustPosition(ERC4626 position) public virtual;
+
     // =========================================== EMERGENCY LOGIC ===========================================
 
     /**
-     * @notice Emitted when cellar is shutdown.
+     * @notice Emitted when cellar emergency state is changed.
+     * @param isShutdown whether the cellar is shutdown
      */
-    event ShutdownInitiated();
-
-    /**
-     * @notice Emitted when shutdown is lifted.
-     */
-    event ShutdownLifted();
+    event ShutdownChanged(bool isShutdown);
 
     /**
      * @notice Whether or not the contract is shutdown in case of an emergency.
@@ -165,19 +185,19 @@ abstract contract Cellar is ERC4626, Ownable {
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @dev In the case where
      */
-    function initiateShutdown() external virtual whenNotShutdown onlyOwner {
+    function initiateShutdown() public virtual whenNotShutdown onlyOwner {
         isShutdown = true;
 
-        emit ShutdownInitiated();
+        emit ShutdownChanged(true);
     }
 
     /**
      * @notice Restart the cellar.
      */
-    function liftShutdown() external virtual onlyOwner {
+    function liftShutdown() public virtual onlyOwner {
         isShutdown = false;
 
-        emit ShutdownLifted();
+        emit ShutdownChanged(false);
     }
 
     // =========================================== CONSTRUCTOR ===========================================
@@ -193,13 +213,15 @@ abstract contract Cellar is ERC4626, Ownable {
      *      module to the cellars.
      *      https://github.com/PeggyJV/steward
      *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
+     * @param _asset address of underlying token used for the for accounting, depositing, and withdrawing
+     * @param _name name of this cellar's share token
+     * @param _name symbol of this cellar's share token
      */
     constructor(
         ERC20 _asset,
         string memory _name,
-        string memory _symbol,
-        uint8 _decimals
-    ) ERC4626(_asset, _name, _symbol, _decimals) Ownable() {
+        string memory _symbol
+    ) ERC4626(_asset, _name, _symbol, 18) Ownable() {
         // Transfer ownership to the Gravity Bridge.
         transferOwnership(address(gravityBridge));
     }
@@ -215,7 +237,23 @@ abstract contract Cellar is ERC4626, Ownable {
         if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
     }
 
+    // ========================================= ACCOUNTING LOGIC =========================================
+
+    /**
+     * @notice The total amount of assets in holding position.
+     */
+    function totalHoldings() public view virtual returns (uint256) {
+        return asset.balanceOf(address(this));
+    }
+
     // =========================================== ACCRUAL LOGIC ===========================================
+
+    /**
+     * @notice Emitted on accruals.
+     * @param platformFees amount of shares minted as platform fees this accrual
+     * @param performanceFees amount of shares minted as performance fees this accrual
+     */
+    event Accrual(uint256 platformFees, uint256 performanceFees);
 
     /**
      * @notice Accrue platform fees and performance fees. May also accrue yield.
@@ -262,5 +300,59 @@ abstract contract Cellar is ERC4626, Ownable {
 
         // Only return the more relevant of the two.
         shares = convertToShares(Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit));
+    }
+
+    // ========================================= FEES LOGIC =========================================
+
+    /**
+     * @notice Emitted when platform fees are send to the Sommelier chain.
+     * @param feesInSharesRedeemed amount of fees redeemed for assets to send
+     * @param feesInAssetsSent amount of assets fees were redeemed for that were sent
+     */
+    event SendFees(uint256 feesInSharesRedeemed, uint256 feesInAssetsSent);
+
+    /**
+     * @notice Transfer accrued fees to the Sommelier chain to distribute.
+     * @dev Fees are accrued as shares and redeemed upon transfer.
+     */
+    function sendFees() public virtual onlyOwner {
+        // Redeem our fee shares for assets to send to the fee distributor module.
+        uint256 totalFees = balanceOf[address(this)];
+        uint256 assets = previewRedeem(totalFees);
+        require(assets != 0, "ZERO_ASSETS");
+
+        beforeWithdraw(assets, 0, address(0), address(0));
+
+        _burn(address(this), totalFees);
+
+        // Transfer assets to a fee distributor on the Sommelier chain.
+        asset.safeApprove(address(gravityBridge), assets);
+        gravityBridge.sendToCosmos(address(asset), feesDistributor, assets);
+
+        emit SendFees(totalFees, assets);
+    }
+
+    // ========================================== RECOVERY LOGIC ==========================================
+
+    /**
+     * @notice Emitted when tokens accidentally sent to cellar are recovered.
+     * @param token the address of the token
+     * @param to the address sweeped tokens were transferred to
+     * @param amount amount transferred out
+     */
+    event Sweep(address indexed token, address indexed to, uint256 amount);
+
+    function sweep(
+        ERC20 token,
+        address to,
+        uint256 amount
+    ) public virtual onlyOwner {
+        // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
+        if (token == asset || token == this) revert USR_ProtectedAsset(address(token));
+
+        // Transfer out tokens in this cellar that shouldn't be here.
+        token.safeTransfer(to, amount);
+
+        emit Sweep(address(token), to, amount);
     }
 }
