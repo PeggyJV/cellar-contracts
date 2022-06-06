@@ -160,6 +160,11 @@ error STATE_AlreadyShutdown();
 error STATE_RewardsNotFunded(uint256 rewardBalance, uint256 reward);
 
 /**
+ * @notice The caller attempted to change the next epoch duration, but there are rewards ready.
+ */
+ error STATE_RewardsReady();
+
+/**
  * @notice The caller attempted to change the epoch length, but current reward epochs were active.
  */
 error STATE_RewardsOngoing();

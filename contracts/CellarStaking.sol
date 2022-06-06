@@ -607,6 +607,8 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @param _epochDuration        The new duration for reward schedules.
      */
     function setRewardsDuration(uint256 _epochDuration) external override onlyOwner {
+        if (rewardsReady > 0) revert STATE_RewardsReady();
+
         nextEpochDuration = _epochDuration;
         emit EpochDurationChange(nextEpochDuration);
     }
