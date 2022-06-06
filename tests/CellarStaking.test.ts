@@ -1523,13 +1523,15 @@ describe("CellarStaking", () => {
       it("should update the reward epoch duration", async () => {
         const { staking } = ctx;
 
-        expect(await staking.epochDuration()).to.equal(oneMonthSec);
+        const currentEpochDuration = await staking.currentEpochDuration();
+        expect(await staking.nextEpochDuration()).to.equal(oneMonthSec);
 
         await expect(staking.setRewardsDuration(oneWeekSec))
           .to.emit(staking, "EpochDurationChange")
           .withArgs(oneWeekSec);
 
-        expect(await staking.epochDuration()).to.equal(oneWeekSec);
+        expect(await staking.nextEpochDuration()).to.equal(oneWeekSec);
+        expect(await staking.currentEpochDuration()).to.equal(currentEpochDuration);
       });
     });
 
