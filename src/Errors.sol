@@ -170,6 +170,11 @@ error STATE_AccrualOngoing();
 error STATE_RewardsOngoing();
 
 /**
+ * @notice The caller attempted to change the next epoch duration, but there are rewards ready.
+ */
+error STATE_RewardsReady();
+
+/**
  * @notice The caller attempted to deposit stake, but there are no remaining rewards to pay out.
  */
 error STATE_NoRewardsLeft();
