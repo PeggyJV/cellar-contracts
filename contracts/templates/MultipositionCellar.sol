@@ -5,7 +5,6 @@ import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { ERC4626 } from "../interfaces/ERC4626.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ERC4626 } from "../interfaces/ERC4626.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { MathUtils } from "../utils/MathUtils.sol";
@@ -245,7 +244,7 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
         string memory _name,
         string memory _symbol,
         uint8 _decimals
-    ) ERC4626(_asset, _name, _symbol, _decimals) Ownable() {
+    ) ERC4626(_asset, _name, _symbol, _decimals, false) Ownable() {
         positions = _positions;
         swapRouter = _swapRouter;
 
@@ -272,7 +271,11 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
     }
 
     function totalHoldings() public view virtual returns (uint256) {
-        return asset.balanceOf(address(this));
+        if (address(asset) == address(WETH) && assetIsETHInsteadOfWETH) {
+            return address(this).balance;
+        } else {
+            return asset.balanceOf(address(this));
+        }
     }
 
     function totalLocked() public view virtual returns (uint256) {
@@ -494,6 +497,18 @@ abstract contract MultipositionCellar is ERC4626, Ownable {
 
         // Transfer out tokens in this cellar that shouldn't be here.
         ERC20(token).safeTransfer(to, amount);
+    }
+
+    // ======================================== ETH SUPPORT ========================================
+
+    /**
+     * @notice Sets the use of ether as an asset.
+     */
+    function useEthAsAsset() external virtual onlyOwner {
+        require(address(asset) == address(WETH), "ASSET_NOT_WETH");
+
+        assetIsETHInsteadOfWETH = true;
+        WETH.withdraw(asset.balanceOf(address(this)));
     }
 
     // ======================================== HELPER FUNCTIONS ========================================

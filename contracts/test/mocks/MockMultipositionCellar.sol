@@ -6,9 +6,9 @@ import { ERC20 } from "@rari-capital/solmate/src/tokens/ERC20.sol";
 import { SafeTransferLib } from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import { ERC4626 } from "../../interfaces/ERC4626.sol";
 import { MathUtils } from "../../utils/MathUtils.sol";
-
 import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { MockSwapRouter } from "./MockSwapRouter.sol";
+import { MockWETH } from "./MockWETH.sol";
 
 import "../../Errors.sol";
 
@@ -24,8 +24,11 @@ contract MockMultipositionCellar is MultipositionCellar {
         ISwapRouter _swapRouter,
         string memory _name,
         string memory _symbol,
-        uint8 _decimals
-    ) MultipositionCellar(_asset, _positions, _paths, _maxSlippages, _swapRouter, _name, _symbol, _decimals) {}
+        uint8 _decimals,
+        address _weth
+    ) MultipositionCellar(_asset, _positions, _paths, _maxSlippages, _swapRouter, _name, _symbol, _decimals) {
+        WETH = MockWETH(_weth);
+    }
 
     function convertToAssets(ERC20 positionAsset, uint256 assets) public view override returns (uint256) {
         return MockSwapRouter(address(swapRouter)).convert(address(positionAsset), address(asset), assets);
