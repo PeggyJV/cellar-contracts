@@ -3,7 +3,7 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { Ownable } from "@openzeppelin/access/Ownable.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ICellarStaking } from "./interfaces/ICellarStaking.sol";
 
 import "./Errors.sol";
@@ -655,8 +655,7 @@ contract CellarStaking is ICellarStaking, Ownable {
             _updateRewards();
 
             // Return any remaining, since new calculation is stopped
-            uint256 remaining = endTimestamp > block.timestamp ?
-                    (endTimestamp - block.timestamp) * rewardRate : 0;
+            uint256 remaining = endTimestamp > block.timestamp ? (endTimestamp - block.timestamp) * rewardRate : 0;
 
             // Make sure any rewards except for remaining are kept for claims
             uint256 amountToKeep = rewardRate * currentEpochDuration - remaining;
@@ -774,7 +773,7 @@ contract CellarStaking is ICellarStaking, Ownable {
      */
     function _earned(UserStake memory s) internal view returns (uint256) {
         uint256 rewardPerTokenAcc = rewardPerTokenStored - s.rewardPerTokenPaid;
-        uint256 newRewards = s.amountWithBoost * rewardPerTokenAcc / ONE;
+        uint256 newRewards = (s.amountWithBoost * rewardPerTokenAcc) / ONE;
 
         return newRewards;
     }
