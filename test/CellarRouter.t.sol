@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ERC4626 } from "src/base/ERC4626.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
-import { ISwapRouter } from "@uniswap/v3-periphery/interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "src/interfaces/ISwapRouter.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
@@ -61,7 +61,6 @@ contract CellarRouterTest is Test {
             ERC4626(address(cellar)),
             assets,
             owner,
-            owner,
             block.timestamp,
             v,
             r,
@@ -95,7 +94,7 @@ contract CellarRouterTest is Test {
         vm.prank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
-        uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, assets, 0, owner, owner);
+        uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, assets, 0, owner);
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
         // to deposit due to slippage swaps.
@@ -142,7 +141,6 @@ contract CellarRouterTest is Test {
             path,
             assets,
             0,
-            owner,
             owner,
             block.timestamp,
             v,
