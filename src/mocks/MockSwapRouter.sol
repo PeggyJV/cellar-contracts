@@ -3,7 +3,7 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Math } from "src/utils/Math.sol";
-import { ISwapRouter } from "@uniswap/v3-periphery/interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "../interfaces/ISwapRouter.sol";
 
 library BytesLib {
     function slice(

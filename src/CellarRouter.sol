@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC4626 } from "./base/ERC4626.sol";
-import { ISwapRouter } from "@uniswap/v3-periphery/interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "./interfaces/ISwapRouter.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 
 contract CellarRouter is ICellarRouter {
@@ -29,8 +29,7 @@ contract CellarRouter is ICellarRouter {
      * @notice Deposit assets into a cellar using permit.
      * @param cellar address of the cellar to deposit into
      * @param assets amount of assets to deposit
-     * @param receiver address receiving the shares
-     * @param owner address that owns the assets being deposited
+     * @param to address to deposit assets for and mint shares to
      * @param deadline timestamp after which permit is invalid
      * @param v used to produce valid secp256k1 signature from the caller along with r and s
      * @param r used to produce valid secp256k1 signature from the caller along with v and s
@@ -40,8 +39,7 @@ contract CellarRouter is ICellarRouter {
     function depositIntoCellarWithPermit(
         ERC4626 cellar,
         uint256 assets,
-        address receiver,
-        address owner,
+        address to,
         uint256 deadline,
         uint8 v,
         bytes32 r,
@@ -51,16 +49,16 @@ contract CellarRouter is ICellarRouter {
         ERC20 asset = cellar.asset();
 
         // Approve the assets from the user to the router via permit.
-        asset.permit(owner, address(this), assets, deadline, v, r, s);
+        asset.permit(to, address(this), assets, deadline, v, r, s);
 
         // Transfer assets from the user to the router.
-        asset.safeTransferFrom(owner, address(this), assets);
+        asset.safeTransferFrom(to, address(this), assets);
 
         // Approve the cellar to spend assets.
         asset.safeApprove(address(cellar), assets);
 
         // Deposit assets into the cellar.
-        shares = cellar.deposit(assets, receiver);
+        shares = cellar.deposit(assets, to);
     }
 
     /**
@@ -69,8 +67,7 @@ contract CellarRouter is ICellarRouter {
      * @param path array of [token1, token2, token3] that specifies the swap path on Sushiswap
      * @param assets amount of assets to deposit
      * @param assetsOutMin minimum amount of assets received from swap
-     * @param receiver address receiving the shares
-     * @param owner address that owns the assets being deposited
+     * @param to address to deposit assets for and mint shares to
      * @return shares amount of shares minted
      */
     function depositAndSwapIntoCellar(
@@ -78,14 +75,13 @@ contract CellarRouter is ICellarRouter {
         address[] calldata path,
         uint256 assets,
         uint256 assetsOutMin,
-        address receiver,
-        address owner
+        address to
     ) public returns (uint256 shares) {
         ERC20 asset = cellar.asset();
         ERC20 assetIn = ERC20(path[0]);
 
         // Transfer assets from the user to the router.
-        assetIn.safeTransferFrom(owner, address(this), assets);
+        assetIn.safeTransferFrom(to, address(this), assets);
 
         // Check whether a swap is necessary. If not, skip swap and deposit into cellar directly.
         if (assetIn != asset) {
@@ -115,7 +111,7 @@ contract CellarRouter is ICellarRouter {
         asset.safeApprove(address(cellar), assets);
 
         // Deposit assets into the cellar.
-        shares = cellar.deposit(assets, receiver);
+        shares = cellar.deposit(assets, to);
     }
 
     /**
@@ -124,8 +120,7 @@ contract CellarRouter is ICellarRouter {
      * @param path array of [token1, token2, token3] that specifies the swap path on Sushiswap
      * @param assets amount of assets to deposit
      * @param assetsOutMin minimum amount of assets received from swap
-     * @param receiver address receiving the shares
-     * @param owner address that owns the assets being deposited
+     * @param to address to deposit assets for and mint shares to
      * @param deadline timestamp after which permit is invalid
      * @param v used to produce valid secp256k1 signature from the caller along with r and s
      * @param r used to produce valid secp256k1 signature from the caller along with v and s
@@ -137,8 +132,7 @@ contract CellarRouter is ICellarRouter {
         address[] calldata path,
         uint256 assets,
         uint256 assetsOutMin,
-        address receiver,
-        address owner,
+        address to,
         uint256 deadline,
         uint8 v,
         bytes32 r,
@@ -148,9 +142,9 @@ contract CellarRouter is ICellarRouter {
         ERC20 assetIn = ERC20(path[0]);
 
         // Approve the assets from the user to the router via permit.
-        assetIn.permit(owner, address(this), assets, deadline, v, r, s);
+        assetIn.permit(to, address(this), assets, deadline, v, r, s);
 
         // Deposit assets into the cellar using a swap if necessary.
-        shares = depositAndSwapIntoCellar(cellar, path, assets, assetsOutMin, receiver, owner);
+        shares = depositAndSwapIntoCellar(cellar, path, assets, assetsOutMin, to);
     }
 }

@@ -7,7 +7,7 @@ import { MockMultipositionCellar } from "src/mocks/MockMultipositionCellar.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
-import { ISwapRouter } from "@uniswap/v3-periphery/interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "src/interfaces/ISwapRouter.sol";
 
 import { Test } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -29,7 +29,7 @@ contract MultipositionCellarTest is Test {
     MockERC20 private WBTC;
     MockERC4626 private wbtcCLR;
 
-    function setUp() public {
+    function setUp() external {
         swapRouter = new MockSwapRouter();
         vm.label(address(swapRouter), "swapRouter");
 
@@ -107,7 +107,7 @@ contract MultipositionCellarTest is Test {
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
 
-    function testDepositWithdraw() public {
+    function testDepositWithdraw() external {
         // assets = bound(assets, 1, cellar.maxDeposit(address(this)));
         // NOTE: last time this was run, all test pass with the line below uncommented
         // assets = bound(assets, 1, type(uint128).max);
@@ -141,14 +141,14 @@ contract MultipositionCellarTest is Test {
         assertEq(USDC.balanceOf(address(this)), assets);
     }
 
-    function testFailDepositWithNotEnoughApproval(uint256 assets) public {
+    function testFailDepositWithNotEnoughApproval(uint256 assets) external {
         USDC.mint(address(this), assets / 2);
         USDC.approve(address(cellar), assets / 2);
 
         cellar.deposit(assets, address(this));
     }
 
-    function testFailWithdrawWithNotEnoughBalance(uint256 assets) public {
+    function testFailWithdrawWithNotEnoughBalance(uint256 assets) external {
         USDC.mint(address(this), assets / 2);
         USDC.approve(address(cellar), assets / 2);
 
@@ -157,7 +157,7 @@ contract MultipositionCellarTest is Test {
         cellar.withdraw(assets, address(this), address(this));
     }
 
-    function testFailRedeemWithNotEnoughBalance(uint256 assets) public {
+    function testFailRedeemWithNotEnoughBalance(uint256 assets) external {
         USDC.mint(address(this), assets / 2);
         USDC.approve(address(cellar), assets / 2);
 
@@ -166,20 +166,20 @@ contract MultipositionCellarTest is Test {
         cellar.redeem(assets, address(this), address(this));
     }
 
-    function testFailWithdrawWithNoBalance(uint256 assets) public {
+    function testFailWithdrawWithNoBalance(uint256 assets) external {
         if (assets == 0) assets = 1;
         cellar.withdraw(assets, address(this), address(this));
     }
 
-    function testFailRedeemWithNoBalance(uint256 assets) public {
+    function testFailRedeemWithNoBalance(uint256 assets) external {
         cellar.redeem(assets, address(this), address(this));
     }
 
-    function testFailDepositWithNoApproval(uint256 assets) public {
+    function testFailDepositWithNoApproval(uint256 assets) external {
         cellar.deposit(assets, address(this));
     }
 
-    function testFailWithdrawWithSwapOverMaxSlippage() public {
+    function testFailWithdrawWithSwapOverMaxSlippage() external {
         WETH.mint(address(this), 1e18);
         WETH.approve(address(cellar), 1e18);
         cellar.depositIntoPosition(wethCLR, 1e18, address(this));
@@ -191,7 +191,7 @@ contract MultipositionCellarTest is Test {
         cellar.withdraw(1e6, address(this), address(this));
     }
 
-    function testWithdrawWithoutEnoughHoldings() public {
+    function testWithdrawWithoutEnoughHoldings() external {
         // Deposit assets directly into position.
         WETH.mint(address(this), 1e18);
         WETH.approve(address(cellar), 1e18);
@@ -212,7 +212,7 @@ contract MultipositionCellarTest is Test {
         assertApproxEqAbs(USDC.balanceOf(address(cellar)), 1600e6, 100e6);
     }
 
-    function testWithdrawAllWithHomogenousPositions() public {
+    function testWithdrawAllWithHomogenousPositions() external {
         USDC.mint(address(this), 100e18);
         USDC.approve(address(cellar), 100e18);
         cellar.depositIntoPosition(usdcCLR, 100e18, address(this));
@@ -228,7 +228,7 @@ contract MultipositionCellarTest is Test {
     //       withdrawing from a cellar with positions that are not all in the same asset as the holding
     //       position due to the swap slippage involved in needing to convert them all to single asset
     //       received by the user.
-    function testFailWithdrawAllWithHeterogenousPositions() public {
+    function testFailWithdrawAllWithHeterogenousPositions() external {
         USDC.mint(address(this), 100e6);
         USDC.approve(address(cellar), 100e6);
         cellar.depositIntoPosition(usdcCLR, 100e6, address(this)); // $100
@@ -248,7 +248,7 @@ contract MultipositionCellarTest is Test {
 
     // =========================================== REBALANCE TEST ===========================================
 
-    function testRebalance() public {
+    function testRebalance() external {
         USDC.mint(address(this), 10_000e6);
         USDC.approve(address(cellar), 10_000e6);
         cellar.deposit(10_000e6, address(this));
@@ -296,7 +296,7 @@ contract MultipositionCellarTest is Test {
         assertEq(toBalance, 0);
     }
 
-    function testFailRebalanceFromPositionWithNotEnoughBalance() public {
+    function testFailRebalanceFromPositionWithNotEnoughBalance() external {
         uint256 assets = 100e18;
 
         USDC.mint(address(this), assets / 2);
@@ -312,7 +312,7 @@ contract MultipositionCellarTest is Test {
         cellar.rebalance(usdcCLR, wbtcCLR, assets, expectedAssetsOut, path);
     }
 
-    function testFailRebalanceIntoUntrustedPosition() public {
+    function testFailRebalanceIntoUntrustedPosition() external {
         uint256 assets = 100e18;
 
         ERC4626[] memory positions = cellar.getPositions();
@@ -337,7 +337,7 @@ contract MultipositionCellarTest is Test {
 
     // ============================================= ACCRUE TEST =============================================
 
-    function testAccrue() public {
+    function testAccrue() external {
         // Scenario:
         //  - Multiposition cellar has 3 positions.
         //
@@ -551,7 +551,7 @@ contract MultipositionCellarTest is Test {
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp);
     }
 
-    function testAccrueWithZeroTotalLocked() public {
+    function testAccrueWithZeroTotalLocked() external {
         cellar.accrue();
 
         assertEq(cellar.totalLocked(), 0);
@@ -559,7 +559,7 @@ contract MultipositionCellarTest is Test {
         cellar.accrue();
     }
 
-    function testFailAccrueWithNonzeroTotalLocked() public {
+    function testFailAccrueWithNonzeroTotalLocked() external {
         MockERC4626(address(usdcCLR)).simulateGain(100e6, address(cellar));
         cellar.accrue();
 
@@ -571,7 +571,7 @@ contract MultipositionCellarTest is Test {
 
     // ============================================= POSITIONS TEST =============================================
 
-    function testSetPositions() public {
+    function testSetPositions() external {
         ERC4626[] memory positions = new ERC4626[](3);
         positions[0] = ERC4626(address(wethCLR));
         positions[1] = ERC4626(address(usdcCLR));
@@ -594,7 +594,7 @@ contract MultipositionCellarTest is Test {
         }
     }
 
-    function testFailSetUntrustedPosition() public {
+    function testFailSetUntrustedPosition() external {
         MockERC20 XYZ = new MockERC20("XYZ", 18);
         MockERC4626 xyzCLR = new MockERC4626(ERC20(address(XYZ)), "XYZ Cellar LP Token", "XYZ-CLR", 18);
 
@@ -611,7 +611,7 @@ contract MultipositionCellarTest is Test {
         cellar.setPositions(positions);
     }
 
-    function testFailAddingUntrustedPosition() public {
+    function testFailAddingUntrustedPosition() external {
         MockERC20 XYZ = new MockERC20("XYZ", 18);
         MockERC4626 xyzCLR = new MockERC4626(ERC20(address(XYZ)), "XYZ Cellar LP Token", "XYZ-CLR", 18);
 
@@ -622,7 +622,7 @@ contract MultipositionCellarTest is Test {
         cellar.addPosition(xyzCLR);
     }
 
-    function testTrustingPosition() public {
+    function testTrustingPosition() external {
         MockERC20 XYZ = new MockERC20("XYZ", 18);
         MockERC4626 xyzCLR = new MockERC4626(ERC20(address(XYZ)), "XYZ Cellar LP Token", "XYZ-CLR", 18);
 
@@ -642,7 +642,7 @@ contract MultipositionCellarTest is Test {
         assertEq(address(positions[positions.length - 1]), address(xyzCLR));
     }
 
-    function testDistrustingAndRemovingPosition() public {
+    function testDistrustingAndRemovingPosition() external {
         ERC4626 distrustedPosition = wethCLR;
 
         // Deposit assets into position before distrusting.
@@ -686,7 +686,7 @@ contract MultipositionCellarTest is Test {
 
     // ============================================== SWEEP TEST ==============================================
 
-    function testSweep() public {
+    function testSweep() external {
         MockERC20 XYZ = new MockERC20("XYZ", 18);
         XYZ.mint(address(cellar), 100e18);
 
@@ -696,14 +696,14 @@ contract MultipositionCellarTest is Test {
         assertEq(XYZ.balanceOf(address(this)), 100e18);
     }
 
-    function testFailSweep() public {
+    function testFailSweep() external {
         wbtcCLR.mint(address(cellar), 100e18);
 
         // Test sweep of protected asset.
         cellar.sweep(address(wbtcCLR), 100e18, address(this));
     }
 
-    function testFailAttemptingToStealFundsByRemovingPositionThenSweeping() public {
+    function testFailAttemptingToStealFundsByRemovingPositionThenSweeping() external {
         // Deposit assets into position before distrusting.
         uint256 assets = swapRouter.convert(address(USDC), address(WBTC), 100e6);
         WBTC.mint(address(this), assets);
@@ -727,7 +727,7 @@ contract MultipositionCellarTest is Test {
 
     // ============================================= EMERGENCY TEST =============================================
 
-    function testFailShutdownDeposit() public {
+    function testFailShutdownDeposit() external {
         cellar.setShutdown(true, false);
 
         USDC.mint(address(this), 1);
@@ -735,7 +735,7 @@ contract MultipositionCellarTest is Test {
         cellar.deposit(1, address(this));
     }
 
-    function testFailShutdownDepositIntoPosition() public {
+    function testFailShutdownDepositIntoPosition() external {
         USDC.mint(address(this), 1e18);
         USDC.approve(address(cellar), 1e18);
         cellar.deposit(1e18, address(this));
@@ -749,7 +749,7 @@ contract MultipositionCellarTest is Test {
         cellar.rebalance(cellar, usdcCLR, 1e18, 0, path);
     }
 
-    function testShutdownExitsAllPositions() public {
+    function testShutdownExitsAllPositions() external {
         // Deposit 100 assets into each position with 50 assets of unrealized yield.
         ERC4626[] memory positions = cellar.getPositions();
         for (uint256 i; i < positions.length; i++) {
@@ -777,7 +777,7 @@ contract MultipositionCellarTest is Test {
         assertApproxEqAbs(cellar.totalHoldings(), 435e6, 2e6);
     }
 
-    function testShutdownExitsAllPositionsWithNoBalances() public {
+    function testShutdownExitsAllPositionsWithNoBalances() external {
         cellar.setShutdown(true, true);
 
         assertTrue(cellar.isShutdown());
@@ -785,7 +785,7 @@ contract MultipositionCellarTest is Test {
 
     // ============================================== LIMITS TEST ==============================================
 
-    function testLimits() public {
+    function testLimits() external {
         USDC.mint(address(this), 100e6);
         USDC.approve(address(cellar), 100e6);
         cellar.deposit(100e6, address(this));
@@ -814,7 +814,7 @@ contract MultipositionCellarTest is Test {
         assertEq(cellar.maxMint(address(this)), 0);
     }
 
-    function testFailDepositAboveDepositLimit() public {
+    function testFailDepositAboveDepositLimit() external {
         cellar.setDepositLimit(100e6);
 
         USDC.mint(address(this), 101e6);
@@ -822,7 +822,7 @@ contract MultipositionCellarTest is Test {
         cellar.deposit(101e6, address(this));
     }
 
-    function testFailMintAboveDepositLimit() public {
+    function testFailMintAboveDepositLimit() external {
         cellar.setDepositLimit(100e6);
 
         USDC.mint(address(this), 101e6);
@@ -830,7 +830,7 @@ contract MultipositionCellarTest is Test {
         cellar.mint(101e6, address(this));
     }
 
-    function testFailDepositAboveLiquidityLimit() public {
+    function testFailDepositAboveLiquidityLimit() external {
         cellar.setLiquidityLimit(100e6);
 
         USDC.mint(address(this), 101e6);
@@ -838,7 +838,7 @@ contract MultipositionCellarTest is Test {
         cellar.deposit(101e6, address(this));
     }
 
-    function testFailMintAboveLiquidityLimit() public {
+    function testFailMintAboveLiquidityLimit() external {
         cellar.setLiquidityLimit(100e6);
 
         USDC.mint(address(this), 101e6);

@@ -4,33 +4,55 @@ pragma solidity 0.8.13;
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "./Cellar.sol";
 import { WETH } from "@solmate/tokens/WETH.sol";
 import { Math } from "../utils/Math.sol";
+import { AddressArray } from "src/utils/AddressArray.sol";
 
 import "../Errors.sol";
 
-// TODO: try separating logic into and inheriting from LossyMultipositionCellar (vs LosslessMultipositionCellar)
-// TODO: try not making this inheritable (get rid of virtual modifier from functions)
+// TODO: maybe this should not be inheritable (get rid of virtual modifier from functions)
+// TODO: move to /Cellars folder
 
 // TODO: add extensive documentation for cellar creators
 // TODO: add events
 // TODO: handle positions with different WETHs
 // TODO: add comment that positions using ETH or a different version of WETH can still be supported using a wrapper
 
-/**
- * @notice Attempted to trust a position that had an incompatible underlying asset.
- * @param incompatibleAsset address of the asset is incompatible with the asset of this cellar
- * @param expectedAsset address of the cellar's underlying asset
- */
-error USR_IncompatiblePosition(ERC20 incompatibleAsset, ERC20 expectedAsset);
-
-abstract contract MultipositionETHCellar is Cellar {
+contract MultipositionETHCellar is Cellar {
+    using AddressArray for address[];
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-    // ============================================ ACCOUNTING STATE ============================================
-
-    uint256 public totalLosslessBalance;
-
     // ========================================= MULTI-POSITION CONFIG =========================================
+
+    /**
+     * @notice Emitted when a position is added.
+     * @param position address of position that was added
+     * @param index index that position was added at
+     */
+    event PositionAdded(address indexed position, uint256 index);
+
+    /**
+     * @notice Emitted when a position is removed.
+     * @param position address of position that was removed
+     * @param index index that position was removed from
+     */
+    event PositionRemoved(address indexed position, uint256 index);
+
+    /**
+     * @notice Emitted when a position is replaced.
+     * @param oldPosition address of position at index before being replaced
+     * @param newPosition address of position at index after being replaced
+     * @param index index of position replaced
+     */
+    event PositionReplaced(address indexed oldPosition, address indexed newPosition, uint256 index);
+
+    /**
+     * @notice Emitted when the positions at two indexes are swapped.
+     * @param newPosition1 address of position (previously at index2) that replaced index1.
+     * @param newPosition2 address of position (previously at index1) that replaced index2.
+     * @param index1 index of first position involved in the swap
+     * @param index2 index of second position involved in the swap.
+     */
+    event PositionSwapped(address indexed newPosition1, address indexed newPosition2, uint256 index1, uint256 index2);
 
     // TODO: pack struct
     struct PositionData {
@@ -38,52 +60,156 @@ abstract contract MultipositionETHCellar is Cellar {
         uint256 balance;
     }
 
-    ERC4626[] public positions;
+    address[] public positions;
 
-    mapping(ERC4626 => PositionData) public getPositionData;
+    mapping(address => PositionData) public getPositionData;
 
-    function getPositions() external view returns (ERC4626[] memory) {
+    function getPositions() external view returns (address[] memory) {
         return positions;
     }
 
-    function addPosition(ERC4626 position) public virtual onlyOwner {
-        if (!isTrusted[position]) revert USR_UntrustedPosition(address(position));
-
-        positions.push(position);
+    function isPositionUsed(address position) public view virtual returns (bool) {
+        return positions.contains(position);
     }
 
-    function removePosition(ERC4626 position) public virtual onlyOwner {
-        _removePosition(position);
+    function addPosition(uint256 index, address position) public virtual onlyOwner whenNotShutdown {
+        if (!isTrusted[position]) revert USR_UntrustedPosition(position);
+
+        // Check if position is already being used.
+        if (isPositionUsed(position)) revert USR_PositionAlreadyUsed(position);
+
+        // Check if position has same underlying as cellar.
+        ERC20 cellarAsset = asset;
+        ERC20 positionAsset = ERC4626(position).asset();
+        if (positionAsset != cellarAsset) revert USR_IncompatiblePosition(address(positionAsset), address(cellarAsset));
+
+        // Add new position at a specified index.
+        positions.add(index, position);
+
+        emit PositionAdded(position, index);
     }
-
-    // TODO: add more position functions
-
-    function setPositions(ERC4626[] calldata newPositions) public virtual onlyOwner {
-        // TODO: handle positions with non-zero balances being removed
-
-        // Ensure positions are trusted.
-        for (uint256 i; i < newPositions.length; i++) {
-            ERC4626 newPosition = newPositions[i];
-
-            if (!isTrusted[newPosition]) revert USR_UntrustedPosition(address(newPosition));
-        }
-
-        positions = newPositions;
-    }
-
-    // ============================================ HOLDINGS CONFIG ============================================
 
     /**
-     * @dev Should be set high enough that the holding pool can cover the majority of weekly
-     *      withdraw volume without needing to pull from positions. See `beforeWithdraw` for
-     *      more information as to why.
+     * @dev If you know you are going to add a position to the end of the array, this is more
+     *      efficient then `addPosition`.
      */
-    // TODO: consider changing default
-    uint256 public targetHoldingsPercent = 0.05e18;
+    function pushPosition(address position) public virtual onlyOwner whenNotShutdown {
+        if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
-    function setTargetHoldings(uint256 targetPercent) external virtual onlyOwner {
-        targetHoldingsPercent = targetPercent;
+        // Check if position is already being used.
+        if (isPositionUsed(position)) revert USR_PositionAlreadyUsed(position);
+
+        // Check if position has same underlying as cellar.
+        ERC20 cellarAsset = asset;
+        ERC20 positionAsset = ERC4626(position).asset();
+        if (positionAsset != cellarAsset) revert USR_IncompatiblePosition(address(positionAsset), address(cellarAsset));
+
+        // Add new position to the end of the positions.
+        positions.push(position);
+
+        emit PositionAdded(position, positions.length - 1);
     }
+
+    function removePosition(uint256 index) public virtual onlyOwner {
+        // Get position being removed.
+        address position = positions[index];
+
+        // Remove position at the given index.
+        positions.remove(index);
+
+        // Pull any assets that were in the removed position to the holding pool.
+        _emptyPosition(position);
+
+        emit PositionRemoved(position, index);
+    }
+
+    /**
+     * @dev If you know you are going to remove a position from the end of the array, this is more
+     *      efficient then `removePosition`.
+     */
+    function popPosition() public virtual onlyOwner {
+        // Get the index of the last position and last position itself.
+        uint256 index = positions.length - 1;
+        address position = positions[index];
+
+        // Remove last position.
+        positions.pop();
+
+        // Pull any assets that were in the removed position to the holding pool.
+        _emptyPosition(position);
+
+        emit PositionRemoved(position, index);
+    }
+
+    function replacePosition(address newPosition, uint256 index) public virtual onlyOwner whenNotShutdown {
+        // Store the old position before its replaced.
+        address oldPosition = positions[index];
+
+        // Replace old position with new position.
+        positions[index] = newPosition;
+
+        // Pull any assets that were in the old position to the holding pool.
+        _emptyPosition(oldPosition);
+
+        emit PositionReplaced(oldPosition, newPosition, index);
+    }
+
+    function swapPositions(uint256 index1, uint256 index2) public virtual onlyOwner {
+        // Get the new positions that will be at each index.
+        address newPosition1 = positions[index2];
+        address newPosition2 = positions[index1];
+
+        // Swap positions.
+        (positions[index1], positions[index2]) = (newPosition1, newPosition2);
+
+        emit PositionSwapped(newPosition1, newPosition2, index1, index2);
+    }
+
+    // TODO: add functions to config position data
+
+    // ============================================ TRUST CONFIG ============================================
+
+    /**
+     * @notice Emitted when trust for a position is changed.
+     * @param position address of position that trust was changed for
+     * @param isTrusted whether the position is trusted
+     */
+    event TrustChanged(address indexed position, bool isTrusted);
+
+    mapping(address => bool) public isTrusted;
+
+    function trustPosition(address position, bool isLossless) public virtual onlyOwner {
+        // Trust position.
+        isTrusted[position] = true;
+
+        // Set position's lossless flag.
+        getPositionData[position].isLossless = isLossless;
+
+        // Set max approval to deposit into position if it is ERC4626.
+        ERC4626(position).asset().safeApprove(position, type(uint256).max);
+
+        emit TrustChanged(position, true);
+    }
+
+    function distrustPosition(address position) public virtual onlyOwner {
+        // Distrust position.
+        isTrusted[position] = false;
+
+        // Remove position from the list of positions if it is present.
+        positions.remove(position);
+
+        // Pull any assets that were in the removed position to the holding pool.
+        _emptyPosition(position);
+
+        // Remove approval for position.
+        ERC4626(position).asset().safeApprove(position, 0);
+
+        emit TrustChanged(position, false);
+    }
+
+    // ============================================ ACCOUNTING STATE ============================================
+
+    uint256 public totalLosslessBalance;
 
     // ======================================== ACCRUAL CONFIG ========================================
 
@@ -124,25 +250,19 @@ abstract contract MultipositionETHCellar is Cellar {
         accrualPeriod = newAccrualPeriod;
     }
 
-    // ============================================ TRUST CONFIG ============================================
+    // ============================================ HOLDINGS CONFIG ============================================
 
-    mapping(ERC4626 => bool) public isTrusted;
+    /**
+     * @dev Should be set high enough that the holding pool can cover the majority of weekly
+     *      withdraw volume without needing to pull from positions. See `beforeWithdraw` for
+     *      more information as to why.
+     */
+    // TODO: modularize this
+    // TODO: consider changing default
+    uint256 public targetHoldingsPercent = 0.05e18;
 
-    function trustPosition(ERC4626 position) public virtual override onlyOwner {
-        ERC20 positionAsset = position.asset();
-        if (positionAsset != asset) revert USR_IncompatiblePosition(positionAsset, asset);
-
-        isTrusted[position] = true;
-
-        emit TrustChanged(position, true);
-    }
-
-    function distrustPosition(ERC4626 position) public virtual override onlyOwner {
-        isTrusted[position] = false;
-
-        _removePosition(position);
-
-        emit TrustChanged(position, false);
+    function setTargetHoldings(uint256 targetPercent) external virtual onlyOwner {
+        targetHoldingsPercent = targetPercent;
     }
 
     // =========================================== CONSTRUCTOR ===========================================
@@ -159,24 +279,25 @@ abstract contract MultipositionETHCellar is Cellar {
      */
     constructor(
         ERC20 _WETH9,
-        ERC4626[] memory _positions,
+        address[] memory _positions,
         string memory _name,
         string memory _symbol
     ) Cellar(_WETH9, _name, _symbol) {
         // Initialize positions.
         for (uint256 i; i < _positions.length; i++) {
-            ERC4626 position = _positions[i];
-            ERC20 positionAsset = position.asset();
+            address position = _positions[i];
+            ERC20 positionAsset = ERC4626(position).asset();
 
-            if (positionAsset != asset) revert USR_IncompatiblePosition(positionAsset, asset);
+            // Only allow positions with same underlying as cellar.
+            if (positionAsset != _WETH9) revert USR_IncompatiblePosition(address(positionAsset), address(_WETH9));
 
-            isTrusted[position] = true;
+            isTrusted[address(position)] = true;
+
+            // Set max approval for deposits into position.
+            _WETH9.safeApprove(position, type(uint256).max);
         }
 
         positions = _positions;
-
-        // Transfer ownership to the Gravity Bridge.
-        transferOwnership(address(gravityBridge));
     }
 
     // ============================================ CORE LOGIC ============================================
@@ -207,7 +328,7 @@ abstract contract MultipositionETHCellar is Cellar {
             uint256 newTotalLosslessBalance = totalLosslessBalance;
 
             for (uint256 i; ; i++) {
-                ERC4626 position = positions[i];
+                ERC4626 position = ERC4626(positions[i]);
 
                 uint256 totalPositionAssets = position.maxWithdraw(address(this));
 
@@ -217,7 +338,7 @@ abstract contract MultipositionETHCellar is Cellar {
                 // We want to pull as much as we can from this position, but no more than needed.
                 uint256 assetsWithdrawn = Math.min(totalPositionAssets, assetsleftToWithdraw);
 
-                PositionData storage positionData = getPositionData[position];
+                PositionData storage positionData = getPositionData[address(position)];
 
                 if (positionData.isLossless) newTotalLosslessBalance -= assetsWithdrawn;
 
@@ -228,7 +349,7 @@ abstract contract MultipositionETHCellar is Cellar {
                 assetsleftToWithdraw -= assetsWithdrawn;
 
                 // Pull from this position.
-                _withdrawFromPosition(position, assetsWithdrawn);
+                position.withdraw(assetsWithdrawn, address(this), address(this));
 
                 if (assetsleftToWithdraw == 0) break;
             }
@@ -245,9 +366,9 @@ abstract contract MultipositionETHCellar is Cellar {
      */
     function totalAssets() public view virtual override returns (uint256 assets) {
         for (uint256 i; i < positions.length; i++) {
-            ERC4626 position = positions[i];
+            address position = positions[i];
 
-            if (getPositionData[position].isLossless) assets += position.maxWithdraw(address(this));
+            if (getPositionData[position].isLossless) assets += ERC4626(position).maxWithdraw(address(this));
         }
 
         assets += totalLosslessBalance + totalHoldings() - totalLocked();
@@ -286,8 +407,8 @@ abstract contract MultipositionETHCellar is Cellar {
         uint256 newTotalLosslessBalance;
 
         for (uint256 i; i < positions.length; i++) {
-            ERC4626 position = positions[i];
-            PositionData storage positionData = getPositionData[position];
+            ERC4626 position = ERC4626(positions[i]);
+            PositionData storage positionData = getPositionData[address(position)];
 
             uint256 balanceThisAccrual = position.maxWithdraw(address(this));
 
@@ -336,33 +457,33 @@ abstract contract MultipositionETHCellar is Cellar {
 
     // ========================================= REBALANCE LOGIC =========================================
 
-    // TODO: move to Cellar.sol
-    function enterPosition(ERC4626 position, uint256 assets) public virtual onlyOwner {
-        PositionData storage positionData = getPositionData[position];
+    // TODO: test trying to enterPosition/rebalance into untrusted position (should revert bc approval not given)
+
+    function enterPosition(address position, uint256 assets) public virtual onlyOwner {
+        PositionData storage positionData = getPositionData[address(position)];
 
         if (positionData.isLossless) totalLosslessBalance += assets;
 
         positionData.balance += assets;
 
         // Deposit into position.
-        _depositIntoPosition(position, assets);
+        ERC4626(position).deposit(assets, address(this));
     }
 
-    // TODO: move to Cellar.sol
-    function exitPosition(ERC4626 position, uint256 assets) public virtual onlyOwner {
-        PositionData storage positionData = getPositionData[position];
+    function exitPosition(address position, uint256 assets) public virtual onlyOwner {
+        PositionData storage positionData = getPositionData[address(position)];
 
         if (positionData.isLossless) totalLosslessBalance -= assets;
 
         positionData.balance -= assets;
 
         // Withdraw from specified position.
-        _withdrawFromPosition(position, assets);
+        ERC4626(position).withdraw(assets, address(this), address(this));
     }
 
     function rebalance(
-        ERC4626 fromPosition,
-        ERC4626 toPosition,
+        address fromPosition,
+        address toPosition,
         uint256 assets
     ) public virtual onlyOwner {
         PositionData storage fromPositionData = getPositionData[fromPosition];
@@ -379,10 +500,10 @@ abstract contract MultipositionETHCellar is Cellar {
         totalLosslessBalance = newTotalLosslessBalance;
 
         // Withdraw from specified position.
-        _withdrawFromPosition(fromPosition, assets);
+        ERC4626(fromPosition).withdraw(assets, address(this), address(this));
 
         // Deposit into destination position.
-        _depositIntoPosition(toPosition, assets);
+        ERC4626(toPosition).deposit(assets, address(this));
     }
 
     // ========================================= RECOVERY LOGIC =========================================
@@ -400,30 +521,15 @@ abstract contract MultipositionETHCellar is Cellar {
 
     // ======================================== HELPER FUNCTIONS ========================================
 
-    // TODO: move to Cellar.sol
-    /**
-     * @notice Deposits into a position.
-     */
-    function _depositIntoPosition(ERC4626 position, uint256 assets) internal virtual whenNotShutdown {
-        if (!isTrusted[position]) revert USR_UntrustedPosition(address(position));
-
-        position.asset().safeApprove(address(position), assets);
-        position.deposit(assets, address(this));
-    }
-
-    // TODO: move to Cellar.sol
-    /**
-     * @notice Withdraws from a position.
-     */
-    function _withdrawFromPosition(ERC4626 position, uint256 assets) internal virtual {
-        position.withdraw(assets, address(this), address(this));
-    }
-
-    function _emptyPosition(ERC4626 position) internal virtual {
+    function _emptyPosition(address position) internal virtual {
         PositionData storage positionData = getPositionData[position];
 
         uint256 balanceLastAccrual = positionData.balance;
-        uint256 balanceThisAccrual = position.redeem(position.balanceOf(address(this)), address(this), address(this));
+        uint256 balanceThisAccrual = ERC4626(position).redeem(
+            ERC4626(position).balanceOf(address(this)),
+            address(this),
+            address(this)
+        );
 
         positionData.balance = 0;
 
@@ -441,28 +547,6 @@ abstract contract MultipositionETHCellar is Cellar {
 
         // Do not count assets set aside for fees as yield. Allows fees to be immediately withdrawable.
         maxLocked = uint160(totalLocked() + yield.subMinZero(performanceFeeInAssets));
-    }
-
-    function _removePosition(ERC4626 position) internal virtual {
-        // Pull any assets that were in the removed position to the holding pool.
-        _emptyPosition(position);
-
-        // TODO: pop position if withdrawing from in `beforeWithdraw`
-        // Remove position from the list of positions if it is present.
-        uint256 len = positions.length;
-        if (position == positions[len - 1]) {
-            positions.pop();
-        } else {
-            for (uint256 i; i < len; i++) {
-                if (positions[i] == position) {
-                    for (i; i < len - 1; i++) positions[i] = positions[i + 1];
-
-                    positions.pop();
-
-                    break;
-                }
-            }
-        }
     }
 
     // ====================================== RECEIVE ETHER LOGIC ======================================

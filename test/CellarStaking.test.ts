@@ -117,6 +117,8 @@ describe("CellarStaking", () => {
 
       it("should not allow a user to stake if there are no rewards left", async () => {
         const { stakingUser } = ctx;
+
+        await stakingUser.stake(ether("1"), lockDay); // stake to start rewards
         await increaseTime(oneMonthSec * 2); // roll past reward time completion
 
         await expect(stakingUser.stake(ether("1"), lockDay)).to.be.revertedWith("STATE_NoRewardsLeft");
@@ -1252,15 +1254,15 @@ describe("CellarStaking", () => {
       it("should allow rewards to be claimable", async () => {
         const { staking, stakingUser, tokenDist, user } = ctx;
 
+        // Wait to ensure that depositor not immediately depositing
+        await increaseTime(oneWeekSec / 2);
+
         await stakingUser.stake(ether("10000"), lockTwoWeeks);
 
         const balanceBefore = await tokenDist.balanceOf(user.address);
 
         // Move forward one week - rewards should be emitted
         await increaseTime(oneWeekSec * 2);
-
-        // Unbond to update reward
-        await stakingUser.unbondAll();
 
         await staking.emergencyStop(true);
         await stakingUser.emergencyUnstake();
@@ -1277,11 +1279,49 @@ describe("CellarStaking", () => {
 
         expect(claimEvent).to.not.be.undefined;
         expect(claimEvent?.args?.[0]).to.equal(user.address);
-        expectRoundedEqual(claimEvent?.args?.[1], rewardPerEpoch);
+        expect(claimEvent?.args?.[1]).to.equal(rewardPerEpoch);
 
         const balanceAfter = await tokenDist.balanceOf(user.address);
 
         expectRoundedEqual(balanceAfter.sub(balanceBefore), rewardPerEpoch);
+
+        const contractBalanceAfter = await tokenDist.balanceOf(staking.address);
+        expectRoundedEqual(contractBalanceAfter, 0);
+      });
+
+      it("should allow rewards to be claimable, up until the moment of emergencyStop", async () => {
+        const { staking, stakingUser, tokenDist, user } = ctx;
+
+        await stakingUser.stake(ether("10000"), lockTwoWeeks);
+
+        const balanceBefore = await tokenDist.balanceOf(user.address);
+
+        // Move forward 1/2 week - 1/2 rewards should be emitted
+        await increaseTime(oneWeekSec / 2);
+
+        await staking.emergencyStop(true);
+        await stakingUser.emergencyUnstake();
+
+        // Try to claim rewards normally
+        await expect(stakingUser.claim(0)).to.be.revertedWith("STATE_ContractKilled");
+        await expect(stakingUser.claimAll()).to.be.revertedWith("STATE_ContractKilled");
+
+        // Try to claim rewards thru emergency
+        const tx = await stakingUser.emergencyClaim();
+        const receipt = await tx.wait();
+
+        const claimEvent = receipt.events?.find(e => e.event === "EmergencyClaim");
+
+        expect(claimEvent).to.not.be.undefined;
+        expect(claimEvent?.args?.[0]).to.equal(user.address);
+        expectRoundedEqual(claimEvent?.args?.[1], rewardPerEpoch.div(2)); // now half, since program was stopped halfway through
+
+        const balanceAfter = await tokenDist.balanceOf(user.address);
+
+        expectRoundedEqual(balanceAfter.sub(balanceBefore), rewardPerEpoch.div(2));
+
+        const contractBalanceAfter = await tokenDist.balanceOf(staking.address);
+        expectRoundedEqual(contractBalanceAfter, 0);
       });
     });
 
@@ -1385,14 +1425,20 @@ describe("CellarStaking", () => {
       });
 
       it("should schedule new rewards", async () => {
-        const { tokenDist } = ctx;
+        const { tokenDist, stakingUser } = ctx;
 
         // Equates to one unit per second distributed
         const rewards = ether(oneMonthSec.toString());
         const balanceBefore = await tokenDist.balanceOf(distributor.address);
 
         await tokenDist.connect(distributor).transfer(stakingDist.address, rewards);
-        const tx = await stakingDist.notifyRewardAmount(rewards);
+        let tx = await stakingDist.notifyRewardAmount(rewards);
+        await tx.wait();
+
+        // No funding event emitted, but should be on first stake
+        expect(await stakingDist.rewardsReady()).to.equal(rewards);
+
+        tx = await stakingUser.stake(ether("1"), lockDay);
         const receipt = await tx.wait();
         const latestBlock = await ethers.provider.getBlock("latest");
 
@@ -1412,6 +1458,20 @@ describe("CellarStaking", () => {
         expect(balanceBefore.sub(balanceAfter)).to.equal(rewards);
       });
 
+      it("should revert if the staking contract is not funded with enough tokens, counting an existing schedule", async () => {
+        const { stakingUser } = ctx;
+        // Call notify reward amount once
+        await stakingDist.notifyRewardAmount(initialTokenAmount);
+
+        // Stake to start the schedule
+        await stakingUser.stake(ether("1"), lockDay);
+
+        // Schedule initialTokenAmount / 2 new rewards. Should fail because in total we need 3 * initialTokenAmount / 2 rewards
+        await expect(
+          stakingDist.notifyRewardAmount(initialTokenAmount.div(2))
+        ).to.be.revertedWith("STATE_RewardsNotFunded");
+      });
+
       it("should update and extend existing schedule", async () => {
         const { tokenDist, stakingUser } = ctx;
 
@@ -1421,9 +1481,9 @@ describe("CellarStaking", () => {
         await tokenDist.connect(distributor).transfer(stakingDist.address, rewards);
 
         await expect(stakingDist.notifyRewardAmount(rewards)).to.not.be.reverted;
-        let latestBlock = await ethers.provider.getBlock("latest");
 
         await stakingUser.stake(ether("10000"), lockDay);
+        let latestBlock = await ethers.provider.getBlock("latest");
 
         expect(await stakingDist.rewardRate()).to.equal(ether("1"));
         expect(await stakingDist.endTimestamp()).to.equal(latestBlock.timestamp + oneMonthSec);
@@ -1468,13 +1528,15 @@ describe("CellarStaking", () => {
       it("should update the reward epoch duration", async () => {
         const { staking } = ctx;
 
-        expect(await staking.epochDuration()).to.equal(oneMonthSec);
+        const currentEpochDuration = await staking.currentEpochDuration();
+        expect(await staking.nextEpochDuration()).to.equal(oneMonthSec);
 
         await expect(staking.setRewardsDuration(oneWeekSec))
           .to.emit(staking, "EpochDurationChange")
           .withArgs(oneWeekSec);
 
-        expect(await staking.epochDuration()).to.equal(oneWeekSec);
+        expect(await staking.nextEpochDuration()).to.equal(oneWeekSec);
+        expect(await staking.currentEpochDuration()).to.equal(currentEpochDuration);
       });
     });
 
@@ -1637,6 +1699,7 @@ describe("CellarStaking", () => {
 
       beforeEach(async () => {
         await ctx.staking.notifyRewardAmount(oneMonthSec);
+        await ctx.stakingUser.stake(ether("1"), lockDay);
         latestBlock = await ethers.provider.getBlock("latest");
       });
 

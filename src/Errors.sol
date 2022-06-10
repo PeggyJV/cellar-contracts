@@ -141,6 +141,19 @@ error USR_ZeroRewardsPerEpoch();
  */
 error USR_InvalidLockValue(uint256 lock);
 
+/**
+ * @notice Attempted to trust a position that had an incompatible underlying asset.
+ * @param incompatibleAsset address of the asset is incompatible with the asset of this cellar
+ * @param expectedAsset address of the cellar's underlying asset
+ */
+error USR_IncompatiblePosition(address incompatibleAsset, address expectedAsset);
+
+/**
+ * @notice Attempted to add a position that is already being used.
+ * @param position address of the position
+ */
+error USR_PositionAlreadyUsed(address position);
+
 // ========================================== STATE ERRORS ===========================================
 
 /**
@@ -177,6 +190,11 @@ error STATE_AccrualOngoing();
  * @notice The caller attempted to change the epoch length, but current reward epochs were active.
  */
 error STATE_RewardsOngoing();
+
+/**
+ * @notice The caller attempted to change the next epoch duration, but there are rewards ready.
+ */
+error STATE_RewardsReady();
 
 /**
  * @notice The caller attempted to deposit stake, but there are no remaining rewards to pay out.

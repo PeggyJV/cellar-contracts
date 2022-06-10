@@ -2,8 +2,9 @@
 pragma solidity 0.8.13;
 
 import { ERC4626, ERC20 } from "./ERC4626.sol";
+import { Multicall } from "./Multicall.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { Ownable } from "@openzeppelin/access/Ownable.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { Math } from "../utils/Math.sol";
 
@@ -12,7 +13,7 @@ import "../Errors.sol";
 // TODO: add extensive documentation for cellar creators
 // - list functions that still need to be implemented.
 
-abstract contract Cellar is ERC4626, Ownable {
+abstract contract Cellar is ERC4626, Ownable, Multicall {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -137,27 +138,6 @@ abstract contract Cellar is ERC4626, Ownable {
 
         depositLimit = newLimit;
     }
-
-    // ============================================ TRUST CONFIG ============================================
-
-    /**
-     * @notice Emitted when trust for a position is changed.
-     * @param position address of position that trust was changed for
-     * @param isTrusted whether the position is trusted
-     */
-    event TrustChanged(ERC4626 indexed position, bool isTrusted);
-
-    /**
-     * @dev MUST be implemented with `onlyOwner` modifier to allow Steward to define call permissions.
-     * @dev MUST emit the `TrustChanged` event.
-     */
-    function trustPosition(ERC4626 position) public virtual;
-
-    /**
-     * @dev MUST be implemented with `onlyOwner` modifier to allow Steward to define call permissions.
-     * @dev MUST emit the `TrustChanged` event.
-     */
-    function distrustPosition(ERC4626 position) public virtual;
 
     // =========================================== EMERGENCY LOGIC ===========================================
 

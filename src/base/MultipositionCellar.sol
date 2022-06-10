@@ -2,9 +2,9 @@
 pragma solidity 0.8.13;
 
 import { ERC4626, ERC20, SafeTransferLib } from "./ERC4626.sol";
-import { Ownable } from "@openzeppelin/access/Ownable.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
-import { ISwapRouter } from "@uniswap/v3-periphery/interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "../interfaces/ISwapRouter.sol";
 import { Math } from "../utils/Math.sol";
 
 import "../Errors.sol";

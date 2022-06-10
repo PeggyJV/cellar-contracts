@@ -7,7 +7,7 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC4626 } from "src/base/ERC4626.sol";
 import { Math } from "src/utils/Math.sol";
 
-import { ISwapRouter } from "@uniswap/v3-periphery/interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "../interfaces/ISwapRouter.sol";
 import { MockSwapRouter } from "./MockSwapRouter.sol";
 
 import "../Errors.sol";

@@ -11,7 +11,6 @@
     "build": "forge build && npx hardhat compile",
     "test": "forge test -vv && npx hardhat compile && npx hardhat test",
     "coverage": "npx hardhat compile && npx hardhat coverage",
-    "scripts": "chmod +x ./scripts/*",
     "lint": "npx prettier --write src/ test/ tasks/",
     "update": "forge update && npm upgrade",
     "clean": "forge clean && npx hardhat clean",
