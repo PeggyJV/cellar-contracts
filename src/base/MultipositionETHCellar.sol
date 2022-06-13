@@ -824,6 +824,10 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
     // ======================================== HELPER FUNCTIONS ========================================
 
+    /**
+     * @notice Pull everything from a position to holdings.
+     * @dev Will accrue and distribute any leftover unrealized gains in position and mint fees accordingly.
+     */
     function _emptyPosition(address position) internal {
         PositionData storage positionData = getPositionData[position];
 
