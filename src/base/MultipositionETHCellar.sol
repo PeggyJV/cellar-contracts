@@ -161,8 +161,6 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         emit PositionSwapped(newPosition1, newPosition2, index1, index2);
     }
 
-    // TODO: add functions to config position data
-
     // ============================================ TRUST CONFIG ============================================
 
     /**
