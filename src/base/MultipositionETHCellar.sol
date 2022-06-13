@@ -580,7 +580,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
      */
     event Accrual(uint256 platformFees, uint256 performanceFees);
 
-    function accrue() public {
+    function accrue() external {
         uint256 totalLockedYield = totalLocked();
 
         // Without this check, malicious actors could do a slowdown attack on the distribution of
