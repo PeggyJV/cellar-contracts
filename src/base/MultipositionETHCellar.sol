@@ -68,7 +68,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         return positions.contains(position);
     }
 
-    function addPosition(uint256 index, address position) public onlyOwner whenNotShutdown {
+    function addPosition(uint256 index, address position) external onlyOwner whenNotShutdown {
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Check if position is already being used.
@@ -89,7 +89,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
      * @dev If you know you are going to add a position to the end of the array, this is more
      *      efficient then `addPosition`.
      */
-    function pushPosition(address position) public onlyOwner whenNotShutdown {
+    function pushPosition(address position) external onlyOwner whenNotShutdown {
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Check if position is already being used.
@@ -106,7 +106,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         emit PositionAdded(position, positions.length - 1);
     }
 
-    function removePosition(uint256 index) public onlyOwner {
+    function removePosition(uint256 index) external onlyOwner {
         // Get position being removed.
         address position = positions[index];
 
@@ -123,7 +123,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
      * @dev If you know you are going to remove a position from the end of the array, this is more
      *      efficient then `removePosition`.
      */
-    function popPosition() public onlyOwner {
+    function popPosition() external onlyOwner {
         // Get the index of the last position and last position itself.
         uint256 index = positions.length - 1;
         address position = positions[index];
@@ -137,7 +137,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         emit PositionRemoved(position, index);
     }
 
-    function replacePosition(address newPosition, uint256 index) public onlyOwner whenNotShutdown {
+    function replacePosition(address newPosition, uint256 index) external onlyOwner whenNotShutdown {
         // Store the old position before its replaced.
         address oldPosition = positions[index];
 
@@ -150,7 +150,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         emit PositionReplaced(oldPosition, newPosition, index);
     }
 
-    function swapPositions(uint256 index1, uint256 index2) public onlyOwner {
+    function swapPositions(uint256 index1, uint256 index2) external onlyOwner {
         // Get the new positions that will be at each index.
         address newPosition1 = positions[index2];
         address newPosition2 = positions[index1];
@@ -174,7 +174,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
     mapping(address => bool) public isTrusted;
 
-    function trustPosition(address position, bool isLossless) public onlyOwner {
+    function trustPosition(address position, bool isLossless) external onlyOwner {
         // Trust position.
         isTrusted[position] = true;
 
@@ -187,7 +187,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         emit TrustChanged(position, true);
     }
 
-    function distrustPosition(address position) public onlyOwner {
+    function distrustPosition(address position) external onlyOwner {
         // Distrust position.
         isTrusted[position] = false;
 
@@ -394,7 +394,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @dev In the case where
      */
-    function initiateShutdown() public whenNotShutdown onlyOwner {
+    function initiateShutdown() external whenNotShutdown onlyOwner {
         isShutdown = true;
 
         emit ShutdownChanged(true);
@@ -403,7 +403,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
     /**
      * @notice Restart the cellar.
      */
-    function liftShutdown() public onlyOwner {
+    function liftShutdown() external onlyOwner {
         isShutdown = false;
 
         emit ShutdownChanged(false);
@@ -676,7 +676,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
      * @param position address of the position to exit
      * @param assets amount of assets to exit from the position
      */
-    function exitPosition(address position, uint256 assets) public onlyOwner {
+    function exitPosition(address position, uint256 assets) external onlyOwner {
         PositionData storage positionData = getPositionData[address(position)];
 
         if (positionData.isLossless) totalLosslessBalance -= assets;
@@ -705,7 +705,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         address fromPosition,
         address toPosition,
         uint256 assets
-    ) public onlyOwner {
+    ) external onlyOwner {
         PositionData storage fromPositionData = getPositionData[fromPosition];
         PositionData storage toPositionData = getPositionData[toPosition];
 
@@ -781,7 +781,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
      * @notice Transfer accrued fees to the Sommelier chain to distribute.
      * @dev Fees are accrued as shares and redeemed upon transfer.
      */
-    function sendFees() public onlyOwner {
+    function sendFees() external onlyOwner {
         // Redeem our fee shares for assets to send to the fee distributor module.
         uint256 totalFees = balanceOf[address(this)];
         uint256 assets = previewRedeem(totalFees);
@@ -812,7 +812,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         ERC20 token,
         address to,
         uint256 amount
-    ) public onlyOwner {
+    ) external onlyOwner {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == asset || token == this) revert USR_ProtectedAsset(address(token));
         for (uint256 i; i < positions.length; i++)
