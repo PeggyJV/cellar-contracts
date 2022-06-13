@@ -11,7 +11,8 @@ task("deploy:CellarRouter").setAction(async function (args: TaskArguments, { eth
   const factory = <CellarRouter__factory>await ethers.getContractFactory("CellarRouter");
 
   const cellar = <CellarRouter>await factory.deploy(
-    "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F", // Sushiswap Router
+    "0xE592427A0AEce92De3Edee1F18E0157C05861564", // Uniswap V3 Router
+    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", // Uniswap V2 Router
   );
 
   await cellar.deployed();
