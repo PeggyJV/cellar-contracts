@@ -10,7 +10,7 @@ interface ICellarRouter {
     function depositIntoCellarWithPermit(
         ERC4626 cellar,
         uint256 assets,
-        address to,
+        address receiver,
         uint256 deadline,
         uint8 v,
         bytes32 r,
@@ -20,17 +20,19 @@ interface ICellarRouter {
     function depositAndSwapIntoCellar(
         ERC4626 cellar,
         address[] calldata path,
+        uint256[] calldata poolFees,
         uint256 assets,
-        uint256 minAssetsOut,
-        address to
+        uint256 assetsOutMin,
+        address receiver
     ) external returns (uint256 shares);
 
     function depositAndSwapIntoCellarWithPermit(
         ERC4626 cellar,
         address[] calldata path,
+        uint256[] calldata poolFees,
         uint256 assets,
-        uint256 minAssetsOut,
-        address to,
+        uint256 assetsOutMin,
+        address receiver,
         uint256 deadline,
         uint8 v,
         bytes32 r,
