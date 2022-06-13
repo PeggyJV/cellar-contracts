@@ -416,9 +416,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
      *      withdraw volume without needing to pull from positions. See `beforeWithdraw` for
      *      more information as to why.
      */
-    // TODO: modularize this
-    // TODO: consider changing default
-    uint256 public targetHoldingsPercent = 0.05e18;
+    uint256 public targetHoldingsPercent;
 
     function setTargetHoldings(uint256 targetPercent) external onlyOwner {
         targetHoldingsPercent = targetPercent;
