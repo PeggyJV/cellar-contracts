@@ -647,6 +647,11 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
     // TODO: test trying to enterPosition/rebalance into untrusted position (should revert bc approval not given)
 
+    /**
+     * @notice Pushes assets in holdings into a position.
+     * @param position address of the position to enter holdings into
+     * @param assets amount of assets to exit from the position
+     */
     function enterPosition(address position, uint256 assets) public onlyOwner {
         PositionData storage positionData = getPositionData[address(position)];
 
@@ -658,6 +663,19 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         ERC4626(position).deposit(assets, address(this));
     }
 
+    /**
+     * @notice Pushes all assets in holding into a position.
+     * @param position address of the position to enter all holdings into
+     */
+    function enterPosition(address position) external {
+        enterPosition(position, totalHoldings());
+    }
+
+    /**
+     * @notice Pulls assets from a position back into holdings.
+     * @param position address of the position to exit
+     * @param assets amount of assets to exit from the position
+     */
     function exitPosition(address position, uint256 assets) public onlyOwner {
         PositionData storage positionData = getPositionData[address(position)];
 
@@ -669,6 +687,20 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         ERC4626(position).withdraw(assets, address(this), address(this));
     }
 
+    /**
+     * @notice Pulls all assets from a position back into holdings.
+     * @param position address of the position to completely exit
+     */
+    function exitPosition(address position) external onlyOwner {
+        _emptyPosition(position);
+    }
+
+    /**
+     * @notice Move assets between positions.
+     * @param fromPosition address of the position to move assets from
+     * @param toPosition address of the position to move assets to
+     * @param assets amount of assets to move
+     */
     function rebalance(
         address fromPosition,
         address toPosition,
