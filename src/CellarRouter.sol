@@ -74,7 +74,7 @@ contract CellarRouter is ICellarRouter {
      * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
      *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
      *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
-     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (300), and 1% (10000). If using Uniswap
+     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
      *      V2, leave pool fees empty to use Uniswap V2 for swap.
      * @param cellar address of the cellar to deposit into
      * @param path array of [token1, token2, token3] that specifies the swap path on Sushiswap
@@ -154,7 +154,7 @@ contract CellarRouter is ICellarRouter {
      * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
      *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
      *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
-     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (300), and 1% (10000). If using Uniswap
+     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
      *      V2, leave pool fees empty to use Uniswap V2 for swap.
      * @param cellar address of the cellar to deposit into
      * @param path array of [token1, token2, token3] that specifies the swap path on Sushiswap
