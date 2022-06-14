@@ -31,7 +31,7 @@ contract CellarRouter is ICellarRouter {
         uniswapV2Router = _uniswapV2Router;
     }
 
-    // ======================================= ROUTER OPERATIONS =======================================
+    // ======================================= DEPOSIT OPERATIONS =======================================
 
     /**
      * @notice Deposit assets into a cellar using permit.
@@ -74,7 +74,7 @@ contract CellarRouter is ICellarRouter {
      * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
      *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
      *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
-     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (300), and 1% (10000). If using Uniswap
+     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
      *      V2, leave pool fees empty to use Uniswap V2 for swap.
      * @param cellar address of the cellar to deposit into
      * @param path array of [token1, token2, token3] that specifies the swap path on Sushiswap
@@ -100,47 +100,7 @@ contract CellarRouter is ICellarRouter {
         assetIn.safeTransferFrom(msg.sender, address(this), assets);
 
         // Check whether a swap is necessary. If not, skip swap and deposit into cellar directly.
-        if (assetIn != asset) {
-            // Check whether to use Uniswap V2 or Uniswap V3 for swap.
-            if (poolFees.length == 0) {
-                // If no pool fees are specified, use Uniswap V2 for swap.
-
-                // Approve assets to be swapped through the router.
-                assetIn.safeApprove(address(uniswapV2Router), assets);
-
-                // Execute the swap.
-                uint256[] memory amountsOut = uniswapV2Router.swapExactTokensForTokens(
-                    assets,
-                    assetsOutMin,
-                    path,
-                    address(this),
-                    block.timestamp + 60
-                );
-
-                assets = amountsOut[amountsOut.length - 1];
-            } else {
-                // If pool fees are specified, use Uniswap V3 for swap.
-
-                // Approve assets to be swapped through the router.
-                assetIn.safeApprove(address(uniswapV3Router), assets);
-
-                // Encode swap parameters.
-                bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
-                for (uint256 i = 1; i < path.length; i++)
-                    encodePackedPath = abi.encodePacked(encodePackedPath, poolFees[i - 1], path[i]);
-
-                // Execute the swap.
-                assets = uniswapV3Router.exactInput(
-                    UniswapV3Router.ExactInputParams({
-                        path: encodePackedPath,
-                        recipient: address(this),
-                        deadline: block.timestamp + 60,
-                        amountIn: assets,
-                        amountOutMinimum: assetsOutMin
-                    })
-                );
-            }
-        }
+        if (assetIn != asset) assets = _swap(path, poolFees, assets, assetsOutMin);
 
         // Approve the cellar to spend assets.
         asset.safeApprove(address(cellar), assets);
@@ -154,7 +114,7 @@ contract CellarRouter is ICellarRouter {
      * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
      *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
      *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
-     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (300), and 1% (10000). If using Uniswap
+     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
      *      V2, leave pool fees empty to use Uniswap V2 for swap.
      * @param cellar address of the cellar to deposit into
      * @param path array of [token1, token2, token3] that specifies the swap path on Sushiswap
@@ -188,5 +148,149 @@ contract CellarRouter is ICellarRouter {
 
         // Deposit assets into the cellar using a swap if necessary.
         shares = depositAndSwapIntoCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
+    }
+
+    // ======================================= WITHDRAW OPERATIONS =======================================
+
+    /**
+     * @notice Withdraws from a cellar and then performs a swap to another desired asset, if the
+     *         withdrawn asset is not already.
+     * @dev Permission is required from caller for router to burn shares. Please make sure that
+     *      caller has approved the router to spend their shares.
+     * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
+     *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
+     *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
+     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
+     *      V2, leave pool fees empty to use Uniswap V2 for swap.
+     * @param cellar address of the cellar
+     * @param path array of [token1, token2, token3] that specifies the swap path on swap
+     * @param poolFees amount out of 1e4 (eg. 10000 == 1%) that represents the fee tier to use for each swap
+     * @param assets amount of assets to withdraw
+     * @param assetsOutMin minimum amount of assets received from swap
+     * @param receiver address receiving the assets
+     * @return shares amount of shares burned
+     */
+    function withdrawAndSwapFromCellar(
+        ERC4626 cellar,
+        address[] calldata path,
+        uint256[] calldata poolFees,
+        uint256 assets,
+        uint256 assetsOutMin,
+        address receiver
+    ) public returns (uint256 shares) {
+        ERC20 asset = cellar.asset();
+        ERC20 assetOut = ERC20(path[path.length - 1]);
+
+        // Withdraw assets from the cellar.
+        shares = cellar.withdraw(assets, address(this), msg.sender);
+
+        // Check whether a swap is necessary. If not, skip swap and transfer withdrawn assets to receiver.
+        if (assetOut != asset) assets = _swap(path, poolFees, assets, assetsOutMin);
+
+        // Transfer assets from the router to the receiver.
+        assetOut.safeTransfer(receiver, assets);
+    }
+
+    /**
+     * @notice Withdraws from a cellar and then performs a swap to another desired asset, if the
+     *         withdrawn asset is not already, using permit.
+     * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
+     *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
+     *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
+     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
+     *      V2, leave pool fees empty to use Uniswap V2 for swap.
+     * @param cellar address of the cellar
+     * @param path array of [token1, token2, token3] that specifies the swap path on swap
+     * @param poolFees amount out of 1e4 (eg. 10000 == 1%) that represents the fee tier to use for each swap
+     * @param assets amount of assets to withdraw
+     * @param assetsOutMin minimum amount of assets received from swap
+     * @param receiver address receiving the assets
+     * @param deadline timestamp after which permit is invalid
+     * @param v used to produce valid secp256k1 signature from the caller along with r and s
+     * @param r used to produce valid secp256k1 signature from the caller along with v and s
+     * @param s used to produce valid secp256k1 signature from the caller along with r and v
+     * @return shares amount of shares burned
+     */
+    function withdrawAndSwapFromCellarWithPermit(
+        ERC4626 cellar,
+        address[] calldata path,
+        uint256[] calldata poolFees,
+        uint256 assets,
+        uint256 assetsOutMin,
+        address receiver,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 shares) {
+        // Approve for router to burn user shares via permit.
+        cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
+
+        // Withdraw assets from the cellar and swap to another asset if necessary.
+        shares = withdrawAndSwapFromCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
+    }
+
+    // ========================================= HELPER FUNCTIONS =========================================
+    /**
+     * @notice Perform a swap using Uniswap.
+     * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
+     *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
+     *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
+     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
+     *      V2, leave pool fees empty to use Uniswap V2 for swap.
+     * @param path array of [token1, token2, token3] that specifies the swap path on swap
+     * @param poolFees amount out of 1e4 (eg. 10000 == 1%) that represents the fee tier to use for each swap
+     * @param assets amount of assets to withdraw
+     * @param assetsOutMin minimum amount of assets received from swap
+     * @return assetsOut amount of assets received after swap
+     */
+    function _swap(
+        address[] calldata path,
+        uint256[] calldata poolFees,
+        uint256 assets,
+        uint256 assetsOutMin
+    ) internal returns (uint256 assetsOut) {
+        // Retrieve the asset being swapped.
+        ERC20 assetIn = ERC20(path[0]);
+
+        // Check whether to use Uniswap V2 or Uniswap V3 for swap.
+        if (poolFees.length == 0) {
+            // If no pool fees are specified, use Uniswap V2 for swap.
+
+            // Approve assets to be swapped through the router.
+            assetIn.safeApprove(address(uniswapV2Router), assets);
+
+            // Execute the swap.
+            uint256[] memory amountsOut = uniswapV2Router.swapExactTokensForTokens(
+                assets,
+                assetsOutMin,
+                path,
+                address(this),
+                block.timestamp + 60
+            );
+
+            assetsOut = amountsOut[amountsOut.length - 1];
+        } else {
+            // If pool fees are specified, use Uniswap V3 for swap.
+
+            // Approve assets to be swapped through the router.
+            assetIn.safeApprove(address(uniswapV3Router), assets);
+
+            // Encode swap parameters.
+            bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
+            for (uint256 i = 1; i < path.length; i++)
+                encodePackedPath = abi.encodePacked(encodePackedPath, poolFees[i - 1], path[i]);
+
+            // Execute the swap.
+            assetsOut = uniswapV3Router.exactInput(
+                UniswapV3Router.ExactInputParams({
+                    path: encodePackedPath,
+                    recipient: address(this),
+                    deadline: block.timestamp + 60,
+                    amountIn: assets,
+                    amountOutMinimum: assetsOutMin
+                })
+            );
+        }
     }
 }
