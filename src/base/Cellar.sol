@@ -5,17 +5,257 @@ import { ERC4626, ERC20 } from "./ERC4626.sol";
 import { Multicall } from "./Multicall.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { Registry } from "../Registry.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
+import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
 
 import "../Errors.sol";
 
-// TODO: add extensive documentation for cellar creators
-// - list functions that still need to be implemented.
-
-abstract contract Cellar is ERC4626, Ownable, Multicall {
+contract Cellar is ERC4626, Ownable, Multicall {
+    using AddressArray for address[];
     using SafeTransferLib for ERC20;
     using Math for uint256;
+
+    // ========================================= MULTI-POSITION CONFIG =========================================
+
+    /**
+     * @notice Emitted when a position is added.
+     * @param position address of position that was added
+     * @param index index that position was added at
+     */
+    event PositionAdded(address indexed position, uint256 index);
+
+    /**
+     * @notice Emitted when a position is removed.
+     * @param position address of position that was removed
+     * @param index index that position was removed from
+     */
+    event PositionRemoved(address indexed position, uint256 index);
+
+    /**
+     * @notice Emitted when a position is replaced.
+     * @param oldPosition address of position at index before being replaced
+     * @param newPosition address of position at index after being replaced
+     * @param index index of position replaced
+     */
+    event PositionReplaced(address indexed oldPosition, address indexed newPosition, uint256 index);
+
+    /**
+     * @notice Emitted when the positions at two indexes are swapped.
+     * @param newPosition1 address of position (previously at index2) that replaced index1.
+     * @param newPosition2 address of position (previously at index1) that replaced index2.
+     * @param index1 index of first position involved in the swap
+     * @param index2 index of second position involved in the swap.
+     */
+    event PositionSwapped(address indexed newPosition1, address indexed newPosition2, uint256 index1, uint256 index2);
+
+    enum PositionType {
+        ERC20,
+        ERC4626
+    }
+
+    struct PositionData {
+        PositionType positionType;
+        bool isLossless;
+        uint256 balance;
+        address[] pathToAsset; // Left empty if position either is (if ERC20) or uses (if ERC4626) same asset as cellar.
+    }
+
+    address[] public positions;
+
+    mapping(address => PositionData) public getPositionData;
+
+    function getPositions() external view returns (address[] memory) {
+        return positions;
+    }
+
+    function isPositionUsed(address position) public view returns (bool) {
+        return positions.contains(position);
+    }
+
+    function isPositionUsingSameAsset(address position) public view returns (bool) {
+        return getPositionData[position].pathToAsset.length == 0;
+    }
+
+    function addPosition(uint256 index, address position) public onlyOwner whenNotShutdown {
+        if (!isTrusted[position]) revert USR_UntrustedPosition(position);
+
+        // Add new position at a specified index.
+        positions.add(index, position);
+
+        emit PositionAdded(position, index);
+    }
+
+    /**
+     * @dev If you know you are going to add a position to the end of the array, this is more
+     *      efficient then `addPosition`.
+     */
+    function pushPosition(address position) public onlyOwner whenNotShutdown {
+        if (!isTrusted[position]) revert USR_UntrustedPosition(position);
+
+        // Check if position is already being used.
+        if (isPositionUsed(position)) revert USR_PositionAlreadyUsed(position);
+
+        // Add new position to the end of the positions.
+        positions.push(position);
+
+        emit PositionAdded(position, positions.length - 1);
+    }
+
+    function removePosition(uint256 index) public onlyOwner {
+        // Get position being removed.
+        address position = positions[index];
+
+        // Remove position at the given index.
+        positions.remove(index);
+
+        // Pull any assets that were in the removed position to the holding pool.
+        _emptyPosition(position);
+
+        emit PositionRemoved(position, index);
+    }
+
+    /**
+     * @dev If you know you are going to remove a position from the end of the array, this is more
+     *      efficient then `removePosition`.
+     */
+    function popPosition() public onlyOwner {
+        // Get the index of the last position and last position itself.
+        uint256 index = positions.length - 1;
+        address position = positions[index];
+
+        // Remove last position.
+        positions.pop();
+
+        // Pull any assets that were in the removed position to the holding pool.
+        _emptyPosition(position);
+
+        emit PositionRemoved(position, index);
+    }
+
+    function replacePosition(address newPosition, uint256 index) public onlyOwner whenNotShutdown {
+        // Store the old position before its replaced.
+        address oldPosition = positions[index];
+
+        // Replace old position with new position.
+        positions[index] = newPosition;
+
+        // Pull any assets that were in the old position to the holding pool.
+        _emptyPosition(oldPosition);
+
+        emit PositionReplaced(oldPosition, newPosition, index);
+    }
+
+    function swapPositions(uint256 index1, uint256 index2) public onlyOwner {
+        // Get the new positions that will be at each index.
+        address newPosition1 = positions[index2];
+        address newPosition2 = positions[index1];
+
+        // Swap positions.
+        (positions[index1], positions[index2]) = (newPosition1, newPosition2);
+
+        emit PositionSwapped(newPosition1, newPosition2, index1, index2);
+    }
+
+    // ============================================ TRUST CONFIG ============================================
+
+    /**
+     * @notice Emitted when trust for a position is changed.
+     * @param position address of position that trust was changed for
+     * @param isTrusted whether the position is trusted
+     */
+    event TrustChanged(address indexed position, bool isTrusted);
+
+    mapping(address => bool) public isTrusted;
+
+    function trustPosition(
+        address position,
+        PositionType positionType,
+        bool isLossless
+    ) public onlyOwner {
+        // Trust position.
+        isTrusted[position] = true;
+
+        // Set position type and lossless flag.
+        PositionData storage positionData = getPositionData[position];
+        positionData.positionType = positionType;
+        positionData.isLossless = isLossless;
+
+        // Set max approval to deposit into position if it is ERC4626.
+        if (positionType == PositionType.ERC4626) ERC4626(position).asset().safeApprove(position, type(uint256).max);
+
+        emit TrustChanged(position, true);
+    }
+
+    function distrustPosition(address position) public onlyOwner {
+        // Distrust position.
+        isTrusted[position] = false;
+
+        // Remove position from the list of positions if it is present.
+        positions.remove(position);
+
+        // Pull any assets that were in the removed position to the holding pool.
+        _emptyPosition(position);
+
+        emit TrustChanged(position, false);
+    }
+
+    // ============================================ ACCOUNTING STATE ============================================
+
+    uint256 public totalLosslessBalance;
+
+    // ======================================== ACCRUAL CONFIG ========================================
+
+    /**
+     * @notice Emitted when accrual period is changed.
+     * @param oldPeriod time the period was changed from
+     * @param newPeriod time the period was changed to
+     */
+    event AccrualPeriodChanged(uint32 oldPeriod, uint32 newPeriod);
+
+    /**
+     * @notice Period of time over which yield since the last accrual is linearly distributed to the cellar.
+     * @dev Net gains are distributed gradually over a period to prevent frontrunning and sandwich attacks.
+     *      Net losses are realized immediately otherwise users could time exits to sidestep losses.
+     */
+    uint32 public accrualPeriod = 7 days;
+
+    /**
+     * @notice Timestamp of when the last accrual occurred.
+     */
+    uint64 public lastAccrual;
+
+    /**
+     * @notice The amount of yield to be distributed to the cellar from the last accrual.
+     */
+    uint160 public maxLocked;
+
+    /**
+     * @notice Set the accrual period over which yield is distributed.
+     * @param newAccrualPeriod period of time in seconds of the new accrual period
+     */
+    function setAccrualPeriod(uint32 newAccrualPeriod) external onlyOwner {
+        // Ensure that the change is not disrupting a currently ongoing distribution of accrued yield.
+        if (totalLocked() > 0) revert STATE_AccrualOngoing();
+
+        emit AccrualPeriodChanged(accrualPeriod, newAccrualPeriod);
+
+        accrualPeriod = newAccrualPeriod;
+    }
+
+    // ============================================ HOLDINGS CONFIG ============================================
+
+    /**
+     * @dev Should be set high enough that the holding pool can cover the majority of weekly
+     *      withdraw volume without needing to pull from positions. See `beforeWithdraw` for
+     *      more information as to why.
+     */
+    uint256 public targetHoldingsPercent;
+
+    function setTargetHoldings(uint256 targetPercent) external onlyOwner {
+        targetHoldingsPercent = targetPercent;
+    }
 
     // ========================================= FEES CONFIG =========================================
 
@@ -165,7 +405,7 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @dev In the case where
      */
-    function initiateShutdown() public virtual whenNotShutdown onlyOwner {
+    function initiateShutdown() public whenNotShutdown onlyOwner {
         isShutdown = true;
 
         emit ShutdownChanged(true);
@@ -174,7 +414,7 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @notice Restart the cellar.
      */
-    function liftShutdown() public virtual onlyOwner {
+    function liftShutdown() public onlyOwner {
         isShutdown = false;
 
         emit ShutdownChanged(false);
@@ -182,11 +422,9 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
 
     // =========================================== CONSTRUCTOR ===========================================
 
-    // TODO: have cellar read gravity address from registry
-    /**
-     * @notice Cosmos Gravity Bridge contract. Used to transfer fees to `feeDistributor` on the Sommelier chain.
-     */
-    IGravity public constant gravityBridge = IGravity(0x69592e6f9d21989a043646fE8225da2600e5A0f7);
+    // TODO: since registry address should never change, consider hardcoding the address once
+    //       registry is finalized and making this a constant
+    Registry public immutable registry;
 
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
@@ -198,12 +436,15 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
      * @param _name symbol of this cellar's share token
      */
     constructor(
+        Registry _registry,
         ERC20 _asset,
         string memory _name,
         string memory _symbol
     ) ERC4626(_asset, _name, _symbol, 18) Ownable() {
+        registry = _registry;
+
         // Transfer ownership to the Gravity Bridge.
-        transferOwnership(address(gravityBridge));
+        transferOwnership(_registry.gravityBridge());
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -212,18 +453,52 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
         uint256 assets,
         uint256,
         address receiver
-    ) internal virtual override whenNotShutdown {
+    ) internal view override whenNotShutdown {
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
     }
 
     // ========================================= ACCOUNTING LOGIC =========================================
 
+    function denominateInAsset(address token, uint256 amount) public view returns (uint256 assets) {}
+
+    /**
+     * @notice The total amount of assets in the cellar.
+     * @dev Excludes locked yield that hasn't been distributed.
+     */
+    function totalAssets() public view override returns (uint256 assets) {
+        for (uint256 i; i < positions.length; i++) {
+            address position = positions[i];
+
+            if (getPositionData[position].isLossless) assets += ERC4626(position).maxWithdraw(address(this));
+        }
+
+        assets += totalLosslessBalance + totalHoldings() - totalLocked();
+    }
+
     /**
      * @notice The total amount of assets in holding position.
      */
-    function totalHoldings() public view virtual returns (uint256) {
+    function totalHoldings() public view returns (uint256) {
         return asset.balanceOf(address(this));
+    }
+
+    /**
+     * @notice The total amount of locked yield still being distributed.
+     */
+    function totalLocked() public view returns (uint256) {
+        // Get the last accrual and accrual period.
+        uint256 previousAccrual = lastAccrual;
+        uint256 accrualInterval = accrualPeriod;
+
+        // If the accrual period has passed, there is no locked yield.
+        if (block.timestamp >= previousAccrual + accrualInterval) return 0;
+
+        // Get the maximum amount we could return.
+        uint256 maxLockedYield = maxLocked;
+
+        // Get how much yield remains locked.
+        return maxLockedYield - (maxLockedYield * (block.timestamp - previousAccrual)) / accrualInterval;
     }
 
     // =========================================== ACCRUAL LOGIC ===========================================
@@ -238,7 +513,72 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @notice Accrue platform fees and performance fees. May also accrue yield.
      */
-    function accrue() public virtual;
+    function accrue() public {
+        uint256 totalLockedYield = totalLocked();
+
+        // Without this check, malicious actors could do a slowdown attack on the distribution of
+        // yield by continuously resetting the accrual period.
+        if (msg.sender != owner() && totalLockedYield > 0) revert STATE_AccrualOngoing();
+
+        uint256 totalBalanceLastAccrual = totalLosslessBalance;
+        uint256 totalBalanceThisAccrual;
+
+        uint256 newTotalLosslessBalance;
+
+        for (uint256 i; i < positions.length; i++) {
+            address position = positions[i];
+            PositionData storage positionData = getPositionData[position];
+
+            uint256 balanceThisAccrual = positionData.positionType == PositionType.ERC4626
+                ? ERC4626(position).maxWithdraw(address(this))
+                : ERC20(position).balanceOf(address(this));
+
+            // Check whether position is lossless.
+            if (positionData.isLossless) {
+                // Update total lossless balance. No need to add to last accrual balance
+                // because since it is already accounted for in `totalLosslessBalance`.
+                newTotalLosslessBalance += balanceThisAccrual;
+            } else {
+                // Add to balance for last accrual.
+                totalBalanceLastAccrual += positionData.balance;
+            }
+
+            // Add to balance for this accrual.
+            totalBalanceThisAccrual += balanceThisAccrual;
+
+            // Store position's balance this accrual.
+            positionData.balance = balanceThisAccrual;
+        }
+
+        // Compute and store current exchange rate between assets and shares for gas efficiency.
+        uint256 exchangeRate = convertToShares(1e18);
+
+        // Calculate platform fees accrued.
+        uint256 elapsedTime = block.timestamp - lastAccrual;
+        uint256 platformFeeInAssets = (totalBalanceThisAccrual * elapsedTime * platformFee) / 1e18 / 365 days;
+        uint256 platformFees = platformFeeInAssets.mulWadDown(exchangeRate); // Convert to shares.
+
+        // Calculate performance fees accrued.
+        uint256 yield = totalBalanceThisAccrual.subMinZero(totalBalanceLastAccrual);
+        uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
+        uint256 performanceFees = performanceFeeInAssets.mulWadDown(exchangeRate); // Convert to shares.
+
+        // Mint accrued fees as shares.
+        _mint(address(this), platformFees + performanceFees);
+
+        // Do not count assets set aside for fees as yield. Allows fees to be immediately withdrawable.
+        maxLocked = uint160(totalLockedYield + yield.subMinZero(platformFeeInAssets + performanceFeeInAssets));
+
+        lastAccrual = uint32(block.timestamp);
+
+        totalLosslessBalance = newTotalLosslessBalance;
+
+        emit Accrual(platformFees, performanceFees);
+    }
+
+    // =========================================== POSITION LOGIC ===========================================
+
+    // TODO: add enterPosition, exitPosition, and rebalance functions
 
     // ============================================ LIMITS LOGIC ============================================
 
@@ -247,7 +587,7 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
      * @param receiver address of account that would receive the shares
      * @return assets maximum amount of assets that can be deposited
      */
-    function maxDeposit(address receiver) public view virtual override returns (uint256 assets) {
+    function maxDeposit(address receiver) public view override returns (uint256 assets) {
         if (isShutdown) return 0;
 
         uint256 asssetDepositLimit = depositLimit;
@@ -267,7 +607,7 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
      * @param receiver address of account that would receive the shares
      * @return shares maximum amount of shares that can be minted
      */
-    function maxMint(address receiver) public view virtual override returns (uint256 shares) {
+    function maxMint(address receiver) public view override returns (uint256 shares) {
         if (isShutdown) return 0;
 
         uint256 asssetDepositLimit = depositLimit;
@@ -295,7 +635,7 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Transfer accrued fees to the Sommelier chain to distribute.
      * @dev Fees are accrued as shares and redeemed upon transfer.
      */
-    function sendFees() public virtual onlyOwner {
+    function sendFees() public onlyOwner {
         // Redeem our fee shares for assets to send to the fee distributor module.
         uint256 totalFees = balanceOf[address(this)];
         uint256 assets = previewRedeem(totalFees);
@@ -306,6 +646,7 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
         _burn(address(this), totalFees);
 
         // Transfer assets to a fee distributor on the Sommelier chain.
+        IGravity gravityBridge = IGravity(registry.gravityBridge());
         asset.safeApprove(address(gravityBridge), assets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, assets);
 
@@ -326,7 +667,7 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
         ERC20 token,
         address to,
         uint256 amount
-    ) public virtual onlyOwner {
+    ) public onlyOwner {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == asset || token == this) revert USR_ProtectedAsset(address(token));
 
@@ -334,5 +675,42 @@ abstract contract Cellar is ERC4626, Ownable, Multicall {
         token.safeTransfer(to, amount);
 
         emit Sweep(address(token), to, amount);
+    }
+
+    // ======================================== HELPER FUNCTIONS ========================================
+
+    function _emptyPosition(address position) internal {
+        PositionData storage positionData = getPositionData[position];
+
+        uint256 balanceLastAccrual = positionData.balance;
+        uint256 balanceThisAccrual;
+
+        // uint256 totalPositionBalance = positionData.positionType == PositionType.ERC4626
+        //     ? ERC4626(position).redeem(ERC4626(position).balanceOf(address(this)), address(this), address(this))
+        //     : ERC20(position).balanceOf(address(this));
+
+        // if (!isPositionUsingSameAsset(position))
+        //     registry.getSwapRouter().swapExactAmount(
+        //         totalPositionBalance,
+        //         // amountOutMin,
+        //         positionData.pathToAsset
+        //     );
+
+        positionData.balance = 0;
+
+        if (positionData.isLossless) totalLosslessBalance -= balanceLastAccrual;
+
+        if (balanceThisAccrual == 0) return;
+
+        // Calculate performance fees accrued.
+        uint256 yield = balanceThisAccrual.subMinZero(balanceLastAccrual);
+        uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
+        uint256 performanceFees = convertToShares(performanceFeeInAssets); // Convert to shares.
+
+        // Mint accrued fees as shares.
+        _mint(address(this), performanceFees);
+
+        // Do not count assets set aside for fees as yield. Allows fees to be immediately withdrawable.
+        maxLocked = uint160(totalLocked() + yield.subMinZero(performanceFeeInAssets));
     }
 }
