@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
-import { ERC20 } from "@openzeppelin/token/ERC20/ERC20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { MockLendingPool } from "./MockLendingPool.sol";
 import { Math } from "src/utils/Math.sol";
 

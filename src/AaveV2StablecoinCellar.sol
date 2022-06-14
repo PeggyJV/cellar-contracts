@@ -3,7 +3,7 @@ pragma solidity 0.8.13;
 
 import { ERC4626, ERC20, SafeTransferLib } from "./base/ERC4626.sol";
 import { Multicall } from "./base/Multicall.sol";
-import { Ownable } from "@openzeppelin/access/Ownable.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
 import { IAaveIncentivesController } from "./interfaces/IAaveIncentivesController.sol";
 import { IStakedTokenV2 } from "./interfaces/IStakedTokenV2.sol";

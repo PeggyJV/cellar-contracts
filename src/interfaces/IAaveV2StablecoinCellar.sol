@@ -76,7 +76,7 @@ interface IAaveV2StablecoinCellar {
      * @param position address of the position that trust was changed for
      * @param trusted whether the position was trusted or untrusted
      */
-    event TrustChanged(address position, bool trusted);
+    event TrustChanged(address indexed position, bool trusted);
 
     function isTrusted(ERC20) external view returns (bool);
 

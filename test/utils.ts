@@ -173,7 +173,7 @@ export const setupAdvancedScenario1 = (ctx: TestContext): ScenarioInfo => {
 
   const actions: Action[] = [
     {
-      timestamp: programStart + 5,
+      timestamp: programStart,
       actions: [
         {
           signer: user1,
@@ -267,7 +267,7 @@ export const setupAdvancedScenario2 = (ctx: TestContext): ScenarioInfo => {
 
   const actions: Action[] = [
     {
-      timestamp: programStart + 5,
+      timestamp: programStart,
       actions: [
         {
           signer: user1,
@@ -365,7 +365,7 @@ export const setupAdvancedScenario3 = (ctx: TestContext): ScenarioInfo => {
 
   const actions: Action[] = [
     {
-      timestamp: programStart + 5,
+      timestamp: programStart,
       actions: [
         {
           signer: user1,
@@ -486,7 +486,7 @@ export const setupAdvancedScenario4 = (ctx: TestContext): ScenarioInfo => {
 
   const actions: Action[] = [
     {
-      timestamp: programStart + 5,
+      timestamp: programStart,
       actions: [
         {
           signer: user1,
@@ -637,7 +637,7 @@ export const setupAdvancedScenario5 = (ctx: TestContext): ScenarioInfo => {
 
   const actions: Action[] = [
     {
-      timestamp: programStart + 5,
+      timestamp: programStart,
       actions: [
         {
           signer: user1,
@@ -805,26 +805,12 @@ export const runScenario = async (
   const { staking, signers } = ctx;
   const claims: { [user: string]: BigNumberish } = {};
 
-  let haveNotified = false;
-
   await staking.setRewardsDuration(oneMonthSec);
-
-  const doNotify = async (rewards: BigNumberish) => {
-    if (haveNotified) return;
-
-    await setNextBlockTimestamp(programStart);
-    await staking.notifyRewardAmount(rewards);
-    haveNotified = true;
-  };
+  await staking.notifyRewardAmount(TOTAL_REWARDS);
 
   // Run through scenario from beginning of program until end
   for (const batch of actions) {
     const { timestamp, actions: batchActions } = batch;
-
-    // Make deposit
-    if (timestamp > programStart) {
-      await doNotify(TOTAL_REWARDS);
-    }
 
     await setNextBlockTimestamp(timestamp);
 
