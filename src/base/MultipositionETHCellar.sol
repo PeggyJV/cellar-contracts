@@ -58,21 +58,19 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
     address[] public positions;
 
+    mapping(address => bool) public isPositionUsed;
+
     mapping(address => PositionData) public getPositionData;
 
     function getPositions() external view returns (address[] memory) {
         return positions;
     }
 
-    function isPositionUsed(address position) public view returns (bool) {
-        return positions.contains(position);
-    }
-
     function addPosition(uint256 index, address position) external onlyOwner whenNotShutdown {
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Check if position is already being used.
-        if (isPositionUsed(position)) revert USR_PositionAlreadyUsed(position);
+        if (isPositionUsed[position]) revert USR_PositionAlreadyUsed(position);
 
         // Check if position has same underlying as cellar.
         ERC20 cellarAsset = asset;
@@ -81,6 +79,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
         // Add new position at a specified index.
         positions.add(index, position);
+        isPositionUsed[position] = true;
 
         emit PositionAdded(position, index);
     }
@@ -93,7 +92,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Check if position is already being used.
-        if (isPositionUsed(position)) revert USR_PositionAlreadyUsed(position);
+        if (isPositionUsed[position]) revert USR_PositionAlreadyUsed(position);
 
         // Check if position has same underlying as cellar.
         ERC20 cellarAsset = asset;
@@ -102,6 +101,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
         // Add new position to the end of the positions.
         positions.push(position);
+        isPositionUsed[position] = true;
 
         emit PositionAdded(position, positions.length - 1);
     }
@@ -112,6 +112,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
         // Remove position at the given index.
         positions.remove(index);
+        isPositionUsed[position] = false;
 
         // Pull any assets that were in the removed position to the holding pool.
         _emptyPosition(position);
@@ -130,6 +131,7 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
         // Remove last position.
         positions.pop();
+        isPositionUsed[position] = false;
 
         // Pull any assets that were in the removed position to the holding pool.
         _emptyPosition(position);
@@ -143,6 +145,8 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
 
         // Replace old position with new position.
         positions[index] = newPosition;
+        isPositionUsed[oldPosition] = false;
+        isPositionUsed[newPosition] = true;
 
         // Pull any assets that were in the old position to the holding pool.
         _emptyPosition(oldPosition);
@@ -451,7 +455,9 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
             // Only allow positions with same underlying as cellar.
             if (positionAsset != _WETH9) revert USR_IncompatiblePosition(address(positionAsset), address(_WETH9));
 
-            isTrusted[address(position)] = true;
+            // Trust position and declare it is being used.
+            isTrusted[position] = true;
+            isPositionUsed[position] = true;
 
             // Set max approval for deposits into position.
             _WETH9.safeApprove(position, type(uint256).max);
@@ -651,6 +657,9 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
      * @param assets amount of assets to exit from the position
      */
     function enterPosition(address position, uint256 assets) public onlyOwner {
+        // Check that position is a valid position.
+        if (!isPositionUsed[position]) revert USR_InvalidPosition(position);
+
         PositionData storage positionData = getPositionData[address(position)];
 
         if (positionData.isLossless) totalLosslessBalance += assets;
@@ -704,12 +713,18 @@ contract MultipositionETHCellar is ERC4626, Ownable, Multicall {
         address toPosition,
         uint256 assets
     ) external onlyOwner {
+        // Check that position being rebalanced to is a valid position.
+        if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(toPosition);
+
+        // Get data for both positions.
         PositionData storage fromPositionData = getPositionData[fromPosition];
         PositionData storage toPositionData = getPositionData[toPosition];
 
+        // Update tracked balance of both positions.
         fromPositionData.balance -= assets;
         toPositionData.balance += assets;
 
+        // Update total lossless balance.
         uint256 newTotalLosslessBalance = totalLosslessBalance;
 
         if (fromPositionData.isLossless) newTotalLosslessBalance -= assets;
