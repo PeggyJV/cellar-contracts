@@ -9,6 +9,7 @@ import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/IUniswapV2
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { Test } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -23,21 +24,32 @@ contract CellarRouterTest is Test {
     MockERC4626 private cellar;
     CellarRouter private router;
 
+    MockERC4626 private forkedCellar;
+    CellarRouter private forkedRouter;
+
     bytes32 private constant PERMIT_TYPEHASH =
         keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     uint256 private constant privateKey = 0xBEEF;
     address private owner = vm.addr(privateKey);
 
+    //mainnet contracts
+    address constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    IERC20 weth = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IERC20 dai = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+
     function setUp() public {
         swapRouter = new MockSwapRouter();
 
         router = new CellarRouter(UniswapV3Router(address(swapRouter)), UniswapV2Router(address(swapRouter)));
+        forkedRouter = new CellarRouter(UniswapV3Router(uniV3Router), UniswapV2Router(uniV2Router));
 
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
 
-        // Set up a cellar:
+        // Set up two cellars:
         cellar = new MockERC4626(ERC20(address(ABC)), "ABC Cellar", "abcCLR", 18);
+        forkedCellar = new MockERC4626(ERC20(address(weth)), "wETH Cellar", "wethCLR", 18); //for mainnet fork test
     }
 
     // ======================================= DEPOSIT TESTS =======================================
@@ -94,7 +106,7 @@ contract CellarRouterTest is Test {
         path[1] = address(ABC);
 
         // Specify the pool fee tiers to use for each swap (none).
-        uint256[] memory poolFees;
+        uint24[] memory poolFees;
 
         // Test deposit and swap.
         vm.startPrank(owner);
@@ -141,7 +153,7 @@ contract CellarRouterTest is Test {
         path[1] = address(ABC);
 
         // Specify the pool fee tiers to use for each swap (none).
-        uint256[] memory poolFees;
+        uint24[] memory poolFees;
 
         // Test deposit and swap with permit.
         vm.startPrank(owner);
@@ -175,6 +187,95 @@ contract CellarRouterTest is Test {
         assertEq(ABC.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
+    function testDepositAndSwapV2IntoCellarForked(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint112).max);
+
+        // Specify the swap path.
+        address[] memory path = new address[](2);
+        path[0] = address(dai);
+        path[1] = address(weth);
+
+        // Specify the pool fee tiers to use for each swap (none).
+        uint24[] memory poolFees;
+
+        // Test deposit and swap.
+        vm.startPrank(owner);
+        deal(address(dai), owner, assets, true);
+        dai.approve(address(forkedRouter), assets);
+        uint256 shares = forkedRouter.depositAndSwapIntoCellar(
+            ERC4626(address(forkedCellar)),
+            path,
+            poolFees,
+            assets,
+            0,
+            owner
+        );
+        vm.stopPrank();
+
+        // Assets received by the cellar will be equal to weth currently in forked cellar bc no other deposits have been made
+        uint256 assetsReceived = weth.balanceOf(address(forkedCellar));
+
+        // Run test.
+        assertEq(shares, assetsReceived, "Should have 1:1 exchange rate for initial deposit.");
+        assertEq(forkedCellar.previewWithdraw(assetsReceived), shares, "Withdrawing assets should burn shares given.");
+        assertEq(forkedCellar.previewDeposit(assetsReceived), shares, "Depositing assets should mint shares given.");
+        assertEq(forkedCellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
+        assertEq(forkedCellar.totalAssets(), assetsReceived, "Should have updated total assets with assets deposited.");
+        assertEq(forkedCellar.balanceOf(owner), shares, "Should have updated user's share balance.");
+        assertEq(
+            forkedCellar.convertToAssets(forkedCellar.balanceOf(owner)),
+            assetsReceived,
+            "Should return all user's assets."
+        );
+        assertEq(dai.balanceOf(owner), 0, "Should have deposited assets from user.");
+    }
+
+    function testDepositAndSwapV3IntoCellarForked(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint112).max);
+
+        // Specify the swap path.
+        address[] memory path = new address[](2);
+        path[0] = address(dai);
+        path[1] = address(weth);
+
+        // Specify the pool fee tiers to use for each swap, 0.3% for DAI <-> wETH.
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000;
+
+        // Test deposit and swap.
+        vm.startPrank(owner);
+        deal(address(dai), owner, assets, true);
+        dai.approve(address(forkedRouter), assets);
+        uint256 shares = forkedRouter.depositAndSwapIntoCellar(
+            ERC4626(address(forkedCellar)),
+            path,
+            poolFees,
+            assets,
+            0,
+            owner
+        );
+        vm.stopPrank();
+
+        // Assets received by the cellar will be equal to weth currently in forked cellar bc no other deposits have been made
+        uint256 assetsReceived = weth.balanceOf(address(forkedCellar));
+
+        // Run test.
+        assertEq(shares, assetsReceived, "Should have 1:1 exchange rate for initial deposit.");
+        assertEq(forkedCellar.previewWithdraw(assetsReceived), shares, "Withdrawing assets should burn shares given.");
+        assertEq(forkedCellar.previewDeposit(assetsReceived), shares, "Depositing assets should mint shares given.");
+        assertEq(forkedCellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
+        assertEq(forkedCellar.totalAssets(), assetsReceived, "Should have updated total assets with assets deposited.");
+        assertEq(forkedCellar.balanceOf(owner), shares, "Should have updated user's share balance.");
+        assertEq(
+            forkedCellar.convertToAssets(forkedCellar.balanceOf(owner)),
+            assetsReceived,
+            "Should return all user's assets."
+        );
+        assertEq(dai.balanceOf(owner), 0, "Should have deposited assets from user.");
+    }
+
+    // ======================================= WITHDRAW TESTS =======================================
+
     function testWithdrawAndSwapFromCellar(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
@@ -187,7 +288,7 @@ contract CellarRouterTest is Test {
         path[1] = address(ABC);
 
         // Specify the pool fee tiers to use for each swap (none).
-        uint256[] memory poolFees;
+        uint24[] memory poolFees;
 
         // Deposit and swap
         vm.startPrank(owner);
@@ -224,8 +325,6 @@ contract CellarRouterTest is Test {
         assertEq(XYZ.balanceOf(owner), assetsReceivedAfterWithdraw, "Should have withdrawn assets to the user.");
     }
 
-    // ======================================= WITHDRAW TESTS =======================================
-
     function testWithdrawAndSwapFromCellarWithPermit(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
@@ -238,7 +337,7 @@ contract CellarRouterTest is Test {
         path[1] = address(ABC);
 
         // Specify the pool fee tiers to use for each swap (none).
-        uint256[] memory poolFees;
+        uint24[] memory poolFees;
 
         // Deposit and swap
         vm.startPrank(owner);
