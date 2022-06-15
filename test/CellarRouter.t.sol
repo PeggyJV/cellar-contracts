@@ -9,9 +9,8 @@ import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/IUniswapV2
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { Test } from "@forge-std/Test.sol";
+import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract CellarRouterTest is Test {
@@ -32,11 +31,11 @@ contract CellarRouterTest is Test {
     uint256 private constant privateKey = 0xBEEF;
     address private owner = vm.addr(privateKey);
 
-    //mainnet contracts
-    address constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-    IERC20 weth = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 dai = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    // Mainnet contracts:
+    address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 
     function setUp() public {
         swapRouter = new MockSwapRouter();
@@ -49,7 +48,7 @@ contract CellarRouterTest is Test {
 
         // Set up two cellars:
         cellar = new MockERC4626(ERC20(address(ABC)), "ABC Cellar", "abcCLR", 18);
-        forkedCellar = new MockERC4626(ERC20(address(weth)), "wETH Cellar", "wethCLR", 18); //for mainnet fork test
+        forkedCellar = new MockERC4626(ERC20(address(WETH)), "WETH Cellar", "WETHCLR", 18); // For mainnet fork test.
     }
 
     // ======================================= DEPOSIT TESTS =======================================
@@ -187,21 +186,24 @@ contract CellarRouterTest is Test {
         assertEq(ABC.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapV2IntoCellarForked(uint256 assets) external {
+    function testDepositAndSwapIntoCellarUsingUniswapV2OnMainnet(uint256 assets) external {
+        // Ignore if not on mainnet.
+        if (block.chainid != 1) return;
+
         assets = bound(assets, 1e18, type(uint112).max);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
-        path[0] = address(dai);
-        path[1] = address(weth);
+        path[0] = address(DAI);
+        path[1] = address(WETH);
 
         // Specify the pool fee tiers to use for each swap (none).
         uint24[] memory poolFees;
 
         // Test deposit and swap.
         vm.startPrank(owner);
-        deal(address(dai), owner, assets, true);
-        dai.approve(address(forkedRouter), assets);
+        deal(address(DAI), owner, assets, true);
+        DAI.approve(address(forkedRouter), assets);
         uint256 shares = forkedRouter.depositAndSwapIntoCellar(
             ERC4626(address(forkedCellar)),
             path,
@@ -212,8 +214,9 @@ contract CellarRouterTest is Test {
         );
         vm.stopPrank();
 
-        // Assets received by the cellar will be equal to weth currently in forked cellar bc no other deposits have been made
-        uint256 assetsReceived = weth.balanceOf(address(forkedCellar));
+        // Assets received by the cellar will be equal to WETH currently in forked cellar because no
+        // other deposits have been made.
+        uint256 assetsReceived = WETH.balanceOf(address(forkedCellar));
 
         // Run test.
         assertEq(shares, assetsReceived, "Should have 1:1 exchange rate for initial deposit.");
@@ -227,25 +230,28 @@ contract CellarRouterTest is Test {
             assetsReceived,
             "Should return all user's assets."
         );
-        assertEq(dai.balanceOf(owner), 0, "Should have deposited assets from user.");
+        assertEq(DAI.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapV3IntoCellarForked(uint256 assets) external {
+    function testDepositAndSwapIntoCellarUsingUniswapV3OnMainnet(uint256 assets) external {
+        // Ignore if not on mainnet.
+        if (block.chainid != 1) return;
+
         assets = bound(assets, 1e18, type(uint112).max);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
-        path[0] = address(dai);
-        path[1] = address(weth);
+        path[0] = address(DAI);
+        path[1] = address(WETH);
 
-        // Specify the pool fee tiers to use for each swap, 0.3% for DAI <-> wETH.
+        // Specify the pool fee tiers to use for each swap, 0.3% for DAI <-> WETH.
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = 3000;
 
         // Test deposit and swap.
         vm.startPrank(owner);
-        deal(address(dai), owner, assets, true);
-        dai.approve(address(forkedRouter), assets);
+        deal(address(DAI), owner, assets, true);
+        DAI.approve(address(forkedRouter), assets);
         uint256 shares = forkedRouter.depositAndSwapIntoCellar(
             ERC4626(address(forkedCellar)),
             path,
@@ -256,8 +262,9 @@ contract CellarRouterTest is Test {
         );
         vm.stopPrank();
 
-        // Assets received by the cellar will be equal to weth currently in forked cellar bc no other deposits have been made
-        uint256 assetsReceived = weth.balanceOf(address(forkedCellar));
+        // Assets received by the cellar will be equal to WETH currently in forked cellar because no
+        // other deposits have been made.
+        uint256 assetsReceived = WETH.balanceOf(address(forkedCellar));
 
         // Run test.
         assertEq(shares, assetsReceived, "Should have 1:1 exchange rate for initial deposit.");
@@ -271,7 +278,7 @@ contract CellarRouterTest is Test {
             assetsReceived,
             "Should return all user's assets."
         );
-        assertEq(dai.balanceOf(owner), 0, "Should have deposited assets from user.");
+        assertEq(DAI.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
     // ======================================= WITHDRAW TESTS =======================================
