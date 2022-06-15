@@ -30,10 +30,10 @@ forge test
 npx hardhat test
 ```
 
-Run tests on forked chains with Foundry
+Run tests on forked chains with Foundry:
 
 ```bash
-forge clean && forge test --optimize --optimizer-runs 200 -vv --fork-url <YOUR ALCHEMY HTTPS>
+forge test --fork-url ALCHEMY_API_KEY
 ```
 
 Run tests for both Hardhat and Foundry:
