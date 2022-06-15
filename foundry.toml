@@ -3,7 +3,3 @@
 # This overrides the `auto_detect_solc` value
 solc_version = '0.8.13'
 auto_detect_solc = false
-
-[ci]
-# Perform extreme fuzzing on CI runs
-fuzz_runs = 100_000
