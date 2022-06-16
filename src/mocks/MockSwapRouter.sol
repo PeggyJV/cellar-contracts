@@ -3,7 +3,7 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Math } from "src/utils/Math.sol";
-import { IUniswapV3Router } from "../interfaces/IUniswapV3Router.sol";
+import { ISwapRouter } from "../interfaces/ISwapRouter.sol";
 
 library BytesLib {
     function slice(
@@ -202,7 +202,7 @@ contract MockSwapRouter {
         return amountOut;
     }
 
-    function exactInput(IUniswapV3Router.ExactInputParams memory params) external returns (uint256) {
+    function exactInput(ISwapRouter.ExactInputParams memory params) external returns (uint256) {
         (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
 
         while (params.path.hasMultiplePools()) {
