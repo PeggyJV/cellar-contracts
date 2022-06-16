@@ -22,7 +22,7 @@ interface IUniswapV3SwapCallback {
 
 /// @title Router token swapping functionality
 /// @notice Functions for swapping tokens via Uniswap V3
-interface IUniswapV3Router is IUniswapV3SwapCallback {
+interface ISwapRouter is IUniswapV3SwapCallback {
     struct ExactInputSingleParams {
         address tokenIn;
         address tokenOut;
