@@ -87,7 +87,7 @@ contract CellarRouter is ICellarRouter {
     function depositAndSwapIntoCellar(
         ERC4626 cellar,
         address[] calldata path,
-        uint256[] calldata poolFees,
+        uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin,
         address receiver
@@ -131,7 +131,7 @@ contract CellarRouter is ICellarRouter {
     function depositAndSwapIntoCellarWithPermit(
         ERC4626 cellar,
         address[] calldata path,
-        uint256[] calldata poolFees,
+        uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin,
         address receiver,
@@ -173,7 +173,7 @@ contract CellarRouter is ICellarRouter {
     function withdrawAndSwapFromCellar(
         ERC4626 cellar,
         address[] calldata path,
-        uint256[] calldata poolFees,
+        uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin,
         address receiver
@@ -214,7 +214,7 @@ contract CellarRouter is ICellarRouter {
     function withdrawAndSwapFromCellarWithPermit(
         ERC4626 cellar,
         address[] calldata path,
-        uint256[] calldata poolFees,
+        uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin,
         address receiver,
@@ -246,7 +246,7 @@ contract CellarRouter is ICellarRouter {
      */
     function _swap(
         address[] calldata path,
-        uint256[] calldata poolFees,
+        uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin
     ) internal returns (uint256 assetsOut) {

@@ -34,7 +34,7 @@ jobs:
 
       - name: Run Forge tests
         run: |
-          forge test -vvv
+          forge test -vvv --fork-url https://eth-mainnet.alchemyapi.io/v2/${{ secrets.ALCHEMY_API_KEY }}
         id: forge-test
 
   hardhat:

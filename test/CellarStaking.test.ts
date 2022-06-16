@@ -1467,9 +1467,9 @@ describe("CellarStaking", () => {
         await stakingUser.stake(ether("1"), lockDay);
 
         // Schedule initialTokenAmount / 2 new rewards. Should fail because in total we need 3 * initialTokenAmount / 2 rewards
-        await expect(
-          stakingDist.notifyRewardAmount(initialTokenAmount.div(2))
-        ).to.be.revertedWith("STATE_RewardsNotFunded");
+        await expect(stakingDist.notifyRewardAmount(initialTokenAmount.div(2))).to.be.revertedWith(
+          "STATE_RewardsNotFunded",
+        );
       });
 
       it("should update and extend existing schedule", async () => {
