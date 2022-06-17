@@ -2,7 +2,8 @@
 pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SwapRouter } from "./SwapRouter.sol";
+import { SwapRouter } from "./modules/SwapRouter.sol";
+import { IGravity } from "./interfaces/IGravity.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 // TODO: configure defaults
@@ -28,7 +29,17 @@ interface PriceRouter {
 contract Registry is Ownable {
     SwapRouter public swapRouter;
     PriceRouter public priceRouter;
-    address public gravityBridge;
+    IGravity public gravityBridge;
+
+    constructor(
+        SwapRouter _swapRouter,
+        PriceRouter _priceRouter,
+        IGravity _gravityBridge
+    ) {
+        swapRouter = _swapRouter;
+        priceRouter = _priceRouter;
+        gravityBridge = _gravityBridge;
+    }
 
     function setSwapRouter(SwapRouter newSwapRouter) external {
         swapRouter = newSwapRouter;
@@ -38,7 +49,7 @@ contract Registry is Ownable {
         priceRouter = newPriceRouter;
     }
 
-    function setGravityBridge(address newGravityBridge) external {
+    function setGravityBridge(IGravity newGravityBridge) external {
         gravityBridge = newGravityBridge;
     }
 }

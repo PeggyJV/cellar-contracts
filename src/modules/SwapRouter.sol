@@ -47,11 +47,13 @@ contract SwapRouter {
 
     // ======================================= SWAP OPERATIONS =======================================
 
-    function swap(Exchanges id, bytes memory swapData) external returns (uint256 swapOutAmount) {
+    function swapExactAssets(Exchanges id, bytes memory swapData) external returns (uint256 swapOutAmount) {
         (bool success, bytes memory result) = address(this).call(abi.encodeWithSelector(idToSelector[id], swapData));
         require(success, "Failed to perform swap");
         swapOutAmount = abi.decode(result, (uint256));
     }
+
+    function swapForExactAssets(Exchanges id, bytes memory swapData) external returns (uint256 swapInAmount) {}
 
     function swapWithUniV2(bytes memory swapData) public returns (uint256 swapOutAmount) {
         (address[] memory path, uint256 assets, uint256 assetsOutMin, address recipient) = abi.decode(

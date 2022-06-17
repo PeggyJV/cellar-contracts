@@ -386,7 +386,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         registry = _registry;
 
         // Transfer ownership to the Gravity Bridge.
-        transferOwnership(_registry.gravityBridge());
+        transferOwnership(address(_registry.gravityBridge()));
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -421,7 +421,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         _burn(owner, shares);
 
-        assetsOut = _withdrawAndSwapFromPositions(assets, exchanges, params);
+        assetsOut = _pullFromPositions(assets, exchanges, params);
 
         require(assetsOut >= minAssetsOut, "NOT_ENOUGH_ASSETS_OUT");
 
@@ -430,7 +430,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
-    function _withdrawAndSwapFromPositions(
+    function _pullFromPositions(
         uint256 assets,
         SwapRouter.Exchanges[] calldata exchanges,
         bytes[] calldata params
@@ -444,7 +444,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             if (totalPositionBalance == 0) continue;
 
             // Although it would be more efficient to store `position.asset()` and
-            // `registry.priceRouter()`, doing so would cause a stack error.
+            // `registry.priceRouter()`, this is done to avoid stack errors.
             uint256 onePositionAsset = 10**position.asset().decimals();
             uint256 positionAssetToAssetExchangeRate = registry.priceRouter().getExchangeRate(position.asset(), asset);
 
@@ -479,15 +479,18 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Excludes locked yield that hasn't been distributed.
      */
     function totalAssets() public view override returns (uint256 assets) {
-        assets = totalHoldings();
+        uint256 numOfPositions = positions.length;
+        ERC20[] memory positionAssets = new ERC20[](numOfPositions);
+        uint256[] memory balances = new uint256[](numOfPositions);
 
-        PriceRouter priceRouter = PriceRouter(registry.priceRouter());
-
-        ERC20 denominationAsset = asset;
-        for (uint256 i; i < positions.length; i++) {
+        for (uint256 i; i < numOfPositions; i++) {
             ERC4626 position = ERC4626(positions[i]);
-            assets += priceRouter.getValue(position.asset(), position.maxWithdraw(address(this)), denominationAsset);
+
+            positionAssets[i] = position.asset();
+            balances[i] = position.maxWithdraw(address(this));
         }
+
+        assets = totalHoldings() + registry.priceRouter().getValue(positionAssets, balances, asset);
     }
 
     /**
@@ -515,7 +518,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 totalBalanceLastAccrual;
 
         // Get the latest address of the price router.
-        PriceRouter priceRouter = PriceRouter(registry.priceRouter());
+        PriceRouter priceRouter = registry.priceRouter();
 
         for (uint256 i; i < positions.length; i++) {
             ERC4626 position = ERC4626(positions[i]);
@@ -578,23 +581,26 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of the position to enter holdings into
      * @param assets amount of assets to exit from the position
      */
-    function enterPosition(ERC4626 position, uint256 assets) public onlyOwner {
+    function enterPosition(
+        ERC4626 position,
+        uint256 assets,
+        SwapRouter.Exchanges exchange,
+        bytes calldata params
+    ) external onlyOwner {
         // Check that position is a valid position.
         if (!isPositionUsed[address(position)]) revert USR_InvalidPosition(address(position));
 
-        // TODO:
-        // // Swap to the holding pool asset if necessary.
-        // ERC20 positionAsset = position.asset();
-        // if (positionAsset != asset) _swap(positionAsset, assets, exchange, params);
-
-        // Get position data.
-        PositionData storage positionData = getPositionData[address(position)];
+        // Swap from the holding pool asset if necessary.
+        ERC20 denominationAsset = asset;
+        ERC20 positionAsset = position.asset();
+        if (positionAsset != denominationAsset)
+            _swapForExactAssets(positionAsset, denominationAsset, assets, exchange, params);
 
         // Update position balance.
-        positionData.balance += assets;
+        getPositionData[address(position)].balance += assets;
 
         // Deposit into position.
-        ERC4626(position).deposit(assets, address(this));
+        position.deposit(assets, address(this));
     }
 
     /**
@@ -757,7 +763,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Swap to the holding pool asset if necessary.
         ERC20 positionAsset = position.asset();
-        amountOut = positionAsset != toAsset ? _swap(positionAsset, amount, exchange, params) : amount;
+        amountOut = positionAsset != toAsset ? _swapExactAssets(positionAsset, amount, exchange, params) : amount;
     }
 
     function _subtractFromPositionBalance(PositionData storage positionData, uint256 amount) internal {
@@ -773,12 +779,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
-    function _swap(
+    function _swapExactAssets(
         ERC20 assetIn,
         uint256 amountIn,
         SwapRouter.Exchanges exchange,
         bytes calldata params
-    ) internal returns (uint256 assetsOut) {
+    ) internal returns (uint256 amountOut) {
         // Store the expected amount of the asset in that we expect to have after the swap.
         uint256 expectedAssetsInAfter = assetIn.balanceOf(address(this)) - amountIn;
 
@@ -789,11 +795,36 @@ contract Cellar is ERC4626, Ownable, Multicall {
         assetIn.safeApprove(address(swapRouter), amountIn);
 
         // Perform swap.
-        assetsOut = swapRouter.swap(exchange, params);
+        amountOut = swapRouter.swapExactAssets(exchange, params);
 
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
-        // specified a different amount of assets to swap then `assets`.
+        // specified a different amount of assets to swap then `amountIn`.
         // TODO: consider replacing with revert statement
         require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
+    }
+
+    function _swapForExactAssets(
+        ERC20 assetIn,
+        ERC20 assetOut,
+        uint256 amountOut,
+        SwapRouter.Exchanges exchange,
+        bytes calldata params
+    ) internal returns (uint256 amountIn) {
+        // Store the expected amount of the asset out that we expect to have after the swap.
+        uint256 expectedAssetsOutAfter = assetOut.balanceOf(address(this)) + amountOut;
+
+        // Get the address of the latest swap router.
+        SwapRouter swapRouter = registry.swapRouter();
+
+        // Approve swap router to swap assets.
+        assetIn.safeApprove(address(swapRouter), amountIn);
+
+        // Perform swap.
+        amountIn = swapRouter.swapForExactAssets(exchange, params);
+
+        // Check that the amount of assets received is what is expected. Will revert if the `params`
+        // specified a different amount of assets to receive then `amountOut`.
+        // TODO: consider replacing with revert statement
+        require(assetOut.balanceOf(address(this)) == expectedAssetsOutAfter, "INCORRECT_PARAMS_AMOUNT");
     }
 }
