@@ -4,8 +4,8 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC4626 } from "./base/ERC4626.sol";
-import { IUniswapV3Router as UniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
-import { IUniswapV2Router02 as UniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
+import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
+import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 
 contract CellarRouter is ICellarRouter {
@@ -15,18 +15,18 @@ contract CellarRouter is ICellarRouter {
     /**
      * @notice Uniswap V3 swap router contract. Used for swapping if pool fees are specified.
      */
-    UniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
+    IUniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
     /**
      * @notice Uniswap V2 swap router contract. Used for swapping if pool fees are not specified.
      */
-    UniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
+    IUniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
     /**
      * @param _uniswapV3Router Uniswap V3 swap router address
      * @param _uniswapV2Router Uniswap V2 swap router address
      */
-    constructor(UniswapV3Router _uniswapV3Router, UniswapV2Router _uniswapV2Router) {
+    constructor(IUniswapV3Router _uniswapV3Router, IUniswapV2Router _uniswapV2Router) {
         uniswapV3Router = _uniswapV3Router;
         uniswapV2Router = _uniswapV2Router;
     }
@@ -283,7 +283,7 @@ contract CellarRouter is ICellarRouter {
 
             // Execute the swap.
             assetsOut = uniswapV3Router.exactInput(
-                UniswapV3Router.ExactInputParams({
+                IUniswapV3Router.ExactInputParams({
                     path: encodePackedPath,
                     recipient: address(this),
                     deadline: block.timestamp + 60,

@@ -3,8 +3,8 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { IUniswapV2Router02 as UniswapV2Router } from "../interfaces/IUniswapV2Router02.sol";
-import { IUniswapV3Router as UniswapV3Router } from "../interfaces/IUniswapV3Router.sol";
+import { IUniswapV2Router02 as IUniswapV2Router } from "../interfaces/IUniswapV2Router02.sol";
+import { IUniswapV3Router } from "../interfaces/IUniswapV3Router.sol";
 
 contract SwapRouter {
     using SafeTransferLib for ERC20;
@@ -25,17 +25,17 @@ contract SwapRouter {
     /**
      * @notice Uniswap V2 swap router contract. Used for swapping if pool fees are not specified.
      */
-    UniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
+    IUniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
     /**
      * @notice Uniswap V3 swap router contract. Used for swapping if pool fees are specified.
      */
-    UniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
+    IUniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
     /**
      *
      */
-    constructor(UniswapV2Router _uniswapV2Router, UniswapV3Router _uniswapV3Router) {
+    constructor(IUniswapV2Router _uniswapV2Router, IUniswapV3Router _uniswapV3Router) {
         //set up all exchanges
         uniswapV2Router = _uniswapV2Router;
         uniswapV3Router = _uniswapV3Router;
@@ -88,7 +88,7 @@ contract SwapRouter {
 
         // Execute the swap.
         swapOutAmount = uniswapV3Router.exactInput(
-            UniswapV3Router.ExactInputParams({
+            IUniswapV3Router.ExactInputParams({
                 path: encodePackedPath,
                 recipient: recipient,
                 deadline: block.timestamp + 60,

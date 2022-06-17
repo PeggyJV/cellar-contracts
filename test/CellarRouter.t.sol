@@ -4,8 +4,8 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ERC4626 } from "src/base/ERC4626.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
-import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
-import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
+import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
+import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
@@ -40,8 +40,8 @@ contract CellarRouterTest is Test {
     function setUp() public {
         swapRouter = new MockSwapRouter();
 
-        router = new CellarRouter(UniswapV3Router(address(swapRouter)), UniswapV2Router(address(swapRouter)));
-        forkedRouter = new CellarRouter(UniswapV3Router(uniV3Router), UniswapV2Router(uniV2Router));
+        router = new CellarRouter(IUniswapV3Router(address(swapRouter)), IUniswapV2Router(address(swapRouter)));
+        forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router));
 
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
