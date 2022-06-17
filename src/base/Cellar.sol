@@ -400,56 +400,84 @@ contract Cellar is ERC4626, Ownable, Multicall {
         if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
     }
 
+    // TODO: move to ICellar once done
+    event WithdrawFromPositions(
+        address indexed caller,
+        address indexed receiver,
+        address indexed owner,
+        ERC20[] receivedAssets,
+        uint256[] amountsOut,
+        uint256 shares
+    );
+
+    event PulledFromPosition(address indexed position, uint256 amount);
+
     function withdrawFromPositions(
         uint256 assets,
-        uint256 minAssetsOut,
-        SwapRouter.Exchanges[] calldata exchanges,
-        bytes[] calldata params,
         address receiver,
         address owner
-    ) external returns (uint256 assetsOut, uint256 shares) {
+    )
+        external
+        returns (
+            uint256 shares,
+            ERC20[] memory receivedAssets,
+            uint256[] memory amountsOut
+        )
+    {
         // Only withdraw if not enough assets in the holding pool.
-        if (assets > totalHoldings()) return (assets, withdraw(assets, receiver, owner));
+        if (assets > totalHoldings()) {
+            receivedAssets[0] = asset;
+            amountsOut[0] = assets;
+            shares = withdraw(assets, receiver, owner);
+        } else {
+            // Get data efficiently.
+            (
+                uint256 _totalAssets,
+                ,
+                ERC4626[] memory _positions,
+                ERC20[] memory positionAssets,
+                uint256[] memory positionBalances
+            ) = _getData();
 
-        shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
+            // Get the amount of share needed to redeem.
+            shares = _previewWithdraw(assets, _totalAssets);
 
-        if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+            if (msg.sender != owner) {
+                uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+                if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+            }
+
+            _burn(owner, shares);
+
+            (receivedAssets, amountsOut) = _pullFromPositions(assets, _positions, positionAssets, positionBalances);
+
+            // Transfer withdrawn assets to the receiver.
+            for (uint256 i; i < receivedAssets.length; i++) receivedAssets[i].safeTransfer(receiver, amountsOut[i]);
+
+            emit WithdrawFromPositions(msg.sender, receiver, owner, receivedAssets, amountsOut, shares);
         }
-
-        _burn(owner, shares);
-
-        assetsOut = _pullFromPositions(assets, exchanges, params);
-
-        require(assetsOut >= minAssetsOut, "NOT_ENOUGH_ASSETS_OUT");
-
-        asset.safeTransfer(receiver, assetsOut);
-
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
     function _pullFromPositions(
         uint256 assets,
-        SwapRouter.Exchanges[] calldata exchanges,
-        bytes[] calldata params
-    ) internal returns (uint256 assetsOut) {
+        ERC4626[] memory _positions,
+        ERC20[] memory positionAssets,
+        uint256[] memory positionBalances
+    ) internal returns (ERC20[] memory receivedAssets, uint256[] memory amountsOut) {
+        // Get the price router.
+        PriceRouter priceRouter = registry.priceRouter();
+
         for (uint256 i; ; i++) {
-            ERC4626 position = ERC4626(positions[i]);
-
-            uint256 totalPositionBalance = position.maxWithdraw(address(this));
-
             // Move on to next position if this one is empty.
-            if (totalPositionBalance == 0) continue;
+            if (positionBalances[i] == 0) continue;
 
-            // Although it would be more efficient to store `position.asset()` and
-            // `registry.priceRouter()`, this is done to avoid stack errors.
-            uint256 onePositionAsset = 10**position.asset().decimals();
-            uint256 positionAssetToAssetExchangeRate = registry.priceRouter().getExchangeRate(position.asset(), asset);
+            ERC20 positionAsset = positionAssets[i];
+            uint256 onePositionAsset = 10**positionAsset.decimals();
+            uint256 positionAssetToAssetExchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
 
             // Denominate position balance in cellar's asset.
-            uint256 totalPositionBalanceInAssets = totalPositionBalance.mulDivDown(
+            uint256 totalPositionBalanceInAssets = positionBalances[i].mulDivDown(
                 positionAssetToAssetExchangeRate,
                 onePositionAsset
             );
@@ -461,11 +489,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
                 amount = assets.mulDivDown(onePositionAsset, positionAssetToAssetExchangeRate);
             } else {
                 assets -= totalPositionBalanceInAssets;
-                amount = totalPositionBalance;
+                amount = positionBalances[i];
             }
 
-            // Pull from this position.
-            assetsOut += _withdrawAndSwapFromPosition(position, asset, amount, exchanges[i], params[i]);
+            // Return the asset and amount that will be received.
+            amountsOut[i] = amount;
+            receivedAssets[i] = positionAsset;
+
+            // Update position balance.
+            _subtractFromPositionBalance(getPositionData[address(_positions[i])], amount);
+
+            // Withdraw from position.
+            _positions[i].withdraw(amount, address(this), address(this));
+
+            emit PulledFromPosition(address(_positions[i]), amount);
 
             // Stop if no more assets to withdraw.
             if (assets == 0) break;
@@ -520,15 +557,23 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Get the latest address of the price router.
         PriceRouter priceRouter = registry.priceRouter();
 
-        for (uint256 i; i < positions.length; i++) {
-            ERC4626 position = ERC4626(positions[i]);
-            PositionData storage positionData = getPositionData[address(position)];
+        // Get data efficiently.
+        (
+            uint256 _totalAssets,
+            ,
+            ERC4626[] memory _positions,
+            ERC20[] memory positionAssets,
+            uint256[] memory positionBalances
+        ) = _getData();
+
+        for (uint256 i; i < _positions.length; i++) {
+            PositionData storage positionData = getPositionData[address(_positions[i])];
 
             // Get the current position balance.
-            uint256 balanceThisAccrual = position.maxWithdraw(address(this));
+            uint256 balanceThisAccrual = positionBalances[i];
 
             // Get exchange rate.
-            ERC20 positionAsset = position.asset();
+            ERC20 positionAsset = positionAssets[i];
             uint256 onePositionAsset = 10**positionAsset.decimals();
             uint256 positionAssetToAssetExchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
 
@@ -550,7 +595,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
 
         // Compute and store current exchange rate between assets and shares for gas efficiency.
-        uint256 assetToSharesExchangeRate = convertToShares(1e18);
+        uint256 assetToSharesExchangeRate = _convertToShares(1e18, _totalAssets);
 
         // Calculate platform fees accrued.
         uint256 elapsedTime = block.timestamp - lastAccrual;
@@ -777,6 +822,53 @@ contract Cellar is ERC4626, Ownable, Multicall {
             // Without these, the unrealized gains that were withdrawn would be not be counted next accrual.
             positionData.storedUnrealizedGains = amount - positionBalance;
         }
+    }
+
+    function _getData()
+        internal
+        view
+        returns (
+            uint256 _totalAssets,
+            uint256 _totalHoldings,
+            ERC4626[] memory _positions,
+            ERC20[] memory positionAssets,
+            uint256[] memory positionBalances
+        )
+    {
+        for (uint256 i; i < positions.length; i++) {
+            ERC4626 position = ERC4626(positions[i]);
+
+            _positions[i] = position;
+            positionAssets[i] = position.asset();
+            positionBalances[i] = position.maxWithdraw(address(this));
+        }
+
+        _totalHoldings = totalHoldings();
+        _totalAssets = _totalHoldings + registry.priceRouter().getValue(positionAssets, positionBalances, asset);
+    }
+
+    function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets);
+    }
+
+    function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivDown(_totalAssets, supply);
+    }
+
+    function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivUp(_totalAssets, supply);
+    }
+
+    function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivUp(supply, _totalAssets);
     }
 
     function _swapExactAssets(
