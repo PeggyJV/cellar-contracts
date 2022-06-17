@@ -541,6 +541,98 @@ contract Cellar is ERC4626, Ownable, Multicall {
         return asset.balanceOf(address(this));
     }
 
+    /**
+     * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
+     * @param shares amount of shares to convert
+     * @return assets the shares can be exchanged for
+     */
+    function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 assetDecimals = asset.decimals();
+        uint256 totalAssetsNormalized = totalAssets().changeDecimals(assetDecimals, 18);
+
+        assets = totalShares == 0 ? shares : shares.mulDivDown(totalAssetsNormalized, totalShares);
+        assets = assets.changeDecimals(18, assetDecimals);
+    }
+
+    /**
+     * @notice The amount of shares that the cellar would exchange for the amount of assets provided.
+     * @param assets amount of assets to convert
+     * @return shares the assets can be exchanged for
+     */
+    function convertToShares(uint256 assets) public view override returns (uint256 shares) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 assetDecimals = asset.decimals();
+        uint256 assetsNormalized = assets.changeDecimals(assetDecimals, 18);
+        uint256 totalAssetsNormalized = totalAssets().changeDecimals(assetDecimals, 18);
+
+        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivDown(totalShares, totalAssetsNormalized);
+    }
+
+    /**
+     * @notice Simulate the effects of minting shares at the current block, given current on-chain conditions.
+     * @param shares amount of shares to mint
+     * @return assets that will be deposited
+     */
+    function previewMint(uint256 shares) public view override returns (uint256 assets) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 assetDecimals = asset.decimals();
+        uint256 totalAssetsNormalized = totalAssets().changeDecimals(assetDecimals, 18);
+
+        assets = totalShares == 0 ? shares : shares.mulDivUp(totalAssetsNormalized, totalShares);
+        assets = assets.changeDecimals(18, assetDecimals);
+    }
+
+    /**
+     * @notice Simulate the effects of withdrawing assets at the current block, given current on-chain conditions.
+     * @param assets amount of assets to withdraw
+     * @return shares that will be redeemed
+     */
+    function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 assetDecimals = asset.decimals();
+        uint256 assetsNormalized = assets.changeDecimals(assetDecimals, 18);
+        uint256 totalAssetsNormalized = totalAssets().changeDecimals(assetDecimals, 18);
+
+        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivUp(totalShares, totalAssetsNormalized);
+    }
+
+    function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 assetDecimals = asset.decimals();
+        uint256 totalAssetsNormalized = _totalAssets.changeDecimals(assetDecimals, 18);
+
+        assets = totalShares == 0 ? shares : shares.mulDivDown(totalAssetsNormalized, totalShares);
+        assets = assets.changeDecimals(18, assetDecimals);
+    }
+
+    function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 assetDecimals = asset.decimals();
+        uint256 assetsNormalized = assets.changeDecimals(assetDecimals, 18);
+        uint256 totalAssetsNormalized = _totalAssets.changeDecimals(assetDecimals, 18);
+
+        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivDown(totalShares, totalAssetsNormalized);
+    }
+
+    function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 assetDecimals = asset.decimals();
+        uint256 totalAssetsNormalized = _totalAssets.changeDecimals(assetDecimals, 18);
+
+        assets = totalShares == 0 ? shares : shares.mulDivUp(totalAssetsNormalized, totalShares);
+        assets = assets.changeDecimals(18, assetDecimals);
+    }
+
+    function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
+        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint8 assetDecimals = asset.decimals();
+        uint256 assetsNormalized = assets.changeDecimals(assetDecimals, 18);
+        uint256 totalAssetsNormalized = _totalAssets.changeDecimals(assetDecimals, 18);
+
+        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivUp(totalShares, totalAssetsNormalized);
+    }
+
     // =========================================== ACCRUAL LOGIC ===========================================
 
     /**
@@ -849,30 +941,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         _totalHoldings = totalHoldings();
         _totalAssets = _totalHoldings + registry.priceRouter().getValue(positionAssets, positionBalances, asset);
-    }
-
-    function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets);
-    }
-
-    function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? shares : shares.mulDivDown(_totalAssets, supply);
-    }
-
-    function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? shares : shares.mulDivUp(_totalAssets, supply);
-    }
-
-    function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivUp(supply, _totalAssets);
     }
 
     function _swapExactAssets(

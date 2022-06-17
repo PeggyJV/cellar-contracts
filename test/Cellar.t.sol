@@ -101,9 +101,8 @@ contract CellarTest is Test {
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
 
     function testDepositWithdraw() external {
-        // assets = bound(assets, 1, cellar.maxDeposit(address(this)));
         // NOTE: last time this was run, all test pass with the line below uncommented
-        // assets = bound(assets, 1, type(uint128).max);
+        // assets = bound(assets, 1, type(uint72).max);
         uint256 assets = 100e18;
 
         // Test single deposit.
@@ -111,7 +110,7 @@ contract CellarTest is Test {
         USDC.approve(address(cellar), assets);
         uint256 shares = cellar.deposit(assets, address(this));
 
-        assertEq(shares, assets); // Expect exchange rate to be 1:1 on initial deposit.
+        assertEq(shares, assets.changeDecimals(6, 18)); // Expect exchange rate to be 1:1 on initial deposit.
         assertEq(cellar.previewWithdraw(assets), shares);
         assertEq(cellar.previewDeposit(assets), shares);
         assertEq(cellar.totalHoldings(), assets);
@@ -149,12 +148,12 @@ contract CellarTest is Test {
     }
 
     function testFailRedeemWithNotEnoughBalance(uint256 assets) external {
-        USDC.mint(address(this), assets / 2);
-        USDC.approve(address(cellar), assets / 2);
+        USDC.mint(address(this), assets);
+        USDC.approve(address(cellar), assets);
 
-        cellar.deposit(assets / 2, address(this));
+        uint256 shares = cellar.deposit(assets, address(this));
 
-        cellar.redeem(assets, address(this), address(this));
+        cellar.redeem(shares * 2, address(this), address(this));
     }
 
     function testFailWithdrawWithNoBalance(uint256 assets) external {
