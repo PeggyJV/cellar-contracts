@@ -46,6 +46,10 @@ contract CellarRouterTest is Test {
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
 
+        // Set up exchange rates:
+        swapRouter.setExchangeRate(address(ABC), address(XYZ), 1e18);
+        swapRouter.setExchangeRate(address(XYZ), address(ABC), 1e18);
+
         // Set up two cellars:
         cellar = new MockERC4626(ERC20(address(ABC)), "ABC Cellar", "abcCLR", 18);
         forkedCellar = new MockERC4626(ERC20(address(WETH)), "WETH Cellar", "WETHCLR", 18); // For mainnet fork test.
