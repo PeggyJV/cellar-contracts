@@ -380,10 +380,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
     constructor(
         Registry _registry,
         ERC20 _asset,
+        address[] memory _positions,
         string memory _name,
         string memory _symbol
     ) ERC4626(_asset, _name, _symbol, 18) Ownable() {
         registry = _registry;
+        positions = _positions;
+
+        for (uint256 i; i < _positions.length; i++) isTrusted[_positions[i]] = true;
 
         // Transfer ownership to the Gravity Bridge.
         transferOwnership(address(_registry.gravityBridge()));
