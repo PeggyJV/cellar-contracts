@@ -5,7 +5,7 @@ import { ERC4626, ERC20 } from "./ERC4626.sol";
 import { Multicall } from "./Multicall.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { Registry } from "../Registry.sol";
+import { Registry, SwapRouter, PriceRouter } from "../Registry.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
@@ -52,8 +52,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // TODO: pack struct
     struct PositionData {
-        bool isLossless;
         uint256 balance;
+        uint256 storedUnrealizedGains;
     }
 
     address[] public positions;
@@ -72,11 +72,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Check if position is already being used.
         if (isPositionUsed[position]) revert USR_PositionAlreadyUsed(position);
 
-        // Check if position has same underlying as cellar.
-        ERC20 cellarAsset = asset;
-        ERC20 positionAsset = ERC4626(position).asset();
-        if (positionAsset != cellarAsset) revert USR_IncompatiblePosition(address(positionAsset), address(cellarAsset));
-
         // Add new position at a specified index.
         positions.add(index, position);
         isPositionUsed[position] = true;
@@ -93,11 +88,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Check if position is already being used.
         if (isPositionUsed[position]) revert USR_PositionAlreadyUsed(position);
-
-        // Check if position has same underlying as cellar.
-        ERC20 cellarAsset = asset;
-        ERC20 positionAsset = ERC4626(position).asset();
-        if (positionAsset != cellarAsset) revert USR_IncompatiblePosition(address(positionAsset), address(cellarAsset));
 
         // Add new position to the end of the positions.
         positions.push(position);
@@ -176,12 +166,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     mapping(address => bool) public isTrusted;
 
-    function trustPosition(address position, bool isLossless) external onlyOwner {
+    function trustPosition(address position) external onlyOwner {
         // Trust position.
         isTrusted[position] = true;
-
-        // Set position's lossless flag.
-        getPositionData[position].isLossless = isLossless;
 
         // Set max approval to deposit into position if it is ERC4626.
         ERC4626(position).asset().safeApprove(position, type(uint256).max);
@@ -205,50 +192,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit TrustChanged(position, false);
     }
 
-    // ============================================ ACCOUNTING STATE ============================================
-
-    uint256 public totalLosslessBalance;
-
-    // ======================================== ACCRUAL CONFIG ========================================
-
-    /**
-     * @notice Emitted when accrual period is changed.
-     * @param oldPeriod time the period was changed from
-     * @param newPeriod time the period was changed to
-     */
-    event AccrualPeriodChanged(uint32 oldPeriod, uint32 newPeriod);
-
-    /**
-     * @notice Period of time over which yield since the last accrual is linearly distributed to the cellar.
-     * @dev Net gains are distributed gradually over a period to prevent frontrunning and sandwich attacks.
-     *      Net losses are realized immediately otherwise users could time exits to sidestep losses.
-     */
-    uint32 public accrualPeriod = 7 days;
+    // ============================================ ACCRUAL STORAGE ============================================
 
     /**
      * @notice Timestamp of when the last accrual occurred.
      */
     uint64 public lastAccrual;
 
-    /**
-     * @notice The amount of yield to be distributed to the cellar from the last accrual.
-     */
-    uint160 public maxLocked;
-
-    /**
-     * @notice Set the accrual period over which yield is distributed.
-     * @param newAccrualPeriod period of time in seconds of the new accrual period
-     */
-    function setAccrualPeriod(uint32 newAccrualPeriod) external onlyOwner {
-        // Ensure that the change is not disrupting a currently ongoing distribution of accrued yield.
-        if (totalLocked() > 0) revert STATE_AccrualOngoing();
-
-        emit AccrualPeriodChanged(accrualPeriod, newAccrualPeriod);
-
-        accrualPeriod = newAccrualPeriod;
-    }
-
-    // ========================================= FEES CONFIG =========================================
+    // =============================================== FEES CONFIG ===============================================
 
     /**
      * @notice Emitted when platform fees is changed.
@@ -411,19 +362,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit ShutdownChanged(false);
     }
 
-    // ============================================ HOLDINGS CONFIG ============================================
-
-    /**
-     * @dev Should be set high enough that the holding pool can cover the majority of weekly
-     *      withdraw volume without needing to pull from positions. See `beforeWithdraw` for
-     *      more information as to why.
-     */
-    uint256 public targetHoldingsPercent;
-
-    function setTargetHoldings(uint256 targetPercent) external onlyOwner {
-        targetHoldingsPercent = targetPercent;
-    }
-
     // =========================================== CONSTRUCTOR ===========================================
 
     // TODO: since registry address should never change, consider hardcoding the address once
@@ -462,78 +400,94 @@ contract Cellar is ERC4626, Ownable, Multicall {
         if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
     }
 
-    /**
-     * @dev Check if holding position has enough funds to cover the withdraw and only pull from the
-     *      current lending position if needed.
-     */
-    function beforeWithdraw(
+    function withdrawFromPositions(
         uint256 assets,
-        uint256,
-        address,
-        address
-    ) internal override {
-        uint256 totalAssetsInHolding = totalHoldings();
-
+        uint256 minAssetsOut,
+        SwapRouter.Exchanges[] calldata exchanges,
+        bytes[] calldata params,
+        address receiver,
+        address owner
+    ) external returns (uint256 assetsOut, uint256 shares) {
         // Only withdraw if not enough assets in the holding pool.
-        if (assets > totalAssetsInHolding) {
-            uint256 totalAssetsInCellar = totalAssets();
+        if (assets > totalHoldings()) return (assets, withdraw(assets, receiver, owner));
 
-            // The amounts needed to cover this withdraw and reach the target holdings percentage.
-            uint256 assetsMissingForWithdraw = assets - totalAssetsInHolding;
-            uint256 assetsMissingForTargetHoldings = (totalAssetsInCellar - assets).mulWadDown(targetHoldingsPercent);
+        shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
 
-            // Pull enough to cover the withdraw and reach the target holdings percentage.
-            uint256 assetsleftToWithdraw = assetsMissingForWithdraw + assetsMissingForTargetHoldings;
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
-            uint256 newTotalLosslessBalance = totalLosslessBalance;
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
 
-            for (uint256 i; ; i++) {
-                ERC4626 position = ERC4626(positions[i]);
+        _burn(owner, shares);
 
-                uint256 totalPositionAssets = position.maxWithdraw(address(this));
+        assetsOut = _withdrawAndSwapFromPositions(assets, exchanges, params);
 
-                // Move on to next position if this one is empty.
-                if (totalPositionAssets == 0) continue;
+        require(assetsOut >= minAssetsOut, "NOT_ENOUGH_ASSETS_OUT");
 
-                // We want to pull as much as we can from this position, but no more than needed.
-                uint256 assetsWithdrawn = Math.min(totalPositionAssets, assetsleftToWithdraw);
+        asset.safeTransfer(receiver, assetsOut);
 
-                PositionData storage positionData = getPositionData[address(position)];
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+    }
 
-                if (positionData.isLossless) newTotalLosslessBalance -= assetsWithdrawn;
+    function _withdrawAndSwapFromPositions(
+        uint256 assets,
+        SwapRouter.Exchanges[] calldata exchanges,
+        bytes[] calldata params
+    ) internal returns (uint256 assetsOut) {
+        for (uint256 i; ; i++) {
+            ERC4626 position = ERC4626(positions[i]);
 
-                // Without this the next accrual would count this withdrawal as a loss.
-                positionData.balance -= assetsWithdrawn;
+            uint256 totalPositionBalance = position.maxWithdraw(address(this));
 
-                // Update the assets left to withdraw.
-                assetsleftToWithdraw -= assetsWithdrawn;
+            // Move on to next position if this one is empty.
+            if (totalPositionBalance == 0) continue;
 
-                // Pull from this position.
-                position.withdraw(assetsWithdrawn, address(this), address(this));
+            // Although it would be more efficient to store `position.asset()` and
+            // `registry.priceRouter()`, doing so would cause a stack error.
+            uint256 onePositionAsset = 10**position.asset().decimals();
+            uint256 positionAssetToAssetExchangeRate = registry.priceRouter().getExchangeRate(position.asset(), asset);
 
-                if (assetsleftToWithdraw == 0) break;
+            // Denominate position balance in cellar's asset.
+            uint256 totalPositionBalanceInAssets = totalPositionBalance.mulDivDown(
+                positionAssetToAssetExchangeRate,
+                onePositionAsset
+            );
+
+            // We want to pull as much as we can from this position, but no more than needed.
+            uint256 amount;
+            if (totalPositionBalanceInAssets > assets) {
+                assets -= assets;
+                amount = assets.mulDivDown(onePositionAsset, positionAssetToAssetExchangeRate);
+            } else {
+                assets -= totalPositionBalanceInAssets;
+                amount = totalPositionBalance;
             }
 
-            totalLosslessBalance = newTotalLosslessBalance;
+            // Pull from this position.
+            assetsOut += _withdrawAndSwapFromPosition(position, asset, amount, exchanges[i], params[i]);
+
+            // Stop if no more assets to withdraw.
+            if (assets == 0) break;
         }
     }
 
     // ========================================= ACCOUNTING LOGIC =========================================
-
-    function denominateInAsset(address token, uint256 amount) public view returns (uint256 assets) {}
 
     /**
      * @notice The total amount of assets in the cellar.
      * @dev Excludes locked yield that hasn't been distributed.
      */
     function totalAssets() public view override returns (uint256 assets) {
+        assets = totalHoldings();
+
+        PriceRouter priceRouter = PriceRouter(registry.priceRouter());
+
+        ERC20 denominationAsset = asset;
         for (uint256 i; i < positions.length; i++) {
-            address position = positions[i];
-
-            if (getPositionData[position].isLossless) assets += ERC4626(position).maxWithdraw(address(this));
+            ERC4626 position = ERC4626(positions[i]);
+            assets += priceRouter.getValue(position.asset(), position.maxWithdraw(address(this)), denominationAsset);
         }
-
-        assets += totalLosslessBalance + totalHoldings() - totalLocked();
     }
 
     /**
@@ -541,24 +495,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function totalHoldings() public view returns (uint256) {
         return asset.balanceOf(address(this));
-    }
-
-    /**
-     * @notice The total amount of locked yield still being distributed.
-     */
-    function totalLocked() public view returns (uint256) {
-        // Get the last accrual and accrual period.
-        uint256 previousAccrual = lastAccrual;
-        uint256 accrualInterval = accrualPeriod;
-
-        // If the accrual period has passed, there is no locked yield.
-        if (block.timestamp >= previousAccrual + accrualInterval) return 0;
-
-        // Get the maximum amount we could return.
-        uint256 maxLockedYield = maxLocked;
-
-        // Get how much yield remains locked.
-        return maxLockedYield - (maxLockedYield * (block.timestamp - previousAccrual)) / accrualInterval;
     }
 
     // =========================================== ACCRUAL LOGIC ===========================================
@@ -574,62 +510,59 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Accrue platform fees and performance fees. May also accrue yield.
      */
     function accrue() public {
-        uint256 totalLockedYield = totalLocked();
-
-        // Without this check, malicious actors could do a slowdown attack on the distribution of
-        // yield by continuously resetting the accrual period.
-        if (msg.sender != owner() && totalLockedYield > 0) revert STATE_AccrualOngoing();
-
-        uint256 totalBalanceLastAccrual = totalLosslessBalance;
+        // Record the balance of this and last accrual.
         uint256 totalBalanceThisAccrual;
+        uint256 totalBalanceLastAccrual;
 
-        uint256 newTotalLosslessBalance;
+        // Get the latest address of the price router.
+        PriceRouter priceRouter = PriceRouter(registry.priceRouter());
 
         for (uint256 i; i < positions.length; i++) {
             ERC4626 position = ERC4626(positions[i]);
             PositionData storage positionData = getPositionData[address(position)];
 
+            // Get the current position balance.
             uint256 balanceThisAccrual = position.maxWithdraw(address(this));
 
-            // Check whether position is lossless.
-            if (positionData.isLossless) {
-                // Update total lossless balance. No need to add to last accrual balance
-                // because since it is already accounted for in `totalLosslessBalance`.
-                newTotalLosslessBalance += balanceThisAccrual;
-            } else {
-                // Add to balance for last accrual.
-                totalBalanceLastAccrual += positionData.balance;
-            }
+            // Get exchange rate.
+            ERC20 positionAsset = position.asset();
+            uint256 onePositionAsset = 10**positionAsset.decimals();
+            uint256 positionAssetToAssetExchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
+
+            // Add to balance for last accrual.
+            totalBalanceLastAccrual += positionData.balance.mulDivDown(
+                positionAssetToAssetExchangeRate,
+                onePositionAsset
+            );
 
             // Add to balance for this accrual.
-            totalBalanceThisAccrual += balanceThisAccrual;
+            totalBalanceThisAccrual += (balanceThisAccrual + positionData.storedUnrealizedGains).mulDivDown(
+                positionAssetToAssetExchangeRate,
+                onePositionAsset
+            );
 
-            // Store position's balance this accrual.
+            // Update position's data.
             positionData.balance = balanceThisAccrual;
+            positionData.storedUnrealizedGains = 0;
         }
 
         // Compute and store current exchange rate between assets and shares for gas efficiency.
-        uint256 exchangeRate = convertToShares(1e18);
+        uint256 assetToSharesExchangeRate = convertToShares(1e18);
 
         // Calculate platform fees accrued.
         uint256 elapsedTime = block.timestamp - lastAccrual;
         uint256 platformFeeInAssets = (totalBalanceThisAccrual * elapsedTime * platformFee) / 1e18 / 365 days;
-        uint256 platformFees = platformFeeInAssets.mulWadDown(exchangeRate); // Convert to shares.
+        uint256 platformFees = platformFeeInAssets.mulWadDown(assetToSharesExchangeRate); // Convert to shares.
 
         // Calculate performance fees accrued.
         uint256 yield = totalBalanceThisAccrual.subMinZero(totalBalanceLastAccrual);
         uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
-        uint256 performanceFees = performanceFeeInAssets.mulWadDown(exchangeRate); // Convert to shares.
+        uint256 performanceFees = performanceFeeInAssets.mulWadDown(assetToSharesExchangeRate); // Convert to shares.
 
         // Mint accrued fees as shares.
         _mint(address(this), platformFees + performanceFees);
 
-        // Do not count assets set aside for fees as yield. Allows fees to be immediately withdrawable.
-        maxLocked = uint160(totalLockedYield + yield.subMinZero(platformFeeInAssets + performanceFeeInAssets));
-
         lastAccrual = uint32(block.timestamp);
-
-        totalLosslessBalance = uint240(newTotalLosslessBalance);
 
         emit Accrual(platformFees, performanceFees);
     }
@@ -645,14 +578,19 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of the position to enter holdings into
      * @param assets amount of assets to exit from the position
      */
-    function enterPosition(address position, uint256 assets) public onlyOwner {
+    function enterPosition(ERC4626 position, uint256 assets) public onlyOwner {
         // Check that position is a valid position.
-        if (!isPositionUsed[position]) revert USR_InvalidPosition(position);
+        if (!isPositionUsed[address(position)]) revert USR_InvalidPosition(address(position));
 
+        // TODO:
+        // // Swap to the holding pool asset if necessary.
+        // ERC20 positionAsset = position.asset();
+        // if (positionAsset != asset) _swap(positionAsset, assets, exchange, params);
+
+        // Get position data.
         PositionData storage positionData = getPositionData[address(position)];
 
-        if (positionData.isLossless) totalLosslessBalance += assets;
-
+        // Update position balance.
         positionData.balance += assets;
 
         // Deposit into position.
@@ -660,103 +598,44 @@ contract Cellar is ERC4626, Ownable, Multicall {
     }
 
     /**
-     * @notice Pushes all assets in holding into a position.
-     * @param position address of the position to enter all holdings into
-     */
-    function enterPosition(address position) external {
-        enterPosition(position, totalHoldings());
-    }
-
-    /**
      * @notice Pulls assets from a position back into holdings.
-     * @param position address of the position to exit
-     * @param assets amount of assets to exit from the position
-     */
-    function exitPosition(address position, uint256 assets) external onlyOwner {
-        PositionData storage positionData = getPositionData[address(position)];
-
-        if (positionData.isLossless) totalLosslessBalance -= assets;
-
-        positionData.balance -= assets;
-
-        // Withdraw from specified position.
-        ERC4626(position).withdraw(assets, address(this), address(this));
-    }
-
-    /**
-     * @notice Pulls all assets from a position back into holdings.
      * @param position address of the position to completely exit
+     * @param assets amount of assets to exit from the position
+     * @param params encoded arguments for the function that will perform the swap on the selected exchange
      */
-    function exitPosition(address position) external onlyOwner {
-        PositionData storage positionData = getPositionData[position];
-
-        uint256 balanceLastAccrual = positionData.balance;
-        uint256 balanceThisAccrual;
-
-        // uint256 totalPositionBalance = positionData.positionType == PositionType.ERC4626
-        //     ? ERC4626(position).redeem(ERC4626(position).balanceOf(address(this)), address(this), address(this))
-        //     : ERC20(position).balanceOf(address(this));
-
-        // if (!isPositionUsingSameAsset(position))
-        //     registry.getSwapRouter().swapExactAmount(
-        //         totalPositionBalance,
-        //         // amountOutMin,
-        //         positionData.pathToAsset
-        //     );
-
-        positionData.balance = 0;
-
-        if (positionData.isLossless) totalLosslessBalance -= balanceLastAccrual;
-
-        if (balanceThisAccrual == 0) return;
-
-        // Calculate performance fees accrued.
-        uint256 yield = balanceThisAccrual.subMinZero(balanceLastAccrual);
-        uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
-        uint256 performanceFees = convertToShares(performanceFeeInAssets); // Convert to shares.
-
-        // Mint accrued fees as shares.
-        _mint(address(this), performanceFees);
-
-        // Do not count assets set aside for fees as yield. Allows fees to be immediately withdrawable.
-        maxLocked = uint160(totalLocked() + yield.subMinZero(performanceFeeInAssets));
+    function exitPosition(
+        ERC4626 position,
+        uint256 assets,
+        SwapRouter.Exchanges exchange,
+        bytes calldata params
+    ) external onlyOwner {
+        _withdrawAndSwapFromPosition(position, asset, assets, exchange, params);
     }
 
     /**
      * @notice Move assets between positions.
      * @param fromPosition address of the position to move assets from
      * @param toPosition address of the position to move assets to
-     * @param assets amount of assets to move
+     * @param assetsFrom amount of assets to move from the from position
      */
     function rebalance(
-        address fromPosition,
-        address toPosition,
-        uint256 assets
-    ) external onlyOwner {
+        ERC4626 fromPosition,
+        ERC4626 toPosition,
+        uint256 assetsFrom,
+        SwapRouter.Exchanges exchange,
+        bytes calldata params
+    ) external onlyOwner returns (uint256 assetsTo) {
         // Check that position being rebalanced to is a valid position.
-        if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(toPosition);
+        if (!isPositionUsed[address(toPosition)]) revert USR_InvalidPosition(address(toPosition));
 
-        // Get data for both positions.
-        PositionData storage fromPositionData = getPositionData[fromPosition];
-        PositionData storage toPositionData = getPositionData[toPosition];
+        // Withdraw from the from position and update related position data.
+        assetsTo = _withdrawAndSwapFromPosition(fromPosition, toPosition.asset(), assetsFrom, exchange, params);
 
-        // Update tracked balance of both positions.
-        fromPositionData.balance -= assets;
-        toPositionData.balance += assets;
+        // Update stored balance of the to position.
+        getPositionData[address(toPosition)].balance += assetsTo;
 
-        // Update total lossless balance.
-        uint256 newTotalLosslessBalance = totalLosslessBalance;
-
-        if (fromPositionData.isLossless) newTotalLosslessBalance -= assets;
-        if (toPositionData.isLossless) newTotalLosslessBalance += assets;
-
-        totalLosslessBalance = newTotalLosslessBalance;
-
-        // Withdraw from specified position.
-        ERC4626(fromPosition).withdraw(assets, address(this), address(this));
-
-        // Deposit into destination position.
-        ERC4626(toPosition).deposit(assets, address(this));
+        // Deposit into the to position.
+        toPosition.deposit(assetsTo, address(this));
     }
 
     // ============================================ LIMITS LOGIC ============================================
@@ -826,7 +705,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Transfer assets to a fee distributor on the Sommelier chain.
         IGravity gravityBridge = IGravity(registry.gravityBridge());
-        asset.safeApprove(address(gravityBridge), assets);
+        asset.safeApprove(address(gravityBridge), assets); // TODO: change to send the asset withdrawn
         gravityBridge.sendToCosmos(address(asset), feesDistributor, assets);
 
         emit SendFees(totalFees, assets);
@@ -856,5 +735,65 @@ contract Cellar is ERC4626, Ownable, Multicall {
         token.safeTransfer(to, amount);
 
         emit Sweep(address(token), to, amount);
+    }
+
+    // ========================================== HELPER FUNCTIONS ==========================================
+
+    function _withdrawAndSwapFromPosition(
+        ERC4626 position,
+        ERC20 toAsset,
+        uint256 amount,
+        SwapRouter.Exchanges exchange,
+        bytes calldata params
+    ) internal returns (uint256 amountOut) {
+        // Get position data.
+        PositionData storage positionData = getPositionData[address(position)];
+
+        // Update position balance.
+        _subtractFromPositionBalance(positionData, amount);
+
+        // Withdraw from position.
+        position.withdraw(amount, address(this), address(this));
+
+        // Swap to the holding pool asset if necessary.
+        ERC20 positionAsset = position.asset();
+        amountOut = positionAsset != toAsset ? _swap(positionAsset, amount, exchange, params) : amount;
+    }
+
+    function _subtractFromPositionBalance(PositionData storage positionData, uint256 amount) internal {
+        // Update position balance.
+        uint256 positionBalance = positionData.balance;
+        if (positionBalance > amount) {
+            positionData.balance -= amount;
+        } else {
+            positionData.balance = 0;
+
+            // Without these, the unrealized gains that were withdrawn would be not be counted next accrual.
+            positionData.storedUnrealizedGains = amount - positionBalance;
+        }
+    }
+
+    function _swap(
+        ERC20 assetIn,
+        uint256 amountIn,
+        SwapRouter.Exchanges exchange,
+        bytes calldata params
+    ) internal returns (uint256 assetsOut) {
+        // Store the expected amount of the asset in that we expect to have after the swap.
+        uint256 expectedAssetsInAfter = assetIn.balanceOf(address(this)) - amountIn;
+
+        // Get the address of the latest swap router.
+        SwapRouter swapRouter = registry.swapRouter();
+
+        // Approve swap router to swap assets.
+        assetIn.safeApprove(address(swapRouter), amountIn);
+
+        // Perform swap.
+        assetsOut = swapRouter.swap(exchange, params);
+
+        // Check that the amount of assets swapped is what is expected. Will revert if the `params`
+        // specified a different amount of assets to swap then `assets`.
+        // TODO: consider replacing with revert statement
+        require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
     }
 }
