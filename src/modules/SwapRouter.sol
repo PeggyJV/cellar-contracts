@@ -3,8 +3,8 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { IUniswapV2Router02 as UniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
-import { IUniswapV3Router as UniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
+import { IUniswapV2Router02 as UniswapV2Router } from "../interfaces/IUniswapV2Router02.sol";
+import { IUniswapV3Router as UniswapV3Router } from "../interfaces/IUniswapV3Router.sol";
 
 contract SwapRouter {
     using SafeTransferLib for ERC20;
@@ -13,7 +13,7 @@ contract SwapRouter {
         UNIV2,
         UNIV3
     }
-    /** @notice Planned additions 
+    /** @notice Planned additions
         BALANCERV2,
         CURVE,
         ONEINCH
