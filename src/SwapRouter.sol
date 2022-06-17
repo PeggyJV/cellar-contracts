@@ -3,7 +3,6 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { IAggregationRouterV4 as AggregationRouterV4 } from "./interfaces/IAggregationRouterV4.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router as UniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
 
@@ -34,20 +33,10 @@ contract SwapRouter {
     UniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
     /**
-     * @notice 1Inch Dex Aggregation Router
+     *
      */
-    AggregationRouterV4 public immutable aggRouterV4; // 0x1111111254fb6c44bAC0beD2854e76F90643097d
-
-    /**
-     * @param _aggRouterV4 1 Inch Router Address
-     */
-    constructor(
-        AggregationRouterV4 _aggRouterV4,
-        UniswapV2Router _uniswapV2Router,
-        UniswapV3Router _uniswapV3Router
-    ) {
+    constructor(UniswapV2Router _uniswapV2Router, UniswapV3Router _uniswapV3Router) {
         //set up all exchanges
-        aggRouterV4 = _aggRouterV4;
         uniswapV2Router = _uniswapV2Router;
         uniswapV3Router = _uniswapV3Router;
 
