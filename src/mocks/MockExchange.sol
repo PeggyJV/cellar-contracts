@@ -154,7 +154,7 @@ library Path {
     }
 }
 
-contract MockSwapRouter {
+contract MockExchange {
     using Path for bytes;
     using Math for uint256;
 
