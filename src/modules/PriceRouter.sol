@@ -66,7 +66,7 @@ contract PriceRouter is Ownable {
         ERC20 baseAsset,
         uint256 amounts,
         ERC20 quoteAsset
-    ) public view returns (uint256 value) {
+    ) external view returns (uint256 value) {
         value = _getValue(baseAsset, amounts, quoteAsset, quoteAsset.decimals());
     }
 
@@ -76,11 +76,11 @@ contract PriceRouter is Ownable {
 
     function _getValue(
         ERC20 baseAsset,
-        uint256 amounts,
+        uint256 amount,
         ERC20 quoteAsset,
         uint8 quoteAssetDecimals
     ) internal view returns (uint256 value) {
-        value = amounts.mulDivDown(
+        value = amount.mulDivDown(
             _getExchangeRate(baseAsset, quoteAsset, quoteAssetDecimals),
             10**baseAsset.decimals()
         );

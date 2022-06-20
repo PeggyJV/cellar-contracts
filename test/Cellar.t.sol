@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 import { Cellar, ERC4626, ERC20 } from "src/base/Cellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/SwapRouter.sol";
-import { PriceRouter } from "src/modules/PriceRouter.sol";
+import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 
@@ -19,7 +19,7 @@ contract CellarTest is Test {
 
     IUniswapV2Router private constant uniswapV2Router = IUniswapV2Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
     IUniswapV3Router private constant uniswapV3Router = IUniswapV3Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-    PriceRouter private priceRouter;
+    MockPriceRouter private priceRouter;
     SwapRouter private swapRouter;
 
     Registry private registry;
@@ -45,10 +45,28 @@ contract CellarTest is Test {
 
         // Setup Registry and modules:
         swapRouter = new SwapRouter(uniswapV2Router, uniswapV3Router);
-        priceRouter = new PriceRouter();
+        priceRouter = new MockPriceRouter();
         gravity = new MockGravity();
 
-        registry = new Registry(swapRouter, priceRouter, IGravity(address(gravity)));
+        registry = new Registry(swapRouter, PriceRouter(address(priceRouter)), IGravity(address(gravity)));
+
+        // Setup exchange rates:
+        // USDC Simulated Price: $1
+        // WETH Simulated Price: $2000
+        // WBTC Simulated Price: $30,000
+
+        swapRouter.setExchangeRate(USDC, USDC, 1e6);
+        swapRouter.setExchangeRate(WETH, WETH, 1e18);
+        swapRouter.setExchangeRate(WBTC, WBTC, 1e8);
+
+        swapRouter.setExchangeRate(USDC, WETH, 0.0005e18);
+        swapRouter.setExchangeRate(WETH, USDC, 2000e6);
+
+        swapRouter.setExchangeRate(USDC, WBTC, 0.000033e8);
+        swapRouter.setExchangeRate(WBTC, USDC, 30_000e6);
+
+        swapRouter.setExchangeRate(WETH, WBTC, 0.06666666e8);
+        swapRouter.setExchangeRate(WBTC, WETH, 15e18);
 
         // Setup Cellar:
         address[] memory positions = new address[](3);
@@ -71,7 +89,7 @@ contract CellarTest is Test {
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
 
-    function testDepositAndWithdraw(uint256 assets) external {
+    function testDepositAndWithdraw(uint256 assets) internal {
         assets = bound(assets, 1, type(uint72).max);
 
         deal(address(USDC), address(this), assets);

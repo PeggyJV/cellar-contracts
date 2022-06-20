@@ -8,7 +8,7 @@ import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
-import { MockExchange } from "src/mocks/MockExchange.sol";
+import { MockExchange, MockPriceRouter } from "src/mocks/MockExchange.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -18,6 +18,7 @@ contract CellarRouterTest is Test {
 
     MockERC20 private ABC;
     MockERC20 private XYZ;
+    MockPriceRouter private priceRouter;
     MockExchange private exchange;
 
     MockERC4626 private cellar;
@@ -38,7 +39,8 @@ contract CellarRouterTest is Test {
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 
     function setUp() public {
-        exchange = new MockExchange();
+        priceRouter = new MockPriceRouter();
+        exchange = new MockExchange(priceRouter);
 
         router = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)));
         forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router));
@@ -47,8 +49,8 @@ contract CellarRouterTest is Test {
         XYZ = new MockERC20("XYZ", 18);
 
         // Set up exchange rates:
-        exchange.setExchangeRate(address(ABC), address(XYZ), 1e18);
-        exchange.setExchangeRate(address(XYZ), address(ABC), 1e18);
+        priceRouter.setExchangeRate(ERC20(address(ABC)), ERC20(address(XYZ)), 1e18);
+        priceRouter.setExchangeRate(ERC20(address(XYZ)), ERC20(address(ABC)), 1e18);
 
         // Set up two cellars:
         cellar = new MockERC4626(ERC20(address(ABC)), "ABC Cellar", "abcCLR", 18);
