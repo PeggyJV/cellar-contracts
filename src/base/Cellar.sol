@@ -487,17 +487,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             // We want to pull as much as we can from this position, but no more than needed.
             uint256 amount;
-            if (totalPositionBalanceInAssets > assets) {
-                assets -= assets;
-                amount = assets.mulDivDown(onePositionAsset, positionAssetToAssetExchangeRate);
-            } else {
-                assets -= totalPositionBalanceInAssets;
-                amount = positionBalances[i];
-            }
+            (amount, assets) = totalPositionBalanceInAssets > assets
+                ? (assets.mulDivDown(onePositionAsset, positionAssetToAssetExchangeRate), 0)
+                : (positionBalances[i], assets - totalPositionBalanceInAssets);
 
             // Return the asset and amount that will be received.
-            amountsOut[i] = amount;
-            receivedAssets[i] = positionAssets[i];
+            amountsOut[amountsOut.length] = amount;
+            receivedAssets[receivedAssets.length] = positionAssets[i];
 
             // Update position balance.
             _subtractFromPositionBalance(getPositionData[address(_positions[i])], amount);
