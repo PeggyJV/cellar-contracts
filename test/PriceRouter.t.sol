@@ -3,7 +3,6 @@ pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ChainlinkPriceFeedAdaptor } from "src/ChainlinkPriceFeedAdaptor.sol";
-import { OracleRouter } from "src/OracleRouter.sol";
 import { PriceRouter } from "src/PriceRouter.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 
@@ -14,7 +13,6 @@ contract PriceRouterTest is Test {
     using Math for uint256;
 
     ChainlinkPriceFeedAdaptor private chainlinkAdaptor;
-    OracleRouter private oracleRouter;
     PriceRouter private priceRouter;
 
     uint256 private constant privateKey0 = 0xABCD;
@@ -28,12 +26,16 @@ contract PriceRouterTest is Test {
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     ERC20 private BOND = ERC20(0x0391D2021f89DC339F60Fff84546EA23E337750f);
+    address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address public constant BTC = 0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB;
     FeedRegistryInterface private FeedRegistry = FeedRegistryInterface(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
 
     function setUp() public {
         chainlinkAdaptor = new ChainlinkPriceFeedAdaptor(FeedRegistry);
-        oracleRouter = new OracleRouter(address(chainlinkAdaptor)); //make chainlink adaptor the default adaptor
-        priceRouter = new PriceRouter(oracleRouter);
+        priceRouter = new PriceRouter(address(chainlinkAdaptor));
+
+        priceRouter.addAsset(address(WETH), address(chainlinkAdaptor), uint128(0), uint128(0), uint96(1 days), ETH);
+        priceRouter.addAsset(address(WBTC), address(chainlinkAdaptor), uint128(0), uint128(0), uint96(1 days), BTC);
     }
 
     // ======================================= SWAP TESTS =======================================
