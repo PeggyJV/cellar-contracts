@@ -70,19 +70,27 @@ contract PriceRouter is Ownable {
         value = _getValue(baseAsset, amounts, quoteAsset, quoteAsset.decimals());
     }
 
+    function getExchangeRate(ERC20 baseAsset, ERC20 quoteAsset) external view returns (uint256 exchangeRate) {
+        exchangeRate = _getExchangeRate(baseAsset, quoteAsset, quoteAsset.decimals());
+    }
+
     function _getValue(
         ERC20 baseAsset,
         uint256 amounts,
         ERC20 quoteAsset,
         uint8 quoteAssetDecimals
     ) internal view returns (uint256 value) {
-        value = amounts.mulWadDown(getExchangeRate(baseAsset, quoteAsset)).changeDecimals(
-            baseAsset.decimals(),
-            quoteAssetDecimals
+        value = amounts.mulDivDown(
+            _getExchangeRate(baseAsset, quoteAsset, quoteAssetDecimals),
+            10**baseAsset.decimals()
         );
     }
 
-    function getExchangeRate(ERC20 baseAsset, ERC20 quoteAsset) public view returns (uint256 exchangeRate) {
+    function _getExchangeRate(
+        ERC20 baseAsset,
+        ERC20 quoteAsset,
+        uint8 quoteDecimals
+    ) internal view returns (uint256 exchangeRate) {
         address baseOverride = baseAssetOverride[baseAsset];
         address base = baseOverride == address(0) ? address(baseAsset) : baseOverride;
 
@@ -91,15 +99,14 @@ contract PriceRouter is Ownable {
 
         if (base == quote) return 1e18;
 
-        exchangeRate = isSupportedQuoteAsset(quoteAsset)
-            ? _getExchangeRate(base, quote)
-            : _getExchangeRateInETH(base).mulDivDown(1e18, _getExchangeRateInETH(quote));
-    }
+        if (isSupportedQuoteAsset(quoteAsset)) {
+            (, int256 price, , , ) = feedRegistry.latestRoundData(base, quote);
 
-    function _getExchangeRate(address base, address quote) internal view returns (uint256 exchangeRate) {
-        (, int256 price, , , ) = feedRegistry.latestRoundData(base, quote);
-
-        exchangeRate = uint256(price).changeDecimals(feedRegistry.decimals(base, quote), 18);
+            exchangeRate = uint256(price).changeDecimals(feedRegistry.decimals(base, quote), quoteDecimals);
+        } else {
+            exchangeRate = _getExchangeRateInETH(base).mulDivDown(1e18, _getExchangeRateInETH(quote));
+            exchangeRate = exchangeRate.changeDecimals(18, quoteDecimals);
+        }
     }
 
     function _getExchangeRateInETH(address base) internal view returns (uint256 exchangeRate) {

@@ -435,7 +435,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
             shares = withdraw(assets, receiver, owner);
         } else {
             // Get data efficiently.
-            (uint256 _totalAssets, , , ERC20[] memory positionAssets, uint256[] memory positionBalances) = _getData();
+            (
+                uint256 _totalAssets,
+                ,
+                ERC4626[] memory _positions,
+                ERC20[] memory positionAssets,
+                uint256[] memory positionBalances
+            ) = _getData();
 
             // Get the amount of share needed to redeem.
             shares = _previewWithdraw(assets, _totalAssets);
@@ -448,7 +454,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             _burn(owner, shares);
 
-            (receivedAssets, amountsOut) = _pullFromPositions(assets, positionAssets, positionBalances);
+            (receivedAssets, amountsOut) = _pullFromPositions(assets, _positions, positionAssets, positionBalances);
 
             // Transfer withdrawn assets to the receiver.
             for (uint256 i; i < receivedAssets.length; i++) receivedAssets[i].safeTransfer(receiver, amountsOut[i]);
@@ -459,6 +465,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     function _pullFromPositions(
         uint256 assets,
+        ERC4626[] memory _positions,
         ERC20[] memory positionAssets,
         uint256[] memory positionBalances
     ) internal returns (ERC20[] memory receivedAssets, uint256[] memory amountsOut) {
@@ -469,21 +476,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
             // Move on to next position if this one is empty.
             if (positionBalances[i] == 0) continue;
 
+            uint256 onePositionAsset = 10**positionAssets[i].decimals();
             uint256 positionAssetToAssetExchangeRate = priceRouter.getExchangeRate(positionAssets[i], asset);
 
             // Denominate position balance in cellar's asset.
-            uint256 totalPositionBalanceInAssets = positionBalances[i]
-                .mulWadDown(positionAssetToAssetExchangeRate)
-                .changeDecimals(positionAssets[i].decimals(), asset.decimals());
+            uint256 totalPositionBalanceInAssets = positionBalances[i].mulDivDown(
+                positionAssetToAssetExchangeRate,
+                onePositionAsset
+            );
 
             // We want to pull as much as we can from this position, but no more than needed.
             uint256 amount;
             if (totalPositionBalanceInAssets > assets) {
                 assets -= assets;
-                amount = assets.mulDivDown(1e18, positionAssetToAssetExchangeRate).changeDecimals(
-                    asset.decimals(),
-                    positionAssets[i].decimals()
-                );
+                amount = assets.mulDivDown(onePositionAsset, positionAssetToAssetExchangeRate);
             } else {
                 assets -= totalPositionBalanceInAssets;
                 amount = positionBalances[i];
@@ -494,12 +500,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
             receivedAssets[i] = positionAssets[i];
 
             // Update position balance.
-            _subtractFromPositionBalance(getPositionData[positions[i]], amount);
+            _subtractFromPositionBalance(getPositionData[address(_positions[i])], amount);
 
             // Withdraw from position.
-            ERC4626(positions[i]).withdraw(amount, address(this), address(this));
+            _positions[i].withdraw(amount, address(this), address(this));
 
-            emit PulledFromPosition(positions[i], amount);
+            emit PulledFromPosition(address(_positions[i]), amount);
 
             // Stop if no more assets to withdraw.
             if (assets == 0) break;
@@ -635,7 +641,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             uint256[] memory positionBalances
         ) = _getData();
 
-        uint8 assetDecimals = asset.decimals();
+        ERC20 denominationAsset = asset;
+        uint8 assetDecimals = denominationAsset.decimals();
 
         for (uint256 i; i < _positions.length; i++) {
             PositionData storage positionData = getPositionData[address(_positions[i])];
@@ -645,18 +652,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             // Get exchange rate.
             ERC20 positionAsset = positionAssets[i];
-            uint8 positionDecimals = positionAsset.decimals();
-            uint256 positionAssetToAssetExchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
+            uint256 onePositionAsset = 10**positionAsset.decimals();
+            uint256 positionAssetToAssetExchangeRate = priceRouter.getExchangeRate(positionAsset, denominationAsset);
 
             // Add to balance for last accrual.
-            totalBalanceLastAccrual += (positionData.balance)
-                .mulWadDown(positionAssetToAssetExchangeRate)
-                .changeDecimals(positionDecimals, assetDecimals);
+            totalBalanceLastAccrual += (positionData.balance).mulDivDown(
+                positionAssetToAssetExchangeRate,
+                onePositionAsset
+            );
 
             // Add to balance for this accrual.
-            totalBalanceThisAccrual += (balanceThisAccrual + positionData.storedUnrealizedGains)
-                .mulWadDown(positionAssetToAssetExchangeRate)
-                .changeDecimals(positionDecimals, assetDecimals);
+            totalBalanceThisAccrual += (balanceThisAccrual + positionData.storedUnrealizedGains).mulDivDown(
+                positionAssetToAssetExchangeRate,
+                onePositionAsset
+            );
 
             // Update position's data.
             positionData.balance = balanceThisAccrual;
