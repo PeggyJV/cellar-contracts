@@ -2,14 +2,18 @@
 pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { WETH } from "@solmate/tokens/WETH.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC4626 } from "./base/ERC4626.sol";
 import { ISwapRouter as UniswapV3Router } from "./interfaces/ISwapRouter.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 
+import "./Errors.sol";
+
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
+    using SafeTransferLib for address;
 
     // ========================================== CONSTRUCTOR ==========================================
     /**
@@ -23,12 +27,19 @@ contract CellarRouter is ICellarRouter {
     UniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
     /**
+     * @notice WETH address. Used to support payable functions with ETH
+     */
+    WETH public immutable weth; // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+
+    /**
      * @param _uniswapV3Router Uniswap V3 swap router address
      * @param _uniswapV2Router Uniswap V2 swap router address
+     * @param _weth WETH address
      */
-    constructor(UniswapV3Router _uniswapV3Router, UniswapV2Router _uniswapV2Router) {
+    constructor(UniswapV3Router _uniswapV3Router, UniswapV2Router _uniswapV2Router, address _weth) {
         uniswapV3Router = _uniswapV3Router;
         uniswapV2Router = _uniswapV2Router;
+        weth = WETH(payable(_weth));
     }
 
     // ======================================= DEPOSIT OPERATIONS =======================================
@@ -150,6 +161,31 @@ contract CellarRouter is ICellarRouter {
         shares = depositAndSwapIntoCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
     }
 
+    /**
+     * @notice Deposit ETH into a WETH compatible cellar.
+     * @param cellar the WETH compatible cellar to deposit into.
+     * @param receiver address receiving the shares
+     * @return shares amount of shares minted
+     */
+    function depositETHIntoCellar(
+        ERC4626 cellar,
+        address receiver
+    ) external payable returns (uint256 shares) {
+        ERC20 asset = cellar.asset();
+
+        // Ensure the cellar asset is WETH.
+        if (address(asset) != address(weth)) revert STATE_AssetNotWeth();
+
+        // Wrap the ETH into WETH.
+        weth.deposit{value: msg.value}();
+
+        // Approve the cellar to spend assets.
+        asset.safeApprove(address(cellar), msg.value);
+
+        // Deposit assets into the cellar.
+        shares = cellar.deposit(msg.value, receiver);
+    }
+
     // ======================================= WITHDRAW OPERATIONS =======================================
 
     /**
@@ -230,6 +266,72 @@ contract CellarRouter is ICellarRouter {
         shares = withdrawAndSwapFromCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
     }
 
+    /**
+     * @notice Withdraw ETH from a WETH compatible cellar.
+     * @param cellar the WETH compatible cellar to withdraw from.
+     * @param assets amount of assets to withdraw
+     * @param receiver address receiving the ETH
+     * @return shares amount of shares burned
+     */
+    function withdrawETHFromCellar(
+        ERC4626 cellar,
+        uint256 assets,
+        address receiver
+    ) external returns (uint256 shares) {
+        ERC20 asset = cellar.asset();
+
+        // Ensure the cellar asset is WETH.
+        if (address(asset) != address(weth)) revert STATE_AssetNotWeth();
+
+        // Withdraw assets from the cellar.
+        shares = cellar.withdraw(assets, address(this), msg.sender);
+
+        // Convert the WETH into ETH.
+        weth.withdraw(assets);
+
+        // Transfer the unwrapped ETH to the receiver.
+        receiver.safeTransferETH(assets);
+    }
+
+    /**
+     * @notice Withdraw ETH from a WETH compatible cellar.
+     *         If the withdrawn asset is not already, using permit.
+     * @param cellar the WETH compatible cellar to withdraw from.
+     * @param assets amount of assets to withdraw
+     * @param receiver address receiving the ETH
+     * @param deadline timestamp after which permit is invalid
+     * @param v used to produce valid secp256k1 signature from the caller along with r and s
+     * @param r used to produce valid secp256k1 signature from the caller along with v and s
+     * @param s used to produce valid secp256k1 signature from the caller along with r and v
+     * @return shares amount of shares burned
+     */
+    function withdrawETHFromCellarWithPermit(
+        ERC4626 cellar,
+        uint256 assets,
+        address receiver,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 shares) {
+        ERC20 asset = cellar.asset();
+
+        // Ensure the cellar asset is WETH.
+        if (address(asset) != address(weth)) revert STATE_AssetNotWeth();
+
+        // Approve for router to burn user shares via permit.
+        cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
+
+        // Withdraw assets from the cellar.
+        shares = cellar.withdraw(assets, address(this), msg.sender);
+
+        // Convert the WETH into ETH.
+        weth.withdraw(assets);
+
+        // Transfer the unwrapped ETH to the receiver.
+        receiver.safeTransferETH(assets);
+    }
+
     // ========================================= HELPER FUNCTIONS =========================================
     /**
      * @notice Perform a swap using Uniswap.
@@ -293,4 +395,6 @@ contract CellarRouter is ICellarRouter {
             );
         }
     }
+
+    receive() external payable {}
 }

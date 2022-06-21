@@ -9,6 +9,7 @@ import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/IUniswapV2
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
+import { MockWETH } from "src/mocks/MockWETH.sol";
 
 import { Test } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -18,9 +19,11 @@ contract CellarRouterTest is Test {
 
     MockERC20 private ABC;
     MockERC20 private XYZ;
+    MockWETH private weth;
     MockSwapRouter private swapRouter;
 
     MockERC4626 private cellar;
+    MockERC4626 private wethCellar;
     CellarRouter private router;
 
     bytes32 private constant PERMIT_TYPEHASH =
@@ -31,13 +34,22 @@ contract CellarRouterTest is Test {
     function setUp() public {
         swapRouter = new MockSwapRouter();
 
-        router = new CellarRouter(UniswapV3Router(address(swapRouter)), UniswapV2Router(address(swapRouter)));
+        weth = new MockWETH();
+
+        router = new CellarRouter(
+            UniswapV3Router(address(swapRouter)),
+            UniswapV2Router(address(swapRouter)),
+            address(weth)
+        );
 
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
 
         // Set up a cellar:
         cellar = new MockERC4626(ERC20(address(ABC)), "ABC Cellar", "abcCLR", 18);
+        
+        // Set up a wethCellar:
+        wethCellar = new MockERC4626(ERC20(address(weth)), "WETH Cellar", "wethCLR", 18);
     }
 
     // ======================================= DEPOSIT TESTS =======================================
@@ -175,6 +187,34 @@ contract CellarRouterTest is Test {
         assertEq(ABC.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
+    function testDepositETHIntoWethCellar(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint72).max);
+
+        uint256 balanceBefore = address(this).balance;
+
+        // Test ETH deposit.
+        uint256 shares = router.depositETHIntoCellar{value: assets}(ERC4626(address(wethCellar)), owner);
+
+        // Run test.
+        assertEq(shares, assets, "Should have 1:1 exchange rate for initial deposit.");
+        assertEq(wethCellar.previewWithdraw(assets), shares, "Withdrawing assets should burn shares given.");
+        assertEq(wethCellar.previewDeposit(assets), shares, "Depositing assets should mint shares given.");
+        assertEq(wethCellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
+        assertEq(wethCellar.totalAssets(), assets, "Should have updated total assets with assets deposited.");
+        assertEq(wethCellar.balanceOf(owner), shares, "Should have updated user's share balance.");
+        assertEq(wethCellar.convertToAssets(wethCellar.balanceOf(owner)), assets, "Should return all user's assets.");
+        assertEq(address(this).balance + assets, balanceBefore, "Should have deposited assets from sender.");
+    }
+    
+    function testFailDepositETHIntoNoWethCellar(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint72).max);
+
+        // Test ETH deposit.
+        router.depositETHIntoCellar{value: assets}(ERC4626(address(cellar)), owner);
+    }
+
+    // ======================================= WITHDRAW TESTS =======================================
+
     function testWithdrawAndSwapFromCellar(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
@@ -223,8 +263,6 @@ contract CellarRouterTest is Test {
         assertEq(cellar.balanceOf(owner), 0, "Should have updated user's share balance.");
         assertEq(XYZ.balanceOf(owner), assetsReceivedAfterWithdraw, "Should have withdrawn assets to the user.");
     }
-
-    // ======================================= WITHDRAW TESTS =======================================
 
     function testWithdrawAndSwapFromCellarWithPermit(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
@@ -298,5 +336,81 @@ contract CellarRouterTest is Test {
         assertEq(cellar.totalAssets(), 0, "Should have updated total assets into account the withdrawn assets.");
         assertEq(cellar.balanceOf(owner), 0, "Should have updated user's share balance.");
         assertEq(XYZ.balanceOf(owner), assetsReceivedAfterWithdraw, "Should have withdrawn assets to the user.");
+    }
+
+    function testWithdrawETHFromWethCellar(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint72).max);
+
+        // Deposit
+        router.depositETHIntoCellar{value: assets}(ERC4626(address(wethCellar)), owner);
+
+        uint256 shareBalanceBefore = wethCellar.balanceOf(owner);
+        uint256 balanceBefore = owner.balance;
+
+        // Test withdraw.
+        vm.startPrank(owner);
+        wethCellar.approve(address(router), assets);
+        uint256 sharesRedeemed = router.withdrawETHFromCellar(
+            ERC4626(address(wethCellar)),
+            assets,
+            owner
+        );
+
+        // Run test.
+        assertEq(sharesRedeemed, assets, "Should have 1:1 exchange rate.");
+        assertEq(wethCellar.totalSupply(), 0, "Should have updated total supply.");
+        assertEq(wethCellar.totalAssets(), 0, "Should have updated total assets into account the withdrawn assets.");
+        assertEq(shareBalanceBefore - wethCellar.balanceOf(owner), assets, "Should have updated user's share balance after withdraw.");
+        assertEq(owner.balance - balanceBefore, assets, "Should have withdrawn assets to the user.");
+    }
+
+    function testWithdrawETHFromWethCellarWithPermit(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint72).max);
+
+        // Deposit
+        router.depositETHIntoCellar{value: assets}(ERC4626(address(wethCellar)), owner);
+
+        uint256 shareBalanceBefore = wethCellar.balanceOf(owner);
+        uint256 balanceBefore = owner.balance;
+
+        // Sign permit to allow router to transfer shares.
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            privateKey,
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    wethCellar.DOMAIN_SEPARATOR(),
+                    keccak256(
+                        abi.encode(
+                            PERMIT_TYPEHASH,
+                            owner,
+                            address(router),
+                            assets,
+                            0,
+                            block.timestamp
+                        )
+                    )
+                )
+            )
+        );
+
+        // Test withdraw.
+        vm.startPrank(owner);
+        uint256 sharesRedeemed = router.withdrawETHFromCellarWithPermit(
+            ERC4626(address(wethCellar)),
+            assets,
+            owner,
+            block.timestamp,
+            v,
+            r,
+            s
+        );
+
+        // Run test.
+        assertEq(sharesRedeemed, assets, "Should have 1:1 exchange rate.");
+        assertEq(wethCellar.totalSupply(), 0, "Should have updated total supply.");
+        assertEq(wethCellar.totalAssets(), 0, "Should have updated total assets into account the withdrawn assets.");
+        assertEq(shareBalanceBefore - wethCellar.balanceOf(owner), assets, "Should have updated user's share balance after withdraw.");
+        assertEq(owner.balance - balanceBefore, assets, "Should have withdrawn assets to the user.");
     }
 }

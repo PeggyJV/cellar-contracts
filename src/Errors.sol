@@ -203,3 +203,8 @@ error STATE_ContractPaused();
  * @dev    Emergency mode is irreversible.
  */
 error STATE_ContractKilled();
+
+/**
+ * @notice The caller attempted to deposit or withdraw ETH, but the asset is not WETH.
+ */
+error STATE_AssetNotWeth();
