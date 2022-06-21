@@ -11,6 +11,7 @@ import "./interfaces/IChainlinkAggregator.sol";
 //TODO does this even make sense to have a base adaptor? What functionality would all the adaptors share?
 //TODO add in Math for easy decimal conversion
 //TODO edge case where WBTC ~ BTC should we do a conversion from WBTC to BTC? How likely is a WBTC depeg?
+//TODO maybe we should store a min/max vlaue directly tied to chainlink
 contract ChainlinkPriceFeedAdaptor {
     address public constant USD = address(840); //used by feed registry to denominate USD
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
@@ -29,36 +30,55 @@ contract ChainlinkPriceFeedAdaptor {
         feedRegistry = _feedRegistry;
     }
 
-    //TODO should this revert if it can't find USD or ETH price?
-    function getPricingInformation(address baseAsset)
-        external
+    //TODO should we add a compatability check to see if the base can convert to USD or ETH, and if the decimals are correct
+    function getPricingInformation(address baseAsset) public view returns (uint256 price, uint256 timestamp) {
+        try feedRegistry.latestRoundData(baseAsset, USD) returns (
+            uint80,
+            int256 price_,
+            uint256,
+            uint256 timestamp_,
+            uint80
+        ) {
+            price = uint256(price_);
+            timestamp = timestamp_;
+        } catch {
+            //if we can't find the USD price, then try the ETH price
+            (, int256 price_, , uint256 timestamp_, ) = feedRegistry.latestRoundData(baseAsset, ETH);
+            price = uint256(price_);
+            timestamp = timestamp_;
+            //now convert ETH to USD
+            uint8 decimals = feedRegistry.decimals(baseAsset, ETH); //could assume that ETH is 18 decimals to remove external call
+            uint256 ETHtoUSD = uint256(feedRegistry.latestAnswer(ETH, USD));
+            price = (price * ETHtoUSD) / uint256(10**decimals);
+            //latestTimestamp stays unchanged
+        }
+    }
+
+    function getPriceWithDenomination(address baseAsset, address denomination)
+        public
         view
-        returns (PriceRouter.PricingInformation memory info)
+        returns (uint256 price, uint256 timestamp)
     {
+        (, int256 price_, , uint256 timestamp_, ) = feedRegistry.latestRoundData(baseAsset, denomination);
+        price = uint256(price_);
+        timestamp = timestamp_;
+    }
+
+    function getPriceRange(address baseAsset) public view returns (uint128 min, uint128 max) {
         try feedRegistry.getFeed(baseAsset, USD) returns (AggregatorV2V3Interface aggregator) {
             IChainlinkAggregator chainlinkAgg = IChainlinkAggregator(address(aggregator));
-            info = PriceRouter.PricingInformation({
-                minPrice: uint256(uint192(chainlinkAgg.minAnswer())), //throws error if trying to convert from a int256 directly to a uint256
-                maxPrice: uint256(uint192(chainlinkAgg.maxAnswer())),
-                price: uint256(uint256(feedRegistry.latestAnswer(baseAsset, USD))), // Raises No Access revert if you try to get this directly from the aggregator
-                lastTimestamp: uint256(feedRegistry.latestTimestamp(baseAsset, USD))
-            });
+            min = uint128(uint192(chainlinkAgg.minAnswer()));
+            max = uint128(uint192(chainlinkAgg.maxAnswer()));
         } catch {
             //if we can't find the USD price, then try the ETH price
             IChainlinkAggregator chainlinkAgg = IChainlinkAggregator(address(feedRegistry.getFeed(baseAsset, ETH)));
-            info = PriceRouter.PricingInformation({
-                minPrice: uint256(uint192(chainlinkAgg.minAnswer())), //throws error if trying to convert from a int256 directly to a uint256
-                maxPrice: uint256(uint192(chainlinkAgg.maxAnswer())),
-                price: uint256(feedRegistry.latestAnswer(baseAsset, ETH)), // Raises No Access revert if you try to get this directly from the aggregator
-                lastTimestamp: uint256(feedRegistry.latestTimestamp(baseAsset, ETH))
-            });
+            min = uint128(uint192(chainlinkAgg.minAnswer()));
+            max = uint128(uint192(chainlinkAgg.maxAnswer()));
             //now convert ETH to USD
             uint8 decimals = feedRegistry.decimals(baseAsset, ETH);
-            uint256 ETHtoUSD = uint256(uint256(feedRegistry.latestAnswer(ETH, USD)));
-            info.minPrice = (info.minPrice * ETHtoUSD) / uint256(10**decimals);
-            info.maxPrice = (info.maxPrice * ETHtoUSD) / uint256(10**decimals);
-            info.price = (info.price * ETHtoUSD) / uint256(10**decimals);
-            //latestTimestamp stays unchanged
+            uint128 ETHtoUSD = uint128(uint256(feedRegistry.latestAnswer(ETH, USD)));
+            min = (min * ETHtoUSD) / uint128(10**decimals);
+            max = (max * ETHtoUSD) / uint128(10**decimals);
         }
     }
 }

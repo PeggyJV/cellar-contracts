@@ -4,16 +4,18 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { ChainlinkPriceFeedAdaptor } from "./ChainlinkPriceFeedAdaptor.sol";
 import { BaseAdaptor } from "./BaseAdaptor.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 
-contract PriceRouter is Ownable {
+//TODO convert from WBTC to BTC first
+//TODO add min and max logic into chainlink adaptor
+contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     using SafeTransferLib for ERC20;
 
     //in terms of 8 decimal USD
     //determined by interfacing with adaptors
     struct PricingInformation {
-        uint256 minPrice;
-        uint256 maxPrice;
         uint256 price;
         uint256 lastTimestamp;
     }
@@ -25,6 +27,7 @@ contract PriceRouter is Ownable {
         address adaptor; //this could replace assetToAdaptor
         uint96 heartBeat; //maximum allowed time to pass with no update
         address remap;
+        bool assetSupported;
         //So for chainlink most heartbeats are 3600 seconds
     }
 
@@ -42,9 +45,7 @@ contract PriceRouter is Ownable {
     /**
      *
      */
-    constructor(address _defaultAdaptor) {
-        defaultAdaptor = _defaultAdaptor;
-    }
+    constructor(FeedRegistryInterface _feedRegistry) ChainlinkPriceFeedAdaptor(_feedRegistry) {}
 
     // ======================================= Adaptor OPERATIONS =======================================
 
@@ -56,12 +57,34 @@ contract PriceRouter is Ownable {
         uint96 heartbeat,
         address remap
     ) external onlyOwner {
+        require(baseAsset != address(0), "Invalid baseAsset");
+
+        //first cache min/max if not provided
+        if (min == 0 || max == 0) {
+            //need to get the price range
+            uint128 adaptorMin;
+            uint128 adaptorMax;
+            address asset = remap == address(0) ? baseAsset : remap;
+            if (adaptor == address(0)) {
+                //using this contract
+                (adaptorMin, adaptorMax) = getPriceRange(asset);
+            } else {
+                (adaptorMin, adaptorMax) = BaseAdaptor(adaptor).getPriceRange(asset);
+            }
+            min = min == 0 ? adaptorMin : min;
+            max = max == 0 ? adaptorMax : max;
+        }
+
+        //if heartbeat is 0 use default
+        heartbeat = heartbeat == 0 ? defaultHeartBeat : heartbeat;
+
         assetInformation[baseAsset] = AssetInformation({
             assetMin: min,
             assetMax: max,
             adaptor: adaptor,
             heartBeat: heartbeat,
-            remap: remap
+            remap: remap,
+            assetSupported: true
         });
     }
 
@@ -69,41 +92,40 @@ contract PriceRouter is Ownable {
         defaultAdaptor = _default;
     }
 
-    //TODO if the asset isn't found in the deafult adaptor should this revert? If so probs want to make sure this is called whenever a cellars assets are changed to confirm we have pricing info for them!
+    ///@dev allows owner to stop all pricing calls to baseAsset, can be undone by calling addAsset again
+    function stopSupportForAsset(address baseAsset) external onlyOwner {
+        assetInformation[baseAsset].assetSupported = false;
+    }
+
     /**
      * @dev returns pricing information for baseAsset in terms of USD
      */
-    function getPricingInformation(address baseAsset) public view returns (PricingInformation memory info) {
+    function safePrice(address baseAsset) public view returns (uint256 price, uint256 timestamp) {
         //check baseAsset to adaptor
         AssetInformation storage storedInfo = assetInformation[baseAsset];
-        BaseAdaptor adaptor = storedInfo.adaptor == address(0)
-            ? BaseAdaptor(defaultAdaptor)
-            : BaseAdaptor(storedInfo.adaptor);
+        require(storedInfo.assetSupported, "baseAsset is not supported");
+
         baseAsset = storedInfo.remap == address(0) ? baseAsset : storedInfo.remap;
-        info = adaptor.getPricingInformation(baseAsset);
+        if (storedInfo.adaptor == address(0)) {
+            (price, timestamp) = getPricingInformation(baseAsset);
+        } else {
+            (price, timestamp) = BaseAdaptor(storedInfo.adaptor).getPricingInformation(baseAsset);
+        }
 
-        //update min and max price if values have been set in this contract
-        info.minPrice = storedInfo.assetMin == 0 ? info.minPrice : storedInfo.assetMin;
-        info.maxPrice = storedInfo.assetMax == 0 ? info.maxPrice : storedInfo.assetMin;
-        //latestTimestamp, and price are already gucci
-
-        require(info.price >= info.minPrice, "Asset price below min price");
-        require(info.price <= info.maxPrice, "Asset price above max price");
-        uint96 heartbeat = storedInfo.heartBeat == 0 ? defaultHeartBeat : storedInfo.heartBeat;
-        require(block.timestamp - info.lastTimestamp < heartbeat, "Stale price");
+        require(price >= storedInfo.assetMin, "Asset price below min price");
+        require(price <= storedInfo.assetMax, "Asset price above max price");
+        require(block.timestamp - timestamp < storedInfo.heartBeat, "Stale price");
     }
 
     function getPriceInUSD(address baseAsset) public view returns (uint256 price) {
-        PricingInformation memory info = getPricingInformation(baseAsset);
-
-        price = info.price;
+        (price, ) = safePrice(baseAsset);
     }
 
     function getAssetRange(address baseAsset) public view returns (uint256 min, uint256 max) {
-        PricingInformation memory info = getPricingInformation(baseAsset);
+        AssetInformation storage info = assetInformation[baseAsset];
 
-        min = info.minPrice;
-        max = info.maxPrice;
+        min = info.assetMin;
+        max = info.assetMax;
     }
 
     // ======================================= PRICING OPERATIONS =======================================
@@ -121,7 +143,6 @@ contract PriceRouter is Ownable {
         }
     }
 
-    //TODO returns values in USD with 8 decimals? Should we add a quote asset?
     function getAssetsRange(address[] memory baseAssets)
         external
         view
@@ -147,7 +168,8 @@ contract PriceRouter is Ownable {
         }
     }
 
-    //TODO add in safety checks
+    ///@dev could optimize by checking is quote is ETH, and if so just get the pricing info using ETH, but then we'd need to store min's and max's in ETH
+    /// but then the ETH/USD min and max would be changing constantly relative to eachother
     function getExchangeRate(address baseAsset, address quoteAsset) public view returns (uint256 exchangeRate) {
         uint256 baseUSD = getPriceInUSD(baseAsset);
         uint256 quoteUSD = getPriceInUSD(quoteAsset);

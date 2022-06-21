@@ -35,10 +35,13 @@ contract PriceRouterTest is Test {
 
     function setUp() public {
         chainlinkAdaptor = new ChainlinkPriceFeedAdaptor(FeedRegistry);
-        priceRouter = new PriceRouter(address(chainlinkAdaptor));
+        priceRouter = new PriceRouter(FeedRegistry);
 
-        priceRouter.addAsset(address(WETH), address(chainlinkAdaptor), uint128(0), uint128(0), uint96(1 days), ETH);
-        priceRouter.addAsset(address(WBTC), address(chainlinkAdaptor), uint128(0), uint128(0), uint96(1 days), BTC);
+        priceRouter.addAsset(address(WETH), address(0), uint128(0), uint128(0), uint96(1 days), ETH);
+        priceRouter.addAsset(address(WBTC), address(0), uint128(0), uint128(0), uint96(1 days), BTC);
+        priceRouter.addAsset(address(USDC), address(0), uint128(0), uint128(0), uint96(1 days), address(0));
+        priceRouter.addAsset(address(BOND), address(0), uint128(1e6), uint128(1000e8), uint96(1 days), address(0));
+        priceRouter.addAsset(address(DAI), address(0), uint128(0), uint128(0), uint96(1 days), address(0));
     }
 
     // ======================================= SWAP TESTS =======================================
@@ -66,7 +69,6 @@ contract PriceRouterTest is Test {
         assertEq(exchangeRate, 1e18, "BOND -> BOND Exchange Rate Should be 1e18");
 
         //check exchange rates work
-        //TODO bring in swap exchange data to check these exchange rates
         address[] memory path = new address[](2);
         path[0] = address(DAI);
         path[1] = address(USDC);
