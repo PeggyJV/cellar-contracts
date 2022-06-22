@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
-import { SwapRouter } from "src/modules/SwapRouter.sol";
+import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
