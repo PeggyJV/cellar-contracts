@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC4626 } from "./base/ERC4626.sol";
-import { ISwapRouter } from "@uniswap/v3-periphery/interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "src/interfaces/ISwapRouter.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 
 contract CellarRouter is ICellarRouter {

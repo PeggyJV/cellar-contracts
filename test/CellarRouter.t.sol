@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ERC4626 } from "src/base/ERC4626.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
-import { ISwapRouter } from "@uniswap/v3-periphery/interfaces/ISwapRouter.sol";
+import { ISwapRouter } from "src/interfaces/ISwapRouter.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
