@@ -4,8 +4,8 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ChainlinkPriceFeedAdaptor } from "./ChainlinkPriceFeedAdaptor.sol";
-import { BaseAdaptor } from "./BaseAdaptor.sol";
+import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
+import { BaseAdaptor } from "src/modules/price-router/adaptors/BaseAdaptor.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 
 //TODO convert from WBTC to BTC first

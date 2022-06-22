@@ -2,8 +2,8 @@
 pragma solidity 0.8.13;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { ChainlinkPriceFeedAdaptor } from "src/ChainlinkPriceFeedAdaptor.sol";
-import { PriceRouter } from "src/PriceRouter.sol";
+import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 

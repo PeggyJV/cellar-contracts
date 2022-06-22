@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
-import { PriceRouter } from "./PriceRouter.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 
 abstract contract BaseAdaptor {
     function getPricingInformation(address baseAsset) external view virtual returns (uint256 price, uint256 timestamp);

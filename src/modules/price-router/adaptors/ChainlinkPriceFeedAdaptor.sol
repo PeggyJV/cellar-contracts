@@ -2,10 +2,10 @@
 pragma solidity 0.8.13;
 
 import { BaseAdaptor } from "./BaseAdaptor.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
-import { PriceRouter } from "./PriceRouter.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
-import "./interfaces/IChainlinkAggregator.sol";
+import "src/interfaces/IChainlinkAggregator.sol";
 
 //TODO when converting int's to uint's does V8 check if the value is negative, or if its too large to fit into 128 bits?
 //TODO does this even make sense to have a base adaptor? What functionality would all the adaptors share?
