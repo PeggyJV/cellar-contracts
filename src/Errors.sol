@@ -132,6 +132,13 @@ error USR_ZeroRewardsPerEpoch();
  */
 error USR_InvalidLockValue(uint256 lock);
 
+/**
+ * @notice The caller attempted an signed action with an invalid signature.
+ * @param signatureLength length of the signature passed in
+ * @param expectedSignatureLength expected length of the signature passed in
+ */
+error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
+
 // ========================================== STATE ERRORS ===========================================
 
 /**
