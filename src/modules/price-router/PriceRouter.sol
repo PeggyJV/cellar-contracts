@@ -5,7 +5,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
-import { BaseAdaptor } from "src/modules/price-router/adaptors/BaseAdaptor.sol";
+import { IPriceFeedAdaptor } from "src/modules/price-router/adaptors/IPriceFeedAdaptor.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 
 //TODO convert from WBTC to BTC first
@@ -69,7 +69,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
                 //using this contract
                 (adaptorMin, adaptorMax) = getPriceRange(asset);
             } else {
-                (adaptorMin, adaptorMax) = BaseAdaptor(adaptor).getPriceRange(asset);
+                (adaptorMin, adaptorMax) = IPriceFeedAdaptor(adaptor).getPriceRange(asset);
             }
             min = min == 0 ? adaptorMin : min;
             max = max == 0 ? adaptorMax : max;
@@ -109,7 +109,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         if (storedInfo.adaptor == address(0)) {
             (price, timestamp) = getPricingInformation(baseAsset);
         } else {
-            (price, timestamp) = BaseAdaptor(storedInfo.adaptor).getPricingInformation(baseAsset);
+            (price, timestamp) = IPriceFeedAdaptor(storedInfo.adaptor).getPricingInformation(baseAsset);
         }
 
         require(price >= storedInfo.assetMin, "Asset price below min price");

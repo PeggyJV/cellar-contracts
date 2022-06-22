@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
-import { BaseAdaptor } from "./BaseAdaptor.sol";
+import { IPriceFeedAdaptor } from "src/modules/price-router/adaptors/IPriceFeedAdaptor.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
@@ -12,7 +12,7 @@ import "src/interfaces/IChainlinkAggregator.sol";
 //TODO add in Math for easy decimal conversion
 //TODO edge case where WBTC ~ BTC should we do a conversion from WBTC to BTC? How likely is a WBTC depeg?
 //TODO maybe we should store a min/max vlaue directly tied to chainlink
-contract ChainlinkPriceFeedAdaptor {
+contract ChainlinkPriceFeedAdaptor is IPriceFeedAdaptor {
     address public constant USD = address(840); //used by feed registry to denominate USD
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
