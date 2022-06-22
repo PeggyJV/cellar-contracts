@@ -41,6 +41,7 @@ contract CellarRouter is ICellarRouter {
      * @param assets amount of assets to deposit
      * @param receiver address receiving the shares
      * @param deadline timestamp after which permit is invalid
+     * @param minSharesOut minimum amount of shares caller expects
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
      */
@@ -49,6 +50,7 @@ contract CellarRouter is ICellarRouter {
         uint256 assets,
         address receiver,
         uint256 deadline,
+        uint256 minSharesOut,
         bytes memory signature
     ) external returns (uint256 shares) {
         // Retrieve the cellar's current asset.
@@ -66,6 +68,9 @@ contract CellarRouter is ICellarRouter {
 
         // Deposit assets into the cellar.
         shares = cellar.deposit(assets, receiver);
+
+        //enforce minSharesOut
+        require(shares >= minSharesOut, "Insufficient shares out");
     }
 
     /**
@@ -81,6 +86,7 @@ contract CellarRouter is ICellarRouter {
      * @param assets amount of assets to deposit
      * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the shares
+     * @param minSharesOut minimum amount of shares caller expects
      * @return shares amount of shares minted
      */
     function depositAndSwapIntoCellar(
@@ -89,7 +95,8 @@ contract CellarRouter is ICellarRouter {
         uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin,
-        address receiver
+        address receiver,
+        uint256 minSharesOut
     ) public returns (uint256 shares) {
         // Retrieve the asset being swapped and asset of cellar.
         ERC20 asset = cellar.asset();
@@ -106,6 +113,9 @@ contract CellarRouter is ICellarRouter {
 
         // Deposit assets into the cellar.
         shares = cellar.deposit(assets, receiver);
+
+        //enforce minSharesOut
+        require(shares >= minSharesOut, "Insufficient shares out");
     }
 
     /**
@@ -122,6 +132,7 @@ contract CellarRouter is ICellarRouter {
      * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the shares
      * @param deadline timestamp after which permit is invalid
+     * @param minSharesOut minimum amount of shares caller expects
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
      */
@@ -133,17 +144,20 @@ contract CellarRouter is ICellarRouter {
         uint256 assetsOutMin,
         address receiver,
         uint256 deadline,
+        uint256 minSharesOut,
         bytes memory signature
     ) external returns (uint256 shares) {
         // Retrieve the asset being swapped.
         ERC20 assetIn = ERC20(path[0]);
 
-        // Approve for router to burn user shares via permit.
-        (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
-        assetIn.permit(msg.sender, address(this), assets, deadline, v, r, s);
+        {
+            // Approve for router to burn user shares via permit.
+            (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
+            assetIn.permit(msg.sender, address(this), assets, deadline, v, r, s);
+        }
 
         // Deposit assets into the cellar using a swap if necessary.
-        shares = depositAndSwapIntoCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
+        shares = depositAndSwapIntoCellar(cellar, path, poolFees, assets, assetsOutMin, receiver, minSharesOut);
     }
 
     // ======================================= WITHDRAW OPERATIONS =======================================

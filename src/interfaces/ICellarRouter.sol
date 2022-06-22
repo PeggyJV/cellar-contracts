@@ -12,6 +12,7 @@ interface ICellarRouter {
         uint256 assets,
         address receiver,
         uint256 deadline,
+        uint256 minSharesOut,
         bytes memory signature
     ) external returns (uint256 shares);
 
@@ -21,7 +22,8 @@ interface ICellarRouter {
         uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin,
-        address receiver
+        address receiver,
+        uint256 minSharesOut
     ) external returns (uint256 shares);
 
     function depositAndSwapIntoCellarWithPermit(
@@ -32,6 +34,7 @@ interface ICellarRouter {
         uint256 assetsOutMin,
         address receiver,
         uint256 deadline,
+        uint256 minSharesOut,
         bytes memory signature
     ) external returns (uint256 shares);
 
