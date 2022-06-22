@@ -13,17 +13,10 @@ import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     using SafeTransferLib for ERC20;
 
-    //in terms of 8 decimal USD
-    //determined by interfacing with adaptors
-    struct PricingInformation {
-        uint256 price;
-        uint256 lastTimestamp;
-    }
-
     //storage
     struct AssetInformation {
-        uint128 assetMin;
-        uint128 assetMax;
+        uint256 assetMin;
+        uint256 assetMax;
         address adaptor; //this could replace assetToAdaptor
         uint96 heartBeat; //maximum allowed time to pass with no update
         address remap;
@@ -52,8 +45,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     function addAsset(
         address baseAsset,
         address adaptor,
-        uint128 min,
-        uint128 max,
+        uint256 min,
+        uint256 max,
         uint96 heartbeat,
         address remap
     ) external onlyOwner {
@@ -62,8 +55,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         //first cache min/max if not provided
         if (min == 0 || max == 0) {
             //need to get the price range
-            uint128 adaptorMin;
-            uint128 adaptorMax;
+            uint256 adaptorMin;
+            uint256 adaptorMax;
             address asset = remap == address(0) ? baseAsset : remap;
             if (adaptor == address(0)) {
                 //using this contract

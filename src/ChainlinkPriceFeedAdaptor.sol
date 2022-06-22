@@ -6,6 +6,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import { PriceRouter } from "./PriceRouter.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
 import "./interfaces/IChainlinkAggregator.sol";
+import { Math } from "./utils/Math.sol";
 
 //TODO when converting int's to uint's does V8 check if the value is negative, or if its too large to fit into 128 bits?
 //TODO does this even make sense to have a base adaptor? What functionality would all the adaptors share?
@@ -15,6 +16,7 @@ import "./interfaces/IChainlinkAggregator.sol";
 contract ChainlinkPriceFeedAdaptor {
     address public constant USD = address(840); //used by feed registry to denominate USD
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    using Math for uint256;
 
     // ========================================== CONSTRUCTOR ==========================================
 
@@ -49,36 +51,26 @@ contract ChainlinkPriceFeedAdaptor {
             //now convert ETH to USD
             uint8 decimals = feedRegistry.decimals(baseAsset, ETH); //could assume that ETH is 18 decimals to remove external call
             uint256 ETHtoUSD = uint256(feedRegistry.latestAnswer(ETH, USD));
-            price = (price * ETHtoUSD) / uint256(10**decimals);
+            price = price.mulDivDown(ETHtoUSD, (10**decimals));
             //latestTimestamp stays unchanged
         }
     }
 
-    function getPriceWithDenomination(address baseAsset, address denomination)
-        public
-        view
-        returns (uint256 price, uint256 timestamp)
-    {
-        (, int256 price_, , uint256 timestamp_, ) = feedRegistry.latestRoundData(baseAsset, denomination);
-        price = uint256(price_);
-        timestamp = timestamp_;
-    }
-
-    function getPriceRange(address baseAsset) public view returns (uint128 min, uint128 max) {
+    function getPriceRange(address baseAsset) public view returns (uint256 min, uint256 max) {
         try feedRegistry.getFeed(baseAsset, USD) returns (AggregatorV2V3Interface aggregator) {
             IChainlinkAggregator chainlinkAgg = IChainlinkAggregator(address(aggregator));
-            min = uint128(uint192(chainlinkAgg.minAnswer()));
-            max = uint128(uint192(chainlinkAgg.maxAnswer()));
+            min = uint256(uint192(chainlinkAgg.minAnswer()));
+            max = uint256(uint192(chainlinkAgg.maxAnswer()));
         } catch {
             //if we can't find the USD price, then try the ETH price
             IChainlinkAggregator chainlinkAgg = IChainlinkAggregator(address(feedRegistry.getFeed(baseAsset, ETH)));
-            min = uint128(uint192(chainlinkAgg.minAnswer()));
-            max = uint128(uint192(chainlinkAgg.maxAnswer()));
+            min = uint256(uint192(chainlinkAgg.minAnswer()));
+            max = uint256(uint192(chainlinkAgg.maxAnswer()));
             //now convert ETH to USD
             uint8 decimals = feedRegistry.decimals(baseAsset, ETH);
-            uint128 ETHtoUSD = uint128(uint256(feedRegistry.latestAnswer(ETH, USD)));
-            min = (min * ETHtoUSD) / uint128(10**decimals);
-            max = (max * ETHtoUSD) / uint128(10**decimals);
+            uint256 ETHtoUSD = uint256(feedRegistry.latestAnswer(ETH, USD));
+            min = min.mulDivDown(ETHtoUSD, (10**decimals));
+            max = max.mulDivDown(ETHtoUSD, (10**decimals));
         }
     }
 }

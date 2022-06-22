@@ -6,7 +6,7 @@ import { PriceRouter } from "./PriceRouter.sol";
 abstract contract BaseAdaptor {
     function getPricingInformation(address baseAsset) external view virtual returns (uint256 price, uint256 timestamp);
 
-    function getPriceRange(address baseAsset) public view virtual returns (uint128 min, uint128 max);
+    function getPriceRange(address baseAsset) public view virtual returns (uint256 min, uint256 max);
 
     function getPriceWithDenomination(address baseAsset, address denomination)
         public

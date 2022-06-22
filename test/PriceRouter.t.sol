@@ -40,7 +40,7 @@ contract PriceRouterTest is Test {
         priceRouter.addAsset(address(WETH), address(0), uint128(0), uint128(0), uint96(1 days), ETH);
         priceRouter.addAsset(address(WBTC), address(0), uint128(0), uint128(0), uint96(1 days), BTC);
         priceRouter.addAsset(address(USDC), address(0), uint128(0), uint128(0), uint96(1 days), address(0));
-        priceRouter.addAsset(address(BOND), address(0), uint128(1e6), uint128(1000e8), uint96(1 days), address(0));
+        priceRouter.addAsset(address(BOND), address(0), uint128(0), uint128(0), uint96(1 days), address(0));
         priceRouter.addAsset(address(DAI), address(0), uint128(0), uint128(0), uint96(1 days), address(0));
     }
 
