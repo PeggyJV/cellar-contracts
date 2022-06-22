@@ -34,6 +34,9 @@ contract PriceRouterTest is Test {
     IUniswapV2Router private uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
     function setUp() public {
+        // Ignore if not on mainnet.
+        if (block.chainid != 1) return;
+
         chainlinkAdaptor = new ChainlinkPriceFeedAdaptor(FeedRegistry);
         priceRouter = new PriceRouter(FeedRegistry);
 
