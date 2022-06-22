@@ -448,8 +448,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
             return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(totalAssets());
+        (uint256 leftUntilDepositLimit, uint256 leftUntilLiquidityLimit) = _getAssetsLeftUntilLimits(
+            asssetDepositLimit,
+            asssetLiquidityLimit,
+            receiver
+        );
 
         // Only return the more relevant of the two.
         assets = Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
@@ -468,11 +471,33 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
             return type(uint256).max;
 
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdraw(receiver));
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(totalAssets());
+        (uint256 leftUntilDepositLimit, uint256 leftUntilLiquidityLimit) = _getAssetsLeftUntilLimits(
+            asssetDepositLimit,
+            asssetLiquidityLimit,
+            receiver
+        );
 
         // Only return the more relevant of the two.
         shares = convertToShares(Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit));
+    }
+
+    function _getAssetsLeftUntilLimits(
+        uint256 asssetDepositLimit,
+        uint256 asssetLiquidityLimit,
+        address receiver
+    ) internal view returns (uint256 leftUntilDepositLimit, uint256 leftUntilLiquidityLimit) {
+        uint256 totalAssetsIncludingUnrealizedGains = assetAToken.balanceOf(address(this)) + totalHoldings();
+
+        // Convert receiver's shares to assets using total assets including locked yield.
+        uint256 receiverShares = balanceOf[receiver];
+        uint256 totalShares = totalSupply;
+        uint256 maxWithdrawableByReceiver = totalShares == 0
+            ? receiverShares
+            : receiverShares.mulDivDown(totalAssetsIncludingUnrealizedGains, totalShares);
+
+        // Get the maximum amount of assets that can be deposited until limits are reached.
+        leftUntilDepositLimit = asssetDepositLimit.subMinZero(maxWithdrawableByReceiver);
+        leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(totalAssetsIncludingUnrealizedGains);
     }
 
     // ========================================== ACCRUAL LOGIC ==========================================
