@@ -48,8 +48,22 @@ contract SwapRouter {
     // ======================================= SWAP OPERATIONS =======================================
 
     function swapExactAssets(Exchanges id, bytes memory swapData) external returns (uint256 swapOutAmount) {
-        (bool success, bytes memory result) = address(this).call(abi.encodeWithSelector(idToSelector[id], swapData));
-        require(success, "Failed to perform swap");
+        (bool success, bytes memory result) = address(this).delegatecall(
+            abi.encodeWithSelector(idToSelector[id], swapData)
+        );
+
+        if (!success) {
+            // If there is return data, the call reverted with a reason or a custom error.
+            if (result.length > 0) {
+                assembly {
+                    let returndata_size := mload(result)
+                    revert(add(32, result), returndata_size)
+                }
+            } else {
+                revert("Execution reverted.");
+            }
+        }
+
         swapOutAmount = abi.decode(result, (uint256));
     }
 
@@ -60,7 +74,10 @@ contract SwapRouter {
             swapData,
             (address[], uint256, uint256, address)
         );
+
         ERC20 assetIn = ERC20(path[0]);
+        assetIn.safeTransferFrom(msg.sender, address(this), assets);
+
         // Approve assets to be swapped through the router.
         assetIn.safeApprove(address(uniswapV2Router), assets);
 
@@ -72,13 +89,16 @@ contract SwapRouter {
             recipient,
             block.timestamp + 60
         );
-        swapOutAmount = amountsOut[1];
+
+        swapOutAmount = amountsOut[amountsOut.length - 1];
     }
 
     function swapWithUniV3(bytes memory swapData) public returns (uint256 swapOutAmount) {
         (address[] memory path, uint24[] memory poolFees, uint256 assets, uint256 assetsOutMin, address recipient) = abi
             .decode(swapData, (address[], uint24[], uint256, uint256, address));
+
         ERC20 assetIn = ERC20(path[0]);
+        assetIn.safeTransferFrom(msg.sender, address(this), assets);
 
         // Approve assets to be swapped through the router.
         assetIn.safeApprove(address(uniswapV3Router), assets);

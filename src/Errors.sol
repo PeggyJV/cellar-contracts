@@ -44,7 +44,6 @@ error USR_InvalidSwap(address assetOut, address currentAsset);
  * @notice Attempted to sweep an asset that is managed by the cellar.
  * @param token address of the token that can't be sweeped
  */
-// TODO: change to ERC20
 error USR_ProtectedAsset(address token);
 
 /**
@@ -63,7 +62,6 @@ error USR_UnsupportedPosition(address unsupportedPosition);
  * @notice Attempted an operation on an untrusted position.
  * @param position address of the position
  */
-// TODO: change to ERC4626
 error USR_UntrustedPosition(address position);
 
 /**
@@ -77,7 +75,6 @@ error USR_TooManyDecimals(uint8 newDecimals, uint8 maxDecimals);
  * @notice Attempted set the cellar's asset to WETH with an asset that is not WETH compatible.
  * @param asset address of the asset that is not WETH compatible
  */
-// TODO: change to ERC20
 error USR_AssetNotWETH(address asset);
 
 /**
@@ -153,6 +150,19 @@ error USR_IncompatiblePosition(address incompatibleAsset, address expectedAsset)
  * @param position address of the position
  */
 error USR_PositionAlreadyUsed(address position);
+
+/**
+ * @notice Attempted an action on a position that is not being used by the cellar.
+ * @param position address of the invalid position
+ */
+error USR_InvalidPosition(address position);
+
+/**
+ * @notice Attempted an action on a position that is required to be empty before the action can be performed.
+ * @param position address of the non-empty position
+ * @param sharesRemaining amount of shares remaining in the position
+ */
+error USR_PositionNotEmpty(address position, uint256 sharesRemaining);
 
 // ========================================== STATE ERRORS ===========================================
 

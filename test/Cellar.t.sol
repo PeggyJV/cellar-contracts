@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
-import { Cellar, ERC4626, ERC20 } from "src/base/Cellar.sol";
+import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/SwapRouter.sol";
+import { MockExchange } from "src/mocks/MockExchange.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 
-import { Test } from "@forge-std/Test.sol";
+import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract CellarTest is Test {
     using Math for uint256;
 
-    Cellar private cellar;
+    MockCellar private cellar;
     MockGravity private gravity;
 
-    IUniswapV2Router private constant uniswapV2Router = IUniswapV2Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
-    IUniswapV3Router private constant uniswapV3Router = IUniswapV3Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    MockExchange private exchange;
     MockPriceRouter private priceRouter;
     SwapRouter private swapRouter;
 
@@ -44,29 +44,34 @@ contract CellarTest is Test {
         vm.label(address(wbtcCLR), "wbtcCLR");
 
         // Setup Registry and modules:
-        swapRouter = new SwapRouter(uniswapV2Router, uniswapV3Router);
         priceRouter = new MockPriceRouter();
+        exchange = new MockExchange(priceRouter);
+        swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
         gravity = new MockGravity();
 
-        registry = new Registry(swapRouter, PriceRouter(address(priceRouter)), IGravity(address(gravity)));
+        registry = new Registry(
+            SwapRouter(address(swapRouter)),
+            PriceRouter(address(priceRouter)),
+            IGravity(address(gravity))
+        );
 
         // Setup exchange rates:
         // USDC Simulated Price: $1
         // WETH Simulated Price: $2000
         // WBTC Simulated Price: $30,000
 
-        swapRouter.setExchangeRate(USDC, USDC, 1e6);
-        swapRouter.setExchangeRate(WETH, WETH, 1e18);
-        swapRouter.setExchangeRate(WBTC, WBTC, 1e8);
+        priceRouter.setExchangeRate(USDC, USDC, 1e6);
+        priceRouter.setExchangeRate(WETH, WETH, 1e18);
+        priceRouter.setExchangeRate(WBTC, WBTC, 1e8);
 
-        swapRouter.setExchangeRate(USDC, WETH, 0.0005e18);
-        swapRouter.setExchangeRate(WETH, USDC, 2000e6);
+        priceRouter.setExchangeRate(USDC, WETH, 0.0005e18);
+        priceRouter.setExchangeRate(WETH, USDC, 2000e6);
 
-        swapRouter.setExchangeRate(USDC, WBTC, 0.000033e8);
-        swapRouter.setExchangeRate(WBTC, USDC, 30_000e6);
+        priceRouter.setExchangeRate(USDC, WBTC, 0.000033e8);
+        priceRouter.setExchangeRate(WBTC, USDC, 30_000e6);
 
-        swapRouter.setExchangeRate(WETH, WBTC, 0.06666666e8);
-        swapRouter.setExchangeRate(WBTC, WETH, 15e18);
+        priceRouter.setExchangeRate(WETH, WBTC, 0.06666666e8);
+        priceRouter.setExchangeRate(WBTC, WETH, 15e18);
 
         // Setup Cellar:
         address[] memory positions = new address[](3);
@@ -74,12 +79,17 @@ contract CellarTest is Test {
         positions[1] = address(wethCLR);
         positions[2] = address(wbtcCLR);
 
-        cellar = new Cellar(registry, USDC, positions, "Multiposition Cellar LP Token", "multiposition-CLR");
+        cellar = new MockCellar(registry, USDC, positions, "Multiposition Cellar LP Token", "multiposition-CLR");
         vm.label(address(cellar), "cellar");
 
         // Transfer ownership to this contract for testing.
         vm.prank(address(registry.gravityBridge()));
         cellar.transferOwnership(address(this));
+
+        // Mint enough liquidity to swap router for swaps.
+        deal(address(USDC), address(exchange), type(uint224).max);
+        deal(address(WETH), address(exchange), type(uint224).max);
+        deal(address(WBTC), address(exchange), type(uint224).max);
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
@@ -89,7 +99,7 @@ contract CellarTest is Test {
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
 
-    function testDepositAndWithdraw(uint256 assets) internal {
+    function testDepositAndWithdraw(uint256 assets) external {
         assets = bound(assets, 1, type(uint72).max);
 
         deal(address(USDC), address(this), assets);
@@ -113,5 +123,59 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0, "Should return zero assets.");
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
+    }
+
+    function testWithdrawFromPositions() external {
+        cellar.increasePositionBalance(address(wethCLR), 1e18);
+
+        assertEq(cellar.totalAssets(), 2000e6, "Should have updated total assets with assets deposited.");
+
+        // Mint shares to user to redeem.
+        deal(address(cellar), address(this), cellar.previewWithdraw(1000e6));
+
+        // Withdraw from position.
+        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
+            1000e6,
+            address(this),
+            address(this)
+        );
+
+        assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
+        assertEq(shares, 1000e18, "Should returned all redeemed shares.");
+        assertEq(receivedAssets.length, 1, "Should have received one asset.");
+        assertEq(amountsOut.length, 1, "Should have gotten out one amount.");
+        assertEq(address(receivedAssets[0]), address(WETH), "Should have received WETH.");
+        assertEq(amountsOut[0], 0.5e18, "Should have gotten out 0.5 WETH.");
+        assertEq(WETH.balanceOf(address(this)), 0.5e18, "Should have transferred position balance to user.");
+        assertEq(cellar.totalAssets(), 1000e6, "Should have updated cellar total assets.");
+    }
+
+    function testWithdrawFromPositionsCompletely() external {
+        cellar.increasePositionBalance(address(wethCLR), 1e18);
+        cellar.increasePositionBalance(address(wbtcCLR), 1e8);
+
+        assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
+
+        // Mint shares to user to redeem.
+        deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
+
+        // Withdraw from position.
+        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
+            32_000e6,
+            address(this),
+            address(this)
+        );
+
+        assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
+        assertEq(shares, 32_000e18, "Should returned all redeemed shares.");
+        assertEq(receivedAssets.length, 2, "Should have received two assets.");
+        assertEq(amountsOut.length, 2, "Should have gotten out two amount.");
+        assertEq(address(receivedAssets[0]), address(WETH), "Should have received WETH.");
+        assertEq(address(receivedAssets[1]), address(WBTC), "Should have received WBTC.");
+        assertEq(amountsOut[0], 1e18, "Should have gotten out 1 WETH.");
+        assertEq(amountsOut[1], 1e8, "Should have gotten out 1 WBTC.");
+        assertEq(WETH.balanceOf(address(this)), 1e18, "Should have transferred position balance to user.");
+        assertEq(WBTC.balanceOf(address(this)), 1e8, "Should have transferred position balance to user.");
+        assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
     }
 }
