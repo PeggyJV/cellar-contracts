@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.13;
 
+import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
-import { SwapRouter } from "src/modules/SwapRouter.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -28,6 +28,8 @@ contract SwapRouterTest is Test {
 
     function setUp() public {
         swapRouter = new SwapRouter(UniswapV2Router(uniV2Router), UniswapV3Router(uniV3Router));
+
+        vm.startPrank(sender);
     }
 
     // ======================================= SWAP TESTS =======================================
@@ -44,12 +46,10 @@ contract SwapRouterTest is Test {
         path[1] = address(WETH);
 
         // Test swap.
-        vm.startPrank(sender);
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchanges.UNIV2, swapData);
-        vm.stopPrank();
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
@@ -69,12 +69,10 @@ contract SwapRouterTest is Test {
         path[2] = address(USDC);
 
         // Test swap.
-        vm.startPrank(sender);
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchanges.UNIV2, swapData);
-        vm.stopPrank();
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
@@ -97,12 +95,10 @@ contract SwapRouterTest is Test {
         poolFees[0] = 3000;
 
         // Test swap.
-        vm.startPrank(sender);
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, poolFees, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchanges.UNIV3, swapData);
-        vm.stopPrank();
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
@@ -127,12 +123,10 @@ contract SwapRouterTest is Test {
         poolFees[1] = 100; // 0.01%
 
         // Test swap.
-        vm.startPrank(sender);
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, poolFees, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchanges.UNIV3, swapData);
-        vm.stopPrank();
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
