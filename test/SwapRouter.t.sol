@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
-import { SwapRouter } from "src/SwapRouter.sol";
+import { SwapRouter } from "src/modules/SwapRouter.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -48,7 +48,7 @@ contract SwapRouterTest is Test {
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swapExactAssets(SwapRouter.Exchanges.UNIV2, swapData);
+        uint256 out = swapRouter.swap(SwapRouter.Exchanges.UNIV2, swapData);
         vm.stopPrank();
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
@@ -73,7 +73,7 @@ contract SwapRouterTest is Test {
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swapExactAssets(SwapRouter.Exchanges.UNIV2, swapData);
+        uint256 out = swapRouter.swap(SwapRouter.Exchanges.UNIV2, swapData);
         vm.stopPrank();
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
@@ -101,7 +101,7 @@ contract SwapRouterTest is Test {
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, poolFees, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swapExactAssets(SwapRouter.Exchanges.UNIV3, swapData);
+        uint256 out = swapRouter.swap(SwapRouter.Exchanges.UNIV3, swapData);
         vm.stopPrank();
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
@@ -131,7 +131,7 @@ contract SwapRouterTest is Test {
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, poolFees, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swapExactAssets(SwapRouter.Exchanges.UNIV3, swapData);
+        uint256 out = swapRouter.swap(SwapRouter.Exchanges.UNIV3, swapData);
         vm.stopPrank();
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
