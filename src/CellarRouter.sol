@@ -291,9 +291,7 @@ contract CellarRouter is ICellarRouter {
      * @param assets amount of assets to withdraw
      * @param receiver address receiving the ETH
      * @param deadline timestamp after which permit is invalid
-     * @param v used to produce valid secp256k1 signature from the caller along with r and s
-     * @param r used to produce valid secp256k1 signature from the caller along with v and s
-     * @param s used to produce valid secp256k1 signature from the caller along with r and v
+     * @param signature a valid secp256k1 signature
      * @return shares amount of shares burned
      */
     function withdrawETHFromCellarWithPermit(
@@ -301,9 +299,7 @@ contract CellarRouter is ICellarRouter {
         uint256 assets,
         address receiver,
         uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        bytes memory signature
     ) external returns (uint256 shares) {
         ERC20 asset = cellar.asset();
 
@@ -311,6 +307,7 @@ contract CellarRouter is ICellarRouter {
         if (address(asset) != address(weth)) revert STATE_AssetNotWeth();
 
         // Approve for router to burn user shares via permit.
+        (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
         cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Withdraw assets from the cellar.

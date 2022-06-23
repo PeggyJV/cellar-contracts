@@ -343,9 +343,7 @@ contract CellarRouterTest is Test {
             assets,
             owner,
             block.timestamp,
-            v,
-            r,
-            s
+            abi.encodePacked(r, s, v)
         );
 
         // Run test.

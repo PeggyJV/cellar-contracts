@@ -35,6 +35,11 @@ interface ICellarRouter {
         bytes memory signature
     ) external returns (uint256 shares);
 
+    function depositETHIntoCellar(
+        ERC4626 cellar,
+        address receiver
+    ) external payable returns (uint256 shares);
+
     function withdrawAndSwapFromCellar(
         ERC4626 cellar,
         address[] calldata path,
@@ -50,6 +55,20 @@ interface ICellarRouter {
         uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin,
+        address receiver,
+        uint256 deadline,
+        bytes memory signature
+    ) external returns (uint256 shares);
+
+    function withdrawETHFromCellar(
+        ERC4626 cellar,
+        uint256 assets,
+        address receiver
+    ) external returns (uint256 shares);
+
+    function withdrawETHFromCellarWithPermit(
+        ERC4626 cellar,
+        uint256 assets,
         address receiver,
         uint256 deadline,
         bytes memory signature
