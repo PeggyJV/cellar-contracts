@@ -30,6 +30,12 @@ forge test
 npx hardhat test
 ```
 
+Run tests on forked chains with Foundry:
+
+```bash
+forge test --fork-url ALCHEMY_API_KEY
+```
+
 Run tests for both Hardhat and Foundry:
 
 ```bash
