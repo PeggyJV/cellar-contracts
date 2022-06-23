@@ -309,19 +309,51 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
     // ============================================ CORE LOGIC ============================================
 
-    /**
-     * @dev Check that the deposit is not restricted by a deposit limit or liquidity limit and
-     *      prevent deposits during a shutdown.
-     * @param assets amount of assets to deposit
-     * @param receiver address that will receive minted shares
-     */
-    function beforeDeposit(
-        uint256 assets,
-        uint256,
-        address receiver
-    ) internal view override whenNotShutdown {
+    function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
+        // Check that the deposit is not restricted by a deposit limit or liquidity limit and
+        // prevent deposits during a shutdown.
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
+
+        // Check for rounding error since we round down in previewDeposit.
+        require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
+
+        ERC20 cellarAsset = asset;
+        uint256 assetsBeforeDeposit = cellarAsset.balanceOf(address(this));
+
+        // Need to transfer before minting or ERC777s could reenter.
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+
+        // Check that the balance transferred is what was expected.
+        uint256 assetsReceived = cellarAsset.balanceOf(address(this)) - assetsBeforeDeposit;
+        if (assetsReceived != assets) revert STATE_AssetUsesFeeOnTransfer(address(cellarAsset));
+
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
+    }
+
+    function mint(uint256 shares, address receiver) public override returns (uint256 assets) {
+        assets = previewMint(shares); // No need to check for rounding error, previewMint rounds up.
+
+        // Check that the deposit is not restricted by a deposit limit or liquidity limit and
+        // prevent deposits during a shutdown.
+        uint256 maxAssets = maxDeposit(receiver);
+        if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
+
+        ERC20 cellarAsset = asset;
+        uint256 assetsBeforeDeposit = cellarAsset.balanceOf(address(this));
+
+        // Need to transfer before minting or ERC777s could reenter.
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+
+        // Check that the balance transferred is what was expected.
+        uint256 assetsReceived = cellarAsset.balanceOf(address(this)) - assetsBeforeDeposit;
+        if (assetsReceived != assets) revert STATE_AssetUsesFeeOnTransfer(address(cellarAsset));
+
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
     }
 
     /**

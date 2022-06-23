@@ -267,7 +267,7 @@ contract MockSwapRouter {
         uint8 toDecimals = ERC20(tokenOut).decimals();
         amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
 
-        require(amountOut > _expected, "received less than expected");
+        require(amountOut >= _expected, "received less than expected");
 
         ERC20(tokenOut).transfer(msg.sender, amountOut);
 
