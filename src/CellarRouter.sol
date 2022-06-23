@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.13;
+pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
@@ -7,6 +7,8 @@ import { ERC4626 } from "./base/ERC4626.sol";
 import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
+
+import "./Errors.sol";
 
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
@@ -39,9 +41,7 @@ contract CellarRouter is ICellarRouter {
      * @param assets amount of assets to deposit
      * @param receiver address receiving the shares
      * @param deadline timestamp after which permit is invalid
-     * @param v used to produce valid secp256k1 signature from the caller along with r and s
-     * @param r used to produce valid secp256k1 signature from the caller along with v and s
-     * @param s used to produce valid secp256k1 signature from the caller along with r and v
+     * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
      */
     function depositIntoCellarWithPermit(
@@ -49,14 +49,13 @@ contract CellarRouter is ICellarRouter {
         uint256 assets,
         address receiver,
         uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        bytes memory signature
     ) external returns (uint256 shares) {
         // Retrieve the cellar's current asset.
         ERC20 asset = cellar.asset();
 
         // Approve the assets from the user to the router via permit.
+        (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
         asset.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Transfer assets from the user to the router.
@@ -123,9 +122,7 @@ contract CellarRouter is ICellarRouter {
      * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the shares
      * @param deadline timestamp after which permit is invalid
-     * @param v used to produce valid secp256k1 signature from the caller along with r and s
-     * @param r used to produce valid secp256k1 signature from the caller along with v and s
-     * @param s used to produce valid secp256k1 signature from the caller along with r and v
+     * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
      */
     function depositAndSwapIntoCellarWithPermit(
@@ -136,14 +133,13 @@ contract CellarRouter is ICellarRouter {
         uint256 assetsOutMin,
         address receiver,
         uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        bytes memory signature
     ) external returns (uint256 shares) {
         // Retrieve the asset being swapped.
         ERC20 assetIn = ERC20(path[0]);
 
-        // Approve the assets from the user to the router via permit.
+        // Approve for router to burn user shares via permit.
+        (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
         assetIn.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Deposit assets into the cellar using a swap if necessary.
@@ -206,9 +202,7 @@ contract CellarRouter is ICellarRouter {
      * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the assets
      * @param deadline timestamp after which permit is invalid
-     * @param v used to produce valid secp256k1 signature from the caller along with r and s
-     * @param r used to produce valid secp256k1 signature from the caller along with v and s
-     * @param s used to produce valid secp256k1 signature from the caller along with r and v
+     * @param signature a valid secp256k1 signature
      * @return shares amount of shares burned
      */
     function withdrawAndSwapFromCellarWithPermit(
@@ -219,11 +213,10 @@ contract CellarRouter is ICellarRouter {
         uint256 assetsOutMin,
         address receiver,
         uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        bytes memory signature
     ) external returns (uint256 shares) {
         // Approve for router to burn user shares via permit.
+        (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
         cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
@@ -231,6 +224,38 @@ contract CellarRouter is ICellarRouter {
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
+
+    /**
+     * @notice Split a signature into its components.
+     * @param signature a valid secp256k1 signature
+     * @return v a component of the secp256k1 signature
+     * @return r a component of the secp256k1 signature
+     * @return s a component of the secp256k1 signature
+     */
+    function _splitSignature(bytes memory signature)
+        internal
+        pure
+        returns (
+            uint8 v,
+            bytes32 r,
+            bytes32 s
+        )
+    {
+        if (signature.length != 65) revert USR_InvalidSignature(signature.length, 65);
+
+        // Read each parameter directly from the signature's memory region.
+        assembly {
+            // Place first word on the stack at r.
+            r := mload(add(signature, 32))
+
+            // Place second word on the stack at s.
+            s := mload(add(signature, 64))
+
+            // Place final byte on the stack at v.
+            v := byte(0, mload(add(signature, 96)))
+        }
+    }
+
     /**
      * @notice Perform a swap using Uniswap.
      * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For

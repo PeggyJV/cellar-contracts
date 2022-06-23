@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.13;
+pragma solidity 0.8.15;
 
 // ========================================== USER ERRORS ===========================================
 
@@ -163,6 +163,13 @@ error USR_InvalidPosition(address position);
  * @param sharesRemaining amount of shares remaining in the position
  */
 error USR_PositionNotEmpty(address position, uint256 sharesRemaining);
+
+/**
+ * @notice The caller attempted an signed action with an invalid signature.
+ * @param signatureLength length of the signature passed in
+ * @param expectedSignatureLength expected length of the signature passed in
+ */
+error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
 
 // ========================================== STATE ERRORS ===========================================
 
