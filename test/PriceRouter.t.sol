@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.13;
+pragma solidity 0.8.15;
 
 import { PriceRouter, Registry, ERC20 } from "src/modules/PriceRouter.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";

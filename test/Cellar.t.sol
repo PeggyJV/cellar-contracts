@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.13;
+pragma solidity 0.8.15;
 
 import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
