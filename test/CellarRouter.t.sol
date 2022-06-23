@@ -2,7 +2,7 @@
 pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { ERC4626 } from "src/base/ERC4626.sol";
+import { Cellar } from "src/base/Cellar.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
@@ -77,7 +77,7 @@ contract CellarRouterTest is Test {
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
-        uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, poolFees, assets, 0, owner);
+        uint256 shares = router.depositAndSwapIntoCellar(Cellar(address(cellar)), path, poolFees, assets, 0, owner);
         vm.stopPrank();
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
@@ -114,7 +114,7 @@ contract CellarRouterTest is Test {
         deal(address(DAI), owner, assets, true);
         DAI.approve(address(forkedRouter), assets);
         uint256 shares = forkedRouter.depositAndSwapIntoCellar(
-            ERC4626(address(forkedCellar)),
+            Cellar(address(forkedCellar)),
             path,
             poolFees,
             assets,
@@ -162,7 +162,7 @@ contract CellarRouterTest is Test {
         deal(address(DAI), owner, assets, true);
         DAI.approve(address(forkedRouter), assets);
         uint256 shares = forkedRouter.depositAndSwapIntoCellar(
-            ERC4626(address(forkedCellar)),
+            Cellar(address(forkedCellar)),
             path,
             poolFees,
             assets,
@@ -210,7 +210,7 @@ contract CellarRouterTest is Test {
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
-        router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, poolFees, assets, 0, owner);
+        router.depositAndSwapIntoCellar(Cellar(address(cellar)), path, poolFees, assets, 0, owner);
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
         // to deposit due to slippage swaps.
@@ -222,7 +222,7 @@ contract CellarRouterTest is Test {
         // Test withdraw and swap.
         cellar.approve(address(router), assetsReceivedAfterDeposit);
         uint256 sharesRedeemed = router.withdrawAndSwapFromCellar(
-            ERC4626(address(cellar)),
+            Cellar(address(cellar)),
             path,
             poolFees,
             assetsReceivedAfterDeposit,
