@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.13;
+pragma solidity 0.8.15;
 
 // ========================================== USER ERRORS ===========================================
 
@@ -139,30 +139,11 @@ error USR_ZeroRewardsPerEpoch();
 error USR_InvalidLockValue(uint256 lock);
 
 /**
- * @notice Attempted to trust a position that had an incompatible underlying asset.
- * @param incompatibleAsset address of the asset is incompatible with the asset of this cellar
- * @param expectedAsset address of the cellar's underlying asset
+ * @notice The caller attempted an signed action with an invalid signature.
+ * @param signatureLength length of the signature passed in
+ * @param expectedSignatureLength expected length of the signature passed in
  */
-error USR_IncompatiblePosition(address incompatibleAsset, address expectedAsset);
-
-/**
- * @notice Attempted to add a position that is already being used.
- * @param position address of the position
- */
-error USR_PositionAlreadyUsed(address position);
-
-/**
- * @notice Attempted an action on a position that is not being used by the cellar.
- * @param position address of the invalid position
- */
-error USR_InvalidPosition(address position);
-
-/**
- * @notice Attempted an action on a position that is required to be empty before the action can be performed.
- * @param position address of the non-empty position
- * @param sharesRemaining amount of shares remaining in the position
- */
-error USR_PositionNotEmpty(address position, uint256 sharesRemaining);
+error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
 
 // ========================================== STATE ERRORS ===========================================
 
