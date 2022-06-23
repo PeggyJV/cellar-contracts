@@ -917,6 +917,7 @@ contract AaveV2StablecoinCellarTest is Test {
         uint256 maxLockedBefore = cellar.maxLocked();
 
         uint256 highWatermarkBeforeRebalance = cellar.highWatermarkBalance();
+        uint256 totalHoldingsBeforeRebalance = cellar.totalHoldings();
         uint256 totalAssetsBeforeRebalance = cellar.totalAssets();
         uint256 priceOfShareBeforeRebalance = cellar.convertToAssets(1e18);
         cellar.rebalance(route, swapParams, 0);
@@ -944,7 +945,7 @@ contract AaveV2StablecoinCellarTest is Test {
         assertEq(cellar.totalBalance(), assetsAfterRebalance, "Should have updated total balance.");
         assertEq(
             cellar.highWatermarkBalance(),
-            highWatermarkBeforeRebalance.changeDecimals(6, 18),
+            (highWatermarkBeforeRebalance + totalHoldingsBeforeRebalance).changeDecimals(6, 18),
             "Should have updated high watermark balance."
         );
         assertLt(priceOfShareAfterRebalance, priceOfShareBeforeRebalance, "Expect price of shares to have decreased.");
@@ -976,6 +977,8 @@ contract AaveV2StablecoinCellarTest is Test {
 
         uint256 totalBalanceAndHoldingsBeforeRebalance = cellar.totalBalance() + cellar.totalHoldings();
 
+        uint256 highWatermarkBeforeRebalance = cellar.highWatermarkBalance();
+        uint256 totalHoldingsBeforeRebalance = cellar.totalHoldings();
         uint256 totalAssetsBeforeRebalance = cellar.totalAssets();
         uint256 priceOfShareBeforeRebalance = cellar.convertToAssets(1e18);
         cellar.rebalance(route, swapParams, 0);
@@ -1002,7 +1005,7 @@ contract AaveV2StablecoinCellarTest is Test {
         );
         assertEq(
             cellar.highWatermarkBalance(),
-            highWatermarkBeforeRebalance.changeDecimals(6, 18),
+            (highWatermarkBeforeRebalance + totalHoldingsBeforeRebalance).changeDecimals(6, 18),
             "Should have updated high watermark balance."
         );
         assertEq(
@@ -1042,6 +1045,8 @@ contract AaveV2StablecoinCellarTest is Test {
 
         uint256[3][4] memory swapParams;
 
+        uint256 highWatermarkBeforeRebalance = cellar.highWatermarkBalance();
+        uint256 totalHoldingsBeforeRebalance = cellar.totalHoldings();
         uint256 totalAssetsBeforeRebalance = cellar.totalAssets();
         uint256 priceOfShareBeforeRebalance = cellar.convertToAssets(1e18);
         cellar.rebalance(route, swapParams, 0);
@@ -1064,7 +1069,7 @@ contract AaveV2StablecoinCellarTest is Test {
         assertEq(cellar.totalBalance(), assetsAfterRebalance, "Should have updated total balance.");
         assertEq(
             cellar.highWatermarkBalance(),
-            highWatermarkBeforeRebalance.changeDecimals(6, 18),
+            (highWatermarkBeforeRebalance + totalHoldingsBeforeRebalance).changeDecimals(6, 18),
             "Should have updated high watermark balance."
         );
         assertLt(priceOfShareAfterRebalance, priceOfShareBeforeRebalance, "Expect price of shares to have decreased.");

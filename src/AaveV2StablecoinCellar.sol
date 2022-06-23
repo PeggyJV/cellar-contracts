@@ -651,7 +651,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         );
 
         totalBalance = uint240(newTotalBalance);
-        highWatermarkBalance = highWatermarkBalance.changeDecimals(oldPositionDecimals, newPositionDecimals);
+        highWatermarkBalance = (highWatermarkBalance + totalAssetsInHolding).changeDecimals(
+            oldPositionDecimals,
+            newPositionDecimals
+        );
 
         emit Rebalance(address(oldPosition), address(newPosition), newTotalBalance);
     }
