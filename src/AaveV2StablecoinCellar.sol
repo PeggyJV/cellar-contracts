@@ -44,7 +44,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @notice The total amount of assets held in the current position since the time of last accrual.
      * @dev Unlike `totalAssets`, this includes locked yield that hasn't been distributed.
      */
-    uint240 public totalBalance;
+    uint256 public totalBalance;
 
     // ======================================== ACCRUAL CONFIG ========================================
 
@@ -339,7 +339,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 holdings = totalHoldings();
 
         // Only withdraw if not enough assets in the holding pool.
-        if (assets > holdings) totalBalance -= uint240(_withdrawFromPosition(currentPosition, assets - holdings));
+        if (assets > holdings) totalBalance -= _withdrawFromPosition(currentPosition, assets - holdings);
     }
 
     // ======================================= ACCOUNTING LOGIC =======================================
@@ -515,7 +515,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         lastAccrual = uint32(block.timestamp);
 
-        totalBalance = uint240(balanceThisAccrual);
+        totalBalance = balanceThisAccrual;
 
         emit Accrual(platformFees, performanceFees, yield);
     }
@@ -529,7 +529,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function enterPosition(uint256 assets) public whenNotShutdown onlyOwner {
         ERC20 currentPosition = asset;
 
-        totalBalance += uint240(assets);
+        totalBalance += assets;
 
         _depositIntoPosition(currentPosition, assets);
 
@@ -550,7 +550,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function exitPosition(uint256 assets) public whenNotShutdown onlyOwner {
         ERC20 currentPosition = asset;
 
-        totalBalance -= uint240(_withdrawFromPosition(currentPosition, assets));
+        totalBalance -= _withdrawFromPosition(currentPosition, assets);
 
         emit ExitPosition(address(currentPosition), assets);
     }
@@ -635,7 +635,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
             assetsAfterSwap
         );
 
-        totalBalance = uint240(newTotalBalance);
+        totalBalance = newTotalBalance;
 
         emit Rebalance(address(oldPosition), address(newPosition), newTotalBalance);
     }
