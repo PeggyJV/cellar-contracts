@@ -235,6 +235,7 @@ contract CellarRouter is ICellarRouter {
      * @param paths array of arrays of [token1, token2, token3] that specifies the swap path on swap
      * @param poolFees array of amounts out of 1e4 (eg. 10000 == 1%) that represents the fee tier to use for each swap
      * @param assets amount of assets to withdraw
+     * @param assetsIn description
      * @param assetsOutMins array of minimum amounts of assets received from swaps
      * @param receiver address receiving the assets
      * @return shares amount of shares burned
@@ -244,25 +245,26 @@ contract CellarRouter is ICellarRouter {
         address[][] calldata paths,
         uint24[][] calldata poolFees,
         uint256 assets,
-        uint256[] calldata assetsOutMins, //technicallly couldn't this be one value, then pass in zero for all the min amounts, and do a final check at the end?
+        uint256[] calldata assetsIn,
+        uint256[] calldata assetsOutMins,
         address receiver
     ) public returns (uint256 shares) {
         ERC20 assetOut = ERC20(paths[0][paths[0].length - 1]); // get the last asset from the first path
         require(paths.length == assetsOutMins.length, "Array length mismatch");
-
+        // `paths.length` was stored in a memory variable, but was removed because stack too deep.
         // Withdraw assets from the cellar.
         ERC20[] memory receivedAssets;
-        uint256[] memory amountsOut;
-        (shares, receivedAssets, amountsOut) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
+        //uint256[] memory amountsOut;
+        (shares, receivedAssets, ) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
 
-        assets = 0; //zero out for use in for loop
+        assets = assetOut.balanceOf(address(this)); //zero out for use in for loop
         for (uint256 i = 0; i < paths.length; i++) {
             if (receivedAssets[i] == ERC20(paths[i][paths[i].length - 1])) {
-                assets += amountsOut[i]; // asset is already in desired asset
+                //assets += assetsIn[i]; // asset is already in desired asset
                 continue; //no need to swap
             }
             require(assetOut == ERC20(paths[i][paths[i].length - 1]), "Paths have different ends");
-            assets += _swap(paths[i], poolFees[i], amountsOut[i], assetsOutMins[i]);
+            assets += _swap(paths[i], poolFees[i], assetsIn[i], assetsOutMins[i]);
         }
 
         // Transfer assets from the router to the receiver.
