@@ -247,13 +247,14 @@ contract CellarRouter is ICellarRouter {
         uint256[] calldata assetsOutMins, //technicallly couldn't this be one value, then pass in zero for all the min amounts, and do a final check at the end?
         address receiver
     ) public returns (uint256 shares) {
-        ERC20 assetOut = ERC20(paths[0][paths.length - 1]); // get the last asset from the first path
-        require(paths.length == poolFees.length && paths.length == assetsOutMins.length, "Array length mismatch");
+        ERC20 assetOut = ERC20(paths[0][paths[0].length - 1]); // get the last asset from the first path
+        require(paths.length == assetsOutMins.length, "Array length mismatch");
 
         // Withdraw assets from the cellar.
         ERC20[] memory receivedAssets;
         uint256[] memory amountsOut;
         (shares, receivedAssets, amountsOut) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
+
         assets = 0; //zero out for use in for loop
         for (uint256 i = 0; i < paths.length; i++) {
             if (receivedAssets[i] == ERC20(paths[i][paths[i].length - 1])) {

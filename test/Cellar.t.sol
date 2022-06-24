@@ -9,6 +9,8 @@ import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 
+import { CellarRouter } from "src/CellarRouter.sol";
+
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
@@ -32,6 +34,13 @@ contract CellarTest is Test {
 
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     MockERC4626 private wbtcCLR;
+
+    //========================= CRISPY TEMPORARY ==========================
+    // Mainnet contracts:
+    address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    CellarRouter private cellarRouter;
 
     function setUp() external {
         usdcCLR = new MockERC4626(USDC, "USDC Cellar LP Token", "USDC-CLR", 6);
@@ -95,6 +104,8 @@ contract CellarTest is Test {
         USDC.approve(address(cellar), type(uint256).max);
         WETH.approve(address(cellar), type(uint256).max);
         WBTC.approve(address(cellar), type(uint256).max);
+
+        cellarRouter = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)));
     }
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
@@ -177,5 +188,68 @@ contract CellarTest is Test {
         assertEq(WETH.balanceOf(address(this)), 1e18, "Should have transferred position balance to user.");
         assertEq(WBTC.balanceOf(address(this)), 1e8, "Should have transferred position balance to user.");
         assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
+    }
+
+    function testWithdrawFromPositionsIntoSingleAssetWTwoSwaps() external {
+        cellar.increasePositionBalance(address(wethCLR), 1e18);
+        cellar.increasePositionBalance(address(wbtcCLR), 1e8);
+
+        assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
+
+        // Mint shares to user to redeem.
+        deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
+
+        //create paths
+        address[][] memory paths = new address[][](2);
+        paths[0] = new address[](2);
+        paths[0][0] = address(WETH);
+        paths[0][1] = address(USDC);
+        paths[1] = new address[](2);
+        paths[1][0] = address(WBTC);
+        paths[1][1] = address(USDC);
+        uint24[][] memory poolFees = new uint24[][](2);
+        poolFees[0] = new uint24[](0);
+        poolFees[1] = new uint24[](0);
+        uint256 assets = 32_000e6;
+        uint256[] memory minOuts = new uint256[](2);
+        minOuts[0] = 0;
+        minOuts[1] = 0;
+
+        cellar.approve(address(cellarRouter), type(uint256).max);
+        cellarRouter.withdrawFromPositionsIntoSingleAsset(cellar, paths, poolFees, assets, minOuts, address(this));
+
+        assertEq(USDC.balanceOf(address(this)), 30_400e6, "Did not recieve expected assets");
+    }
+
+    /**
+     * @notice if the asset wanted is an asset given, then it should just be added to the output with no swaps needed
+     */
+    function testWithdrawFromPositionsIntoSingleAssetWOneSwap() external {
+        cellar.increasePositionBalance(address(wethCLR), 1e18);
+        cellar.increasePositionBalance(address(wbtcCLR), 1e8);
+
+        assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
+
+        // Mint shares to user to redeem.
+        deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
+
+        //create paths
+        address[][] memory paths = new address[][](2);
+        paths[0] = new address[](1);
+        paths[0][0] = address(WETH);
+        paths[1] = new address[](2);
+        paths[1][0] = address(WBTC);
+        paths[1][1] = address(WETH);
+        uint24[][] memory poolFees = new uint24[][](2);
+        poolFees[0] = new uint24[](0);
+        poolFees[1] = new uint24[](0);
+        uint256 assets = 32_000e6;
+        uint256[] memory minOuts = new uint256[](2);
+        minOuts[0] = 0;
+        minOuts[1] = 0;
+
+        cellar.approve(address(cellarRouter), type(uint256).max);
+        cellarRouter.withdrawFromPositionsIntoSingleAsset(cellar, paths, poolFees, assets, minOuts, address(this));
+        assertEq(WETH.balanceOf(address(this)), 15.25e18, "Did not recieve expected assets");
     }
 }
