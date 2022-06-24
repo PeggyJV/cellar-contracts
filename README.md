@@ -6,6 +6,8 @@ Cellar contracts for the Sommelier Network.
 
 **Getting Started**
 
+Before attempting to setup the repo, first make sure you have Foundry installed and updated, which can be done [here](https://github.com/foundry-rs/foundry#installation).
+
 ```bash
 npm run setup
 ```
