@@ -76,39 +76,6 @@ contract SwapRouter {
         amountOut = abi.decode(result, (uint256));
     }
 
-    //in the cellar
-
-    function doExcecute(address adaptor, bytes memory adaptorData) public {
-        //require adaptor is approved
-        (bool success, bytes memory result) = adaptor.call(
-            adaptorData
-        );
-        IAdaptor(adaptor).execute(adaptorData)
-    }
-
-    //in adaptors
-    function execute( bytes memory adaptorData) external returns (uint256 amountOut) {
-        // Route swap call to appropriate function using selector.
-        (bool success, bytes memory result) = address(this).call(
-            abi.encodeWithSelector(getExchangeSelector[exchange], swapData)
-        );
-
-        if (!success) {
-            // If there is return data, the call reverted with a reason or a custom error so we
-            // bubble up the error message.
-            if (result.length > 0) {
-                assembly {
-                    let returndata_size := mload(result)
-                    revert(add(32, result), returndata_size)
-                }
-            } else {
-                revert("Swap reverted.");
-            }
-        }
-
-        amountOut = abi.decode(result, (uint256));
-    }
-
     /**
      * @notice Allows caller to make swaps using the UniswapV2 Exchange.
      * @param swapData bytes variable storing the following swap information:
