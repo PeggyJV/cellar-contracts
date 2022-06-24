@@ -383,12 +383,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @return assets the shares can be exchanged for
      */
     function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
-        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-        uint8 positionDecimals = assetDecimals;
-        uint256 totalAssetsNormalized = totalAssets().changeDecimals(positionDecimals, 18);
+        uint256 totalShares = totalSupply;
 
-        assets = totalShares == 0 ? shares : shares.mulDivDown(totalAssetsNormalized, totalShares);
-        assets = assets.changeDecimals(18, positionDecimals);
+        assets = totalShares == 0
+            ? shares.changeDecimals(18, assetDecimals)
+            : shares.mulDivDown(totalAssets(), totalShares);
     }
 
     /**
@@ -397,12 +396,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @return shares the assets can be exchanged for
      */
     function convertToShares(uint256 assets) public view override returns (uint256 shares) {
-        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-        uint8 positionDecimals = assetDecimals;
-        uint256 assetsNormalized = assets.changeDecimals(positionDecimals, 18);
-        uint256 totalAssetsNormalized = totalAssets().changeDecimals(positionDecimals, 18);
+        uint256 totalShares = totalSupply;
 
-        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivDown(totalShares, totalAssetsNormalized);
+        shares = totalShares == 0
+            ? assets.changeDecimals(assetDecimals, 18)
+            : assets.mulDivDown(totalShares, totalAssets());
     }
 
     /**
@@ -411,12 +409,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @return assets that will be deposited
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
-        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-        uint8 positionDecimals = assetDecimals;
-        uint256 totalAssetsNormalized = totalAssets().changeDecimals(positionDecimals, 18);
+        uint256 totalShares = totalSupply;
 
-        assets = totalShares == 0 ? shares : shares.mulDivUp(totalAssetsNormalized, totalShares);
-        assets = assets.changeDecimals(18, positionDecimals);
+        assets = totalShares == 0
+            ? shares.changeDecimals(18, assetDecimals)
+            : shares.mulDivUp(totalAssets(), totalShares);
     }
 
     /**
@@ -425,12 +422,11 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @return shares that will be redeemed
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
-        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-        uint8 positionDecimals = assetDecimals;
-        uint256 assetsNormalized = assets.changeDecimals(positionDecimals, 18);
-        uint256 totalAssetsNormalized = totalAssets().changeDecimals(positionDecimals, 18);
+        uint256 totalShares = totalSupply;
 
-        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivUp(totalShares, totalAssetsNormalized);
+        shares = totalShares == 0
+            ? assets.changeDecimals(assetDecimals, 18)
+            : assets.mulDivUp(totalShares, totalAssets());
     }
 
     // ========================================= LIMITS LOGIC =========================================
