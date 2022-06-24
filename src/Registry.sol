@@ -2,7 +2,7 @@
 pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SwapRouter } from "./modules/SwapRouter.sol";
+import { SwapRouter } from "./modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "./modules/PriceRouter.sol";
 import { IGravity } from "./interfaces/IGravity.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";

@@ -3,7 +3,7 @@ pragma solidity 0.8.15;
 
 import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
-import { IUniswapV2Router, IUniswapV3Router } from "src/modules/SwapRouter.sol";
+import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { MockExchange } from "src/mocks/MockExchange.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
@@ -215,10 +215,22 @@ contract CellarTest is Test {
         minOuts[0] = 0;
         minOuts[1] = 0;
 
-        cellar.approve(address(cellarRouter), type(uint256).max);
-        //cellarRouter.withdrawFromPositionsIntoSingleAsset(cellar, paths, poolFees, assets, minOuts, address(this));
+        uint256[] memory assetsIn = new uint256[](2);
+        assetsIn[0] = 1e18;
+        assetsIn[1] = 1e8;
 
-        //assertEq(USDC.balanceOf(address(this)), 30_400e6, "Did not recieve expected assets");
+        cellar.approve(address(cellarRouter), type(uint256).max);
+        cellarRouter.withdrawFromPositionsIntoSingleAsset(
+            cellar,
+            paths,
+            poolFees,
+            assets,
+            assetsIn,
+            minOuts,
+            address(this)
+        );
+
+        assertEq(USDC.balanceOf(address(this)), 30_400e6, "Did not recieve expected assets");
     }
 
     /**
@@ -248,8 +260,75 @@ contract CellarTest is Test {
         minOuts[0] = 0;
         minOuts[1] = 0;
 
+        uint256[] memory assetsIn = new uint256[](2);
+        assetsIn[0] = 1e18;
+        assetsIn[1] = 1e8;
+
         cellar.approve(address(cellarRouter), type(uint256).max);
-        //cellarRouter.withdrawFromPositionsIntoSingleAsset(cellar, paths, poolFees, assets, minOuts, address(this));
-        //assertEq(WETH.balanceOf(address(this)), 15.25e18, "Did not recieve expected assets");
+        cellarRouter.withdrawFromPositionsIntoSingleAsset(
+            cellar,
+            paths,
+            poolFees,
+            assets,
+            assetsIn,
+            minOuts,
+            address(this)
+        );
+        assertEq(WETH.balanceOf(address(this)), 15.25e18, "Did not recieve expected assets");
+    }
+
+    function testWithdrawFromPositionsIntoSingleAssetWFourSwaps() external {
+        cellar.increasePositionBalance(address(wethCLR), 1e18);
+        cellar.increasePositionBalance(address(wbtcCLR), 1e8);
+
+        assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
+
+        // Mint shares to user to redeem.
+        deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
+
+        //create paths
+        address[][] memory paths = new address[][](4);
+        paths[0] = new address[](2);
+        paths[0][0] = address(WETH);
+        paths[0][1] = address(USDC);
+        paths[1] = new address[](2);
+        paths[1][0] = address(WBTC);
+        paths[1][1] = address(USDC);
+        paths[2] = new address[](2);
+        paths[2][0] = address(WETH);
+        paths[2][1] = address(USDC);
+        paths[3] = new address[](2);
+        paths[3][0] = address(WBTC);
+        paths[3][1] = address(USDC);
+        uint24[][] memory poolFees = new uint24[][](4);
+        poolFees[0] = new uint24[](0);
+        poolFees[1] = new uint24[](0);
+        poolFees[2] = new uint24[](0);
+        poolFees[3] = new uint24[](0);
+        uint256 assets = 32_000e6;
+        uint256[] memory minOuts = new uint256[](4);
+        minOuts[0] = 0;
+        minOuts[1] = 0;
+        minOuts[2] = 0;
+        minOuts[3] = 0;
+
+        uint256[] memory assetsIn = new uint256[](4);
+        assetsIn[0] = 0.5e18;
+        assetsIn[1] = 0.5e8;
+        assetsIn[2] = 0.5e18;
+        assetsIn[3] = 0.5e8;
+
+        cellar.approve(address(cellarRouter), type(uint256).max);
+        cellarRouter.withdrawFromPositionsIntoSingleAsset(
+            cellar,
+            paths,
+            poolFees,
+            assets,
+            assetsIn,
+            minOuts,
+            address(this)
+        );
+
+        assertEq(USDC.balanceOf(address(this)), 30_400e6, "Did not recieve expected assets");
     }
 }

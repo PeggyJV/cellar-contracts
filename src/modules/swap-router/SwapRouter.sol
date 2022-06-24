@@ -54,7 +54,7 @@ contract SwapRouter {
      * @param swapData encoded data used for the swap
      * @return amountOut amount of tokens received from the swap
      */
-    function swap(Exchange exchange, bytes memory swapData) external returns (uint256 amountOut) {
+    function swap(Exchange exchange, bytes memory swapData) public returns (uint256 amountOut) {
         // Route swap call to appropriate function using selector.
         (bool success, bytes memory result) = address(this).call(
             abi.encodeWithSelector(getExchangeSelector[exchange], swapData)
@@ -74,6 +74,23 @@ contract SwapRouter {
         }
 
         amountOut = abi.decode(result, (uint256));
+    }
+
+    /**
+     * @notice Route swap calls to the appropriate exchanges.
+     * @param exchange array of values dictating which exchange to use to make the swap
+     * @param swapData arrays of encoded data used for the swaps
+     * @return amountsOut array of amounts of tokens received from swaps
+     */
+    function multiSwap(Exchange[] memory exchange, bytes[] memory swapData)
+        external
+        returns (uint256[] memory amountsOut)
+    {
+        amountsOut = new uint256[](exchange.length);
+        //loop through and perform all swap
+        for (uint256 i = 0; i < exchange.length; i++) {
+            amountsOut[i] = swap(exchange[i], swapData[i]);
+        }
     }
 
     /**

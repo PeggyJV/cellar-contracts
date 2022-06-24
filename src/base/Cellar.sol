@@ -735,7 +735,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     function enterPosition(
         ERC4626 position,
         uint256 assets,
-        SwapRouter.Exchanges exchange,
+        SwapRouter.Exchange exchange,
         bytes calldata params
     ) external onlyOwner {
         // Check that position is a valid position.
@@ -761,7 +761,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     function exitPosition(
         ERC4626 position,
         uint256 balance,
-        SwapRouter.Exchanges exchange,
+        SwapRouter.Exchange exchange,
         bytes calldata params
     ) external onlyOwner {
         _withdrawAndSwapFromPosition(position, asset, balance, exchange, params);
@@ -777,7 +777,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         ERC4626 fromPosition,
         ERC4626 toPosition,
         uint256 assetsFrom,
-        SwapRouter.Exchanges exchange,
+        SwapRouter.Exchange exchange,
         bytes calldata params
     ) external onlyOwner returns (uint256 assetsTo) {
         // Check that position being rebalanced to is a valid position.
@@ -906,7 +906,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         ERC4626 position,
         ERC20 toAsset,
         uint256 balance,
-        SwapRouter.Exchanges exchange,
+        SwapRouter.Exchange exchange,
         bytes calldata params
     ) internal returns (uint256 amountOut) {
         // Get position data.
@@ -968,7 +968,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     function _swapExactAssets(
         ERC20 assetIn,
         uint256 amountIn,
-        SwapRouter.Exchanges exchange,
+        SwapRouter.Exchange exchange,
         bytes calldata params
     ) internal returns (uint256 amountOut) {
         // Store the expected amount of the asset in that we expect to have after the swap.
@@ -981,7 +981,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         assetIn.safeApprove(address(swapRouter), amountIn);
 
         // Perform swap.
-        amountOut = swapRouter.swapExactAssets(exchange, params);
+        amountOut = swapRouter.swap(exchange, params);
 
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
         // specified a different amount of assets to swap then `amountIn`.
@@ -993,7 +993,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         ERC20 assetIn,
         ERC20 assetOut,
         uint256 amountOut,
-        SwapRouter.Exchanges exchange,
+        SwapRouter.Exchange exchange,
         bytes calldata params
     ) internal returns (uint256 amountIn) {
         // Store the expected amount of the asset out that we expect to have after the swap.
@@ -1006,7 +1006,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         assetIn.safeApprove(address(swapRouter), amountIn);
 
         // Perform swap.
-        amountIn = swapRouter.swapForExactAssets(exchange, params);
+        amountIn = swapRouter.swap(exchange, params);
 
         // Check that the amount of assets received is what is expected. Will revert if the `params`
         // specified a different amount of assets to receive then `amountOut`.
