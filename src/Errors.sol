@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.13;
+pragma solidity 0.8.15;
 
 // ========================================== USER ERRORS ===========================================
 
@@ -161,6 +161,13 @@ error USR_PositionAlreadyUsed(address position);
  * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
  */
 error USR_LengthMismatch();
+
+/**
+ * @notice Attempted an operation with an invalid signature.
+ * @param signatureLength length of the signature
+ * @param expectedSignatureLength expected length of the signature
+ */
+error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
 
 // ========================================== STATE ERRORS ===========================================
 
