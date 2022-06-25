@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.13;
+pragma solidity 0.8.15;
 
 // TODO: uncomment and refactor test once src/base/Cellar.sol contract is ready
 

@@ -44,7 +44,6 @@ error USR_InvalidSwap(address assetOut, address currentAsset);
  * @notice Attempted to sweep an asset that is managed by the cellar.
  * @param token address of the token that can't be sweeped
  */
-// TODO: change to ERC20
 error USR_ProtectedAsset(address token);
 
 /**
@@ -55,15 +54,20 @@ error USR_SamePosition(address position);
 
 /**
  * @notice Attempted to update the position to one that is not supported by the platform.
- * @param unsupportedPosition address of the unsupported position
+ * @param positon address of the unsupported position
  */
-error USR_UnsupportedPosition(address unsupportedPosition);
+error USR_UnsupportedPosition(address positon);
+
+/**
+ * @notice Attempted to update the asset to one that is not supported by the platform.
+ * @param asset address of the unsupported asset
+ */
+error USR_UnsupportedAsset(address asset);
 
 /**
  * @notice Attempted an operation on an untrusted position.
  * @param position address of the position
  */
-// TODO: change to ERC4626
 error USR_UntrustedPosition(address position);
 
 /**
@@ -77,7 +81,6 @@ error USR_TooManyDecimals(uint8 newDecimals, uint8 maxDecimals);
  * @notice Attempted set the cellar's asset to WETH with an asset that is not WETH compatible.
  * @param asset address of the asset that is not WETH compatible
  */
-// TODO: change to ERC20
 error USR_AssetNotWETH(address asset);
 
 /**
@@ -154,6 +157,18 @@ error USR_IncompatiblePosition(address incompatibleAsset, address expectedAsset)
  */
 error USR_PositionAlreadyUsed(address position);
 
+/**
+ * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
+ */
+error USR_LengthMismatch();
+
+/**
+ * @notice Attempted an operation with an invalid signature.
+ * @param signatureLength length of the signature
+ * @param expectedSignatureLength expected length of the signature
+ */
+error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
+
 // ========================================== STATE ERRORS ===========================================
 
 /**
@@ -225,3 +240,27 @@ error STATE_ContractPaused();
  * @dev    Emergency mode is irreversible.
  */
 error STATE_ContractKilled();
+
+/**
+ * @notice Attempted an operation to price an asset that under its minimum valid price.
+ * @param asset address of the asset that is under its minimum valid price
+ * @param price price of the asset
+ * @param minPrice minimum valid price of the asset
+ */
+error STATE_AssetBelowMinPrice(address asset, uint256 price, uint256 minPrice);
+
+/**
+ * @notice Attempted an operation to price an asset that under its maximum valid price.
+ * @param asset address of the asset that is under its maximum valid price
+ * @param price price of the asset
+ * @param maxPrice maximum valid price of the asset
+ */
+error STATE_AssetAboveMaxPrice(address asset, uint256 price, uint256 maxPrice);
+
+/**
+ * @notice Attempted to fetch a price for an asset that has not been updated in too long.
+ * @param asset address of the asset thats price is stale
+ * @param timeSinceLastUpdate seconds since the last price update
+ * @param heartbeat maximum allowed time between price updates
+ */
+error STATE_StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
