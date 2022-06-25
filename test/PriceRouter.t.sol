@@ -50,6 +50,9 @@ contract PriceRouterTest is Test {
     // ======================================= SWAP TESTS =======================================
 
     function testExchangeRate() external {
+        // Ignore if not on mainnet.
+        if (block.chainid != 1) return;
+
         uint256 exchangeRate;
 
         // Test exchange rates work when quote is same as base.
@@ -107,6 +110,9 @@ contract PriceRouterTest is Test {
 
     // TODO: Add test case for getting BOND price range.
     function testPriceRange() external {
+        // Ignore if not on mainnet.
+        if (block.chainid != 1) return;
+
         uint256 min;
         uint256 max;
 
@@ -150,6 +156,9 @@ contract PriceRouterTest is Test {
         uint256 assets1,
         uint256 assets2
     ) external {
+        // Ignore if not on mainnet.
+        if (block.chainid != 1) return;
+
         assets0 = bound(assets0, 1e6, type(uint72).max);
         assets1 = bound(assets1, 1e18, type(uint112).max);
         assets2 = bound(assets2, 1e8, type(uint48).max);
