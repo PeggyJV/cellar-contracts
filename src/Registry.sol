@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.13;
+pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SwapRouter } from "./modules/SwapRouter.sol";
-import { PriceRouter } from "./modules/PriceRouter.sol";
+import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "./interfaces/IGravity.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -26,15 +26,15 @@ contract Registry is Ownable {
         gravityBridge = _gravityBridge;
     }
 
-    function setSwapRouter(SwapRouter newSwapRouter) external {
+    function setSwapRouter(SwapRouter newSwapRouter) external onlyOwner {
         swapRouter = newSwapRouter;
     }
 
-    function setPriceRouter(PriceRouter newPriceRouter) external {
+    function setPriceRouter(PriceRouter newPriceRouter) external onlyOwner {
         priceRouter = newPriceRouter;
     }
 
-    function setGravityBridge(IGravity newGravityBridge) external {
+    function setGravityBridge(IGravity newGravityBridge) external onlyOwner {
         gravityBridge = newGravityBridge;
     }
 }

@@ -1,5 +1,9 @@
 [default]
 # Sets the concrete solc version to use
 # This overrides the `auto_detect_solc` value
-solc_version = '0.8.13'
+solc_version = '0.8.15'
 auto_detect_solc = false
+
+# eth_rpc_url = "YOUR_ALCHEMY_HTTPS_URL_HERE"
+# etherscan_api_key = "YOUR_ETHERSCAN_API_KEY_HERE"
+block_number = 15000000
