@@ -421,7 +421,6 @@ contract CellarStaking is ICellarStaking, Ownable {
         _updateRewardForStake(msg.sender, depositId);
 
         // Start unstaking
-        uint256 amountWithBoost = s.amountWithBoost;
         reward = s.rewards;
 
         s.amount = 0;
@@ -429,8 +428,9 @@ contract CellarStaking is ICellarStaking, Ownable {
         s.rewards = 0;
 
         // Update global state
+        // Boosted amount same as deposit amount, since we have unbonded
         totalDeposits -= depositAmount;
-        totalDepositsWithBoost -= amountWithBoost;
+        totalDepositsWithBoost -= depositAmount;
 
         // Distribute stake
         stakingToken.safeTransfer(msg.sender, depositAmount);
