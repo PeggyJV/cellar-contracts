@@ -234,9 +234,9 @@ contract CellarStaking is ICellarStaking, Ownable {
             UserStake({
                 amount: uint112(amount),
                 amountWithBoost: uint112(amountWithBoost),
+                unbondTimestamp: 0,
                 rewardPerTokenPaid: uint112(rewardPerTokenStored),
                 rewards: 0,
-                unbondTimestamp: 0,
                 lock: lock
             })
         );
