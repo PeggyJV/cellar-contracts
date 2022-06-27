@@ -687,16 +687,19 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @dev    Sets rewardPerTokenStored.
      *
      *
-     * @return rewardPerToken           The latest time to calculate.
+     * @return newRewardPerTokenStored  The new rewards to distribute per token.
+     * @return latestTimestamp          The latest time to calculate.
      */
-    function rewardPerToken() public view override returns (uint256) {
-        if (totalDeposits == 0) return rewardPerTokenStored;
+    function rewardPerToken() public view override returns (uint256 newRewardPerTokenStored, uint256 latestTimestamp) {
+        latestTimestamp = latestRewardsTimestamp();
 
-        uint256 timeElapsed = latestRewardsTimestamp() - lastAccountingTimestamp;
+        if (totalDeposits == 0) return (rewardPerTokenStored, latestTimestamp);
+
+        uint256 timeElapsed = latestTimestamp - lastAccountingTimestamp;
         uint256 rewardsForTime = timeElapsed * rewardRate;
         uint256 newRewardsPerToken = (rewardsForTime * ONE) / totalDepositsWithBoost;
 
-        return rewardPerTokenStored + newRewardsPerToken;
+        newRewardPerTokenStored = rewardPerTokenStored + newRewardsPerToken;
     }
 
     /**
@@ -735,8 +738,7 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @dev Update reward accounting for the global state totals.
      */
     function _updateRewards() internal {
-        rewardPerTokenStored = rewardPerToken();
-        lastAccountingTimestamp = latestRewardsTimestamp();
+        (rewardPerTokenStored, lastAccountingTimestamp) = rewardPerToken();
     }
 
     /**

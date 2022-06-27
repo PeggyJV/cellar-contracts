@@ -110,7 +110,7 @@ interface ICellarStaking {
 
     function latestRewardsTimestamp() external view returns (uint256);
 
-    function rewardPerToken() external view returns (uint256);
+    function rewardPerToken() external view returns (uint256, uint256);
 
     function getUserStakes(address user) external view returns (UserStake[] memory);
 }

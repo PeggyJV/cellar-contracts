@@ -1740,7 +1740,7 @@ describe("CellarStaking", () => {
 
         // Half rewards distributed, which means that .5 tokens dist per deposited token
         // Need to divide by one ether since zeroes are added for precision
-        const rewardPerToken = (await stakingUser.rewardPerToken()).div(ether("1"));
+        const rewardPerToken = (await stakingUser.rewardPerToken())[0].div(ether("1"));
         expectRoundedEqual(rewardPerToken, ether(".5"));
       });
 
@@ -1755,7 +1755,7 @@ describe("CellarStaking", () => {
         await stakingUser.unstake(0);
 
         // Get reward per tokenStored
-        const rewardPerToken = await stakingUser.rewardPerToken();
+        const [rewardPerToken] = await stakingUser.rewardPerToken();
         const rewardPerTokenStored = await stakingUser.rewardPerTokenStored();
 
         expect(rewardPerToken).to.equal(rewardPerTokenStored);
@@ -1764,7 +1764,7 @@ describe("CellarStaking", () => {
         await increaseTime(oneMonthSec);
 
         // Check again
-        const newRewardPerToken = await stakingUser.rewardPerToken();
+        const [newRewardPerToken] = await stakingUser.rewardPerToken();
         const newRewardPerTokenStored = await stakingUser.rewardPerTokenStored();
 
         expect(rewardPerTokenStored).to.equal(newRewardPerTokenStored);
