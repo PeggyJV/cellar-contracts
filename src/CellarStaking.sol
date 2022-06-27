@@ -124,7 +124,6 @@ contract CellarStaking is ICellarStaking, Ownable {
     uint256 public constant ONE_DAY = 60 * 60 * 24;
     uint256 public constant ONE_WEEK = ONE_DAY * 7;
     uint256 public constant TWO_WEEKS = ONE_WEEK * 2;
-    uint256 public constant MAX_UINT = 2**256 - 1;
 
     uint256 public immutable SHORT_BOOST;
     uint256 public immutable MEDIUM_BOOST;
