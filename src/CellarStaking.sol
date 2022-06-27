@@ -649,7 +649,7 @@ contract CellarStaking is ICellarStaking, Ownable {
         claimable = makeRewardsClaimable;
         uint256 amountToReturn = distributionToken.balanceOf(address(this));
 
-        if (claimable) {
+        if (makeRewardsClaimable) {
             // Update rewards one more time
             _updateRewards();
 
