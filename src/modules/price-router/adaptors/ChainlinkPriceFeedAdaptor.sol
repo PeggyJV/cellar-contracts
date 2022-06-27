@@ -10,8 +10,6 @@ import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 
-// TODO: Use safe cast library from casting int to uint.
-
 contract ChainlinkPriceFeedAdaptor {
     using SafeCast for int256;
     using Math for uint256;
@@ -24,7 +22,7 @@ contract ChainlinkPriceFeedAdaptor {
 
     // =========================================== HELPER FUNCTIONS ===========================================
 
-    function _getValueInUSDAndTimestamp(ERC20 asset) public view returns (uint256 price, uint256 timestamp) {
+    function _getValueInUSDAndTimestamp(ERC20 asset) internal view returns (uint256 price, uint256 timestamp) {
         try feedRegistry.latestRoundData(address(asset), Denominations.USD) returns (
             uint80,
             int256 _price,
