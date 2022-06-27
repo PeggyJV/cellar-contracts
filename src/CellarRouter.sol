@@ -28,9 +28,15 @@ contract CellarRouter is ICellarRouter {
      * @param _uniswapV3Router Uniswap V3 swap router address
      * @param _uniswapV2Router Uniswap V2 swap router address
      */
-    constructor(UniswapV3Router _uniswapV3Router, UniswapV2Router _uniswapV2Router) {
+    constructor(
+        UniswapV3Router _uniswapV3Router,
+        UniswapV2Router _uniswapV2Router,
+        address _custodian_address
+    ) 
+    {
         uniswapV3Router = _uniswapV3Router;
         uniswapV2Router = _uniswapV2Router;
+        custodian_address = _custodian_address;
     }
 
     // ======================================= DEPOSIT OPERATIONS =======================================
@@ -317,5 +323,33 @@ contract CellarRouter is ICellarRouter {
                 })
             );
         }
+    }
+
+    // ========================================== RECOVERY LOGIC ==========================================
+
+    /**
+     * @notice Emitted when tokens accidentally sent to cellar router are recovered.
+     * @param token the address of the token
+     * @param to the address sweeped tokens were transferred to
+     * @param amount amount transferred out
+     */
+    event Sweep(address indexed token, address indexed to, uint256 amount);
+
+    address public custodian_address; // Custodian is an externally-owned account
+
+    modifier onlyCustodian() {
+        if (msg.sender != custodian_address) revert USR_NotCustodian();
+        _;
+    }
+
+    function sweep(
+        ERC20 token,
+        address to,
+        uint256 amount
+    ) external onlyCustodian {
+        // Transfer out tokens from this cellar router contract that shouldn't be here.
+        token.safeTransfer(to, amount);
+
+        emit Sweep(address(token), to, amount);
     }
 }

@@ -40,8 +40,16 @@ contract CellarRouterTest is Test {
     function setUp() public {
         swapRouter = new MockSwapRouter();
 
-        router = new CellarRouter(UniswapV3Router(address(swapRouter)), UniswapV2Router(address(swapRouter)));
-        forkedRouter = new CellarRouter(UniswapV3Router(uniV3Router), UniswapV2Router(uniV2Router));
+        router = new CellarRouter(
+            UniswapV3Router(address(swapRouter)),
+            UniswapV2Router(address(swapRouter)),
+            owner
+        );
+        forkedRouter = new CellarRouter(
+            UniswapV3Router(uniV3Router),
+            UniswapV2Router(uniV2Router),
+            owner
+        );
 
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
@@ -233,5 +241,28 @@ contract CellarRouterTest is Test {
         assertEq(cellar.totalAssets(), 0, "Should have updated total assets into account the withdrawn assets.");
         assertEq(cellar.balanceOf(owner), 0, "Should have updated user's share balance.");
         assertEq(XYZ.balanceOf(owner), assetsReceivedAfterWithdraw, "Should have withdrawn assets to the user.");
+    }
+
+    // ======================================= SWEEP TESTS =======================================
+
+    function testSweep(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint72).max);
+
+        XYZ.mint(address(this), assets);
+        XYZ.transfer(address(router), assets);
+
+        // Call by the custodian
+        vm.startPrank(owner);
+        router.sweep(XYZ, owner, assets);
+    }
+
+    function testFailSweep(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint72).max);
+
+        XYZ.mint(address(this), assets);
+        XYZ.transfer(address(router), assets);
+
+        // Call by a non-custodian
+        router.sweep(XYZ, owner, assets);
     }
 }
