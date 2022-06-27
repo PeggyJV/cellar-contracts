@@ -6,8 +6,6 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 
-import { Test, console } from "@forge-std/Test.sol";
-
 contract SwapRouter {
     using SafeTransferLib for ERC20;
 
