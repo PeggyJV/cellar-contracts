@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { Cellar, MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
@@ -290,10 +290,6 @@ contract CellarTest is Test {
 
     // =========================================== ACCRUE TEST ===========================================
 
-    // TODO: DRY this up.
-    // TODO: Fuzz.
-    // TODO: Add checks that highwatermarks for each position were updated.
-
     function testAccrueWithPositivePerformance() external {
         // Initialize position balances.
         cellar.depositIntoPosition(address(usdcCLR), 1000e6, address(this)); // $1000
@@ -405,6 +401,55 @@ contract CellarTest is Test {
             cellar.balanceOf(address(cellar)),
             0,
             "Should not have counted withdrawals from holdings and position as yield."
+        );
+    }
+
+    event Accrual(uint256 platformFees, uint256 performanceFees);
+
+    function testAccrueUsesHighWatermark() external {
+        // Initialize position balances.
+        cellar.depositIntoPosition(address(usdcCLR), 1000e6, address(this)); // $1000
+        cellar.depositIntoPosition(address(wethCLR), 1e18, address(this)); // $2000
+        cellar.depositIntoPosition(address(wbtcCLR), 1e8, address(this)); // $30,000
+
+        // Simulate gains.
+        simulateGains(address(usdcCLR), 500e6); // $500
+        simulateGains(address(wethCLR), 0.5e18); // $1000
+        simulateGains(address(wbtcCLR), 0.5e8); // $15,000
+
+        cellar.accrue();
+
+        assertApproxEqAbs(
+            cellar.convertToAssets(cellar.balanceOf(address(cellar))),
+            1650e6,
+            1, // May be off by 1 due to rounding.
+            "Should have minted performance fees to cellar for gains."
+        );
+
+        // Simulate losing all previous gains.
+        simulateLoss(address(usdcCLR), 500e6); // -$500
+        simulateLoss(address(wethCLR), 0.5e18); // -$1000
+        simulateLoss(address(wbtcCLR), 0.5e8); // -$15,000
+
+        uint256 performanceFeesBefore = cellar.balanceOf(address(cellar));
+
+        cellar.accrue();
+
+        assertEq(
+            cellar.balanceOf(address(cellar)),
+            performanceFeesBefore,
+            "Should have minted no performance fees for losses."
+        );
+
+        // Simulate recovering previous gains.
+        simulateGains(address(usdcCLR), 500e6); // $500
+        simulateGains(address(wethCLR), 0.5e18); // $1000
+        simulateGains(address(wbtcCLR), 0.5e8); // $15,000
+
+        assertEq(
+            cellar.balanceOf(address(cellar)),
+            performanceFeesBefore,
+            "Should have minted no performance fees for no net gains."
         );
     }
 }
