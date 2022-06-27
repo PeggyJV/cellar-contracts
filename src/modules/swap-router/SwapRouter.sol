@@ -6,6 +6,8 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 
+import { Test, console } from "@forge-std/Test.sol";
+
 contract SwapRouter {
     using SafeTransferLib for ERC20;
 
@@ -47,7 +49,6 @@ contract SwapRouter {
     }
 
     // ======================================= SWAP OPERATIONS =======================================
-    //TODO add array of exchanges and array of swap data
     /**
      * @notice Route swap calls to the appropriate exchanges.
      * @param exchange value dictating which exchange to use to make the swap
