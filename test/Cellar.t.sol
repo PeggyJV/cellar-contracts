@@ -289,8 +289,8 @@ contract CellarTest is Test {
 
         // Deposit assets from holding pool to USDC cellar position
         cellar.rebalance(
-            ERC4626(address(cellar)),
-            ERC4626(address(usdcCLR)),
+            address(cellar),
+            address(usdcCLR),
             assets,
             SwapRouter.Exchange.UNIV2, // Does not matter, no swap is involved.
             abi.encode(0) // Does not matter, no swap is involved.
@@ -301,8 +301,8 @@ contract CellarTest is Test {
 
         // Withdraw some assets from USDC cellar position to holding position.
         cellar.rebalance(
-            ERC4626(address(usdcCLR)),
-            ERC4626(address(cellar)),
+            address(usdcCLR),
+            address(cellar),
             assets / 2,
             SwapRouter.Exchange.UNIV2, // Does not matter, no swap is involved.
             abi.encode(0) // Does not matter, no swap is involved.
