@@ -10,6 +10,7 @@ import { Registry, SwapRouter, PriceRouter } from "../Registry.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
+import { console } from "@forge-std/Test.sol"; // TODO: Delete.
 
 import "../Errors.sol";
 
@@ -441,7 +442,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     event PulledFromPosition(address indexed position, uint256 amount);
 
-    function withdrawFromPositions(
+    function withdrawFromPositionsInOrder(
         uint256 assets,
         address receiver,
         address owner
@@ -497,17 +498,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
             receivedAssets = new ERC20[](numOfReceivedAssets);
             amountsOut = new uint256[](numOfReceivedAssets);
 
-            uint256 j;
-            for (uint256 i; i < amountsReceived.length; i++) {
-                if (amountsReceived[i] == 0) continue;
+            for (uint256 i = amountsReceived.length; i > 0; i--) {
+                if (amountsReceived[i - 1] == 0) continue;
 
-                ERC20 positionAsset = positionAssets[i];
-                receivedAssets[j] = positionAsset;
-                amountsOut[j] = amountsReceived[i];
-                j++;
+                ERC20 positionAsset = positionAssets[i - 1];
+                receivedAssets[numOfReceivedAssets - 1] = positionAsset;
+                amountsOut[numOfReceivedAssets - 1] = amountsReceived[i - 1];
+                numOfReceivedAssets--;
 
                 // Transfer withdrawn assets to the receiver.
-                positionAsset.safeTransfer(receiver, amountsReceived[i]);
+                positionAsset.safeTransfer(receiver, amountsReceived[i - 1]);
             }
 
             emit WithdrawFromPositions(msg.sender, receiver, owner, receivedAssets, amountsOut, shares);
@@ -559,6 +559,84 @@ contract Cellar is ERC4626, Ownable, Multicall {
             // Stop if no more assets to withdraw.
             if (assets == 0) break;
         }
+    }
+
+    // TODO: DRY this up.
+
+    function withdrawFromPositionsInProportion(
+        uint256 assets,
+        address receiver,
+        address owner
+    )
+        external
+        returns (
+            uint256 shares,
+            ERC20[] memory receivedAssets,
+            uint256[] memory amountsOut
+        )
+    {
+        // Get data efficiently.
+        (
+            uint256 _totalAssets,
+            ,
+            ERC4626[] memory _positions,
+            ERC20[] memory positionAssets,
+            uint256[] memory positionBalances
+        ) = _getData();
+
+        // Get the amount of share needed to redeem.
+        shares = _previewWithdraw(assets, _totalAssets);
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
+        // Saves SLOADs during looping.
+        uint256 totalShares = totalSupply;
+
+        _burn(owner, shares);
+
+        uint256[] memory amountsReceived = new uint256[](_positions.length);
+        uint256 numOfReceivedAssets;
+
+        // Withdraw assets from positions in proportion to shares redeemed.
+        for (uint256 i; i < _positions.length; i++) {
+            // Move on to next position if this one is empty.
+            if (positionBalances[i] == 0) continue;
+
+            // Get the amount of assets to withdraw from this position based on proportion to shares redeemed.
+            uint256 amount = positionBalances[i].mulDivDown(shares, totalShares);
+
+            // Update position balance.
+            getPositionData[address(_positions[i])].highWatermark -= amount.toInt256();
+
+            amountsReceived[i] = amount;
+            numOfReceivedAssets++;
+
+            // Withdraw from position.
+            _positions[i].withdraw(amount, address(this), address(this));
+
+            emit PulledFromPosition(address(_positions[i]), amount);
+        }
+
+        receivedAssets = new ERC20[](numOfReceivedAssets);
+        amountsOut = new uint256[](numOfReceivedAssets);
+
+        for (uint256 i = amountsReceived.length; i > 0; i--) {
+            if (amountsReceived[i - 1] == 0) continue;
+
+            ERC20 positionAsset = positionAssets[i - 1];
+            receivedAssets[numOfReceivedAssets - 1] = positionAsset;
+            amountsOut[numOfReceivedAssets - 1] = amountsReceived[i - 1];
+            numOfReceivedAssets--;
+
+            // Transfer withdrawn assets to the receiver.
+            positionAsset.safeTransfer(receiver, amountsReceived[i - 1]);
+        }
+
+        emit WithdrawFromPositions(msg.sender, receiver, owner, receivedAssets, amountsOut, shares);
     }
 
     // ========================================= ACCOUNTING LOGIC =========================================

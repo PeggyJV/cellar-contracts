@@ -148,34 +148,9 @@ contract CellarTest is Test {
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
     }
 
-    function testWithdrawFromPositions() external {
-        cellar.depositIntoPosition(address(wethCLR), 1e18);
-
-        assertEq(cellar.totalAssets(), 2000e6, "Should have updated total assets with assets deposited.");
-
-        // Mint shares to user to redeem.
-        deal(address(cellar), address(this), cellar.previewWithdraw(1000e6));
-
-        // Withdraw from position.
-        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
-            1000e6,
-            address(this),
-            address(this)
-        );
-
-        assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
-        assertEq(shares, 1000e18, "Should returned all redeemed shares.");
-        assertEq(receivedAssets.length, 1, "Should have received one asset.");
-        assertEq(amountsOut.length, 1, "Should have gotten out one amount.");
-        assertEq(address(receivedAssets[0]), address(WETH), "Should have received WETH.");
-        assertEq(amountsOut[0], 0.5e18, "Should have gotten out 0.5 WETH.");
-        assertEq(WETH.balanceOf(address(this)), 0.5e18, "Should have transferred position balance to user.");
-        assertEq(cellar.totalAssets(), 1000e6, "Should have updated cellar total assets.");
-    }
-
-    function testWithdrawFromPositionsCompletely() external {
-        cellar.depositIntoPosition(address(wethCLR), 1e18);
-        cellar.depositIntoPosition(address(wbtcCLR), 1e8);
+    function testWithdrawFromPositionsInOrder() external {
+        cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
+        cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
 
         assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
 
@@ -183,11 +158,8 @@ contract CellarTest is Test {
         deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
 
         // Withdraw from position.
-        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
-            32_000e6,
-            address(this),
-            address(this)
-        );
+        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar
+            .withdrawFromPositionsInOrder(32_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
         assertEq(shares, 32_000e18, "Should returned all redeemed shares.");
@@ -200,6 +172,33 @@ contract CellarTest is Test {
         assertEq(WETH.balanceOf(address(this)), 1e18, "Should have transferred position balance to user.");
         assertEq(WBTC.balanceOf(address(this)), 1e8, "Should have transferred position balance to user.");
         assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
+    }
+
+    function testWithdrawFromPositionsInProportion() external {
+        cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
+        cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
+
+        assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.totalSupply(), 32_000e18);
+
+        // Mint shares to user to redeem.
+        deal(address(cellar), address(this), cellar.previewWithdraw(16_000e6));
+
+        // Withdraw from position.
+        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar
+            .withdrawFromPositionsInProportion(16_000e6, address(this), address(this));
+
+        assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
+        assertEq(shares, 16_000e18, "Should returned all redeemed shares.");
+        assertEq(receivedAssets.length, 2, "Should have received two assets.");
+        assertEq(amountsOut.length, 2, "Should have gotten out two amount.");
+        assertEq(address(receivedAssets[0]), address(WETH), "Should have received WETH.");
+        assertEq(address(receivedAssets[1]), address(WBTC), "Should have received WBTC.");
+        assertEq(amountsOut[0], 0.5e18, "Should have gotten out 0.5 WETH.");
+        assertEq(amountsOut[1], 0.5e8, "Should have gotten out 0.5 WBTC.");
+        assertEq(WETH.balanceOf(address(this)), 0.5e18, "Should have transferred position balance to user.");
+        assertEq(WBTC.balanceOf(address(this)), 0.5e8, "Should have transferred position balance to user.");
+        assertEq(cellar.totalAssets(), 16_000e6, "Should have half of assets remaining in cellar.");
     }
 
     // ========================================== REBALANCE TEST ==========================================
@@ -394,7 +393,7 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have counted withdrawals from position as yield.");
 
         // Withdraw assets from holding pool and USDC cellar position.
-        cellar.withdrawFromPositions(assets, address(this), address(this));
+        cellar.withdrawFromPositionsInOrder(assets, address(this), address(this));
 
         cellar.accrue();
         assertEq(
