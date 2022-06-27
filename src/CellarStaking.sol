@@ -354,8 +354,8 @@ contract CellarStaking is ICellarStaking, Ownable {
 
         // Reinstate
         (uint256 boost, ) = _getBoost(s.lock);
-        uint256 amountWithBoost = s.amount + (s.amount * boost) / ONE;
-        uint256 depositAmountIncreased = amountWithBoost - s.amountWithBoost;
+        uint256 depositAmountIncreased = (s.amount * boost) / ONE;
+        uint256 amountWithBoost = s.amount + depositAmountIncreased;
 
         s.amountWithBoost = uint112(amountWithBoost);
         s.unbondTimestamp = 0;
