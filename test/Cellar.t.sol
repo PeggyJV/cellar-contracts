@@ -202,6 +202,92 @@ contract CellarTest is Test {
         assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
     }
 
+    // ========================================== REBALANCE TEST ==========================================
+
+    function testRebalanceBetweenPositions(uint256 assets) external {
+        assets = bound(assets, 1, type(uint72).max);
+
+        cellar.depositIntoPosition(address(usdcCLR), assets);
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WETH);
+
+        uint256 assetsTo = cellar.rebalance(
+            ERC4626(address(usdcCLR)),
+            ERC4626(address(wethCLR)),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(path, assets, 0, address(cellar), address(cellar))
+        );
+
+        assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
+        assertEq(usdcCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
+        assertEq(wethCLR.balanceOf(address(cellar)), assetsTo, "Should have rebalanced to position.");
+    }
+
+    function testRebalanceFromHoldings(uint256 assets) external {
+        assets = bound(assets, 1, type(uint72).max);
+
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WETH);
+
+        uint256 assetsTo = cellar.rebalance(
+            ERC4626(address(cellar)),
+            ERC4626(address(wethCLR)),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(path, assets, 0, address(cellar), address(cellar))
+        );
+
+        assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
+        assertEq(usdcCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
+        assertEq(wethCLR.balanceOf(address(cellar)), assetsTo, "Should have rebalanced to position.");
+    }
+
+    function testRebalanceToHoldings(uint256 assets) external {
+        assets = bound(assets, 1, type(uint112).max);
+
+        cellar.depositIntoPosition(address(wethCLR), assets);
+
+        address[] memory path = new address[](2);
+        path[0] = address(WETH);
+        path[1] = address(USDC);
+
+        uint256 assetsTo = cellar.rebalance(
+            ERC4626(address(wethCLR)),
+            ERC4626(address(cellar)),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(path, assets, 0, address(cellar), address(cellar))
+        );
+
+        assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
+        assertEq(wethCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
+        assertEq(cellar.totalHoldings(), assetsTo, "Should have rebalanced to position.");
+    }
+
+    function testRebalanceToSamePosition(uint256 assets) external {
+        assets = bound(assets, 1, type(uint72).max);
+
+        cellar.depositIntoPosition(address(usdcCLR), assets);
+
+        uint256 assetsTo = cellar.rebalance(
+            ERC4626(address(usdcCLR)),
+            ERC4626(address(usdcCLR)),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Will be ignored because no swap is necessary.
+            abi.encode(0) // Will be ignored because no swap is necessary.
+        );
+
+        assertEq(assetsTo, assets, "Should received expected assets from swap.");
+        assertEq(usdcCLR.balanceOf(address(cellar)), assets, "Should have not changed position balance.");
+    }
+
     // =========================================== ACCRUE TEST ===========================================
 
     // TODO: DRY this up.
