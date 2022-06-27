@@ -38,7 +38,7 @@ contract SwapRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        assets = bound(assets, 1e18, type(uint112).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -60,7 +60,7 @@ contract SwapRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        assets = bound(assets, 1e18, type(uint112).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         // Specify the swap path.
         address[] memory path = new address[](3);
@@ -83,7 +83,7 @@ contract SwapRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        assets = bound(assets, 1e18, type(uint112).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -109,7 +109,7 @@ contract SwapRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        assets = bound(assets, 1e18, type(uint112).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         // Specify the swap path.
         address[] memory path = new address[](3);

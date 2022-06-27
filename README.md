@@ -22,6 +22,8 @@ Whenever you install new libraries using Foundry, make sure to update your `rema
 
 **Testing**
 
+Before running test, make sure to go to `foundry.toml` and set `eth_rpc_url` to your [Alchemy](https://www.alchemy.com/) HTTPS URL and `etherscan_api_key` to your [Etherscan](https://etherscan.io/) API key. This is required for tests that run against a fork of mainnet.
+
 Run tests with either Hardhat or Foundry:
 
 ```bash
