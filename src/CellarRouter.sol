@@ -225,7 +225,7 @@ contract CellarRouter is ICellarRouter {
 
     /**
      * @notice Withdraws from a multi assset cellar and then performs swaps to another desired asset, if the
-     *         withdrawn asset is not already, using permit.
+     *         withdrawn asset is not already.
      * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
      *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
      *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
@@ -234,9 +234,9 @@ contract CellarRouter is ICellarRouter {
      * @param cellar address of the cellar
      * @param paths array of arrays of [token1, token2, token3] that specifies the swap path on swap,
      * if paths[i].length is 1, then no swap will be made
-     * @param poolFees array of amounts out of 1e4 (eg. 10000 == 1%) that represents the fee tier to use for each swap
+     * @param poolFees array of arrays of amounts out of 1e4 (eg. 10000 == 1%) that represents the fee tier to use for each swap
      * @param assets amount of assets to withdraw
-     * @param assetsIn description
+     * @param assetsIn array of amounts in for each swap, allows caller to swap the same asset at multiple different exchanges
      * @param assetsOutMins array of minimum amounts of assets received from swaps
      * @param receiver address receiving the assets
      * @return shares amount of shares burned
