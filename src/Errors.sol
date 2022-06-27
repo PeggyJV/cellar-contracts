@@ -54,9 +54,15 @@ error USR_SamePosition(address position);
 
 /**
  * @notice Attempted to update the position to one that is not supported by the platform.
- * @param unsupportedPosition address of the unsupported position
+ * @param positon address of the unsupported position
  */
-error USR_UnsupportedPosition(address unsupportedPosition);
+error USR_UnsupportedPosition(address positon);
+
+/**
+ * @notice Attempted to update the asset to one that is not supported by the platform.
+ * @param asset address of the unsupported asset
+ */
+error USR_UnsupportedAsset(address asset);
 
 /**
  * @notice Attempted an operation on an untrusted position.
@@ -139,9 +145,40 @@ error USR_ZeroRewardsPerEpoch();
 error USR_InvalidLockValue(uint256 lock);
 
 /**
- * @notice The caller attempted an signed action with an invalid signature.
- * @param signatureLength length of the signature passed in
- * @param expectedSignatureLength expected length of the signature passed in
+ * @notice Attempted to trust a position that had an incompatible underlying asset.
+ * @param incompatibleAsset address of the asset is incompatible with the asset of this cellar
+ * @param expectedAsset address of the cellar's underlying asset
+ */
+error USR_IncompatiblePosition(address incompatibleAsset, address expectedAsset);
+
+/**
+ * @notice Attempted to add a position that is already being used.
+ * @param position address of the position
+ */
+error USR_PositionAlreadyUsed(address position);
+
+/**
+ * @notice Attempted an action on a position that is not being used by the cellar.
+ * @param position address of the invalid position
+ */
+error USR_InvalidPosition(address position);
+
+/**
+ * @notice Attempted an action on a position that is required to be empty before the action can be performed.
+ * @param position address of the non-empty position
+ * @param sharesRemaining amount of shares remaining in the position
+ */
+error USR_PositionNotEmpty(address position, uint256 sharesRemaining);
+
+/**
+ * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
+ */
+error USR_LengthMismatch();
+
+/**
+ * @notice Attempted an operation with an invalid signature.
+ * @param signatureLength length of the signature
+ * @param expectedSignatureLength expected length of the signature
  */
 error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
 
@@ -216,3 +253,27 @@ error STATE_ContractPaused();
  * @dev    Emergency mode is irreversible.
  */
 error STATE_ContractKilled();
+
+/**
+ * @notice Attempted an operation to price an asset that under its minimum valid price.
+ * @param asset address of the asset that is under its minimum valid price
+ * @param price price of the asset
+ * @param minPrice minimum valid price of the asset
+ */
+error STATE_AssetBelowMinPrice(address asset, uint256 price, uint256 minPrice);
+
+/**
+ * @notice Attempted an operation to price an asset that under its maximum valid price.
+ * @param asset address of the asset that is under its maximum valid price
+ * @param price price of the asset
+ * @param maxPrice maximum valid price of the asset
+ */
+error STATE_AssetAboveMaxPrice(address asset, uint256 price, uint256 maxPrice);
+
+/**
+ * @notice Attempted to fetch a price for an asset that has not been updated in too long.
+ * @param asset address of the asset thats price is stale
+ * @param timeSinceLastUpdate seconds since the last price update
+ * @param heartbeat maximum allowed time between price updates
+ */
+error STATE_StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
