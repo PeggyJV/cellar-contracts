@@ -158,7 +158,8 @@ error USR_IncompatiblePosition(address incompatibleAsset, address expectedAsset)
 error USR_PositionAlreadyUsed(address position);
 
 /**
- * @notice Attempted an action on a position that is not being used by the cellar.
+ * @notice Attempted an action on a position that is not being used by the cellar but must be for
+ *         the operation to succeed.
  * @param position address of the invalid position
  */
 error USR_InvalidPosition(address position);

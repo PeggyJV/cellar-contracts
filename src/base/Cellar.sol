@@ -21,7 +21,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     using SafeCast for int256;
     using Math for uint256;
 
-    // ========================================= MULTI-POSITION CONFIG =========================================
+    // ========================================= POSITIONS CONFIG =========================================
 
     /**
      * @notice Emitted when a position is added.
@@ -203,6 +203,47 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // can no longer be used and to exit the position or rebalance its assets into another
         // position ASAP.
         emit TrustChanged(position, false);
+    }
+
+    // ============================================ WITHDRAW CONFIG ============================================
+
+    event WithdrawTypeChanged(WithdrawType oldType, WithdrawType newType);
+
+    enum WithdrawType {
+        Orderly,
+        Proportional
+    }
+
+    WithdrawType public withdrawType;
+
+    function setWithdrawType(WithdrawType newWithdrawType) external onlyOwner {
+        emit WithdrawTypeChanged(withdrawType, newWithdrawType);
+
+        withdrawType = newWithdrawType;
+    }
+
+    // ============================================ HOLDINGS CONFIG ============================================
+
+    event HoldingPositionChanged(address indexed oldPosition, address indexed newPosition);
+
+    /**
+     * @notice The "default" position which uses the same asset as the cellar. It is the position
+     *         deposited assets will automatically go into (perhaps while waiting to be rebalanced
+     *         to other positions) and commonly the first position withdrawn assets will be pulled
+     *         from if using orderly withdraws.
+     * @dev MUST accept the same asset as the cellar's `asset`. MUST be a position present in
+     *      `positions`. Should be a static (eg. just holding) or lossless (eg. lending on Aave)
+     *      position. Should not be expensive to move assets in or out of as this will occur
+     *      frequently. It is highly recommended to choose a "simple" holding position.
+     */
+    address public holdingPosition;
+
+    function setHoldingPosition(address newHoldingPosition) external onlyOwner {
+        if (!isPositionUsed[newHoldingPosition]) revert USR_InvalidPosition(newHoldingPosition);
+
+        emit HoldingPositionChanged(holdingPosition, newHoldingPosition);
+
+        holdingPosition = newHoldingPosition;
     }
 
     // ============================================ ACCRUAL STORAGE ============================================
@@ -394,10 +435,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
         Registry _registry,
         ERC20 _asset,
         address[] memory _positions,
+        address _holdingPosition,
         string memory _name,
         string memory _symbol
     ) ERC4626(_asset, _name, _symbol, 18) Ownable() {
         registry = _registry;
+
+        // Initialize positions.
         positions = _positions;
 
         for (uint256 i; i < _positions.length; i++) {
@@ -411,6 +455,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
             ERC4626(position).asset().safeApprove(position, type(uint256).max);
         }
 
+        // Initialize holding position.
+        if (!isPositionUsed[_holdingPosition]) revert USR_InvalidPosition(_holdingPosition);
+
+        holdingPosition = _holdingPosition;
+
         // Initialize last accrual timestamp to time that cellar was created, otherwise the first
         // `accrue` will take platform fees from 1970 to the time it is called.
         lastAccrual = uint64(block.timestamp);
@@ -421,6 +470,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // =========================================== CORE LOGIC ===========================================
 
+    event PulledFromPosition(address indexed position, uint256 amount);
+
     function beforeDeposit(
         uint256 assets,
         uint256,
@@ -430,70 +481,71 @@ contract Cellar is ERC4626, Ownable, Multicall {
         if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
     }
 
-    // TODO: move to ICellar once done
-    event WithdrawFromPositions(
-        address indexed caller,
-        address indexed receiver,
-        address indexed owner,
-        ERC20[] receivedAssets,
-        uint256[] amountsOut,
-        uint256 shares
-    );
+    function afterDeposit(
+        uint256 assets,
+        uint256,
+        address
+    ) internal override {
+        // TODO: Refactor once support for different position types is implemented.
+        ERC4626(holdingPosition).deposit(assets, address(this));
+    }
 
-    event PulledFromPosition(address indexed position, uint256 amount);
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address owner
+    ) public override returns (uint256 shares) {
+        (shares, , ) = withdrawFromPositions(assets, receiver, owner);
+    }
 
-    function withdrawFromPositionsInOrder(
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address owner
+    ) public override returns (uint256 assets) {
+        (assets, , ) = redeemFromPositions(shares, receiver, owner);
+    }
+
+    function withdrawFromPositions(
         uint256 assets,
         address receiver,
         address owner
     )
-        external
+        public
         returns (
             uint256 shares,
             ERC20[] memory receivedAssets,
             uint256[] memory amountsOut
         )
     {
-        // Only withdraw if not enough assets in the holding pool.
-        if (totalHoldings() >= assets) {
-            receivedAssets = new ERC20[](1);
-            amountsOut = new uint256[](1);
+        // Get data efficiently.
+        (
+            uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
+            ERC4626[] memory _positions,
+            ERC20[] memory positionAssets,
+            uint256[] memory positionBalances
+        ) = _getData();
 
-            receivedAssets[0] = asset;
-            amountsOut[0] = assets;
+        // No need to check for rounding error, `previewWithdraw` rounds up.
+        shares = _previewWithdraw(assets, _totalAssets);
 
-            shares = withdraw(assets, receiver, owner);
-        } else {
-            // Would be more efficient to store `totalHoldings` to avoid calling twice, but will
-            // cause stack errors.
-            assets -= totalHoldings();
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
-            // Get data efficiently.
-            (
-                uint256 _totalAssets,
-                ,
-                ERC4626[] memory _positions,
-                ERC20[] memory positionAssets,
-                uint256[] memory positionBalances
-            ) = _getData();
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
 
-            // Get the amount of share needed to redeem.
-            shares = _previewWithdraw(assets, _totalAssets);
+        uint256 totalShares = totalSupply;
 
-            if (msg.sender != owner) {
-                uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+        _burn(owner, shares);
 
-                if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
-            }
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
-            _burn(owner, shares);
-
-            (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) = _pullFromPositions(
-                assets,
-                _positions,
-                positionAssets,
-                positionBalances
-            );
+        // Scope to avoid stack errors.
+        {
+            (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) = withdrawType == WithdrawType.Orderly
+                ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
+                : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
 
             receivedAssets = new ERC20[](numOfReceivedAssets);
             amountsOut = new uint256[](numOfReceivedAssets);
@@ -505,17 +557,68 @@ contract Cellar is ERC4626, Ownable, Multicall {
                 receivedAssets[numOfReceivedAssets - 1] = positionAsset;
                 amountsOut[numOfReceivedAssets - 1] = amountsReceived[i - 1];
                 numOfReceivedAssets--;
-
-                // Transfer withdrawn assets to the receiver.
-                positionAsset.safeTransfer(receiver, amountsReceived[i - 1]);
             }
-
-            emit WithdrawFromPositions(msg.sender, receiver, owner, receivedAssets, amountsOut, shares);
         }
     }
 
-    function _pullFromPositions(
+    function redeemFromPositions(
+        uint256 shares,
+        address receiver,
+        address owner
+    )
+        public
+        returns (
+            uint256 assets,
+            ERC20[] memory receivedAssets,
+            uint256[] memory amountsOut
+        )
+    {
+        // Get data efficiently.
+        (
+            uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
+            ERC4626[] memory _positions,
+            ERC20[] memory positionAssets,
+            uint256[] memory positionBalances
+        ) = _getData();
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
+        // Check for rounding error since we round down in previewRedeem.
+        require((assets = _convertToAssets(shares, _totalAssets)) != 0, "ZERO_ASSETS");
+
+        uint256 totalShares = totalSupply;
+
+        _burn(owner, shares);
+
+        // Scope to avoid stack errors.
+        {
+            (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) = withdrawType == WithdrawType.Orderly
+                ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
+                : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
+
+            receivedAssets = new ERC20[](numOfReceivedAssets);
+            amountsOut = new uint256[](numOfReceivedAssets);
+
+            for (uint256 i = amountsReceived.length; i > 0; i--) {
+                if (amountsReceived[i - 1] == 0) continue;
+
+                ERC20 positionAsset = positionAssets[i - 1];
+                receivedAssets[numOfReceivedAssets - 1] = positionAsset;
+                amountsOut[numOfReceivedAssets - 1] = amountsReceived[i - 1];
+                numOfReceivedAssets--;
+            }
+        }
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+    }
+
+    function _withdrawInOrder(
         uint256 assets,
+        address receiver,
         ERC4626[] memory _positions,
         ERC20[] memory positionAssets,
         uint256[] memory positionBalances
@@ -529,20 +632,23 @@ contract Cellar is ERC4626, Ownable, Multicall {
             // Move on to next position if this one is empty.
             if (positionBalances[i] == 0) continue;
 
+            // TODO: Check for optimization.
             uint256 onePositionAsset = 10**positionAssets[i].decimals();
-            uint256 positionAssetToAssetExchangeRate = priceRouter.getExchangeRate(positionAssets[i], asset);
+            uint256 exchangeRate = priceRouter.getExchangeRate(positionAssets[i], asset);
 
             // Denominate position balance in cellar's asset.
-            uint256 totalPositionBalanceInAssets = positionBalances[i].mulDivDown(
-                positionAssetToAssetExchangeRate,
-                onePositionAsset
-            );
+            uint256 totalPositionBalanceInAssets = positionBalances[i].mulDivDown(exchangeRate, onePositionAsset);
 
             // We want to pull as much as we can from this position, but no more than needed.
             uint256 amount;
-            (amount, assets) = totalPositionBalanceInAssets > assets
-                ? (assets.mulDivDown(onePositionAsset, positionAssetToAssetExchangeRate), 0)
-                : (positionBalances[i], assets - totalPositionBalanceInAssets);
+
+            if (totalPositionBalanceInAssets > assets) {
+                amount = assets.mulDivDown(onePositionAsset, exchangeRate);
+                assets = 0;
+            } else {
+                amount = positionBalances[i];
+                assets = assets - totalPositionBalanceInAssets;
+            }
 
             // Return the amount that will be received and increment number of received assets.
             amountsReceived[i] = amount;
@@ -551,8 +657,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             // Update position balance.
             getPositionData[address(_positions[i])].highWatermark -= amount.toInt256();
 
-            // Withdraw from position.
-            _positions[i].withdraw(amount, address(this), address(this));
+            // Withdraw from position to receiver.
+            _positions[i].withdraw(amount, receiver, address(this));
 
             emit PulledFromPosition(address(_positions[i]), amount);
 
@@ -561,82 +667,41 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
-    // TODO: DRY this up.
-
-    function withdrawFromPositionsInProportion(
-        uint256 assets,
+    function _withdrawInProportion(
+        uint256 shares,
+        uint256 totalShares,
         address receiver,
-        address owner
-    )
-        external
-        returns (
-            uint256 shares,
-            ERC20[] memory receivedAssets,
-            uint256[] memory amountsOut
-        )
-    {
-        // Get data efficiently.
-        (
-            uint256 _totalAssets,
-            ,
-            ERC4626[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
-        ) = _getData();
-
-        // Get the amount of share needed to redeem.
-        shares = _previewWithdraw(assets, _totalAssets);
-
-        if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
-        }
-
-        // Saves SLOADs during looping.
-        uint256 totalShares = totalSupply;
-
-        _burn(owner, shares);
-
-        uint256[] memory amountsReceived = new uint256[](_positions.length);
-        uint256 numOfReceivedAssets;
+        ERC4626[] memory _positions,
+        uint256[] memory positionBalances
+    ) internal returns (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) {
+        amountsReceived = new uint256[](_positions.length);
 
         // Withdraw assets from positions in proportion to shares redeemed.
         for (uint256 i; i < _positions.length; i++) {
+            ERC4626 position = _positions[i];
+            uint256 positionBalance = positionBalances[i];
+
             // Move on to next position if this one is empty.
-            if (positionBalances[i] == 0) continue;
+            if (positionBalance == 0) continue;
 
             // Get the amount of assets to withdraw from this position based on proportion to shares redeemed.
-            uint256 amount = positionBalances[i].mulDivDown(shares, totalShares);
+            uint256 amount = positionBalance.mulDivDown(shares, totalShares);
+
+            // Update position balance.
+            getPositionData[address(position)].highWatermark -= amount.toInt256();
+
+            // Return the amount that will be received and increment number of received assets.
+            amountsReceived[i] = amount;
+            numOfReceivedAssets++;
 
             // Update position balance.
             getPositionData[address(_positions[i])].highWatermark -= amount.toInt256();
 
-            amountsReceived[i] = amount;
-            numOfReceivedAssets++;
+            // Withdraw from position to receiver.
+            position.withdraw(amount, receiver, address(this));
 
-            // Withdraw from position.
-            _positions[i].withdraw(amount, address(this), address(this));
-
-            emit PulledFromPosition(address(_positions[i]), amount);
+            emit PulledFromPosition(address(position), amount);
         }
-
-        receivedAssets = new ERC20[](numOfReceivedAssets);
-        amountsOut = new uint256[](numOfReceivedAssets);
-
-        for (uint256 i = amountsReceived.length; i > 0; i--) {
-            if (amountsReceived[i - 1] == 0) continue;
-
-            ERC20 positionAsset = positionAssets[i - 1];
-            receivedAssets[numOfReceivedAssets - 1] = positionAsset;
-            amountsOut[numOfReceivedAssets - 1] = amountsReceived[i - 1];
-            numOfReceivedAssets--;
-
-            // Transfer withdrawn assets to the receiver.
-            positionAsset.safeTransfer(receiver, amountsReceived[i - 1]);
-        }
-
-        emit WithdrawFromPositions(msg.sender, receiver, owner, receivedAssets, amountsOut, shares);
     }
 
     // ========================================= ACCOUNTING LOGIC =========================================
@@ -657,14 +722,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             balances[i] = position.maxWithdraw(address(this));
         }
 
-        assets = registry.priceRouter().getValues(positionAssets, balances, asset) + totalHoldings();
-    }
-
-    /**
-     * @notice The total amount of assets in holding position.
-     */
-    function totalHoldings() public view returns (uint256) {
-        return asset.balanceOf(address(this));
+        assets = registry.priceRouter().getValues(positionAssets, balances, asset);
     }
 
     /**
@@ -739,6 +797,33 @@ contract Cellar is ERC4626, Ownable, Multicall {
         shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivUp(totalShares, totalAssetsNormalized);
     }
 
+    function _getData()
+        internal
+        view
+        returns (
+            uint256 _totalAssets,
+            ERC4626[] memory _positions,
+            ERC20[] memory positionAssets,
+            uint256[] memory positionBalances
+        )
+    {
+        uint256 len = positions.length;
+
+        _positions = new ERC4626[](len);
+        positionAssets = new ERC20[](len);
+        positionBalances = new uint256[](len);
+
+        for (uint256 i; i < len; i++) {
+            ERC4626 position = ERC4626(positions[i]);
+
+            _positions[i] = position;
+            positionAssets[i] = position.asset();
+            positionBalances[i] = position.maxWithdraw(address(this));
+        }
+
+        _totalAssets = registry.priceRouter().getValues(positionAssets, positionBalances, asset);
+    }
+
     // =========================================== ACCRUAL LOGIC ===========================================
 
     /**
@@ -758,7 +843,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Get data efficiently.
         (
             uint256 _totalAssets,
-            ,
             ERC4626[] memory _positions,
             ERC20[] memory positionAssets,
             uint256[] memory positionBalances
@@ -807,6 +891,19 @@ contract Cellar is ERC4626, Ownable, Multicall {
         lastAccrual = uint32(block.timestamp);
 
         emit Accrual(platformFees, performanceFees);
+    }
+
+    function _convertToFees(uint256 assets, uint256 exchangeRate) internal view returns (uint256 fees) {
+        // Convert amount of assets to take as fees to shares.
+        uint256 feesInShares = assets * exchangeRate;
+
+        // Saves an SLOAD.
+        uint256 totalShares = totalSupply;
+
+        // Get the amount of fees to mint. Without this, the value of fees minted would be slightly
+        // diluted because total shares increased while total assets did not. This counteracts that.
+        uint256 denominator = totalShares - feesInShares;
+        fees = denominator > 0 ? feesInShares.mulDivUp(totalShares, denominator) : 0;
     }
 
     // =========================================== POSITION LOGIC ===========================================
@@ -961,35 +1058,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // ========================================== HELPER FUNCTIONS ==========================================
 
-    function _getData()
-        internal
-        view
-        returns (
-            uint256 _totalAssets,
-            uint256 _totalHoldings,
-            ERC4626[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
-        )
-    {
-        uint256 len = positions.length;
-
-        _positions = new ERC4626[](len);
-        positionAssets = new ERC20[](len);
-        positionBalances = new uint256[](len);
-
-        for (uint256 i; i < len; i++) {
-            ERC4626 position = ERC4626(positions[i]);
-
-            _positions[i] = position;
-            positionAssets[i] = position.asset();
-            positionBalances[i] = position.maxWithdraw(address(this));
-        }
-
-        _totalHoldings = totalHoldings();
-        _totalAssets = registry.priceRouter().getValues(positionAssets, positionBalances, asset) + _totalHoldings;
-    }
-
     function _swap(
         ERC20 assetIn,
         uint256 amountIn,
@@ -1012,18 +1080,5 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // specified a different amount of assets to swap then `amountIn`.
         // TODO: consider replacing with revert statement
         require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
-    }
-
-    function _convertToFees(uint256 assets, uint256 exchangeRate) internal view returns (uint256 fees) {
-        // Convert amount of assets to take as fees to shares.
-        uint256 feesInShares = assets * exchangeRate;
-
-        // Saves an SLOAD.
-        uint256 totalShares = totalSupply;
-
-        // Get the amount of fees to mint. Without this, the value of fees minted would be slightly
-        // diluted because total shares increased while total assets did not. This counteracts that.
-        uint256 denominator = totalShares - feesInShares;
-        fees = denominator > 0 ? feesInShares.mulDivUp(totalShares, denominator) : 0;
     }
 }
