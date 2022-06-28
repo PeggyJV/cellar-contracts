@@ -2,7 +2,9 @@
 pragma solidity 0.8.15;
 
 import { ERC4626, ERC20 } from "./ERC4626.sol";
-import { Cellar } from "./Cellar.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+
+error USR_InvalidPositionType();
 
 enum PositionType {
     ERC20,
@@ -11,41 +13,42 @@ enum PositionType {
 }
 
 library PositionLib {
+    using SafeTransferLib for ERC20;
+
     function asset(address position, PositionType positionType) internal view returns (ERC20) {
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             return ERC4626(position).asset();
         } else if (positionType == PositionType.ERC20) {
             return ERC20(position);
         } else {
-            revert("Unsupported Position Type");
-        }
-    }
-
-    function maxWithdraw(
-        address position,
-        PositionType positionType,
-        address holder
-    ) internal view returns (uint256) {
-        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            return ERC4626(position).maxWithdraw(holder);
-        } else if (positionType == PositionType.ERC20) {
-            return ERC20(position).balanceOf(holder);
-        } else {
-            revert("Unsupported Position Type");
+            revert USR_InvalidPositionType();
         }
     }
 
     function balanceOf(
         address position,
         PositionType positionType,
-        address holder
-    ) internal view returns (uint256) {
+        address owner
+    ) internal view returns (uint256 balance) {
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            return ERC4626(position).balanceOf(holder);
+            balance = ERC4626(position).maxWithdraw(owner);
         } else if (positionType == PositionType.ERC20) {
-            return ERC20(position).balanceOf(holder);
+            balance = ERC20(position).balanceOf(owner);
         } else {
-            revert("Unsupported Position Type");
+            revert USR_InvalidPositionType();
+        }
+    }
+
+    function deposit(
+        address position,
+        PositionType positionType,
+        uint256 assets
+    ) internal {
+        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
+            ERC4626(position).asset().safeApprove(position, assets);
+            ERC4626(position).deposit(assets, address(this));
+        } else if (positionType != PositionType.ERC20) {
+            revert USR_InvalidPositionType();
         }
     }
 
@@ -53,32 +56,14 @@ library PositionLib {
         address position,
         PositionType positionType,
         uint256 assets,
-        address receiver,
-        address owner
-    ) internal returns (uint256 shares) {
-        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            shares = ERC4626(position).withdraw(assets, receiver, owner);
-        } else if (positionType == PositionType.ERC20) {
-            //since we dont need to actually do anything just return how many tokens the cellar has? Assumes the amount of tokens the cellar has is equal to the amount of shares it has
-            shares = ERC20(position).balanceOf(owner);
-        } else {
-            revert("Unsupported Position Type");
-        }
-    }
-
-    function deposit(
-        address position,
-        PositionType positionType,
-        uint256 assets,
         address receiver
-    ) internal returns (uint256 shares) {
+    ) internal {
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            shares = ERC4626(position).deposit(assets, receiver);
+            ERC4626(position).withdraw(assets, receiver, address(this));
         } else if (positionType == PositionType.ERC20) {
-            //since we dont need to actually do anything just return how many tokens the cellar has? Assumes the amount of tokens the cellar has is equal to the amount of shares it has
-            shares = ERC20(position).balanceOf(receiver);
+            if (receiver != address(this)) ERC20(position).safeTransfer(receiver, assets);
         } else {
-            revert("Unsupported Position Type");
+            revert USR_InvalidPositionType();
         }
     }
 }

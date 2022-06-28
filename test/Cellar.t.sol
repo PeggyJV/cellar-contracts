@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { MockCellar, ERC4626, ERC20, PositionType } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
@@ -81,7 +81,19 @@ contract CellarTest is Test {
         positions[1] = address(wethCLR);
         positions[2] = address(wbtcCLR);
 
-        cellar = new MockCellar(registry, USDC, positions, "Multiposition Cellar LP Token", "multiposition-CLR");
+        PositionType[] memory positionTypes = new PositionType[](3);
+        positionTypes[0] = PositionType.ERC4626;
+        positionTypes[1] = PositionType.ERC4626;
+        positionTypes[2] = PositionType.ERC4626;
+
+        cellar = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            "Multiposition Cellar LP Token",
+            "multiposition-CLR"
+        );
         vm.label(address(cellar), "cellar");
 
         // Transfer ownership to this contract for testing.
@@ -152,6 +164,7 @@ contract CellarTest is Test {
         cellar.depositIntoPosition(address(wethCLR), 1e18);
 
         assertEq(cellar.totalAssets(), 2000e6, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.totalSupply(), 2000e18, "Should have updated total shares.");
 
         // Mint shares to user to redeem.
         deal(address(cellar), address(this), cellar.previewWithdraw(1000e6));
