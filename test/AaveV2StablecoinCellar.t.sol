@@ -17,7 +17,7 @@ import { MockIncentivesController } from "src/mocks/MockIncentivesController.sol
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockStkAAVE } from "src/mocks/MockStkAAVE.sol";
 
-import { Test } from "@forge-std/Test.sol";
+import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract AaveV2StablecoinCellarTest is Test {
@@ -1074,6 +1074,46 @@ contract AaveV2StablecoinCellarTest is Test {
         );
         assertLt(priceOfShareAfterRebalance, priceOfShareBeforeRebalance, "Expect price of shares to have decreased.");
         assertLt(totalAssetsAfterRebalance, totalAssetsBeforeRebalance, "Expect total assets to have decreased.");
+    }
+
+    function testRebalanceEffectOnHighWatermark() external {
+        USDC.mint(address(this), 1000e6);
+
+        cellar.deposit(1000e6, address(this));
+        cellar.enterPosition(1000e6 / 2);
+
+        address[9] memory route;
+        route[0] = address(USDC);
+        route[1] = address(1);
+        route[2] = address(DAI);
+
+        uint256[3][4] memory swapParams;
+
+        uint256 totalAssetsBeforeRebalance = cellar.totalAssets();
+
+        // Rebalance such that there is a loss.
+        cellar.rebalance(route, swapParams, 0);
+
+        // Test that accrue does not mint any performance fees.
+        cellar.accrue();
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted performance fees for loss.");
+
+        // Simulate gaining assets up to the amount that existed before the rebalance.
+        aDAI.mint(address(cellar), totalAssetsBeforeRebalance.changeDecimals(6, 18) - cellar.totalAssets());
+
+        // Test that accrue does not mint any performance fees.
+        cellar.accrue();
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted performance fees for no net gain.");
+
+        // Simulate gaining assets exceeding the amount that existed before the rebalance.
+        aDAI.mint(address(cellar), 100e18);
+
+        // Test that accrue does mint any performance fees.
+        cellar.accrue();
+
+        assertEq(cellar.balanceOf(address(cellar)), 10e18, "Should have minted performance fees for net gain.");
     }
 
     function testRebalanceWithEmptyPosition(uint256 assets) external {
