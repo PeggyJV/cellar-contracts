@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { Cellar, MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
@@ -12,6 +12,8 @@ import { MockGravity } from "src/mocks/MockGravity.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
+
+// TODO: Add test for proportional withdraw type.
 
 contract CellarTest is Test {
     using SafeTransferLib for ERC20;
@@ -76,12 +78,28 @@ contract CellarTest is Test {
         priceRouter.setExchangeRate(WBTC, WETH, 15e18);
 
         // Setup Cellar:
-        address[] memory positions = new address[](3);
-        positions[0] = address(usdcCLR);
-        positions[1] = address(wethCLR);
-        positions[2] = address(wbtcCLR);
+        address[] memory positions = new address[](4);
+        positions[0] = address(USDC);
+        positions[1] = address(usdcCLR);
+        positions[2] = address(wethCLR);
+        positions[3] = address(wbtcCLR);
 
-        cellar = new MockCellar(registry, USDC, positions, "Multiposition Cellar LP Token", "multiposition-CLR");
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](4);
+        positionTypes[0] = Cellar.PositionType.ERC20;
+        positionTypes[1] = Cellar.PositionType.ERC4626;
+        positionTypes[2] = Cellar.PositionType.ERC4626;
+        positionTypes[3] = Cellar.PositionType.ERC4626;
+
+        cellar = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            address(USDC),
+            Cellar.WithdrawType.Orderly,
+            "Multiposition Cellar LP Token",
+            "multiposition-CLR"
+        );
         vm.label(address(cellar), "cellar");
 
         // Transfer ownership to this contract for testing.
@@ -158,8 +176,11 @@ contract CellarTest is Test {
         deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
 
         // Withdraw from position.
-        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar
-            .withdrawFromPositionsInOrder(32_000e6, address(this), address(this));
+        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
+            32_000e6,
+            address(this),
+            address(this)
+        );
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
         assertEq(shares, 32_000e18, "Should returned all redeemed shares.");
@@ -185,8 +206,12 @@ contract CellarTest is Test {
         deal(address(cellar), address(this), cellar.previewWithdraw(16_000e6));
 
         // Withdraw from position.
-        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar
-            .withdrawFromPositionsInProportion(16_000e6, address(this), address(this));
+        cellar.setWithdrawType(Cellar.WithdrawType.Proportional);
+        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
+            16_000e6,
+            address(this),
+            address(this)
+        );
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
         assertEq(shares, 16_000e18, "Should returned all redeemed shares.");
@@ -203,6 +228,8 @@ contract CellarTest is Test {
 
     // ========================================== REBALANCE TEST ==========================================
 
+    // TODO: Test rebalancing to invalid position.
+
     function testRebalanceBetweenPositions(uint256 assets) external {
         assets = bound(assets, 1, type(uint72).max);
 
@@ -213,8 +240,8 @@ contract CellarTest is Test {
         path[1] = address(WETH);
 
         uint256 assetsTo = cellar.rebalance(
-            ERC4626(address(usdcCLR)),
-            ERC4626(address(wethCLR)),
+            address(usdcCLR),
+            address(wethCLR),
             assets,
             SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
             abi.encode(path, assets, 0, address(cellar), address(cellar))
@@ -223,51 +250,6 @@ contract CellarTest is Test {
         assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
         assertEq(usdcCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
         assertEq(wethCLR.balanceOf(address(cellar)), assetsTo, "Should have rebalanced to position.");
-    }
-
-    function testRebalanceFromHoldings(uint256 assets) external {
-        assets = bound(assets, 1, type(uint72).max);
-
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        address[] memory path = new address[](2);
-        path[0] = address(USDC);
-        path[1] = address(WETH);
-
-        uint256 assetsTo = cellar.rebalance(
-            ERC4626(address(cellar)),
-            ERC4626(address(wethCLR)),
-            assets,
-            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-            abi.encode(path, assets, 0, address(cellar), address(cellar))
-        );
-
-        assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
-        assertEq(usdcCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
-        assertEq(wethCLR.balanceOf(address(cellar)), assetsTo, "Should have rebalanced to position.");
-    }
-
-    function testRebalanceToHoldings(uint256 assets) external {
-        assets = bound(assets, 1, type(uint112).max);
-
-        cellar.depositIntoPosition(address(wethCLR), assets);
-
-        address[] memory path = new address[](2);
-        path[0] = address(WETH);
-        path[1] = address(USDC);
-
-        uint256 assetsTo = cellar.rebalance(
-            ERC4626(address(wethCLR)),
-            ERC4626(address(cellar)),
-            assets,
-            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-            abi.encode(path, assets, 0, address(cellar), address(cellar))
-        );
-
-        assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
-        assertEq(wethCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
-        assertEq(cellar.totalHoldings(), assetsTo, "Should have rebalanced to position.");
     }
 
     function testRebalanceToSamePosition(uint256 assets) external {
@@ -276,8 +258,8 @@ contract CellarTest is Test {
         cellar.depositIntoPosition(address(usdcCLR), assets);
 
         uint256 assetsTo = cellar.rebalance(
-            ERC4626(address(usdcCLR)),
-            ERC4626(address(usdcCLR)),
+            address(usdcCLR),
+            address(usdcCLR),
             assets,
             SwapRouter.Exchange.UNIV2, // Will be ignored because no swap is necessary.
             abi.encode(0) // Will be ignored because no swap is necessary.
@@ -370,8 +352,8 @@ contract CellarTest is Test {
 
         // Deposit assets from holding pool to USDC cellar position
         cellar.rebalance(
-            ERC4626(address(cellar)),
-            ERC4626(address(usdcCLR)),
+            address(USDC),
+            address(usdcCLR),
             assets,
             SwapRouter.Exchange.UNIV2, // Does not matter, no swap is involved.
             abi.encode(0) // Does not matter, no swap is involved.
@@ -382,8 +364,8 @@ contract CellarTest is Test {
 
         // Withdraw some assets from USDC cellar position to holding position.
         cellar.rebalance(
-            ERC4626(address(usdcCLR)),
-            ERC4626(address(cellar)),
+            address(usdcCLR),
+            address(USDC),
             assets / 2,
             SwapRouter.Exchange.UNIV2, // Does not matter, no swap is involved.
             abi.encode(0) // Does not matter, no swap is involved.
@@ -393,7 +375,7 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have counted withdrawals from position as yield.");
 
         // Withdraw assets from holding pool and USDC cellar position.
-        cellar.withdrawFromPositionsInOrder(assets, address(this), address(this));
+        cellar.withdraw(assets, address(this), address(this));
 
         cellar.accrue();
         assertEq(

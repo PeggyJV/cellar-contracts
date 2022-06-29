@@ -10,7 +10,6 @@ import { Registry, SwapRouter, PriceRouter } from "../Registry.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
-import { console } from "@forge-std/Test.sol"; // TODO: Delete.
 
 import "../Errors.sol";
 
@@ -111,7 +110,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address position = positions[index];
 
         // Only remove position if it is empty.
-        uint256 positionBalance = ERC4626(position).balanceOf(address(this));
+        uint256 positionBalance = _balanceOf(position);
         if (positionBalance > 0) revert USR_PositionNotEmpty(position, positionBalance);
 
         // Remove position at the given index.
@@ -131,7 +130,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address position = positions[index];
 
         // Only remove position if it is empty.
-        uint256 positionBalance = ERC4626(position).balanceOf(address(this));
+        uint256 positionBalance = _balanceOf(position);
         if (positionBalance > 0) revert USR_PositionNotEmpty(position, positionBalance);
 
         // Remove last position.
@@ -146,7 +145,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address oldPosition = positions[index];
 
         // Only remove position if it is empty.
-        uint256 positionBalance = ERC4626(oldPosition).balanceOf(address(this));
+        uint256 positionBalance = _balanceOf(oldPosition);
         if (positionBalance > 0) revert USR_PositionNotEmpty(oldPosition, positionBalance);
 
         // Replace old position with new position.
@@ -179,12 +178,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     mapping(address => bool) public isTrusted;
 
-    function trustPosition(address position) external onlyOwner {
+    function trustPosition(address position, PositionType positionType) external onlyOwner {
         // Trust position.
         isTrusted[position] = true;
 
-        // Set max approval to deposit into position if it is ERC4626.
-        ERC4626(position).asset().safeApprove(position, type(uint256).max);
+        // Set position type.
+        getPositionData[position].positionType = positionType;
 
         emit TrustChanged(position, true);
     }
@@ -195,9 +194,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Remove position from the list of positions if it is present.
         positions.remove(position);
-
-        // Remove approval for position.
-        ERC4626(position).asset().safeApprove(position, 0);
 
         // NOTE: After position has been removed, SP should be notified on the UI that the position
         // can no longer be used and to exit the position or rebalance its assets into another
@@ -240,6 +236,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     function setHoldingPosition(address newHoldingPosition) external onlyOwner {
         if (!isPositionUsed[newHoldingPosition]) revert USR_InvalidPosition(newHoldingPosition);
+
+        ERC20 holdingPositionAsset = _assetOf(newHoldingPosition);
+        if (holdingPositionAsset == asset) revert USR_AssetMismatch(address(holdingPositionAsset), address(asset));
 
         emit HoldingPositionChanged(holdingPosition, newHoldingPosition);
 
@@ -435,7 +434,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         Registry _registry,
         ERC20 _asset,
         address[] memory _positions,
+        PositionType[] memory _positionTypes,
         address _holdingPosition,
+        WithdrawType _withdrawType,
         string memory _name,
         string memory _symbol
     ) ERC4626(_asset, _name, _symbol, 18) Ownable() {
@@ -451,14 +452,19 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             isTrusted[position] = true;
             isPositionUsed[position] = true;
-
-            ERC4626(position).asset().safeApprove(position, type(uint256).max);
+            getPositionData[position].positionType = _positionTypes[i];
         }
 
         // Initialize holding position.
         if (!isPositionUsed[_holdingPosition]) revert USR_InvalidPosition(_holdingPosition);
 
+        ERC20 holdingPositionAsset = _assetOf(_holdingPosition);
+        if (holdingPositionAsset != _asset) revert USR_AssetMismatch(address(holdingPositionAsset), address(_asset));
+
         holdingPosition = _holdingPosition;
+
+        // Initialize withdraw type.
+        withdrawType = _withdrawType;
 
         // Initialize last accrual timestamp to time that cellar was created, otherwise the first
         // `accrue` will take platform fees from 1970 to the time it is called.
@@ -486,8 +492,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256,
         address
     ) internal override {
-        // TODO: Refactor once support for different position types is implemented.
-        ERC4626(holdingPosition).deposit(assets, address(this));
+        _depositTo(holdingPosition, assets);
     }
 
     function withdraw(
@@ -521,7 +526,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Get data efficiently.
         (
             uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
-            ERC4626[] memory _positions,
+            address[] memory _positions,
             ERC20[] memory positionAssets,
             uint256[] memory positionBalances
         ) = _getData();
@@ -576,7 +581,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Get data efficiently.
         (
             uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
-            ERC4626[] memory _positions,
+            address[] memory _positions,
             ERC20[] memory positionAssets,
             uint256[] memory positionBalances
         ) = _getData();
@@ -619,7 +624,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     function _withdrawInOrder(
         uint256 assets,
         address receiver,
-        ERC4626[] memory _positions,
+        address[] memory _positions,
         ERC20[] memory positionAssets,
         uint256[] memory positionBalances
     ) internal returns (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) {
@@ -654,13 +659,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
             amountsReceived[i] = amount;
             numOfReceivedAssets++;
 
-            // Update position balance.
-            getPositionData[address(_positions[i])].highWatermark -= amount.toInt256();
+            // Withdraw from position.
+            _withdrawFrom(_positions[i], amount, receiver);
 
-            // Withdraw from position to receiver.
-            _positions[i].withdraw(amount, receiver, address(this));
-
-            emit PulledFromPosition(address(_positions[i]), amount);
+            emit PulledFromPosition(_positions[i], amount);
 
             // Stop if no more assets to withdraw.
             if (assets == 0) break;
@@ -671,14 +673,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 shares,
         uint256 totalShares,
         address receiver,
-        ERC4626[] memory _positions,
+        address[] memory _positions,
         uint256[] memory positionBalances
     ) internal returns (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) {
         amountsReceived = new uint256[](_positions.length);
 
         // Withdraw assets from positions in proportion to shares redeemed.
         for (uint256 i; i < _positions.length; i++) {
-            ERC4626 position = _positions[i];
+            address position = _positions[i];
             uint256 positionBalance = positionBalances[i];
 
             // Move on to next position if this one is empty.
@@ -687,20 +689,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
             // Get the amount of assets to withdraw from this position based on proportion to shares redeemed.
             uint256 amount = positionBalance.mulDivDown(shares, totalShares);
 
-            // Update position balance.
-            getPositionData[address(position)].highWatermark -= amount.toInt256();
-
             // Return the amount that will be received and increment number of received assets.
             amountsReceived[i] = amount;
             numOfReceivedAssets++;
 
-            // Update position balance.
-            getPositionData[address(_positions[i])].highWatermark -= amount.toInt256();
-
             // Withdraw from position to receiver.
-            position.withdraw(amount, receiver, address(this));
+            _withdrawFrom(position, amount, receiver);
 
-            emit PulledFromPosition(address(position), amount);
+            emit PulledFromPosition(position, amount);
         }
     }
 
@@ -716,10 +712,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256[] memory balances = new uint256[](numOfPositions);
 
         for (uint256 i; i < numOfPositions; i++) {
-            ERC4626 position = ERC4626(positions[i]);
-
-            positionAssets[i] = position.asset();
-            balances[i] = position.maxWithdraw(address(this));
+            address position = positions[i];
+            positionAssets[i] = _assetOf(position);
+            balances[i] = _balanceOf(position);
         }
 
         assets = registry.priceRouter().getValues(positionAssets, balances, asset);
@@ -802,23 +797,23 @@ contract Cellar is ERC4626, Ownable, Multicall {
         view
         returns (
             uint256 _totalAssets,
-            ERC4626[] memory _positions,
+            address[] memory _positions,
             ERC20[] memory positionAssets,
             uint256[] memory positionBalances
         )
     {
         uint256 len = positions.length;
 
-        _positions = new ERC4626[](len);
+        _positions = new address[](len);
         positionAssets = new ERC20[](len);
         positionBalances = new uint256[](len);
 
         for (uint256 i; i < len; i++) {
-            ERC4626 position = ERC4626(positions[i]);
+            address position = positions[i];
 
             _positions[i] = position;
-            positionAssets[i] = position.asset();
-            positionBalances[i] = position.maxWithdraw(address(this));
+            positionAssets[i] = _assetOf(position);
+            positionBalances[i] = _balanceOf(position);
         }
 
         _totalAssets = registry.priceRouter().getValues(positionAssets, positionBalances, asset);
@@ -843,7 +838,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Get data efficiently.
         (
             uint256 _totalAssets,
-            ERC4626[] memory _positions,
+            address[] memory _positions,
             ERC20[] memory positionAssets,
             uint256[] memory positionBalances
         ) = _getData();
@@ -855,7 +850,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         ERC20 denominationAsset = asset;
 
         for (uint256 i; i < _positions.length; i++) {
-            PositionData storage positionData = getPositionData[address(_positions[i])];
+            PositionData storage positionData = getPositionData[_positions[i]];
 
             // Get the current position balance.
             uint256 balanceThisAccrual = positionBalances[i];
@@ -916,37 +911,25 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param assetsFrom amount of assets to move from the from position
      */
     function rebalance(
-        ERC4626 fromPosition,
-        ERC4626 toPosition,
+        address fromPosition,
+        address toPosition,
         uint256 assetsFrom,
         SwapRouter.Exchange exchange,
         bytes calldata params
     ) external onlyOwner returns (uint256 assetsTo) {
-        // Withdraw from position, if not the rebalancing from the holding pool.
-        if (address(fromPosition) != address(this)) {
-            // Without this, withdrawals from this position would be counted as losses during the
-            // next fee accrual.
-            getPositionData[address(fromPosition)].highWatermark -= assetsFrom.toInt256();
+        // Check that position being rebalanced to is currently being used.
+        if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(address(toPosition));
 
-            fromPosition.withdraw(assetsFrom, address(this), address(this));
-        }
+        // Withdraw from position.
+        _withdrawFrom(fromPosition, assetsFrom, address(this));
 
         // Swap to the asset of the other position if necessary.
-        ERC20 fromAsset = fromPosition.asset();
-        ERC20 toAsset = toPosition.asset();
+        ERC20 fromAsset = _assetOf(fromPosition);
+        ERC20 toAsset = _assetOf(toPosition);
         assetsTo = fromAsset != toAsset ? _swap(fromAsset, assetsFrom, exchange, params) : assetsFrom;
 
-        // Deposit to position, if not the rebalancing to the holding pool
-        if (address(toPosition) != address(this)) {
-            // Check that position being rebalanced to is currently being used.
-            if (!isPositionUsed[address(toPosition)]) revert USR_InvalidPosition(address(toPosition));
-
-            // Without this, deposits to this position would be counted as yield during the next fee
-            // accrual.
-            getPositionData[address(toPosition)].highWatermark += assetsTo.toInt256();
-
-            toPosition.deposit(assetsTo, address(this));
-        }
+        // Deposit into position.
+        _depositTo(toPosition, assetsTo);
     }
 
     // ============================================ LIMITS LOGIC ============================================
@@ -1057,6 +1040,61 @@ contract Cellar is ERC4626, Ownable, Multicall {
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================
+
+    function _depositTo(address position, uint256 assets) internal {
+        PositionData storage positionData = getPositionData[position];
+        PositionType positionType = positionData.positionType;
+
+        // Without this, deposits to this position would be counted as yield during the next fee
+        // accrual.
+        positionData.highWatermark += assets.toInt256();
+
+        // Deposit into position.
+        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
+            ERC4626(position).asset().safeApprove(position, assets);
+            ERC4626(position).deposit(assets, address(this));
+        }
+    }
+
+    function _withdrawFrom(
+        address position,
+        uint256 assets,
+        address receiver
+    ) internal {
+        PositionData storage positionData = getPositionData[position];
+        PositionType positionType = positionData.positionType;
+
+        // Without this, withdrawals from this position would be counted as losses during the
+        // next fee accrual.
+        positionData.highWatermark -= assets.toInt256();
+
+        // Withdraw from position.
+        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
+            ERC4626(position).withdraw(assets, receiver, address(this));
+        } else {
+            if (receiver != address(this)) ERC20(position).safeTransfer(receiver, assets);
+        }
+    }
+
+    function _balanceOf(address position) internal view returns (uint256) {
+        PositionType positionType = getPositionData[position].positionType;
+
+        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
+            return ERC4626(position).maxWithdraw(address(this));
+        } else {
+            return ERC20(position).balanceOf(address(this));
+        }
+    }
+
+    function _assetOf(address position) internal view returns (ERC20) {
+        PositionType positionType = getPositionData[position].positionType;
+
+        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
+            return ERC4626(position).asset();
+        } else {
+            return ERC20(position);
+        }
+    }
 
     function _swap(
         ERC20 assetIn,

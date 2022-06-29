@@ -183,6 +183,13 @@ error USR_LengthMismatch();
  */
 error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
 
+/**
+ * @notice Attempted an operation with an asset that was different then the one expected.
+ * @param asset address of the asset
+ * @param expectedAsset address of the expected asset
+ */
+error USR_AssetMismatch(address asset, address expectedAsset);
+
 // ========================================== STATE ERRORS ===========================================
 
 /**

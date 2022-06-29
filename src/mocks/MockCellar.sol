@@ -12,37 +12,37 @@ contract MockCellar is Cellar, Test {
         Registry _registry,
         ERC20 _asset,
         address[] memory _positions,
+        PositionType[] memory _positionTypes,
         address _holdingPosition,
+        WithdrawType _withdrawType,
         string memory _name,
         string memory _symbol
-    ) Cellar(_registry, _asset, _positions, _holdingPosition, _name, _symbol) {}
+    ) Cellar(_registry, _asset, _positions, _positionTypes, _holdingPosition, _withdrawType, _name, _symbol) {}
 
     function depositIntoPosition(
         address position,
         uint256 amount,
         address mintSharesTo
     ) external returns (uint256 shares) {
-        uint256 amountInAssets = registry.priceRouter().getValue(ERC4626(position).asset(), amount, asset);
-        shares = previewDeposit(amountInAssets);
-
-        deal(address(ERC4626(position).asset()), address(this), amount);
-
-        getPositionData[position].highWatermark += amount.toInt256();
-
-        ERC4626(position).deposit(amount, address(this));
+        shares = _depositIntoPosition(position, amount);
 
         _mint(mintSharesTo, shares);
     }
 
-    function depositIntoPosition(address position, uint256 amount) public returns (uint256 shares) {
-        uint256 amountInAssets = registry.priceRouter().getValue(ERC4626(position).asset(), amount, asset);
+    function depositIntoPosition(address position, uint256 amount) external returns (uint256 shares) {
+        shares = _depositIntoPosition(position, amount);
+
+        totalSupply += shares;
+    }
+
+    function _depositIntoPosition(address position, uint256 amount) internal returns (uint256 shares) {
+        ERC20 positionAsset = _assetOf(position);
+
+        uint256 amountInAssets = registry.priceRouter().getValue(positionAsset, amount, asset);
         shares = previewDeposit(amountInAssets);
 
-        deal(address(ERC4626(position).asset()), address(this), amount);
+        deal(address(positionAsset), address(this), amount);
 
-        getPositionData[position].highWatermark += amount.toInt256();
-        totalSupply += shares;
-
-        ERC4626(position).deposit(amount, address(this));
+        _depositTo(position, amount);
     }
 }
