@@ -3,6 +3,7 @@ pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Cellar } from "src/base/Cellar.sol";
+import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 
 interface ICellarRouter {
     // ======================================= ROUTER OPERATIONS =======================================
@@ -17,40 +18,36 @@ interface ICellarRouter {
 
     function depositAndSwapIntoCellar(
         Cellar cellar,
-        address[] calldata path,
-        uint24[] calldata poolFees,
+        SwapRouter.Exchange exchange,
+        bytes calldata swapData,
         uint256 assets,
-        uint256 assetsOutMin,
-        address receiver
+        address receiver,
+        ERC20 assetIn
     ) external returns (uint256 shares);
 
     function depositAndSwapIntoCellarWithPermit(
         Cellar cellar,
-        address[] calldata path,
-        uint24[] calldata poolFees,
+        SwapRouter.Exchange exchange,
+        bytes calldata swapData,
         uint256 assets,
-        uint256 assetsOutMin,
-        address receiver,
+        ERC20 assetIn,
+        address reciever,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares);
 
     function withdrawAndSwapFromCellar(
         Cellar cellar,
-        address[] calldata path,
-        uint24[] calldata poolFees,
-        uint256 assets,
-        uint256 assetsOutMin,
-        address receiver
+        SwapRouter.Exchange exchange,
+        bytes calldata swapData,
+        uint256 assets
     ) external returns (uint256 shares);
 
     function withdrawAndSwapFromCellarWithPermit(
         Cellar cellar,
-        address[] calldata path,
-        uint24[] calldata poolFees,
+        SwapRouter.Exchange exchange,
+        bytes calldata swapData,
         uint256 assets,
-        uint256 assetsOutMin,
-        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares);
