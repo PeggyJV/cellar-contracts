@@ -267,7 +267,7 @@ contract MockExchange {
         uint256 amountOut = convert(tokenIn, tokenOut, _amount);
         amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
 
-        require(amountOut > _expected, "received less than expected");
+        require(amountOut >= _expected, "received less than expected");
 
         ERC20(tokenOut).transfer(msg.sender, amountOut);
 
