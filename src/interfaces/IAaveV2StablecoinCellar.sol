@@ -19,7 +19,7 @@ interface IAaveV2StablecoinCellar {
 
     function assetDecimals() external view returns (uint8);
 
-    function totalBalance() external view returns (uint240);
+    function totalBalance() external view returns (uint256);
 
     // ========================================= ACCRUAL CONFIG =========================================
 
