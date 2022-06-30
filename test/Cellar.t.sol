@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { Cellar, MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
@@ -148,34 +148,9 @@ contract CellarTest is Test {
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
     }
 
-    function testWithdrawFromPositions() external {
-        cellar.depositIntoPosition(address(wethCLR), 1e18);
-
-        assertEq(cellar.totalAssets(), 2000e6, "Should have updated total assets with assets deposited.");
-
-        // Mint shares to user to redeem.
-        deal(address(cellar), address(this), cellar.previewWithdraw(1000e6));
-
-        // Withdraw from position.
-        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
-            1000e6,
-            address(this),
-            address(this)
-        );
-
-        assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
-        assertEq(shares, 1000e18, "Should returned all redeemed shares.");
-        assertEq(receivedAssets.length, 1, "Should have received one asset.");
-        assertEq(amountsOut.length, 1, "Should have gotten out one amount.");
-        assertEq(address(receivedAssets[0]), address(WETH), "Should have received WETH.");
-        assertEq(amountsOut[0], 0.5e18, "Should have gotten out 0.5 WETH.");
-        assertEq(WETH.balanceOf(address(this)), 0.5e18, "Should have transferred position balance to user.");
-        assertEq(cellar.totalAssets(), 1000e6, "Should have updated cellar total assets.");
-    }
-
-    function testWithdrawFromPositionsCompletely() external {
-        cellar.depositIntoPosition(address(wethCLR), 1e18);
-        cellar.depositIntoPosition(address(wbtcCLR), 1e8);
+    function testWithdrawFromPositionsInOrder() external {
+        cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
+        cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
 
         assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
 
@@ -183,11 +158,8 @@ contract CellarTest is Test {
         deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
 
         // Withdraw from position.
-        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
-            32_000e6,
-            address(this),
-            address(this)
-        );
+        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar
+            .withdrawFromPositionsInOrder(32_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
         assertEq(shares, 32_000e18, "Should returned all redeemed shares.");
@@ -202,11 +174,120 @@ contract CellarTest is Test {
         assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
     }
 
-    // =========================================== ACCRUE TEST ===========================================
+    function testWithdrawFromPositionsInProportion() external {
+        cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
+        cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
 
-    // TODO: DRY this up.
-    // TODO: Fuzz.
-    // TODO: Add checks that highwatermarks for each position were updated.
+        assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.totalSupply(), 32_000e18);
+
+        // Mint shares to user to redeem.
+        deal(address(cellar), address(this), cellar.previewWithdraw(16_000e6));
+
+        // Withdraw from position.
+        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar
+            .withdrawFromPositionsInProportion(16_000e6, address(this), address(this));
+
+        assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
+        assertEq(shares, 16_000e18, "Should returned all redeemed shares.");
+        assertEq(receivedAssets.length, 2, "Should have received two assets.");
+        assertEq(amountsOut.length, 2, "Should have gotten out two amount.");
+        assertEq(address(receivedAssets[0]), address(WETH), "Should have received WETH.");
+        assertEq(address(receivedAssets[1]), address(WBTC), "Should have received WBTC.");
+        assertEq(amountsOut[0], 0.5e18, "Should have gotten out 0.5 WETH.");
+        assertEq(amountsOut[1], 0.5e8, "Should have gotten out 0.5 WBTC.");
+        assertEq(WETH.balanceOf(address(this)), 0.5e18, "Should have transferred position balance to user.");
+        assertEq(WBTC.balanceOf(address(this)), 0.5e8, "Should have transferred position balance to user.");
+        assertEq(cellar.totalAssets(), 16_000e6, "Should have half of assets remaining in cellar.");
+    }
+
+    // ========================================== REBALANCE TEST ==========================================
+
+    function testRebalanceBetweenPositions(uint256 assets) external {
+        assets = bound(assets, 1, type(uint72).max);
+
+        cellar.depositIntoPosition(address(usdcCLR), assets);
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WETH);
+
+        uint256 assetsTo = cellar.rebalance(
+            ERC4626(address(usdcCLR)),
+            ERC4626(address(wethCLR)),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(path, assets, 0, address(cellar), address(cellar))
+        );
+
+        assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
+        assertEq(usdcCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
+        assertEq(wethCLR.balanceOf(address(cellar)), assetsTo, "Should have rebalanced to position.");
+    }
+
+    function testRebalanceFromHoldings(uint256 assets) external {
+        assets = bound(assets, 1, type(uint72).max);
+
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WETH);
+
+        uint256 assetsTo = cellar.rebalance(
+            ERC4626(address(cellar)),
+            ERC4626(address(wethCLR)),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(path, assets, 0, address(cellar), address(cellar))
+        );
+
+        assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
+        assertEq(usdcCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
+        assertEq(wethCLR.balanceOf(address(cellar)), assetsTo, "Should have rebalanced to position.");
+    }
+
+    function testRebalanceToHoldings(uint256 assets) external {
+        assets = bound(assets, 1, type(uint112).max);
+
+        cellar.depositIntoPosition(address(wethCLR), assets);
+
+        address[] memory path = new address[](2);
+        path[0] = address(WETH);
+        path[1] = address(USDC);
+
+        uint256 assetsTo = cellar.rebalance(
+            ERC4626(address(wethCLR)),
+            ERC4626(address(cellar)),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(path, assets, 0, address(cellar), address(cellar))
+        );
+
+        assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
+        assertEq(wethCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
+        assertEq(cellar.totalHoldings(), assetsTo, "Should have rebalanced to position.");
+    }
+
+    function testRebalanceToSamePosition(uint256 assets) external {
+        assets = bound(assets, 1, type(uint72).max);
+
+        cellar.depositIntoPosition(address(usdcCLR), assets);
+
+        uint256 assetsTo = cellar.rebalance(
+            ERC4626(address(usdcCLR)),
+            ERC4626(address(usdcCLR)),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Will be ignored because no swap is necessary.
+            abi.encode(0) // Will be ignored because no swap is necessary.
+        );
+
+        assertEq(assetsTo, assets, "Should received expected assets from swap.");
+        assertEq(usdcCLR.balanceOf(address(cellar)), assets, "Should have not changed position balance.");
+    }
+
+    // =========================================== ACCRUE TEST ===========================================
 
     function testAccrueWithPositivePerformance() external {
         // Initialize position balances.
@@ -312,13 +393,62 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have counted withdrawals from position as yield.");
 
         // Withdraw assets from holding pool and USDC cellar position.
-        cellar.withdrawFromPositions(assets, address(this), address(this));
+        cellar.withdrawFromPositionsInOrder(assets, address(this), address(this));
 
         cellar.accrue();
         assertEq(
             cellar.balanceOf(address(cellar)),
             0,
             "Should not have counted withdrawals from holdings and position as yield."
+        );
+    }
+
+    event Accrual(uint256 platformFees, uint256 performanceFees);
+
+    function testAccrueUsesHighWatermark() external {
+        // Initialize position balances.
+        cellar.depositIntoPosition(address(usdcCLR), 1000e6, address(this)); // $1000
+        cellar.depositIntoPosition(address(wethCLR), 1e18, address(this)); // $2000
+        cellar.depositIntoPosition(address(wbtcCLR), 1e8, address(this)); // $30,000
+
+        // Simulate gains.
+        simulateGains(address(usdcCLR), 500e6); // $500
+        simulateGains(address(wethCLR), 0.5e18); // $1000
+        simulateGains(address(wbtcCLR), 0.5e8); // $15,000
+
+        cellar.accrue();
+
+        assertApproxEqAbs(
+            cellar.convertToAssets(cellar.balanceOf(address(cellar))),
+            1650e6,
+            1, // May be off by 1 due to rounding.
+            "Should have minted performance fees to cellar for gains."
+        );
+
+        // Simulate losing all previous gains.
+        simulateLoss(address(usdcCLR), 500e6); // -$500
+        simulateLoss(address(wethCLR), 0.5e18); // -$1000
+        simulateLoss(address(wbtcCLR), 0.5e8); // -$15,000
+
+        uint256 performanceFeesBefore = cellar.balanceOf(address(cellar));
+
+        cellar.accrue();
+
+        assertEq(
+            cellar.balanceOf(address(cellar)),
+            performanceFeesBefore,
+            "Should have minted no performance fees for losses."
+        );
+
+        // Simulate recovering previous gains.
+        simulateGains(address(usdcCLR), 500e6); // $500
+        simulateGains(address(wethCLR), 0.5e18); // $1000
+        simulateGains(address(wbtcCLR), 0.5e8); // $15,000
+
+        assertEq(
+            cellar.balanceOf(address(cellar)),
+            performanceFeesBefore,
+            "Should have minted no performance fees for no net gains."
         );
     }
 }
