@@ -6,6 +6,7 @@ import { ERC4626 } from "src/base/ERC4626.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
 import { ISwapRouter as IUniswapV3Router } from "src/interfaces/ISwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
+import { IGravity } from "src/interfaces/IGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
@@ -40,8 +41,16 @@ contract CellarRouterTest is Test {
     function setUp() public {
         swapRouter = new MockSwapRouter();
 
-        router = new CellarRouter(IUniswapV3Router(address(swapRouter)), IUniswapV2Router(address(swapRouter)));
-        forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router));
+        router = new CellarRouter(
+            IUniswapV3Router(address(swapRouter)),
+            IUniswapV2Router(address(swapRouter)),
+            IGravity(address(this))
+        );
+        forkedRouter = new CellarRouter(
+            IUniswapV3Router(uniV3Router),
+            IUniswapV2Router(uniV2Router),
+            IGravity(address(this))
+        );
 
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
@@ -243,18 +252,9 @@ contract CellarRouterTest is Test {
         XYZ.mint(address(this), assets);
         XYZ.transfer(address(router), assets);
 
-        // Call by the custodian
-        vm.startPrank(owner);
-        router.sweep(XYZ, owner, assets);
-    }
+        router.sweep(XYZ, address(this), assets);
 
-    function testFailSweep(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint72).max);
-
-        XYZ.mint(address(this), assets);
-        XYZ.transfer(address(router), assets);
-
-        // Call by a non-custodian
-        router.sweep(XYZ, owner, assets);
+        assertEq(XYZ.balanceOf(address(this)), assets, "Should have sweeped assets to specified address.");
+        assertEq(XYZ.balanceOf(address(router)), 0, "Should have sweeped assets from the router.");
     }
 }

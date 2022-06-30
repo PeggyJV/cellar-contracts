@@ -4,9 +4,11 @@ pragma solidity 0.8.15;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC4626 } from "./base/ERC4626.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ISwapRouter as IUniswapV3Router } from "./interfaces/ISwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
+import { IGravity } from "./interfaces/IGravity.sol";
 
 import "./Errors.sol";
 
@@ -32,12 +34,16 @@ contract CellarRouter is ICellarRouter, Ownable {
      * @param _uniswapV3Router Uniswap V3 swap router address
      * @param _uniswapV2Router Uniswap V2 swap router address
      */
-    constructor(IUniswapV3Router _uniswapV3Router, IUniswapV2Router _uniswapV2Router) {
+    constructor(
+        IUniswapV3Router _uniswapV3Router,
+        IUniswapV2Router _uniswapV2Router,
+        IGravity gravityBridge
+    ) {
         uniswapV3Router = _uniswapV3Router;
         uniswapV2Router = _uniswapV2Router;
 
         // Transfer ownership to the Gravity Bridge.
-        transferOwnership(address(_gravityBridge));
+        transferOwnership(address(gravityBridge));
     }
 
     // ======================================= DEPOSIT OPERATIONS =======================================
