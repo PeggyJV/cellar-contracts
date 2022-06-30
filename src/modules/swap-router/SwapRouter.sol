@@ -5,8 +5,9 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
+import { Multicall } from "src/base/Multicall.sol";
 
-contract SwapRouter {
+contract SwapRouter is Multicall {
     using SafeTransferLib for ERC20;
 
     /** @notice Planned additions

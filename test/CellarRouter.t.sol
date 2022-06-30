@@ -97,12 +97,28 @@ contract CellarRouterTest is Test {
         cellar = new MockERC4626(ERC20(address(ABC)), "ABC Cellar", "abcCLR", 18);
         forkedCellar = new MockERC4626(ERC20(address(WETH)), "WETH Cellar", "WETHCLR", 18); // For mainnet fork test.
 
-        address[] memory positions = new address[](3);
-        positions[0] = address(usdcCLR);
-        positions[1] = address(wethCLR);
-        positions[2] = address(wbtcCLR);
+        address[] memory positions = new address[](4);
+        positions[0] = address(USDC);
+        positions[1] = address(usdcCLR);
+        positions[2] = address(wethCLR);
+        positions[3] = address(wbtcCLR);
 
-        multiCellar = new MockCellar(registry, USDC, positions, "Multiposition Cellar LP Token", "multiposition-CLR");
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](4);
+        positionTypes[0] = Cellar.PositionType.ERC20;
+        positionTypes[1] = Cellar.PositionType.ERC4626;
+        positionTypes[2] = Cellar.PositionType.ERC4626;
+        positionTypes[3] = Cellar.PositionType.ERC4626;
+
+        multiCellar = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            address(USDC),
+            Cellar.WithdrawType.Orderly,
+            "Multiposition Cellar LP Token",
+            "multiposition-CLR"
+        );
         vm.label(address(cellar), "cellar");
 
         // Transfer ownership to this contract for testing.
@@ -133,15 +149,12 @@ contract CellarRouterTest is Test {
         path[0] = address(XYZ);
         path[1] = address(ABC);
 
-        // Specify the pool fee tiers to use for each swap (none).
-        uint24[] memory poolFees;
-
         // Test deposit and swap.
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
         bytes memory swapData = abi.encode(path, assets, 0, address(router));
-        uint256 shares = router.depositAndSwapIntoCellar(
+        uint256 shares = router.depositAndSwap(
             Cellar(address(cellar)),
             SwapRouter.Exchange.UNIV2,
             swapData,
@@ -184,7 +197,7 @@ contract CellarRouterTest is Test {
         deal(address(DAI), owner, assets, true);
         DAI.approve(address(router), assets);
         bytes memory swapData = abi.encode(path, assets, 0, address(router));
-        uint256 shares = router.depositAndSwapIntoCellar(
+        uint256 shares = router.depositAndSwap(
             Cellar(address(forkedCellar)),
             SwapRouter.Exchange.UNIV2,
             swapData,
@@ -235,7 +248,7 @@ contract CellarRouterTest is Test {
         deal(address(DAI), owner, assets, true);
         DAI.approve(address(router), assets);
         bytes memory swapData = abi.encode(path, poolFees, assets, 0, address(router));
-        uint256 shares = router.depositAndSwapIntoCellar(
+        uint256 shares = router.depositAndSwap(
             Cellar(address(forkedCellar)),
             SwapRouter.Exchange.UNIV3,
             swapData,
@@ -279,22 +292,12 @@ contract CellarRouterTest is Test {
         path[0] = address(XYZ);
         path[1] = address(ABC);
 
-        // Specify the pool fee tiers to use for each swap (none).
-        uint24[] memory poolFees;
-
         // Deposit and swap
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
         bytes memory swapData = abi.encode(path, assets, 0, address(router));
-        router.depositAndSwapIntoCellar(
-            Cellar(address(cellar)),
-            SwapRouter.Exchange.UNIV2,
-            swapData,
-            assets,
-            owner,
-            XYZ
-        );
+        router.depositAndSwap(Cellar(address(cellar)), SwapRouter.Exchange.UNIV2, swapData, assets, owner, XYZ);
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
         // to deposit due to slippage swaps.
@@ -306,11 +309,12 @@ contract CellarRouterTest is Test {
         // Test withdraw and swap.
         cellar.approve(address(router), assetsReceivedAfterDeposit);
         swapData = abi.encode(path, assetsReceivedAfterDeposit, 0, owner);
-        uint256 sharesRedeemed = router.withdrawAndSwapFromCellar(
+        uint256 sharesRedeemed = router.withdrawAndSwap(
             Cellar(address(cellar)),
             SwapRouter.Exchange.UNIV2,
             swapData,
-            assetsReceivedAfterDeposit
+            assetsReceivedAfterDeposit,
+            owner
         );
         vm.stopPrank();
 
@@ -327,7 +331,6 @@ contract CellarRouterTest is Test {
     function testWithdrawFromPositionsIntoSingleAssetWTwoSwaps() external {
         multiCellar.depositIntoPosition(address(wethCLR), 1e18);
         multiCellar.depositIntoPosition(address(wbtcCLR), 1e8);
-
         assertEq(multiCellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
 
         // Mint shares to user to redeem.
@@ -341,9 +344,7 @@ contract CellarRouterTest is Test {
         paths[1] = new address[](2);
         paths[1][0] = address(WBTC);
         paths[1][1] = address(USDC);
-        uint24[][] memory poolFees = new uint24[][](2);
-        poolFees[0] = new uint24[](0);
-        poolFees[1] = new uint24[](0);
+
         uint256 assets = 32_000e6;
         uint256[] memory minOuts = new uint256[](2);
         minOuts[0] = 0;
@@ -360,7 +361,8 @@ contract CellarRouterTest is Test {
         bytes[] memory swapData = new bytes[](2);
         swapData[0] = abi.encode(paths[0], 1e18, 0, address(this));
         swapData[1] = abi.encode(paths[1], 1e8, 0, address(this));
-        router.withdrawFromPositionsIntoSingleAsset(multiCellar, exchanges, swapData, assets);
+
+        router.withdrawFromPositionsAndSwap(multiCellar, exchanges, swapData, assets, address(this));
 
         assertEq(USDC.balanceOf(address(this)), 30_400e6, "Did not recieve expected assets");
     }
@@ -383,9 +385,6 @@ contract CellarRouterTest is Test {
         paths[0][0] = address(WBTC);
         paths[0][1] = address(WETH);
 
-        uint24[][] memory poolFees = new uint24[][](1);
-        poolFees[0] = new uint24[](0);
-
         uint256[] memory minOuts = new uint256[](1);
         minOuts[0] = 0;
 
@@ -394,13 +393,11 @@ contract CellarRouterTest is Test {
 
         uint256 assets = 32_000e6;
         multiCellar.approve(address(router), type(uint256).max);
-        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](2);
+        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](1);
         exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV2;
-        bytes[] memory swapData = new bytes[](2);
-        swapData[0] = abi.encode(paths[0], 1e18, 0, address(this));
-        swapData[1] = abi.encode(paths[1], 1e8, 0, address(this));
-        router.withdrawFromPositionsIntoSingleAsset(multiCellar, exchanges, swapData, assets);
+        bytes[] memory swapData = new bytes[](1);
+        swapData[0] = abi.encode(paths[0], 1e8, 0, address(this));
+        router.withdrawFromPositionsAndSwap(multiCellar, exchanges, swapData, assets, address(this));
         assertEq(WETH.balanceOf(address(this)), 15.25e18, "Did not recieve expected assets");
     }
 
@@ -428,11 +425,6 @@ contract CellarRouterTest is Test {
         paths[3][0] = address(WBTC);
         paths[3][1] = address(USDC);
 
-        uint24[][] memory poolFees = new uint24[][](4);
-        poolFees[0] = new uint24[](0);
-        poolFees[1] = new uint24[](0);
-        poolFees[2] = new uint24[](0);
-        poolFees[3] = new uint24[](0);
         uint256 assets = 32_000e6;
         uint256[] memory minOuts = new uint256[](4);
         minOuts[0] = 0;
@@ -457,7 +449,7 @@ contract CellarRouterTest is Test {
         swapData[1] = abi.encode(paths[1], 0.5e8, 0, address(this));
         swapData[2] = abi.encode(paths[2], 0.5e18, 0, address(this));
         swapData[3] = abi.encode(paths[3], 0.5e8, 0, address(this));
-        router.withdrawFromPositionsIntoSingleAsset(multiCellar, exchanges, swapData, assets);
+        router.withdrawFromPositionsAndSwap(multiCellar, exchanges, swapData, assets, address(this));
 
         assertEq(USDC.balanceOf(address(this)), 30_400e6, "Did not recieve expected assets");
     }

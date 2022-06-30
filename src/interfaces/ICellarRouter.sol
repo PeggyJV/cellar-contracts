@@ -8,7 +8,7 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 interface ICellarRouter {
     // ======================================= ROUTER OPERATIONS =======================================
 
-    function depositIntoCellarWithPermit(
+    function depositWithPermit(
         Cellar cellar,
         uint256 assets,
         address receiver,
@@ -16,7 +16,7 @@ interface ICellarRouter {
         bytes memory signature
     ) external returns (uint256 shares);
 
-    function depositAndSwapIntoCellar(
+    function depositAndSwap(
         Cellar cellar,
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
@@ -25,7 +25,7 @@ interface ICellarRouter {
         ERC20 assetIn
     ) external returns (uint256 shares);
 
-    function depositAndSwapIntoCellarWithPermit(
+    function depositAndSwapWithPermit(
         Cellar cellar,
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
@@ -36,19 +36,21 @@ interface ICellarRouter {
         bytes memory signature
     ) external returns (uint256 shares);
 
-    function withdrawAndSwapFromCellar(
+    function withdrawAndSwap(
         Cellar cellar,
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
-        uint256 assets
+        uint256 assets,
+        address receiver
     ) external returns (uint256 shares);
 
-    function withdrawAndSwapFromCellarWithPermit(
+    function withdrawAndSwapWithPermit(
         Cellar cellar,
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
         uint256 assets,
         uint256 deadline,
-        bytes memory signature
+        bytes memory signature,
+        address receiver
     ) external returns (uint256 shares);
 }

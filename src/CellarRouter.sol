@@ -99,6 +99,7 @@ contract CellarRouter is ICellarRouter {
      * @param swapData bytes variable containing all the data needed to make a swap
      * @param assets amount of assets to deposit
      * @param receiver address to recieve the cellar shares
+     * @param assetIn ERC20 token used to deposit
      * @return shares amount of shares minted
      */
     function depositAndSwap(
@@ -106,7 +107,8 @@ contract CellarRouter is ICellarRouter {
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
         uint256 assets,
-        address receiver
+        address receiver,
+        ERC20 assetIn
     ) public returns (uint256 shares) {
         // Retrieve the asset being swapped and asset of cellar.
         ERC20 asset = cellar.asset();
@@ -158,7 +160,7 @@ contract CellarRouter is ICellarRouter {
         assetIn.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Deposit assets into the cellar using a swap if necessary.
-        shares = depositAndSwapIntoCellar(cellar, exchange, swapData, assets, reciever, assetIn);
+        shares = depositAndSwap(cellar, exchange, swapData, assets, reciever, assetIn);
     }
 
     // ======================================= WITHDRAW OPERATIONS =======================================
@@ -176,13 +178,15 @@ contract CellarRouter is ICellarRouter {
      * @param swapData bytes variable containing all the data needed to make a swap
      *        reciever address should be the callers address
      * @param assets amount of assets to withdraw
+     * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
      */
     function withdrawAndSwap(
         Cellar cellar,
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
-        uint256 assets
+        uint256 assets,
+        address receiver
     ) public returns (uint256 shares) {
         // Withdraw assets from the cellar.
         shares = cellar.withdraw(assets, address(this), msg.sender);
@@ -207,6 +211,7 @@ contract CellarRouter is ICellarRouter {
      * @param assets amount of assets to withdraw
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
+     * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
      */
     function withdrawAndSwapWithPermit(
@@ -215,14 +220,15 @@ contract CellarRouter is ICellarRouter {
         bytes calldata swapData,
         uint256 assets,
         uint256 deadline,
-        bytes memory signature
+        bytes memory signature,
+        address receiver
     ) external returns (uint256 shares) {
         // Approve for router to burn user shares via permit.
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
         cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
-        shares = withdrawAndSwap(cellar, exchange, swapData, assets);
+        shares = withdrawAndSwap(cellar, exchange, swapData, assets, receiver);
     }
 
     /**
@@ -239,16 +245,16 @@ contract CellarRouter is ICellarRouter {
      * @param swapData bytes variable containing all the data needed to make a swap
      *        reciever address should be the callers address
      * @param assets amount of assets to withdraw
+     * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
      */
     function withdrawFromPositionsAndSwap(
         Cellar cellar,
         SwapRouter.Exchange[] calldata exchange,
         bytes[] calldata swapData,
-        uint256 assets
+        uint256 assets,
+        address receiver
     ) public returns (uint256 shares) {
-        require(paths.length == assetsOutMins.length, "Array length mismatch");
-
         ERC20[] memory receivedAssets;
         uint256[] memory amountsOut;
         (shares, receivedAssets, amountsOut) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
@@ -258,7 +264,14 @@ contract CellarRouter is ICellarRouter {
         bytes[] memory data = new bytes[](swapData.length);
         for (uint256 i; i < swapData.length; i++) data[i] = abi.encodeCall(SwapRouter.swap, (exchange[i], swapData[i]));
 
+        for (uint256 i; i < receivedAssets.length; i++)
+            receivedAssets[i].safeApprove(address(registry.swapRouter()), amountsOut[i]);
+
         registry.swapRouter().multicall(data);
+
+        //zero out approval in case it wasn't used
+        for (uint256 i; i < receivedAssets.length; i++)
+            receivedAssets[i].safeApprove(address(registry.swapRouter()), 0);
 
         for (uint256 i; i < receivedAssets.length; i++) {
             uint256 balanceBefore = balancesBefore[i];
