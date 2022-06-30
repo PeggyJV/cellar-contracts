@@ -3,8 +3,6 @@ pragma solidity 0.8.15;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
-// TODO: configure defaults
-
 contract Registry is Ownable {
     address public swapRouter;
     address public gravityBridge;
@@ -71,5 +69,21 @@ contract Registry is Ownable {
         priceRouter = newPriceRouter;
 
         emit PriceRouterChanged(oldPriceRouter, newPriceRouter);
+    }
+
+    /**
+     * @notice Configures default addresses of contracts
+     * @param _swapRouter address of SwapRouter contract
+     * @param _gravityBridge address of GravityBridge contract
+     * @param _priceRouter address of PriceRouter contract
+     */
+    constructor(
+        address _swapRouter,
+        address _gravityBridge,
+        address _priceRouter
+    ) Ownable() {
+        swapRouter = _swapRouter;
+        gravityBridge = _gravityBridge;
+        priceRouter = _priceRouter;
     }
 }
