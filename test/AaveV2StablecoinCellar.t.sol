@@ -583,6 +583,90 @@ contract AaveV2StablecoinCellarTest is Test {
         assertEq(cellar.maxMint(address(this)), 0, "Should show no shares can be minted when shutdown.");
     }
 
+    function testDepositLimitWithUnrealizedGains() external {
+        cellar.setDepositLimit(50_000e6);
+
+        USDC.mint(address(this), 45_000e6);
+        cellar.deposit(45_000e6, address(this));
+
+        // When factoring in that performance fees will be taken, we need to simulate gains of
+        // $5000 / (100% - % taken as performance fee) to ensure that deposit limit is reached.
+        aUSDC.mint(address(cellar), (5000e6 * 1e18) / (1e18 - cellar.performanceFee()));
+
+        assertEq(cellar.maxDeposit(address(this)), 0, "Deposit limit should count unrealized gains for deposit.");
+        assertEq(cellar.maxMint(address(this)), 0, "Deposit limit should count unrealized gains for mint.");
+
+        cellar.accrue();
+
+        // NOTE: Deposit limit might budge slightly because new shares are minted to the cellar as
+        //       fees, but it should not be significant. Here, the impact was to allow a deposit of
+        //       ~$60 assets over the $50,000 deposit limit after new shares were minted. The impact
+        //       will be even less as to be negligible the more depositors in the cellar there are
+        //       as the increase in the deposit limit will be divided amongst all depositors
+        //       (eg. the ~$60 difference here would be divided amongst all depositors).
+
+        assertApproxEqAbs(
+            cellar.maxDeposit(address(this)),
+            0,
+            100e6,
+            "Max deposit should not change significantly because of accrue."
+        );
+        assertApproxEqAbs(
+            cellar.maxMint(address(this)),
+            0,
+            100e18,
+            "Max mint should not change significantly because of accrue."
+        );
+
+        vm.warp(block.timestamp + cellar.accrualPeriod());
+
+        assertApproxEqAbs(
+            cellar.maxDeposit(address(this)),
+            0,
+            100e6,
+            "Max deposit should not change significantly because of accrue even after accrual period."
+        );
+        assertApproxEqAbs(
+            cellar.maxMint(address(this)),
+            0,
+            100e18,
+            "Max mint should not change significantly because of accrue even after accrual period."
+        );
+    }
+
+    function testLiquidityLimitWithUnrealizedGains() external {
+        cellar.setLiquidityLimit(5_000_000e6);
+
+        USDC.mint(address(this), 4_000_000e6);
+        cellar.deposit(4_000_000e6, address(this));
+
+        // Simulate gains.
+        aUSDC.mint(address(cellar), 1_000_000e6);
+
+        assertEq(cellar.maxDeposit(address(this)), 0, "Liquidity limit should count unrealized gains for deposit.");
+        assertEq(cellar.maxMint(address(this)), 0, "Liquidity limit should count unrealized gains for mint.");
+
+        cellar.accrue();
+
+        assertEq(cellar.maxDeposit(address(this)), 0, "Max deposit should not change because of accrue.");
+
+        assertEq(cellar.maxMint(address(this)), 0, "Max mint should not change because of accrue.");
+
+        vm.warp(block.timestamp + cellar.accrualPeriod());
+
+        assertEq(
+            cellar.maxDeposit(address(this)),
+            0,
+            "Max deposit should not change because of accrue even after accrual period."
+        );
+
+        assertEq(
+            cellar.maxMint(address(this)),
+            0,
+            "Max mint should not change because of accrue even after accrual period."
+        );
+    }
+
     function testFailDepositAboveDepositLimit(uint256 amount) external {
         amount = bound(amount, 101e6, type(uint112).max);
 
