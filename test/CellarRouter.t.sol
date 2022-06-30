@@ -63,10 +63,6 @@ contract CellarRouterTest is Test {
         priceRouter = new MockPriceRouter();
         exchange = new MockExchange(priceRouter);
 
-        // TODO: Remove forked router and related tests, these tests should be in swap router.
-
-        router = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)));
-        forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router));
         swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
         gravity = new MockGravity();
 
@@ -75,6 +71,9 @@ contract CellarRouterTest is Test {
             PriceRouter(address(priceRouter)),
             IGravity(address(gravity))
         );
+
+        router = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)), registry);
+        forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router), registry);
 
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);

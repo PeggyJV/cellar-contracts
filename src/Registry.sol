@@ -10,6 +10,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 // TODO: configure defaults
 // TODO: add natspec
 // TODO: add events
+//TODO should this be deployed first with no constructor args?
 
 contract Registry is Ownable {
     SwapRouter public swapRouter;

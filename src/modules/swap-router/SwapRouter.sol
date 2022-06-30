@@ -54,6 +54,7 @@ contract SwapRouter {
      * @return amountOut amount of tokens received from the swap
      */
     function swap(Exchange exchange, bytes memory swapData) public returns (uint256 amountOut) {
+        swapData = abi.encode(msg.sender, swapData);
         // Route swap call to appropriate function using selector.
         (bool success, bytes memory result) = address(this).call(
             abi.encodeWithSelector(getExchangeSelector[exchange], swapData)
@@ -103,9 +104,15 @@ contract SwapRouter {
      * @return amountOut amount of tokens received from the swap
      */
     function swapWithUniV2(bytes memory swapData) public returns (uint256 amountOut) {
-        (address[] memory path, uint256 assets, uint256 assetsOutMin, address recipient, address from) = abi.decode(
+        address from;
+        (from, swapData) = abi.decode(swapData, (address, bytes));
+        if (msg.sender != address(this)) {
+            //if called externally, then check from == msg.sender
+            require(from == msg.sender, "Restricted from input");
+        }
+        (address[] memory path, uint256 assets, uint256 assetsOutMin, address recipient) = abi.decode(
             swapData,
-            (address[], uint256, uint256, address, address)
+            (address[], uint256, uint256, address)
         );
 
         // Transfer assets to this contract to swap.
@@ -138,14 +145,14 @@ contract SwapRouter {
      * @return amountOut amount of tokens received from the swap
      */
     function swapWithUniV3(bytes memory swapData) public returns (uint256 amountOut) {
-        (
-            address[] memory path,
-            uint24[] memory poolFees,
-            uint256 assets,
-            uint256 assetsOutMin,
-            address recipient,
-            address from
-        ) = abi.decode(swapData, (address[], uint24[], uint256, uint256, address, address));
+        address from;
+        (from, swapData) = abi.decode(swapData, (address, bytes));
+        if (msg.sender != address(this)) {
+            //if called externally, then check from == msg.sender
+            require(from == msg.sender, "Restricted from input");
+        }
+        (address[] memory path, uint24[] memory poolFees, uint256 assets, uint256 assetsOutMin, address recipient) = abi
+            .decode(swapData, (address[], uint24[], uint256, uint256, address));
 
         // Transfer assets to this contract to swap.
         ERC20 assetIn = ERC20(path[0]);
