@@ -34,23 +34,20 @@ contract CellarRouterTest is Test {
     MockERC4626 private forkedCellar;
     CellarRouter private forkedRouter;
 
-    bytes32 private constant PERMIT_TYPEHASH =
-        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-    uint256 private constant privateKey = 0xBEEF;
-    address private owner = vm.addr(privateKey);
+    address private immutable owner = vm.addr(0xBEEF);
 
     // Mainnet contracts:
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    ERC20 private constant DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    ERC20 private constant USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     MockERC4626 private usdcCLR;
 
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     MockERC4626 private wethCLR;
 
-    ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
+    ERC20 private constant WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     MockERC4626 private wbtcCLR;
 
     function setUp() public {
@@ -65,6 +62,8 @@ contract CellarRouterTest is Test {
 
         priceRouter = new MockPriceRouter();
         exchange = new MockExchange(priceRouter);
+
+        // TODO: Remove forked router and related tests, these tests should be in swap router.
 
         router = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)));
         forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router));
@@ -255,6 +254,8 @@ contract CellarRouterTest is Test {
 
     // ======================================= WITHDRAW TESTS =======================================
 
+    // TODO: Add test ensuring that no assets remain after withdrawal.
+
     function testWithdrawAndSwapFromCellar(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
@@ -334,7 +335,7 @@ contract CellarRouterTest is Test {
         assetsIn[1] = 1e8;
 
         multiCellar.approve(address(router), type(uint256).max);
-        router.withdrawFromPositionsIntoSingleAsset(
+        router.withdrawAndSwapFromCellarPositionsInOrder(
             multiCellar,
             paths,
             poolFees,
@@ -360,26 +361,23 @@ contract CellarRouterTest is Test {
         deal(address(multiCellar), address(this), multiCellar.previewWithdraw(32_000e6));
 
         //create paths
-        address[][] memory paths = new address[][](2);
-        paths[0] = new address[](1);
-        paths[0][0] = address(WETH);
-        paths[1] = new address[](2);
-        paths[1][0] = address(WBTC);
-        paths[1][1] = address(WETH);
-        uint24[][] memory poolFees = new uint24[][](2);
+        address[][] memory paths = new address[][](1);
+        paths[0] = new address[](2);
+        paths[0][0] = address(WBTC);
+        paths[0][1] = address(WETH);
+
+        uint24[][] memory poolFees = new uint24[][](1);
         poolFees[0] = new uint24[](0);
-        poolFees[1] = new uint24[](0);
-        uint256 assets = 32_000e6;
-        uint256[] memory minOuts = new uint256[](2);
+
+        uint256[] memory minOuts = new uint256[](1);
         minOuts[0] = 0;
-        minOuts[1] = 0;
 
-        uint256[] memory assetsIn = new uint256[](2);
+        uint256[] memory assetsIn = new uint256[](1);
         assetsIn[0] = 1e18;
-        assetsIn[1] = 1e8;
 
+        uint256 assets = 32_000e6;
         multiCellar.approve(address(router), type(uint256).max);
-        router.withdrawFromPositionsIntoSingleAsset(
+        router.withdrawAndSwapFromCellarPositionsInOrder(
             multiCellar,
             paths,
             poolFees,
@@ -414,6 +412,7 @@ contract CellarRouterTest is Test {
         paths[3] = new address[](2);
         paths[3][0] = address(WBTC);
         paths[3][1] = address(USDC);
+
         uint24[][] memory poolFees = new uint24[][](4);
         poolFees[0] = new uint24[](0);
         poolFees[1] = new uint24[](0);
@@ -433,7 +432,7 @@ contract CellarRouterTest is Test {
         assetsIn[3] = 0.5e8;
 
         multiCellar.approve(address(router), type(uint256).max);
-        router.withdrawFromPositionsIntoSingleAsset(
+        router.withdrawAndSwapFromCellarPositionsInOrder(
             multiCellar,
             paths,
             poolFees,

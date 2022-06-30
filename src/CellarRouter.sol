@@ -3,17 +3,22 @@ pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { Cellar } from "./base/Cellar.sol";
+import { Registry } from "src/Registry.sol";
+import { Cellar } from "src/base/Cellar.sol";
 import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 
 import "./Errors.sol";
 
+// TODO: Fix comments (some of them still reference Sushiswap).
+// TODO: Rewrite natspec comments to be more clear.
+
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
 
     // ========================================== CONSTRUCTOR ==========================================
+
     /**
      * @notice Uniswap V3 swap router contract. Used for swapping if pool fees are specified.
      */
@@ -44,7 +49,7 @@ contract CellarRouter is ICellarRouter {
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
      */
-    function depositIntoCellarWithPermit(
+    function depositWithPermit(
         Cellar cellar,
         uint256 assets,
         address receiver,
@@ -83,7 +88,7 @@ contract CellarRouter is ICellarRouter {
      * @param receiver address receiving the shares
      * @return shares amount of shares minted
      */
-    function depositAndSwapIntoCellar(
+    function depositAndSwap(
         Cellar cellar,
         address[] calldata path,
         uint24[] calldata poolFees,
@@ -99,7 +104,7 @@ contract CellarRouter is ICellarRouter {
         assetIn.safeTransferFrom(msg.sender, address(this), assets);
 
         // Check whether a swap is necessary. If not, skip swap and deposit into cellar directly.
-        if (assetIn != asset) assets = _swap(path, poolFees, assets, assetsOutMin);
+        if (assetIn != asset) assets = _swap(path, poolFees, assets, assetsOutMin, address(this));
 
         // Approve the cellar to spend assets.
         asset.safeApprove(address(cellar), assets);
@@ -125,7 +130,7 @@ contract CellarRouter is ICellarRouter {
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
      */
-    function depositAndSwapIntoCellarWithPermit(
+    function depositAndSwapWithPermit(
         Cellar cellar,
         address[] calldata path,
         uint24[] calldata poolFees,
@@ -166,7 +171,7 @@ contract CellarRouter is ICellarRouter {
      * @param receiver address receiving the assets
      * @return shares amount of shares burned
      */
-    function withdrawAndSwapFromCellar(
+    function withdrawAndSwap(
         Cellar cellar,
         address[] calldata path,
         uint24[] calldata poolFees,
@@ -181,7 +186,7 @@ contract CellarRouter is ICellarRouter {
         shares = cellar.withdraw(assets, address(this), msg.sender);
 
         // Check whether a swap is necessary. If not, skip swap and transfer withdrawn assets to receiver.
-        if (assetOut != asset) assets = _swap(path, poolFees, assets, assetsOutMin);
+        if (assetOut != asset) assets = _swap(path, poolFees, assets, assetsOutMin, address(this));
 
         // Transfer assets from the router to the receiver.
         assetOut.safeTransfer(receiver, assets);
@@ -205,7 +210,7 @@ contract CellarRouter is ICellarRouter {
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares burned
      */
-    function withdrawAndSwapFromCellarWithPermit(
+    function withdrawAndSwapWithPermit(
         Cellar cellar,
         address[] calldata path,
         uint24[] calldata poolFees,
@@ -220,11 +225,11 @@ contract CellarRouter is ICellarRouter {
         cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
-        shares = withdrawAndSwapFromCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
+        shares = withdrawAndSwap(cellar, path, poolFees, assets, assetsOutMin, receiver);
     }
 
     /**
-     * @notice Withdraws from a multi assset cellar and then performs swaps to another desired asset, if the
+     * @notice Withdraws from a multi assset cellar and then performs swaps to a single desired asset, if the
      *         withdrawn asset is not already.
      * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
      *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
@@ -232,16 +237,16 @@ contract CellarRouter is ICellarRouter {
      *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
      *      V2, leave pool fees empty to use Uniswap V2 for swap.
      * @param cellar address of the cellar
-     * @param paths array of arrays of [token1, token2, token3] that specifies the swap path on swap,
-     * if paths[i].length is 1, then no swap will be made
-     * @param poolFees array of arrays of amounts out of 1e4 (eg. 10000 == 1%) that represents the fee tier to use for each swap
+     * @param paths array of arrays of [token1, token2, token3] that specifies the swap path on swap
+     * @param poolFees array of arrays of amounts out of 1e4 (eg. 10000 == 1%) that represents the
+     *                 fee tier to use for each swap
      * @param assets amount of assets to withdraw
      * @param assetsIn array of amounts in for each swap, allows caller to swap the same asset at multiple different exchanges
      * @param assetsOutMins array of minimum amounts of assets received from swaps
      * @param receiver address receiving the assets
      * @return shares amount of shares burned
      */
-    function withdrawFromPositionsIntoSingleAsset(
+    function withdrawFromPositionsAndSwap(
         Cellar cellar,
         address[][] calldata paths,
         uint24[][] calldata poolFees,
@@ -250,22 +255,24 @@ contract CellarRouter is ICellarRouter {
         uint256[] calldata assetsOutMins,
         address receiver
     ) public returns (uint256 shares) {
-        ERC20 assetOut = ERC20(paths[0][paths[0].length - 1]); // get the last asset from the first path
         require(paths.length == assetsOutMins.length, "Array length mismatch");
-        // `paths.length` was stored in a memory variable, but was removed because stack too deep.
-        // Withdraw assets from the cellar.
+
         ERC20[] memory receivedAssets;
-        //uint256[] memory amountsOut;
-        (shares, receivedAssets, ) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
+        uint256[] memory amountsOut;
+        (shares, receivedAssets, amountsOut) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
 
-        assets = assetOut.balanceOf(address(this)); //zero out for use in for loop
-        for (uint256 i = 0; i < paths.length; i++) {
-            if (paths[i].length == 1) continue; //no need to swap
-            assets += _swap(paths[i], poolFees[i], assetsIn[i], assetsOutMins[i]);
+        uint256[] memory balancesBefore = _getBalancesBefore(receivedAssets, amountsOut);
+
+        for (uint256 i; i < paths.length; i++) _swap(paths[i], poolFees[i], assetsIn[i], assetsOutMins[i], receiver);
+
+        for (uint256 i; i < receivedAssets.length; i++) {
+            uint256 balanceBefore = balancesBefore[i];
+            uint256 balanceAfter = receivedAssets[i].balanceOf(address(this));
+
+            if (balanceAfter != balanceBefore) {
+                receivedAssets[i].transfer(receiver, balanceAfter - balanceBefore);
+            }
         }
-
-        // Transfer assets from the router to the receiver.
-        assetOut.safeTransfer(receiver, assets);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
@@ -301,6 +308,20 @@ contract CellarRouter is ICellarRouter {
         }
     }
 
+    function _getBalancesBefore(ERC20[] memory assets, uint256[] memory amountsReceived)
+        internal
+        view
+        returns (uint256[] memory balancesBefore)
+    {
+        balancesBefore = new uint256[](assets.length);
+
+        for (uint256 i; i < assets.length; i++) {
+            ERC20 asset = assets[i];
+
+            balancesBefore[i] = asset.balanceOf(address(this)) - amountsReceived[i];
+        }
+    }
+
     /**
      * @notice Perform a swap using Uniswap.
      * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
@@ -318,7 +339,8 @@ contract CellarRouter is ICellarRouter {
         address[] calldata path,
         uint24[] calldata poolFees,
         uint256 assets,
-        uint256 assetsOutMin
+        uint256 assetsOutMin,
+        address receiver
     ) internal returns (uint256 assetsOut) {
         // Retrieve the asset being swapped.
         ERC20 assetIn = ERC20(path[0]);
@@ -335,7 +357,7 @@ contract CellarRouter is ICellarRouter {
                 assets,
                 assetsOutMin,
                 path,
-                address(this),
+                receiver,
                 block.timestamp + 60
             );
 
