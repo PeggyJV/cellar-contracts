@@ -4,12 +4,12 @@ pragma solidity 0.8.15;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ERC4626 } from "src/base/ERC4626.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
-import { ISwapRouter as IUniswapV3Router } from "src/interfaces/ISwapRouter.sol";
+import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IGravity } from "src/interfaces/IGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
-import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
+import { MockExchange } from "src/mocks/MockExchange.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -19,7 +19,7 @@ contract CellarRouterTest is Test {
 
     MockERC20 private ABC;
     MockERC20 private XYZ;
-    MockSwapRouter private swapRouter;
+    MockExchange private exchange;
 
     MockERC4626 private cellar;
     CellarRouter private router;
@@ -39,11 +39,11 @@ contract CellarRouterTest is Test {
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 
     function setUp() public {
-        swapRouter = new MockSwapRouter();
+        exchange = new MockExchange();
 
         router = new CellarRouter(
-            IUniswapV3Router(address(swapRouter)),
-            IUniswapV2Router(address(swapRouter)),
+            IUniswapV3Router(address(exchange)),
+            IUniswapV2Router(address(exchange)),
             IGravity(address(this))
         );
         forkedRouter = new CellarRouter(
@@ -54,6 +54,10 @@ contract CellarRouterTest is Test {
 
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
+
+        // Set up exchange rates:
+        exchange.setExchangeRate(address(ABC), address(XYZ), 1e18);
+        exchange.setExchangeRate(address(XYZ), address(ABC), 1e18);
 
         // Set up two cellars:
         cellar = new MockERC4626(ERC20(address(ABC)), "ABC Cellar", "abcCLR", 18);
@@ -66,7 +70,7 @@ contract CellarRouterTest is Test {
         assets = bound(assets, 1e18, type(uint72).max);
 
         // Mint liquidity for swap.
-        ABC.mint(address(swapRouter), 2 * assets);
+        ABC.mint(address(exchange), 2 * assets);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -85,7 +89,7 @@ contract CellarRouterTest is Test {
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
         // to deposit due to slippage swaps.
-        uint256 assetsReceived = swapRouter.quote(assets, path);
+        uint256 assetsReceived = exchange.quote(assets, path);
 
         // Run test.
         assertEq(shares, assetsReceived, "Should have 1:1 exchange rate for initial deposit.");
@@ -199,7 +203,7 @@ contract CellarRouterTest is Test {
         assets = bound(assets, 1e18, type(uint72).max);
 
         // Mint liquidity for swap.
-        ABC.mint(address(swapRouter), 2 * assets);
+        ABC.mint(address(exchange), 2 * assets);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -217,7 +221,7 @@ contract CellarRouterTest is Test {
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
         // to deposit due to slippage swaps.
-        uint256 assetsReceivedAfterDeposit = swapRouter.quote(assets, path);
+        uint256 assetsReceivedAfterDeposit = exchange.quote(assets, path);
 
         // Reverse the swap path.
         (path[0], path[1]) = (path[1], path[0]);
@@ -234,7 +238,7 @@ contract CellarRouterTest is Test {
         );
         vm.stopPrank();
 
-        uint256 assetsReceivedAfterWithdraw = swapRouter.quote(assetsReceivedAfterDeposit, path);
+        uint256 assetsReceivedAfterWithdraw = exchange.quote(assetsReceivedAfterDeposit, path);
 
         // Run test.
         assertEq(sharesRedeemed, assetsReceivedAfterDeposit, "Should have 1:1 exchange rate.");
