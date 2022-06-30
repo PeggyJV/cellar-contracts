@@ -2084,4 +2084,34 @@ describe("CellarStaking", () => {
       }
     });
   });
+
+  describe("Corner Cases", () => {
+    it("Old stakers should not be able to claim rewards of the new reward cycle", async () => {
+      const { staking, stakingUser, user, tokenDist } = ctx;
+      const min = ether("1");
+      await staking.setMinimumDeposit(min);
+
+      // Reward Cycle 1
+      await ctx.staking.notifyRewardAmount(ether(oneMonthSec.toString()));
+      await stakingUser.stake(ether("1"), 0);
+      await increaseTime(oneMonthSec * 2);
+
+      // shortTermboost : 0
+      // lock: 0
+      // staked: 1 ether
+      // total: 1 ether
+      // total rewards: 2592000
+      // epochDuration: 2592000
+      // rewardRate: 1
+      // timePassed: 2592000*2
+
+      await stakingUser.claim(0);
+      expectRoundedEqual(await tokenDist.balanceOf(user.address), ether(oneMonthSec.toString()));
+
+      // Reward Cycle 2
+      await ctx.staking.notifyRewardAmount(ether(oneMonthSec.toString()));
+      await stakingUser.claim(0);
+      expectRoundedEqual(await tokenDist.balanceOf(user.address), ether(oneMonthSec.toString()));
+    });
+  })
 });

@@ -598,6 +598,8 @@ contract CellarStaking is ICellarStaking, Ownable {
             // Ready to start
             _startProgram(reward);
         }
+
+        lastAccountingTimestamp = block.timestamp;
     }
 
     /**
