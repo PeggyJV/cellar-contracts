@@ -90,7 +90,7 @@ contract AaveV2StablecoinCellarTest is Test {
         );
 
         assertEq(cellar.liquidityLimit(), 5_000_000e6);
-        assertEq(cellar.depositLimit(), 50_000e6);
+        assertEq(cellar.depositLimit(), type(uint256).max);
 
         // Transfer ownership to this contract for testing.
         vm.prank(address(cellar.gravityBridge()));

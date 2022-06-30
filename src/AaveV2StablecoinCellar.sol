@@ -301,7 +301,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         // Initialize limits.
         uint256 powOfAssetDecimals = 10**_assetDecimals;
         liquidityLimit = 5_000_000 * powOfAssetDecimals;
-        depositLimit = 50_000 * powOfAssetDecimals;
+        depositLimit = type(uint256).max;
 
         // Initialize approved positions.
         for (uint256 i; i < _approvedPositions.length; i++) isTrusted[_approvedPositions[i]] = true;
