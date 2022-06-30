@@ -876,8 +876,8 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
             _withdrawFromPosition(position, type(uint256).max);
 
-            totalBalance = 0;
-            highWatermarkBalance = 0;
+            delete totalBalance;
+            delete highWatermarkBalance;
         }
     }
 
