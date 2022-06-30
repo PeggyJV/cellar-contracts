@@ -10,6 +10,7 @@ import { ISushiSwapRouter } from "src/interfaces/ISushiSwapRouter.sol";
 import { IGravity } from "src/interfaces/IGravity.sol";
 import { ILendingPool } from "src/interfaces/ILendingPool.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
+import { MockERC20WithTransferFee } from "src/mocks/MockERC20WithTransferFee.sol";
 import { MockAToken } from "src/mocks/MockAToken.sol";
 import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
 import { MockLendingPool } from "src/mocks/MockLendingPool.sol";
@@ -17,11 +18,12 @@ import { MockIncentivesController } from "src/mocks/MockIncentivesController.sol
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockStkAAVE } from "src/mocks/MockStkAAVE.sol";
 
-import { Test } from "@forge-std/Test.sol";
+import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract AaveV2StablecoinCellarTest is Test {
     using Math for uint256;
+    using stdStorage for StdStorage;
 
     // Initialization Variables:
     MockERC20 private USDC;
@@ -477,6 +479,38 @@ contract AaveV2StablecoinCellarTest is Test {
         );
         assertEq(cellar.balanceOf(bob), 0, "10. Bob's share balance should be 0.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(bob)), 0, "10. Bob's shares should be worth 0.");
+    }
+
+    function testFailDepositUsingAssetWithTransferFee() external {
+        MockERC20 tokenWithTransferFee = MockERC20(address(new MockERC20WithTransferFee("TKN", 6)));
+
+        stdstore.target(address(cellar)).sig(cellar.asset.selector).checked_write(address(tokenWithTransferFee));
+
+        assertEq(
+            address(cellar.asset()),
+            address(tokenWithTransferFee),
+            "Cellar asset should be token with transfer fee."
+        );
+
+        tokenWithTransferFee.mint(address(this), 100e6);
+        tokenWithTransferFee.approve(address(cellar), 100e6);
+        cellar.deposit(100e6, address(this));
+    }
+
+    function testFailMintUsingAssetWithTransferFee() external {
+        MockERC20 tokenWithTransferFee = MockERC20(address(new MockERC20WithTransferFee("TKN", 6)));
+
+        stdstore.target(address(cellar)).sig(cellar.asset.selector).checked_write(address(tokenWithTransferFee));
+
+        assertEq(
+            address(cellar.asset()),
+            address(tokenWithTransferFee),
+            "Cellar asset should be token with transfer fee."
+        );
+
+        tokenWithTransferFee.mint(address(this), 100e6);
+        tokenWithTransferFee.approve(address(cellar), 100e6);
+        cellar.mint(100e18, address(this));
     }
 
     // ========================================= LIMITS TESTS =========================================
