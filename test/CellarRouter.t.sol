@@ -12,6 +12,7 @@ import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
+import { USR_InsufficientShares } from "src/Errors.sol";
 
 contract CellarRouterTest is Test {
     using Math for uint256;
@@ -89,7 +90,7 @@ contract CellarRouterTest is Test {
         assertEq(XYZ.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
-    function testMinSharesOut(uint256 assets) external {
+    function testMinSharesIn(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
         // Mint liquidity for swap.
@@ -103,12 +104,12 @@ contract CellarRouterTest is Test {
         // Specify the pool fee tiers to use for each swap (none).
         uint24[] memory poolFees;
 
-        // Test minSharesOut is enforced
+        // Test minSharesIn is enforced
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
-        uint256 unreasonableMinSharesOut = 2**72;
-        vm.expectRevert(bytes("Insufficient shares out"));
+        uint256 unreasonableMinSharesIn = 2**72;
+        vm.expectRevert(USR_InsufficientShares.selector);
         router.depositAndSwapIntoCellar(
             ERC4626(address(cellar)),
             path,
@@ -116,7 +117,32 @@ contract CellarRouterTest is Test {
             assets,
             0,
             owner,
-            unreasonableMinSharesOut
+            unreasonableMinSharesIn
+        );
+
+        router.depositAndSwapIntoCellar(
+            ERC4626(address(cellar)),
+            path,
+            poolFees,
+            assets,
+            0,
+            owner,
+            0
+        );
+
+        uint256 assetsReceivedAfterDeposit = swapRouter.quote(assets, path);
+        (path[0], path[1]) = (path[1], path[0]);
+        cellar.approve(address(router), assetsReceivedAfterDeposit);
+
+        vm.expectRevert(USR_InsufficientShares.selector);
+        router.withdrawAndSwapFromCellar(
+            ERC4626(address(cellar)),
+            path,
+            poolFees,
+            assetsReceivedAfterDeposit,
+            0,
+            owner,
+            unreasonableMinSharesIn
         );
         vm.stopPrank();
     }
@@ -255,7 +281,8 @@ contract CellarRouterTest is Test {
             poolFees,
             assetsReceivedAfterDeposit,
             0,
-            owner
+            owner,
+            0
         );
         vm.stopPrank();
 
