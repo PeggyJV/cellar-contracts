@@ -66,6 +66,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     uint160 public maxLocked;
 
     /**
+     * @notice The minimum level of total balance a strategy provider needs to achieve to receive
+     *         performance fees for the next accrual.
+     */
+    uint256 public highWatermarkBalance;
+
+    /**
      * @notice Set the accrual period over which yield is distributed.
      * @param newAccrualPeriod period of time in seconds of the new accrual period
      */
@@ -371,7 +377,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 holdings = totalHoldings();
 
         // Only withdraw if not enough assets in the holding pool.
-        if (assets > holdings) totalBalance -= _withdrawFromPosition(currentPosition, assets - holdings);
+        if (assets > holdings) {
+            uint256 withdrawnAssets = _withdrawFromPosition(currentPosition, assets - holdings);
+
+            totalBalance -= withdrawnAssets;
+            highWatermarkBalance -= withdrawnAssets;
+        }
     }
 
     // ======================================= ACCOUNTING LOGIC =======================================
@@ -526,7 +537,6 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 exchangeRate = convertToShares(oneAsset);
 
         // Get balance since last accrual and updated balance for this accrual.
-        uint256 balanceLastAccrual = totalBalance;
         uint256 balanceThisAccrual = assetAToken.balanceOf(address(this));
 
         // Calculate platform fees accrued.
@@ -535,7 +545,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         uint256 platformFees = platformFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
 
         // Calculate performance fees accrued.
-        uint256 yield = balanceThisAccrual.subMinZero(balanceLastAccrual);
+        uint256 yield = balanceThisAccrual.subMinZero(highWatermarkBalance);
         uint256 performanceFeeInAssets = yield.mulWadDown(performanceFee);
         uint256 performanceFees = performanceFeeInAssets.mulDivDown(exchangeRate, oneAsset); // Convert to shares.
 
@@ -548,6 +558,9 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         lastAccrual = uint32(block.timestamp);
 
         totalBalance = balanceThisAccrual;
+
+        // Only update high watermark if balance greater than last high watermark.
+        if (balanceThisAccrual > highWatermarkBalance) highWatermarkBalance = balanceThisAccrual;
 
         emit Accrual(platformFees, performanceFees, yield);
     }
@@ -562,6 +575,10 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         ERC20 currentPosition = asset;
 
         totalBalance += assets;
+
+        // Without this line, assets entered into Aave would be counted as gains during the next
+        // accrual.
+        highWatermarkBalance += assets;
 
         _depositIntoPosition(currentPosition, assets);
 
@@ -582,7 +599,13 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function exitPosition(uint256 assets) public whenNotShutdown onlyOwner {
         ERC20 currentPosition = asset;
 
-        totalBalance -= _withdrawFromPosition(currentPosition, assets);
+        uint256 withdrawnAssets = _withdrawFromPosition(currentPosition, assets);
+
+        totalBalance -= withdrawnAssets;
+
+        // Without this line, assets exited from Aave would be counted as losses during the next
+        // accrual.
+        highWatermarkBalance -= withdrawnAssets;
 
         emit ExitPosition(address(currentPosition), assets);
     }
@@ -668,6 +691,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         );
 
         totalBalance = newTotalBalance;
+
+        // Keep high watermark at level it should be at before rebalance because otherwise swap
+        // losses from this rebalance would not be counted in the next accrual. Include holdings
+        // into new high watermark balance as those have all been deposited into Aave now.
+        highWatermarkBalance = (highWatermarkBalance + totalAssetsInHolding).changeDecimals(
+            oldPositionDecimals,
+            newPositionDecimals
+        );
 
         emit Rebalance(address(oldPosition), address(newPosition), newTotalBalance);
     }
@@ -821,6 +852,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
             _withdrawFromPosition(position, type(uint256).max);
 
             totalBalance = 0;
+            highWatermarkBalance = 0;
         }
     }
 

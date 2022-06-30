@@ -18,7 +18,7 @@ import { MockIncentivesController } from "src/mocks/MockIncentivesController.sol
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockStkAAVE } from "src/mocks/MockStkAAVE.sol";
 
-import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
+import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract AaveV2StablecoinCellarTest is Test {
@@ -846,6 +846,35 @@ contract AaveV2StablecoinCellarTest is Test {
         assertEq(cellar.lastAccrual(), lastAccrualTimestamp, "12. Should have changed timestamp of last accrual.");
     }
 
+    // NOTE: Despite the fact this cellar's strategy should not be able to suffer a loss, this
+    //       should test that the cellar's high water mark mechanic works correctly in case there was.
+    function testPerformanceFeesTrackAbsolutePerformance() external {
+        USDC.mint(address(this), type(uint112).max);
+        USDC.approve(address(cellar), type(uint112).max);
+
+        // Set the stage with $1000 in position, and trigger accrual.
+        cellar.deposit(1_000e6, address(this));
+        cellar.enterPosition();
+        cellar.accrue();
+
+        // Lose $100 worth of assets
+        aUSDC.burn(address(cellar), 100e6);
+
+        // $100 loss => $0 performance fee
+        cellar.accrue();
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not accrue performance fees for loss.");
+
+        // Gain $100 worth of assets
+        aUSDC.mint(address(cellar), 100e6, lendingPool.index());
+
+        // Net performance increase over the investment is $0,
+        // so would expect yield and performance fee to be 0.
+        cellar.accrue();
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not accrue performance fees for net loss.");
+    }
+
     // ========================================== POSITION TESTS ==========================================
 
     function testEnterPosition(uint256 assets) external {
@@ -921,6 +950,8 @@ contract AaveV2StablecoinCellarTest is Test {
 
         uint256 maxLockedBefore = cellar.maxLocked();
 
+        uint256 highWatermarkBeforeRebalance = cellar.highWatermarkBalance();
+        uint256 totalHoldingsBeforeRebalance = cellar.totalHoldings();
         uint256 totalAssetsBeforeRebalance = cellar.totalAssets();
         uint256 priceOfShareBeforeRebalance = cellar.convertToAssets(1e18);
         cellar.rebalance(route, swapParams, 0);
@@ -946,6 +977,11 @@ contract AaveV2StablecoinCellarTest is Test {
             "Should have deposited all assets into new position."
         );
         assertEq(cellar.totalBalance(), assetsAfterRebalance, "Should have updated total balance.");
+        assertEq(
+            cellar.highWatermarkBalance(),
+            (highWatermarkBeforeRebalance + totalHoldingsBeforeRebalance).changeDecimals(6, 18),
+            "Should have updated high watermark balance."
+        );
         assertLt(priceOfShareAfterRebalance, priceOfShareBeforeRebalance, "Expect price of shares to have decreased.");
         assertLt(totalAssetsAfterRebalance, totalAssetsBeforeRebalance, "Expect total assets to have decreased.");
 
@@ -975,6 +1011,8 @@ contract AaveV2StablecoinCellarTest is Test {
 
         uint256 totalBalanceAndHoldingsBeforeRebalance = cellar.totalBalance() + cellar.totalHoldings();
 
+        uint256 highWatermarkBeforeRebalance = cellar.highWatermarkBalance();
+        uint256 totalHoldingsBeforeRebalance = cellar.totalHoldings();
         uint256 totalAssetsBeforeRebalance = cellar.totalAssets();
         uint256 priceOfShareBeforeRebalance = cellar.convertToAssets(1e18);
         cellar.rebalance(route, swapParams, 0);
@@ -998,6 +1036,11 @@ contract AaveV2StablecoinCellarTest is Test {
             cellar.totalBalance(),
             totalBalanceAndHoldingsBeforeRebalance.changeDecimals(6, 18),
             "Should have updated total balance."
+        );
+        assertEq(
+            cellar.highWatermarkBalance(),
+            (highWatermarkBeforeRebalance + totalHoldingsBeforeRebalance).changeDecimals(6, 18),
+            "Should have updated high watermark balance."
         );
         assertEq(
             priceOfShareAfterRebalance,
@@ -1036,6 +1079,8 @@ contract AaveV2StablecoinCellarTest is Test {
 
         uint256[3][4] memory swapParams;
 
+        uint256 highWatermarkBeforeRebalance = cellar.highWatermarkBalance();
+        uint256 totalHoldingsBeforeRebalance = cellar.totalHoldings();
         uint256 totalAssetsBeforeRebalance = cellar.totalAssets();
         uint256 priceOfShareBeforeRebalance = cellar.convertToAssets(1e18);
         cellar.rebalance(route, swapParams, 0);
@@ -1056,8 +1101,53 @@ contract AaveV2StablecoinCellarTest is Test {
             "Should have deposited all assets into new position."
         );
         assertEq(cellar.totalBalance(), assetsAfterRebalance, "Should have updated total balance.");
+        assertEq(
+            cellar.highWatermarkBalance(),
+            (highWatermarkBeforeRebalance + totalHoldingsBeforeRebalance).changeDecimals(6, 18),
+            "Should have updated high watermark balance."
+        );
         assertLt(priceOfShareAfterRebalance, priceOfShareBeforeRebalance, "Expect price of shares to have decreased.");
         assertLt(totalAssetsAfterRebalance, totalAssetsBeforeRebalance, "Expect total assets to have decreased.");
+    }
+
+    function testRebalanceEffectOnHighWatermark() external {
+        USDC.mint(address(this), 1000e6);
+
+        cellar.deposit(1000e6, address(this));
+        cellar.enterPosition(1000e6 / 2);
+
+        address[9] memory route;
+        route[0] = address(USDC);
+        route[1] = address(1);
+        route[2] = address(DAI);
+
+        uint256[3][4] memory swapParams;
+
+        uint256 totalAssetsBeforeRebalance = cellar.totalAssets();
+
+        // Rebalance such that there is a loss.
+        cellar.rebalance(route, swapParams, 0);
+
+        // Test that accrue does not mint any performance fees.
+        cellar.accrue();
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted performance fees for loss.");
+
+        // Simulate gaining assets up to the amount that existed before the rebalance.
+        aDAI.mint(address(cellar), totalAssetsBeforeRebalance.changeDecimals(6, 18) - cellar.totalAssets());
+
+        // Test that accrue does not mint any performance fees.
+        cellar.accrue();
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted performance fees for no net gain.");
+
+        // Simulate gaining assets exceeding the amount that existed before the rebalance.
+        aDAI.mint(address(cellar), 100e18);
+
+        // Test that accrue does mint any performance fees.
+        cellar.accrue();
+
+        assertEq(cellar.balanceOf(address(cellar)), 10e18, "Should have minted performance fees for net gain.");
     }
 
     function testRebalanceWithEmptyPosition(uint256 assets) external {
