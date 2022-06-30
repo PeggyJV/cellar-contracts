@@ -41,7 +41,7 @@ contract CellarRouter is ICellarRouter {
      * @param assets amount of assets to deposit
      * @param receiver address receiving the shares
      * @param deadline timestamp after which permit is invalid
-     * @param minSharesOut minimum amount of shares caller expects
+     * @param minSharesIn minimum amount of shares caller expects
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
      */
@@ -50,7 +50,7 @@ contract CellarRouter is ICellarRouter {
         uint256 assets,
         address receiver,
         uint256 deadline,
-        uint256 minSharesOut,
+        uint256 minSharesIn,
         bytes memory signature
     ) external returns (uint256 shares) {
         // Retrieve the cellar's current asset.
@@ -69,8 +69,9 @@ contract CellarRouter is ICellarRouter {
         // Deposit assets into the cellar.
         shares = cellar.deposit(assets, receiver);
 
-        //enforce minSharesOut
-        require(shares >= minSharesOut, "Insufficient shares out");
+        // Enforce minSharesIn
+        if (shares < minSharesIn) revert USR_InsufficientShares();
+        
     }
 
     /**
@@ -86,7 +87,7 @@ contract CellarRouter is ICellarRouter {
      * @param assets amount of assets to deposit
      * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the shares
-     * @param minSharesOut minimum amount of shares caller expects
+     * @param minSharesIn minimum amount of shares caller expects
      * @return shares amount of shares minted
      */
     function depositAndSwapIntoCellar(
@@ -96,7 +97,7 @@ contract CellarRouter is ICellarRouter {
         uint256 assets,
         uint256 assetsOutMin,
         address receiver,
-        uint256 minSharesOut
+        uint256 minSharesIn
     ) public returns (uint256 shares) {
         // Retrieve the asset being swapped and asset of cellar.
         ERC20 asset = cellar.asset();
@@ -114,8 +115,8 @@ contract CellarRouter is ICellarRouter {
         // Deposit assets into the cellar.
         shares = cellar.deposit(assets, receiver);
 
-        //enforce minSharesOut
-        require(shares >= minSharesOut, "Insufficient shares out");
+        // Enforce minSharesIn
+        if (shares < minSharesIn) revert USR_InsufficientShares();
     }
 
     /**
@@ -132,7 +133,7 @@ contract CellarRouter is ICellarRouter {
      * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the shares
      * @param deadline timestamp after which permit is invalid
-     * @param minSharesOut minimum amount of shares caller expects
+     * @param minSharesIn minimum amount of shares caller expects
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
      */
@@ -144,7 +145,7 @@ contract CellarRouter is ICellarRouter {
         uint256 assetsOutMin,
         address receiver,
         uint256 deadline,
-        uint256 minSharesOut,
+        uint256 minSharesIn,
         bytes memory signature
     ) external returns (uint256 shares) {
         // Retrieve the asset being swapped.
@@ -157,7 +158,7 @@ contract CellarRouter is ICellarRouter {
         }
 
         // Deposit assets into the cellar using a swap if necessary.
-        shares = depositAndSwapIntoCellar(cellar, path, poolFees, assets, assetsOutMin, receiver, minSharesOut);
+        shares = depositAndSwapIntoCellar(cellar, path, poolFees, assets, assetsOutMin, receiver, minSharesIn);
     }
 
     // ======================================= WITHDRAW OPERATIONS =======================================
@@ -178,6 +179,7 @@ contract CellarRouter is ICellarRouter {
      * @param assets amount of assets to withdraw
      * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the assets
+     * @param minSharesIn minimum amount of shares caller expects
      * @return shares amount of shares burned
      */
     function withdrawAndSwapFromCellar(
@@ -186,13 +188,17 @@ contract CellarRouter is ICellarRouter {
         uint24[] calldata poolFees,
         uint256 assets,
         uint256 assetsOutMin,
-        address receiver
+        address receiver,
+        uint256 minSharesIn
     ) public returns (uint256 shares) {
         ERC20 asset = cellar.asset();
         ERC20 assetOut = ERC20(path[path.length - 1]);
 
         // Withdraw assets from the cellar.
         shares = cellar.withdraw(assets, address(this), msg.sender);
+
+        // Enforce minSharesIn
+        if (shares < minSharesIn) revert USR_InsufficientShares();
 
         // Check whether a swap is necessary. If not, skip swap and transfer withdrawn assets to receiver.
         if (assetOut != asset) assets = _swap(path, poolFees, assets, assetsOutMin);
@@ -216,6 +222,7 @@ contract CellarRouter is ICellarRouter {
      * @param assetsOutMin minimum amount of assets received from swap
      * @param receiver address receiving the assets
      * @param deadline timestamp after which permit is invalid
+     * @param minSharesIn minimum amount of shares caller expects
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares burned
      */
@@ -227,6 +234,7 @@ contract CellarRouter is ICellarRouter {
         uint256 assetsOutMin,
         address receiver,
         uint256 deadline,
+        uint256 minSharesIn,
         bytes memory signature
     ) external returns (uint256 shares) {
         // Approve for router to burn user shares via permit.
@@ -234,7 +242,7 @@ contract CellarRouter is ICellarRouter {
         cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
-        shares = withdrawAndSwapFromCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
+        shares = withdrawAndSwapFromCellar(cellar, path, poolFees, assets, assetsOutMin, receiver, minSharesIn);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
