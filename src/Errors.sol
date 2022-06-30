@@ -139,12 +139,6 @@ error USR_InvalidLockValue(uint256 lock);
  */
 error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
 
-/**
- * @notice Attempted an action by a non-custodian
- */
-error USR_NotCustodian();
-
-
 // ========================================== STATE ERRORS ===========================================
 
 /**
