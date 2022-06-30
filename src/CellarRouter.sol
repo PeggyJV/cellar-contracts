@@ -111,6 +111,7 @@ contract CellarRouter is ICellarRouter {
         assetIn.safeTransferFrom(msg.sender, address(this), assets);
 
         // Swap assets into desired token
+        assetIn.safeApprove(address(registry.swapRouter()), assets);
         assets = registry.swapRouter().swap(exchange, swapData);
 
         // Approve the cellar to spend assets.
@@ -181,6 +182,7 @@ contract CellarRouter is ICellarRouter {
         shares = cellar.withdraw(assets, address(this), msg.sender);
 
         // Swap assets into desired token
+        cellar.asset().safeApprove(address(registry.swapRouter()), assets);
         registry.swapRouter().swap(exchange, swapData);
     }
 
@@ -242,9 +244,17 @@ contract CellarRouter is ICellarRouter {
         //TODO Brian add the balanceOf checks to make sure nothing is left in the router
         // Withdraw assets from the cellar.
         ERC20[] memory receivedAssets;
-        (shares, receivedAssets, ) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
+        uint256[] memory assetsOut;
 
+        (shares, receivedAssets, assetsOut) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
+
+        //need to approve the swaprouter to spend the cellar router assets
+        for (uint256 i = 0; i < assetsOut.length; i++) {
+            receivedAssets[i].safeApprove(address(registry.swapRouter()), assetsOut[i]);
+        }
         registry.swapRouter().multiSwap(exchange, swapData);
+
+        //So if we aren't summing everthing together, then transferring out at the end, we need to handle the edge case where the user wants one of the assets they get from the cellar and isn't making a swap
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
