@@ -52,12 +52,17 @@ contract SwapRouter {
      * @notice Route swap calls to the appropriate exchanges.
      * @param exchange value dictating which exchange to use to make the swap
      * @param swapData encoded data used for the swap
+     * @param recipient address to send the swapped tokens to
      * @return amountOut amount of tokens received from the swap
      */
-    function swap(Exchange exchange, bytes memory swapData) external returns (uint256 amountOut) {
+    function swap(
+        Exchange exchange,
+        bytes memory swapData,
+        address recipient
+    ) external returns (uint256 amountOut) {
         // Route swap call to appropriate function using selector.
         (bool success, bytes memory result) = address(this).call(
-            abi.encodeWithSelector(getExchangeSelector[exchange], swapData)
+            abi.encodeWithSelector(getExchangeSelector[exchange], swapData, recipient)
         );
 
         if (!success) {
@@ -84,12 +89,13 @@ contract SwapRouter {
      *      uint256 assetsOutMin: the minimum amount of path[path.length - 1] tokens you want from the swap
      *      address recipient: the address path[path.length - 1] token should be sent to
      *      address from: the address to transfer path[0] tokens from to this address.
+     * @param recipient address to send the swapped tokens to
      * @return amountOut amount of tokens received from the swap
      */
-    function swapWithUniV2(bytes memory swapData) public returns (uint256 amountOut) {
-        (address[] memory path, uint256 assets, uint256 assetsOutMin, address recipient, address from) = abi.decode(
+    function swapWithUniV2(bytes memory swapData, address recipient) public returns (uint256 amountOut) {
+        (address[] memory path, uint256 assets, uint256 assetsOutMin, address from) = abi.decode(
             swapData,
-            (address[], uint256, uint256, address, address)
+            (address[], uint256, uint256, address)
         );
 
         // Transfer assets to this contract to swap.
@@ -119,17 +125,12 @@ contract SwapRouter {
      *      uint256 assetsOutMin: the minimum amount of path[path.length - 1] tokens you want from the swap
      *      address recipient: the address path[path.length - 1] token should be sent to
      *      address from: the address to transfer path[0] tokens from to this address.
+     * @param recipient address to send the swapped tokens to
      * @return amountOut amount of tokens received from the swap
      */
-    function swapWithUniV3(bytes memory swapData) public returns (uint256 amountOut) {
-        (
-            address[] memory path,
-            uint24[] memory poolFees,
-            uint256 assets,
-            uint256 assetsOutMin,
-            address recipient,
-            address from
-        ) = abi.decode(swapData, (address[], uint24[], uint256, uint256, address, address));
+    function swapWithUniV3(bytes memory swapData, address recipient) public returns (uint256 amountOut) {
+        (address[] memory path, uint24[] memory poolFees, uint256 assets, uint256 assetsOutMin, address from) = abi
+            .decode(swapData, (address[], uint24[], uint256, uint256, address));
 
         // Transfer assets to this contract to swap.
         ERC20 assetIn = ERC20(path[0]);
