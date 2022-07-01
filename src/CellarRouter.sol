@@ -8,7 +8,6 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ISwapRouter as IUniswapV3Router } from "./interfaces/ISwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
-import { IGravity } from "./interfaces/IGravity.sol";
 
 import "./Errors.sol";
 
@@ -27,23 +26,12 @@ contract CellarRouter is ICellarRouter, Ownable {
     IUniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
     /**
-     * @dev Owner will be set to the Gravity Bridge, which relays instructions from the Steward
-     *      module to the cellars.
-     *      https://github.com/PeggyJV/steward
-     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
      * @param _uniswapV3Router Uniswap V3 swap router address
      * @param _uniswapV2Router Uniswap V2 swap router address
      */
-    constructor(
-        IUniswapV3Router _uniswapV3Router,
-        IUniswapV2Router _uniswapV2Router,
-        IGravity gravityBridge
-    ) {
+    constructor(IUniswapV3Router _uniswapV3Router, IUniswapV2Router _uniswapV2Router) {
         uniswapV3Router = _uniswapV3Router;
         uniswapV2Router = _uniswapV2Router;
-
-        // Transfer ownership to the Gravity Bridge.
-        transferOwnership(address(gravityBridge));
     }
 
     // ======================================= DEPOSIT OPERATIONS =======================================
@@ -234,27 +222,6 @@ contract CellarRouter is ICellarRouter, Ownable {
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
         shares = withdrawAndSwapFromCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
-    }
-
-    // ========================================== RECOVERY LOGIC ==========================================
-
-    /**
-     * @notice Emitted when tokens accidentally sent to cellar router are recovered.
-     * @param token the address of the token
-     * @param to the address sweeped tokens were transferred to
-     * @param amount amount transferred out
-     */
-    event Sweep(address indexed token, address indexed to, uint256 amount);
-
-    function sweep(
-        ERC20 token,
-        address to,
-        uint256 amount
-    ) external onlyOwner {
-        // Transfer out tokens from this cellar router contract that shouldn't be here.
-        token.safeTransfer(to, amount);
-
-        emit Sweep(address(token), to, amount);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
