@@ -48,8 +48,8 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData);
+        bytes memory swapData = abi.encode(path, assets, 0, sender);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, reciever);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
@@ -71,8 +71,8 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData);
+        bytes memory swapData = abi.encode(path, assets, 0, sender);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, reciever);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
@@ -97,8 +97,8 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData);
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0, sender);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, reciever);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
@@ -125,8 +125,8 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0, reciever, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData);
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0, sender);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, reciever);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");

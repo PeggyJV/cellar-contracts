@@ -124,7 +124,6 @@ contract CellarStaking is ICellarStaking, Ownable {
     uint256 public constant ONE_DAY = 60 * 60 * 24;
     uint256 public constant ONE_WEEK = ONE_DAY * 7;
     uint256 public constant TWO_WEEKS = ONE_WEEK * 2;
-    uint256 public constant MAX_UINT = 2**256 - 1;
 
     uint256 public immutable SHORT_BOOST;
     uint256 public immutable MEDIUM_BOOST;
@@ -234,9 +233,9 @@ contract CellarStaking is ICellarStaking, Ownable {
             UserStake({
                 amount: uint112(amount),
                 amountWithBoost: uint112(amountWithBoost),
+                unbondTimestamp: 0,
                 rewardPerTokenPaid: uint112(rewardPerTokenStored),
                 rewards: 0,
-                unbondTimestamp: 0,
                 lock: lock
             })
         );
@@ -354,8 +353,8 @@ contract CellarStaking is ICellarStaking, Ownable {
 
         // Reinstate
         (uint256 boost, ) = _getBoost(s.lock);
-        uint256 amountWithBoost = s.amount + (s.amount * boost) / ONE;
-        uint256 depositAmountIncreased = amountWithBoost - s.amountWithBoost;
+        uint256 depositAmountIncreased = (s.amount * boost) / ONE;
+        uint256 amountWithBoost = s.amount + depositAmountIncreased;
 
         s.amountWithBoost = uint112(amountWithBoost);
         s.unbondTimestamp = 0;
@@ -422,7 +421,6 @@ contract CellarStaking is ICellarStaking, Ownable {
         _updateRewardForStake(msg.sender, depositId);
 
         // Start unstaking
-        uint256 amountWithBoost = s.amountWithBoost;
         reward = s.rewards;
 
         s.amount = 0;
@@ -430,8 +428,9 @@ contract CellarStaking is ICellarStaking, Ownable {
         s.rewards = 0;
 
         // Update global state
+        // Boosted amount same as deposit amount, since we have unbonded
         totalDeposits -= depositAmount;
-        totalDepositsWithBoost -= amountWithBoost;
+        totalDepositsWithBoost -= depositAmount;
 
         // Distribute stake
         stakingToken.safeTransfer(msg.sender, depositAmount);
@@ -599,6 +598,8 @@ contract CellarStaking is ICellarStaking, Ownable {
             // Ready to start
             _startProgram(reward);
         }
+
+        lastAccountingTimestamp = block.timestamp;
     }
 
     /**
@@ -650,7 +651,7 @@ contract CellarStaking is ICellarStaking, Ownable {
         claimable = makeRewardsClaimable;
         uint256 amountToReturn = distributionToken.balanceOf(address(this));
 
-        if (claimable) {
+        if (makeRewardsClaimable) {
             // Update rewards one more time
             _updateRewards();
 
@@ -686,16 +687,19 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @dev    Sets rewardPerTokenStored.
      *
      *
-     * @return rewardPerToken           The latest time to calculate.
+     * @return newRewardPerTokenStored  The new rewards to distribute per token.
+     * @return latestTimestamp          The latest time to calculate.
      */
-    function rewardPerToken() public view override returns (uint256) {
-        if (totalDeposits == 0) return rewardPerTokenStored;
+    function rewardPerToken() public view override returns (uint256 newRewardPerTokenStored, uint256 latestTimestamp) {
+        latestTimestamp = latestRewardsTimestamp();
 
-        uint256 timeElapsed = latestRewardsTimestamp() - lastAccountingTimestamp;
+        if (totalDeposits == 0) return (rewardPerTokenStored, latestTimestamp);
+
+        uint256 timeElapsed = latestTimestamp - lastAccountingTimestamp;
         uint256 rewardsForTime = timeElapsed * rewardRate;
         uint256 newRewardsPerToken = (rewardsForTime * ONE) / totalDepositsWithBoost;
 
-        return rewardPerTokenStored + newRewardsPerToken;
+        newRewardPerTokenStored = rewardPerTokenStored + newRewardsPerToken;
     }
 
     /**
@@ -734,8 +738,7 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @dev Update reward accounting for the global state totals.
      */
     function _updateRewards() internal {
-        rewardPerTokenStored = rewardPerToken();
-        lastAccountingTimestamp = latestRewardsTimestamp();
+        (rewardPerTokenStored, lastAccountingTimestamp) = rewardPerToken();
     }
 
     /**
