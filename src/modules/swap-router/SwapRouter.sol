@@ -5,6 +5,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
+import { ICurveSwaps } from "src/interfaces/ICurveSwaps.sol";
 
 contract SwapRouter {
     using SafeTransferLib for ERC20;
@@ -16,7 +17,8 @@ contract SwapRouter {
     */
     enum Exchange {
         UNIV2,
-        UNIV3
+        UNIV3,
+        CURVE
     }
 
     mapping(Exchange => bytes4) public getExchangeSelector;
@@ -34,16 +36,30 @@ contract SwapRouter {
     IUniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
     /**
-     *
+     * @notice Curve Registry Exchange contract. Used for rebalancing positions.
      */
-    constructor(IUniswapV2Router _uniswapV2Router, IUniswapV3Router _uniswapV3Router) {
+    ICurveSwaps public immutable curveRegistryExchange; // 0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7
+
+    /**
+     * @param _uniswapV2Router Uniswap V2 swap router address
+     * @param _uniswapV3Router Uniswap V3 swap router address
+     * @param _curveRegistryExchange Curve registry exchange
+     */
+    constructor(
+        IUniswapV2Router _uniswapV2Router,
+        IUniswapV3Router _uniswapV3Router,
+        ICurveSwaps _curveRegistryExchange
+    )
+    {
         //set up all exchanges
         uniswapV2Router = _uniswapV2Router;
         uniswapV3Router = _uniswapV3Router;
+        curveRegistryExchange = _curveRegistryExchange;
 
         //set up mapping between ids and selectors
         getExchangeSelector[Exchange.UNIV2] = SwapRouter(this).swapWithUniV2.selector;
         getExchangeSelector[Exchange.UNIV3] = SwapRouter(this).swapWithUniV3.selector;
+        getExchangeSelector[Exchange.CURVE] = SwapRouter(this).swapWithCurve.selector;
     }
 
     // ======================================= SWAP OPERATIONS =======================================
@@ -153,5 +169,51 @@ contract SwapRouter {
                 amountOutMinimum: assetsOutMin
             })
         );
+    }
+
+    /**
+     * @notice Allows caller to make swaps using the Curve Exchange.
+     * @param swapData bytes variable storing the following swap information
+     *      address[9] route: array of [initial token, pool, token, pool, token, ...] that specifies the swap route on Curve.
+     *      uint256[3][4] swapParams: multidimensional array of [i, j, swap type]
+     *          where i and j are the correct values for the n'th pool in `_route` and swap type should be
+     *              1 for a stableswap `exchange`,
+     *              2 for stableswap `exchange_underlying`,
+     *              3 for a cryptoswap `exchange`,
+     *              4 for a cryptoswap `exchange_underlying`
+            ERC20 assetIn: the asset being swapped
+            ERC20 assetOut: the asset being received
+            uint256 assets: the amount of assetIn you want to swap with
+     *      uint256 assetsOutMin: the minimum amount of assetOut tokens you want from the swap
+     *      address from: the address to transfer assetIn tokens from to this address
+     *      address recipient: the address assetOut token should be sent to.
+     * @return amountOut amount of tokens received from the swap
+     */
+    function swapWithCurve(bytes memory swapData) public returns (uint256 amountOut) {
+        (
+            address[9] memory route,
+            uint256[3][4] memory swapParams,
+            ERC20 assetIn,
+            ERC20 assetOut,
+            uint256 assets,
+            uint256 assetsOutMin,
+            address from,
+            address recipient
+        ) = abi.decode(swapData, (address[9], uint256[3][4], ERC20, ERC20, uint256, uint256, address, address));
+
+        // Transfer assets to this contract to swap.
+        assetIn.safeTransferFrom(from, address(this), assets);
+
+        // Execute the stablecoin swap.
+        assetIn.safeApprove(address(curveRegistryExchange), assets);
+        amountOut = curveRegistryExchange.exchange_multiple(
+            route,
+            swapParams,
+            assets,
+            assetsOutMin
+        );
+
+        // Transfer the amountOut of assetOut tokens from the router to the recipient.
+        assetOut.safeTransfer(recipient, amountOut);
     }
 }
