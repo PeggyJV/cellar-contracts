@@ -13,8 +13,6 @@ import { MockGravity } from "src/mocks/MockGravity.sol";
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-// TODO: Add test for proportional withdraw type.
-
 contract CellarTest is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;

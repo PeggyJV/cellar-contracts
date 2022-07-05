@@ -33,7 +33,7 @@ contract CellarRouter is ICellarRouter {
     /**
      * @notice Registry contract
      */
-    Registry public immutable registry; // TODO: set registry
+    Registry public immutable registry;
 
     /**
      * @dev Owner will be set to the Gravity Bridge, which relays instructions from the Steward

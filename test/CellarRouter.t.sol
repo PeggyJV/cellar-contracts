@@ -219,7 +219,6 @@ contract CellarRouterTest is Test {
         assertEq(DAI.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
-    // TODO: make external
     function testDepositAndSwapUsingUniswapV3OnMainnet(uint256 assets) external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
