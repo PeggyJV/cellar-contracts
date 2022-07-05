@@ -34,9 +34,9 @@ interface ICellarStaking {
     struct UserStake {
         uint112 amount;
         uint112 amountWithBoost;
+        uint32 unbondTimestamp;
         uint112 rewardPerTokenPaid;
         uint112 rewards;
-        uint32 unbondTimestamp;
         Lock lock;
     }
 
@@ -110,7 +110,7 @@ interface ICellarStaking {
 
     function latestRewardsTimestamp() external view returns (uint256);
 
-    function rewardPerToken() external view returns (uint256);
+    function rewardPerToken() external view returns (uint256, uint256);
 
     function getUserStakes(address user) external view returns (UserStake[] memory);
 }

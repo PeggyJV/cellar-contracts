@@ -6,7 +6,9 @@ import { Multicall } from "./Multicall.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import { Registry, SwapRouter, PriceRouter } from "../Registry.sol";
+import { Registry } from "src/Registry.sol";
+import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
@@ -471,7 +473,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         lastAccrual = uint64(block.timestamp);
 
         // Transfer ownership to the Gravity Bridge.
-        transferOwnership(address(_registry.gravityBridge()));
+        address gravityBridge = _registry.getAddress(0);
+        transferOwnership(gravityBridge);
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -631,7 +634,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         amountsReceived = new uint256[](_positions.length);
 
         // Get the price router.
-        PriceRouter priceRouter = registry.priceRouter();
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
 
         for (uint256 i; ; i++) {
             // Move on to next position if this one is empty.
@@ -717,7 +720,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             balances[i] = _balanceOf(position);
         }
 
-        assets = registry.priceRouter().getValues(positionAssets, balances, asset);
+        assets = PriceRouter(registry.getAddress(2)).getValues(positionAssets, balances, asset);
     }
 
     /**
@@ -816,7 +819,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             positionBalances[i] = _balanceOf(position);
         }
 
-        _totalAssets = registry.priceRouter().getValues(positionAssets, positionBalances, asset);
+        _totalAssets = PriceRouter(registry.getAddress(2)).getValues(positionAssets, positionBalances, asset);
     }
 
     // =========================================== ACCRUAL LOGIC ===========================================
@@ -833,7 +836,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function accrue() public {
         // Get the latest address of the price router.
-        PriceRouter priceRouter = registry.priceRouter();
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
 
         // Get data efficiently.
         (
@@ -926,7 +929,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Swap to the asset of the other position if necessary.
         ERC20 fromAsset = _assetOf(fromPosition);
         ERC20 toAsset = _assetOf(toPosition);
-        assetsTo = fromAsset != toAsset ? _swap(fromAsset, assetsFrom, exchange, params) : assetsFrom;
+        assetsTo = fromAsset != toAsset ? _swap(fromAsset, assetsFrom, exchange, params, address(this)) : assetsFrom;
 
         // Deposit into position.
         _depositTo(toPosition, assetsTo);
@@ -1006,8 +1009,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         _burn(address(this), totalFees);
 
         // Transfer assets to a fee distributor on the Sommelier chain.
-        IGravity gravityBridge = IGravity(registry.gravityBridge());
-        asset.safeApprove(address(gravityBridge), assets); // TODO: change to send the asset withdrawn
+        IGravity gravityBridge = IGravity(registry.getAddress(0));
+        asset.safeApprove(address(gravityBridge), assets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, assets);
 
         emit SendFees(totalFees, assets);
@@ -1100,19 +1103,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
         ERC20 assetIn,
         uint256 amountIn,
         SwapRouter.Exchange exchange,
-        bytes calldata params
+        bytes calldata params,
+        address recipient
     ) internal returns (uint256 amountOut) {
         // Store the expected amount of the asset in that we expect to have after the swap.
         uint256 expectedAssetsInAfter = assetIn.balanceOf(address(this)) - amountIn;
 
         // Get the address of the latest swap router.
-        SwapRouter swapRouter = registry.swapRouter();
+        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
 
         // Approve swap router to swap assets.
         assetIn.safeApprove(address(swapRouter), amountIn);
 
         // Perform swap.
-        amountOut = swapRouter.swap(exchange, params);
+        amountOut = swapRouter.swap(exchange, params, recipient);
 
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
         // specified a different amount of assets to swap then `amountIn`.

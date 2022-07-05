@@ -17,7 +17,7 @@ contract SwapRouterTest is Test {
     uint256 private constant privateKey0 = 0xABCD;
     uint256 private constant privateKey1 = 0xBEEF;
     address private sender = vm.addr(privateKey0);
-    address private reciever = vm.addr(privateKey1);
+    address private receiver = vm.addr(privateKey1);
 
     // Mainnet contracts:
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -48,12 +48,12 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, assets, 0, reciever);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData);
+        bytes memory swapData = abi.encode(path, assets, 0);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
-        assertEq(out, WETH.balanceOf(reciever), "Amount Out should equal WETH Balance of reciever");
+        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of receiver should be greater than 0");
+        assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
     }
 
     function testMultiPathSwapV2(uint256 assets) external {
@@ -71,12 +71,12 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, assets, 0, reciever);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData);
+        bytes memory swapData = abi.encode(path, assets, 0);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
-        assertEq(out, USDC.balanceOf(reciever), "Amount Out should equal USDC Balance of reciever");
+        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of receiver should be greater than 0");
+        assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
     }
 
     function testSimplePathSwapV3(uint256 assets) external {
@@ -97,12 +97,12 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0, reciever);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData);
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
-        assertEq(out, WETH.balanceOf(reciever), "Amount Out should equal WETH Balance of reciever");
+        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of receiver should be greater than 0");
+        assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
     }
 
     function testMultiPathSwapV3(uint256 assets) external {
@@ -125,116 +125,11 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0, reciever);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData);
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
-        assertEq(out, USDC.balanceOf(reciever), "Amount Out should equal USDC Balance of reciever");
-    }
-
-    function testMultiSwapV2(uint256 assets) external {
-        // Ignore if not on mainnet.
-        if (block.chainid != 1) return;
-
-        assets = bound(assets, 1e18, type(uint96).max);
-
-        // Specify the swap path.
-        address[] memory path = new address[](2);
-        path[0] = address(DAI);
-        path[1] = address(WETH);
-
-        // Test swap.
-        deal(address(DAI), sender, 2 * assets, true);
-        DAI.approve(address(swapRouter), 2 * assets);
-        bytes memory swapData = abi.encode(path, assets, 0, reciever);
-
-        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](2);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV2;
-
-        bytes[] memory multiSwapData = new bytes[](2);
-        multiSwapData[0] = swapData;
-        multiSwapData[1] = swapData;
-
-        uint256[] memory amountsOut = swapRouter.multiSwap(exchanges, multiSwapData);
-        uint256 sum;
-        for (uint256 i = 0; i < 2; i++) {
-            sum += amountsOut[i];
-        }
-
-        assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
-        assertEq(sum, WETH.balanceOf(reciever), "Amount Out should equal WETH Balance of reciever");
-    }
-
-    ///@dev makes three swaps using multiSwap, first 2 on UNIV2, and the last one on UNIV3
-    function testMultiSwapV2V3(uint256 assets) external {
-        // Ignore if not on mainnet.
-        if (block.chainid != 1) return;
-
-        assets = bound(assets, 1e18, type(uint96).max);
-
-        // Specify the swap path.
-        address[] memory path = new address[](2);
-        path[0] = address(DAI);
-        path[1] = address(WETH);
-
-        // Test swap.
-        deal(address(DAI), sender, 3 * assets, true);
-        DAI.approve(address(swapRouter), 3 * assets);
-        bytes memory swapData = abi.encode(path, assets, 0, reciever);
-
-        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV2;
-        exchanges[2] = SwapRouter.Exchange.UNIV3;
-
-        bytes[] memory multiSwapData = new bytes[](3);
-        multiSwapData[0] = swapData;
-        multiSwapData[1] = swapData;
-
-        // Alter swap data to work with UniV3
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = 3000;
-        swapData = abi.encode(path, poolFees, assets, 0, reciever);
-        multiSwapData[2] = swapData;
-
-        uint256[] memory amountsOut = swapRouter.multiSwap(exchanges, multiSwapData);
-        uint256 sum;
-        for (uint256 i = 0; i < 3; i++) {
-            sum += amountsOut[i];
-        }
-
-        assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
-        assertEq(sum, WETH.balanceOf(reciever), "Amount Out should equal WETH Balance of reciever");
-    }
-
-    function testFromCheck() external {
-        // Specify the swap path.
-        address[] memory path = new address[](2);
-        path[0] = address(DAI);
-        path[1] = address(WETH);
-
-        uint256 assets = 1e18;
-
-        // Test swap.
-        deal(address(DAI), sender, assets, true);
-        DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, assets, 0, reciever);
-        bytes memory attackerData = abi.encode(address(0xAAAA), swapData);
-        vm.expectRevert(bytes("Restricted from input"));
-        swapRouter.swapWithUniV2(attackerData);
-        vm.expectRevert(bytes("Restricted from input")); //make sure the UNIV3 swap reverts too
-        swapRouter.swapWithUniV3(attackerData);
-        vm.expectRevert();
-        swapRouter.swapWithUniV2(swapData); //caller does not properly format swapData
-        bytes memory goodData = abi.encode(sender, swapData);
-        swapRouter.swapWithUniV2(goodData);
-
-        //not really a security concern just want to confirm that improperly formatted swap data reverts
-        vm.expectRevert(bytes("Swap reverted."));
-        swapRouter.swap(SwapRouter.Exchange.UNIV2, goodData); //swap data already has sender encoded
+        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of receiver should be greater than 0");
+        assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
     }
 }

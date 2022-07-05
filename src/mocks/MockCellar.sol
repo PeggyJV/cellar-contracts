@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import { Cellar, Registry, ERC4626, ERC20, SafeCast } from "src/base/Cellar.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Test, console } from "@forge-std/Test.sol";
 
 contract MockCellar is Cellar, Test {
@@ -38,7 +39,7 @@ contract MockCellar is Cellar, Test {
     function _depositIntoPosition(address position, uint256 amount) internal returns (uint256 shares) {
         ERC20 positionAsset = _assetOf(position);
 
-        uint256 amountInAssets = registry.priceRouter().getValue(positionAsset, amount, asset);
+        uint256 amountInAssets = PriceRouter(registry.getAddress(2)).getValue(positionAsset, amount, asset);
         shares = previewDeposit(amountInAssets);
 
         deal(address(positionAsset), address(this), amount);

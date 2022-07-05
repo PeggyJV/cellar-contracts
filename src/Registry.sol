@@ -1,41 +1,75 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { IGravity } from "./interfaces/IGravity.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-
-// TODO: configure defaults
-// TODO: add natspec
-// TODO: add events
-//TODO should this be deployed first with no constructor args?
+import "src/Errors.sol";
 
 contract Registry is Ownable {
-    SwapRouter public swapRouter;
-    PriceRouter public priceRouter;
-    IGravity public gravityBridge;
+    /**
+     * @notice Emitted when a new contract is registered.
+     * @param id value representing the unique ID tied to the new contract
+     * @param newContract address of the new contract
+     */
+    event Registered(uint256 indexed id, address indexed newContract);
 
+    /**
+     * @notice Emitted when the address of a contract is changed.
+     * @param id value representing the unique ID tied to the changed contract
+     * @param oldAddress address of the contract before the change
+     * @param newAddress address of the contract after the contract
+     */
+    event AddressChanged(uint256 indexed id, address oldAddress, address newAddress);
+
+    /**
+     * @notice The unique ID that the next registered contract will have.
+     */
+    uint256 public currentId;
+
+    /**
+     * @notice Get the address associated with an id.
+     */
+    mapping(uint256 => address) public getAddress;
+
+    /**
+     * @notice Set the address of the contract at a given id.
+     */
+    function setAddress(uint256 id, address newAddress) external onlyOwner {
+        address oldAddress = getAddress[id];
+        if (oldAddress == address(0)) revert USR_ContractNotRegistered(id);
+
+        getAddress[id] = newAddress;
+
+        emit AddressChanged(id, oldAddress, newAddress);
+    }
+
+    /**
+     * @param gravityBridge address of GravityBridge contract
+     * @param swapRouter address of SwapRouter contract
+     * @param priceRouter address of PriceRouter contract
+     */
     constructor(
-        SwapRouter _swapRouter,
-        PriceRouter _priceRouter,
-        IGravity _gravityBridge
-    ) {
-        swapRouter = _swapRouter;
-        priceRouter = _priceRouter;
-        gravityBridge = _gravityBridge;
+        address gravityBridge,
+        address swapRouter,
+        address priceRouter
+    ) Ownable() {
+        _register(gravityBridge);
+        _register(swapRouter);
+        _register(priceRouter);
     }
 
-    function setSwapRouter(SwapRouter newSwapRouter) external onlyOwner {
-        swapRouter = newSwapRouter;
+    /**
+     * @notice Register the address of a new contract.
+     * @param newContract address of the new contract to register
+     */
+    function register(address newContract) external onlyOwner {
+        _register(newContract);
     }
 
-    function setPriceRouter(PriceRouter newPriceRouter) external onlyOwner {
-        priceRouter = newPriceRouter;
-    }
+    function _register(address newContract) internal {
+        getAddress[currentId] = newContract;
 
-    function setGravityBridge(IGravity newGravityBridge) external onlyOwner {
-        gravityBridge = newGravityBridge;
+        emit Registered(currentId, newContract);
+
+        currentId++;
     }
 }

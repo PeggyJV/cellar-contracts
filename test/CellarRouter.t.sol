@@ -6,11 +6,12 @@ import { Cellar } from "src/base/Cellar.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
+import { IGravity } from "src/interfaces/IGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockExchange, MockPriceRouter } from "src/mocks/MockExchange.sol";
 import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
-import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
+import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
@@ -68,11 +69,7 @@ contract CellarRouterTest is Test {
         realSwapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         gravity = new MockGravity();
 
-        registry = new Registry(
-            SwapRouter(address(swapRouter)),
-            PriceRouter(address(priceRouter)),
-            IGravity(address(gravity))
-        );
+        registry = new Registry(address(gravity), address(swapRouter), address(priceRouter));
 
         router = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)), registry);
         //forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router), registry);
@@ -121,10 +118,6 @@ contract CellarRouterTest is Test {
         );
         vm.label(address(cellar), "cellar");
 
-        // Transfer ownership to this contract for testing.
-        vm.prank(address(registry.gravityBridge()));
-        multiCellar.transferOwnership(address(this));
-
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(exchange), type(uint224).max);
         deal(address(WETH), address(exchange), type(uint224).max);
@@ -138,7 +131,7 @@ contract CellarRouterTest is Test {
 
     // ======================================= DEPOSIT TESTS =======================================
 
-    function testDepositAndSwapIntoCellar(uint256 assets) external {
+    function testDepositAndSwap(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
         // Mint liquidity for swap.
@@ -153,7 +146,7 @@ contract CellarRouterTest is Test {
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
-        bytes memory swapData = abi.encode(path, assets, 0, address(router));
+        bytes memory swapData = abi.encode(path, assets, 0);
         uint256 shares = router.depositAndSwap(
             Cellar(address(cellar)),
             SwapRouter.Exchange.UNIV2,
@@ -179,11 +172,11 @@ contract CellarRouterTest is Test {
         assertEq(XYZ.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapIntoCellarUsingUniswapV2OnMainnet(uint256 assets) external {
+    function testDepositAndSwapUsingUniswapV2OnMainnet(uint256 assets) external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        registry.setSwapRouter(realSwapRouter); // use the real swap router for this test
+        registry.setAddress(1, address(realSwapRouter)); // use the real swap router for this test
 
         assets = bound(assets, 1e18, type(uint112).max);
 
@@ -196,7 +189,7 @@ contract CellarRouterTest is Test {
         vm.startPrank(owner);
         deal(address(DAI), owner, assets, true);
         DAI.approve(address(router), assets);
-        bytes memory swapData = abi.encode(path, assets, 0, address(router));
+        bytes memory swapData = abi.encode(path, assets, 0);
         uint256 shares = router.depositAndSwap(
             Cellar(address(forkedCellar)),
             SwapRouter.Exchange.UNIV2,
@@ -226,11 +219,12 @@ contract CellarRouterTest is Test {
         assertEq(DAI.balanceOf(owner), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapIntoCellarUsingUniswapV3OnMainnet(uint256 assets) external {
+    // TODO: make external
+    function testDepositAndSwapUsingUniswapV3OnMainnet(uint256 assets) external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        registry.setSwapRouter(realSwapRouter); // use the real swap router for this test
+        registry.setAddress(1, address(realSwapRouter)); // use the real swap router for this test
 
         assets = bound(assets, 1e18, type(uint112).max);
 
@@ -247,7 +241,7 @@ contract CellarRouterTest is Test {
         vm.startPrank(owner);
         deal(address(DAI), owner, assets, true);
         DAI.approve(address(router), assets);
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0, address(router));
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
         uint256 shares = router.depositAndSwap(
             Cellar(address(forkedCellar)),
             SwapRouter.Exchange.UNIV3,
@@ -296,7 +290,7 @@ contract CellarRouterTest is Test {
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
-        bytes memory swapData = abi.encode(path, assets, 0, address(router));
+        bytes memory swapData = abi.encode(path, assets, 0);
         router.depositAndSwap(Cellar(address(cellar)), SwapRouter.Exchange.UNIV2, swapData, assets, owner, XYZ);
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
@@ -359,8 +353,8 @@ contract CellarRouterTest is Test {
         exchanges[0] = SwapRouter.Exchange.UNIV2;
         exchanges[1] = SwapRouter.Exchange.UNIV2;
         bytes[] memory swapData = new bytes[](2);
-        swapData[0] = abi.encode(paths[0], 1e18, 0, address(this));
-        swapData[1] = abi.encode(paths[1], 1e8, 0, address(this));
+        swapData[0] = abi.encode(paths[0], 1e18, 0);
+        swapData[1] = abi.encode(paths[1], 1e8, 0);
 
         router.withdrawFromPositionsAndSwap(multiCellar, exchanges, swapData, assets, address(this));
 

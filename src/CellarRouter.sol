@@ -5,17 +5,15 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
-import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
+import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
-import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 
 import "./Errors.sol";
 
 // TODO: Fix comments (some of them still reference Sushiswap).
 // TODO: Rewrite natspec comments to be more clear.
-// TODO: Add checks after swap to ensure all assets were swapped.
 
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
@@ -35,9 +33,13 @@ contract CellarRouter is ICellarRouter {
     /**
      * @notice Registry contract
      */
-    Registry public immutable registry; //TODO set registry
+    Registry public immutable registry; // TODO: set registry
 
     /**
+     * @dev Owner will be set to the Gravity Bridge, which relays instructions from the Steward
+     *      module to the cellars.
+     *      https://github.com/PeggyJV/steward
+     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
      * @param _uniswapV3Router Uniswap V3 swap router address
      * @param _uniswapV2Router Uniswap V2 swap router address
      */
@@ -110,18 +112,16 @@ contract CellarRouter is ICellarRouter {
         address receiver,
         ERC20 assetIn
     ) public returns (uint256 shares) {
-        // Retrieve the asset being swapped and asset of cellar.
-        ERC20 asset = cellar.asset();
-
         // Transfer assets from the user to the router.
         assetIn.safeTransferFrom(msg.sender, address(this), assets);
 
         // Swap assets into desired token
-        assetIn.safeApprove(address(registry.swapRouter()), assets);
-        assets = registry.swapRouter().swap(exchange, swapData);
+        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
+        assetIn.safeApprove(address(swapRouter), assets);
+        assets = swapRouter.swap(exchange, swapData, address(this));
 
         // Approve the cellar to spend assets.
-        asset.safeApprove(address(cellar), assets);
+        cellar.asset().safeApprove(address(cellar), assets);
 
         // Deposit assets into the cellar.
         shares = cellar.deposit(assets, receiver);
@@ -140,7 +140,7 @@ contract CellarRouter is ICellarRouter {
      * @param swapData bytes variable containing all the data needed to make a swap
      * @param assets amount of assets to deposit
      * @param assetIn ERC20 asset caller wants to swap and deposit with
-     * @param reciever address to recieve the cellar shares
+     * @param receiver address to recieve the cellar shares
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
@@ -151,7 +151,7 @@ contract CellarRouter is ICellarRouter {
         bytes calldata swapData,
         uint256 assets,
         ERC20 assetIn,
-        address reciever,
+        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares) {
@@ -160,12 +160,10 @@ contract CellarRouter is ICellarRouter {
         assetIn.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Deposit assets into the cellar using a swap if necessary.
-        shares = depositAndSwap(cellar, exchange, swapData, assets, reciever, assetIn);
+        shares = depositAndSwap(cellar, exchange, swapData, assets, receiver, assetIn);
     }
 
     // ======================================= WITHDRAW OPERATIONS =======================================
-
-    // TODO: Add back `receiver` param to specify who should receive the swapped assets.
 
     /**
      * @notice Withdraws from a cellar and then performs a swap to another desired asset, if the
@@ -176,7 +174,7 @@ contract CellarRouter is ICellarRouter {
      * @param exchange ENUM representing what exchange to make the swap at
      *        Refer to src/SwapRouter.sol for list of available options
      * @param swapData bytes variable containing all the data needed to make a swap
-     *        reciever address should be the callers address
+     *        receiver address should be the callers address
      * @param assets amount of assets to withdraw
      * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
@@ -191,9 +189,10 @@ contract CellarRouter is ICellarRouter {
         // Withdraw assets from the cellar.
         shares = cellar.withdraw(assets, address(this), msg.sender);
 
-        // Swap assets into desired token
-        cellar.asset().safeApprove(address(registry.swapRouter()), assets);
-        registry.swapRouter().swap(exchange, swapData);
+        // Swap assets into desired token.
+        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
+        cellar.asset().safeApprove(address(swapRouter), assets);
+        swapRouter.swap(exchange, swapData, receiver);
     }
 
     /**
@@ -243,7 +242,7 @@ contract CellarRouter is ICellarRouter {
      * @param exchange ENUM representing what exchange to make the swap at
      *        Refer to src/SwapRouter.sol for list of available options
      * @param swapData bytes variable containing all the data needed to make a swap
-     *        reciever address should be the callers address
+     *        receiver address should be the callers address
      * @param assets amount of assets to withdraw
      * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
@@ -261,24 +260,28 @@ contract CellarRouter is ICellarRouter {
 
         uint256[] memory balancesBefore = _getBalancesBefore(receivedAssets, amountsOut);
 
+        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
+
         bytes[] memory data = new bytes[](swapData.length);
-        for (uint256 i; i < swapData.length; i++) data[i] = abi.encodeCall(SwapRouter.swap, (exchange[i], swapData[i]));
+        for (uint256 i; i < swapData.length; i++)
+            data[i] = abi.encodeCall(SwapRouter.swap, (exchange[i], swapData[i], receiver));
 
         for (uint256 i; i < receivedAssets.length; i++)
-            receivedAssets[i].safeApprove(address(registry.swapRouter()), amountsOut[i]);
+            receivedAssets[i].safeApprove(address(swapRouter), amountsOut[i]);
 
-        registry.swapRouter().multicall(data);
-
-        //zero out approval in case it wasn't used
-        for (uint256 i; i < receivedAssets.length; i++)
-            receivedAssets[i].safeApprove(address(registry.swapRouter()), 0);
+        swapRouter.multicall(data);
 
         for (uint256 i; i < receivedAssets.length; i++) {
+            ERC20 receivedAsset = receivedAssets[i];
+
+            // Remove approvals in case it wasn't used.
+            receivedAsset.safeApprove(address(swapRouter), 0);
+
             uint256 balanceBefore = balancesBefore[i];
-            uint256 balanceAfter = receivedAssets[i].balanceOf(address(this));
+            uint256 balanceAfter = receivedAsset.balanceOf(address(this));
 
             if (balanceAfter != balanceBefore) {
-                receivedAssets[i].transfer(receiver, balanceAfter - balanceBefore);
+                receivedAsset.transfer(receiver, balanceAfter - balanceBefore);
             }
         }
     }

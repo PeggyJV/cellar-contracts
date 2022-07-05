@@ -2,7 +2,7 @@
 pragma solidity 0.8.15;
 
 import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
-import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
+import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { MockExchange } from "src/mocks/MockExchange.sol";
@@ -53,11 +53,7 @@ contract CellarTest is Test {
         swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
         gravity = new MockGravity();
 
-        registry = new Registry(
-            SwapRouter(address(swapRouter)),
-            PriceRouter(address(priceRouter)),
-            IGravity(address(gravity))
-        );
+        registry = new Registry(address(gravity), address(swapRouter), address(priceRouter));
 
         // Setup exchange rates:
         // USDC Simulated Price: $1
@@ -103,7 +99,7 @@ contract CellarTest is Test {
         vm.label(address(cellar), "cellar");
 
         // Transfer ownership to this contract for testing.
-        vm.prank(address(registry.gravityBridge()));
+        vm.prank(registry.getAddress(0));
         cellar.transferOwnership(address(this));
 
         // Mint enough liquidity to swap router for swaps.
