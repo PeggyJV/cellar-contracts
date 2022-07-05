@@ -6,6 +6,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { ICurveSwaps } from "src/interfaces/ICurveSwaps.sol";
+import { IBalancerExchangeProxy } from "src/interfaces/BalancerInterfaces.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -25,15 +26,18 @@ contract SwapRouterTest is Test {
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant curveRegistryExchange = 0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7;
     address private constant curveStableSwap3Pool = 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7;
+    address private constant balancerExchangeProxy = 0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21;
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    ERC20 private AAVE = ERC20(0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9);
 
     function setUp() public {
         swapRouter = new SwapRouter(
             UniswapV2Router(uniV2Router),
             UniswapV3Router(uniV3Router),
-            ICurveSwaps(curveRegistryExchange)
+            ICurveSwaps(curveRegistryExchange),
+            IBalancerExchangeProxy(balancerExchangeProxy)
         );
 
         vm.startPrank(sender);
@@ -167,5 +171,23 @@ contract SwapRouterTest is Test {
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
         assertEq(out, USDC.balanceOf(reciever), "Amount Out should equal USDC Balance of reciever");
+    }
+
+    function testBalancerSwap(uint256 assets) external {
+        // Ignore if not on mainnet.
+        if (block.chainid != 1) return;
+
+        assets = bound(assets, 1e18, 100000e18);
+
+        // Test swap.
+        deal(address(AAVE), sender, assets, true);
+        AAVE.approve(address(swapRouter), assets);
+
+        bytes memory swapData = abi.encode(0xC697051d1C6296C24aE3bceF39acA743861D9A81, AAVE, WETH, assets, 0, sender, reciever);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.BALANCERV2, swapData);
+
+        assertTrue(AAVE.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
+        assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
+        assertEq(out, WETH.balanceOf(reciever), "Amount Out should equal WETH Balance of reciever");
     }
 }

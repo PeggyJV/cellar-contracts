@@ -6,6 +6,7 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { ICurveSwaps } from "src/interfaces/ICurveSwaps.sol";
+import { IBalancerExchangeProxy, TokenInterface } from "src/interfaces/BalancerInterfaces.sol";
 
 contract SwapRouter {
     using SafeTransferLib for ERC20;
@@ -18,7 +19,8 @@ contract SwapRouter {
     enum Exchange {
         UNIV2,
         UNIV3,
-        CURVE
+        CURVE,
+        BALANCERV2
     }
 
     mapping(Exchange => bytes4) public getExchangeSelector;
@@ -41,25 +43,34 @@ contract SwapRouter {
     ICurveSwaps public immutable curveRegistryExchange; // 0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7
 
     /**
+     * @notice Balancer ExchangeProxy V2 contract.
+     */
+    IBalancerExchangeProxy public immutable balancerExchangeProxy; // 0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21
+
+    /**
      * @param _uniswapV2Router Uniswap V2 swap router address
      * @param _uniswapV3Router Uniswap V3 swap router address
      * @param _curveRegistryExchange Curve registry exchange
+     * @param _balancerExchangeProxy Balancer ExchangeProxy V2
      */
     constructor(
         IUniswapV2Router _uniswapV2Router,
         IUniswapV3Router _uniswapV3Router,
-        ICurveSwaps _curveRegistryExchange
+        ICurveSwaps _curveRegistryExchange,
+        IBalancerExchangeProxy _balancerExchangeProxy
     )
     {
         //set up all exchanges
         uniswapV2Router = _uniswapV2Router;
         uniswapV3Router = _uniswapV3Router;
         curveRegistryExchange = _curveRegistryExchange;
+        balancerExchangeProxy = _balancerExchangeProxy;
 
         //set up mapping between ids and selectors
         getExchangeSelector[Exchange.UNIV2] = SwapRouter(this).swapWithUniV2.selector;
         getExchangeSelector[Exchange.UNIV3] = SwapRouter(this).swapWithUniV3.selector;
         getExchangeSelector[Exchange.CURVE] = SwapRouter(this).swapWithCurve.selector;
+        getExchangeSelector[Exchange.BALANCERV2] = SwapRouter(this).swapWithBalancerV2.selector;
     }
 
     // ======================================= SWAP OPERATIONS =======================================
@@ -209,6 +220,56 @@ contract SwapRouter {
         amountOut = curveRegistryExchange.exchange_multiple(
             route,
             swapParams,
+            assets,
+            assetsOutMin
+        );
+
+        // Transfer the amountOut of assetOut tokens from the router to the recipient.
+        assetOut.safeTransfer(recipient, amountOut);
+    }
+    
+    /**
+     * @notice Allows caller to make swaps using Balancer V2.
+     * @param swapData bytes variable storing the following swap information
+     *      address pool: 
+            ERC20 assetIn: the asset being swapped
+            ERC20 assetOut: the asset being received
+            uint256 assets: the amount of assetIn you want to swap with
+     *      uint256 assetsOutMin: the minimum amount of assetOut tokens you want from the swap
+     *      address from: the address to transfer assetIn tokens from to this address
+     *      address recipient: the address assetOut token should be sent to.
+     * @return amountOut amount of tokens received from the swap
+     */
+    function swapWithBalancerV2(bytes memory swapData) public returns (uint256 amountOut) {
+        (
+            address pool,
+            ERC20 assetIn,
+            ERC20 assetOut,
+            uint256 assets,
+            uint256 assetsOutMin,
+            address from,
+            address recipient
+        ) = abi.decode(swapData, (address, ERC20, ERC20, uint256, uint256, address, address));
+
+        // Transfer assets to this contract to swap.
+        assetIn.safeTransferFrom(from, address(this), assets);
+
+        // Execute the multihop swap.
+        assetIn.safeApprove(address(balancerExchangeProxy), assets);
+
+        IBalancerExchangeProxy.Swap[][] memory swapSequences = new IBalancerExchangeProxy.Swap[][](1);
+        swapSequences[0] = new IBalancerExchangeProxy.Swap[](1);
+
+        swapSequences[0][0].pool = pool;
+        swapSequences[0][0].tokenIn = address(assetIn);
+        swapSequences[0][0].tokenOut = address(assetOut);
+        swapSequences[0][0].swapAmount = assets;
+        swapSequences[0][0].maxPrice = type(uint256).max;
+
+        amountOut = balancerExchangeProxy.multihopBatchSwapExactIn(
+            swapSequences,
+            TokenInterface(address(assetIn)),
+            TokenInterface(address(assetOut)),
             assets,
             assetsOutMin
         );
