@@ -166,7 +166,7 @@ contract SwapRouterTest is Test {
         swapParams[0][2] = 1;
 
         bytes memory swapData = abi.encode(route, swapParams, DAI, USDC, assets, 0, sender, reciever);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.CURVE, swapData);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.CURVE, swapData, reciever);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
@@ -184,7 +184,7 @@ contract SwapRouterTest is Test {
         AAVE.approve(address(swapRouter), assets);
 
         bytes memory swapData = abi.encode(0xC697051d1C6296C24aE3bceF39acA743861D9A81, AAVE, WETH, assets, 0, sender, reciever);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.BALANCERV2, swapData);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.BALANCERV2, swapData, reciever);
 
         assertTrue(AAVE.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
         assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
