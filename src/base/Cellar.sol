@@ -832,30 +832,4 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         emit SendFees(totalFees, assets);
     }
-
-    // ========================================== RECOVERY LOGIC ==========================================
-
-    /**
-     * @notice Emitted when tokens accidentally sent to cellar are recovered.
-     * @param token the address of the token
-     * @param to the address sweeped tokens were transferred to
-     * @param amount amount transferred out
-     */
-    event Sweep(address indexed token, address indexed to, uint256 amount);
-
-    function sweep(
-        ERC20 token,
-        address to,
-        uint256 amount
-    ) external onlyOwner {
-        // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
-        if (token == asset || token == this) revert USR_ProtectedAsset(address(token));
-        for (uint256 i; i < positions.length; i++)
-            if (address(token) == address(positions[i])) revert USR_ProtectedAsset(address(token));
-
-        // Transfer out tokens in this cellar that shouldn't be here.
-        token.safeTransfer(to, amount);
-
-        emit Sweep(address(token), to, amount);
-    }
 }
