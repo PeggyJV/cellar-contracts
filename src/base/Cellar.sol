@@ -471,7 +471,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         lastAccrual = uint64(block.timestamp);
 
         // Transfer ownership to the Gravity Bridge.
-        transferOwnership(address(_registry.gravityBridge()));
+        address gravityBridge = _registry.getAddress(0);
+        transferOwnership(gravityBridge);
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -1006,37 +1007,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
         _burn(address(this), totalFees);
 
         // Transfer assets to a fee distributor on the Sommelier chain.
-        IGravity gravityBridge = IGravity(registry.gravityBridge());
-        asset.safeApprove(address(gravityBridge), assets); // TODO: change to send the asset withdrawn
+        IGravity gravityBridge = IGravity(registry.getAddress(0));
+        asset.safeApprove(address(gravityBridge), assets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, assets);
 
         emit SendFees(totalFees, assets);
-    }
-
-    // ========================================== RECOVERY LOGIC ==========================================
-
-    /**
-     * @notice Emitted when tokens accidentally sent to cellar are recovered.
-     * @param token the address of the token
-     * @param to the address sweeped tokens were transferred to
-     * @param amount amount transferred out
-     */
-    event Sweep(address indexed token, address indexed to, uint256 amount);
-
-    function sweep(
-        ERC20 token,
-        address to,
-        uint256 amount
-    ) external onlyOwner {
-        // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
-        if (token == asset || token == this) revert USR_ProtectedAsset(address(token));
-        for (uint256 i; i < positions.length; i++)
-            if (address(token) == address(positions[i])) revert USR_ProtectedAsset(address(token));
-
-        // Transfer out tokens in this cellar that shouldn't be here.
-        token.safeTransfer(to, amount);
-
-        emit Sweep(address(token), to, amount);
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================

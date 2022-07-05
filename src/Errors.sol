@@ -190,6 +190,12 @@ error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLen
  */
 error USR_AssetMismatch(address asset, address expectedAsset);
 
+/**
+ * @notice Attempted to reassign the address of a contract with an ID that has not been registered.
+ * @param unregisteredId value of the ID that has not been registered
+ */
+error USR_ContractNotRegistered(uint256 unregisteredId);
+
 // ========================================== STATE ERRORS ===========================================
 
 /**
@@ -197,6 +203,12 @@ error USR_AssetMismatch(address asset, address expectedAsset);
  *      These errors do not relate to user input, and may or may not be resolved by other actions
  *      or the progression of time.
  */
+
+/**
+ * @notice Attempted an action when cellar is using an asset that has a fee on transfer.
+ * @param assetWithFeeOnTransfer address of the asset with fee on transfer
+ */
+error STATE_AssetUsesFeeOnTransfer(address assetWithFeeOnTransfer);
 
 /**
  * @notice Attempted action was prevented due to contract being shutdown.

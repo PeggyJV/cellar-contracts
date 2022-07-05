@@ -262,7 +262,7 @@ contract MockExchange {
         uint256 amountOut = priceRouter.getValue(tokenIn, _amount, tokenOut);
         amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
 
-        require(amountOut > _expected, "received less than expected");
+        require(amountOut >= _expected, "received less than expected");
 
         tokenOut.transfer(msg.sender, amountOut);
 
