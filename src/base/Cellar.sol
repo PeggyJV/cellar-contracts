@@ -10,11 +10,13 @@ import { Registry, SwapRouter, PriceRouter } from "../Registry.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
+import { console } from "@forge-std/Test.sol"; // TODO: Delete.
 
 import "../Errors.sol";
 
 contract Cellar is ERC4626, Ownable, Multicall {
     using AddressArray for address[];
+    using AddressArray for ERC20[];
     using SafeTransferLib for ERC20;
     using SafeCast for uint256;
     using SafeCast for int256;
@@ -501,29 +503,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address receiver,
         address owner
     ) public override returns (uint256 shares) {
-        (shares, , ) = withdrawFromPositions(assets, receiver, owner);
-    }
-
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public override returns (uint256 assets) {
-        (assets, , ) = redeemFromPositions(shares, receiver, owner);
-    }
-
-    function withdrawFromPositions(
-        uint256 assets,
-        address receiver,
-        address owner
-    )
-        public
-        returns (
-            uint256 shares,
-            ERC20[] memory receivedAssets,
-            uint256[] memory amountsOut
-        )
-    {
         // Get data efficiently.
         (
             uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
@@ -547,38 +526,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
-        // Scope to avoid stack errors.
-        {
-            (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) = withdrawType == WithdrawType.Orderly
-                ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
-                : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
-
-            receivedAssets = new ERC20[](numOfReceivedAssets);
-            amountsOut = new uint256[](numOfReceivedAssets);
-
-            for (uint256 i = amountsReceived.length; i > 0; i--) {
-                if (amountsReceived[i - 1] == 0) continue;
-
-                ERC20 positionAsset = positionAssets[i - 1];
-                receivedAssets[numOfReceivedAssets - 1] = positionAsset;
-                amountsOut[numOfReceivedAssets - 1] = amountsReceived[i - 1];
-                numOfReceivedAssets--;
-            }
-        }
+        withdrawType == WithdrawType.Orderly
+            ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
+            : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
     }
 
-    function redeemFromPositions(
+    function redeem(
         uint256 shares,
         address receiver,
         address owner
-    )
-        public
-        returns (
-            uint256 assets,
-            ERC20[] memory receivedAssets,
-            uint256[] memory amountsOut
-        )
-    {
+    ) public override returns (uint256 assets) {
         // Get data efficiently.
         (
             uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
@@ -600,26 +557,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         _burn(owner, shares);
 
-        // Scope to avoid stack errors.
-        {
-            (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) = withdrawType == WithdrawType.Orderly
-                ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
-                : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
-
-            receivedAssets = new ERC20[](numOfReceivedAssets);
-            amountsOut = new uint256[](numOfReceivedAssets);
-
-            for (uint256 i = amountsReceived.length; i > 0; i--) {
-                if (amountsReceived[i - 1] == 0) continue;
-
-                ERC20 positionAsset = positionAssets[i - 1];
-                receivedAssets[numOfReceivedAssets - 1] = positionAsset;
-                amountsOut[numOfReceivedAssets - 1] = amountsReceived[i - 1];
-                numOfReceivedAssets--;
-            }
-        }
-
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        withdrawType == WithdrawType.Orderly
+            ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
+            : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
     }
 
     function _withdrawInOrder(
@@ -628,17 +570,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address[] memory _positions,
         ERC20[] memory positionAssets,
         uint256[] memory positionBalances
-    ) internal returns (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) {
-        amountsReceived = new uint256[](_positions.length);
-
+    ) internal {
         // Get the price router.
-        PriceRouter priceRouter = registry.priceRouter();
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
 
         for (uint256 i; ; i++) {
             // Move on to next position if this one is empty.
             if (positionBalances[i] == 0) continue;
 
-            // TODO: Check for optimization.
             uint256 onePositionAsset = 10**positionAssets[i].decimals();
             uint256 exchangeRate = priceRouter.getExchangeRate(positionAssets[i], asset);
 
@@ -658,7 +597,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             // Return the amount that will be received and increment number of received assets.
             amountsReceived[i] = amount;
-            numOfReceivedAssets++;
 
             // Withdraw from position.
             _withdrawFrom(_positions[i], amount, receiver);
@@ -676,7 +614,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address receiver,
         address[] memory _positions,
         uint256[] memory positionBalances
-    ) internal returns (uint256[] memory amountsReceived, uint256 numOfReceivedAssets) {
+    ) internal {
         amountsReceived = new uint256[](_positions.length);
 
         // Withdraw assets from positions in proportion to shares redeemed.
@@ -692,7 +630,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             // Return the amount that will be received and increment number of received assets.
             amountsReceived[i] = amount;
-            numOfReceivedAssets++;
 
             // Withdraw from position to receiver.
             _withdrawFrom(position, amount, receiver);
@@ -718,7 +655,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             balances[i] = _balanceOf(position);
         }
 
-        assets = registry.priceRouter().getValues(positionAssets, balances, asset);
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+        assets = priceRouter.getValues(positionAssets, balances, asset);
     }
 
     /**
@@ -817,7 +755,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             positionBalances[i] = _balanceOf(position);
         }
 
-        _totalAssets = registry.priceRouter().getValues(positionAssets, positionBalances, asset);
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+        _totalAssets = priceRouter.getValues(positionAssets, positionBalances, asset);
     }
 
     // =========================================== ACCRUAL LOGIC ===========================================
@@ -834,7 +773,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function accrue() public {
         // Get the latest address of the price router.
-        PriceRouter priceRouter = registry.priceRouter();
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
 
         // Get data efficiently.
         (
@@ -927,7 +866,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Swap to the asset of the other position if necessary.
         ERC20 fromAsset = _assetOf(fromPosition);
         ERC20 toAsset = _assetOf(toPosition);
-        assetsTo = fromAsset != toAsset ? _swap(fromAsset, assetsFrom, exchange, params) : assetsFrom;
+        assetsTo = fromAsset != toAsset ? _swap(fromAsset, assetsFrom, exchange, params, address(this)) : assetsFrom;
 
         // Deposit into position.
         _depositTo(toPosition, assetsTo);
@@ -1075,19 +1014,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
         ERC20 assetIn,
         uint256 amountIn,
         SwapRouter.Exchange exchange,
-        bytes calldata params
+        bytes calldata params,
+        address receiver
     ) internal returns (uint256 amountOut) {
         // Store the expected amount of the asset in that we expect to have after the swap.
         uint256 expectedAssetsInAfter = assetIn.balanceOf(address(this)) - amountIn;
 
         // Get the address of the latest swap router.
-        SwapRouter swapRouter = registry.swapRouter();
+        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
 
         // Approve swap router to swap assets.
         assetIn.safeApprove(address(swapRouter), amountIn);
 
         // Perform swap.
-        amountOut = swapRouter.swap(exchange, params);
+        amountOut = swapRouter.swap(exchange, params, receiver);
 
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
         // specified a different amount of assets to swap then `amountIn`.
