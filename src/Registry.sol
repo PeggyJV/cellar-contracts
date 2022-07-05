@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import "src/Errors.sol";
 
 contract Registry is Ownable {
     /**
@@ -12,6 +13,14 @@ contract Registry is Ownable {
     event Registered(uint256 indexed id, address indexed newContract);
 
     /**
+     * @notice Emitted when the address of a contract is changed.
+     * @param id value representing the unique ID tied to the changed contract
+     * @param oldAddress address of the contract before the change
+     * @param newAddress address of the contract after the contract
+     */
+    event AddressChanged(uint256 indexed id, address oldAddress, address newAddress);
+
+    /**
      * @notice The unique ID that the next registered contract will have.
      */
     uint256 public currentId;
@@ -20,6 +29,18 @@ contract Registry is Ownable {
      * @notice Get the address associated with an id.
      */
     mapping(uint256 => address) public getAddress;
+
+    /**
+     * @notice Set the address of the contract at a given id.
+     */
+    function setAddress(uint256 id, address newAddress) external onlyOwner {
+        address oldAddress = getAddress[id];
+        if (oldAddress == address(0)) revert USR_ContractNotRegistered(id);
+
+        getAddress[id] = newAddress;
+
+        emit AddressChanged(id, oldAddress, newAddress);
+    }
 
     /**
      * @param gravityBridge address of GravityBridge contract
