@@ -53,11 +53,7 @@ contract CellarTest is Test {
         swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
         gravity = new MockGravity();
 
-        registry = new Registry(
-            SwapRouter(address(swapRouter)),
-            PriceRouter(address(priceRouter)),
-            IGravity(address(gravity))
-        );
+        registry = new Registry(address(gravity), address(swapRouter), address(priceRouter));
 
         // Setup exchange rates:
         // USDC Simulated Price: $1
@@ -103,7 +99,7 @@ contract CellarTest is Test {
         vm.label(address(cellar), "cellar");
 
         // Transfer ownership to this contract for testing.
-        vm.prank(address(registry.gravityBridge()));
+        vm.prank(registry.getAddress(0));
         cellar.transferOwnership(address(this));
 
         // Mint enough liquidity to swap router for swaps.

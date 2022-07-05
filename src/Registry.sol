@@ -8,59 +8,51 @@ import { IGravity } from "./interfaces/IGravity.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Registry is Ownable {
-    SwapRouter public swapRouter;
-    PriceRouter public priceRouter;
-    IGravity public gravityBridge;
+    /**
+     * @notice Emitted when a new contract is registered.
+     * @param id value representing the unique ID tied to the new contract
+     * @param newContract address of the new contract
+     */
+    event Registered(uint256 indexed id, address indexed newContract);
 
     /**
-     * @notice Emitted when the swap router is changed.
-     * @param oldSwapRouter address of SwapRouter contract was changed from
-     * @param newSwapRouter address of SwapRouter contract was changed to
+     * @notice The unique ID that the next registered contract will have.
      */
-    event SwapRouterChanged(address oldSwapRouter, address newSwapRouter);
+    uint256 public currentId;
 
     /**
-     * @notice Emitted when the Gravity Bridge is changed.
-     * @param oldGravityBridge address of GravityBridge contract was changed from
-     * @param newGravityBridge address of GravityBridge contract was changed to
+     * @notice Get the address associated with an id.
      */
-    event GravityBridgeChanged(address oldGravityBridge, address newGravityBridge);
+    mapping(uint256 => address) public getAddress;
 
     /**
-     * @notice Emitted when the price router is changed.
-     * @param oldPriceRouter address of PriceRouter contract was changed from
-     * @param newPriceRouter address of PriceRouter contract was changed to
+     * @param gravityBridge address of GravityBridge contract
+     * @param swapRouter address of SwapRouter contract
+     * @param priceRouter address of PriceRouter contract
      */
-    event PriceRouterChanged(address oldPriceRouter, address newPriceRouter);
-
     constructor(
-        SwapRouter _swapRouter,
-        PriceRouter _priceRouter,
-        IGravity _gravityBridge
-    ) {
-        swapRouter = _swapRouter;
-        priceRouter = _priceRouter;
-        gravityBridge = _gravityBridge;
+        address gravityBridge,
+        address swapRouter,
+        address priceRouter
+    ) Ownable() {
+        _register(gravityBridge);
+        _register(swapRouter);
+        _register(priceRouter);
     }
 
-    function setSwapRouter(SwapRouter newSwapRouter) external onlyOwner {
-        address oldSwapRouter = address(swapRouter);
-        swapRouter = newSwapRouter;
-
-        emit SwapRouterChanged(oldSwapRouter, address(newSwapRouter));
+    /**
+     * @notice Register the address of a new contract.
+     * @param newContract address of the new contract to register
+     */
+    function register(address newContract) external onlyOwner {
+        _register(newContract);
     }
 
-    function setPriceRouter(PriceRouter newPriceRouter) external onlyOwner {
-        address oldPriceRouter = address(priceRouter);
-        priceRouter = newPriceRouter;
+    function _register(address newContract) internal {
+        getAddress[currentId] = newContract;
 
-        emit PriceRouterChanged(oldPriceRouter, address(newPriceRouter));
-    }
+        emit Registered(currentId, newContract);
 
-    function setGravityBridge(IGravity newGravityBridge) external onlyOwner {
-        address oldGravityBridge = address(newGravityBridge);
-        gravityBridge = newGravityBridge;
-
-        emit GravityBridgeChanged(oldGravityBridge, address(newGravityBridge));
+        currentId++;
     }
 }
