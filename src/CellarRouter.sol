@@ -4,13 +4,15 @@ pragma solidity 0.8.15;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC4626 } from "./base/ERC4626.sol";
-import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
+import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
+import { IGravity } from "./interfaces/IGravity.sol";
 
 import "./Errors.sol";
 
-contract CellarRouter is ICellarRouter {
+contract CellarRouter is ICellarRouter, Ownable {
     using SafeTransferLib for ERC20;
 
     // ========================================== CONSTRUCTOR ==========================================
@@ -25,12 +27,23 @@ contract CellarRouter is ICellarRouter {
     IUniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
     /**
+     * @dev Owner will be set to the Gravity Bridge, which relays instructions from the Steward
+     *      module to the cellars.
+     *      https://github.com/PeggyJV/steward
+     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
      * @param _uniswapV3Router Uniswap V3 swap router address
      * @param _uniswapV2Router Uniswap V2 swap router address
      */
-    constructor(IUniswapV3Router _uniswapV3Router, IUniswapV2Router _uniswapV2Router) {
+    constructor(
+        IUniswapV3Router _uniswapV3Router,
+        IUniswapV2Router _uniswapV2Router,
+        IGravity gravityBridge
+    ) {
         uniswapV3Router = _uniswapV3Router;
         uniswapV2Router = _uniswapV2Router;
+
+        // Transfer ownership to the Gravity Bridge.
+        transferOwnership(address(gravityBridge));
     }
 
     // ======================================= DEPOSIT OPERATIONS =======================================
@@ -221,6 +234,27 @@ contract CellarRouter is ICellarRouter {
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
         shares = withdrawAndSwapFromCellar(cellar, path, poolFees, assets, assetsOutMin, receiver);
+    }
+
+    // ========================================== RECOVERY LOGIC ==========================================
+
+    /**
+     * @notice Emitted when tokens accidentally sent to cellar router are recovered.
+     * @param token the address of the token
+     * @param to the address sweeped tokens were transferred to
+     * @param amount amount transferred out
+     */
+    event Sweep(address indexed token, address indexed to, uint256 amount);
+
+    function sweep(
+        ERC20 token,
+        address to,
+        uint256 amount
+    ) external onlyOwner {
+        // Transfer out tokens from this cellar router contract that shouldn't be here.
+        token.safeTransfer(to, amount);
+
+        emit Sweep(address(token), to, amount);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================

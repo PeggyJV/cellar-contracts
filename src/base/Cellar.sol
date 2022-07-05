@@ -448,7 +448,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         registry = _registry;
 
         // Transfer ownership to the Gravity Bridge.
-        transferOwnership(_registry.gravityBridge());
+        address gravityBridge = _registry.getAddress(0);
+        transferOwnership(gravityBridge);
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -825,7 +826,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         _burn(address(this), totalFees);
 
         // Transfer assets to a fee distributor on the Sommelier chain.
-        IGravity gravityBridge = IGravity(registry.gravityBridge());
+        IGravity gravityBridge = IGravity(registry.getAddress(0));
         asset.safeApprove(address(gravityBridge), assets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, assets);
 

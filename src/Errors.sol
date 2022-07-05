@@ -178,6 +178,12 @@ error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLen
  */
 
 /**
+ * @notice Attempted an action when cellar is using an asset that has a fee on transfer.
+ * @param assetWithFeeOnTransfer address of the asset with fee on transfer
+ */
+error STATE_AssetUsesFeeOnTransfer(address assetWithFeeOnTransfer);
+
+/**
  * @notice Attempted action was prevented due to contract being shutdown.
  */
 error STATE_ContractShutdown();

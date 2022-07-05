@@ -4,86 +4,51 @@ pragma solidity 0.8.15;
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Registry is Ownable {
-    address public swapRouter;
-    address public gravityBridge;
-    address public priceRouter;
-
     /**
-     * @notice Emitted when the swap router is changed.
-     * @param oldSwapRouter address of SwapRouter contract was changed from
-     * @param newSwapRouter address of SwapRouter contract was changed to
+     * @notice Emitted when a new contract is registered.
+     * @param id value representing the unique ID tied to the new contract
+     * @param newContract address of the new contract
      */
-    event SwapRouterChanged(
-        address oldSwapRouter,
-        address newSwapRouter
-    );
+    event Registered(uint256 indexed id, address indexed newContract);
 
     /**
-     * @notice Emitted when the Gravity Bridge is changed.
-     * @param oldGravityBridge address of GravityBridge contract was changed from
-     * @param newGravityBridge address of GravityBridge contract was changed to
+     * @notice The unique ID that the next registered contract will have.
      */
-    event GravityBridgeChanged(
-        address oldGravityBridge,
-        address newGravityBridge
-    );
+    uint256 public currentId;
 
     /**
-     * @notice Emitted when the price router is changed.
-     * @param oldPriceRouter address of PriceRouter contract was changed from
-     * @param newPriceRouter address of PriceRouter contract was changed to
+     * @notice Get the address associated with an id.
      */
-    event PriceRouterChanged(
-        address oldPriceRouter,
-        address newPriceRouter
-    );
+    mapping(uint256 => address) public getAddress;
 
     /**
-     * @notice Sets new address of SwapRouter contract.
-     * @param newSwapRouter new SwapRouter address
-     */
-    function setSwapRouter(address newSwapRouter) external onlyOwner {
-        address oldSwapRouter = swapRouter;
-        swapRouter = newSwapRouter;
-        
-        emit SwapRouterChanged(oldSwapRouter, newSwapRouter);
-    }
-
-    /**
-     * @notice Sets new address of GravityBridge contract.
-     * @param newGravityBridge new GravityBridge address
-     */
-    function setGravityBridge(address newGravityBridge) external onlyOwner {
-        address oldGravityBridge = gravityBridge;
-        gravityBridge = newGravityBridge;
-
-        emit GravityBridgeChanged(oldGravityBridge, newGravityBridge);
-    }
-
-    /**
-     * @notice Sets new address of PriceRouter contract.
-     * @param newPriceRouter new PriceRouter address
-     */
-    function setPriceRouter(address newPriceRouter) external onlyOwner {
-        address oldPriceRouter = priceRouter;
-        priceRouter = newPriceRouter;
-
-        emit PriceRouterChanged(oldPriceRouter, newPriceRouter);
-    }
-
-    /**
-     * @notice Configures default addresses of contracts
-     * @param _swapRouter address of SwapRouter contract
-     * @param _gravityBridge address of GravityBridge contract
-     * @param _priceRouter address of PriceRouter contract
+     * @param gravityBridge address of GravityBridge contract
+     * @param swapRouter address of SwapRouter contract
+     * @param priceRouter address of PriceRouter contract
      */
     constructor(
-        address _swapRouter,
-        address _gravityBridge,
-        address _priceRouter
+        address gravityBridge,
+        address swapRouter,
+        address priceRouter
     ) Ownable() {
-        swapRouter = _swapRouter;
-        gravityBridge = _gravityBridge;
-        priceRouter = _priceRouter;
+        _register(gravityBridge);
+        _register(swapRouter);
+        _register(priceRouter);
+    }
+
+    /**
+     * @notice Register the address of a new contract.
+     * @param newContract address of the new contract to register
+     */
+    function register(address newContract) external onlyOwner {
+        _register(newContract);
+    }
+
+    function _register(address newContract) internal {
+        getAddress[currentId] = newContract;
+
+        emit Registered(currentId, newContract);
+
+        currentId++;
     }
 }
