@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
+
 // TODO: add natspec
 
 /**
  * @notice A library to extend the address array data type.
  */
 library AddressArray {
+    // =========================================== ADDRESS STORAGE ===========================================
+
     function add(
         address[] storage array,
         uint256 index,
@@ -53,5 +57,13 @@ library AddressArray {
         for (uint256 i; i < array.length; i++) if (value == array[i]) return true;
 
         return false;
+    }
+
+    // =========================================== ERC20 MEMORY ===========================================
+
+    function contains(ERC20[] memory array, ERC20 value) internal pure returns (bool, uint256) {
+        for (uint256 i; i < array.length; i++) if (value == array[i]) return (true, i);
+
+        return (false, type(uint256).max);
     }
 }

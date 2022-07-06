@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { Cellar, Registry, ERC4626, ERC20, SafeCast } from "src/base/Cellar.sol";
-import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
+import { Cellar, Registry, PriceRouter, ERC4626, ERC20, SafeCast } from "src/base/Cellar.sol";
 import { Test, console } from "@forge-std/Test.sol";
 
 contract MockCellar is Cellar, Test {
@@ -39,7 +38,8 @@ contract MockCellar is Cellar, Test {
     function _depositIntoPosition(address position, uint256 amount) internal returns (uint256 shares) {
         ERC20 positionAsset = _assetOf(position);
 
-        uint256 amountInAssets = PriceRouter(registry.getAddress(2)).getValue(positionAsset, amount, asset);
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+        uint256 amountInAssets = priceRouter.getValue(positionAsset, amount, asset);
         shares = previewDeposit(amountInAssets);
 
         deal(address(positionAsset), address(this), amount);

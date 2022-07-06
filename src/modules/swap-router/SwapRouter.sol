@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { Multicall } from "src/base/Multicall.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
@@ -38,11 +39,11 @@ contract SwapRouter is Multicall {
      *
      */
     constructor(IUniswapV2Router _uniswapV2Router, IUniswapV3Router _uniswapV3Router) {
-        //set up all exchanges
+        // Set up all exchanges.
         uniswapV2Router = _uniswapV2Router;
         uniswapV3Router = _uniswapV3Router;
 
-        //set up mapping between ids and selectors
+        // Set up mapping between IDs and selectors.
         getExchangeSelector[Exchange.UNIV2] = SwapRouter(this).swapWithUniV2.selector;
         getExchangeSelector[Exchange.UNIV3] = SwapRouter(this).swapWithUniV3.selector;
     }
@@ -87,8 +88,6 @@ contract SwapRouter is Multicall {
      *      address[] path: array of addresses dictating what swap path to follow
      *      uint256 assets: the amount of path[0] you want to swap with
      *      uint256 assetsOutMin: the minimum amount of path[path.length - 1] tokens you want from the swap
-     *      address recipient: the address path[path.length - 1] token should be sent to
-     *      address from: the address to transfer path[0] tokens from to this address.
      * @param recipient address to send the swapped tokens to
      * @return amountOut amount of tokens received from the swap
      */
@@ -113,6 +112,7 @@ contract SwapRouter is Multicall {
             recipient,
             block.timestamp + 60
         );
+
         amountOut = amountsOut[amountsOut.length - 1];
     }
 
@@ -120,11 +120,9 @@ contract SwapRouter is Multicall {
      * @notice Allows caller to make swaps using the UniswapV3 Exchange.
      * @param swapData bytes variable storing the following swap information
      *      address[] path: array of addresses dictating what swap path to follow
-     *      uint24[] memory poolFees: array of pool fees dictating what swap pools to use
+     *      uint24[] poolFees: array of pool fees dictating what swap pools to use
      *      uint256 assets: the amount of path[0] you want to swap with
      *      uint256 assetsOutMin: the minimum amount of path[path.length - 1] tokens you want from the swap
-     *      address recipient: the address path[path.length - 1] token should be sent to
-     *      address from: the address to transfer path[0] tokens from to this address.
      * @param recipient address to send the swapped tokens to
      * @return amountOut amount of tokens received from the swap
      */

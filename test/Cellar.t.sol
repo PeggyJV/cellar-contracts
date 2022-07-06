@@ -51,7 +51,13 @@ contract CellarTest is Test {
         swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
         gravity = new MockGravity();
 
-        registry = new Registry(address(gravity), address(swapRouter), address(priceRouter));
+        registry = new Registry(
+            // Set this contract to the Gravity Bridge for testing to give the permissions usually
+            // given to the Gravity Bridge to this contract.
+            address(this),
+            address(swapRouter),
+            address(priceRouter)
+        );
 
         // Setup exchange rates:
         // USDC Simulated Price: $1
@@ -95,10 +101,6 @@ contract CellarTest is Test {
             "multiposition-CLR"
         );
         vm.label(address(cellar), "cellar");
-
-        // Transfer ownership to this contract for testing.
-        vm.prank(registry.getAddress(0));
-        cellar.transferOwnership(address(this));
 
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(exchange), type(uint224).max);
@@ -160,7 +162,7 @@ contract CellarTest is Test {
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
     }
 
-    function testWithdrawFromPositionsInOrder() external {
+    function testWithdrawInOrder() external {
         cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
         cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
 
@@ -170,26 +172,16 @@ contract CellarTest is Test {
         deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
 
         // Withdraw from position.
-        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
-            32_000e6,
-            address(this),
-            address(this)
-        );
+        uint256 shares = cellar.withdraw(32_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
         assertEq(shares, 32_000e18, "Should returned all redeemed shares.");
-        assertEq(receivedAssets.length, 2, "Should have received two assets.");
-        assertEq(amountsOut.length, 2, "Should have gotten out two amount.");
-        assertEq(address(receivedAssets[0]), address(WETH), "Should have received WETH.");
-        assertEq(address(receivedAssets[1]), address(WBTC), "Should have received WBTC.");
-        assertEq(amountsOut[0], 1e18, "Should have gotten out 1 WETH.");
-        assertEq(amountsOut[1], 1e8, "Should have gotten out 1 WBTC.");
         assertEq(WETH.balanceOf(address(this)), 1e18, "Should have transferred position balance to user.");
         assertEq(WBTC.balanceOf(address(this)), 1e8, "Should have transferred position balance to user.");
         assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
     }
 
-    function testWithdrawFromPositionsInProportion() external {
+    function testWithdrawInProportion() external {
         cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
         cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
 
@@ -201,23 +193,36 @@ contract CellarTest is Test {
 
         // Withdraw from position.
         cellar.setWithdrawType(Cellar.WithdrawType.Proportional);
-        (uint256 shares, ERC20[] memory receivedAssets, uint256[] memory amountsOut) = cellar.withdrawFromPositions(
-            16_000e6,
-            address(this),
-            address(this)
-        );
+        uint256 shares = cellar.withdraw(16_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
         assertEq(shares, 16_000e18, "Should returned all redeemed shares.");
-        assertEq(receivedAssets.length, 2, "Should have received two assets.");
-        assertEq(amountsOut.length, 2, "Should have gotten out two amount.");
-        assertEq(address(receivedAssets[0]), address(WETH), "Should have received WETH.");
-        assertEq(address(receivedAssets[1]), address(WBTC), "Should have received WBTC.");
-        assertEq(amountsOut[0], 0.5e18, "Should have gotten out 0.5 WETH.");
-        assertEq(amountsOut[1], 0.5e8, "Should have gotten out 0.5 WBTC.");
         assertEq(WETH.balanceOf(address(this)), 0.5e18, "Should have transferred position balance to user.");
         assertEq(WBTC.balanceOf(address(this)), 0.5e8, "Should have transferred position balance to user.");
         assertEq(cellar.totalAssets(), 16_000e6, "Should have half of assets remaining in cellar.");
+    }
+
+    function testWithdrawWithDuplicateReceivedAssets() external {
+        MockERC4626 wethVault = new MockERC4626(WETH, "WETH Vault LP Token", "WETH-VLT", 18);
+        cellar.trustPosition(address(wethVault), Cellar.PositionType.ERC4626);
+        cellar.pushPosition(address(wethVault));
+
+        cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
+        cellar.depositIntoPosition(address(wethVault), 0.5e18); // $1000
+
+        assertEq(cellar.totalAssets(), 3000e6, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.totalSupply(), 3000e18);
+
+        // Mint shares to user to redeem.
+        deal(address(cellar), address(this), cellar.previewWithdraw(3000e6));
+
+        // Withdraw from position.
+        uint256 shares = cellar.withdraw(3000e6, address(this), address(this));
+
+        assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
+        assertEq(shares, 3000e18, "Should returned all redeemed shares.");
+        assertEq(WETH.balanceOf(address(this)), 1.5e18, "Should have transferred position balance to user.");
+        assertEq(cellar.totalAssets(), 0, "Should have no assets remaining in cellar.");
     }
 
     // ========================================== REBALANCE TEST ==========================================
