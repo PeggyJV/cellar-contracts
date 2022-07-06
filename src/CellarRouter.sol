@@ -15,21 +15,16 @@ import "./Errors.sol";
 
 // TODO: Fix comments (some of them still reference Sushiswap).
 // TODO: Rewrite natspec comments to be more clear.
-
+/**
+ * @title Sommelier Cellar Router
+ * @notice Allows for better user experience when on-boarding/off-boarding from cellars
+ *         by combining together deposit/withdraw TXs with appropriate swaps
+ * @author Brian Le
+ */
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
 
     // ========================================== CONSTRUCTOR ==========================================
-
-    /**
-     * @notice Uniswap V3 swap router contract. Used for swapping if pool fees are specified.
-     */
-    IUniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
-
-    /**
-     * @notice Uniswap V2 swap router contract. Used for swapping if pool fees are not specified.
-     */
-    IUniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
     /**
      * @notice Registry contract
@@ -37,20 +32,9 @@ contract CellarRouter is ICellarRouter {
     Registry public immutable registry;
 
     /**
-     * @dev Owner will be set to the Gravity Bridge, which relays instructions from the Steward
-     *      module to the cellars.
-     *      https://github.com/PeggyJV/steward
-     *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
-     * @param _uniswapV3Router Uniswap V3 swap router address
-     * @param _uniswapV2Router Uniswap V2 swap router address
+     * @param _registry Registry contract used to get most current swap router
      */
-    constructor(
-        IUniswapV3Router _uniswapV3Router,
-        IUniswapV2Router _uniswapV2Router,
-        Registry _registry
-    ) {
-        uniswapV3Router = _uniswapV3Router;
-        uniswapV2Router = _uniswapV2Router;
+    constructor(Registry _registry) {
         registry = _registry;
     }
 
@@ -90,19 +74,17 @@ contract CellarRouter is ICellarRouter {
     }
 
     /**
-     * @notice Deposit into a cellar by first performing a swap to the cellar's current asset if necessary.
-     * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
-     *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
-     *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
-     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
-     *      V2, leave pool fees empty to use Uniswap V2 for swap.
+     * @notice Deposit into a cellar by first performing a swap to the cellar's current asset.
+     * @dev Uses the swap router to perform the swap
      * @param cellar address of the cellar
      * @param exchange ENUM representing what exchange to make the swap at
-     *        Refer to src/SwapRouter.sol for list of available options
+     *        Refer to src/modules/swap-router/SwapRouter.sol for list of available options
      * @param swapData bytes variable containing all the data needed to make a swap
-     * @param assets amount of assets to deposit
+     *        Composition is based off what exchange is chosen for the swap refer to
+     *        src/modules/swap-router/SwapRouter.sol to see what data should be encoded into swapData
+     * @param assets amount of assets to swap, must match initial swap asset in swapData
      * @param receiver address to recieve the cellar shares
-     * @param assetIn ERC20 token used to deposit
+     * @param assetIn ERC20 token used to swap for deposit token
      * @return shares amount of shares minted
      */
     function depositAndSwap(
@@ -129,17 +111,15 @@ contract CellarRouter is ICellarRouter {
     }
 
     /**
-     * @notice Deposit into a cellar by first performing a swap to the cellar's current asset if necessary.
-     * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
-     *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
-     *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
-     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
-     *      V2, leave pool fees empty to use Uniswap V2 for swap.
+     * @notice Deposit into a cellar by first performing a swap to the cellar's current asset.
+     * @dev Uses the swap router to perform the swap
      * @param cellar address of the cellar to deposit into
      * @param exchange ENUM representing what exchange to make the swap at
-     *        Refer to src/SwapRouter.sol for list of available options
+     *        Refer to src/modules/swap-router/SwapRouter.sol for list of available options
      * @param swapData bytes variable containing all the data needed to make a swap
-     * @param assets amount of assets to deposit
+     *        Composition is based off what exchange is chosen for the swap refer to
+     *        src/modules/swap-router/SwapRouter.sol to see what data should be encoded into swapData
+     * @param assets amount of assets to swap, must match initial swap asset in swapData
      * @param assetIn ERC20 asset caller wants to swap and deposit with
      * @param receiver address to recieve the cellar shares
      * @param deadline timestamp after which permit is invalid
@@ -167,15 +147,15 @@ contract CellarRouter is ICellarRouter {
     // ======================================= WITHDRAW OPERATIONS =======================================
 
     /**
-     * @notice Withdraws from a cellar and then performs a swap to another desired asset, if the
-     *         withdrawn asset is not already.
+     * @notice Withdraws from a cellar and then performs swap(s) to another desired asset.
      * @dev Permission is required from caller for router to burn shares. Please make sure that
      *      caller has approved the router to spend their shares.
      * @param cellar address of the cellar
      * @param exchanges enums representing what exchange to make the swap at,
-     *                  refer to src/SwapRouter.sol for list of available options
-     * @param swapDatas bytes variable containing all the data needed to make a swap
-     *                 receiver address should be the callers address
+     *                  refer to src/modules/swap-router/SwapRouter.sol for list of available options
+     * @param swapDatas bytes array variable containing all the data needed to make multiple swaps
+     *        Composition is based off what exchange is chosen for the swap refer to
+     *        src/modules/swap-router/SwapRouter.sol to see what data should be encoded into swapDatas[i]
      * @param assets amount of assets to withdraw
      * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
@@ -223,17 +203,15 @@ contract CellarRouter is ICellarRouter {
     }
 
     /**
-     * @notice Withdraws from a cellar and then performs a swap to another desired asset, if the
-     *         withdrawn asset is not already, using permit.
-     * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
-     *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
-     *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
-     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
-     *      V2, leave pool fees empty to use Uniswap V2 for swap.
+     * @notice Withdraws from a cellar and then performs swap(s) to another desired asset, using permit.
+     * @dev Permission is required from caller for router to burn shares. Please make sure that
+     *      caller has approved the router to spend their shares.
      * @param cellar address of the cellar
-     * @param exchanges enum representing what exchange to make the swap at
-     *        Refer to src/SwapRouter.sol for list of available options
-     * @param swapDatas bytes variable containing all the data needed to make a swap
+     * @param exchanges enums representing what exchange to make the swap at,
+     *                  refer to src/modules/swap-router/SwapRouter.sol for list of available options
+     * @param swapDatas bytes array variable containing all the data needed to make multiple swaps
+     *        Composition is based off what exchange is chosen for the swap refer to
+     *        src/modules/swap-router/SwapRouter.sol to see what data should be encoded into swapDatas[i]
      * @param assets amount of assets to withdraw
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
@@ -290,6 +268,12 @@ contract CellarRouter is ICellarRouter {
         }
     }
 
+    /**
+     * @notice Used to determine the amounts of assets Router had using current balances and amountsReceived.
+     * @param assets array of ERC20 tokens to query the balances of
+     * @param amountsRecevied the amount of each assets received
+     * @return balancesBefore array of balances before amounts were received
+     */
     function _getBalancesBefore(ERC20[] memory assets, uint256[] memory amountsReceived)
         internal
         view
@@ -304,6 +288,11 @@ contract CellarRouter is ICellarRouter {
         }
     }
 
+    /**
+     * @notice Find what assets a cellar's positions uses.
+     * @param cellar address of the cellar
+     * @return assets array of assets that make up cellar's positions
+     */
     function _getPositionAssets(Cellar cellar) internal view returns (ERC20[] memory assets) {
         address[] memory positions = cellar.getPositions();
 
