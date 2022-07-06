@@ -9,10 +9,10 @@ import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { Multicall } from "src/base/Multicall.sol";
 
 /**
- * @title Sommeliet Swap Router
+ * @title Sommelier Price Router
  * @notice Provides a universal interface allowing Sommelier contracts to interact with multiple
- * @dev Perform multiple swaps using Multicall
- * different exchanges to perform swaps
+ *         different exchanges to perform swaps.
+ * @dev Perform multiple swaps using Multicall.
  * @author crispymangoes, Brian Le
  */
 contract SwapRouter is Multicall {
