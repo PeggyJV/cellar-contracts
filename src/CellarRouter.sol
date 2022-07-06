@@ -4,15 +4,16 @@ pragma solidity 0.8.15;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC4626 } from "./base/ERC4626.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { SharedAuth } from "src/SharedAuth.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
 import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
 import { IGravity } from "./interfaces/IGravity.sol";
+import { Registry } from "src/Registry.sol";
 
 import "./Errors.sol";
 
-contract CellarRouter is ICellarRouter, Ownable {
+contract CellarRouter is ICellarRouter, SharedAuth {
     using SafeTransferLib for ERC20;
 
     // ========================================== CONSTRUCTOR ==========================================
@@ -37,13 +38,10 @@ contract CellarRouter is ICellarRouter, Ownable {
     constructor(
         IUniswapV3Router _uniswapV3Router,
         IUniswapV2Router _uniswapV2Router,
-        IGravity gravityBridge
-    ) {
+        Registry _registry
+    ) SharedAuth(_registry) {
         uniswapV3Router = _uniswapV3Router;
         uniswapV2Router = _uniswapV2Router;
-
-        // Transfer ownership to the Gravity Bridge.
-        transferOwnership(address(gravityBridge));
     }
 
     // ======================================= DEPOSIT OPERATIONS =======================================
@@ -250,7 +248,7 @@ contract CellarRouter is ICellarRouter, Ownable {
         ERC20 token,
         address to,
         uint256 amount
-    ) external onlyOwner {
+    ) external requiresAuth {
         // Transfer out tokens from this cellar router contract that shouldn't be here.
         token.safeTransfer(to, amount);
 

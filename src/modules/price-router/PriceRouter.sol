@@ -3,15 +3,16 @@ pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { SharedAuth } from "src/SharedAuth.sol";
 import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
 import { Math } from "src/utils/Math.sol";
+import { Registry } from "src/Registry.sol";
 
 import "src/Errors.sol";
 
 // TODO: Add test cases that there are no ERC20 operations performed on remapped assets.
 
-contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
+contract PriceRouter is SharedAuth, ChainlinkPriceFeedAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -35,6 +36,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
 
     uint96 public constant DEFAULT_HEART_BEAT = 1 days;
 
+    constructor(Registry _registry) SharedAuth(_registry) {}
+
     // ======================================= Adaptor OPERATIONS =======================================
 
     /**
@@ -55,7 +58,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         uint256 minPrice,
         uint256 maxPrice,
         uint96 heartbeat
-    ) external onlyOwner {
+    ) external requiresAuth {
         require(address(asset) != address(0), "Invalid asset");
 
         if (minPrice == 0 || maxPrice == 0) {
@@ -80,7 +83,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @notice Remove support for an asset, causing all operations that use the asset to revert.
      * @param asset address of asset to remove support for
      */
-    function removeAsset(ERC20 asset) external onlyOwner {
+    function removeAsset(ERC20 asset) external requiresAuth {
         getAssetData[asset].isSupported = false;
     }
 

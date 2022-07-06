@@ -3,16 +3,16 @@ pragma solidity 0.8.15;
 
 import { ERC4626, ERC20 } from "./ERC4626.sol";
 import { Multicall } from "./Multicall.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { SharedAuth } from "src/SharedAuth.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { Registry } from "../Registry.sol";
+import { Registry } from "src/Registry.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
 
 import "../Errors.sol";
 
-contract Cellar is ERC4626, Ownable, Multicall {
+contract Cellar is ERC4626, SharedAuth, Multicall {
     using AddressArray for address[];
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -66,7 +66,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         return positions;
     }
 
-    function addPosition(uint256 index, address position) external onlyOwner whenNotShutdown {
+    function addPosition(uint256 index, address position) external requiresAuth whenNotShutdown {
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Check if position is already being used.
@@ -88,7 +88,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev If you know you are going to add a position to the end of the array, this is more
      *      efficient then `addPosition`.
      */
-    function pushPosition(address position) external onlyOwner whenNotShutdown {
+    function pushPosition(address position) external requiresAuth whenNotShutdown {
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Check if position is already being used.
@@ -106,7 +106,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit PositionAdded(position, positions.length - 1);
     }
 
-    function removePosition(uint256 index) external onlyOwner {
+    function removePosition(uint256 index) external requiresAuth {
         // Get position being removed.
         address position = positions[index];
 
@@ -124,7 +124,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev If you know you are going to remove a position from the end of the array, this is more
      *      efficient then `removePosition`.
      */
-    function popPosition() external onlyOwner {
+    function popPosition() external requiresAuth {
         // Get the index of the last position and last position itself.
         uint256 index = positions.length - 1;
         address position = positions[index];
@@ -139,7 +139,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit PositionRemoved(position, index);
     }
 
-    function replacePosition(address newPosition, uint256 index) external onlyOwner whenNotShutdown {
+    function replacePosition(address newPosition, uint256 index) external requiresAuth whenNotShutdown {
         // Store the old position before its replaced.
         address oldPosition = positions[index];
 
@@ -154,7 +154,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit PositionReplaced(oldPosition, newPosition, index);
     }
 
-    function swapPositions(uint256 index1, uint256 index2) external onlyOwner {
+    function swapPositions(uint256 index1, uint256 index2) external requiresAuth {
         // Get the new positions that will be at each index.
         address newPosition1 = positions[index2];
         address newPosition2 = positions[index1];
@@ -176,7 +176,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     mapping(address => bool) public isTrusted;
 
-    function trustPosition(address position, bool isLossless) external onlyOwner {
+    function trustPosition(address position, bool isLossless) external requiresAuth {
         // Trust position.
         isTrusted[position] = true;
 
@@ -189,7 +189,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit TrustChanged(position, true);
     }
 
-    function distrustPosition(address position) external onlyOwner {
+    function distrustPosition(address position) external requiresAuth {
         // Distrust position.
         isTrusted[position] = false;
 
@@ -239,7 +239,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Set the accrual period over which yield is distributed.
      * @param newAccrualPeriod period of time in seconds of the new accrual period
      */
-    function setAccrualPeriod(uint32 newAccrualPeriod) external onlyOwner {
+    function setAccrualPeriod(uint32 newAccrualPeriod) external requiresAuth {
         // Ensure that the change is not disrupting a currently ongoing distribution of accrued yield.
         if (totalLocked() > 0) revert STATE_AccrualOngoing();
 
@@ -293,7 +293,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Set the percentage of platform fees accrued over a year.
      * @param newPlatformFee value out of 1e18 that represents new platform fee percentage
      */
-    function setPlatformFee(uint64 newPlatformFee) external onlyOwner {
+    function setPlatformFee(uint64 newPlatformFee) external requiresAuth {
         emit PlatformFeeChanged(platformFee, newPlatformFee);
 
         platformFee = newPlatformFee;
@@ -303,7 +303,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Set the percentage of performance fees accrued from yield.
      * @param newPerformanceFee value out of 1e18 that represents new performance fee percentage
      */
-    function setPerformanceFee(uint64 newPerformanceFee) external onlyOwner {
+    function setPerformanceFee(uint64 newPerformanceFee) external requiresAuth {
         emit PerformanceFeeChanged(performanceFee, newPerformanceFee);
 
         performanceFee = newPerformanceFee;
@@ -315,7 +315,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      *      expects it to be.
      * @param newFeesDistributor formatted address of the new fee distributor module
      */
-    function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
+    function setFeesDistributor(bytes32 newFeesDistributor) external requiresAuth {
         emit FeesDistributorChanged(feesDistributor, newFeesDistributor);
 
         feesDistributor = newFeesDistributor;
@@ -354,7 +354,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Set the maximum liquidity that cellar can manage. Uses the same decimals as the current asset.
      * @param newLimit amount of assets to set as the new limit
      */
-    function setLiquidityLimit(uint256 newLimit) external onlyOwner {
+    function setLiquidityLimit(uint256 newLimit) external requiresAuth {
         emit LiquidityLimitChanged(liquidityLimit, newLimit);
 
         liquidityLimit = newLimit;
@@ -364,7 +364,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Set the per-wallet deposit limit. Uses the same decimals as the current asset.
      * @param newLimit amount of assets to set as the new limit
      */
-    function setDepositLimit(uint256 newLimit) external onlyOwner {
+    function setDepositLimit(uint256 newLimit) external requiresAuth {
         emit DepositLimitChanged(depositLimit, newLimit);
 
         depositLimit = newLimit;
@@ -396,7 +396,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @dev In the case where
      */
-    function initiateShutdown() public whenNotShutdown onlyOwner {
+    function initiateShutdown() public whenNotShutdown requiresAuth {
         isShutdown = true;
 
         emit ShutdownChanged(true);
@@ -405,7 +405,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @notice Restart the cellar.
      */
-    function liftShutdown() public onlyOwner {
+    function liftShutdown() public requiresAuth {
         isShutdown = false;
 
         emit ShutdownChanged(false);
@@ -420,7 +420,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     uint256 public targetHoldingsPercent;
 
-    function setTargetHoldings(uint256 targetPercent) external onlyOwner {
+    function setTargetHoldings(uint256 targetPercent) external requiresAuth {
         targetHoldingsPercent = targetPercent;
     }
 
@@ -428,7 +428,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // TODO: since registry address should never change, consider hardcoding the address once
     //       registry is finalized and making this a constant
-    Registry public immutable registry;
+    //Registry public immutable registry;
 
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
@@ -444,13 +444,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         ERC20 _asset,
         string memory _name,
         string memory _symbol
-    ) ERC4626(_asset, _name, _symbol, 18) Ownable() {
-        registry = _registry;
-
-        // Transfer ownership to the Gravity Bridge.
-        address gravityBridge = _registry.getAddress(0);
-        transferOwnership(gravityBridge);
-    }
+    ) ERC4626(_asset, _name, _symbol, 18) SharedAuth(_registry) {}
 
     // =========================================== CORE LOGIC ===========================================
 
@@ -579,7 +573,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Without this check, malicious actors could do a slowdown attack on the distribution of
         // yield by continuously resetting the accrual period.
-        if (msg.sender != owner() && totalLockedYield > 0) revert STATE_AccrualOngoing();
+        if (isAuthorized(msg.sender, Cellar(this).accrue.selector) && totalLockedYield > 0)
+            revert STATE_AccrualOngoing();
 
         uint256 totalBalanceLastAccrual = totalLosslessBalance;
         uint256 totalBalanceThisAccrual;
@@ -646,7 +641,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of the position to enter holdings into
      * @param assets amount of assets to exit from the position
      */
-    function enterPosition(address position, uint256 assets) public onlyOwner {
+    function enterPosition(address position, uint256 assets) public requiresAuth {
         // Check that position is a valid position.
         if (!isPositionUsed[position]) revert USR_InvalidPosition(position);
 
@@ -673,7 +668,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of the position to exit
      * @param assets amount of assets to exit from the position
      */
-    function exitPosition(address position, uint256 assets) external onlyOwner {
+    function exitPosition(address position, uint256 assets) external requiresAuth {
         PositionData storage positionData = getPositionData[address(position)];
 
         if (positionData.isLossless) totalLosslessBalance -= assets;
@@ -688,7 +683,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Pulls all assets from a position back into holdings.
      * @param position address of the position to completely exit
      */
-    function exitPosition(address position) external onlyOwner {
+    function exitPosition(address position) external requiresAuth {
         PositionData storage positionData = getPositionData[position];
 
         uint256 balanceLastAccrual = positionData.balance;
@@ -733,7 +728,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address fromPosition,
         address toPosition,
         uint256 assets
-    ) external onlyOwner {
+    ) external requiresAuth {
         // Check that position being rebalanced to is a valid position.
         if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(toPosition);
 
@@ -815,7 +810,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Transfer accrued fees to the Sommelier chain to distribute.
      * @dev Fees are accrued as shares and redeemed upon transfer.
      */
-    function sendFees() public onlyOwner {
+    function sendFees() public requiresAuth {
         // Redeem our fee shares for assets to send to the fee distributor module.
         uint256 totalFees = balanceOf[address(this)];
         uint256 assets = previewRedeem(totalFees);
