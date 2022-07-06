@@ -7,6 +7,13 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 
+/**
+ * @title Sommeliet Swap Router
+ * @notice Provides a universal interface allowing Sommelier contracts to interact with multiple
+ * @dev Perform multiple swaps using Multicall
+ * different exchanges to perform swaps
+ * @author crispymangoes, Brian Le
+ */
 contract SwapRouter is Multicall {
     using SafeTransferLib for ERC20;
 

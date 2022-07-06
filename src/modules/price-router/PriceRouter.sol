@@ -9,8 +9,12 @@ import { Math } from "src/utils/Math.sol";
 
 import "src/Errors.sol";
 
-// TODO: Add test cases that there are no ERC20 operations performed on remapped assets.
-
+/**
+ * @title Sommeliet Price Router
+ * @notice Provides a universal interface allowing Sommelier contracts to retrieve secure pricing data
+ * from Chainlink and arbitrary adaptors
+ * @author crispymangoes, Brian Le
+ */
 contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -183,6 +187,14 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
 
     // =========================================== HELPER FUNCTIONS ===========================================
 
+    /**
+     * @notice Gets the exchange rate between a base and a quote asset
+     * @param baseAsset the asset to convert into quoteAsset
+     * @param quoteAsset the asset base asset is converted into
+     * @return exchangeRate baseAsset/quoteAsset
+     * if base is ETH and quote is USD
+     * would return ETH/USD
+     */
     function _getExchangeRate(
         ERC20 baseAsset,
         ERC20 quoteAsset,
@@ -191,6 +203,12 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         exchangeRate = _getValueInUSD(baseAsset).mulDivDown(10**quoteAssetDecimals, _getValueInUSD(quoteAsset));
     }
 
+    /**
+     * @notice Gets the valuation of some asset in USD
+     * @dev USD valuation has 8 decimals
+     * @param asset the asset to get the value of in USD
+     * @return value the value of asset in USD
+     */
     function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
         AssetData storage assetData = getAssetData[asset];
 
