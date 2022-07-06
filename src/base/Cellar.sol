@@ -91,15 +91,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @notice Tell whether a position is currently used.
-     * @param position address of position to check
-     * @return isUsed boolean specifying whether position is currently used
      */
     mapping(address => bool) public isPositionUsed;
 
     /**
      * @notice Get the data related to a position.
-     * @param position address of position to get data for
-     * @return positionData data related to the position
      */
     mapping(address => PositionData) public getPositionData;
 
@@ -235,8 +231,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @notice Tell whether a position is trusted.
-     * @param position address of position to check
-     * @return isTrusted boolean specifying whether position is trusted
      */
     mapping(address => bool) public isTrusted;
 

@@ -96,7 +96,7 @@ contract CellarTest is Test {
             positions,
             positionTypes,
             address(USDC),
-            Cellar.WithdrawType.Orderly,
+            Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
             "multiposition-CLR"
         );
@@ -192,7 +192,7 @@ contract CellarTest is Test {
         deal(address(cellar), address(this), cellar.previewWithdraw(16_000e6));
 
         // Withdraw from position.
-        cellar.setWithdrawType(Cellar.WithdrawType.Proportional);
+        cellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
         uint256 shares = cellar.withdraw(16_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
