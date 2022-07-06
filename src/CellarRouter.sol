@@ -271,7 +271,7 @@ contract CellarRouter is ICellarRouter {
     /**
      * @notice Used to determine the amounts of assets Router had using current balances and amountsReceived.
      * @param assets array of ERC20 tokens to query the balances of
-     * @param amountsRecevied the amount of each assets received
+     * @param amountsReceived the amount of each assets received
      * @return balancesBefore array of balances before amounts were received
      */
     function _getBalancesBefore(ERC20[] memory assets, uint256[] memory amountsReceived)

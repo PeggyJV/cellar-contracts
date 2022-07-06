@@ -76,7 +76,7 @@ contract CellarRouterTest is Test {
             address(priceRouter)
         );
 
-        router = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)), registry);
+        router = new CellarRouter(registry);
         //forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router), registry);
 
         ABC = new MockERC20("ABC", 18);
@@ -117,7 +117,7 @@ contract CellarRouterTest is Test {
             positions,
             positionTypes,
             address(USDC),
-            Cellar.WithdrawType.Orderly,
+            Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
             "multiposition-CLR"
         );
