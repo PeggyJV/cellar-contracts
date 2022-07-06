@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { IGravity } from "./interfaces/IGravity.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import "src/Errors.sol";
 

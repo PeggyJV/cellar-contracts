@@ -145,13 +145,6 @@ error USR_ZeroRewardsPerEpoch();
 error USR_InvalidLockValue(uint256 lock);
 
 /**
- * @notice Attempted to trust a position that had an incompatible underlying asset.
- * @param incompatibleAsset address of the asset is incompatible with the asset of this cellar
- * @param expectedAsset address of the cellar's underlying asset
- */
-error USR_IncompatiblePosition(address incompatibleAsset, address expectedAsset);
-
-/**
  * @notice Attempted to add a position that is already being used.
  * @param position address of the position
  */

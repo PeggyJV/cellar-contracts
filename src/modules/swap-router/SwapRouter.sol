@@ -6,6 +6,7 @@ import { Multicall } from "src/base/Multicall.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
+import { Multicall } from "src/base/Multicall.sol";
 
 /**
  * @title Sommeliet Swap Router
@@ -55,7 +56,6 @@ contract SwapRouter is Multicall {
     }
 
     // ======================================= SWAP OPERATIONS =======================================
-
     /**
      * @notice Route swap calls to the appropriate exchanges.
      * @param exchange value dictating which exchange to use to make the swap

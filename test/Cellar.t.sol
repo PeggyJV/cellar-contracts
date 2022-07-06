@@ -2,7 +2,7 @@
 pragma solidity 0.8.15;
 
 import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
-import { Registry, PriceRouter, SwapRouter, IGravity } from "src/Registry.sol";
+import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { MockExchange } from "src/mocks/MockExchange.sol";
@@ -12,8 +12,6 @@ import { MockGravity } from "src/mocks/MockGravity.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
-
-// TODO: Add test for proportional withdraw type.
 
 contract CellarTest is Test {
     using SafeTransferLib for ERC20;
