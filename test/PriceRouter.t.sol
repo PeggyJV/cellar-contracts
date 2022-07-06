@@ -7,6 +7,7 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { FeedRegistryInterface } from "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
+import { Registry } from "src/Registry.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -18,6 +19,7 @@ contract PriceRouterTest is Test {
 
     ChainlinkPriceFeedAdaptor private chainlinkAdaptor;
     PriceRouter private priceRouter;
+    Registry private registry;
 
     uint256 private constant privateKey0 = 0xABCD;
     uint256 private constant privateKey1 = 0xBEEF;
@@ -37,8 +39,10 @@ contract PriceRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
+        registry = new Registry(address(this), address(this), address(this), address(this));
+
         chainlinkAdaptor = new ChainlinkPriceFeedAdaptor();
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
 
         priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, 0);
         priceRouter.addAsset(WBTC, ERC20(Denominations.BTC), 0, 0, 0);

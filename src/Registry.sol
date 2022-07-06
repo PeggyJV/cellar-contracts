@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Auth, Authority } from "@solmate/auth/Auth.sol";
 import "src/Errors.sol";
 
-contract Registry is Ownable {
+contract Registry is Auth {
     /**
      * @notice Emitted when a new contract is registered.
      * @param id value representing the unique ID tied to the new contract
@@ -33,7 +33,7 @@ contract Registry is Ownable {
     /**
      * @notice Set the address of the contract at a given id.
      */
-    function setAddress(uint256 id, address newAddress) external onlyOwner {
+    function setAddress(uint256 id, address newAddress) external requiresAuth {
         address oldAddress = getAddress[id];
         if (oldAddress == address(0)) revert USR_ContractNotRegistered(id);
 
@@ -46,12 +46,15 @@ contract Registry is Ownable {
      * @param gravityBridge address of GravityBridge contract
      * @param swapRouter address of SwapRouter contract
      * @param priceRouter address of PriceRouter contract
+     * @param admin address able to make privelaged function calls to this contract, and all SharedAuth contracts
+     * @dev zero address is used for authority which means only the admin address can perform any requiresAuth functions
      */
     constructor(
         address gravityBridge,
         address swapRouter,
-        address priceRouter
-    ) Ownable() {
+        address priceRouter,
+        address admin
+    ) Auth(admin, Authority(address(0))) {
         _register(gravityBridge);
         _register(swapRouter);
         _register(priceRouter);
@@ -61,7 +64,7 @@ contract Registry is Ownable {
      * @notice Register the address of a new contract.
      * @param newContract address of the new contract to register
      */
-    function register(address newContract) external onlyOwner {
+    function register(address newContract) external requiresAuth {
         _register(newContract);
     }
 

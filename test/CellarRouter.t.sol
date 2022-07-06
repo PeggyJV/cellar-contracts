@@ -10,6 +10,7 @@ import { IGravity } from "src/interfaces/IGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockExchange } from "src/mocks/MockExchange.sol";
+import { Registry } from "src/Registry.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -27,6 +28,8 @@ contract CellarRouterTest is Test {
     MockERC4626 private forkedCellar;
     CellarRouter private forkedRouter;
 
+    Registry private registry;
+
     bytes32 private constant PERMIT_TYPEHASH =
         keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     uint256 private constant privateKey = 0xBEEF;
@@ -41,16 +44,10 @@ contract CellarRouterTest is Test {
     function setUp() public {
         exchange = new MockExchange();
 
-        router = new CellarRouter(
-            IUniswapV3Router(address(exchange)),
-            IUniswapV2Router(address(exchange)),
-            IGravity(address(this))
-        );
-        forkedRouter = new CellarRouter(
-            IUniswapV3Router(uniV3Router),
-            IUniswapV2Router(uniV2Router),
-            IGravity(address(this))
-        );
+        registry = new Registry(address(this), address(this), address(this), address(this));
+
+        router = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)), registry);
+        forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router), registry);
 
         ABC = new MockERC20("ABC", 18);
         XYZ = new MockERC20("XYZ", 18);
