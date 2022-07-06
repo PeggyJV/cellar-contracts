@@ -22,8 +22,10 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     // =========================================== ASSETS CONFIG ===========================================
 
     /**
-     * @param minPrice is the minimum price in USD for the asset before reverting
-     * @param maxPrice is the maximum price in USD for the asset before reverting
+     * @param remap address of asset to get pricing data for instead if a price feed is not
+     *              available (eg. ETH for WETH), set to `address(0)` for no remapping
+     * @param minPrice minimum price in USD for the asset before reverting
+     * @param maxPrice maximum price in USD for the asset before reverting
      * @param heartbeat maximum allowed time that can pass with no update before price data is considered stale
      * @param isSupported whether this asset is supported by the platform or not
      */
@@ -31,20 +33,23 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         ERC20 remap;
         uint256 minPrice;
         uint256 maxPrice;
-        uint96 heartBeat; //maximum allowed time to pass with no update
+        uint96 heartBeat;
         bool isSupported;
     }
 
+    /**
+     * @notice Get the asset data for a given asset.
+     */
     mapping(ERC20 => AssetData) public getAssetData;
 
     uint96 public constant DEFAULT_HEART_BEAT = 1 days;
 
-    // ======================================= Adaptor OPERATIONS =======================================
+    // ======================================= ADAPTOR OPERATIONS =======================================
 
     /**
      * @notice Add an asset for the price router to support.
      * @param asset address of asset to support on the platform
-     * @param remap address of asset to use pricing data for instead if a price feed is not
+     * @param remap address of asset to get pricing data for instead if a price feed is not
      *              available (eg. ETH for WETH), set to `address(0)` for no remapping
      * @param minPrice minimum price in USD with 8 decimals for the asset before reverting,
      *                 set to `0` to use Chainlink's default
@@ -191,9 +196,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @notice Gets the exchange rate between a base and a quote asset
      * @param baseAsset the asset to convert into quoteAsset
      * @param quoteAsset the asset base asset is converted into
-     * @return exchangeRate baseAsset/quoteAsset
-     * if base is ETH and quote is USD
-     * would return ETH/USD
+     * @return exchangeRate value of base asset in terms of quote asset
      */
     function _getExchangeRate(
         ERC20 baseAsset,
