@@ -10,7 +10,6 @@ import { Registry, SwapRouter, PriceRouter } from "../Registry.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
-import { console } from "@forge-std/Test.sol"; // TODO: Delete.
 
 import "../Errors.sol";
 
@@ -595,9 +594,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
                 assets = assets - totalPositionBalanceInAssets;
             }
 
-            // Return the amount that will be received and increment number of received assets.
-            amountsReceived[i] = amount;
-
             // Withdraw from position.
             _withdrawFrom(_positions[i], amount, receiver);
 
@@ -615,8 +611,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address[] memory _positions,
         uint256[] memory positionBalances
     ) internal {
-        amountsReceived = new uint256[](_positions.length);
-
         // Withdraw assets from positions in proportion to shares redeemed.
         for (uint256 i; i < _positions.length; i++) {
             address position = _positions[i];
@@ -627,9 +621,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             // Get the amount of assets to withdraw from this position based on proportion to shares redeemed.
             uint256 amount = positionBalance.mulDivDown(shares, totalShares);
-
-            // Return the amount that will be received and increment number of received assets.
-            amountsReceived[i] = amount;
 
             // Withdraw from position to receiver.
             _withdrawFrom(position, amount, receiver);
