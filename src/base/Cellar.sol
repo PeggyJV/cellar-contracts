@@ -15,6 +15,11 @@ import { Math } from "../utils/Math.sol";
 
 import "../Errors.sol";
 
+/**
+ * @title Sommelier Cellar
+ * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
+ * @author crispymangoes, Brian Le
+ */
 contract Cellar is ERC4626, Ownable, Multicall {
     using AddressArray for address[];
     using AddressArray for ERC20[];
@@ -56,28 +61,60 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     event PositionSwapped(address indexed newPosition1, address indexed newPosition2, uint256 index1, uint256 index2);
 
+    /**
+     * @notice Value specifying the interface a position uses.
+     * @param ERC20 an ERC20 token
+     * @param ERC4626 an ERC4626 vault
+     * @param Cellar a cellar
+     */
     enum PositionType {
         ERC20,
         ERC4626,
         Cellar
     }
 
-    // TODO: pack struct
+    /**
+     * @notice Data related to a position.
+     * @param positionType value specifying the interface a position uses
+     * @param highWatermark amount representing the balance this position needs to exceed during the
+     *                      next accrual to receive performance fees
+     */
     struct PositionData {
         PositionType positionType;
         int256 highWatermark;
     }
 
+    /**
+     * @notice Addresses of the positions current used by the cellar.
+     */
     address[] public positions;
 
+    /**
+     * @notice Tell whether a position is currently used.
+     * @param position address of position to check
+     * @return isUsed boolean specifying whether position is currently used
+     */
     mapping(address => bool) public isPositionUsed;
 
+    /**
+     * @notice Get the data related to a position.
+     * @param position address of position to get data for
+     * @return positionData data related to the position
+     */
     mapping(address => PositionData) public getPositionData;
 
+    /**
+     * @notice Get the addresses of the positions current used by the cellar.
+     */
     function getPositions() external view returns (address[] memory) {
         return positions;
     }
 
+    /**
+     * @notice Insert a trusted position to the list of positions used by the cellar at a given index.
+     * @param index index at which to insert the position
+     * @param position address of position to add
+     */
     function addPosition(uint256 index, address position) external onlyOwner whenNotShutdown {
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
@@ -92,8 +129,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
     }
 
     /**
+     * @notice Push a trusted position to the end of the list of positions used by the cellar.
      * @dev If you know you are going to add a position to the end of the array, this is more
      *      efficient then `addPosition`.
+     * @param position address of position to add
      */
     function pushPosition(address position) external onlyOwner whenNotShutdown {
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
@@ -108,6 +147,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit PositionAdded(position, positions.length - 1);
     }
 
+    /**
+     * @notice Remove the position at a given index from the list of positions used by the cellar.
+     * @param index index at which to remove the position
+     */
     function removePosition(uint256 index) external onlyOwner {
         // Get position being removed.
         address position = positions[index];
@@ -124,6 +167,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     }
 
     /**
+     * @notice Remove the last position in the list of positions used by the cellar.
      * @dev If you know you are going to remove a position from the end of the array, this is more
      *      efficient then `removePosition`.
      */
@@ -143,7 +187,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit PositionRemoved(position, index);
     }
 
-    function replacePosition(address newPosition, uint256 index) external onlyOwner whenNotShutdown {
+    /**
+     * @notice Replace a position at a given index with a new position.
+     * @param index index at which to replace the position
+     * @param newPosition address of position to replace with
+     */
+    function replacePosition(uint256 index, address newPosition) external onlyOwner whenNotShutdown {
         // Store the old position before its replaced.
         address oldPosition = positions[index];
 
@@ -159,6 +208,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit PositionReplaced(oldPosition, newPosition, index);
     }
 
+    /**
+     * @notice Swap the positions at two given indexes.
+     * @param index1 index of first position to swap
+     * @param index2 index of second position to swap
+     */
     function swapPositions(uint256 index1, uint256 index2) external onlyOwner {
         // Get the new positions that will be at each index.
         address newPosition1 = positions[index2];
@@ -179,8 +233,18 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     event TrustChanged(address indexed position, bool isTrusted);
 
+    /**
+     * @notice Tell whether a position is trusted.
+     * @param position address of position to check
+     * @return isTrusted boolean specifying whether position is trusted
+     */
     mapping(address => bool) public isTrusted;
 
+    /**
+     * @notice Trust a position to be used by the cellar.
+     * @param position address of position to trust
+     * @param positionType value specifying the interface the position uses
+     */
     function trustPosition(address position, PositionType positionType) external onlyOwner {
         // Trust position.
         isTrusted[position] = true;
@@ -191,6 +255,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit TrustChanged(position, true);
     }
 
+    /**
+     * @notice Distrust a position to prevent it from being used by the cellar.
+     * @param position address of position to distrust
+     */
     function distrustPosition(address position) external onlyOwner {
         // Distrust position.
         isTrusted[position] = false;
@@ -199,22 +267,43 @@ contract Cellar is ERC4626, Ownable, Multicall {
         positions.remove(position);
 
         // NOTE: After position has been removed, SP should be notified on the UI that the position
-        // can no longer be used and to exit the position or rebalance its assets into another
-        // position ASAP.
+        //       can no longer be used and to exit the position or rebalance its assets into another
+        //       position ASAP.
         emit TrustChanged(position, false);
     }
 
     // ============================================ WITHDRAW CONFIG ============================================
 
+    /**
+     * @notice Emitted when withdraw type configuration is changed.
+     * @param oldType previous withdraw type
+     * @param newType new withdraw type
+     */
     event WithdrawTypeChanged(WithdrawType oldType, WithdrawType newType);
 
+    /**
+     * @notice The withdraw type to use for the cellar.
+     * @param ORDERLY use `positions` in specify the order in which assets are withdrawn (eg.
+     *                `positions[0]` is withdrawn from first), least impactful position (position
+     *                that will have its core positions impacted the least by having funds removed)
+     *                should be first and most impactful position should be last
+     * @param PROPORTIONAL pull assets from each position proportionally when withdrawing, used if
+     *                     trying to maintain a specific ratio
+     */
     enum WithdrawType {
-        Orderly,
-        Proportional
+        ORDERLY,
+        PROPORTIONAL
     }
 
+    /**
+     * @notice The withdraw type to used by the cellar.
+     */
     WithdrawType public withdrawType;
 
+    /**
+     * @notice Set the withdraw type used by the cellar.
+     * @param newWithdrawType value of the new withdraw type to use
+     */
     function setWithdrawType(WithdrawType newWithdrawType) external onlyOwner {
         emit WithdrawTypeChanged(withdrawType, newWithdrawType);
 
@@ -223,6 +312,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // ============================================ HOLDINGS CONFIG ============================================
 
+    /**
+     * @notice Emitted when the holdings position is changed.
+     * @param oldPosition address of the old holdings position
+     * @param newPosition address of the new holdings position
+     */
     event HoldingPositionChanged(address indexed oldPosition, address indexed newPosition);
 
     /**
@@ -237,6 +331,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     address public holdingPosition;
 
+    /**
+     * @notice Set the holding position used by the cellar.
+     * @param newHoldingPosition address of the new holding position to use
+     */
     function setHoldingPosition(address newHoldingPosition) external onlyOwner {
         if (!isPositionUsed[newHoldingPosition]) revert USR_InvalidPosition(newHoldingPosition);
 
@@ -252,6 +350,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @notice Timestamp of when the last accrual occurred.
+     * @dev Used for determining the amount of platform fees that can be taken during an accrual period.
      */
     uint64 public lastAccrual;
 
@@ -420,8 +519,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // =========================================== CONSTRUCTOR ===========================================
 
-    // TODO: since registry address should never change, consider hardcoding the address once
-    //       registry is finalized and making this a constant
+    /**
+     * @notice Address of the platform's registry contract. Used to get the latest address of modules.
+     */
     Registry public immutable registry;
 
     /**
@@ -429,7 +529,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
      *      module to the cellars.
      *      https://github.com/PeggyJV/steward
      *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
+     * @param _registry address of the platform's registry contract
      * @param _asset address of underlying token used for the for accounting, depositing, and withdrawing
+     * @param _positions addresses of the positions to initialize the cellar with
+     * @param _positionTypes types of each positions used
+     * @param _holdingPosition address of the position to use as the holding position
+     * @param _withdrawType withdraw type to use for the cellar
      * @param _name name of this cellar's share token
      * @param _name symbol of this cellar's share token
      */
@@ -499,6 +604,19 @@ contract Cellar is ERC4626, Ownable, Multicall {
         _depositTo(holdingPosition, assets);
     }
 
+    /**
+     * @notice Withdraw assets from the cellar by redeeming shares.
+     * @dev Unlike conventional ERC4626 contracts, this may not always return one asset to the receiver.
+     *      Since there are no swaps involved in this function, the receiver may receive multiple
+     *      assets. The value of all the assets returned will be equal to the amount defined by
+     *      `assets` denominated in the `asset` of the cellar (eg. if `asset` is USDC and `assets`
+     *      is 1000, then the receiver will receive $1000 worth of assets in either one or many
+     *      tokens).
+     * @param assets equivalent value of the assets withdrawn, denominated in the cellar's asset
+     * @param receiver address that will receive withdrawn assets
+     * @param owner address that owns the shares being redeemed
+     * @return shares amount of shares redeemed
+     */
     function withdraw(
         uint256 assets,
         address receiver,
@@ -527,11 +645,24 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
-        withdrawType == WithdrawType.Orderly
+        withdrawType == WithdrawType.ORDERLY
             ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
             : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
     }
 
+    /**
+     * @notice Redeem shares to withdraw assets from the cellar.
+     * @dev Unlike conventional ERC4626 contracts, this may not always return one asset to the receiver.
+     *      Since there are no swaps involved in this function, the receiver may receive multiple
+     *      assets. The value of all the assets returned will be equal to the amount defined by
+     *      `assets` denominated in the `asset` of the cellar (eg. if `asset` is USDC and `assets`
+     *      is 1000, then the receiver will receive $1000 worth of assets in either one or many
+     *      tokens).
+     * @param shares amount of shares to redeem
+     * @param receiver address that will receive withdrawn assets
+     * @param owner address that owns the shares being redeemed
+     * @return assets equivalent value of the assets withdrawn, denominated in the cellar's asset
+     */
     function redeem(
         uint256 shares,
         address receiver,
@@ -560,11 +691,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
-        withdrawType == WithdrawType.Orderly
+        withdrawType == WithdrawType.ORDERLY
             ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
             : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
     }
 
+    /**
+     * @dev Withdraw from positions in the order defined by `positions`. Used if the withdraw type
+     *      is `ORDERLY`.
+     */
     function _withdrawInOrder(
         uint256 assets,
         address receiver,
@@ -606,6 +741,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
+    /**
+     * @dev Withdraw from each position proportional to that of shares redeemed. Used if the
+     *      withdraw type is `PROPORTIONAL`.
+     */
     function _withdrawInProportion(
         uint256 shares,
         uint256 totalShares,
@@ -688,6 +827,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         shares = _previewWithdraw(assets, totalAssets());
     }
 
+    /**
+     * @dev Used to more efficiently convert amount of shares to assets using a stored `totalAssets` value.
+     */
     function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
         uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
         uint8 assetDecimals = asset.decimals();
@@ -697,6 +839,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         assets = assets.changeDecimals(18, assetDecimals);
     }
 
+    /**
+     * @dev Used to more efficiently convert amount of assets to shares using a stored `totalAssets` value.
+     */
     function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
         uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
         uint8 assetDecimals = asset.decimals();
@@ -706,6 +851,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivDown(totalShares, totalAssetsNormalized);
     }
 
+    /**
+     * @dev Used to more efficiently simulate minting shares using a stored `totalAssets` value.
+     */
     function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
         uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
         uint8 assetDecimals = asset.decimals();
@@ -715,6 +863,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         assets = assets.changeDecimals(18, assetDecimals);
     }
 
+    /**
+     * @dev Used to more efficiently simulate withdrawing assets using a stored `totalAssets` value.
+     */
     function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
         uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
         uint8 assetDecimals = asset.decimals();
@@ -724,6 +875,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivUp(totalShares, totalAssetsNormalized);
     }
 
+    /**
+     * @dev Used to efficiently get and store accounting information to avoid having to expensively
+     *      recompute it.
+     */
     function _getData()
         internal
         view
@@ -821,6 +976,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit Accrual(platformFees, performanceFees);
     }
 
+    /**
+     * @dev Calculate the amount of fees to mint such that value of fees after minting is not diluted.
+     */
     function _convertToFees(uint256 assets, uint256 exchangeRate) internal view returns (uint256 fees) {
         // Convert amount of assets to take as fees to shares.
         uint256 feesInShares = assets * exchangeRate;
@@ -948,6 +1106,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // ========================================== HELPER FUNCTIONS ==========================================
 
+    /**
+     * @dev Deposit into a position according to its position type and update related state.
+     */
     function _depositTo(address position, uint256 assets) internal {
         PositionData storage positionData = getPositionData[position];
         PositionType positionType = positionData.positionType;
@@ -963,6 +1124,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
+    /**
+     * @dev Withdraw from a position according to its position type and update related state.
+     */
     function _withdrawFrom(
         address position,
         uint256 assets,
@@ -983,6 +1147,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
+    /**
+     * @dev Get the balance of a position according to its position type.
+     */
     function _balanceOf(address position) internal view returns (uint256) {
         PositionType positionType = getPositionData[position].positionType;
 
@@ -993,6 +1160,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
+    /**
+     * @dev Get the asset of a position according to its position type.
+     */
     function _assetOf(address position) internal view returns (ERC20) {
         PositionType positionType = getPositionData[position].positionType;
 
@@ -1003,6 +1173,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
+    /**
+     * @dev Perform a swap using the swap router and check that it behaves as expected.
+     */
     function _swap(
         ERC20 assetIn,
         uint256 amountIn,
@@ -1024,7 +1197,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
         // specified a different amount of assets to swap then `amountIn`.
-        // TODO: consider replacing with revert statement
         require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
     }
 }
