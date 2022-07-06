@@ -573,7 +573,7 @@ contract Cellar is ERC4626, SharedAuth, Multicall {
 
         // Without this check, malicious actors could do a slowdown attack on the distribution of
         // yield by continuously resetting the accrual period.
-        if (isAuthorized(msg.sender, Cellar(this).accrue.selector) && totalLockedYield > 0)
+        if (!isAuthorized(msg.sender, Cellar(this).accrue.selector) && totalLockedYield > 0)
             revert STATE_AccrualOngoing();
 
         uint256 totalBalanceLastAccrual = totalLosslessBalance;
