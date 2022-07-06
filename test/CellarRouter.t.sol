@@ -17,6 +17,7 @@ import { MockGravity } from "src/mocks/MockGravity.sol";
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
+// solhint-disable-next-line max-states-count
 contract CellarRouterTest is Test {
     using Math for uint256;
 
@@ -34,7 +35,6 @@ contract CellarRouterTest is Test {
     CellarRouter private router;
 
     MockERC4626 private forkedCellar;
-    CellarRouter private forkedRouter;
 
     address private immutable owner = vm.addr(0xBEEF);
 
@@ -67,9 +67,14 @@ contract CellarRouterTest is Test {
 
         swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
         realSwapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-        gravity = new MockGravity();
 
-        registry = new Registry(address(gravity), address(swapRouter), address(priceRouter));
+        registry = new Registry(
+            // Set this contract to the Gravity Bridge for testing to give the permissions usually
+            // given to the Gravity Bridge to this contract.
+            address(this),
+            address(swapRouter),
+            address(priceRouter)
+        );
 
         router = new CellarRouter(IUniswapV3Router(address(exchange)), IUniswapV2Router(address(exchange)), registry);
         //forkedRouter = new CellarRouter(IUniswapV3Router(uniV3Router), IUniswapV2Router(uniV2Router), registry);
@@ -272,178 +277,43 @@ contract CellarRouterTest is Test {
 
     // ======================================= WITHDRAW TESTS =======================================
 
-    // TODO: Add test ensuring that no assets remain after withdrawal.
-
-    function testWithdrawAndSwapFromCellar(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint72).max);
-
-        // Mint liquidity for swap.
-        ABC.mint(address(exchange), 2 * assets);
-
-        // Specify the swap path.
-        address[] memory path = new address[](2);
-        path[0] = address(XYZ);
-        path[1] = address(ABC);
-
-        // Deposit and swap
-        vm.startPrank(owner);
-        XYZ.approve(address(router), assets);
-        XYZ.mint(owner, assets);
-        bytes memory swapData = abi.encode(path, assets, 0);
-        router.depositAndSwap(Cellar(address(cellar)), SwapRouter.Exchange.UNIV2, swapData, assets, owner, XYZ);
-
-        // Assets received by the cellar will be different from the amount of assets a user attempted
-        // to deposit due to slippage swaps.
-        uint256 assetsReceivedAfterDeposit = exchange.quote(assets, path);
-
-        // Reverse the swap path.
-        (path[0], path[1]) = (path[1], path[0]);
-
-        // Test withdraw and swap.
-        cellar.approve(address(router), assetsReceivedAfterDeposit);
-        swapData = abi.encode(path, assetsReceivedAfterDeposit, 0, owner);
-        uint256 sharesRedeemed = router.withdrawAndSwap(
-            Cellar(address(cellar)),
-            SwapRouter.Exchange.UNIV2,
-            swapData,
-            assetsReceivedAfterDeposit,
-            owner
-        );
-        vm.stopPrank();
-
-        uint256 assetsReceivedAfterWithdraw = exchange.quote(assetsReceivedAfterDeposit, path);
-
-        // Run test.
-        assertEq(sharesRedeemed, assetsReceivedAfterDeposit, "Should have 1:1 exchange rate.");
-        assertEq(cellar.totalSupply(), 0, "Should have updated total supply with shares minted.");
-        assertEq(cellar.totalAssets(), 0, "Should have updated total assets into account the withdrawn assets.");
-        assertEq(cellar.balanceOf(owner), 0, "Should have updated user's share balance.");
-        assertEq(XYZ.balanceOf(owner), assetsReceivedAfterWithdraw, "Should have withdrawn assets to the user.");
-    }
-
-    function testWithdrawFromPositionsIntoSingleAssetWTwoSwaps() external {
+    function testWithdrawAndSwap() external {
         multiCellar.depositIntoPosition(address(wethCLR), 1e18);
         multiCellar.depositIntoPosition(address(wbtcCLR), 1e8);
+
         assertEq(multiCellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
 
         // Mint shares to user to redeem.
         deal(address(multiCellar), address(this), multiCellar.previewWithdraw(32_000e6));
 
-        //create paths
-        address[][] memory paths = new address[][](2);
-        paths[0] = new address[](2);
-        paths[0][0] = address(WETH);
-        paths[0][1] = address(USDC);
-        paths[1] = new address[](2);
-        paths[1][0] = address(WBTC);
-        paths[1][1] = address(USDC);
-
-        uint256 assets = 32_000e6;
-        uint256[] memory minOuts = new uint256[](2);
-        minOuts[0] = 0;
-        minOuts[1] = 0;
-
-        uint256[] memory assetsIn = new uint256[](2);
-        assetsIn[0] = 1e18;
-        assetsIn[1] = 1e8;
-
-        multiCellar.approve(address(router), type(uint256).max);
+        // Encode swaps.
+        // Swap 1: 0.2 WETH -> WBTC.
+        // Swap 2: 0.8 WETH -> USDC.
         SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](2);
         exchanges[0] = SwapRouter.Exchange.UNIV2;
         exchanges[1] = SwapRouter.Exchange.UNIV2;
-        bytes[] memory swapData = new bytes[](2);
-        swapData[0] = abi.encode(paths[0], 1e18, 0);
-        swapData[1] = abi.encode(paths[1], 1e8, 0);
 
-        router.withdrawFromPositionsAndSwap(multiCellar, exchanges, swapData, assets, address(this));
-
-        assertEq(USDC.balanceOf(address(this)), 30_400e6, "Did not recieve expected assets");
-    }
-
-    /**
-     * @notice if the asset wanted is an asset given, then it should just be added to the output with no swaps needed
-     */
-    function testWithdrawFromPositionsIntoSingleAssetWOneSwap() external {
-        multiCellar.depositIntoPosition(address(wethCLR), 1e18);
-        multiCellar.depositIntoPosition(address(wbtcCLR), 1e8);
-
-        assertEq(multiCellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
-
-        // Mint shares to user to redeem.
-        deal(address(multiCellar), address(this), multiCellar.previewWithdraw(32_000e6));
-
-        //create paths
-        address[][] memory paths = new address[][](1);
-        paths[0] = new address[](2);
-        paths[0][0] = address(WBTC);
-        paths[0][1] = address(WETH);
-
-        uint256[] memory minOuts = new uint256[](1);
-        minOuts[0] = 0;
-
-        uint256[] memory assetsIn = new uint256[](1);
-        assetsIn[0] = 1e18;
-
-        uint256 assets = 32_000e6;
-        multiCellar.approve(address(router), type(uint256).max);
-        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](1);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        bytes[] memory swapData = new bytes[](1);
-        swapData[0] = abi.encode(paths[0], 1e8, 0, address(this));
-        router.withdrawFromPositionsAndSwap(multiCellar, exchanges, swapData, assets, address(this));
-        assertEq(WETH.balanceOf(address(this)), 15.25e18, "Did not recieve expected assets");
-    }
-
-    function testWithdrawFromPositionsIntoSingleAssetWFourSwaps() external {
-        multiCellar.depositIntoPosition(address(wethCLR), 1e18);
-        multiCellar.depositIntoPosition(address(wbtcCLR), 1e8);
-
-        assertEq(multiCellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
-
-        // Mint shares to user to redeem.
-        deal(address(multiCellar), address(this), multiCellar.previewWithdraw(32_000e6));
-
-        //create paths
-        address[][] memory paths = new address[][](4);
+        address[][] memory paths = new address[][](2);
         paths[0] = new address[](2);
         paths[0][0] = address(WETH);
-        paths[0][1] = address(USDC);
+        paths[0][1] = address(WBTC);
+
         paths[1] = new address[](2);
-        paths[1][0] = address(WBTC);
+        paths[1][0] = address(WETH);
         paths[1][1] = address(USDC);
-        paths[2] = new address[](2);
-        paths[2][0] = address(WETH);
-        paths[2][1] = address(USDC);
-        paths[3] = new address[](2);
-        paths[3][0] = address(WBTC);
-        paths[3][1] = address(USDC);
 
-        uint256 assets = 32_000e6;
-        uint256[] memory minOuts = new uint256[](4);
-        minOuts[0] = 0;
-        minOuts[1] = 0;
-        minOuts[2] = 0;
-        minOuts[3] = 0;
-
-        uint256[] memory assetsIn = new uint256[](4);
-        assetsIn[0] = 0.5e18;
-        assetsIn[1] = 0.5e8;
-        assetsIn[2] = 0.5e18;
-        assetsIn[3] = 0.5e8;
+        bytes[] memory swapData = new bytes[](2);
+        swapData[0] = abi.encode(paths[0], 0.2e18, 0);
+        swapData[1] = abi.encode(paths[1], 0.8e18, 0);
 
         multiCellar.approve(address(router), type(uint256).max);
-        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](4);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV2;
-        exchanges[2] = SwapRouter.Exchange.UNIV2;
-        exchanges[3] = SwapRouter.Exchange.UNIV2;
-        bytes[] memory swapData = new bytes[](4);
-        swapData[0] = abi.encode(paths[0], 0.5e18, 0, address(this));
-        swapData[1] = abi.encode(paths[1], 0.5e8, 0, address(this));
-        swapData[2] = abi.encode(paths[2], 0.5e18, 0, address(this));
-        swapData[3] = abi.encode(paths[3], 0.5e8, 0, address(this));
-        router.withdrawFromPositionsAndSwap(multiCellar, exchanges, swapData, assets, address(this));
+        router.withdrawAndSwap(multiCellar, exchanges, swapData, 32_000e6, address(this));
 
-        assertEq(USDC.balanceOf(address(this)), 30_400e6, "Did not recieve expected assets");
+        assertEq(WETH.balanceOf(address(this)), 0, "Should receive no WETH.");
+        assertGt(WBTC.balanceOf(address(this)), 0, "Should receive WBTC");
+        assertGt(USDC.balanceOf(address(this)), 0, "Should receive USDC");
+        assertEq(WETH.allowance(address(router), address(swapRouter)), 0, "Should have no WETH allowances.");
+        assertEq(WBTC.allowance(address(router), address(swapRouter)), 0, "Should have no WBTC allowances.");
+        assertEq(USDC.allowance(address(router), address(swapRouter)), 0, "Should have no USDC allowances.");
     }
 }

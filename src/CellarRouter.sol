@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
@@ -171,28 +172,54 @@ contract CellarRouter is ICellarRouter {
      * @dev Permission is required from caller for router to burn shares. Please make sure that
      *      caller has approved the router to spend their shares.
      * @param cellar address of the cellar
-     * @param exchange ENUM representing what exchange to make the swap at
-     *        Refer to src/SwapRouter.sol for list of available options
-     * @param swapData bytes variable containing all the data needed to make a swap
-     *        receiver address should be the callers address
+     * @param exchanges enums representing what exchange to make the swap at,
+     *                  refer to src/SwapRouter.sol for list of available options
+     * @param swapDatas bytes variable containing all the data needed to make a swap
+     *                 receiver address should be the callers address
      * @param assets amount of assets to withdraw
      * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
      */
     function withdrawAndSwap(
         Cellar cellar,
-        SwapRouter.Exchange exchange,
-        bytes calldata swapData,
+        SwapRouter.Exchange[] calldata exchanges,
+        bytes[] calldata swapDatas,
         uint256 assets,
         address receiver
     ) public returns (uint256 shares) {
-        // Withdraw assets from the cellar.
+        // Withdraw from the cellar. May potentially receive multiple assets
         shares = cellar.withdraw(assets, address(this), msg.sender);
 
-        // Swap assets into desired token.
+        // Get the address of the swap router.
         SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
-        cellar.asset().safeApprove(address(swapRouter), assets);
-        swapRouter.swap(exchange, swapData, receiver);
+
+        // Get all the assets that could potentially have been received.
+        ERC20[] memory positionAssets = _getPositionAssets(cellar);
+
+        if (swapDatas.length != 0) {
+            // Encode data used to perform swap.
+            bytes[] memory data = new bytes[](swapDatas.length);
+            for (uint256 i; i < swapDatas.length; i++)
+                data[i] = abi.encodeCall(SwapRouter.swap, (exchanges[i], swapDatas[i], receiver));
+
+            // Approve swap router to swap each asset.
+            for (uint256 i; i < positionAssets.length; i++)
+                positionAssets[i].safeApprove(address(swapRouter), type(uint256).max);
+
+            // Execute swap(s).
+            swapRouter.multicall(data);
+        }
+
+        for (uint256 i; i < positionAssets.length; i++) {
+            ERC20 asset = positionAssets[i];
+
+            // Reset approvals.
+            asset.safeApprove(address(swapRouter), 0);
+
+            // Transfer remaining unswapped balances to receiver.
+            uint256 remainingBalance = asset.balanceOf(address(this));
+            if (remainingBalance != 0) asset.transfer(receiver, remainingBalance);
+        }
     }
 
     /**
@@ -204,9 +231,9 @@ contract CellarRouter is ICellarRouter {
      *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
      *      V2, leave pool fees empty to use Uniswap V2 for swap.
      * @param cellar address of the cellar
-     * @param exchange ENUM representing what exchange to make the swap at
+     * @param exchanges enum representing what exchange to make the swap at
      *        Refer to src/SwapRouter.sol for list of available options
-     * @param swapData bytes variable containing all the data needed to make a swap
+     * @param swapDatas bytes variable containing all the data needed to make a swap
      * @param assets amount of assets to withdraw
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
@@ -215,8 +242,8 @@ contract CellarRouter is ICellarRouter {
      */
     function withdrawAndSwapWithPermit(
         Cellar cellar,
-        SwapRouter.Exchange exchange,
-        bytes calldata swapData,
+        SwapRouter.Exchange[] calldata exchanges,
+        bytes[] calldata swapDatas,
         uint256 assets,
         uint256 deadline,
         bytes memory signature,
@@ -227,63 +254,7 @@ contract CellarRouter is ICellarRouter {
         cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
-        shares = withdrawAndSwap(cellar, exchange, swapData, assets, receiver);
-    }
-
-    /**
-     * @notice Withdraws from a multi assset cellar and then performs swaps to a single desired asset, if the
-     *         withdrawn asset is not already.
-     * @dev If using Uniswap V3 for swap, must specify the pool fee tier to use for each swap. For
-     *      example, if there are "n" addresses in path, there should be "n-1" values specifying the
-     *      fee tiers of each pool used for each swap. The current possible pool fee tiers for
-     *      Uniswap V3 are 0.01% (100), 0.05% (500), 0.3% (3000), and 1% (10000). If using Uniswap
-     *      V2, leave pool fees empty to use Uniswap V2 for swap.
-     * @param cellar address of the cellar
-     * @param exchange ENUM representing what exchange to make the swap at
-     *        Refer to src/SwapRouter.sol for list of available options
-     * @param swapData bytes variable containing all the data needed to make a swap
-     *        receiver address should be the callers address
-     * @param assets amount of assets to withdraw
-     * @param receiver the address swapped tokens are sent to
-     * @return shares amount of shares burned
-     */
-    function withdrawFromPositionsAndSwap(
-        Cellar cellar,
-        SwapRouter.Exchange[] calldata exchange,
-        bytes[] calldata swapData,
-        uint256 assets,
-        address receiver
-    ) public returns (uint256 shares) {
-        ERC20[] memory receivedAssets;
-        uint256[] memory amountsOut;
-        (shares, receivedAssets, amountsOut) = cellar.withdrawFromPositions(assets, address(this), msg.sender);
-
-        uint256[] memory balancesBefore = _getBalancesBefore(receivedAssets, amountsOut);
-
-        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
-
-        bytes[] memory data = new bytes[](swapData.length);
-        for (uint256 i; i < swapData.length; i++)
-            data[i] = abi.encodeCall(SwapRouter.swap, (exchange[i], swapData[i], receiver));
-
-        for (uint256 i; i < receivedAssets.length; i++)
-            receivedAssets[i].safeApprove(address(swapRouter), amountsOut[i]);
-
-        swapRouter.multicall(data);
-
-        for (uint256 i; i < receivedAssets.length; i++) {
-            ERC20 receivedAsset = receivedAssets[i];
-
-            // Remove approvals in case it wasn't used.
-            receivedAsset.safeApprove(address(swapRouter), 0);
-
-            uint256 balanceBefore = balancesBefore[i];
-            uint256 balanceAfter = receivedAsset.balanceOf(address(this));
-
-            if (balanceAfter != balanceBefore) {
-                receivedAsset.transfer(receiver, balanceAfter - balanceBefore);
-            }
-        }
+        shares = withdrawAndSwap(cellar, exchanges, swapDatas, assets, receiver);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
@@ -330,6 +301,19 @@ contract CellarRouter is ICellarRouter {
             ERC20 asset = assets[i];
 
             balancesBefore[i] = asset.balanceOf(address(this)) - amountsReceived[i];
+        }
+    }
+
+    function _getPositionAssets(Cellar cellar) internal view returns (ERC20[] memory assets) {
+        address[] memory positions = cellar.getPositions();
+
+        assets = new ERC20[](positions.length);
+
+        for (uint256 i; i < positions.length; i++) {
+            address position = positions[i];
+            (Cellar.PositionType positionType, ) = cellar.getPositionData(position);
+
+            assets[i] = positionType == Cellar.PositionType.ERC20 ? ERC20(position) : ERC4626(position).asset();
         }
     }
 }

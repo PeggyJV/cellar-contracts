@@ -31,23 +31,23 @@ interface ICellarRouter {
         bytes calldata swapData,
         uint256 assets,
         ERC20 assetIn,
-        address reciever,
+        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares);
 
     function withdrawAndSwap(
         Cellar cellar,
-        SwapRouter.Exchange exchange,
-        bytes calldata swapData,
+        SwapRouter.Exchange[] calldata exchanges,
+        bytes[] calldata swapDatas,
         uint256 assets,
         address receiver
     ) external returns (uint256 shares);
 
     function withdrawAndSwapWithPermit(
         Cellar cellar,
-        SwapRouter.Exchange exchange,
-        bytes calldata swapData,
+        SwapRouter.Exchange[] calldata exchanges,
+        bytes[] calldata swapDatas,
         uint256 assets,
         uint256 deadline,
         bytes memory signature,
