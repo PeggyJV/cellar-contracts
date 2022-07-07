@@ -75,13 +75,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @notice Data related to a position.
+     * @dev struct pack a uint8(positionType) with a int248(highWatermark)
      * @param positionType value specifying the interface a position uses
      * @param highWatermark amount representing the balance this position needs to exceed during the
      *                      next accrual to receive performance fees
      */
     struct PositionData {
         PositionType positionType;
-        int256 highWatermark;
+        int248 highWatermark;
     }
 
     /**
@@ -938,7 +939,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             uint256 balanceThisAccrual = positionBalances[i];
 
             // Measure yield earned against this position's high watermark.
-            int256 yield = balanceThisAccrual.toInt256() - positionData.highWatermark;
+            int256 yield = balanceThisAccrual.toInt256() - positionData.highWatermark; // highWatermark is implicitly converted to an int256
 
             // Move on if there is no yield to accrue.
             if (yield <= 0) continue;
@@ -947,7 +948,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             totalYield += priceRouter.getValue(positionAssets[i], yield.toUint256(), denominationAsset);
 
             // Update position's high watermark.
-            positionData.highWatermark = balanceThisAccrual.toInt256();
+            positionData.highWatermark = balanceThisAccrual.toInt256().toInt248();
         }
 
         // Compute and store current exchange rate between assets and shares for gas efficiency.
@@ -1109,7 +1110,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Without this, deposits to this position would be counted as yield during the next fee
         // accrual.
-        positionData.highWatermark += assets.toInt256();
+        positionData.highWatermark += assets.toInt256().toInt248();
 
         // Deposit into position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
@@ -1131,7 +1132,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Without this, withdrawals from this position would be counted as losses during the
         // next fee accrual.
-        positionData.highWatermark -= assets.toInt256();
+        positionData.highWatermark -= assets.toInt256().toInt248();
 
         // Withdraw from position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
