@@ -13,12 +13,10 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 
 import "./Errors.sol";
 
-// TODO: Fix comments (some of them still reference Sushiswap).
-// TODO: Rewrite natspec comments to be more clear.
 /**
  * @title Sommelier Cellar Router
- * @notice Allows for better user experience when on-boarding/off-boarding from cellars
- *         by combining together deposit/withdraw TXs with appropriate swaps
+ * @notice Enables depositing/withdrawing from cellars using permits and swapping from/to different
+ *         assets before/after depositing/withdrawing.
  * @author Brian Le
  */
 contract CellarRouter is ICellarRouter {
@@ -27,12 +25,12 @@ contract CellarRouter is ICellarRouter {
     // ========================================== CONSTRUCTOR ==========================================
 
     /**
-     * @notice Registry contract
+     * @notice Registry contract used to get most current swap router.
      */
     Registry public immutable registry;
 
     /**
-     * @param _registry Registry contract used to get most current swap router
+     * @param _registry address of the registry contract
      */
     constructor(Registry _registry) {
         registry = _registry;
@@ -77,13 +75,12 @@ contract CellarRouter is ICellarRouter {
      * @notice Deposit into a cellar by first performing a swap to the cellar's current asset.
      * @dev Uses the swap router to perform the swap
      * @param cellar address of the cellar
-     * @param exchange ENUM representing what exchange to make the swap at
-     *        Refer to src/modules/swap-router/SwapRouter.sol for list of available options
-     * @param swapData bytes variable containing all the data needed to make a swap
-     *        Composition is based off what exchange is chosen for the swap refer to
-     *        src/modules/swap-router/SwapRouter.sol to see what data should be encoded into swapData
+     * @param exchange value representing what exchange to make the swap at, refer to
+     *                 `SwapRouter.sol` for list of available options
+     * @param swapData bytes variable containing all the data needed to make a swap, refer to
+     *                 `SwapRouter.sol` to see what parameters need to be encoded for each exchange
      * @param assets amount of assets to swap, must match initial swap asset in swapData
-     * @param receiver address to recieve the cellar shares
+     * @param receiver address to receive the cellar shares
      * @param assetIn ERC20 token used to swap for deposit token
      * @return shares amount of shares minted
      */
@@ -114,14 +111,13 @@ contract CellarRouter is ICellarRouter {
      * @notice Deposit into a cellar by first performing a swap to the cellar's current asset.
      * @dev Uses the swap router to perform the swap
      * @param cellar address of the cellar to deposit into
-     * @param exchange ENUM representing what exchange to make the swap at
-     *        Refer to src/modules/swap-router/SwapRouter.sol for list of available options
-     * @param swapData bytes variable containing all the data needed to make a swap
-     *        Composition is based off what exchange is chosen for the swap refer to
-     *        src/modules/swap-router/SwapRouter.sol to see what data should be encoded into swapData
+     * @param exchange value representing what exchange to make the swap at, refer to
+     *                 `SwapRouter.sol` for list of available options
+     * @param swapData bytes variable containing all the data needed to make a swap, refer to
+     *                 `SwapRouter.sol` to see what parameters need to be encoded for each exchange
      * @param assets amount of assets to swap, must match initial swap asset in swapData
      * @param assetIn ERC20 asset caller wants to swap and deposit with
-     * @param receiver address to recieve the cellar shares
+     * @param receiver address to receive the cellar shares
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
@@ -151,11 +147,10 @@ contract CellarRouter is ICellarRouter {
      * @dev Permission is required from caller for router to burn shares. Please make sure that
      *      caller has approved the router to spend their shares.
      * @param cellar address of the cellar
-     * @param exchanges enums representing what exchange to make the swap at,
-     *                  refer to src/modules/swap-router/SwapRouter.sol for list of available options
-     * @param swapDatas bytes array variable containing all the data needed to make multiple swaps
-     *        Composition is based off what exchange is chosen for the swap refer to
-     *        src/modules/swap-router/SwapRouter.sol to see what data should be encoded into swapDatas[i]
+     * @param exchanges value representing what exchange to make the swap at, refer to
+     *                  `SwapRouter.sol` for list of available options
+     * @param swapDatas bytes variable containing all the data needed to make a swap, refer to
+     *                  `SwapRouter.sol` to see what parameters need to be encoded for each exchange
      * @param assets amount of assets to withdraw
      * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
@@ -207,11 +202,10 @@ contract CellarRouter is ICellarRouter {
      * @dev Permission is required from caller for router to burn shares. Please make sure that
      *      caller has approved the router to spend their shares.
      * @param cellar address of the cellar
-     * @param exchanges enums representing what exchange to make the swap at,
-     *                  refer to src/modules/swap-router/SwapRouter.sol for list of available options
-     * @param swapDatas bytes array variable containing all the data needed to make multiple swaps
-     *        Composition is based off what exchange is chosen for the swap refer to
-     *        src/modules/swap-router/SwapRouter.sol to see what data should be encoded into swapDatas[i]
+     * @param exchanges value representing what exchange to make the swap at, refer to
+     *                  `SwapRouter.sol` for list of available options
+     * @param swapDatas bytes variable containing all the data needed to make a swap, refer to
+     *                  `SwapRouter.sol` to see what parameters need to be encoded for each exchange
      * @param assets amount of assets to withdraw
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
