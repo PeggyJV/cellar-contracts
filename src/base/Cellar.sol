@@ -18,7 +18,7 @@ import "../Errors.sol";
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
- * @author crispymangoes, Brian Le
+ * @author Brian Le
  */
 contract Cellar is ERC4626, Ownable, Multicall {
     using AddressArray for address[];
