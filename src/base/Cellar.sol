@@ -75,7 +75,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @notice Data related to a position.
-     * @dev struct pack a uint8(positionType) with a int248(highWatermark)
      * @param positionType value specifying the interface a position uses
      * @param highWatermark amount representing the balance this position needs to exceed during the
      *                      next accrual to receive performance fees
@@ -939,7 +938,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             uint256 balanceThisAccrual = positionBalances[i];
 
             // Measure yield earned against this position's high watermark.
-            int256 yield = balanceThisAccrual.toInt256() - positionData.highWatermark; // highWatermark is implicitly converted to an int256
+            int256 yield = balanceThisAccrual.toInt256() - positionData.highWatermark;
 
             // Move on if there is no yield to accrue.
             if (yield <= 0) continue;
