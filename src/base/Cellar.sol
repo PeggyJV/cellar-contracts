@@ -5,7 +5,7 @@ import { ERC4626, ERC20 } from "./ERC4626.sol";
 import { Multicall } from "./Multicall.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { SafeCast } from "src/utils/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -81,7 +81,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     struct PositionData {
         PositionType positionType;
-        int256 highWatermark;
+        int248 highWatermark;
     }
 
     /**
@@ -947,7 +947,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             totalYield += priceRouter.getValue(positionAssets[i], yield.toUint256(), denominationAsset);
 
             // Update position's high watermark.
-            positionData.highWatermark = balanceThisAccrual.toInt256();
+            positionData.highWatermark = balanceThisAccrual.toInt248();
         }
 
         // Compute and store current exchange rate between assets and shares for gas efficiency.
@@ -1109,7 +1109,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Without this, deposits to this position would be counted as yield during the next fee
         // accrual.
-        positionData.highWatermark += assets.toInt256();
+        positionData.highWatermark += assets.toInt248();
 
         // Deposit into position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
@@ -1131,7 +1131,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Without this, withdrawals from this position would be counted as losses during the
         // next fee accrual.
-        positionData.highWatermark -= assets.toInt256();
+        positionData.highWatermark -= assets.toInt248();
 
         // Withdraw from position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
