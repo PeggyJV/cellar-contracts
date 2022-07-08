@@ -95,6 +95,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
     mapping(address => bool) public isPositionUsed;
 
     /**
+     * @notice Tell whether a position can accept direct deposits.
+     */
+    mapping(address => bool) public isDirectDepositAllowed;
+
+    /**
      * @notice Get the data related to a position.
      */
     mapping(address => PositionData) public getPositionData;
@@ -158,6 +163,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Remove position at the given index.
         positions.remove(index);
         isPositionUsed[position] = false;
+        isDirectDepositAllowed[position] = false;
 
         emit PositionRemoved(position, index);
     }
@@ -179,6 +185,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Remove last position.
         positions.pop();
         isPositionUsed[position] = false;
+        isDirectDepositAllowed[position] = false;
 
         emit PositionRemoved(position, index);
     }
@@ -218,6 +225,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
         (positions[index1], positions[index2]) = (newPosition1, newPosition2);
 
         emit PositionSwapped(newPosition1, newPosition2, index1, index2);
+    }
+
+    function allowPositionDirectDeposits(address position) external onlyOwner whenNotShutdown {
+        if (!isPositionUsed[position]) revert USR_InvalidPosition(address(position));
+        isDirectDepositAllowed[position] = true;
+    }
+
+    function stopPositionDirectDeposits(address position) external onlyOwner whenNotShutdown {
+        if (!isPositionUsed[position]) revert USR_InvalidPosition(address(position));
+        isDirectDepositAllowed[position] = false;
     }
 
     // ============================================ TRUST CONFIG ============================================
@@ -596,6 +613,40 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address
     ) internal override {
         _depositTo(holdingPosition, assets);
+    }
+
+    function directDepositToPosition(
+        address toPosition,
+        uint256 assets,
+        address receiver
+    ) public returns (uint256 shares) {
+        if (toPosition == holdingPosition) shares = deposit(assets, receiver);
+        else {
+            if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(address(toPosition));
+
+            require(isDirectDepositAllowed[toPosition], "Add a custom error message here");
+
+            //convert assets into cellar asset
+            ERC20 positionToAsset = _assetOf(toPosition);
+            PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+            uint256 convertedAssets = priceRouter.getValue(positionToAsset, assets, asset);
+
+            // Check for rounding error since we round down in previewDeposit.
+            require((shares = previewDeposit(convertedAssets)) != 0, "ZERO_SHARES");
+
+            beforeDeposit(convertedAssets, shares, receiver);
+
+            // Need to transfer before minting or ERC777s could reenter.
+            positionToAsset.safeTransferFrom(msg.sender, address(this), assets);
+
+            _mint(receiver, shares);
+
+            //if positionType is cellar call a different depositTo that calls directDepositToPosition instead of deposit
+            //if I need more inputs to the depositTo function
+            //In order to get this to work, I think I'd need a some mapping in cellars of supported assets?
+
+            _depositTo(toPosition, assets); //effectively afterDeposit
+        }
     }
 
     /**

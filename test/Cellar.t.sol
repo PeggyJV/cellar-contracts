@@ -9,6 +9,7 @@ import { MockExchange } from "src/mocks/MockExchange.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
+import { USR_InvalidPosition } from "src/Errors.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -18,6 +19,7 @@ contract CellarTest is Test {
     using Math for uint256;
 
     MockCellar private cellar;
+    MockCellar private simpleCellar;
     MockGravity private gravity;
 
     MockExchange private exchange;
@@ -111,6 +113,36 @@ contract CellarTest is Test {
         USDC.approve(address(cellar), type(uint256).max);
         WETH.approve(address(cellar), type(uint256).max);
         WBTC.approve(address(cellar), type(uint256).max);
+
+        // Setup Cellar:
+        address[] memory simplePositions = new address[](2);
+        simplePositions[0] = address(USDC);
+        simplePositions[1] = address(WETH);
+
+        Cellar.PositionType[] memory simplePositionTypes = new Cellar.PositionType[](2);
+        simplePositionTypes[0] = Cellar.PositionType.ERC20;
+        simplePositionTypes[1] = Cellar.PositionType.ERC20;
+
+        simpleCellar = new MockCellar(
+            registry,
+            USDC,
+            simplePositions,
+            simplePositionTypes,
+            address(USDC),
+            Cellar.WithdrawType.ORDERLY,
+            "USDC WETH Cellar LP Token",
+            "usdc-weth-CLR"
+        );
+
+        // Approve simpleCellar to spend all assets.
+        USDC.approve(address(simpleCellar), type(uint256).max);
+        WETH.approve(address(simpleCellar), type(uint256).max);
+        WBTC.approve(address(simpleCellar), type(uint256).max);
+
+        //Allow direct deposits
+        simpleCellar.allowPositionDirectDeposits(address(USDC));
+        simpleCellar.allowPositionDirectDeposits(address(WETH));
+        cellar.allowPositionDirectDeposits(address(wethCLR));
     }
 
     // ============================================ HELPER FUNCTIONS ============================================
@@ -160,6 +192,73 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0, "Should return zero assets.");
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
+    }
+
+    function testDirectDepositERC20(uint256 assets) external {
+        assets = bound(assets, 1e14, type(uint112).max);
+
+        deal(address(WETH), address(this), assets);
+
+        // Test single deposit.
+        uint256 shares = simpleCellar.directDepositToPosition(address(WETH), assets, address(this));
+        // Choose 6 decimals for easier rounding
+        uint256 valueIn = (assets * 2000e6) / 1e18;
+        assertEq(shares, valueIn.changeDecimals(6, 18), "Shares should euqal USDC value deposited into cellar.");
+        assertEq(simpleCellar.maxWithdraw(address(this)), valueIn, "Withdrawable value out should equal value in.");
+    }
+
+    function testDirectDepositPosition(uint256 assets) external {
+        assets = bound(assets, 1e14, type(uint112).max);
+
+        deal(address(WETH), address(this), assets);
+
+        // Test single deposit.
+        uint256 shares = cellar.directDepositToPosition(address(wethCLR), assets, address(this));
+        // Choose 6 decimals for easier rounding
+        uint256 valueIn = (assets * 2000e6) / 1e18;
+        assertEq(shares, valueIn.changeDecimals(6, 18), "Shares should euqal USDC value deposited into cellar.");
+        assertEq(cellar.maxWithdraw(address(this)), valueIn, "Withdrawable value out should equal value in.");
+    }
+
+    function testDirectDepositCellarAsset(uint256 assets) external {
+        assets = bound(assets, 1e6, type(uint72).max);
+
+        deal(address(USDC), address(this), assets);
+
+        // Test single deposit.
+        uint256 shares = simpleCellar.directDepositToPosition(address(USDC), assets, address(this));
+        uint256 valueIn = assets;
+        assertEq(shares, assets.changeDecimals(6, 18), "Shares should euqal USDC value deposited into cellar.");
+        assertEq(simpleCellar.maxWithdraw(address(this)), valueIn, "Withdrawable value out should equal value in.");
+    }
+
+    function testDirectDepositInvalidPosition() external {
+        uint256 assets = 1e8;
+
+        deal(address(WBTC), address(this), assets);
+
+        vm.expectRevert(abi.encodeWithSelector(USR_InvalidPosition.selector, address(wbtcCLR)));
+        simpleCellar.directDepositToPosition(address(wbtcCLR), assets, address(this));
+    }
+
+    function testDirectDepositInvalidAsset() external {
+        uint256 assets = 1e8;
+
+        deal(address(WBTC), address(this), assets);
+
+        vm.expectRevert(abi.encodeWithSelector(USR_InvalidPosition.selector, address(WBTC)));
+        simpleCellar.directDepositToPosition(address(WBTC), assets, address(this));
+    }
+
+    function testDirectDepositNotAllowed() external {
+        uint256 assets = 1e8;
+
+        simpleCellar.stopPositionDirectDeposits(address(WETH));
+
+        deal(address(WETH), address(this), assets);
+
+        vm.expectRevert(bytes("Add a custom error message here"));
+        simpleCellar.directDepositToPosition(address(WETH), assets, address(this));
     }
 
     function testWithdrawInOrder() external {
