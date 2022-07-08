@@ -641,10 +641,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             _mint(receiver, shares);
 
-            //if positionType is cellar call a different depositTo that calls directDepositToPosition instead of deposit
-            //if I need more inputs to the depositTo function
-            //In order to get this to work, I think I'd need a some mapping in cellars of supported assets?
-
             _depositTo(toPosition, assets); //effectively afterDeposit
         }
     }

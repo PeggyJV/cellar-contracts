@@ -199,7 +199,7 @@ contract CellarTest is Test {
 
         deal(address(WETH), address(this), assets);
 
-        // Test single deposit.
+        // Test direct deposit using ERC20.
         uint256 shares = simpleCellar.directDepositToPosition(address(WETH), assets, address(this));
         // Choose 6 decimals for easier rounding
         uint256 valueIn = (assets * 2000e6) / 1e18;
@@ -212,7 +212,7 @@ contract CellarTest is Test {
 
         deal(address(WETH), address(this), assets);
 
-        // Test single deposit.
+        // Test direct deposit into Cellar position using Cellar's underlying asset.
         uint256 shares = cellar.directDepositToPosition(address(wethCLR), assets, address(this));
         // Choose 6 decimals for easier rounding
         uint256 valueIn = (assets * 2000e6) / 1e18;
@@ -225,7 +225,7 @@ contract CellarTest is Test {
 
         deal(address(USDC), address(this), assets);
 
-        // Test single deposit.
+        // Test direct deposit into cellar  where cellar asset is the ERC20 being direct deposited.
         uint256 shares = simpleCellar.directDepositToPosition(address(USDC), assets, address(this));
         uint256 valueIn = assets;
         assertEq(shares, assets.changeDecimals(6, 18), "Shares should euqal USDC value deposited into cellar.");
