@@ -622,9 +622,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
     ) public returns (uint256 shares) {
         if (toPosition == holdingPosition) shares = deposit(assets, receiver);
         else {
-            if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(address(toPosition));
+            if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(toPosition);
 
-            require(isDirectDepositAllowed[toPosition], "Add a custom error message here");
+            if (!isDirectDepositAllowed[toPosition]) revert USR_DirectDepositNotAllowedFor(toPosition);
 
             //convert assets into cellar asset
             ERC20 positionToAsset = _assetOf(toPosition);

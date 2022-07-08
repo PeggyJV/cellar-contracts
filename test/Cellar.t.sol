@@ -9,7 +9,7 @@ import { MockExchange } from "src/mocks/MockExchange.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
-import { USR_InvalidPosition } from "src/Errors.sol";
+import { USR_InvalidPosition, USR_DirectDepositNotAllowedFor } from "src/Errors.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -257,7 +257,7 @@ contract CellarTest is Test {
 
         deal(address(WETH), address(this), assets);
 
-        vm.expectRevert(bytes("Add a custom error message here"));
+        vm.expectRevert(abi.encodeWithSelector(USR_DirectDepositNotAllowedFor.selector, address(WETH)));
         simpleCellar.directDepositToPosition(address(WETH), assets, address(this));
     }
 

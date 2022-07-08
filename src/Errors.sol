@@ -158,6 +158,12 @@ error USR_PositionAlreadyUsed(address position);
 error USR_InvalidPosition(address position);
 
 /**
+ * @notice Attempted to direct deposit into a postion that doesn't allow it
+ * @param position address of the position that does not allow direct deposits
+ */
+error USR_DirectDepositNotAllowedFor(address position);
+
+/**
  * @notice Attempted an action on a position that is required to be empty before the action can be performed.
  * @param position address of the non-empty position
  * @param sharesRemaining amount of shares remaining in the position
