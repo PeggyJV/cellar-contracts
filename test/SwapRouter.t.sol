@@ -19,7 +19,7 @@ contract SwapRouterTest is Test {
     uint256 private constant privateKey0 = 0xABCD;
     uint256 private constant privateKey1 = 0xBEEF;
     address private sender = vm.addr(privateKey0);
-    address private reciever = vm.addr(privateKey1);
+    address private receiver = vm.addr(privateKey1);
 
     // Mainnet contracts:
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -59,12 +59,12 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, assets, 0, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, reciever);
+        bytes memory swapData = abi.encode(path, assets, 0);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
-        assertEq(out, WETH.balanceOf(reciever), "Amount Out should equal WETH Balance of reciever");
+        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of receiver should be greater than 0");
+        assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
     }
 
     function testMultiSwapV2(uint256 assets) external {
@@ -82,12 +82,12 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, assets, 0, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, reciever);
+        bytes memory swapData = abi.encode(path, assets, 0);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
-        assertEq(out, USDC.balanceOf(reciever), "Amount Out should equal USDC Balance of reciever");
+        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of Reciever should be greater than 0");
+        assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
     }
 
     function testSimpleSwapV3(uint256 assets) external {
@@ -108,12 +108,12 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, reciever);
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
-        assertEq(out, WETH.balanceOf(reciever), "Amount Out should equal WETH Balance of reciever");
+        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of Reciever should be greater than 0");
+        assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
     }
 
     function testMultiSwapV3(uint256 assets) external {
@@ -136,12 +136,12 @@ contract SwapRouterTest is Test {
         // Test swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, reciever);
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
-        assertEq(out, USDC.balanceOf(reciever), "Amount Out should equal USDC Balance of reciever");
+        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of Reciever should be greater than 0");
+        assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
     }
 
     function testCurveSwap(uint256 assets) external {
@@ -166,11 +166,11 @@ contract SwapRouterTest is Test {
         swapParams[0][2] = 1;
 
         bytes memory swapData = abi.encode(route, swapParams, DAI, USDC, assets, 0, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.CURVE, swapData, reciever);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.CURVE, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(reciever) > 0, "USDC Balance of Reciever should be greater than 0");
-        assertEq(out, USDC.balanceOf(reciever), "Amount Out should equal USDC Balance of reciever");
+        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of Reciever should be greater than 0");
+        assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
     }
 
     function testBalancerSwap(uint256 assets) external {
@@ -184,10 +184,10 @@ contract SwapRouterTest is Test {
         AAVE.approve(address(swapRouter), assets);
 
         bytes memory swapData = abi.encode(0xC697051d1C6296C24aE3bceF39acA743861D9A81, AAVE, WETH, assets, 0, sender);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.BALANCERV2, swapData, reciever);
+        uint256 out = swapRouter.swap(SwapRouter.Exchange.BALANCERV2, swapData, receiver);
 
         assertTrue(AAVE.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(reciever) > 0, "WETH Balance of Reciever should be greater than 0");
-        assertEq(out, WETH.balanceOf(reciever), "Amount Out should equal WETH Balance of reciever");
+        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of Reciever should be greater than 0");
+        assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
     }
 }

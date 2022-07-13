@@ -169,6 +169,12 @@ error USR_LengthMismatch();
  */
 error USR_InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
 
+/**
+ * @notice Attempted to reassign the address of a contract with an ID that has not been registered.
+ * @param unregisteredId value of the ID that has not been registered
+ */
+error USR_ContractNotRegistered(uint256 unregisteredId);
+
 // ========================================== STATE ERRORS ===========================================
 
 /**
