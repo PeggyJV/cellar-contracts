@@ -8,13 +8,28 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { ICurveSwaps } from "src/interfaces/ICurveSwaps.sol";
 import { IBalancerExchangeProxy, TokenInterface } from "src/interfaces/BalancerInterfaces.sol";
+import { Multicall } from "src/base/Multicall.sol";
 
+/**
+ * @title Sommelier Swap Router
+ * @notice Provides a universal interface allowing Sommelier contracts to interact with multiple
+ *         different exchanges to perform swaps.
+ * @dev Perform multiple swaps using Multicall.
+ * @author crispymangoes, Brian Le
+ */
 contract SwapRouter is Multicall {
     using SafeTransferLib for ERC20;
 
     /** @notice Planned additions
         ONEINCH
     */
+
+    /**
+     * @param UNIV2 Uniswap V2
+     * @param UNIV3 Uniswap V3
+     * @param CURVE Curve Exchange
+     * @param BALANCERV2 Balancer V2
+     */
     enum Exchange {
         UNIV2,
         UNIV3,
@@ -22,22 +37,25 @@ contract SwapRouter is Multicall {
         BALANCERV2
     }
 
+    /**
+     * @notice Get the selector of the function to call in order to perform swap with a given exchange.
+     */
     mapping(Exchange => bytes4) public getExchangeSelector;
 
     // ========================================== CONSTRUCTOR ==========================================
 
     /**
-     * @notice Uniswap V2 swap router contract. Used for swapping if pool fees are not specified.
+     * @notice Uniswap V2 swap router contract.
      */
     IUniswapV2Router public immutable uniswapV2Router; // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
     /**
-     * @notice Uniswap V3 swap router contract. Used for swapping if pool fees are specified.
+     * @notice Uniswap V3 swap router contract.
      */
     IUniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
     /**
-     * @notice Curve Registry Exchange contract. Used for rebalancing positions.
+     * @notice Curve registry exchange contract.
      */
     ICurveSwaps public immutable curveRegistryExchange; // 0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7
 
@@ -47,10 +65,10 @@ contract SwapRouter is Multicall {
     IBalancerExchangeProxy public immutable balancerExchangeProxy; // 0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21
 
     /**
-     * @param _uniswapV2Router Uniswap V2 swap router address
-     * @param _uniswapV3Router Uniswap V3 swap router address
-     * @param _curveRegistryExchange Curve registry exchange
-     * @param _balancerExchangeProxy Balancer ExchangeProxy V2
+     * @param _uniswapV2Router address of the Uniswap V2 swap router contract
+     * @param _uniswapV3Router address of the Uniswap V3 swap router contract
+     * @param _curveRegistryExchange address of the Curve registry exchange contract
+     * @param _balancerExchangeProxy address of the Balancer ExchangeProxy V2 contract
      */
     constructor(
         IUniswapV2Router _uniswapV2Router,
@@ -73,22 +91,21 @@ contract SwapRouter is Multicall {
     }
 
     // ======================================= SWAP OPERATIONS =======================================
-
     /**
-     * @notice Route swap calls to the appropriate exchanges.
+     * @notice Perform a swap using a supported exchange.
      * @param exchange value dictating which exchange to use to make the swap
      * @param swapData encoded data used for the swap
-     * @param recipient address to send the swapped tokens to
-     * @return amountOut amount of tokens received from the swap
+     * @param receiver address to send the received assets to
+     * @return amountOut amount of assets received from the swap
      */
     function swap(
         Exchange exchange,
         bytes memory swapData,
-        address recipient
+        address receiver
     ) external returns (uint256 amountOut) {
         // Route swap call to appropriate function using selector.
         (bool success, bytes memory result) = address(this).delegatecall(
-            abi.encodeWithSelector(getExchangeSelector[exchange], swapData, recipient)
+            abi.encodeWithSelector(getExchangeSelector[exchange], swapData, receiver)
         );
 
         if (!success) {
@@ -108,33 +125,33 @@ contract SwapRouter is Multicall {
     }
 
     /**
-     * @notice Allows caller to make swaps using the UniswapV2 Exchange.
+     * @notice Perform a swap using Uniswap V2.
      * @param swapData bytes variable storing the following swap information:
      *      address[] path: array of addresses dictating what swap path to follow
-     *      uint256 assets: the amount of path[0] you want to swap with
-     *      uint256 assetsOutMin: the minimum amount of path[path.length - 1] tokens you want from the swap
-     * @param recipient address to send the swapped tokens to
-     * @return amountOut amount of tokens received from the swap
+     *      uint256 amount: amount of the first asset in the path to swap
+     *      uint256 amountOutMin: the minimum amount of the last asset in the path to receive
+     * @param receiver address to send the received assets to
+     * @return amountOut amount of assets received from the swap
      */
-    function swapWithUniV2(bytes memory swapData, address recipient) public returns (uint256 amountOut) {
-        (address[] memory path, uint256 assets, uint256 assetsOutMin) = abi.decode(
+    function swapWithUniV2(bytes memory swapData, address receiver) public returns (uint256 amountOut) {
+        (address[] memory path, uint256 amount, uint256 amountOutMin) = abi.decode(
             swapData,
             (address[], uint256, uint256)
         );
 
         // Transfer assets to this contract to swap.
         ERC20 assetIn = ERC20(path[0]);
-        assetIn.safeTransferFrom(msg.sender, address(this), assets);
+        assetIn.safeTransferFrom(msg.sender, address(this), amount);
 
         // Approve assets to be swapped through the router.
-        assetIn.safeApprove(address(uniswapV2Router), assets);
+        assetIn.safeApprove(address(uniswapV2Router), amount);
 
         // Execute the swap.
         uint256[] memory amountsOut = uniswapV2Router.swapExactTokensForTokens(
-            assets,
-            assetsOutMin,
+            amount,
+            amountOutMin,
             path,
-            recipient,
+            receiver,
             block.timestamp + 60
         );
 
@@ -142,27 +159,27 @@ contract SwapRouter is Multicall {
     }
 
     /**
-     * @notice Allows caller to make swaps using the UniswapV3 Exchange.
+     * @notice Perform a swap using Uniswap V3.
      * @param swapData bytes variable storing the following swap information
      *      address[] path: array of addresses dictating what swap path to follow
      *      uint24[] poolFees: array of pool fees dictating what swap pools to use
-     *      uint256 assets: the amount of path[0] you want to swap with
-     *      uint256 assetsOutMin: the minimum amount of path[path.length - 1] tokens you want from the swap
-     * @param recipient address to send the swapped tokens to
-     * @return amountOut amount of tokens received from the swap
+     *      uint256 amount: amount of the first asset in the path to swap
+     *      uint256 amountOutMin: the minimum amount of the last asset in the path to receive
+     * @param receiver address to send the received assets to
+     * @return amountOut amount of assets received from the swap
      */
-    function swapWithUniV3(bytes memory swapData, address recipient) public returns (uint256 amountOut) {
-        (address[] memory path, uint24[] memory poolFees, uint256 assets, uint256 assetsOutMin) = abi.decode(
+    function swapWithUniV3(bytes memory swapData, address receiver) public returns (uint256 amountOut) {
+        (address[] memory path, uint24[] memory poolFees, uint256 amount, uint256 amountOutMin) = abi.decode(
             swapData,
             (address[], uint24[], uint256, uint256)
         );
 
         // Transfer assets to this contract to swap.
         ERC20 assetIn = ERC20(path[0]);
-        assetIn.safeTransferFrom(msg.sender, address(this), assets);
+        assetIn.safeTransferFrom(msg.sender, address(this), amount);
 
         // Approve assets to be swapped through the router.
-        assetIn.safeApprove(address(uniswapV3Router), assets);
+        assetIn.safeApprove(address(uniswapV3Router), amount);
 
         // Encode swap parameters.
         bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
@@ -173,10 +190,10 @@ contract SwapRouter is Multicall {
         amountOut = uniswapV3Router.exactInput(
             IUniswapV3Router.ExactInputParams({
                 path: encodePackedPath,
-                recipient: recipient,
+                recipient: receiver,
                 deadline: block.timestamp + 60,
-                amountIn: assets,
-                amountOutMinimum: assetsOutMin
+                amountIn: amount,
+                amountOutMinimum: amountOutMin
             })
         );
     }

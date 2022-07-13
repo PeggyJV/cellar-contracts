@@ -12,7 +12,7 @@ import { ILendingPool } from "src/interfaces/ILendingPool.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC20WithTransferFee } from "src/mocks/MockERC20WithTransferFee.sol";
 import { MockAToken } from "src/mocks/MockAToken.sol";
-import { MockExchange } from "src/mocks/MockExchange.sol";
+import { MockExchange, MockPriceRouter } from "src/mocks/MockExchange.sol";
 import { MockLendingPool } from "src/mocks/MockLendingPool.sol";
 import { MockIncentivesController } from "src/mocks/MockIncentivesController.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
@@ -34,6 +34,7 @@ contract AaveV2StablecoinCellarTest is Test {
     MockAToken private aUSDC;
     MockAToken private aDAI;
     MockLendingPool private lendingPool;
+    MockPriceRouter private priceRouter;
     MockExchange private exchange;
     MockIncentivesController private incentivesController;
     MockGravity private gravity;
@@ -62,7 +63,8 @@ contract AaveV2StablecoinCellarTest is Test {
         ERC20[] memory approvedPositions = new ERC20[](1);
         approvedPositions[0] = ERC20(DAI);
 
-        exchange = new MockExchange();
+        priceRouter = new MockPriceRouter();
+        exchange = new MockExchange(priceRouter);
         vm.label(address(exchange), "exchange");
 
         AAVE = new MockERC20("AAVE", 18);
@@ -76,10 +78,10 @@ contract AaveV2StablecoinCellarTest is Test {
         vm.label(address(gravity), "gravity");
 
         // Setup exchange rates:
-        exchange.setExchangeRate(address(USDC), address(DAI), 1e18);
-        exchange.setExchangeRate(address(DAI), address(USDC), 1e6);
-        exchange.setExchangeRate(address(AAVE), address(USDC), 100e6);
-        exchange.setExchangeRate(address(AAVE), address(DAI), 100e18);
+        priceRouter.setExchangeRate(ERC20(address(USDC)), ERC20(address(DAI)), 1e18);
+        priceRouter.setExchangeRate(ERC20(address(DAI)), ERC20(address(USDC)), 1e6);
+        priceRouter.setExchangeRate(ERC20(address(AAVE)), ERC20(address(USDC)), 100e6);
+        priceRouter.setExchangeRate(ERC20(address(AAVE)), ERC20(address(DAI)), 100e18);
 
         // Declare unnecessary variables with address 0.
         cellar = new AaveV2StablecoinCellar(

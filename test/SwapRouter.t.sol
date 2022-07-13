@@ -45,11 +45,11 @@ contract SwapRouterTest is Test {
 
     // ======================================= SWAP TESTS =======================================
 
-    function testSimpleSwapV2(uint256 assets) external {
+    function testSimplePathSwapV2(uint256 assets) external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        assets = bound(assets, 1e18, type(uint112).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -67,11 +67,11 @@ contract SwapRouterTest is Test {
         assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
     }
 
-    function testMultiSwapV2(uint256 assets) external {
+    function testMultiPathSwapV2(uint256 assets) external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        assets = bound(assets, 1e18, type(uint112).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         // Specify the swap path.
         address[] memory path = new address[](3);
@@ -86,15 +86,15 @@ contract SwapRouterTest is Test {
         uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of Reciever should be greater than 0");
+        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of receiver should be greater than 0");
         assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
     }
 
-    function testSimpleSwapV3(uint256 assets) external {
+    function testSimplePathSwapV3(uint256 assets) external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        assets = bound(assets, 1e18, type(uint112).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -112,15 +112,15 @@ contract SwapRouterTest is Test {
         uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of Reciever should be greater than 0");
+        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of receiver should be greater than 0");
         assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
     }
 
-    function testMultiSwapV3(uint256 assets) external {
+    function testMultiPathSwapV3(uint256 assets) external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        assets = bound(assets, 1e18, type(uint112).max);
+        assets = bound(assets, 1e18, type(uint72).max);
 
         // Specify the swap path.
         address[] memory path = new address[](3);
@@ -140,7 +140,7 @@ contract SwapRouterTest is Test {
         uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of Reciever should be greater than 0");
+        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of receiver should be greater than 0");
         assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
     }
 

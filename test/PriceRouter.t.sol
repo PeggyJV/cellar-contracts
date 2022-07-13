@@ -16,29 +16,25 @@ import { Math } from "src/utils/Math.sol";
 contract PriceRouterTest is Test {
     using Math for uint256;
 
-    ChainlinkPriceFeedAdaptor private chainlinkAdaptor;
-    PriceRouter private priceRouter;
+    ChainlinkPriceFeedAdaptor private immutable chainlinkAdaptor = new ChainlinkPriceFeedAdaptor();
+    PriceRouter private immutable priceRouter = new PriceRouter();
 
-    uint256 private constant privateKey0 = 0xABCD;
-    uint256 private constant privateKey1 = 0xBEEF;
-    address private sender = vm.addr(privateKey0);
-    address private receiver = vm.addr(privateKey1);
+    address private immutable sender = vm.addr(0xABCD);
+    address private immutable receiver = vm.addr(0xBEEF);
 
     // Mainnet contracts:
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
-    ERC20 private BOND = ERC20(0x0391D2021f89DC339F60Fff84546EA23E337750f);
-    FeedRegistryInterface private feedRegistry = FeedRegistryInterface(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
-    IUniswapV2Router private uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 private constant DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    ERC20 private constant USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    ERC20 private constant WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
+    ERC20 private constant BOND = ERC20(0x0391D2021f89DC339F60Fff84546EA23E337750f);
+    FeedRegistryInterface private constant feedRegistry =
+        FeedRegistryInterface(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
+    IUniswapV2Router private constant uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
     function setUp() external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
-
-        chainlinkAdaptor = new ChainlinkPriceFeedAdaptor();
-        priceRouter = new PriceRouter();
 
         priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, 0);
         priceRouter.addAsset(WBTC, ERC20(Denominations.BTC), 0, 0, 0);
@@ -83,18 +79,21 @@ contract PriceRouterTest is Test {
         path[0] = address(WETH);
         path[1] = address(WBTC);
         amounts = uniV2Router.getAmountsOut(1e18, path);
+
         exchangeRate = priceRouter.getExchangeRate(WETH, WBTC);
         assertApproxEqRel(exchangeRate, amounts[1], 1e16, "WETH -> WBTC Exchange Rate Should be 0.5ish +- 1% WBTC");
 
         path[0] = address(WETH);
         path[1] = address(USDC);
         amounts = uniV2Router.getAmountsOut(1e18, path);
+
         exchangeRate = priceRouter.getExchangeRate(WETH, USDC);
         assertApproxEqRel(exchangeRate, amounts[1], 1e16, "WETH -> USDC Exchange Rate Failure");
 
         path[0] = address(USDC);
         path[1] = address(BOND);
         amounts = uniV2Router.getAmountsOut(1e6, path);
+
         exchangeRate = priceRouter.getExchangeRate(USDC, BOND);
         assertApproxEqRel(exchangeRate, amounts[1], 0.02e18, "USDC -> BOND Exchange Rate Failure");
 
