@@ -12,8 +12,6 @@ contract SwapRouter {
     using SafeTransferLib for ERC20;
 
     /** @notice Planned additions
-        BALANCERV2,
-        CURVE,
         ONEINCH
     */
     enum Exchange {
@@ -198,10 +196,10 @@ contract SwapRouter {
             uint256 assets: the amount of assetIn you want to swap with
      *      uint256 assetsOutMin: the minimum amount of assetOut tokens you want from the swap
      *      address from: the address to transfer assetIn tokens from to this address
-     *      address recipient: the address assetOut token should be sent to.
+     * @param recipient the address assetOut token should be sent to
      * @return amountOut amount of tokens received from the swap
      */
-    function swapWithCurve(bytes memory swapData) public returns (uint256 amountOut) {
+    function swapWithCurve(bytes memory swapData, address recipient) public returns (uint256 amountOut) {
         (
             address[9] memory route,
             uint256[3][4] memory swapParams,
@@ -209,9 +207,8 @@ contract SwapRouter {
             ERC20 assetOut,
             uint256 assets,
             uint256 assetsOutMin,
-            address from,
-            address recipient
-        ) = abi.decode(swapData, (address[9], uint256[3][4], ERC20, ERC20, uint256, uint256, address, address));
+            address from
+        ) = abi.decode(swapData, (address[9], uint256[3][4], ERC20, ERC20, uint256, uint256, address));
 
         // Transfer assets to this contract to swap.
         assetIn.safeTransferFrom(from, address(this), assets);
@@ -238,19 +235,18 @@ contract SwapRouter {
             uint256 assets: the amount of assetIn you want to swap with
      *      uint256 assetsOutMin: the minimum amount of assetOut tokens you want from the swap
      *      address from: the address to transfer assetIn tokens from to this address
-     *      address recipient: the address assetOut token should be sent to.
+     * @param recipient the address assetOut token should be sent to
      * @return amountOut amount of tokens received from the swap
      */
-    function swapWithBalancerV2(bytes memory swapData) public returns (uint256 amountOut) {
+    function swapWithBalancerV2(bytes memory swapData, address recipient) public returns (uint256 amountOut) {
         (
             address pool,
             ERC20 assetIn,
             ERC20 assetOut,
             uint256 assets,
             uint256 assetsOutMin,
-            address from,
-            address recipient
-        ) = abi.decode(swapData, (address, ERC20, ERC20, uint256, uint256, address, address));
+            address from
+        ) = abi.decode(swapData, (address, ERC20, ERC20, uint256, uint256, address));
 
         // Transfer assets to this contract to swap.
         assetIn.safeTransferFrom(from, address(this), assets);
