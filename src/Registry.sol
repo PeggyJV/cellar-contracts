@@ -23,7 +23,7 @@ contract Registry is Ownable {
     /**
      * @notice The unique ID that the next registered contract will have.
      */
-    uint256 public currentId;
+    uint256 public nextId;
 
     /**
      * @notice Get the address associated with an id.
@@ -34,7 +34,7 @@ contract Registry is Ownable {
      * @notice Set the address of the contract at a given id.
      */
     function setAddress(uint256 id, address newAddress) external onlyOwner {
-        if (id < currentId) revert USR_ContractNotRegistered(id);
+        if (id < nextId) revert USR_ContractNotRegistered(id);
 
         emit AddressChanged(id, getAddress[id], newAddress);
 
@@ -65,10 +65,10 @@ contract Registry is Ownable {
     }
 
     function _register(address newContract) internal {
-        getAddress[currentId] = newContract;
+        getAddress[nextId] = newContract;
 
-        emit Registered(currentId, newContract);
+        emit Registered(nextId, newContract);
 
-        currentId++;
+        nextId++;
     }
 }
