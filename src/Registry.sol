@@ -34,14 +34,11 @@ contract Registry is Ownable {
      * @notice Set the address of the contract at a given id.
      */
     function setAddress(uint256 id, address newAddress) external onlyOwner {
-        if (newAddress == address(0)) revert USR_InvalidAddress(newAddress);
+        if (id < currentId) revert USR_ContractNotRegistered(id);
 
-        address oldAddress = getAddress[id];
-        if (oldAddress == address(0)) revert USR_ContractNotRegistered(id);
+        emit AddressChanged(id, getAddress[id], newAddress);
 
         getAddress[id] = newAddress;
-
-        emit AddressChanged(id, oldAddress, newAddress);
     }
 
     /**

@@ -189,12 +189,6 @@ error USR_AssetMismatch(address asset, address expectedAsset);
  */
 error USR_ContractNotRegistered(uint256 unregisteredId);
 
-/**
- * @notice Attempted to use an address with an invalid value (eg. address(0)).
- * @param invalidAddress address that was invalid
- */
-error USR_InvalidAddress(address invalidAddress);
-
 // ========================================== STATE ERRORS ===========================================
 
 /**
