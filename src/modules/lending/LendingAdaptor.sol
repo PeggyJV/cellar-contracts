@@ -4,6 +4,8 @@ pragma solidity 0.8.15;
 import { IPool } from "@aave/interfaces/IPool.sol";
 import { ERC4626, ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
+import { IMasterChef } from "src/interfaces/IMasterChef.sol";
 
 /**
  * @title Lending Adaptor
@@ -21,10 +23,13 @@ contract LendingAdaptor {
                 _borrowFromAave(callData[i]);
             } else if (functionsToCall[i] == 3) {
                 _repayAaveDebt(callData[i]);
+            } else if (functionsToCall[i] == 4) {
+                _addLiquidityAndFarmSushi(callData[i]);
             }
         }
     }
 
+    //============================================ AAVE ============================================
     //TODO might need to add a check that toggles use reserve as collateral
     function _depositToAave(bytes memory callData) internal {
         (ERC20[] memory tokens, uint256[] memory amounts) = abi.decode(callData, (ERC20[], uint256[]));
@@ -49,6 +54,33 @@ contract LendingAdaptor {
         for (uint256 i = 0; i < tokens.length; i++) {
             tokens[i].safeApprove(address(pool), amounts[i]);
             pool.repay(address(tokens[i]), amounts[i], 2, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
+        }
+    }
+
+    //============================================ SUSHI ============================================
+    function _addLiquidityAndFarmSushi(bytes memory callData) internal {
+        (ERC20[] memory tokens, uint256[] memory amounts, uint256[] memory minimums, uint256[] memory farms) = abi
+            .decode(callData, (ERC20[], uint256[], uint256[], uint256[]));
+        IUniswapV2Router router = IUniswapV2Router(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F); //mainnet sushi router
+        IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d); //mainnet sushi chef
+        for (uint256 i = 0; i < tokens.length; i += 2) {
+            tokens[i].safeApprove(address(router), amounts[i]);
+            tokens[i + 1].safeApprove(address(router), amounts[i + 1]);
+            (uint256 amountA, uint256 amountB, uint256 liquidity) = router.addLiquidity(
+                address(tokens[i]),
+                address(tokens[i + 1]),
+                amounts[i],
+                amounts[i + 1],
+                minimums[i],
+                minimums[i + 1],
+                address(this),
+                block.timestamp
+            );
+            //TODO what to do if amountA/B is alot less than amounts[i/i+1]
+            //TODO could do a value in vs value out check here
+            //add LP tokens to farm
+            ERC20(chef.lpToken(farms[i / 2])).safeApprove(address(chef), liquidity);
+            chef.deposit(farms[i / 2], liquidity, address(this));
         }
     }
 }
