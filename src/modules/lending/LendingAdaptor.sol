@@ -88,6 +88,8 @@ contract LendingAdaptor {
         }
     }
 
+    //TODO on polygon sushiswap has run out of rewards several times.
+    //when this happens, any harvest TXs revert, might need to take this into account here
     ///@dev rewardToken length must be 2x farms length, each farm is assuemd to have 2 reward tokens, if it only has one, then i+1 reward token should be zero address
     function _harvestSushiFarms(bytes memory callData) internal {
         (uint256[] memory farms, ERC20[] memory rewardTokens, bytes[] memory swapData) = abi.decode(
