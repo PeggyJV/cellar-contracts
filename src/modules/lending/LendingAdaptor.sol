@@ -6,6 +6,8 @@ import { ERC4626, ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 import { IMasterChef } from "src/interfaces/IMasterChef.sol";
+import { Registry } from "src/Registry.sol";
+import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 
 /**
  * @title Lending Adaptor
@@ -25,6 +27,8 @@ contract LendingAdaptor {
                 _repayAaveDebt(callData[i]);
             } else if (functionsToCall[i] == 4) {
                 _addLiquidityAndFarmSushi(callData[i]);
+            } else if (functionsToCall[i] == 5) {
+                _harvestSushiFarms(callData[i]);
             }
         }
     }
@@ -81,6 +85,28 @@ contract LendingAdaptor {
             //add LP tokens to farm
             ERC20(chef.lpToken(farms[i / 2])).safeApprove(address(chef), liquidity);
             chef.deposit(farms[i / 2], liquidity, address(this));
+        }
+    }
+
+    ///@dev rewardToken length must be 2x farms length, each farm is assuemd to have 2 reward tokens, if it only has one, then i+1 reward token should be zero address
+    function _harvestSushiFarms(bytes memory callData) internal {
+        (uint256[] memory farms, ERC20[] memory rewardTokens, bytes[] memory swapData) = abi.decode(
+            callData,
+            (uint256[], ERC20[], bytes[])
+        );
+        IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d); //mainnet sushi chef
+        //SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
+        uint256[] memory rewardsOut = new uint256[](rewardTokens.length);
+        for (uint256 i = 0; i < farms.length; i += 2) {
+            rewardsOut[i] = rewardTokens[i].balanceOf(address(this));
+            if (address(rewardTokens[i + 1]) != address(0))
+                rewardsOut[i + 1] = rewardTokens[i + 1].balanceOf(address(this));
+
+            chef.harvest(farms[i], address(this));
+
+            rewardsOut[i] = rewardTokens[i].balanceOf(address(this)) - rewardsOut[i];
+            if (address(rewardTokens[i + 1]) != address(0))
+                rewardsOut[i + 1] = rewardTokens[i + 1].balanceOf(address(this)) - rewardsOut[i + 1];
         }
     }
 }

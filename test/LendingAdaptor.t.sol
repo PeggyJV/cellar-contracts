@@ -21,6 +21,7 @@ contract LendingAdaptorTest is Test {
     ERC20 private aUSDC = ERC20(0xBcca60bB61934080951369a648Fb03DF4F96263C);
     ERC20 private dWETH = ERC20(0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf);
     ERC20 private CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
+    ERC20 private SUSHI = ERC20(0x6B3595068778DD592e39A122f4f5a5cF09C90fE2);
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
@@ -134,5 +135,54 @@ contract LendingAdaptorTest is Test {
         adaptor.routeCalls(functionsToCall, callData);
         IMasterChef.UserInfo memory info = chef.userInfo(1, address(adaptor));
         console.log(info.amount);
+    }
+
+    function testHarvestSushiFarms() external {
+        deal(address(WETH), address(adaptor), type(uint224).max);
+        deal(address(CVX), address(adaptor), type(uint224).max);
+
+        uint8[] memory functionsToCall;
+        bytes[] memory callData;
+        ERC20[] memory tokens;
+        uint256[] memory amounts;
+        uint256[] memory minimums;
+        uint256[] memory farms;
+        functionsToCall = new uint8[](1);
+        callData = new bytes[](1);
+        tokens = new ERC20[](2);
+        amounts = new uint256[](2);
+        minimums = new uint256[](2);
+        farms = new uint256[](1);
+
+        functionsToCall[0] = 4;
+        tokens[0] = WETH;
+        tokens[1] = CVX;
+        amounts[0] = 1e18;
+        amounts[1] = 200e18;
+        //minimums are both zero
+        farms[0] = 1; //pid 1 for WETH/CVX LP farm
+
+        callData[0] = abi.encode(tokens, amounts, minimums, farms);
+        adaptor.routeCalls(functionsToCall, callData);
+
+        console.log("Pending Sushi Before Roll: ", chef.pendingSushi(1, address(adaptor)));
+
+        vm.roll(16000000);
+
+        console.log("Pending Sushi After Roll: ", chef.pendingSushi(1, address(adaptor)));
+
+        functionsToCall[0] = 5;
+
+        //reward tokens
+        tokens[0] = SUSHI;
+        tokens[1] = ERC20(address(0));
+
+        bytes[] memory swapData;
+
+        callData[0] = abi.encode(farms, tokens, swapData);
+        adaptor.routeCalls(functionsToCall, callData);
+
+        console.log("Pending Sushi After Harvest: ", chef.pendingSushi(1, address(adaptor)));
+        console.log("Adaptor Sushi Balance:", SUSHI.balanceOf(address(adaptor)));
     }
 }
