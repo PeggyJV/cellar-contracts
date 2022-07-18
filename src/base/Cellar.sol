@@ -1017,6 +1017,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
         _depositTo(toPosition, assetsTo);
     }
 
+    // =========================================== ADAPTOR LOGIC ===========================================
+
+    ///@dev will use some gating system to limit what adaptors can be called on, done this way for ease of testing
+    function callOnAdaptor(
+        address adaptor,
+        uint8[] memory functionsToCall,
+        bytes[] memory callData
+    ) public {
+        (bool success, bytes memory result) = adaptor.delegatecall(
+            abi.encodeWithSelector(bytes4(bytes32("routeCalls")), functionsToCall, callData)
+        );
+        require(success, "Adaptor Failed");
+    }
+
     // ============================================ LIMITS LOGIC ============================================
 
     /**
