@@ -372,6 +372,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
     event FeesDistributorChanged(bytes32 oldFeesDistributor, bytes32 newFeesDistributor);
 
     /**
+     * @notice Emitted when strategy provider changes where they get their fee sent to.
+     * @param oldState bool of the old state
+     * @param newState bool of the new state
+     */
+    event IsSPFeeDistributedOnETHChanged(bool oldState, bool newState);
+
+    /**
      *  @notice The percentage of yield accrued as performance fees.
      *  @dev This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
      */
@@ -388,6 +395,19 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev The Gravity contract expects a 32-byte value formatted in a specific way.
      */
     bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+
+    /**
+     * @notice Determines whether the share of the Strategy Providers(SP) fee is distrubuted
+     *         on mainnet ETH or on cosmos.
+     * @dev True means it is distributed on cosmos, false means it is distributed on ETH.
+     */
+    bool public isSPFeeDistributedOnETH = false;
+
+    //TODO could make this a bytes32 value, so that we could store a cosmos address here too, depends what Eric needs to know
+    /**
+     * @notice Determines where to send SP performance fees if isSPFeeDistributedOnETH is set to true.
+     */
+    address public spPayout;
 
     /**
      * @notice Set the percentage of platform fees accrued over a year.
@@ -419,6 +439,18 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit FeesDistributorChanged(feesDistributor, newFeesDistributor);
 
         feesDistributor = newFeesDistributor;
+    }
+
+    /**
+     * @notice Set the address of the fee distributor on the Sommelier chain.
+     * @dev IMPORTANT: Ensure that the address is formatted in the specific way that the Gravity contract
+     *      expects it to be.
+     * @param newFeesDistributor formatted address of the new fee distributor module
+     */
+    function setIsSPFeeDistributedOnETH(bool state) external onlyOwner {
+        emit IsSPFeeDistributedOnETHChanged(isSPFeeDistributedOnETH, state);
+
+        isSPFeeDistributedOnETH = state;
     }
 
     // ============================================= LIMITS CONFIG =============================================
@@ -1080,16 +1112,28 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Transfer accrued fees to the Sommelier chain to distribute.
      * @dev Fees are accrued as shares and redeemed upon transfer.
      */
+    //TODO add a way to set spPayout
+    //TODO add a way to set the percentage of fees that go to somm
     function sendFees() public onlyOwner {
         // Redeem our fee shares for assets to send to the fee distributor module.
         uint256 totalFees = balanceOf[address(this)];
-        uint256 assets = previewRedeem(totalFees);
-        require(assets != 0, "ZERO_ASSETS");
+        uint256 spFee;
 
-        beforeWithdraw(assets, 0, address(0), address(0));
+        // If strategy privider wants performance fee paid on mainnet, then send them their fee in shares.
+        if (isSPFeeDistributedOnETH) {
+            spFee = totalFees.mulDivDown(performanceFee, (performanceFee + platformFee)); //TODO does this revert if both fees are zero? But if they are zero there is no point in calling this
+            totalFees -= spFee;
+        }
+
+        uint256 assets = previewRedeem(totalFees);
+        require(assets != 0, "ZERO_ASSETS"); //TODO this line will revert if a ZERO platform fee is used
+
+        //TODO what if assets isn't supported on cosmos? Like an LP token
+        //TODO add support for multiple assets
 
         _burn(address(this), totalFees);
 
+        if (spFee > 0) transfer(spPayout, spFee);
         // Transfer assets to a fee distributor on the Sommelier chain.
         IGravity gravityBridge = IGravity(registry.getAddress(0));
         asset.safeApprove(address(gravityBridge), assets);
