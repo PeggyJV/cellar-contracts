@@ -92,10 +92,10 @@ contract LendingAdaptorTest is Test {
         amounts[0] = 1e18;
         callData[1] = abi.encode(tokens, amounts);
 
-        functionsToCall[1] = 3;
+        functionsToCall[2] = 3;
         tokens[0] = WETH;
         amounts[0] = 1e18;
-        callData[1] = abi.encode(tokens, amounts);
+        callData[2] = abi.encode(tokens, amounts);
 
         adaptor.routeCalls(functionsToCall, callData);
         assertEq(0, dWETH.balanceOf(address(adaptor)));
