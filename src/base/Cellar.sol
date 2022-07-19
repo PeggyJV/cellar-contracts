@@ -70,7 +70,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
     enum PositionType {
         ERC20,
         ERC4626,
-        Cellar
+        Cellar,
+        Adaptor
     }
 
     /**
@@ -82,6 +83,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
     struct PositionData {
         PositionType positionType;
         int256 highWatermark;
+        bool isDebt;
+        uint112 adaptorId;
+        bytes4 balanceOf;
+        bytes4 assetOf;
+        bytes4 deposit;
+        bytes4 withdraw;
+        bytes adaptorData;
     }
 
     /**
@@ -239,12 +247,32 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of position to trust
      * @param positionType value specifying the interface the position uses
      */
-    function trustPosition(address position, PositionType positionType) external onlyOwner {
+    function trustPosition(
+        address position,
+        PositionType positionType,
+        bool isDebt,
+        uint112 adaptorId,
+        bytes4 balanceOf,
+        bytes4 assetOf,
+        bytes4 deposit,
+        bytes4 withdraw,
+        bytes memory adaptorData
+    ) external onlyOwner {
         // Trust position.
         isTrusted[position] = true;
 
         // Set position type.
         getPositionData[position].positionType = positionType;
+        getPositionData[position].isDebt = isDebt;
+        if (positionType == PositionType.Adaptor) {
+            require(idToAdaptor[adaptorId] != address(0), "Invalid Adaptor");
+            getPositionData[position].adaptorId = adaptorId;
+            getPositionData[position].balanceOf = balanceOf;
+            getPositionData[position].assetOf = assetOf;
+            getPositionData[position].deposit = deposit;
+            getPositionData[position].withdraw = withdraw;
+            getPositionData[position].adaptorData = adaptorData;
+        }
 
         emit TrustChanged(position, true);
     }
@@ -1019,16 +1047,52 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // =========================================== ADAPTOR LOGIC ===========================================
 
-    ///@dev will use some gating system to limit what adaptors can be called on, done this way for ease of testing
+    mapping(uint112 => address) public idToAdaptor;
+
+    // 0 -> 1e18. Used after callOnAdaptor to help safeguard against adaptor moving into positions that are not added here
+    uint256 public allowedRebalanceDeviation = 0.997e18; //currently set to 99.7%
+
+    event AdaptorCallRevertIgnored(address adaptor, bytes4 functionSignature, bytes callData);
+
+    bytes public beforeAdaptorHook;
+    bytes public afterAdaptorHook;
+
+    //TODO could pass in an array of ids to make multiple calls on different adaptors
     function callOnAdaptor(
-        address adaptor,
-        uint8[] memory functionsToCall,
-        bytes[] memory callData
+        uint8 id,
+        bytes4[] memory functionSignatures,
+        bytes[] memory callData,
+        bool[] memory isRevertOK
     ) public {
-        (bool success, bytes memory result) = adaptor.delegatecall(
-            abi.encodeWithSelector(bytes4(bytes32("routeCalls")), functionsToCall, callData)
+        require(
+            callData.length == isRevertOK.length && callData.length == functionSignatures.length,
+            "Input lenghts do not match"
         );
-        require(success, "Adaptor Failed");
+        address adaptor = idToAdaptor[id];
+        require(adaptor != address(0), "Invalid Adaptor");
+
+        //if (beforeAdaptorHook.length > 0)
+        //    require(BaseAdaptor(adaptor).beforeHook(beforeAdaptorHook), "Before Adaptor Hook Failed");
+
+        //record totalAssets
+        uint256 minimumAllowedAssets = totalAssets().mulDivUp(allowedRebalanceDeviation, 1e18);
+
+        for (uint256 i = 0; i < callData.length; i++) {
+            (bool success, bytes memory result) = adaptor.delegatecall(
+                abi.encodeWithSelector(functionSignatures[i], callData[i])
+            );
+            if (!isRevertOK[i] && !success) revert("Adaptor Call Failed");
+            else if (isRevertOK[i] && !success)
+                emit AdaptorCallRevertIgnored(adaptor, functionSignatures[i], callData[i]);
+        }
+
+        //arbitrary hook to check adaptor conditions
+        //if (afterAdaptorHook.length > 0)
+        //    require(BaseAdaptor(adaptor).afterHook(afterAdaptorHook), "After Adaptor Hook Failed");
+
+        if (totalAssets() < minimumAllowedAssets) {
+            revert("Adaptor safeguard failed");
+        }
     }
 
     // ============================================ LIMITS LOGIC ============================================
@@ -1163,8 +1227,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             return ERC4626(position).maxWithdraw(address(this));
-        } else {
+        } else if (positionType == PositionType.ERC20) {
             return ERC20(position).balanceOf(address(this));
+        } else if (positionType == PositionType.Adaptor) {
+            address adaptor = idToAdaptor[getPositionData[position].adaptorId];
+            (bool success, bytes memory result) = adaptor.staticcall(
+                abi.encodeWithSelector(getPositionData[position].balanceOf, getPositionData[position].adaptorData)
+            );
+            require(success, "Adaptor balanceOf call failed");
+            return abi.decode(result, (uint256));
         }
     }
 
@@ -1176,8 +1247,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             return ERC4626(position).asset();
-        } else {
+        } else if (positionType == PositionType.ERC20) {
             return ERC20(position);
+        } else if (positionType == PositionType.Adaptor) {
+            address adaptor = idToAdaptor[getPositionData[position].adaptorId];
+            (bool success, bytes memory result) = adaptor.staticcall(
+                abi.encodeWithSelector(getPositionData[position].assetOf, getPositionData[position].adaptorData)
+            );
+            require(success, "Adaptor balanceOf call failed");
+            return ERC20(abi.decode(result, (address)));
         }
     }
 

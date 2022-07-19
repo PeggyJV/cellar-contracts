@@ -45,9 +45,9 @@ interface IMasterChef {
         address to
     ) external;
 
-    function lpToken(uint256 id) external returns (address);
+    function lpToken(uint256 id) external view returns (address);
 
-    function userInfo(uint256 id, address user) external returns (UserInfo memory info);
+    function userInfo(uint256 id, address user) external view returns (UserInfo memory info);
 
     function pendingSushi(uint256 id, address user) external returns (uint256);
 }
