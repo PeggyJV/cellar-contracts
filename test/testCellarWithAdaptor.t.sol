@@ -2,19 +2,28 @@
 pragma solidity 0.8.15;
 
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { Cellar } from "src/base/Cellar.sol";
 import { LendingAdaptor } from "src/modules/lending/LendingAdaptor.sol";
+import { SushiAdaptor } from "src/modules/farming/SushiAdaptor.sol";
 import { IPool } from "@aave/interfaces/IPool.sol";
-import { IMasterChef, UserInfo } from "src/interfaces/IMasterChef.sol";
+import { IMasterChef } from "src/interfaces/IMasterChef.sol";
+import { Registry } from "src/Registry.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-contract LendingAdaptorTest is Test {
+contract CellarWithAdaptorTest is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-    LendingAdaptor private adaptor;
+    LendingAdaptor private lendingAdaptor;
+    SushiAdaptor private sushiAdaptor;
+    Cellar private cellar;
+    PriceRouter private priceRouter;
+    Registry private registry;
+
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
@@ -28,7 +37,46 @@ contract LendingAdaptorTest is Test {
     IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d); //mainnet sushi chef
 
     function setUp() external {
-        adaptor = new LendingAdaptor();
+        lendingAdaptor = new LendingAdaptor();
+        sushiAdaptor = new SushiAdaptor();
+        priceRouter = new PriceRouter();
+
+        registry = new Registry(address(this), address(this), address(priceRouter));
+
+        // Setup Cellar:
+        address[] memory positions = new address[](3);
+        positions[0] = address(aUSDC);
+        positions[1] = address(dWETH);
+        positions[2] = address(WETH);
+
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](4);
+        positionTypes[0] = Cellar.PositionType.Adaptor;
+        positionTypes[1] = Cellar.PositionType.Adaptor;
+        positionTypes[2] = Cellar.PositionType.ERC20;
+
+        cellar = new Cellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            address(aUSDC),
+            Cellar.WithdrawType.ORDERLY,
+            "AAVE Debt Cellar",
+            "AAVE-CLR"
+        );
+        cellar.setIdToAdaptor(1, address(lendingAdaptor));
+        cellar.setIdToAdaptor(2, address(sushiAdaptor));
+        cellar.trustPosition(
+            address(aUSDC),
+            Cellar.PositionType.Adaptor,
+            false,
+            1,
+            lendingAdaptor.getAaveBalance.selector,
+            lendingAdaptor.getAaveUnderlying.selector,
+            lendingAdaptor.depositToAave.selector,
+            lendingAdaptor.withdrawFromAave.selector,
+            abi.encode(address(aUSDC))
+        );
 
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(adaptor), type(uint224).max);

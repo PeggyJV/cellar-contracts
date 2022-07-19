@@ -3,11 +3,6 @@ pragma solidity 0.8.15;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-struct UserInfo {
-    uint256 amount;
-    int256 rewardDebt;
-}
-
 interface IMasterChef {
     struct UserInfo {
         uint256 amount; // How many LP tokens the user has provided.
