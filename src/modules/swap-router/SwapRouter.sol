@@ -209,26 +209,26 @@ contract SwapRouter is Multicall {
      *              3 for a cryptoswap `exchange`,
      *              4 for a cryptoswap `exchange_underlying`
             ERC20 assetIn: the asset being swapped
-            ERC20 assetOut: the asset being received
             uint256 assets: the amount of assetIn you want to swap with
      *      uint256 assetsOutMin: the minimum amount of assetOut tokens you want from the swap
      *      address from: the address to transfer assetIn tokens from to this address
-     * @param recipient the address assetOut token should be sent to
+     * @param receiver the address assetOut token should be sent to
      * @return amountOut amount of tokens received from the swap
      */
-    function swapWithCurve(bytes memory swapData, address recipient) public returns (uint256 amountOut) {
+    function swapWithCurve(bytes memory swapData, address receiver) public returns (uint256 amountOut) {
         (
             address[9] memory route,
             uint256[3][4] memory swapParams,
             ERC20 assetIn,
-            ERC20 assetOut,
             uint256 assets,
             uint256 assetsOutMin,
             address from
-        ) = abi.decode(swapData, (address[9], uint256[3][4], ERC20, ERC20, uint256, uint256, address));
+        ) = abi.decode(swapData, (address[9], uint256[3][4], ERC20, uint256, uint256, address));
 
         // Transfer assets to this contract to swap.
         assetIn.safeTransferFrom(from, address(this), assets);
+
+        address[4] memory pools;
 
         // Execute the stablecoin swap.
         assetIn.safeApprove(address(curveRegistryExchange), assets);
@@ -236,13 +236,12 @@ contract SwapRouter is Multicall {
             route,
             swapParams,
             assets,
-            assetsOutMin
+            assetsOutMin,
+            pools,
+            receiver
         );
-
-        // Transfer the amountOut of assetOut tokens from the router to the recipient.
-        assetOut.safeTransfer(recipient, amountOut);
     }
-    
+
     /**
      * @notice Allows caller to make swaps using Balancer V2.
      * @param swapData bytes variable storing the following swap information
@@ -252,10 +251,10 @@ contract SwapRouter is Multicall {
             uint256 assets: the amount of assetIn you want to swap with
      *      uint256 assetsOutMin: the minimum amount of assetOut tokens you want from the swap
      *      address from: the address to transfer assetIn tokens from to this address
-     * @param recipient the address assetOut token should be sent to
+     * @param receiver the address assetOut token should be sent to
      * @return amountOut amount of tokens received from the swap
      */
-    function swapWithBalancerV2(bytes memory swapData, address recipient) public returns (uint256 amountOut) {
+    function swapWithBalancerV2(bytes memory swapData, address receiver) public returns (uint256 amountOut) {
         (
             address pool,
             ERC20 assetIn,
@@ -288,7 +287,7 @@ contract SwapRouter is Multicall {
             assetsOutMin
         );
 
-        // Transfer the amountOut of assetOut tokens from the router to the recipient.
-        assetOut.safeTransfer(recipient, amountOut);
+        // Transfer the amountOut of assetOut tokens from the router to the receiver.
+        assetOut.safeTransfer(receiver, amountOut);
     }
 }

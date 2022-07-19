@@ -165,7 +165,7 @@ contract SwapRouterTest is Test {
         swapParams[0][1] = 1;
         swapParams[0][2] = 1;
 
-        bytes memory swapData = abi.encode(route, swapParams, DAI, USDC, assets, 0, sender);
+        bytes memory swapData = abi.encode(route, swapParams, DAI, assets, 0, sender);
         uint256 out = swapRouter.swap(SwapRouter.Exchange.CURVE, swapData, receiver);
 
         assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
