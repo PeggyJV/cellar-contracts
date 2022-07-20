@@ -27,6 +27,11 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         adaptorData = abi.encode( debt token address)
     */
 
+    //============================================ Global Functions ===========================================
+    function pool() internal view returns (IPool) {
+        return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    }
+
     //============================================ Implement Base Functions ===========================================
     function deposit(uint256 assets, bytes memory adaptorData) public override {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
@@ -57,8 +62,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     //============================================ Override Hooks ===========================================
     function afterHook(bytes memory hookData) public view virtual override returns (bool) {
         //TODO hookData would contain a minimum healthFactor or something
-        IPool pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-        (, , , , , uint256 healthFactor) = pool.getUserAccountData(msg.sender);
+        (, , , , , uint256 healthFactor) = pool().getUserAccountData(msg.sender);
 
         uint256 minHealthFactor = abi.decode(hookData, (uint256));
 
@@ -79,13 +83,11 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
 
     //============================================ AAVE Logic ============================================
     function _borrowFromAave(ERC20 tokenToBorrow, uint256 amountToBorrow) internal {
-        IPool pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-        pool.borrow(address(tokenToBorrow), amountToBorrow, 2, 0, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
+        pool().borrow(address(tokenToBorrow), amountToBorrow, 2, 0, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
     }
 
     function _repayAaveDebt(ERC20 tokenToRepay, uint256 amountToRepay) internal {
-        IPool pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-        tokenToRepay.safeApprove(address(pool), amountToRepay);
-        pool.repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
+        tokenToRepay.safeApprove(address(pool()), amountToRepay);
+        pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
     }
 }
