@@ -6,6 +6,8 @@ import { Cellar } from "src/base/Cellar.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
+import { ICurveSwaps } from "src/interfaces/ICurveSwaps.sol";
+import { IBalancerExchangeProxy } from "src/interfaces/BalancerInterfaces.sol";
 import { IGravity } from "src/interfaces/IGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
@@ -41,6 +43,9 @@ contract CellarRouterTest is Test {
     // Mainnet contracts:
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    address private constant curveRegistryExchange = 0x81C46fECa27B31F3ADC2b91eE4be9717d1cd3DD7;
+    address private constant balancerExchangeProxy = 0x3E66B66Fd1d0b02fDa6C811Da9E0547970DB2f21;
+
     ERC20 private constant DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 
     ERC20 private constant USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -65,8 +70,18 @@ contract CellarRouterTest is Test {
         priceRouter = new MockPriceRouter();
         exchange = new MockExchange(priceRouter);
 
-        swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
-        realSwapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapRouter = new SwapRouter(
+            IUniswapV2Router(address(exchange)),
+            IUniswapV3Router(address(exchange)),
+            ICurveSwaps(address(exchange)),
+            IBalancerExchangeProxy(address(exchange))
+        );
+        realSwapRouter = new SwapRouter(
+            IUniswapV2Router(uniV2Router),
+            IUniswapV3Router(uniV3Router),
+            ICurveSwaps(curveRegistryExchange),
+            IBalancerExchangeProxy(balancerExchangeProxy)
+        );
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually

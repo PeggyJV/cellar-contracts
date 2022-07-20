@@ -5,6 +5,8 @@ import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
+import { ICurveSwaps } from "src/interfaces/ICurveSwaps.sol";
+import { IBalancerExchangeProxy } from "src/interfaces/BalancerInterfaces.sol";
 import { MockExchange } from "src/mocks/MockExchange.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
@@ -48,7 +50,12 @@ contract CellarTest is Test {
         // Setup Registry and modules:
         priceRouter = new MockPriceRouter();
         exchange = new MockExchange(priceRouter);
-        swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
+        swapRouter = new SwapRouter(
+            IUniswapV2Router(address(exchange)),
+            IUniswapV3Router(address(exchange)),
+            ICurveSwaps(address(exchange)),
+            IBalancerExchangeProxy(address(exchange))
+        );
         gravity = new MockGravity();
 
         registry = new Registry(
