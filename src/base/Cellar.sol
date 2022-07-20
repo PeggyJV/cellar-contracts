@@ -624,6 +624,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             uint256[] memory positionBalances
         ) = _getData();
 
+        _takePerformanceFees();
+
         // No need to check for rounding error, `previewWithdraw` rounds up.
         shares = _previewWithdraw(assets, _totalAssets);
 
@@ -642,6 +644,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
         withdrawType == WithdrawType.ORDERLY
             ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
             : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
+    }
+
+    function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
+        _takePerformanceFees();
+        shares = super.deposit(assets, receiver);
+    }
+
+    function mint(uint256 shares, address receiver) public override returns (uint256 assets) {
+        _takePerformanceFees();
+        assets = super.mint(shares, receiver);
     }
 
     /**
@@ -669,6 +681,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             ERC20[] memory positionAssets,
             uint256[] memory positionBalances
         ) = _getData();
+
+        _takePerformanceFees();
 
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -984,6 +998,29 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // diluted because total shares increased while total assets did not. This counteracts that.
         uint256 denominator = totalShares - feesInShares;
         fees = denominator > 0 ? feesInShares.mulDivUp(totalShares, denominator) : 0;
+    }
+
+    uint256 sharePriceHighWatermark;
+
+    ///@dev resets high watermark to current share price
+    function resetHighWatermark() external onlyOwner {
+        sharePriceHighWatermark = totalAssets().mulDivDown(10**decimals, totalSupply);
+    }
+
+    function _takePerformanceFees() internal {
+        if (performanceFee == 0) return;
+
+        uint256 _totalAssets = totalAssets();
+        uint256 currentSharePrice = _totalAssets.mulDivDown(10**decimals, totalSupply);
+        if (sharePriceHighWatermark == 0) sharePriceHighWatermark = currentSharePrice;
+        else if (sharePriceHighWatermark < currentSharePrice) {
+            //take a fee
+            uint256 assets = (currentSharePrice - sharePriceHighWatermark) * totalSupply;
+            assets = assets.mulDivDown(performanceFee, 1e18);
+            sharePriceHighWatermark = currentSharePrice;
+            _mint(address(this), _convertToShares(assets, _totalAssets));
+            //TODO could track performance fee amount here to split it up later
+        }
     }
 
     // =========================================== POSITION LOGIC ===========================================
