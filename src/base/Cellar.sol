@@ -12,7 +12,7 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
-import { BaseAdaptor } from "src/modules/BaseAdaptor.sol";
+import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 
 import "../Errors.sol";
 
@@ -86,10 +86,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         int256 highWatermark;
         bool isDebt;
         uint112 adaptorId;
-        bytes4 balanceOf;
-        bytes4 assetOf;
-        bytes4 deposit;
-        bytes4 withdraw;
         bytes adaptorData;
     }
 
@@ -261,10 +257,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         PositionType positionType,
         bool isDebt,
         uint112 adaptorId,
-        bytes4 balanceOf,
-        bytes4 assetOf,
-        bytes4 depositFunc,
-        bytes4 withdrawFunc,
         bytes memory adaptorData
     ) external onlyOwner {
         // Trust position.
@@ -274,12 +266,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         getPositionData[position].positionType = positionType;
         getPositionData[position].isDebt = isDebt;
         if (positionType == PositionType.Adaptor) {
-            require(idToAdaptor[adaptorId].add != address(0), "Invalid Adaptor");
+            require(idToAdaptor[adaptorId].adaptor != address(0), "Invalid Adaptor");
             getPositionData[position].adaptorId = adaptorId;
-            getPositionData[position].balanceOf = balanceOf;
-            getPositionData[position].assetOf = assetOf;
-            getPositionData[position].deposit = depositFunc;
-            getPositionData[position].withdraw = withdrawFunc;
             getPositionData[position].adaptorData = adaptorData;
         }
 
@@ -582,9 +570,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         registry = _registry;
 
         // Initialize positions.
-        positions = _positions;
+        //positions = _positions;
 
-        for (uint256 i; i < _positions.length; i++) {
+        /*for (uint256 i; i < _positions.length; i++) {
             address position = _positions[i];
 
             if (isPositionUsed[position]) revert USR_PositionAlreadyUsed(position);
@@ -592,13 +580,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
             isTrusted[position] = true;
             isPositionUsed[position] = true;
             getPositionData[position].positionType = _positionTypes[i];
-        }
+        }*/
 
         // Initialize holding position.
-        if (!isPositionUsed[_holdingPosition]) revert USR_InvalidPosition(_holdingPosition);
+        //if (!isPositionUsed[_holdingPosition]) revert USR_InvalidPosition(_holdingPosition);
 
-        ERC20 holdingPositionAsset = _assetOf(_holdingPosition);
-        if (holdingPositionAsset != _asset) revert USR_AssetMismatch(address(holdingPositionAsset), address(_asset));
+        //ERC20 holdingPositionAsset = _assetOf(_holdingPosition);
+        //if (holdingPositionAsset != _asset) revert USR_AssetMismatch(address(holdingPositionAsset), address(_asset));
 
         holdingPosition = _holdingPosition;
 
@@ -813,15 +801,19 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256[] memory balances = new uint256[](numOfPositions - numberOfDebtPositions);
         ERC20[] memory debtPositionAssets = new ERC20[](numberOfDebtPositions);
         uint256[] memory debtBalances = new uint256[](numberOfDebtPositions);
+        uint256 collateralIndex;
+        uint256 debtIndex;
 
         for (uint256 i; i < numOfPositions; i++) {
             address position = positions[i];
             if (getPositionData[position].isDebt) {
-                debtPositionAssets[i] = _assetOf(position);
-                debtBalances[i] = _balanceOf(position);
+                debtPositionAssets[debtIndex] = _assetOf(position);
+                debtBalances[debtIndex] = _balanceOf(position);
+                debtIndex++;
             } else {
-                positionAssets[i] = _assetOf(position);
-                balances[i] = _balanceOf(position);
+                positionAssets[collateralIndex] = _assetOf(position);
+                balances[collateralIndex] = _balanceOf(position);
+                collateralIndex++;
             }
         }
 
@@ -1065,17 +1057,17 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // =========================================== ADAPTOR LOGIC ===========================================
 
-    struct Adaptor {
-        address add;
+    struct AdaptorInfo {
+        address adaptor;
         bytes beforeAdaptorHook;
         bytes afterAdaptorHook;
     }
 
-    mapping(uint112 => Adaptor) public idToAdaptor;
+    mapping(uint112 => AdaptorInfo) public idToAdaptor;
 
-    function setIdToAdaptor(uint112 id, address adaptor) public {
+    function setIdToAdaptor(uint112 id, address _adaptor) public {
         bytes memory empty;
-        idToAdaptor[id] = Adaptor({ add: adaptor, beforeAdaptorHook: empty, afterAdaptorHook: empty });
+        idToAdaptor[id] = AdaptorInfo({ adaptor: _adaptor, beforeAdaptorHook: empty, afterAdaptorHook: empty });
     }
 
     // 0 -> 1e18. Used after callOnAdaptor to help safeguard against adaptor moving into positions that are not added here
@@ -1083,57 +1075,58 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     event AdaptorCallRevertIgnored(address adaptor, bytes4 functionSignature, bytes callData);
 
-    //TODO could pass in an array of ids to make multiple calls on different adaptors
-    function callOnAdaptor(
-        uint112[] memory id,
-        bytes4[] memory functionSignatures,
-        bytes[] memory callData,
-        bool[] memory isRevertOK
-    ) public {
-        require(
-            callData.length == isRevertOK.length &&
-                callData.length == functionSignatures.length &&
-                callData.length == id.length,
-            "Input lenghts do not match"
-        );
-        Adaptor memory adaptor;
+    struct AdaptorCall {
+        uint112 adaptorId;
+        bytes4[] functionSigs;
+        bytes[] callData;
+        bool[] isRevertOkay;
+    }
 
-        //if (beforeAdaptorHook.length > 0)
-        //    require(BaseAdaptor(adaptor).beforeHook(beforeAdaptorHook), "Before Adaptor Hook Failed");
-
-        //record totalAssets
-        uint256 minimumAllowedAssets = totalAssets().mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
-        uint256 maximumAllowedAssets = totalAssets().mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
-
-        for (uint256 i = 0; i < callData.length; i++) {
-            // Check if we are changing adaptors.
-            if (adaptor.add != idToAdaptor[id[i]].add) {
-                //Run afterHook for last adaptor.
-                if (adaptor.afterAdaptorHook.length > 0)
-                    require(BaseAdaptor(adaptor.add).afterHook(adaptor.afterAdaptorHook), "After Adaptor Hook Failed");
-
-                //Set adaptor to new adaptor, and run beforeHook.
-                adaptor = idToAdaptor[id[i]];
-                require(adaptor.add != address(0), "Invalid Adaptor");
-                if (adaptor.beforeAdaptorHook.length > 0)
-                    require(
-                        BaseAdaptor(adaptor.add).beforeHook(adaptor.beforeAdaptorHook),
-                        "Before Adaptor Hook Failed"
-                    );
-            }
-
-            // Run the adaptor function
-            (bool success, ) = adaptor.add.delegatecall(abi.encodeWithSelector(functionSignatures[i], callData[i]));
-
-            // Check call success, and revert is necessary.
-            if (!isRevertOK[i] && !success) revert("Adaptor Call Failed");
-            else if (isRevertOK[i] && !success)
-                emit AdaptorCallRevertIgnored(adaptor.add, functionSignatures[i], callData[i]);
+    function callOnAdaptor(AdaptorCall[] memory data) public {
+        AdaptorInfo memory info;
+        //first call all adaptors beforeHooks
+        for (uint8 i = 0; i < data.length; i++) {
+            info = idToAdaptor[data[i].adaptorId];
+            if (info.beforeAdaptorHook.length > 0)
+                require(BaseAdaptor(info.adaptor).beforeHook(info.beforeAdaptorHook), "Before Adaptor Hook Failed");
         }
 
-        //Run the last adaptors afterhook.
-        if (adaptor.afterAdaptorHook.length > 0)
-            require(BaseAdaptor(adaptor.add).afterHook(adaptor.afterAdaptorHook), "After Adaptor Hook Failed");
+        uint256 minimumAllowedAssets;
+        uint256 maximumAllowedAssets;
+        {
+            //record totalAssets
+            uint256 assets = totalAssets();
+            minimumAllowedAssets = assets.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
+            maximumAllowedAssets = assets.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
+        }
+
+        //run all adaptor functions
+        for (uint8 i = 0; i < data.length; i++) {
+            info = idToAdaptor[data[i].adaptorId];
+            require(
+                data[i].callData.length == data[i].isRevertOkay.length &&
+                    data[i].callData.length == data[i].functionSigs.length,
+                "Input lenghts do not match"
+            );
+            for (uint8 j = 0; j < data[i].callData.length; j++) {
+                // Run the adaptor function
+                (bool success, ) = info.adaptor.delegatecall(
+                    abi.encodeWithSelector(data[i].functionSigs[j], data[i].callData[j])
+                );
+
+                // Check call success, and revert is necessary.
+                if (!data[i].isRevertOkay[j] && !success) revert("Adaptor Call Failed");
+                else if (data[i].isRevertOkay[j] && !success)
+                    emit AdaptorCallRevertIgnored(info.adaptor, data[i].functionSigs[j], data[i].callData[j]);
+            }
+        }
+
+        //call all adaptors afterHooks
+        for (uint8 i = 0; i < data.length; i++) {
+            info = idToAdaptor[data[i].adaptorId];
+            if (info.afterAdaptorHook.length > 0)
+                require(BaseAdaptor(info.adaptor).afterHook(info.afterAdaptorHook), "After Adaptor Hook Failed");
+        }
 
         // Make sure that totalAssets deviation is within acceptible bounds.
         uint256 assets = totalAssets();
@@ -1241,11 +1234,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
             ERC4626(position).asset().safeApprove(position, assets);
             ERC4626(position).deposit(assets, address(this));
         } else if (positionType == PositionType.Adaptor) {
-            address adaptor = idToAdaptor[getPositionData[position].adaptorId].add;
-            (bool success, bytes memory result) = adaptor.delegateCall(
-                abi.encodeWithSelector(getPositionData[position].deposit, abi.encode(_assetOf(position), assets))
+            address adaptor = idToAdaptor[getPositionData[position].adaptorId].adaptor;
+            (bool success, ) = adaptor.delegatecall(
+                abi.encodeWithSelector(BaseAdaptor.deposit.selector, assets, getPositionData[position].adaptorData)
             );
-            require(success, "Adaptor balanceOf call failed");
+            require(success, "Failed to deposit into adaptor");
         }
     }
 
@@ -1267,8 +1260,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Withdraw from position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             ERC4626(position).withdraw(assets, receiver, address(this));
-        } else {
+        } else if (positionType == PositionType.ERC20) {
             if (receiver != address(this)) ERC20(position).safeTransfer(receiver, assets);
+        } else if (positionType == PositionType.Adaptor) {
+            address adaptor = idToAdaptor[getPositionData[position].adaptorId].adaptor;
+            BaseAdaptor(adaptor).withdraw(assets, receiver, getPositionData[position].adaptorData);
         }
     }
 
@@ -1283,12 +1279,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         } else if (positionType == PositionType.ERC20) {
             return ERC20(position).balanceOf(address(this));
         } else if (positionType == PositionType.Adaptor) {
-            address adaptor = idToAdaptor[getPositionData[position].adaptorId].add;
-            (bool success, bytes memory result) = adaptor.staticcall(
-                abi.encodeWithSelector(getPositionData[position].balanceOf, getPositionData[position].adaptorData)
-            );
-            require(success, "Adaptor balanceOf call failed");
-            return abi.decode(result, (uint256));
+            address adaptor = idToAdaptor[getPositionData[position].adaptorId].adaptor;
+            return BaseAdaptor(adaptor).balanceOf(getPositionData[position].adaptorData);
         } else revert("Unknown Position Type");
     }
 
@@ -1303,12 +1295,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         } else if (positionType == PositionType.ERC20) {
             return ERC20(position);
         } else if (positionType == PositionType.Adaptor) {
-            address adaptor = idToAdaptor[getPositionData[position].adaptorId].add;
-            (bool success, bytes memory result) = adaptor.staticcall(
-                abi.encodeWithSelector(getPositionData[position].assetOf, getPositionData[position].adaptorData)
-            );
-            require(success, "Adaptor balanceOf call failed");
-            return ERC20(abi.decode(result, (address)));
+            address adaptor = idToAdaptor[getPositionData[position].adaptorId].adaptor;
+            return BaseAdaptor(adaptor).assetOf(getPositionData[position].adaptorData);
         } else revert("Unknown Position Type");
     }
 

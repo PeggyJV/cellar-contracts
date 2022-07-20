@@ -13,7 +13,19 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
  * Block where USDC-1 in == aUSDC out 15000000
  */
 
-contract BaseAdaptor {
+abstract contract BaseAdaptor {
+    function deposit(uint256 assets, bytes memory adaptorData) public virtual;
+
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData
+    ) public virtual;
+
+    function balanceOf(bytes memory adaptorData) public view virtual returns (uint256);
+
+    function assetOf(bytes memory adaptorData) public view virtual returns (ERC20);
+
     function beforeHook(bytes memory hookData) public view virtual returns (bool) {
         return true;
     }

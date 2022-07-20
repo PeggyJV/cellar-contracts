@@ -2,7 +2,7 @@
 pragma solidity 0.8.15;
 
 import { IPool } from "@aave/interfaces/IPool.sol";
-import { BaseAdaptor } from "src/modules/BaseAdaptor.sol";
+import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC4626, ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
@@ -20,11 +20,41 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
  * Block where USDC-1 in == aUSDC out 15000000
  */
 
-contract LendingAdaptor is BaseAdaptor {
+contract AaveATokenAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
 
+    /*
+        adaptorData = abi.encode(aToken address)
+    */
+
+    //============================================ Implement Base Functions ===========================================
+    function deposit(uint256 assets, bytes memory adaptorData) public override {
+        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        _depositToAave(ERC20(token.UNDERLYING_ASSET_ADDRESS()), assets);
+    }
+
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData
+    ) public override {
+        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        _withdrawFromAave(ERC20(token.UNDERLYING_ASSET_ADDRESS()), assets);
+        ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
+    }
+
+    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
+        address token = abi.decode(adaptorData, (address));
+        return ERC20(token).balanceOf(msg.sender);
+    }
+
+    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        return ERC20(token.UNDERLYING_ASSET_ADDRESS());
+    }
+
     //============================================ Override Hooks ===========================================
-    function afterHook(bytes memory hookData) public view override returns (bool) {
+    function afterHook(bytes memory hookData) public view virtual override returns (bool) {
         //TODO hookDat would contain a minimum healthFactor or something
         IPool pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
         (, , , , , uint256 healthFactor) = pool.getUserAccountData(msg.sender);
@@ -39,17 +69,6 @@ contract LendingAdaptor is BaseAdaptor {
         (ERC20 tokenToDeposit, uint256 amountToDeposit) = abi.decode(callData, (ERC20, uint256));
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         _depositToAave(tokenToDeposit, amountToDeposit);
-    }
-
-    function borrowFromAave(bytes memory callData) public {
-        (ERC20 tokenToBorrow, uint256 amountToBorrow) = abi.decode(callData, (ERC20, uint256));
-        _borrowFromAave(tokenToBorrow, amountToBorrow);
-    }
-
-    function repayAaveDebt(bytes memory callData) public {
-        (ERC20 tokenToRepay, uint256 amountToRepay) = abi.decode(callData, (ERC20, uint256));
-        amountToRepay = _maxAvailable(tokenToRepay, amountToRepay);
-        _repayAaveDebt(tokenToRepay, amountToRepay);
     }
 
     function withdrawFromAave(bytes memory callData) public {
@@ -93,6 +112,4 @@ contract LendingAdaptor is BaseAdaptor {
         IPool pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
         pool.withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
     }
-
-    //============================================ COMPOUND Logic ============================================
 }

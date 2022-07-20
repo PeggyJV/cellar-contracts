@@ -2,7 +2,7 @@
 pragma solidity 0.8.15;
 
 import { IPool } from "@aave/interfaces/IPool.sol";
-import { BaseAdaptor } from "src/modules/BaseAdaptor.sol";
+import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC4626, ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
@@ -21,6 +21,38 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 
 contract SushiAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
+
+    /*
+        adaptorData = abi.encode( Sushi Chef farm pid )
+    */
+
+    //============================================ Implement Base Functions ===========================================
+    function deposit(uint256 assets, bytes memory adaptorData) public override {
+        uint256 pid = abi.decode(adaptorData, (uint256));
+        _depositIntoSushiFarm(assets, pid);
+    }
+
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData
+    ) public override {
+        uint256 pid = abi.decode(adaptorData, (uint256));
+        _withdrawFromSushiFarms(assets, pid);
+        ERC20(assetOf(adaptorData)).safeTransfer(receiver, assets);
+    }
+
+    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
+        uint256 pid = abi.decode(adaptorData, (uint256));
+        IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d);
+        return chef.userInfo(pid, msg.sender).amount;
+    }
+
+    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+        uint256 pid = abi.decode(adaptorData, (uint256));
+        IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d);
+        return ERC20(chef.lpToken(pid));
+    }
 
     //============================================ High Level Callable Functions ============================================
     function addLiquidityAndFarmSushi(bytes memory callData) public {
@@ -52,19 +84,13 @@ contract SushiAdaptor is BaseAdaptor {
         _withdrawFromFarmAndLPSushi(tokenA, tokenB, liquidity, minimumA, minimumB, pid);
     }
 
-    function getSushiFarmBalance(bytes memory adaptorData) public view returns (uint256) {
-        uint256 pid = abi.decode(adaptorData, (uint256));
-        IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d);
-        return chef.userInfo(pid, msg.sender).amount;
-    }
-
-    function getSushiFarmAsset(bytes memory adaptorData) public view returns (address) {
-        uint256 pid = abi.decode(adaptorData, (uint256));
-        IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d);
-        return chef.lpToken(pid);
-    }
-
     //============================================ SUSHI Logic ============================================
+    function _depositIntoSushiFarm(uint256 liquidity, uint256 pid) internal {
+        IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d); //mainnet sushi chef
+        ERC20(chef.lpToken(pid)).safeApprove(address(chef), liquidity);
+        chef.deposit(pid, liquidity, address(this));
+    }
+
     function _addLiquidityAndFarmSushi(
         ERC20 tokenA,
         ERC20 tokenB,
@@ -92,8 +118,7 @@ contract SushiAdaptor is BaseAdaptor {
         //TODO what to do if amountA/B is alot less than amounts[i/i+1]
         //TODO could do a value in vs value out check here
         //add LP tokens to farm
-        ERC20(chef.lpToken(pid)).safeApprove(address(chef), liquidity);
-        chef.deposit(pid, liquidity, address(this));
+        _depositIntoSushiFarm(liquidity, pid);
     }
 
     //TODO on polygon sushiswap has run out of rewards several times.
@@ -119,6 +144,11 @@ contract SushiAdaptor is BaseAdaptor {
         }
     }
 
+    function _withdrawFromSushiFarms(uint256 liquidity, uint256 pid) internal {
+        IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d); //mainnet sushi chef
+        chef.withdraw(pid, liquidity, address(this));
+    }
+
     function _withdrawFromFarmAndLPSushi(
         ERC20 tokenA,
         ERC20 tokenB,
@@ -130,8 +160,8 @@ contract SushiAdaptor is BaseAdaptor {
         IUniswapV2Router router = IUniswapV2Router(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F); //mainnet sushi router
         IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d); //mainnet sushi chef
         //TODO use the above harvest function to harvest the farms before withdrawing?
-        chef.withdraw(pid, liquidity, address(this));
-        ERC20(chef.lpToken(1)).safeApprove(address(router), liquidity);
+        _withdrawFromSushiFarms(liquidity, pid);
+        ERC20(chef.lpToken(pid)).safeApprove(address(router), liquidity);
         (uint256 amountA, uint256 amountB) = router.removeLiquidity(
             address(tokenA),
             address(tokenB),
