@@ -432,4 +432,25 @@ contract CellarTest is Test {
             "Should have minted no performance fees for no net gains."
         );
     }
+
+    function testHighWatermark() external {
+        // Deposit into cellar.
+        deal(address(USDC), address(this), 300e6);
+        cellar.deposit(100e6, address(this));
+
+        cellar.deposit(100e6, address(this));
+
+        console.log("HWM", cellar.sharePriceHighWatermark());
+
+        console.log("Assets", cellar.totalAssets());
+        // Simulate gains.
+        USDC.transfer(address(cellar), 10e6);
+        console.log("Assets", cellar.totalAssets());
+
+        cellar.approve(address(cellar), 100e18);
+        cellar.withdraw(10e6, address(this), address(this));
+
+        console.log("HWM", cellar.sharePriceHighWatermark());
+        console.log("Fees Minted", cellar.balanceOf(address(cellar)));
+    }
 }

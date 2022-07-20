@@ -1000,7 +1000,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         fees = denominator > 0 ? feesInShares.mulDivUp(totalShares, denominator) : 0;
     }
 
-    uint256 sharePriceHighWatermark;
+    uint256 public sharePriceHighWatermark;
 
     ///@dev resets high watermark to current share price
     function resetHighWatermark() external onlyOwner {
@@ -1008,17 +1008,18 @@ contract Cellar is ERC4626, Ownable, Multicall {
     }
 
     function _takePerformanceFees() internal {
-        if (performanceFee == 0) return;
+        if (performanceFee == 0 || totalSupply == 0) return;
 
         uint256 _totalAssets = totalAssets();
-        uint256 currentSharePrice = _totalAssets.mulDivDown(10**decimals, totalSupply);
+        uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
+        //uint256 currentSharePrice = _totalAssets.mulDivDown(10**decimals, totalSupply);
         if (sharePriceHighWatermark == 0) sharePriceHighWatermark = currentSharePrice;
         else if (sharePriceHighWatermark < currentSharePrice) {
             //take a fee
-            uint256 assets = (currentSharePrice - sharePriceHighWatermark) * totalSupply;
-            assets = assets.mulDivDown(performanceFee, 1e18);
+            uint256 yield = ((currentSharePrice - sharePriceHighWatermark) * totalSupply) / 10**decimals;
+            yield = yield.mulWadDown(performanceFee);
             sharePriceHighWatermark = currentSharePrice;
-            _mint(address(this), _convertToShares(assets, _totalAssets));
+            _mint(address(this), _convertToShares(yield, _totalAssets));
             //TODO could track performance fee amount here to split it up later
         }
     }
