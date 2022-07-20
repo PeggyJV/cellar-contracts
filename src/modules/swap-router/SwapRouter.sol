@@ -211,7 +211,6 @@ contract SwapRouter is Multicall {
             ERC20 assetIn: the asset being swapped
             uint256 assets: the amount of assetIn you want to swap with
      *      uint256 assetsOutMin: the minimum amount of assetOut tokens you want from the swap
-     *      address from: the address to transfer assetIn tokens from to this address
      * @param receiver the address assetOut token should be sent to
      * @return amountOut amount of tokens received from the swap
      */
@@ -221,12 +220,11 @@ contract SwapRouter is Multicall {
             uint256[3][4] memory swapParams,
             ERC20 assetIn,
             uint256 assets,
-            uint256 assetsOutMin,
-            address from
-        ) = abi.decode(swapData, (address[9], uint256[3][4], ERC20, uint256, uint256, address));
+            uint256 assetsOutMin
+        ) = abi.decode(swapData, (address[9], uint256[3][4], ERC20, uint256, uint256));
 
         // Transfer assets to this contract to swap.
-        assetIn.safeTransferFrom(from, address(this), assets);
+        assetIn.safeTransferFrom(msg.sender, address(this), assets);
 
         address[4] memory pools;
 
@@ -250,7 +248,6 @@ contract SwapRouter is Multicall {
             ERC20 assetOut: the asset being received
             uint256 assets: the amount of assetIn you want to swap with
      *      uint256 assetsOutMin: the minimum amount of assetOut tokens you want from the swap
-     *      address from: the address to transfer assetIn tokens from to this address
      * @param receiver the address assetOut token should be sent to
      * @return amountOut amount of tokens received from the swap
      */
@@ -260,12 +257,11 @@ contract SwapRouter is Multicall {
             ERC20 assetIn,
             ERC20 assetOut,
             uint256 assets,
-            uint256 assetsOutMin,
-            address from
-        ) = abi.decode(swapData, (address, ERC20, ERC20, uint256, uint256, address));
+            uint256 assetsOutMin
+        ) = abi.decode(swapData, (address, ERC20, ERC20, uint256, uint256));
 
         // Transfer assets to this contract to swap.
-        assetIn.safeTransferFrom(from, address(this), assets);
+        assetIn.safeTransferFrom(msg.sender, address(this), assets);
 
         // Execute the multihop swap.
         assetIn.safeApprove(address(balancerExchangeProxy), assets);
