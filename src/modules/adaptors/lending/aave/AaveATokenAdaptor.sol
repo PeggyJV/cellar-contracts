@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.15;
 
-import { IPool } from "@aave/interfaces/IPool.sol";
+import { IPool } from "src/interfaces/IPool.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC4626, ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";

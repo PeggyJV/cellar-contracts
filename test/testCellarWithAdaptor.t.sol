@@ -7,7 +7,7 @@ import { Cellar } from "src/base/Cellar.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/lending/aave/AaveATokenAdaptor.sol";
 import { AaveDebtTokenAdaptor } from "src/modules/adaptors/lending/aave/AaveDebtTokenAdaptor.sol";
 import { SushiAdaptor } from "src/modules/adaptors/farming/SushiAdaptor.sol";
-import { IPool } from "@aave/interfaces/IPool.sol";
+import { IPool } from "src/interfaces/IPool.sol";
 import { IMasterChef } from "src/interfaces/IMasterChef.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
