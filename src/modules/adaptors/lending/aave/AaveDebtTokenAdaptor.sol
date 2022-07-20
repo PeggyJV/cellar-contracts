@@ -56,7 +56,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
 
     //============================================ Override Hooks ===========================================
     function afterHook(bytes memory hookData) public view virtual override returns (bool) {
-        //TODO hookDat would contain a minimum healthFactor or something
+        //TODO hookData would contain a minimum healthFactor or something
         IPool pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
         (, , , , , uint256 healthFactor) = pool.getUserAccountData(msg.sender);
 

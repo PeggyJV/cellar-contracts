@@ -104,6 +104,7 @@ contract CellarWithAdaptorTest is Test {
         bytes4[] memory functionSigs = new bytes4[](2);
         bytes[] memory callData = new bytes[](2);
         bool[] memory isRevertOkay = new bool[](2);
+        //borrow data
         functionSigs[0] = AaveDebtTokenAdaptor.borrowFromAave.selector;
         callData[0] = abi.encode(address(WETH), 1e18);
         isRevertOkay[0] = false;
@@ -117,7 +118,9 @@ contract CellarWithAdaptorTest is Test {
             isRevertOkay: isRevertOkay
         });
 
+        //SP Calls on Adaptor
         cellar.callOnAdaptor(callInfo);
+
         console.log("Cellar aUSDC balance: ", aUSDC.balanceOf(address(cellar)));
         console.log("Cellar dWETH balance: ", dWETH.balanceOf(address(cellar)));
         console.log("Cellar  WETH balance: ", WETH.balanceOf(address(cellar)));

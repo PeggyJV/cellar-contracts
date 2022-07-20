@@ -22,6 +22,10 @@ import "../Errors.sol";
  * @author Brian Le
  */
 contract Cellar is ERC4626, Ownable, Multicall {
+    /**
+     * @notice Address of the platform's registry contract. Used to get the latest address of modules.
+     */
+    Registry public immutable registry;
     using AddressArray for address[];
     using AddressArray for ERC20[];
     using SafeTransferLib for ERC20;
@@ -539,11 +543,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
     // =========================================== CONSTRUCTOR ===========================================
 
     /**
-     * @notice Address of the platform's registry contract. Used to get the latest address of modules.
-     */
-    Registry public immutable registry;
-
-    /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
      *      module to the cellars.
      *      https://github.com/PeggyJV/steward
@@ -719,6 +718,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Withdraw from positions in the order defined by `positions`. Used if the withdraw type
      *      is `ORDERLY`.
      */
+    //TODO think this needs extra logic to repay debt and such
     function _withdrawInOrder(
         uint256 assets,
         address receiver,
@@ -1071,7 +1071,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     }
 
     // 0 -> 1e18. Used after callOnAdaptor to help safeguard against adaptor moving into positions that are not added here
-    uint256 public allowedRebalanceDeviation = 3e15; //currently set to 99.7%
+    uint256 public allowedRebalanceDeviation = 0.003e18; //currently set to 99.7%
 
     event AdaptorCallRevertIgnored(address adaptor, bytes4 functionSignature, bytes callData);
 
@@ -1103,18 +1103,18 @@ contract Cellar is ERC4626, Ownable, Multicall {
         //run all adaptor functions
         for (uint8 i = 0; i < data.length; i++) {
             info = idToAdaptor[data[i].adaptorId];
-            require(
-                data[i].callData.length == data[i].isRevertOkay.length &&
-                    data[i].callData.length == data[i].functionSigs.length,
-                "Input lenghts do not match"
-            );
+            //require(
+            //    data[i].callData.length == data[i].isRevertOkay.length &&
+            //        data[i].callData.length == data[i].functionSigs.length,
+            //    "Input lenghts do not match"
+            //);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 // Run the adaptor function
                 (bool success, ) = info.adaptor.delegatecall(
                     abi.encodeWithSelector(data[i].functionSigs[j], data[i].callData[j])
                 );
 
-                // Check call success, and revert is necessary.
+                // Check call success, and revert if necessary.
                 if (!data[i].isRevertOkay[j] && !success) revert("Adaptor Call Failed");
                 else if (data[i].isRevertOkay[j] && !success)
                     emit AdaptorCallRevertIgnored(info.adaptor, data[i].functionSigs[j], data[i].callData[j]);
@@ -1221,6 +1221,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @dev Deposit into a position according to its position type and update related state.
      */
+    //TODO hooks could be used here to check the health factor of a withdraw from aave?
     function _depositTo(address position, uint256 assets) internal {
         PositionData storage positionData = getPositionData[position];
         PositionType positionType = positionData.positionType;

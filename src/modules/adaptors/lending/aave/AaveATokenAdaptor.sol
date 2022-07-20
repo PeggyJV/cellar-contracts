@@ -69,6 +69,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         (ERC20 tokenToDeposit, uint256 amountToDeposit) = abi.decode(callData, (ERC20, uint256));
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         _depositToAave(tokenToDeposit, amountToDeposit);
+        //require(Cellar(address(this)).isPositionUsed()
     }
 
     function withdrawFromAave(bytes memory callData) public {
@@ -77,16 +78,6 @@ contract AaveATokenAdaptor is BaseAdaptor {
         address aToken = pool.getReserveData(address(tokenToWithdraw)).aTokenAddress;
         amountToWithdraw = _maxAvailable(ERC20(aToken), amountToWithdraw);
         _withdrawFromAave(tokenToWithdraw, amountToWithdraw);
-    }
-
-    function getAaveBalance(bytes memory adaptorData) public view returns (uint256) {
-        address token = abi.decode(adaptorData, (address));
-        return ERC20(token).balanceOf(msg.sender);
-    }
-
-    function getAaveUnderlying(bytes memory adaptorData) public view returns (address) {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        return token.UNDERLYING_ASSET_ADDRESS();
     }
 
     //============================================ AAVE Logic ============================================
