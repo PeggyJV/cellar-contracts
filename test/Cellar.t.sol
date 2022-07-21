@@ -404,6 +404,21 @@ contract CellarTest is Test {
         }
     }
 
+    function testSendFees() external {
+        // Deposit into cellar.
+        deal(address(USDC), address(this), 100e6);
+        cellar.deposit(100e6, address(this));
+        vm.warp(15000000 + 86400);
+
+        cellar.sendFees();
+    }
+
+    function sendToCosmos(
+        address asset,
+        bytes32 feesDistributor,
+        uint256 assets
+    ) external {}
+
     // =========================================== ACCRUE TEST ===========================================
 
     /*function testAccrueWithPositivePerformance() external {
