@@ -801,16 +801,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
         ///@dev so I am thinking that params will contain AdaptorCall[] data
         ///@dev one of the last actions should include approving the aave pool to transfer the amount + premium to it
         AdaptorCall[] memory data = abi.decode(params, (AdaptorCall[]));
+        AdaptorInfo memory info;
 
         ///@dev I don't think any of the other values will be used? SP should do all that calculation off chain, and just instruct the cellar what to do
         //run all adaptor functions
         for (uint8 i = 0; i < data.length; i++) {
             info = idToAdaptor[data[i].adaptorId];
-            //require(
-            //    data[i].callData.length == data[i].isRevertOkay.length &&
-            //        data[i].callData.length == data[i].functionSigs.length,
-            //    "Input lenghts do not match"
-            //);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 // Run the adaptor function
                 (bool success, ) = info.adaptor.delegatecall(
