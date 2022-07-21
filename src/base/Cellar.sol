@@ -848,7 +848,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @return assets that will be deposited
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
-        assets = _previewMint(shares, totalAssets());
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        assets = _previewMint(shares, _totalAssets - feeInAssets);
     }
 
     /**
@@ -857,7 +859,31 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @return shares that will be redeemed
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
-        shares = _previewWithdraw(assets, totalAssets());
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        shares = _previewWithdraw(assets, _totalAssets - feeInAssets);
+    }
+
+    /**
+     * @notice Simulate the effects of depositing assets at the current block, given current on-chain conditions.
+     * @param assets amount of assets to deposit
+     * @return shares that will be minted
+     */
+    function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        shares = _convertToShares(assets, _totalAssets - feeInAssets);
+    }
+
+    /**
+     * @notice Simulate the effects of redeeming shares at the current block, given current on-chain conditions.
+     * @param shares amount of shares to redeem
+     * @return assets that will be returned
+     */
+    function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        assets = _convertToAssets(shares, _totalAssets - feeInAssets);
     }
 
     /**
@@ -1030,43 +1056,30 @@ contract Cellar is ERC4626, Ownable, Multicall {
         sharePriceHighWatermark = totalAssets().mulDivDown(10**decimals, totalSupply);
     }
 
-    function _calculatePerformanceFee(uint256 _totalAssets) internal view returns (uint256 feeInShares) {
+    function _calculatePerformanceFee(uint256 _totalAssets) internal view returns (uint256 feeInAssets) {
         if (performanceFee == 0 || _totalAssets == 0) return 0;
-        uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets).changeDecimals(
-            asset.decimals(),
-            decimals
-        );
+        uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
         if (sharePriceHighWatermark == 0) return 0;
         else if (sharePriceHighWatermark < currentSharePrice) {
-            _totalAssets = _totalAssets.changeDecimals(asset.decimals(), decimals);
-            uint256 shares = totalSupply;
-            //return
-            //    (_totalAssets /
-            //        (sharePriceHighWatermark +
-            //            (currentSharePrice - sharePriceHighWatermark) *
-            //            (1e18 - performanceFee))) - totalSupply;
-            //take a fee
+            //find how many assets make up the fee
             uint256 yield = ((currentSharePrice - sharePriceHighWatermark) * totalSupply) / 10**decimals;
-            uint256 feeShares = (shares * _totalAssets) /
-                (_totalAssets - yield.mulDivDown(performanceFee, 1e18)) -
-                shares;
-
-            return feeShares;
+            feeInAssets = yield.mulDivDown(performanceFee, 1e18);
         } else {
             return 0;
         }
     }
 
+    //TODO do we need to support changing the holding position?
     function _takePerformanceFees(uint256 _totalAssets) internal {
+        if (_totalAssets == 0) sharePriceHighWatermark = 10**asset.decimals(); //Since share price always starts out at one asset
         if (performanceFee == 0 || _totalAssets == 0) return;
 
-        uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets).changeDecimals(
-            asset.decimals(),
-            decimals
-        );
+        uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
         if (sharePriceHighWatermark == 0) sharePriceHighWatermark = currentSharePrice;
         else if (sharePriceHighWatermark < currentSharePrice) {
-            uint256 feeShares = _calculatePerformanceFee(_totalAssets);
+            uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+            uint256 shares = totalSupply;
+            uint256 feeShares = (shares * _totalAssets) / (_totalAssets - feeInAssets) - shares;
             if (feeShares > 0) {
                 _mint(address(this), feeShares);
                 sharePriceHighWatermark = currentSharePrice;

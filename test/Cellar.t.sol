@@ -78,17 +78,19 @@ contract CellarTest is Test {
         priceRouter.setExchangeRate(WBTC, WETH, 15e18);
 
         // Setup Cellar:
-        address[] memory positions = new address[](4);
+        address[] memory positions = new address[](5);
         positions[0] = address(USDC);
         positions[1] = address(usdcCLR);
         positions[2] = address(wethCLR);
         positions[3] = address(wbtcCLR);
+        positions[4] = address(WETH);
 
-        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](4);
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](5);
         positionTypes[0] = Cellar.PositionType.ERC20;
         positionTypes[1] = Cellar.PositionType.ERC4626;
         positionTypes[2] = Cellar.PositionType.ERC4626;
         positionTypes[3] = Cellar.PositionType.ERC4626;
+        positionTypes[4] = Cellar.PositionType.ERC20;
 
         cellar = new MockCellar(
             registry,
@@ -279,29 +281,127 @@ contract CellarTest is Test {
         rng = bound(rng, 1, type(uint8).max);
         uint256 yield = (depositA + depositB) / rng;
         // Deposit into cellar.
-        deal(address(USDC), address(this), (depositA + depositB));
+        deal(address(USDC), address(this), (depositA + depositB + 300e6));
         cellar.deposit(depositA, address(this));
 
         cellar.deposit(depositB, address(this));
 
-        assertEq(1e18, cellar.sharePriceHighWatermark(), "High Watermark should be 1 USDC");
+        assertEq(1e6, cellar.sharePriceHighWatermark(), "High Watermark should be 1 USDC");
 
         // Simulate gains.
         uint256 total = depositA + depositB + yield;
         deal(address(USDC), address(cellar), total); // Balance was 200 USDC, but change it to 210 simulating 10 USDC of gains
 
-        cellar.approve(address(cellar), type(uint256).max);
-        cellar.withdraw(depositA / 10, address(this), address(this));
+        assertEq(
+            cellar.previewMint(100e18),
+            cellar.mint(100e18, address(this)),
+            "previewMint does not return the same as mint"
+        );
 
-        // assertEq(1.05e6, cellar.sharePriceHighWatermark(), "High Watermark should be 1.05 USDC");
-        //uint256 expectedShares = (1e18 * 1e18) / 1.05e18;
-        //assertEq(cellar.balanceOf(address(cellar)), expectedShares, "Incorrect amount of shares minted");
+        assertEq(
+            cellar.previewDeposit(100e6),
+            cellar.deposit(100e6, address(this)),
+            "previewMint does not return the same as deposit"
+        );
+
+        cellar.approve(address(cellar), type(uint256).max);
+        assertEq(
+            cellar.previewWithdraw(depositA / 10),
+            cellar.withdraw(depositA / 10, address(this), address(this)),
+            "previewWithdraw does not return the same as withdraw"
+        );
+
+        assertEq(
+            cellar.previewRedeem(100e18),
+            cellar.redeem(100e18, address(this), address(this)),
+            "previewRedeem does not return the same as redeem"
+        );
+
+        uint256 newHWM = (total * 1e6) / (depositA + depositB);
+        assertEq(newHWM, cellar.sharePriceHighWatermark(), "High Watermark should be equal to newHWM");
         assertApproxEqRel(
             cellar.previewRedeem(cellar.balanceOf(address(cellar))),
             yield.mulDivDown(cellar.performanceFee(), 1e18),
-            0.025e18,
+            0.001e18,
             "Should be within 0.1% of yield * PerformanceFee"
         );
+    }
+
+    function testHighWatermarkComplex(uint256 seed) external {
+        seed = bound(seed, 1, type(uint72).max);
+        deal(address(USDC), address(this), type(uint256).max);
+        cellar.approve(address(cellar), type(uint256).max);
+        cellar.deposit(1_000_000e6, address(this)); //deposit 1M USDC into Cellar
+        uint256 random;
+        uint256 amount;
+        uint256 HWM;
+        uint256 sharePrice;
+        uint256 cellarShares;
+        uint256 expectedFee;
+        uint256 totalSupply;
+        for (uint256 i = 0; i < 100; i++) {
+            random = uint256(keccak256(abi.encode(seed + i))) % 8; //number between 0 -> 7
+
+            // Force the first 8 iterations to guarantee every scenario is called
+            if (i == 0) random = 2; // force withdraw
+            if (i == 1) random = 0; // force deposit
+            if (i == 2) random = 4; // force gains
+            if (i == 3) random = 4; // force gains
+            if (i == 4) random = 6; // force loss
+            if (i == 5) random = 2; // force withdraw
+            if (i == 6) random = 0; // force deposit
+            if (i == 7) random = 6; // force loss
+
+            amount = (uint256(keccak256(abi.encode("HOWDY", seed + i))) % 10000e6) + 1000e6; //number between 1000 -> 10,999 USDC
+            HWM = cellar.sharePriceHighWatermark();
+            cellarShares = cellar.balanceOf(address(cellar));
+            sharePrice = (cellar.totalAssets() * 1e18) / cellar.totalSupply();
+            totalSupply = cellar.totalSupply();
+            if (random < 2) {
+                //deposit
+                console.log("Deposit", amount, "USDC");
+                cellar.deposit(amount, address(this));
+            } else if (random < 4) {
+                //withdraw
+                console.log("Withdraw", amount, "USDC");
+                cellar.withdraw(amount, address(this), address(this));
+            } else if (random < 6) {
+                //yield earned
+                console.log("Yield Earned", amount, "USDC");
+                deal(address(USDC), address(this), USDC.balanceOf(address(cellar)) + amount);
+                uint256 WETHamount = amount.changeDecimals(6, 15);
+                console.log("Yield Earned", WETHamount, "WETH");
+                deal(address(WETH), address(this), WETH.balanceOf(address(cellar)) + WETHamount);
+            } else {
+                //yield loss
+                console.log("Yield Lossed", amount, "USDC");
+                deal(address(USDC), address(this), USDC.balanceOf(address(cellar)) - amount);
+                uint256 WETHamount = amount.changeDecimals(6, 15);
+                console.log("Yield Lossed", WETHamount, "WETH");
+                uint256 newBalance = WETH.balanceOf(address(cellar)) > WETHamount
+                    ? WETH.balanceOf(address(cellar)) - WETHamount
+                    : 0;
+                deal(address(WETH), address(this), newBalance);
+            }
+
+            if (random < 4 && sharePrice > HWM) {
+                //don't check this if a loss or gain happened cuz no fees would be minted
+                assertTrue(cellar.balanceOf(address(cellar)) > cellarShares, "Cellar was not minted Fees");
+                expectedFee = ((sharePrice - HWM) * cellar.performanceFee() * totalSupply) / 1e36;
+                assertApproxEqRel(
+                    expectedFee,
+                    cellar.previewRedeem(cellar.balanceOf(address(cellar)) - cellarShares),
+                    0.001e18,
+                    "Fee Shares minted exceede deviation"
+                );
+                sharePrice = (cellar.totalAssets() * 1e6) / cellar.totalSupply();
+                assertEq(cellar.sharePriceHighWatermark(), sharePrice, "HWM was not set to new Share Price");
+            } else {
+                // We don't really need to check this if random >= 4, but it can't hurt
+                assertTrue(cellar.balanceOf(address(cellar)) == cellarShares, "Cellar was minted Fees");
+                assertEq(cellar.sharePriceHighWatermark(), HWM, "HWM was set to new Share Price");
+            }
+        }
     }
 
     // =========================================== ACCRUE TEST ===========================================
