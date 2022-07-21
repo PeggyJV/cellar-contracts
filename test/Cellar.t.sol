@@ -268,9 +268,45 @@ contract CellarTest is Test {
         assertEq(usdcCLR.balanceOf(address(cellar)), assets, "Should have not changed position balance.");
     }
 
+    // =========================================== Performance Fee TEST ===========================================
+    function testHighWatermark(
+        uint256 depositA,
+        uint256 depositB,
+        uint256 rng
+    ) external {
+        depositA = bound(depositA, 1000e6, 100000000e6);
+        depositB = bound(depositB, 1000e6, 100000000e6);
+        rng = bound(rng, 1, type(uint8).max);
+        uint256 yield = (depositA + depositB) / rng;
+        // Deposit into cellar.
+        deal(address(USDC), address(this), (depositA + depositB));
+        cellar.deposit(depositA, address(this));
+
+        cellar.deposit(depositB, address(this));
+
+        assertEq(1e18, cellar.sharePriceHighWatermark(), "High Watermark should be 1 USDC");
+
+        // Simulate gains.
+        uint256 total = depositA + depositB + yield;
+        deal(address(USDC), address(cellar), total); // Balance was 200 USDC, but change it to 210 simulating 10 USDC of gains
+
+        cellar.approve(address(cellar), type(uint256).max);
+        cellar.withdraw(depositA / 10, address(this), address(this));
+
+        // assertEq(1.05e6, cellar.sharePriceHighWatermark(), "High Watermark should be 1.05 USDC");
+        //uint256 expectedShares = (1e18 * 1e18) / 1.05e18;
+        //assertEq(cellar.balanceOf(address(cellar)), expectedShares, "Incorrect amount of shares minted");
+        assertApproxEqRel(
+            cellar.previewRedeem(cellar.balanceOf(address(cellar))),
+            yield.mulDivDown(cellar.performanceFee(), 1e18),
+            0.025e18,
+            "Should be within 0.1% of yield * PerformanceFee"
+        );
+    }
+
     // =========================================== ACCRUE TEST ===========================================
 
-    function testAccrueWithPositivePerformance() external {
+    /*function testAccrueWithPositivePerformance() external {
         // Initialize position balances.
         cellar.depositIntoPosition(address(usdcCLR), 1000e6, address(this)); // $1000
         cellar.depositIntoPosition(address(wethCLR), 1e18, address(this)); // $2000
@@ -431,26 +467,5 @@ contract CellarTest is Test {
             performanceFeesBefore,
             "Should have minted no performance fees for no net gains."
         );
-    }
-
-    function testHighWatermark() external {
-        // Deposit into cellar.
-        deal(address(USDC), address(this), 300e6);
-        cellar.deposit(100e6, address(this));
-
-        cellar.deposit(100e6, address(this));
-
-        console.log("HWM", cellar.sharePriceHighWatermark());
-
-        console.log("Assets", cellar.totalAssets());
-        // Simulate gains.
-        USDC.transfer(address(cellar), 10e6);
-        console.log("Assets", cellar.totalAssets());
-
-        cellar.approve(address(cellar), 100e18);
-        cellar.withdraw(10e6, address(this), address(this));
-
-        console.log("HWM", cellar.sharePriceHighWatermark());
-        console.log("Fees Minted", cellar.balanceOf(address(cellar)));
-    }
+    }*/
 }
