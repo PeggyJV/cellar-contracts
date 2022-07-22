@@ -403,7 +403,7 @@ contract CellarTest is Test {
             }
         }
     }
-
+    /*
     function testSendFees() external {
         // Deposit into cellar.
         deal(address(USDC), address(this), 100e6);
@@ -418,7 +418,7 @@ contract CellarTest is Test {
         bytes32 feesDistributor,
         uint256 assets
     ) external {}
-
+    */
     // =========================================== ACCRUE TEST ===========================================
 
     /*function testAccrueWithPositivePerformance() external {
