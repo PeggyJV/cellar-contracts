@@ -5,13 +5,16 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/lending/aave/AaveATokenAdaptor.sol";
-import { AaveDebtTokenAdaptor } from "src/modules/adaptors/lending/aave/AaveDebtTokenAdaptor.sol";
+import { AaveDebtTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/lending/aave/AaveDebtTokenAdaptor.sol";
 import { SushiAdaptor } from "src/modules/adaptors/farming/SushiAdaptor.sol";
 import { IPool } from "src/interfaces/IPool.sol";
 import { IMasterChef } from "src/interfaces/IMasterChef.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
+import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
+import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
+import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -26,6 +29,7 @@ contract CellarWithAdaptorTest is Test {
     Cellar private cellar;
     PriceRouter private priceRouter;
     Registry private registry;
+    SwapRouter private swapRouter;
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -35,6 +39,8 @@ contract CellarWithAdaptorTest is Test {
     ERC20 private CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     ERC20 private dCVX = ERC20(0x4Ae5E4409C6Dbc84A00f9f89e4ba096603fb7d50);
     ERC20 private SUSHI = ERC20(0x6B3595068778DD592e39A122f4f5a5cF09C90fE2);
+    address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
@@ -45,8 +51,9 @@ contract CellarWithAdaptorTest is Test {
         aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
         //sushiAdaptor = new SushiAdaptor();
         priceRouter = new PriceRouter();
+        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
-        registry = new Registry(address(this), address(this), address(priceRouter));
+        registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
         // Setup Cellar:
         address[] memory positions = new address[](5);
@@ -101,9 +108,9 @@ contract CellarWithAdaptorTest is Test {
     function testAavePositions() external {
         cellar.deposit(10000e6, address(this));
         Cellar.AdaptorCall[] memory callInfo = new Cellar.AdaptorCall[](1);
-        bytes4[] memory functionSigs = new bytes4[](2);
-        bytes[] memory callData = new bytes[](2);
-        bool[] memory isRevertOkay = new bool[](2);
+        bytes4[] memory functionSigs = new bytes4[](3);
+        bytes[] memory callData = new bytes[](3);
+        bool[] memory isRevertOkay = new bool[](3);
         //borrow data
         functionSigs[0] = AaveDebtTokenAdaptor.borrowFromAave.selector;
         callData[0] = abi.encode(address(WETH), 1e18);
@@ -111,6 +118,16 @@ contract CellarWithAdaptorTest is Test {
         functionSigs[1] = AaveDebtTokenAdaptor.borrowFromAave.selector;
         callData[1] = abi.encode(address(CVX), 200e18);
         isRevertOkay[1] = false;
+
+        address[] memory path = new address[](2);
+        path[0] = address(WETH);
+        path[1] = address(CVX);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 10000;
+        bytes memory swapData = abi.encode(path, poolFees, 1e18, 0);
+        functionSigs[2] = BaseAdaptor.swap.selector;
+        callData[2] = abi.encode(WETH, 1e18, SwapRouter.Exchange.UNIV3, swapData);
+
         callInfo[0] = Cellar.AdaptorCall({
             adaptorId: 2,
             functionSigs: functionSigs,

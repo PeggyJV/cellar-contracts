@@ -28,7 +28,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     */
 
     //============================================ Global Functions ===========================================
-    function pool() internal view returns (IPool) {
+    function pool() internal pure returns (IPool) {
         return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
     }
 

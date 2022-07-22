@@ -5,6 +5,7 @@ import { ERC4626, ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
+import { Cellar } from "src/base/Cellar.sol";
 
 /**
  * @title Base Adaptor
@@ -44,19 +45,26 @@ abstract contract BaseAdaptor {
         else return amount;
     }
 
+    function swap(bytes memory callData) public {
+        (ERC20 assetIn, uint256 amountIn, SwapRouter.Exchange exchange, bytes memory params) = abi.decode(
+            callData,
+            (ERC20, uint256, SwapRouter.Exchange, bytes)
+        );
+        _swap(assetIn, amountIn, exchange, params, address(this));
+    }
+
     function _swap(
         ERC20 assetIn,
         uint256 amountIn,
         SwapRouter.Exchange exchange,
-        bytes calldata params,
+        bytes memory params,
         address receiver
     ) internal returns (uint256 amountOut) {
         // Store the expected amount of the asset in that we expect to have after the swap.
         uint256 expectedAssetsInAfter = assetIn.balanceOf(address(this)) - amountIn;
 
         // Get the address of the latest swap router.
-        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
-        //Cellar(address(this)).registry();
+        SwapRouter swapRouter = SwapRouter(Cellar(address(this)).registry().getAddress(1));
 
         // Approve swap router to swap assets.
         assetIn.safeApprove(address(swapRouter), amountIn);
