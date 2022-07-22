@@ -789,15 +789,19 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
+    address public constant aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
+
     // ========================================= Aave Flash Loan Support =========================================
     function executeOperation(
-        address asset,
-        uint256 amount,
-        uint256 premium,
+        address[] calldata assets,
+        uint256[] calldata amounts,
+        uint256[] calldata premiums,
         address initiator,
         bytes calldata params
     ) external returns (bool) {
         require(initiator == address(this), "External Initiators Not Allowed!"); //important so that attackers cant send a flash loan to this contract and get it to run any adaptor logic
+        require(msg.sender == aavePool, "Only Aave Pool can call this");
+
         ///@dev so I am thinking that params will contain AdaptorCall[] data
         ///@dev one of the last actions should include approving the aave pool to transfer the amount + premium to it
         AdaptorCall[] memory data = abi.decode(params, (AdaptorCall[]));
@@ -809,16 +813,35 @@ contract Cellar is ERC4626, Ownable, Multicall {
             info = idToAdaptor[data[i].adaptorId];
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 // Run the adaptor function
-                (bool success, ) = info.adaptor.delegatecall(
+                (bool success, bytes memory result) = info.adaptor.delegatecall(
                     abi.encodeWithSelector(data[i].functionSigs[j], data[i].callData[j])
                 );
 
                 // Check call success, and revert if necessary.
-                if (!data[i].isRevertOkay[j] && !success) revert("Adaptor Call Failed");
-                else if (data[i].isRevertOkay[j] && !success)
+                if (!data[i].isRevertOkay[j] && !success) {
+                    if (!success) {
+                        // If there is return data, the call reverted with a reason or a custom error so we
+                        // bubble up the error message.
+                        if (result.length > 0) {
+                            assembly {
+                                let returndata_size := mload(result)
+                                revert(add(32, result), returndata_size)
+                            }
+                        } else {
+                            revert("Adaptor Call Failed!!!");
+                        }
+                    }
+                } else if (data[i].isRevertOkay[j] && !success)
                     emit AdaptorCallRevertIgnored(info.adaptor, data[i].functionSigs[j], data[i].callData[j]);
             }
         }
+
+        //approve pool to repay all debt
+        for (uint256 i = 0; i < amounts.length; i++) {
+            ERC20(assets[i]).safeApprove(aavePool, (amounts[i] + premiums[i]));
+        }
+
+        return true;
     }
 
     // ========================================= ACCOUNTING LOGIC =========================================
@@ -1142,13 +1165,25 @@ contract Cellar is ERC4626, Ownable, Multicall {
             //);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 // Run the adaptor function
-                (bool success, ) = info.adaptor.delegatecall(
+                (bool success, bytes memory result) = info.adaptor.delegatecall(
                     abi.encodeWithSelector(data[i].functionSigs[j], data[i].callData[j])
                 );
 
                 // Check call success, and revert if necessary.
-                if (!data[i].isRevertOkay[j] && !success) revert("Adaptor Call Failed");
-                else if (data[i].isRevertOkay[j] && !success)
+                if (!data[i].isRevertOkay[j] && !success) {
+                    if (!success) {
+                        // If there is return data, the call reverted with a reason or a custom error so we
+                        // bubble up the error message.
+                        if (result.length > 0) {
+                            assembly {
+                                let returndata_size := mload(result)
+                                revert(add(32, result), returndata_size)
+                            }
+                        } else {
+                            revert("Adaptor Call Failed?");
+                        }
+                    }
+                } else if (data[i].isRevertOkay[j] && !success)
                     emit AdaptorCallRevertIgnored(info.adaptor, data[i].functionSigs[j], data[i].callData[j]);
             }
         }

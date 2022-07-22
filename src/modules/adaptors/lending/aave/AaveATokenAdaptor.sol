@@ -10,6 +10,7 @@ import { IMasterChef } from "src/interfaces/IMasterChef.sol";
 import { IAaveToken } from "src/interfaces/IAaveToken.sol";
 import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
+import { DataTypes } from "src/interfaces/DataTypes.sol";
 
 /**
  * @title Lending Adaptor
@@ -75,8 +76,9 @@ contract AaveATokenAdaptor is BaseAdaptor {
     function withdrawFromAave(bytes memory callData) public {
         (ERC20 tokenToWithdraw, uint256 amountToWithdraw) = abi.decode(callData, (ERC20, uint256));
         IPool pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-        address aToken = pool.getReserveData(address(tokenToWithdraw)).aTokenAddress;
-        amountToWithdraw = _maxAvailable(ERC20(aToken), amountToWithdraw);
+        //DataTypes.ReserveData memory types = pool.getReserveData(address(tokenToWithdraw));
+        //address aToken = types.aTokenAddress;
+        //amountToWithdraw = _maxAvailable(ERC20(aToken), amountToWithdraw);
         _withdrawFromAave(tokenToWithdraw, amountToWithdraw);
     }
 

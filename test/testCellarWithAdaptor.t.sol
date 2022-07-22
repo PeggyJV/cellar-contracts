@@ -41,6 +41,8 @@ contract CellarWithAdaptorTest is Test {
     ERC20 private SUSHI = ERC20(0x6B3595068778DD592e39A122f4f5a5cF09C90fE2);
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    ERC20 private aDAI = ERC20(0x028171bCA77440897B824Ca71D1c56caC55b68A3);
+    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
@@ -56,19 +58,21 @@ contract CellarWithAdaptorTest is Test {
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
         // Setup Cellar:
-        address[] memory positions = new address[](5);
+        address[] memory positions = new address[](6);
         positions[0] = address(aUSDC);
         positions[1] = address(dWETH);
         positions[2] = address(WETH);
         positions[3] = address(dCVX);
         positions[4] = address(CVX);
+        positions[5] = address(aDAI);
 
-        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](5);
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](6);
         positionTypes[0] = Cellar.PositionType.Adaptor;
         positionTypes[1] = Cellar.PositionType.Adaptor;
         positionTypes[2] = Cellar.PositionType.ERC20;
         positionTypes[3] = Cellar.PositionType.Adaptor;
         positionTypes[4] = Cellar.PositionType.ERC20;
+        positionTypes[5] = Cellar.PositionType.Adaptor;
 
         cellar = new Cellar(
             registry,
@@ -88,17 +92,20 @@ contract CellarWithAdaptorTest is Test {
         cellar.trustPosition(address(WETH), Cellar.PositionType.ERC20, false, 0, abi.encode(address(WETH)));
         cellar.trustPosition(address(dCVX), Cellar.PositionType.Adaptor, true, 2, abi.encode(address(dCVX)));
         cellar.trustPosition(address(CVX), Cellar.PositionType.ERC20, false, 0, abi.encode(address(CVX)));
+        cellar.trustPosition(address(aDAI), Cellar.PositionType.Adaptor, false, 1, abi.encode(address(aDAI)));
 
         cellar.pushPosition(positions[0]);
         cellar.pushPosition(positions[1]);
         cellar.pushPosition(positions[2]);
         cellar.pushPosition(positions[3]);
         cellar.pushPosition(positions[4]);
+        cellar.pushPosition(positions[5]);
 
         //TODO price router stuff
         priceRouter.addAsset(USDC, ERC20(address(0)), 0, 100e8, 1 days);
         priceRouter.addAsset(CVX, ERC20(address(0)), 0, 10000e8, 1 days);
         priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 100000e8, 1 days);
+        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 100e8, 1 days);
 
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(this), type(uint224).max);
@@ -139,6 +146,94 @@ contract CellarWithAdaptorTest is Test {
         cellar.callOnAdaptor(callInfo);
 
         console.log("Cellar aUSDC balance: ", aUSDC.balanceOf(address(cellar)));
+        console.log("Cellar  aDAI balance: ", aDAI.balanceOf(address(cellar)));
+        console.log("Cellar dWETH balance: ", dWETH.balanceOf(address(cellar)));
+        console.log("Cellar  WETH balance: ", WETH.balanceOf(address(cellar)));
+        console.log("Cellar  dCVX balance: ", dCVX.balanceOf(address(cellar)));
+        console.log("Cellar   CVX balance: ", CVX.balanceOf(address(cellar)));
+        console.log("Cellar  Total Assets: ", cellar.totalAssets());
+    }
+
+    function testAaveFlashLoan() external {
+        cellar.deposit(10000e6, address(this));
+        Cellar.AdaptorCall[] memory callInfo = new Cellar.AdaptorCall[](2);
+        bytes4[] memory functionSigs = new bytes4[](3);
+        bytes[] memory callData = new bytes[](3);
+        bool[] memory isRevertOkay = new bool[](3);
+
+        //borrow WETH, CVX, and flashloan DAI
+        functionSigs[0] = AaveDebtTokenAdaptor.borrowFromAave.selector;
+        callData[0] = abi.encode(address(WETH), 1e18);
+        isRevertOkay[0] = false;
+        functionSigs[1] = AaveDebtTokenAdaptor.borrowFromAave.selector;
+        callData[1] = abi.encode(address(CVX), 200e18);
+        isRevertOkay[1] = false;
+
+        functionSigs[2] = AaveDebtTokenAdaptor.simpleFlashLoan.selector;
+        ERC20 flashLoanToken = DAI;
+        uint256 loanAmount = 3800e18;
+
+        Cellar.AdaptorCall[] memory flashCallInfo = new Cellar.AdaptorCall[](1);
+        bytes4[] memory flashFunctionSigs = new bytes4[](3);
+        bytes[] memory flashCallData = new bytes[](3);
+        bool[] memory flashIsRevertOkay = new bool[](3);
+
+        flashFunctionSigs[0] = AaveATokenAdaptor.depositToAave.selector;
+        flashCallData[0] = abi.encode(DAI, loanAmount); //deposit DAI into Aave
+        flashIsRevertOkay[0] = false;
+
+        flashFunctionSigs[1] = AaveATokenAdaptor.withdrawFromAave.selector;
+        flashCallData[1] = abi.encode(USDC, 10000e6);
+        flashIsRevertOkay[1] = false;
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(DAI);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 100; //0.01% pool
+        bytes memory swapData = abi.encode(path, poolFees, 10000e6, 0);
+        flashFunctionSigs[2] = BaseAdaptor.swap.selector;
+        flashCallData[2] = abi.encode(USDC, 10000e6, SwapRouter.Exchange.UNIV3, swapData);
+        flashIsRevertOkay[2] = false;
+
+        flashCallInfo[0] = Cellar.AdaptorCall({
+            adaptorId: 1,
+            functionSigs: flashFunctionSigs,
+            callData: flashCallData,
+            isRevertOkay: flashIsRevertOkay
+        });
+
+        bytes memory flashParams = abi.encode(flashCallInfo);
+        callData[2] = abi.encode(flashLoanToken, loanAmount, flashParams);
+        isRevertOkay[2] = false;
+
+        callInfo[0] = Cellar.AdaptorCall({
+            adaptorId: 2,
+            functionSigs: functionSigs,
+            callData: callData,
+            isRevertOkay: isRevertOkay
+        });
+
+        functionSigs = new bytes4[](1);
+        callData = new bytes[](1);
+        isRevertOkay = new bool[](1);
+
+        functionSigs[0] = AaveATokenAdaptor.depositToAave.selector;
+        callData[0] = abi.encode(DAI, type(uint256).max);
+        isRevertOkay[0] = false;
+
+        callInfo[1] = Cellar.AdaptorCall({
+            adaptorId: 1,
+            functionSigs: functionSigs,
+            callData: callData,
+            isRevertOkay: isRevertOkay
+        });
+
+        //SP Calls on Adaptor
+        cellar.callOnAdaptor(callInfo);
+
+        console.log("Cellar aUSDC balance: ", aUSDC.balanceOf(address(cellar)));
+        console.log("Cellar  aDAI balance: ", aDAI.balanceOf(address(cellar)));
         console.log("Cellar dWETH balance: ", dWETH.balanceOf(address(cellar)));
         console.log("Cellar  WETH balance: ", WETH.balanceOf(address(cellar)));
         console.log("Cellar  dCVX balance: ", dCVX.balanceOf(address(cellar)));

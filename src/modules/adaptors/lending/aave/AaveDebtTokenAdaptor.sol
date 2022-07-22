@@ -81,6 +81,11 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         _repayAaveDebt(tokenToRepay, amountToRepay);
     }
 
+    function simpleFlashLoan(bytes memory callData) public {
+        (ERC20 flashLoanToken, uint256 loanAmount, bytes memory params) = abi.decode(callData, (ERC20, uint256, bytes));
+        _simpleFlashLoan(flashLoanToken, loanAmount, params);
+    }
+
     //============================================ AAVE Logic ============================================
     function _borrowFromAave(ERC20 tokenToBorrow, uint256 amountToBorrow) internal {
         pool().borrow(address(tokenToBorrow), amountToBorrow, 2, 0, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
@@ -89,5 +94,19 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     function _repayAaveDebt(ERC20 tokenToRepay, uint256 amountToRepay) internal {
         tokenToRepay.safeApprove(address(pool()), amountToRepay);
         pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
+    }
+
+    function _simpleFlashLoan(
+        ERC20 flashLoanToken,
+        uint256 loanAmount,
+        bytes memory params
+    ) internal {
+        address[] memory assets = new address[](1);
+        assets[0] = address(flashLoanToken);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = loanAmount;
+        uint256[] memory modes = new uint256[](1);
+        modes[0] = 0;
+        pool().flashLoan(address(this), assets, amounts, modes, address(this), params, 0);
     }
 }
