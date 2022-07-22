@@ -280,6 +280,7 @@ contract CellarTest is Test {
         depositB = bound(depositB, 1000e6, 100000000e6);
         rng = bound(rng, 1, type(uint8).max);
         uint256 yield = (depositA + depositB) / rng;
+
         // Deposit into cellar.
         deal(address(USDC), address(this), (depositA + depositB + 300e6));
         cellar.deposit(depositA, address(this));
@@ -290,7 +291,7 @@ contract CellarTest is Test {
 
         // Simulate gains.
         uint256 total = depositA + depositB + yield;
-        deal(address(USDC), address(cellar), total); // Balance was 200 USDC, but change it to 210 simulating 10 USDC of gains
+        deal(address(USDC), address(cellar), total);
 
         assertEq(
             cellar.previewMint(100e18),
@@ -301,7 +302,7 @@ contract CellarTest is Test {
         assertEq(
             cellar.previewDeposit(100e6),
             cellar.deposit(100e6, address(this)),
-            "previewMint does not return the same as deposit"
+            "previewDeposit does not return the same as deposit"
         );
 
         cellar.approve(address(cellar), type(uint256).max);

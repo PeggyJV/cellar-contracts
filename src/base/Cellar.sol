@@ -1063,28 +1063,50 @@ contract Cellar is ERC4626, Ownable, Multicall {
         else if (sharePriceHighWatermark < currentSharePrice) {
             //find how many assets make up the fee
             uint256 yield = ((currentSharePrice - sharePriceHighWatermark) * totalSupply) / 10**decimals;
-            feeInAssets = yield.mulDivDown(performanceFee, 1e18);
+            feeInAssets = yield.mulDivUp(performanceFee, 1e18);
         } else {
             return 0;
         }
     }
 
-    //TODO do we need to support changing the holding position?
     function _takePerformanceFees(uint256 _totalAssets) internal {
-        if (_totalAssets == 0) sharePriceHighWatermark = 10**asset.decimals(); //Since share price always starts out at one asset
-        if (performanceFee == 0 || _totalAssets == 0) return;
+        if (performanceFee == 0) return;
+        if (_totalAssets == 0) {
+            sharePriceHighWatermark = 10**asset.decimals(); //Since share price always starts out at one asset
+            return;
+        }
 
-        uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
+        uint256 currentSharePrice = _convertToAssets(1e18, _totalAssets);
         if (sharePriceHighWatermark == 0) sharePriceHighWatermark = currentSharePrice;
         else if (sharePriceHighWatermark < currentSharePrice) {
             uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
-            uint256 shares = totalSupply;
-            uint256 feeShares = (shares * _totalAssets) / (_totalAssets - feeInAssets) - shares;
-            if (feeShares > 0) {
-                _mint(address(this), feeShares);
+            //Using this implementation results in preview functions being off be some wei
+            //uint256 exchangeRate = _convertToShares(1, _totalAssets);
+            uint256 platformFees = _convertToFees(_convertToShares(feeInAssets, _totalAssets), 0);
+            //Using this implementation results in preview functions being correct
+            //uint256 shares = totalSupply;
+            //uint256 platformFees = (shares * _totalAssets) / (_totalAssets - feeInAssets) - shares;
+            if (platformFees > 0) {
+                _mint(address(this), platformFees);
                 sharePriceHighWatermark = currentSharePrice;
             }
         }
+    }
+
+    /**
+     * @dev Calculate the amount of fees to mint such that value of fees after minting is not diluted.
+     */
+    function _convertToFees(uint256 feesInShares, uint256 exchangeRate) internal view returns (uint256 fees) {
+        // Convert amount of assets to take as fees to shares.
+        //uint256 feesInShares = assets * exchangeRate;
+
+        // Saves an SLOAD.
+        uint256 totalShares = totalSupply;
+
+        // Get the amount of fees to mint. Without this, the value of fees minted would be slightly
+        // diluted because total shares increased while total assets did not. This counteracts that.
+        uint256 denominator = totalShares - feesInShares;
+        fees = denominator > 0 ? feesInShares.mulDivUp(totalShares, denominator) : 0;
     }
 
     /**
@@ -1099,11 +1121,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Fees are accrued as shares and redeemed upon transfer.
      */
     function sendFees() public onlyOwner {
-        // Calculate platform fees earned.
         uint256 _totalAssets = totalAssets();
+        // Compute and store current exchange rate between assets and shares for gas efficiency.
+        uint256 exchangeRate = _convertToShares(1, _totalAssets);
+
+        // Calculate platform fees earned.
         uint256 elapsedTime = block.timestamp - lastAccrual;
         uint256 platformFeeInAssets = (_totalAssets * elapsedTime * platformFee) / 1e18 / 365 days;
-        uint256 platformFees = _convertToShares(platformFeeInAssets, _totalAssets);
+        uint256 platformFees = _convertToFees(platformFeeInAssets, exchangeRate);
 
         _mint(address(this), platformFees);
 
