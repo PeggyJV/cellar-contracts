@@ -1049,6 +1049,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     // ========================================= FEES LOGIC =========================================
 
+    /**
+     * @notice Stores the share price to be used as a High Watermark to calculate performance fees
+     */
     uint256 public sharePriceHighWatermark;
 
     ///@dev resets high watermark to current share price
@@ -1056,6 +1059,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
         sharePriceHighWatermark = totalAssets().mulDivDown(10**decimals, totalSupply);
     }
 
+    /**
+     * @notice Calculates how many assets Strategist would earn performance fees
+     * @param _totalAssets uint256 value of the total assets in the cellar
+     * @return feeInAssets amount of assets
+     */
     function _calculatePerformanceFee(uint256 _totalAssets) internal view returns (uint256 feeInAssets) {
         if (performanceFee == 0 || _totalAssets == 0) return 0;
         uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
@@ -1069,6 +1077,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
     }
 
+    /**
+     * @notice Mints cellar performance fee shares if current share price is above high watermark
+     * @param _totalAssets uint256 value of the total assets in the cellar
+     */
     function _takePerformanceFees(uint256 _totalAssets) internal {
         if (performanceFee == 0) return;
         if (_totalAssets == 0) {

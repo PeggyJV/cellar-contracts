@@ -138,7 +138,7 @@ contract CellarTest is Test {
 
     function sendToCosmos(
         address asset,
-        bytes32 feesDistributor,
+        bytes32,
         uint256 assets
     ) external {
         ERC20(asset).transferFrom(msg.sender, address(this), assets);
@@ -420,11 +420,17 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        skip(timePassed); //advance time by 1 day
+        skip(timePassed); //advance time
         uint256 cellarBalanceBefore = USDC.balanceOf(address(cellar));
         cellar.sendFees();
         uint256 cellarBalanceAfter = USDC.balanceOf(address(cellar));
-        uint256 expectedFee = (assets * cellar.platformFee() * timePassed) / (1 days * 365 * 1e18);
+        uint256 expectedFee = (assets * cellar.platformFee() * timePassed) / (365 days * 1e18);
         assertEq(cellarBalanceBefore - cellarBalanceAfter, expectedFee, "Incorrect platform fee");
+
+        if (cellar.balanceOf(address(cellar)) > 1e18) {
+            cellar.transfer(address(cellar), 1e18); //Send 1 share to the cellar to mimic cellar collecting performance fees
+            cellar.sendFees();
+            assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar did not burn performance fees");
+        }
     }
 }
