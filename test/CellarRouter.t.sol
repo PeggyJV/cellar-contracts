@@ -12,6 +12,7 @@ import { MockSwapRouter } from "src/mocks/MockSwapRouter.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
+import { USR_InsufficientShares } from "src/Errors.sol";
 
 contract CellarRouterTest is Test {
     using Math for uint256;
@@ -71,7 +72,7 @@ contract CellarRouterTest is Test {
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
-        uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, poolFees, assets, 0, owner);
+        uint256 shares = router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, poolFees, assets, 0, owner, 0);
         vm.stopPrank();
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
@@ -87,6 +88,63 @@ contract CellarRouterTest is Test {
         assertEq(cellar.balanceOf(owner), shares, "Should have updated user's share balance.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(owner)), assetsReceived, "Should return all user's assets.");
         assertEq(XYZ.balanceOf(owner), 0, "Should have deposited assets from user.");
+    }
+
+    function testMinSharesIn(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint72).max);
+
+        // Mint liquidity for swap.
+        ABC.mint(address(swapRouter), 2 * assets);
+
+        // Specify the swap path.
+        address[] memory path = new address[](2);
+        path[0] = address(XYZ);
+        path[1] = address(ABC);
+
+        // Specify the pool fee tiers to use for each swap (none).
+        uint24[] memory poolFees;
+
+        // Test minSharesIn is enforced
+        vm.startPrank(owner);
+        XYZ.approve(address(router), assets);
+        XYZ.mint(owner, assets);
+        uint256 unreasonableMinSharesIn = 2**72;
+        vm.expectRevert(USR_InsufficientShares.selector);
+        router.depositAndSwapIntoCellar(
+            ERC4626(address(cellar)),
+            path,
+            poolFees,
+            assets,
+            0,
+            owner,
+            unreasonableMinSharesIn
+        );
+
+        router.depositAndSwapIntoCellar(
+            ERC4626(address(cellar)),
+            path,
+            poolFees,
+            assets,
+            0,
+            owner,
+            0
+        );
+
+        uint256 assetsReceivedAfterDeposit = swapRouter.quote(assets, path);
+        (path[0], path[1]) = (path[1], path[0]);
+        cellar.approve(address(router), assetsReceivedAfterDeposit);
+
+        vm.expectRevert(USR_InsufficientShares.selector);
+        router.withdrawAndSwapFromCellar(
+            ERC4626(address(cellar)),
+            path,
+            poolFees,
+            assetsReceivedAfterDeposit,
+            0,
+            owner,
+            unreasonableMinSharesIn
+        );
+        vm.stopPrank();
     }
 
     function testDepositAndSwapIntoCellarUsingUniswapV2OnMainnet(uint256 assets) external {
@@ -113,7 +171,8 @@ contract CellarRouterTest is Test {
             poolFees,
             assets,
             0,
-            owner
+            owner,
+            0
         );
         vm.stopPrank();
 
@@ -161,7 +220,8 @@ contract CellarRouterTest is Test {
             poolFees,
             assets,
             0,
-            owner
+            owner,
+            0
         );
         vm.stopPrank();
 
@@ -204,7 +264,7 @@ contract CellarRouterTest is Test {
         vm.startPrank(owner);
         XYZ.approve(address(router), assets);
         XYZ.mint(owner, assets);
-        router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, poolFees, assets, 0, owner);
+        router.depositAndSwapIntoCellar(ERC4626(address(cellar)), path, poolFees, assets, 0, owner, 0);
 
         // Assets received by the cellar will be different from the amount of assets a user attempted
         // to deposit due to slippage swaps.
@@ -221,7 +281,8 @@ contract CellarRouterTest is Test {
             poolFees,
             assetsReceivedAfterDeposit,
             0,
-            owner
+            owner,
+            0
         );
         vm.stopPrank();
 

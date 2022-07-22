@@ -20,6 +20,11 @@ error USR_ZeroAssets();
 error USR_ZeroShares();
 
 /**
+ * @notice Attempted an action resulting in insufficient shares received.
+ */
+error USR_InsufficientShares();
+
+/**
  * @notice Attempted deposit more than the max deposit.
  * @param assets the assets user attempted to deposit
  * @param maxDeposit the max assets that can be deposited
