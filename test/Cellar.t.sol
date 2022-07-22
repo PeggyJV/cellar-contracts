@@ -78,17 +78,19 @@ contract CellarTest is Test {
         priceRouter.setExchangeRate(WBTC, WETH, 15e18);
 
         // Setup Cellar:
-        address[] memory positions = new address[](4);
+        address[] memory positions = new address[](5);
         positions[0] = address(USDC);
         positions[1] = address(usdcCLR);
         positions[2] = address(wethCLR);
         positions[3] = address(wbtcCLR);
+        positions[4] = address(WETH);
 
-        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](4);
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](5);
         positionTypes[0] = Cellar.PositionType.ERC20;
         positionTypes[1] = Cellar.PositionType.ERC4626;
         positionTypes[2] = Cellar.PositionType.ERC4626;
         positionTypes[3] = Cellar.PositionType.ERC4626;
+        positionTypes[4] = Cellar.PositionType.ERC20;
 
         cellar = new MockCellar(
             registry,
@@ -132,6 +134,14 @@ contract CellarTest is Test {
         asset.approve(address(this), assets);
 
         asset.safeTransferFrom(position, address(1), assets);
+    }
+
+    function sendToCosmos(
+        address asset,
+        bytes32,
+        uint256 assets
+    ) external {
+        ERC20(asset).transferFrom(msg.sender, address(this), assets);
     }
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
@@ -268,168 +278,159 @@ contract CellarTest is Test {
         assertEq(usdcCLR.balanceOf(address(cellar)), assets, "Should have not changed position balance.");
     }
 
-    // =========================================== ACCRUE TEST ===========================================
-
-    function testAccrueWithPositivePerformance() external {
-        // Initialize position balances.
-        cellar.depositIntoPosition(address(usdcCLR), 1000e6, address(this)); // $1000
-        cellar.depositIntoPosition(address(wethCLR), 1e18, address(this)); // $2000
-        cellar.depositIntoPosition(address(wbtcCLR), 1e8, address(this)); // $30,000
-
-        assertEq(cellar.totalAssets(), 33_000e6, "Should have initialized total assets with assets deposited.");
-        assertEq(cellar.balanceOf(address(this)), 33_000e18, "Should have initialized total shares.");
-
-        // Simulate gains.
-        simulateGains(address(usdcCLR), 500e6); // $500
-        simulateGains(address(wethCLR), 0.5e18); // $1000
-        simulateGains(address(wbtcCLR), 0.5e8); // $15,000
-
-        assertEq(cellar.totalAssets(), 49_500e6, "Should have updated total assets with gains.");
-
-        cellar.accrue();
-
-        assertApproxEqAbs(
-            cellar.convertToAssets(cellar.balanceOf(address(cellar))),
-            1650e6,
-            1, // May be off by 1 due to rounding.
-            "Should have minted performance fees to cellar."
-        );
-    }
-
-    function testAccrueWithNegativePerformance() external {
-        // Initialize position balances.
-        cellar.depositIntoPosition(address(usdcCLR), 1000e6, address(this)); // $1000
-        cellar.depositIntoPosition(address(wethCLR), 1e18, address(this)); // $2000
-        cellar.depositIntoPosition(address(wbtcCLR), 1e8, address(this)); // $30,000
-
-        assertEq(cellar.totalAssets(), 33_000e6, "Should have initialized total assets with assets deposited.");
-        assertEq(cellar.balanceOf(address(this)), 33_000e18, "Should have initialized total shares.");
-
-        // Simulate losses.
-        simulateLoss(address(usdcCLR), 500e6); // -$500
-        simulateLoss(address(wethCLR), 0.5e18); // -$1000
-        simulateLoss(address(wbtcCLR), 0.5e8); // -$15,000
-
-        assertEq(cellar.totalAssets(), 16_500e6, "Should have updated total assets with losses.");
-
-        cellar.accrue();
-
-        assertEq(
-            cellar.convertToAssets(cellar.balanceOf(address(cellar))),
-            0,
-            "Should have minted no performance fees to cellar."
-        );
-    }
-
-    function testAccrueWithNoPerformance() external {
-        // Initialize position balances.
-        cellar.depositIntoPosition(address(usdcCLR), 1000e6, address(this)); // $1000
-        cellar.depositIntoPosition(address(wethCLR), 1e18, address(this)); // $2000
-        cellar.depositIntoPosition(address(wbtcCLR), 1e8, address(this)); // $30,000
-
-        assertEq(cellar.totalAssets(), 33_000e6, "Should have initialized total assets with assets deposited.");
-        assertEq(cellar.balanceOf(address(this)), 33_000e18, "Should have initialized total shares.");
-
-        cellar.accrue();
-
-        assertEq(
-            cellar.convertToAssets(cellar.balanceOf(address(cellar))),
-            0,
-            "Should have minted no performance fees to cellar."
-        );
-    }
-
-    function testAccrueDepositsAndWithdrawsAreNotCountedAsYield(uint256 assets) external {
-        assets = bound(assets, 1, type(uint72).max);
+    // =========================================== Performance Fee TEST ===========================================
+    function testHighWatermark(
+        uint256 depositA,
+        uint256 depositB,
+        uint256 rng
+    ) external {
+        depositA = bound(depositA, 1000e6, 100000000e6);
+        depositB = bound(depositB, 1000e6, 100000000e6);
+        rng = bound(rng, 1, type(uint8).max);
+        uint256 yield = (depositA + depositB) / rng;
 
         // Deposit into cellar.
+        deal(address(USDC), address(this), (depositA + depositB + 300e6));
+        cellar.deposit(depositA, address(this));
+
+        cellar.deposit(depositB, address(this));
+
+        assertEq(1e6, cellar.sharePriceHighWatermark(), "High Watermark should be 1 USDC");
+
+        // Simulate gains.
+        uint256 total = depositA + depositB + yield;
+        deal(address(USDC), address(cellar), total);
+
+        assertEq(
+            cellar.previewMint(100e18),
+            cellar.mint(100e18, address(this)),
+            "previewMint does not return the same as mint"
+        );
+
+        assertEq(
+            cellar.previewDeposit(100e6),
+            cellar.deposit(100e6, address(this)),
+            "previewDeposit does not return the same as deposit"
+        );
+
+        cellar.approve(address(cellar), type(uint256).max);
+        assertEq(
+            cellar.previewWithdraw(depositA / 10),
+            cellar.withdraw(depositA / 10, address(this), address(this)),
+            "previewWithdraw does not return the same as withdraw"
+        );
+
+        assertEq(
+            cellar.previewRedeem(100e18),
+            cellar.redeem(100e18, address(this), address(this)),
+            "previewRedeem does not return the same as redeem"
+        );
+
+        uint256 newHWM = (total * 1e6) / (depositA + depositB);
+        assertEq(newHWM, cellar.sharePriceHighWatermark(), "High Watermark should be equal to newHWM");
+        assertApproxEqRel(
+            cellar.previewRedeem(cellar.balanceOf(address(cellar))),
+            yield.mulDivDown(cellar.performanceFee(), 1e18),
+            0.001e18,
+            "Should be within 0.1% of yield * PerformanceFee"
+        );
+    }
+
+    function testHighWatermarkComplex(uint256 seed) external {
+        seed = bound(seed, 1, type(uint72).max);
+        deal(address(USDC), address(this), type(uint256).max);
+        cellar.approve(address(cellar), type(uint256).max);
+        cellar.deposit(1_000_000e6, address(this)); //deposit 1M USDC into Cellar
+        uint256 random;
+        uint256 amount;
+        uint256 HWM;
+        uint256 sharePrice;
+        uint256 cellarShares;
+        uint256 expectedFee;
+        uint256 totalSupply;
+        for (uint256 i = 0; i < 20; i++) {
+            random = uint256(keccak256(abi.encode(seed + i))) % 8; //number between 0 -> 7
+
+            // Force the first 8 iterations to guarantee every scenario is called
+            if (i == 0) random = 2; // force withdraw
+            if (i == 1) random = 0; // force deposit
+            if (i == 2) random = 4; // force gains
+            if (i == 3) random = 4; // force gains
+            if (i == 4) random = 6; // force loss
+            if (i == 5) random = 2; // force withdraw
+            if (i == 6) random = 0; // force deposit
+            if (i == 7) random = 6; // force loss
+
+            amount = (uint256(keccak256(abi.encode("HOWDY", seed + i))) % 10000e6) + 1000e6; //number between 1000 -> 10,999 USDC
+            HWM = cellar.sharePriceHighWatermark();
+            cellarShares = cellar.balanceOf(address(cellar));
+            sharePrice = (cellar.totalAssets() * 1e18) / cellar.totalSupply();
+            totalSupply = cellar.totalSupply();
+            if (random < 2) {
+                //deposit
+                console.log("Deposit", amount, "USDC");
+                cellar.deposit(amount, address(this));
+            } else if (random < 4) {
+                //withdraw
+                console.log("Withdraw", amount, "USDC");
+                cellar.withdraw(amount, address(this), address(this));
+            } else if (random < 6) {
+                //yield earned
+                console.log("Yield Earned", amount, "USDC");
+                deal(address(USDC), address(this), USDC.balanceOf(address(cellar)) + amount);
+                uint256 WETHamount = amount.changeDecimals(6, 15);
+                console.log("Yield Earned", WETHamount, "WETH");
+                deal(address(WETH), address(this), WETH.balanceOf(address(cellar)) + WETHamount);
+            } else {
+                //yield loss
+                console.log("Yield Lossed", amount, "USDC");
+                deal(address(USDC), address(this), USDC.balanceOf(address(cellar)) - amount);
+                uint256 WETHamount = amount.changeDecimals(6, 15);
+                console.log("Yield Lossed", WETHamount, "WETH");
+                uint256 newBalance = WETH.balanceOf(address(cellar)) > WETHamount
+                    ? WETH.balanceOf(address(cellar)) - WETHamount
+                    : 0;
+                deal(address(WETH), address(this), newBalance);
+            }
+
+            if (random < 4 && sharePrice > HWM) {
+                //don't check this if a loss or gain happened cuz no fees would be minted
+                assertTrue(cellar.balanceOf(address(cellar)) > cellarShares, "Cellar was not minted Fees");
+                expectedFee = ((sharePrice - HWM) * cellar.performanceFee() * totalSupply) / 1e36;
+                assertApproxEqRel(
+                    expectedFee,
+                    cellar.previewRedeem(cellar.balanceOf(address(cellar)) - cellarShares),
+                    0.001e18,
+                    "Fee Shares minted exceede deviation"
+                );
+                sharePrice = (cellar.totalAssets() * 1e6) / cellar.totalSupply();
+                assertEq(cellar.sharePriceHighWatermark(), sharePrice, "HWM was not set to new Share Price");
+            } else {
+                // We don't really need to check this if random >= 4, but it can't hurt
+                assertTrue(cellar.balanceOf(address(cellar)) == cellarShares, "Cellar was minted Fees");
+                assertEq(cellar.sharePriceHighWatermark(), HWM, "HWM was set to new Share Price");
+            }
+        }
+    }
+
+    function testSendFees(uint256 timePassed) external {
+        timePassed = bound(timePassed, 1 days, 35_000 days);
+        // Deposit into cellar.
+        uint256 assets = 1_000_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        cellar.accrue();
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have counted deposit into cellar as yield.");
+        skip(timePassed); //advance time
+        uint256 cellarBalanceBefore = USDC.balanceOf(address(cellar));
+        cellar.sendFees();
+        uint256 cellarBalanceAfter = USDC.balanceOf(address(cellar));
+        uint256 expectedFee = (assets * cellar.platformFee() * timePassed) / (365 days * 1e18);
+        assertEq(cellarBalanceBefore - cellarBalanceAfter, expectedFee, "Incorrect platform fee");
 
-        // Deposit assets from holding pool to USDC cellar position
-        cellar.rebalance(
-            address(USDC),
-            address(usdcCLR),
-            assets,
-            SwapRouter.Exchange.UNIV2, // Does not matter, no swap is involved.
-            abi.encode(0) // Does not matter, no swap is involved.
-        );
-
-        cellar.accrue();
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have counted deposit into position as yield.");
-
-        // Withdraw some assets from USDC cellar position to holding position.
-        cellar.rebalance(
-            address(usdcCLR),
-            address(USDC),
-            assets / 2,
-            SwapRouter.Exchange.UNIV2, // Does not matter, no swap is involved.
-            abi.encode(0) // Does not matter, no swap is involved.
-        );
-
-        cellar.accrue();
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have counted withdrawals from position as yield.");
-
-        // Withdraw assets from holding pool and USDC cellar position.
-        cellar.withdraw(assets, address(this), address(this));
-
-        cellar.accrue();
-        assertEq(
-            cellar.balanceOf(address(cellar)),
-            0,
-            "Should not have counted withdrawals from holdings and position as yield."
-        );
-    }
-
-    event Accrual(uint256 platformFees, uint256 performanceFees);
-
-    function testAccrueUsesHighWatermark() external {
-        // Initialize position balances.
-        cellar.depositIntoPosition(address(usdcCLR), 1000e6, address(this)); // $1000
-        cellar.depositIntoPosition(address(wethCLR), 1e18, address(this)); // $2000
-        cellar.depositIntoPosition(address(wbtcCLR), 1e8, address(this)); // $30,000
-
-        // Simulate gains.
-        simulateGains(address(usdcCLR), 500e6); // $500
-        simulateGains(address(wethCLR), 0.5e18); // $1000
-        simulateGains(address(wbtcCLR), 0.5e8); // $15,000
-
-        cellar.accrue();
-
-        assertApproxEqAbs(
-            cellar.convertToAssets(cellar.balanceOf(address(cellar))),
-            1650e6,
-            1, // May be off by 1 due to rounding.
-            "Should have minted performance fees to cellar for gains."
-        );
-
-        // Simulate losing all previous gains.
-        simulateLoss(address(usdcCLR), 500e6); // -$500
-        simulateLoss(address(wethCLR), 0.5e18); // -$1000
-        simulateLoss(address(wbtcCLR), 0.5e8); // -$15,000
-
-        uint256 performanceFeesBefore = cellar.balanceOf(address(cellar));
-
-        cellar.accrue();
-
-        assertEq(
-            cellar.balanceOf(address(cellar)),
-            performanceFeesBefore,
-            "Should have minted no performance fees for losses."
-        );
-
-        // Simulate recovering previous gains.
-        simulateGains(address(usdcCLR), 500e6); // $500
-        simulateGains(address(wethCLR), 0.5e18); // $1000
-        simulateGains(address(wbtcCLR), 0.5e8); // $15,000
-
-        assertEq(
-            cellar.balanceOf(address(cellar)),
-            performanceFeesBefore,
-            "Should have minted no performance fees for no net gains."
-        );
+        if (cellar.balanceOf(address(cellar)) > 1e18) {
+            cellar.transfer(address(cellar), 1e18); //Send 1 share to the cellar to mimic cellar collecting performance fees
+            cellar.sendFees();
+            assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar did not burn performance fees");
+        }
     }
 }

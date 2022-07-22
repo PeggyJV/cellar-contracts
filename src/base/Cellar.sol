@@ -76,12 +76,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @notice Data related to a position.
      * @param positionType value specifying the interface a position uses
-     * @param highWatermark amount representing the balance this position needs to exceed during the
-     *                      next accrual to receive performance fees
      */
     struct PositionData {
         PositionType positionType;
-        int256 highWatermark;
     }
 
     /**
@@ -598,6 +595,44 @@ contract Cellar is ERC4626, Ownable, Multicall {
         _depositTo(holdingPosition, assets);
     }
 
+    function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
+        uint256 _totalAssets = totalAssets();
+
+        _takePerformanceFees(_totalAssets);
+        // Check for rounding error since we round down in previewDeposit.
+        require((shares = _convertToShares(assets, _totalAssets)) != 0, "ZERO_SHARES");
+
+        beforeDeposit(assets, shares, receiver);
+
+        // Need to transfer before minting or ERC777s could reenter.
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
+
+        afterDeposit(assets, shares, receiver);
+    }
+
+    function mint(uint256 shares, address receiver) public override returns (uint256 assets) {
+        uint256 _totalAssets = totalAssets();
+
+        _takePerformanceFees(_totalAssets);
+
+        assets = _previewMint(shares, _totalAssets); // No need to check for rounding error, previewMint rounds up.
+
+        beforeDeposit(assets, shares, receiver);
+
+        // Need to transfer before minting or ERC777s could reenter.
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
+
+        afterDeposit(assets, shares, receiver);
+    }
+
     /**
      * @notice Withdraw assets from the cellar by redeeming shares.
      * @dev Unlike conventional ERC4626 contracts, this may not always return one asset to the receiver.
@@ -623,6 +658,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             ERC20[] memory positionAssets,
             uint256[] memory positionBalances
         ) = _getData();
+
+        _takePerformanceFees(_totalAssets);
 
         // No need to check for rounding error, `previewWithdraw` rounds up.
         shares = _previewWithdraw(assets, _totalAssets);
@@ -669,6 +706,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             ERC20[] memory positionAssets,
             uint256[] memory positionBalances
         ) = _getData();
+
+        _takePerformanceFees(_totalAssets);
 
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
@@ -809,7 +848,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @return assets that will be deposited
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
-        assets = _previewMint(shares, totalAssets());
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        assets = _previewMint(shares, _totalAssets - feeInAssets);
     }
 
     /**
@@ -818,7 +859,31 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @return shares that will be redeemed
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
-        shares = _previewWithdraw(assets, totalAssets());
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        shares = _previewWithdraw(assets, _totalAssets - feeInAssets);
+    }
+
+    /**
+     * @notice Simulate the effects of depositing assets at the current block, given current on-chain conditions.
+     * @param assets amount of assets to deposit
+     * @return shares that will be minted
+     */
+    function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        shares = _convertToShares(assets, _totalAssets - feeInAssets);
+    }
+
+    /**
+     * @notice Simulate the effects of redeeming shares at the current block, given current on-chain conditions.
+     * @param shares amount of shares to redeem
+     * @return assets that will be returned
+     */
+    function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        assets = _convertToAssets(shares, _totalAssets - feeInAssets);
     }
 
     /**
@@ -899,91 +964,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
         _totalAssets = priceRouter.getValues(positionAssets, positionBalances, asset);
-    }
-
-    // =========================================== ACCRUAL LOGIC ===========================================
-
-    /**
-     * @notice Emitted on accruals.
-     * @param platformFees amount of shares minted as platform fees this accrual
-     * @param performanceFees amount of shares minted as performance fees this accrual
-     */
-    event Accrual(uint256 platformFees, uint256 performanceFees);
-
-    /**
-     * @notice Accrue platform fees and performance fees. May also accrue yield.
-     */
-    function accrue() public {
-        // Get the latest address of the price router.
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
-
-        // Get data efficiently.
-        (
-            uint256 _totalAssets,
-            address[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
-        ) = _getData();
-
-        // Record the total yield earned this accrual.
-        uint256 totalYield;
-
-        // Saves SLOADs during looping.
-        ERC20 denominationAsset = asset;
-
-        for (uint256 i; i < _positions.length; i++) {
-            PositionData storage positionData = getPositionData[_positions[i]];
-
-            // Get the current position balance.
-            uint256 balanceThisAccrual = positionBalances[i];
-
-            // Measure yield earned against this position's high watermark.
-            int256 yield = balanceThisAccrual.toInt256() - positionData.highWatermark;
-
-            // Move on if there is no yield to accrue.
-            if (yield <= 0) continue;
-
-            // Denominate yield in cellar's asset and count it towards our total yield for this accural.
-            totalYield += priceRouter.getValue(positionAssets[i], yield.toUint256(), denominationAsset);
-
-            // Update position's high watermark.
-            positionData.highWatermark = balanceThisAccrual.toInt256();
-        }
-
-        // Compute and store current exchange rate between assets and shares for gas efficiency.
-        uint256 exchangeRate = _convertToShares(1, _totalAssets);
-
-        // Calculate platform fees accrued.
-        uint256 elapsedTime = block.timestamp - lastAccrual;
-        uint256 platformFeeInAssets = (_totalAssets * elapsedTime * platformFee) / 1e18 / 365 days;
-        uint256 platformFees = _convertToFees(platformFeeInAssets, exchangeRate);
-
-        // Calculate performance fees accrued.
-        uint256 performanceFeeInAssets = totalYield.mulWadDown(performanceFee);
-        uint256 performanceFees = _convertToFees(performanceFeeInAssets, exchangeRate);
-
-        // Mint accrued fees as shares.
-        _mint(address(this), platformFees + performanceFees);
-
-        lastAccrual = uint32(block.timestamp);
-
-        emit Accrual(platformFees, performanceFees);
-    }
-
-    /**
-     * @dev Calculate the amount of fees to mint such that value of fees after minting is not diluted.
-     */
-    function _convertToFees(uint256 assets, uint256 exchangeRate) internal view returns (uint256 fees) {
-        // Convert amount of assets to take as fees to shares.
-        uint256 feesInShares = assets * exchangeRate;
-
-        // Saves an SLOAD.
-        uint256 totalShares = totalSupply;
-
-        // Get the amount of fees to mint. Without this, the value of fees minted would be slightly
-        // diluted because total shares increased while total assets did not. This counteracts that.
-        uint256 denominator = totalShares - feesInShares;
-        fees = denominator > 0 ? feesInShares.mulDivUp(totalShares, denominator) : 0;
     }
 
     // =========================================== POSITION LOGIC ===========================================
@@ -1070,6 +1050,71 @@ contract Cellar is ERC4626, Ownable, Multicall {
     // ========================================= FEES LOGIC =========================================
 
     /**
+     * @notice Stores the share price to be used as a High Watermark to calculate performance fees
+     */
+    uint256 public sharePriceHighWatermark;
+
+    ///@dev resets high watermark to current share price
+    function resetHighWatermark() external onlyOwner {
+        sharePriceHighWatermark = totalAssets().mulDivDown(10**decimals, totalSupply);
+    }
+
+    /**
+     * @notice Calculates how many assets Strategist would earn performance fees
+     * @param _totalAssets uint256 value of the total assets in the cellar
+     * @return feeInAssets amount of assets
+     */
+    function _calculatePerformanceFee(uint256 _totalAssets) internal view returns (uint256 feeInAssets) {
+        if (performanceFee == 0 || _totalAssets == 0) return 0;
+        uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
+        if (sharePriceHighWatermark == 0) return 0;
+        else if (sharePriceHighWatermark < currentSharePrice) {
+            //find how many assets make up the fee
+            uint256 yield = ((currentSharePrice - sharePriceHighWatermark) * totalSupply) / 10**decimals;
+            feeInAssets = yield.mulDivUp(performanceFee, 1e18);
+        } else {
+            return 0;
+        }
+    }
+
+    /**
+     * @notice Mints cellar performance fee shares if current share price is above high watermark
+     * @param _totalAssets uint256 value of the total assets in the cellar
+     */
+    function _takePerformanceFees(uint256 _totalAssets) internal {
+        if (performanceFee == 0) return;
+        if (_totalAssets == 0) {
+            sharePriceHighWatermark = 10**asset.decimals(); //Since share price always starts out at one asset
+            return;
+        }
+
+        uint256 currentSharePrice = _convertToAssets(1e18, _totalAssets);
+        if (sharePriceHighWatermark == 0) sharePriceHighWatermark = currentSharePrice;
+        else if (sharePriceHighWatermark < currentSharePrice) {
+            uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+
+            uint256 platformFees = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
+            if (platformFees > 0) {
+                _mint(address(this), platformFees);
+                sharePriceHighWatermark = currentSharePrice;
+            }
+        }
+    }
+
+    /**
+     * @dev Calculate the amount of fees to mint such that value of fees after minting is not diluted.
+     */
+    function _convertToFees(uint256 feesInShares) internal view returns (uint256 fees) {
+        // Saves an SLOAD.
+        uint256 totalShares = totalSupply;
+
+        // Get the amount of fees to mint. Without this, the value of fees minted would be slightly
+        // diluted because total shares increased while total assets did not. This counteracts that.
+        uint256 denominator = totalShares - feesInShares;
+        fees = denominator > 0 ? feesInShares.mulDivUp(totalShares, denominator) : 0;
+    }
+
+    /**
      * @notice Emitted when platform fees are send to the Sommelier chain.
      * @param feesInSharesRedeemed amount of fees redeemed for assets to send
      * @param feesInAssetsSent amount of assets fees were redeemed for that were sent
@@ -1081,6 +1126,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Fees are accrued as shares and redeemed upon transfer.
      */
     function sendFees() public onlyOwner {
+        uint256 _totalAssets = totalAssets();
+
+        // Calculate platform fees earned.
+        uint256 elapsedTime = block.timestamp - lastAccrual;
+        uint256 platformFeeInAssets = (_totalAssets * elapsedTime * platformFee) / 1e18 / 365 days;
+        uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
+
+        _mint(address(this), platformFees);
+
+        lastAccrual = uint32(block.timestamp);
         // Redeem our fee shares for assets to send to the fee distributor module.
         uint256 totalFees = balanceOf[address(this)];
         uint256 assets = previewRedeem(totalFees);
@@ -1107,10 +1162,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         PositionData storage positionData = getPositionData[position];
         PositionType positionType = positionData.positionType;
 
-        // Without this, deposits to this position would be counted as yield during the next fee
-        // accrual.
-        positionData.highWatermark += assets.toInt256();
-
         // Deposit into position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             ERC4626(position).asset().safeApprove(position, assets);
@@ -1128,10 +1179,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
     ) internal {
         PositionData storage positionData = getPositionData[position];
         PositionType positionType = positionData.positionType;
-
-        // Without this, withdrawals from this position would be counted as losses during the
-        // next fee accrual.
-        positionData.highWatermark -= assets.toInt256();
 
         // Withdraw from position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
