@@ -1080,12 +1080,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         if (sharePriceHighWatermark == 0) sharePriceHighWatermark = currentSharePrice;
         else if (sharePriceHighWatermark < currentSharePrice) {
             uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
-            //Using this implementation results in preview functions being off be some wei
-            //uint256 exchangeRate = _convertToShares(1, _totalAssets);
-            uint256 platformFees = _convertToFees(_convertToShares(feeInAssets, _totalAssets), 0);
-            //Using this implementation results in preview functions being correct
-            //uint256 shares = totalSupply;
-            //uint256 platformFees = (shares * _totalAssets) / (_totalAssets - feeInAssets) - shares;
+
+            uint256 platformFees = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
             if (platformFees > 0) {
                 _mint(address(this), platformFees);
                 sharePriceHighWatermark = currentSharePrice;
@@ -1096,10 +1092,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @dev Calculate the amount of fees to mint such that value of fees after minting is not diluted.
      */
-    function _convertToFees(uint256 feesInShares, uint256 exchangeRate) internal view returns (uint256 fees) {
-        // Convert amount of assets to take as fees to shares.
-        //uint256 feesInShares = assets * exchangeRate;
-
+    function _convertToFees(uint256 feesInShares) internal view returns (uint256 fees) {
         // Saves an SLOAD.
         uint256 totalShares = totalSupply;
 
@@ -1122,18 +1115,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function sendFees() public onlyOwner {
         uint256 _totalAssets = totalAssets();
-        // Compute and store current exchange rate between assets and shares for gas efficiency.
-        uint256 exchangeRate = _convertToShares(1, _totalAssets);
 
         // Calculate platform fees earned.
         uint256 elapsedTime = block.timestamp - lastAccrual;
         uint256 platformFeeInAssets = (_totalAssets * elapsedTime * platformFee) / 1e18 / 365 days;
-        uint256 platformFees = _convertToFees(platformFeeInAssets, exchangeRate);
+        uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
 
         _mint(address(this), platformFees);
 
         lastAccrual = uint32(block.timestamp);
-
         // Redeem our fee shares for assets to send to the fee distributor module.
         uint256 totalFees = balanceOf[address(this)];
         uint256 assets = previewRedeem(totalFees);
