@@ -1158,11 +1158,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         //run all adaptor functions
         for (uint8 i = 0; i < data.length; i++) {
             info = idToAdaptor[data[i].adaptorId];
-            //require(
-            //    data[i].callData.length == data[i].isRevertOkay.length &&
-            //        data[i].callData.length == data[i].functionSigs.length,
-            //    "Input lenghts do not match"
-            //);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 // Run the adaptor function
                 (bool success, bytes memory result) = info.adaptor.delegatecall(

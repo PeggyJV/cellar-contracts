@@ -69,11 +69,8 @@ contract SushiAdaptor is BaseAdaptor {
     }
 
     function harvestSushiFarms(bytes memory callData) public {
-        (uint256 pid, ERC20[] memory rewardTokens, bytes memory swapData) = abi.decode(
-            callData,
-            (uint256, ERC20[], bytes)
-        );
-        _harvestSushiFarms(pid, rewardTokens, swapData);
+        (uint256 pid, ERC20[] memory rewardTokens) = abi.decode(callData, (uint256, ERC20[]));
+        _harvestSushiFarms(pid, rewardTokens);
     }
 
     function withdrawFromFarmAndLPSushi(bytes memory callData) public {
@@ -124,11 +121,7 @@ contract SushiAdaptor is BaseAdaptor {
     //TODO on polygon sushiswap has run out of rewards several times.
     //when this happens, any harvest TXs revert, might need to take this into account here
     ///@dev rewardToken length must be 2x farms length, each farm is assuemd to have 2 reward tokens, if it only has one, then i+1 reward token should be zero address
-    function _harvestSushiFarms(
-        uint256 pid,
-        ERC20[] memory rewardTokens,
-        bytes memory swapData
-    ) internal {
+    function _harvestSushiFarms(uint256 pid, ERC20[] memory rewardTokens) internal {
         IMasterChef chef = IMasterChef(0xEF0881eC094552b2e128Cf945EF17a6752B4Ec5d); //mainnet sushi chef
         //SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
         uint256[] memory rewardsOut = new uint256[](rewardTokens.length);

@@ -6,6 +6,7 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
 import { Math } from "src/utils/Math.sol";
+import { IPriceExternalAdaptor } from "src/interfaces/IPriceExternalAdaptor.sol";
 
 import "src/Errors.sol";
 
@@ -35,6 +36,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         uint256 maxPrice;
         uint96 heartBeat;
         bool isSupported;
+        address externalAdaptor;
     }
 
     /**
@@ -63,11 +65,15 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         ERC20 remap,
         uint256 minPrice,
         uint256 maxPrice,
-        uint96 heartbeat
+        uint96 heartbeat,
+        address externalAdaptor
     ) external onlyOwner {
         require(address(asset) != address(0), "Invalid asset");
 
-        if (minPrice == 0 || maxPrice == 0) {
+        // exetrnalAddress with zero adaptor means we are
+        if (externalAdaptor != address(0)) {
+            require(maxPrice > 0, "maxPrice must be set");
+        } else if (minPrice == 0 || maxPrice == 0) {
             // If no adaptor is specified, use the Chainlink to get the min and max of the asset.
             ERC20 assetToQuery = address(remap) == address(0) ? asset : remap;
             (uint256 minFromChainklink, uint256 maxFromChainlink) = _getPriceRangeInUSD(assetToQuery);
@@ -81,7 +87,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
             minPrice: minPrice,
             maxPrice: maxPrice,
             heartBeat: heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT,
-            isSupported: true
+            isSupported: true,
+            externalAdaptor: externalAdaptor
         });
     }
 
@@ -203,7 +210,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         ERC20 quoteAsset,
         uint8 quoteAssetDecimals
     ) internal view returns (uint256 exchangeRate) {
-        exchangeRate = _getValueInUSD(baseAsset).mulDivDown(10**quoteAssetDecimals, _getValueInUSD(quoteAsset));
+        exchangeRate = getValueInUSD(baseAsset).mulDivDown(10**quoteAssetDecimals, getValueInUSD(quoteAsset));
     }
 
     /**
@@ -212,7 +219,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @param asset the asset to get the value of in USD
      * @return value the value of asset in USD
      */
-    function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
+    function getValueInUSD(ERC20 asset) public view returns (uint256 value) {
         AssetData storage assetData = getAssetData[asset];
 
         if (!assetData.isSupported) revert USR_UnsupportedAsset(address(asset));
@@ -220,7 +227,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         if (address(assetData.remap) != address(0)) asset = assetData.remap;
 
         uint256 timestamp;
-        (value, timestamp) = _getValueInUSDAndTimestamp(asset);
+        if (assetData.externalAdaptor == address(0)) (value, timestamp) = _getValueInUSDAndTimestamp(asset);
+        else (value, timestamp) = IPriceExternalAdaptor(assetData.externalAdaptor).getValueInUSDAndTimestamp(asset);
 
         uint256 minPrice = assetData.minPrice;
         if (value < minPrice) revert STATE_AssetBelowMinPrice(address(asset), value, minPrice);

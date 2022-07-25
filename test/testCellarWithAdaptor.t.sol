@@ -15,6 +15,7 @@ import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
+import { UniswapV2Adaptor } from "src/modules/price-router/adaptors/UniswapV2Adaptor.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -30,6 +31,7 @@ contract CellarWithAdaptorTest is Test {
     PriceRouter private priceRouter;
     Registry private registry;
     SwapRouter private swapRouter;
+    UniswapV2Adaptor private uniswapV2Adaptor;
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -43,6 +45,7 @@ contract CellarWithAdaptorTest is Test {
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     ERC20 private aDAI = ERC20(0x028171bCA77440897B824Ca71D1c56caC55b68A3);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    ERC20 private CVXwETH = ERC20(0x05767d9EF41dC40689678fFca0608878fb3dE906);
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
@@ -51,28 +54,32 @@ contract CellarWithAdaptorTest is Test {
     function setUp() external {
         aaveATokenAdaptor = new AaveATokenAdaptor();
         aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
-        //sushiAdaptor = new SushiAdaptor();
+        sushiAdaptor = new SushiAdaptor();
         priceRouter = new PriceRouter();
+        uniswapV2Adaptor = new UniswapV2Adaptor();
+
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
         // Setup Cellar:
-        address[] memory positions = new address[](6);
+        address[] memory positions = new address[](7);
         positions[0] = address(aUSDC);
         positions[1] = address(dWETH);
         positions[2] = address(WETH);
         positions[3] = address(dCVX);
         positions[4] = address(CVX);
         positions[5] = address(aDAI);
+        positions[6] = address(CVXwETH);
 
-        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](6);
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](7);
         positionTypes[0] = Cellar.PositionType.Adaptor;
         positionTypes[1] = Cellar.PositionType.Adaptor;
         positionTypes[2] = Cellar.PositionType.ERC20;
         positionTypes[3] = Cellar.PositionType.Adaptor;
         positionTypes[4] = Cellar.PositionType.ERC20;
         positionTypes[5] = Cellar.PositionType.Adaptor;
+        positionTypes[6] = Cellar.PositionType.Adaptor;
 
         cellar = new Cellar(
             registry,
@@ -87,12 +94,14 @@ contract CellarWithAdaptorTest is Test {
 
         cellar.setIdToAdaptor(1, address(aaveATokenAdaptor));
         cellar.setIdToAdaptor(2, address(aaveDebtTokenAdaptor));
+        cellar.setIdToAdaptor(3, address(sushiAdaptor));
         cellar.trustPosition(address(aUSDC), Cellar.PositionType.Adaptor, false, 1, abi.encode(address(aUSDC)));
         cellar.trustPosition(address(dWETH), Cellar.PositionType.Adaptor, true, 2, abi.encode(address(dWETH)));
         cellar.trustPosition(address(WETH), Cellar.PositionType.ERC20, false, 0, abi.encode(address(WETH)));
         cellar.trustPosition(address(dCVX), Cellar.PositionType.Adaptor, true, 2, abi.encode(address(dCVX)));
         cellar.trustPosition(address(CVX), Cellar.PositionType.ERC20, false, 0, abi.encode(address(CVX)));
         cellar.trustPosition(address(aDAI), Cellar.PositionType.Adaptor, false, 1, abi.encode(address(aDAI)));
+        cellar.trustPosition(address(CVXwETH), Cellar.PositionType.Adaptor, false, 3, abi.encode(address(1)));
 
         cellar.pushPosition(positions[0]);
         cellar.pushPosition(positions[1]);
@@ -100,12 +109,13 @@ contract CellarWithAdaptorTest is Test {
         cellar.pushPosition(positions[3]);
         cellar.pushPosition(positions[4]);
         cellar.pushPosition(positions[5]);
+        cellar.pushPosition(positions[6]);
 
-        //TODO price router stuff
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 100e8, 1 days);
-        priceRouter.addAsset(CVX, ERC20(address(0)), 0, 10000e8, 1 days);
-        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 100000e8, 1 days);
-        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 100e8, 1 days);
+        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 100e8, 1 days, address(0));
+        priceRouter.addAsset(CVX, ERC20(address(0)), 0, 10000e8, 1 days, address(0));
+        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 100000e8, 1 days, address(0));
+        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 100e8, 1 days, address(0));
+        priceRouter.addAsset(CVXwETH, ERC20(address(0)), 0, type(uint256).max, 1 days, address(uniswapV2Adaptor));
 
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(this), type(uint224).max);
@@ -115,9 +125,9 @@ contract CellarWithAdaptorTest is Test {
     function testAavePositions() external {
         cellar.deposit(10000e6, address(this));
         Cellar.AdaptorCall[] memory callInfo = new Cellar.AdaptorCall[](1);
-        bytes4[] memory functionSigs = new bytes4[](3);
-        bytes[] memory callData = new bytes[](3);
-        bool[] memory isRevertOkay = new bool[](3);
+        bytes4[] memory functionSigs = new bytes4[](2);
+        bytes[] memory callData = new bytes[](2);
+        bool[] memory isRevertOkay = new bool[](2);
         //borrow data
         functionSigs[0] = AaveDebtTokenAdaptor.borrowFromAave.selector;
         callData[0] = abi.encode(address(WETH), 1e18);
@@ -125,15 +135,6 @@ contract CellarWithAdaptorTest is Test {
         functionSigs[1] = AaveDebtTokenAdaptor.borrowFromAave.selector;
         callData[1] = abi.encode(address(CVX), 200e18);
         isRevertOkay[1] = false;
-
-        address[] memory path = new address[](2);
-        path[0] = address(WETH);
-        path[1] = address(CVX);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = 10000;
-        bytes memory swapData = abi.encode(path, poolFees, 1e18, 0);
-        functionSigs[2] = BaseAdaptor.swap.selector;
-        callData[2] = abi.encode(WETH, 1e18, SwapRouter.Exchange.UNIV3, swapData);
 
         callInfo[0] = Cellar.AdaptorCall({
             adaptorId: 2,
@@ -238,6 +239,93 @@ contract CellarWithAdaptorTest is Test {
         console.log("Cellar  WETH balance: ", WETH.balanceOf(address(cellar)));
         console.log("Cellar  dCVX balance: ", dCVX.balanceOf(address(cellar)));
         console.log("Cellar   CVX balance: ", CVX.balanceOf(address(cellar)));
+        console.log("Cellar  Total Assets: ", cellar.totalAssets());
+    }
+
+    function testSushiFarm() external {
+        cellar.deposit(10000e6, address(this));
+        Cellar.AdaptorCall[] memory callInfo = new Cellar.AdaptorCall[](2);
+        bytes4[] memory functionSigs = new bytes4[](2);
+        bytes[] memory callData = new bytes[](2);
+        bool[] memory isRevertOkay = new bool[](2);
+        //borrow data
+        functionSigs[0] = AaveDebtTokenAdaptor.borrowFromAave.selector;
+        callData[0] = abi.encode(address(WETH), 0.938656e18);
+        isRevertOkay[0] = false;
+        functionSigs[1] = AaveDebtTokenAdaptor.borrowFromAave.selector;
+        callData[1] = abi.encode(address(CVX), 200e18);
+        isRevertOkay[1] = false;
+
+        callInfo[0] = Cellar.AdaptorCall({
+            adaptorId: 2,
+            functionSigs: functionSigs,
+            callData: callData,
+            isRevertOkay: isRevertOkay
+        });
+
+        functionSigs = new bytes4[](1);
+        callData = new bytes[](1);
+        isRevertOkay = new bool[](1);
+
+        functionSigs[0] = SushiAdaptor.addLiquidityAndFarmSushi.selector;
+        callData[0] = abi.encode(WETH, CVX, 0.938656e18, 200e18, 0, 0, 1);
+        isRevertOkay[0] = false;
+
+        callInfo[1] = Cellar.AdaptorCall({
+            adaptorId: 3,
+            functionSigs: functionSigs,
+            callData: callData,
+            isRevertOkay: isRevertOkay
+        });
+
+        //SP Calls on Adaptor
+        cellar.callOnAdaptor(callInfo);
+
+        //At this point, cellar is in sushi CVX wETH farm so advance blocks forward
+
+        vm.roll(16000000);
+
+        callInfo = new Cellar.AdaptorCall[](1);
+
+        functionSigs = new bytes4[](2);
+        callData = new bytes[](2);
+        isRevertOkay = new bool[](2);
+
+        functionSigs[0] = SushiAdaptor.harvestSushiFarms.selector;
+        ERC20[] memory rewardTokens = new ERC20[](1);
+        rewardTokens[0] = SUSHI;
+        callData[0] = abi.encode(1, rewardTokens);
+        isRevertOkay[0] = false;
+
+        address[] memory path = new address[](2);
+        path[0] = address(SUSHI);
+        path[1] = address(WETH);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; //0.3% pool
+        uint256 pendingSushi = chef.pendingSushi(1, address(cellar));
+        bytes memory swapData = abi.encode(path, poolFees, pendingSushi, 0);
+        functionSigs[1] = BaseAdaptor.swap.selector;
+        callData[1] = abi.encode(SUSHI, pendingSushi, SwapRouter.Exchange.UNIV3, swapData);
+        isRevertOkay[1] = false;
+
+        callInfo[0] = Cellar.AdaptorCall({
+            adaptorId: 3,
+            functionSigs: functionSigs,
+            callData: callData,
+            isRevertOkay: isRevertOkay
+        });
+
+        cellar.callOnAdaptor(callInfo);
+
+        uint256 farmBalance = chef.userInfo(1, address(cellar)).amount;
+
+        console.log("Cellar aUSDC balance: ", aUSDC.balanceOf(address(cellar)));
+        console.log("Cellar  aDAI balance: ", aDAI.balanceOf(address(cellar)));
+        console.log("Cellar dWETH balance: ", dWETH.balanceOf(address(cellar)));
+        console.log("Cellar  WETH balance: ", WETH.balanceOf(address(cellar)));
+        console.log("Cellar  dCVX balance: ", dCVX.balanceOf(address(cellar)));
+        console.log("Cellar   CVX balance: ", CVX.balanceOf(address(cellar)));
+        console.log("Cellar  Farm balance:", farmBalance);
         console.log("Cellar  Total Assets: ", cellar.totalAssets());
     }
 }

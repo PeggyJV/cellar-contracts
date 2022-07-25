@@ -36,11 +36,11 @@ contract PriceRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, 0);
-        priceRouter.addAsset(WBTC, ERC20(Denominations.BTC), 0, 0, 0);
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0);
-        priceRouter.addAsset(BOND, ERC20(address(0)), 0, 0, 0);
-        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 0, 0);
+        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, 0, address(0));
+        priceRouter.addAsset(WBTC, ERC20(Denominations.BTC), 0, 0, 0, address(0));
+        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0, address(0));
+        priceRouter.addAsset(BOND, ERC20(address(0)), 0, 0, 0, address(0));
+        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 0, 0, address(0));
     }
 
     // ======================================= SWAP TESTS =======================================
