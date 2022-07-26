@@ -633,6 +633,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // `accrue` will take platform fees from 1970 to the time it is called.
         lastAccrual = uint64(block.timestamp);
 
+        // Initialize SharePriceHighWatermark
+        feeData.sharePriceHighWatermark = 10**asset.decimals();
+
         // Transfer ownership to the Gravity Bridge.
         address gravityBridge = _registry.getAddress(0);
         transferOwnership(gravityBridge);
@@ -1142,16 +1145,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param _totalAssets uint256 value of the total assets in the cellar
      */
     function _takePerformanceFees(uint256 _totalAssets) internal {
-        if (_totalAssets == 0) {
-            feeData.sharePriceHighWatermark = 10**asset.decimals(); //Since share price always starts out at one asset
-        } else {
-            (uint256 feeInAssets, uint256 currentSharePrice) = _previewPerformanceFees(_totalAssets);
-            if (feeInAssets > 0) {
-                uint256 platformFeesInShares = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
-                if (platformFeesInShares > 0) {
-                    feeData.sharePriceHighWatermark = currentSharePrice;
-                    _mint(address(this), platformFeesInShares);
-                }
+        (uint256 feeInAssets, uint256 currentSharePrice) = _previewPerformanceFees(_totalAssets);
+        if (feeInAssets > 0) {
+            uint256 platformFeesInShares = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
+            if (platformFeesInShares > 0) {
+                feeData.sharePriceHighWatermark = currentSharePrice;
+                _mint(address(this), platformFeesInShares);
             }
         }
     }
