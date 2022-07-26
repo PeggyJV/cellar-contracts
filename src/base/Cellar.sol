@@ -13,6 +13,8 @@ import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
 
+//TODO remove this
+import { Test, console } from "@forge-std/Test.sol";
 import "../Errors.sol";
 
 /**
@@ -1054,9 +1056,41 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     uint256 public sharePriceHighWatermark;
 
+    /**
+     * @notice Number 0 -> 1e18 defining how much of the performance fee goes to the strategist
+     */
+    uint256 public strategistPerformanceCut = 0.75e18;
+
+    /**
+     * @notice Number 0 -> 1e18 defining how much of the platform fee goes to the strategist
+     */
+    uint256 public strategistPlatformCut = 0.75e18;
+
+    /**
+     * @notice Address to send the strategists fee shares
+     */
+    address public strategistPayoutAddress;
+
     ///@dev resets high watermark to current share price
     function resetHighWatermark() external onlyOwner {
         sharePriceHighWatermark = totalAssets().mulDivDown(10**decimals, totalSupply);
+    }
+
+    ///@dev Sets the Strategists cut of performance fees
+    function setStrategistPerformanceCut(uint256 cut) external onlyOwner {
+        require(cut <= 1e18, "Invalid cut");
+        strategistPerformanceCut = cut;
+    }
+
+    ///@dev Sets the Strategists cut of platform fees
+    function setStrategistPlatformCut(uint256 cut) external onlyOwner {
+        require(cut <= 1e18, "Invalid cut");
+        strategistPlatformCut = cut;
+    }
+
+    ///@dev Sets the Strategists payout address
+    function setStrategistPayoutAddress(address payout) external onlyOwner {
+        strategistPayoutAddress = payout;
     }
 
     /**
@@ -1124,33 +1158,67 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @notice Transfer accrued fees to the Sommelier chain to distribute.
      * @dev Fees are accrued as shares and redeemed upon transfer.
+     * @dev assumes cellar's accounting asset is able to be transferred and sent to Cosmos
      */
     function sendFees() public onlyOwner {
+        require(strategistPayoutAddress != address(0), "Strategist Payout not set");
         uint256 _totalAssets = totalAssets();
+
+        // Since this action mints shares, calculate outstanding performance fees due.
+        _takePerformanceFees(_totalAssets);
+
+        uint256 currentBalance = balanceOf[address(this)];
+
+        console.log("Performance Fee Assets", _convertToAssets(currentBalance, _totalAssets)); // This is right
+
+        uint256 strategistFeeSharesDue = currentBalance.mulDivDown(strategistPerformanceCut, 1e18);
+
+        console.log("Strategist Performance Fee Assets", _convertToAssets(strategistFeeSharesDue, _totalAssets)); // This is right
 
         // Calculate platform fees earned.
         uint256 elapsedTime = block.timestamp - lastAccrual;
         uint256 platformFeeInAssets = (_totalAssets * elapsedTime * platformFee) / 1e18 / 365 days;
         uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
-
         _mint(address(this), platformFees);
 
+        console.log("Platform Fee assets", _convertToAssets(platformFees, _totalAssets)); // This is right
+
+        strategistFeeSharesDue += platformFees.mulDivDown(strategistPlatformCut, 1e18);
+
+        console.log(
+            "Strategist platform Fee Assets",
+            _convertToAssets(platformFees.mulDivDown(strategistPlatformCut, 1e18), _totalAssets)
+        ); // This is right
+
+        //transfer shares to strategist
+        balanceOf[address(this)] -= strategistFeeSharesDue;
+
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[strategistPayoutAddress] += strategistFeeSharesDue;
+        }
+
+        emit Transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
+
+        console.log("Strategist Fee assets", _convertToAssets(strategistFeeSharesDue, _totalAssets));
+
         lastAccrual = uint32(block.timestamp);
+
         // Redeem our fee shares for assets to send to the fee distributor module.
-        uint256 totalFees = balanceOf[address(this)];
-        uint256 assets = previewRedeem(totalFees);
+        currentBalance = balanceOf[address(this)];
+        uint256 assets = _convertToAssets(currentBalance, _totalAssets);
+        console.log("Protocol Fee assets", assets);
         require(assets != 0, "ZERO_ASSETS");
 
-        beforeWithdraw(assets, 0, address(0), address(0));
-
-        _burn(address(this), totalFees);
+        _burn(address(this), currentBalance);
 
         // Transfer assets to a fee distributor on the Sommelier chain.
         IGravity gravityBridge = IGravity(registry.getAddress(0));
         asset.safeApprove(address(gravityBridge), assets);
         gravityBridge.sendToCosmos(address(asset), feesDistributor, assets);
 
-        emit SendFees(totalFees, assets);
+        emit SendFees(currentBalance, assets);
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================

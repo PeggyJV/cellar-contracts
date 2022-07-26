@@ -35,6 +35,10 @@ contract CellarTest is Test {
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     MockERC4626 private wbtcCLR;
 
+    address private immutable strategist = vm.addr(0xBEEF);
+
+    address private immutable cosmos = vm.addr(0xCAAA);
+
     function setUp() external {
         usdcCLR = new MockERC4626(USDC, "USDC Cellar LP Token", "USDC-CLR", 6);
         vm.label(address(usdcCLR), "usdcCLR");
@@ -113,6 +117,8 @@ contract CellarTest is Test {
         USDC.approve(address(cellar), type(uint256).max);
         WETH.approve(address(cellar), type(uint256).max);
         WBTC.approve(address(cellar), type(uint256).max);
+
+        cellar.setStrategistPayoutAddress(strategist);
     }
 
     // ============================================ HELPER FUNCTIONS ============================================
@@ -141,7 +147,7 @@ contract CellarTest is Test {
         bytes32,
         uint256 assets
     ) external {
-        ERC20(asset).transferFrom(msg.sender, address(this), assets);
+        ERC20(asset).transferFrom(msg.sender, cosmos, assets);
     }
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
@@ -336,6 +342,7 @@ contract CellarTest is Test {
         );
     }
 
+    //TODO add more if else cases where we use mint and redeem. Also add in preview functions before each cellar user call
     function testHighWatermarkComplex(uint256 seed) external {
         seed = bound(seed, 1, type(uint72).max);
         deal(address(USDC), address(this), type(uint256).max);
@@ -348,7 +355,7 @@ contract CellarTest is Test {
         uint256 cellarShares;
         uint256 expectedFee;
         uint256 totalSupply;
-        for (uint256 i = 0; i < 20; i++) {
+        for (uint256 i = 0; i < 1000; i++) {
             random = uint256(keccak256(abi.encode(seed + i))) % 8; //number between 0 -> 7
 
             // Force the first 8 iterations to guarantee every scenario is called
@@ -361,36 +368,66 @@ contract CellarTest is Test {
             if (i == 6) random = 0; // force deposit
             if (i == 7) random = 6; // force loss
 
-            amount = (uint256(keccak256(abi.encode("HOWDY", seed + i))) % 10000e6) + 1000e6; //number between 1000 -> 10,999 USDC
+            amount = (uint256(keccak256(abi.encode("HOWDY", seed + i))) % 10000e6) + 1000e6; //number between 1,000 -> 10,999 USDC
             HWM = cellar.sharePriceHighWatermark();
             cellarShares = cellar.balanceOf(address(cellar));
-            sharePrice = (cellar.totalAssets() * 1e18) / cellar.totalSupply();
+            sharePrice = cellar.convertToAssets(1e18);
             totalSupply = cellar.totalSupply();
-            if (random < 2) {
+            if (random == 0) {
                 //deposit
-                console.log("Deposit", amount, "USDC");
-                cellar.deposit(amount, address(this));
-            } else if (random < 4) {
+                //console.log("Deposit", amount, "USDC");
+                assertApproxEqAbs(
+                    cellar.previewDeposit(amount),
+                    cellar.deposit(amount, address(this)),
+                    0,
+                    "previewDeposit does not return the same as deposit"
+                );
+            } else if (random == 1) {
+                //mint
+                amount = amount.changeDecimals(6, 18);
+                //console.log("Mint", amount, "Shares");
+                assertApproxEqAbs(
+                    cellar.previewMint(amount),
+                    cellar.mint(amount, address(this)),
+                    0,
+                    "previewMint does not return the same as mint"
+                );
+            } else if (random == 2) {
                 //withdraw
-                console.log("Withdraw", amount, "USDC");
-                cellar.withdraw(amount, address(this), address(this));
+                //console.log("Withdraw", amount, "USDC");
+                assertApproxEqAbs(
+                    cellar.previewWithdraw(amount),
+                    cellar.withdraw(amount, address(this), address(this)),
+                    0,
+                    "previewWithdraw does not return the same as withdraw"
+                );
+            } else if (random == 3) {
+                //withdraw
+                amount = amount.changeDecimals(6, 18);
+                //console.log("Redeem", amount, "Shares");
+                assertApproxEqAbs(
+                    cellar.previewRedeem(amount),
+                    cellar.redeem(amount, address(this), address(this)),
+                    0,
+                    "previewRedeem does not return the same as redeem"
+                );
             } else if (random < 6) {
                 //yield earned
-                console.log("Yield Earned", amount, "USDC");
-                deal(address(USDC), address(this), USDC.balanceOf(address(cellar)) + amount);
+                //console.log("Yield Earned", amount, "USDC");
+                deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + amount);
                 uint256 WETHamount = amount.changeDecimals(6, 15);
-                console.log("Yield Earned", WETHamount, "WETH");
-                deal(address(WETH), address(this), WETH.balanceOf(address(cellar)) + WETHamount);
+                //console.log("Yield Earned", WETHamount, "WETH");
+                deal(address(WETH), address(cellar), WETH.balanceOf(address(cellar)) + WETHamount);
             } else {
                 //yield loss
-                console.log("Yield Lossed", amount, "USDC");
-                deal(address(USDC), address(this), USDC.balanceOf(address(cellar)) - amount);
+                //console.log("Yield Lossed", amount, "USDC");
+                deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) - amount);
                 uint256 WETHamount = amount.changeDecimals(6, 15);
-                console.log("Yield Lossed", WETHamount, "WETH");
+                //console.log("Yield Lossed", WETHamount, "WETH");
                 uint256 newBalance = WETH.balanceOf(address(cellar)) > WETHamount
                     ? WETH.balanceOf(address(cellar)) - WETHamount
                     : 0;
-                deal(address(WETH), address(this), newBalance);
+                deal(address(WETH), address(cellar), newBalance);
             }
 
             if (random < 4 && sharePrice > HWM) {
@@ -403,7 +440,7 @@ contract CellarTest is Test {
                     0.001e18,
                     "Fee Shares minted exceede deviation"
                 );
-                sharePrice = (cellar.totalAssets() * 1e6) / cellar.totalSupply();
+                //sharePrice = cellar.convertToAssets(1e18);
                 assertEq(cellar.sharePriceHighWatermark(), sharePrice, "HWM was not set to new Share Price");
             } else {
                 // We don't really need to check this if random >= 4, but it can't hurt
@@ -413,24 +450,70 @@ contract CellarTest is Test {
         }
     }
 
-    function testSendFees(uint256 timePassed) external {
+    function testPlatformFees(uint256 timePassed) external {
         timePassed = bound(timePassed, 1 days, 35_000 days);
+        //timePassed = 365 days;
         // Deposit into cellar.
         uint256 assets = 1_000_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        skip(timePassed); //advance time
-        uint256 cellarBalanceBefore = USDC.balanceOf(address(cellar));
-        cellar.sendFees();
-        uint256 cellarBalanceAfter = USDC.balanceOf(address(cellar));
         uint256 expectedFee = (assets * cellar.platformFee() * timePassed) / (365 days * 1e18);
-        assertEq(cellarBalanceBefore - cellarBalanceAfter, expectedFee, "Incorrect platform fee");
+        expectedFee = expectedFee.mulDivDown((1e18 - cellar.strategistPlatformCut()), 1e18);
 
-        if (cellar.balanceOf(address(cellar)) > 1e18) {
-            cellar.transfer(address(cellar), 1e18); //Send 1 share to the cellar to mimic cellar collecting performance fees
-            cellar.sendFees();
-            assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar did not burn performance fees");
-        }
+        skip(timePassed); //advance time
+        uint256 balanceBefore = USDC.balanceOf(cosmos);
+        cellar.sendFees();
+        uint256 balanceAfter = USDC.balanceOf(cosmos);
+        assertEq(balanceAfter - balanceBefore, expectedFee, "Platform fee differs more than 1 wei");
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar did not burn performance fees");
+    }
+
+    function testPlatformAndPerformanceFees() external {
+        // Deposit into cellar.
+        uint256 assets = 100_000e6;
+        uint256 yield = 1_000e6;
+        deal(address(USDC), address(this), assets + 1);
+        cellar.deposit(assets, address(this));
+
+        //1 day passes
+        skip(1 days);
+
+        //simulare gains
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
+
+        cellar.deposit(1, address(this));
+
+        //console.log("Time Since Last Accrual", block.timestamp - cellar.lastAccrual());
+        uint256 old = block.timestamp;
+
+        uint256 balBefore = USDC.balanceOf(cosmos);
+        cellar.sendFees();
+        uint256 balAfter = USDC.balanceOf(cosmos);
+
+        console.log("Cosmos Bal", balAfter - balBefore);
+
+        uint256 expectedShareWorth = yield.mulDivDown(cellar.performanceFee(), 1e18).mulDivDown(
+            cellar.strategistPerformanceCut(),
+            1e18
+        );
+
+        expectedShareWorth += USDC
+            .balanceOf(address(cellar))
+            .mulDivDown(1 days, 365 days)
+            .mulDivDown(cellar.platformFee(), 1e18)
+            .mulDivDown(cellar.strategistPlatformCut(), 1e18);
+        //assertEq(
+        //    cellar.previewRedeem(cellar.balanceOf(strategist)),
+        //    cellar.redeem(cellar.balanceOf(strategist), strategist, address(this)),
+        //    "Incorrect fee for strategist"
+        //);
+
+        assertEq(
+            expectedShareWorth,
+            cellar.previewRedeem(cellar.balanceOf(strategist)),
+            "Incorrect fee for strategist"
+        );
     }
 }
