@@ -342,7 +342,6 @@ contract CellarTest is Test {
         );
     }
 
-    //TODO add more if else cases where we use mint and redeem. Also add in preview functions before each cellar user call
     function testHighWatermarkComplex(uint256 seed) external {
         seed = bound(seed, 1, type(uint72).max);
         deal(address(USDC), address(this), type(uint256).max);
@@ -441,7 +440,7 @@ contract CellarTest is Test {
 
     function testPlatformFees(uint256 timePassed) external {
         timePassed = bound(timePassed, 1 days, 35_000 days);
-        //timePassed = 365 days;
+
         // Deposit into cellar.
         uint256 assets = 1_000_000e6;
         deal(address(USDC), address(this), assets);
@@ -475,8 +474,6 @@ contract CellarTest is Test {
         cellar.sendFees();
         uint256 balAfter = USDC.balanceOf(cosmos);
 
-        console.log("Cosmos Bal", balAfter - balBefore);
-
         uint256 expectedShareWorth = yield.mulDivDown(cellar.getFeeData().performanceFee, 1e18);
 
         // minting platform fees DILUTES share price, so it also dilutes pending performance fees
@@ -485,12 +482,6 @@ contract CellarTest is Test {
             1e18;
 
         expectedShareWorth += ((assets + yield) * cellar.getFeeData().platformFee * timePassed) / (365 days * 1e18);
-
-        console.log("Expected Fees", expectedShareWorth);
-        console.log(
-            "Actual Fees",
-            (balAfter - balBefore) + cellar.previewRedeem(cellar.balanceOf(address(strategist)))
-        );
 
         assertApproxEqAbs(
             expectedShareWorth,
