@@ -355,7 +355,7 @@ contract CellarTest is Test {
         uint256 cellarShares;
         uint256 expectedFee;
         uint256 totalSupply;
-        for (uint256 i = 0; i < 1000; i++) {
+        for (uint256 i = 0; i < 100; i++) {
             random = uint256(keccak256(abi.encode(seed + i))) % 8; //number between 0 -> 7
 
             // Force the first 8 iterations to guarantee every scenario is called
@@ -376,41 +376,30 @@ contract CellarTest is Test {
             if (random == 0) {
                 //deposit
                 //console.log("Deposit", amount, "USDC");
-                assertApproxEqAbs(
-                    cellar.previewDeposit(amount),
-                    cellar.deposit(amount, address(this)),
-                    0,
-                    "previewDeposit does not return the same as deposit"
-                );
+                // Deposit should return the same or more shares as preview.
+                uint256 preview = cellar.previewDeposit(amount);
+                uint256 actual = cellar.deposit(amount, address(this));
+                assertApproxEqAbs(preview, actual, 1, "Deposit should return the same or more shares as preview.");
             } else if (random == 1) {
                 //mint
                 amount = amount.changeDecimals(6, 18);
                 //console.log("Mint", amount, "Shares");
-                assertApproxEqAbs(
-                    cellar.previewMint(amount),
-                    cellar.mint(amount, address(this)),
-                    0,
-                    "previewMint does not return the same as mint"
-                );
+                uint256 preview = cellar.previewMint(amount);
+                uint256 actual = cellar.mint(amount, address(this));
+                assertApproxEqAbs(preview, actual, 1, "Mint should return the same or less assets as preview.");
             } else if (random == 2) {
                 //withdraw
                 //console.log("Withdraw", amount, "USDC");
-                assertApproxEqAbs(
-                    cellar.previewWithdraw(amount),
-                    cellar.withdraw(amount, address(this), address(this)),
-                    0,
-                    "previewWithdraw does not return the same as withdraw"
-                );
+                uint256 preview = cellar.previewWithdraw(amount);
+                uint256 actual = cellar.withdraw(amount, address(this), address(this));
+                assertApproxEqAbs(preview, actual, 1, "Withdraw should return the same or less shares as preview.");
             } else if (random == 3) {
                 //withdraw
                 amount = amount.changeDecimals(6, 18);
                 //console.log("Redeem", amount, "Shares");
-                assertApproxEqAbs(
-                    cellar.previewRedeem(amount),
-                    cellar.redeem(amount, address(this), address(this)),
-                    0,
-                    "previewRedeem does not return the same as redeem"
-                );
+                uint256 preview = cellar.previewRedeem(amount);
+                uint256 actual = cellar.redeem(amount, address(this), address(this));
+                assertApproxEqAbs(preview, actual, 1, "Redeem should return the same or more assets as preview.");
             } else if (random < 6) {
                 //yield earned
                 //console.log("Yield Earned", amount, "USDC");
@@ -465,12 +454,11 @@ contract CellarTest is Test {
         uint256 balanceBefore = USDC.balanceOf(cosmos);
         cellar.sendFees();
         uint256 balanceAfter = USDC.balanceOf(cosmos);
-        assertEq(balanceAfter - balanceBefore, expectedFee, "Platform fee differs more than 1 wei");
-
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar did not burn performance fees");
+        assertEq(balanceAfter - balanceBefore, expectedFee, "Platform fee differs from expected");
     }
 
     function testPlatformAndPerformanceFees() external {
+        uint256 timePassed = 1 days;
         // Deposit into cellar.
         uint256 assets = 100_000e6;
         uint256 yield = 1_000e6;
@@ -478,15 +466,10 @@ contract CellarTest is Test {
         cellar.deposit(assets, address(this));
 
         //1 day passes
-        skip(1 days);
+        skip(timePassed);
 
         //simulare gains
         deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
-
-        cellar.deposit(1, address(this));
-
-        //console.log("Time Since Last Accrual", block.timestamp - cellar.lastAccrual());
-        uint256 old = block.timestamp;
 
         uint256 balBefore = USDC.balanceOf(cosmos);
         cellar.sendFees();
@@ -494,16 +477,15 @@ contract CellarTest is Test {
 
         console.log("Cosmos Bal", balAfter - balBefore);
 
-        uint256 expectedShareWorth = yield.mulDivDown(cellar.performanceFee(), 1e18).mulDivDown(
-            cellar.strategistPerformanceCut(),
-            1e18
-        );
+        uint256 expectedShareWorth = yield.mulDivDown(cellar.performanceFee(), 1e18);
 
-        expectedShareWorth += USDC
-            .balanceOf(address(cellar))
-            .mulDivDown(1 days, 365 days)
-            .mulDivDown(cellar.platformFee(), 1e18)
-            .mulDivDown(cellar.strategistPlatformCut(), 1e18);
+        expectedShareWorth += ((assets + yield) * cellar.platformFee() * timePassed) / (365 days * 1e18);
+
+        console.log("Expected Fees", expectedShareWorth);
+        console.log(
+            "Actual Fees",
+            (balAfter - balBefore) + cellar.previewRedeem(cellar.balanceOf(address(strategist)))
+        );
         //assertEq(
         //    cellar.previewRedeem(cellar.balanceOf(strategist)),
         //    cellar.redeem(cellar.balanceOf(strategist), strategist, address(this)),

@@ -851,7 +851,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        (uint256 feeInAssets, ) = _calculatePerformanceFee(_totalAssets);
         assets = _previewMint(shares, _totalAssets - feeInAssets);
     }
 
@@ -862,7 +862,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        (uint256 feeInAssets, ) = _calculatePerformanceFee(_totalAssets);
         shares = _previewWithdraw(assets, _totalAssets - feeInAssets);
     }
 
@@ -873,7 +873,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        (uint256 feeInAssets, ) = _calculatePerformanceFee(_totalAssets);
         shares = _convertToShares(assets, _totalAssets - feeInAssets);
     }
 
@@ -884,7 +884,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
+        (uint256 feeInAssets, ) = _calculatePerformanceFee(_totalAssets);
         assets = _convertToAssets(shares, _totalAssets - feeInAssets);
     }
 
@@ -1097,40 +1097,41 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Calculates how many assets Strategist would earn performance fees
      * @param _totalAssets uint256 value of the total assets in the cellar
      * @return feeInAssets amount of assets
+     * @return currentSharePrice current price of shares, used by _takePerformanceFee
      */
-    function _calculatePerformanceFee(uint256 _totalAssets) internal view returns (uint256 feeInAssets) {
-        if (performanceFee == 0 || _totalAssets == 0) return 0;
-        uint256 currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
-        if (sharePriceHighWatermark == 0) return 0;
-        else if (sharePriceHighWatermark < currentSharePrice) {
+    function _calculatePerformanceFee(uint256 _totalAssets)
+        internal
+        view
+        returns (uint256 feeInAssets, uint256 currentSharePrice)
+    {
+        if (performanceFee == 0 || _totalAssets == 0) return (0, 0);
+        currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
+        if (sharePriceHighWatermark < currentSharePrice) {
             //find how many assets make up the fee
             uint256 yield = ((currentSharePrice - sharePriceHighWatermark) * totalSupply) / 10**decimals;
             feeInAssets = yield.mulDivUp(performanceFee, 1e18);
         } else {
-            return 0;
+            return (0, 0);
         }
     }
 
     /**
      * @notice Mints cellar performance fee shares if current share price is above high watermark
+     * @dev If performance fees are minted, the resulting HWM will be greater than the current share price
+     *      since performance fees dilute share value.
      * @param _totalAssets uint256 value of the total assets in the cellar
      */
     function _takePerformanceFees(uint256 _totalAssets) internal {
-        if (performanceFee == 0) return;
         if (_totalAssets == 0) {
             sharePriceHighWatermark = 10**asset.decimals(); //Since share price always starts out at one asset
-            return;
-        }
-
-        uint256 currentSharePrice = _convertToAssets(1e18, _totalAssets);
-        if (sharePriceHighWatermark == 0) sharePriceHighWatermark = currentSharePrice;
-        else if (sharePriceHighWatermark < currentSharePrice) {
-            uint256 feeInAssets = _calculatePerformanceFee(_totalAssets);
-
-            uint256 platformFees = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
-            if (platformFees > 0) {
-                _mint(address(this), platformFees);
-                sharePriceHighWatermark = currentSharePrice;
+        } else {
+            (uint256 feeInAssets, uint256 currentSharePrice) = _calculatePerformanceFee(_totalAssets);
+            if (feeInAssets > 0) {
+                uint256 platformFeesInShares = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
+                if (platformFeesInShares > 0) {
+                    sharePriceHighWatermark = currentSharePrice;
+                    _mint(address(this), platformFeesInShares);
+                }
             }
         }
     }
