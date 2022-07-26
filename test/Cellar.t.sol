@@ -179,6 +179,7 @@ contract CellarTest is Test {
     }
 
     function testWithdrawInOrder() external {
+        cellar.setPerformanceFee(0);
         cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
         cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
 
@@ -198,6 +199,7 @@ contract CellarTest is Test {
     }
 
     function testWithdrawInProportion() external {
+        cellar.setPerformanceFee(0);
         cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
         cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
 
@@ -219,6 +221,7 @@ contract CellarTest is Test {
     }
 
     function testWithdrawWithDuplicateReceivedAssets() external {
+        cellar.setPerformanceFee(0);
         MockERC4626 wethVault = new MockERC4626(WETH, "WETH Vault LP Token", "WETH-VLT", 18);
         cellar.trustPosition(address(wethVault), Cellar.PositionType.ERC4626);
         cellar.pushPosition(address(wethVault));
