@@ -13,8 +13,6 @@ import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
 
-//TODO remove this
-import { Test, console } from "@forge-std/Test.sol";
 import "../Errors.sol";
 
 /**
@@ -1192,8 +1190,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         uint256 currentBalance = balanceOf[address(this)];
 
-        console.log("Performance Fee Assets", _convertToAssets(currentBalance, _totalAssets));
-
         uint256 strategistFeeSharesDue = currentBalance.mulWadDown(feeData.strategistPerformanceCut);
 
         // Calculate platform fees earned.
@@ -1201,10 +1197,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 platformFeeInAssets = (_totalAssets * elapsedTime * feeData.platformFee) / 1e18 / 365 days;
         uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
         _mint(address(this), platformFees);
-
-        console.log("Platform Fee assets", _convertToAssets(platformFees, _totalAssets)); // This is right
-
-        console.log("Total Fee Assets", _convertToAssets(balanceOf[address(this)], _totalAssets));
 
         strategistFeeSharesDue += platformFees.mulWadDown(feeData.strategistPlatformCut);
 

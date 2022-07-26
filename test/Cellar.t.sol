@@ -479,6 +479,11 @@ contract CellarTest is Test {
 
         uint256 expectedShareWorth = yield.mulDivDown(cellar.getFeeData().performanceFee, 1e18);
 
+        // minting platform fees DILUTES share price, so it also dilutes pending performance fees
+        expectedShareWorth =
+            (expectedShareWorth * (1e18 - (cellar.getFeeData().platformFee * timePassed) / 365 days)) /
+            1e18;
+
         expectedShareWorth += ((assets + yield) * cellar.getFeeData().platformFee * timePassed) / (365 days * 1e18);
 
         console.log("Expected Fees", expectedShareWorth);
@@ -486,16 +491,27 @@ contract CellarTest is Test {
             "Actual Fees",
             (balAfter - balBefore) + cellar.previewRedeem(cellar.balanceOf(address(strategist)))
         );
-        //assertEq(
-        //    cellar.previewRedeem(cellar.balanceOf(strategist)),
-        //    cellar.redeem(cellar.balanceOf(strategist), strategist, address(this)),
-        //    "Incorrect fee for strategist"
-        //);
 
-        assertEq(
+        assertApproxEqAbs(
             expectedShareWorth,
+            (balAfter - balBefore) + cellar.previewRedeem(cellar.balanceOf(address(strategist))),
+            1,
+            "Expected total fees not equal to actual total fees"
+        );
+
+        //below tests work because the performance cut == platform cut
+        assertApproxEqAbs(
+            expectedShareWorth.mulWadDown(cellar.getFeeData().strategistPerformanceCut),
             cellar.previewRedeem(cellar.balanceOf(strategist)),
+            1,
             "Incorrect fee for strategist"
+        );
+
+        assertApproxEqAbs(
+            expectedShareWorth.mulWadDown(1e18 - cellar.getFeeData().strategistPerformanceCut),
+            (balAfter - balBefore),
+            1,
+            "Incorrect fee for cosmos"
         );
     }
 }
