@@ -76,14 +76,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
     }
 
     /**
-     * @notice Data related to a position.
-     * @param positionType value specifying the interface a position uses
-     */
-    struct PositionData {
-        PositionType positionType;
-    }
-
-    /**
      * @notice Addresses of the positions current used by the cellar.
      */
     address[] public positions;
@@ -94,9 +86,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
     mapping(address => bool) public isPositionUsed;
 
     /**
-     * @notice Get the data related to a position.
+     * @notice Get the type related to a position.
      */
-    mapping(address => PositionData) public getPositionData;
+    mapping(address => PositionType) public getPositionType;
 
     /**
      * @notice Get the addresses of the positions current used by the cellar.
@@ -243,7 +235,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         isTrusted[position] = true;
 
         // Set position type.
-        getPositionData[position].positionType = positionType;
+        getPositionType[position] = positionType;
 
         emit TrustChanged(position, true);
     }
@@ -371,31 +363,80 @@ contract Cellar is ERC4626, Ownable, Multicall {
     event FeesDistributorChanged(bytes32 oldFeesDistributor, bytes32 newFeesDistributor);
 
     /**
-     *  @notice The percentage of yield accrued as performance fees.
-     *  @dev This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
+     * @notice Emitted when strategist performance fee cut is changed.
+     * @param oldPerformanceCut value strategist performance fee cut was changed from
+     * @param newPerformanceCut value strategist performance fee cut was changed to
      */
-    uint64 public platformFee = 0.01e18; // 1%
+    event StrategistPerformanceCutChanged(uint64 oldPerformanceCut, uint64 newPerformanceCut);
 
     /**
-     * @notice The percentage of total assets accrued as platform fees over a year.
-     * @dev This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
+     * @notice Emitted when strategist platform fee cut is changed.
+     * @param oldPlatformCut value strategist platform fee cut was changed from
+     * @param newPlatformCut value strategist platform fee cut was changed to
      */
-    uint64 public performanceFee = 0.1e18; // 10%
+    event StrategistPlatformCutChanged(uint64 oldPlatformCut, uint64 newPlatformCut);
 
     /**
-     * @notice Cosmos address of module that distributes fees, specified as a hex value.
-     * @dev The Gravity contract expects a 32-byte value formatted in a specific way.
+     * @notice Emitted when strategists payout address is changed.
+     * @param oldPayoutAddress value strategists payout address was changed from
+     * @param newPayoutAddress value strategists payout address was changed to
      */
-    bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+    event StrategistPayoutAddressChanged(address oldPayoutAddress, address newPayoutAddress);
+
+    /**
+     * @notice Data related to fees.
+     * @param sharePriceHighWatermark Stores the share price to be used as a High Watermark to calculate performance fees.
+     * @param strategistPerformanceCut Determines how much performance fees go to strategist.
+     *                                 This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
+     * @param strategistPlatformCut Determines how much platform fees go to strategist.
+     *                              This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
+     * @param platformFee The percentage of total assets accrued as platform fees over a year.
+                          This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
+     * @param performanceFee The percentage of total assets accrued as platform fees over a year.
+     *                       This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
+     * @param feesDistributor Cosmos address of module that distributes fees, specified as a hex value.
+     *                        The Gravity contract expects a 32-byte value formatted in a specific way.
+     * @param strategistPayoutAddress Address to send the strategists fee shares.
+     */
+    struct FeeData {
+        uint256 sharePriceHighWatermark;
+        uint64 strategistPerformanceCut;
+        uint64 strategistPlatformCut;
+        uint64 platformFee;
+        uint64 performanceFee;
+        bytes32 feesDistributor;
+        address strategistPayoutAddress;
+    }
+
+    /**
+     * @notice Stores all fee data for cellar.
+     */
+    FeeData public feeData =
+        FeeData({
+            sharePriceHighWatermark: 0,
+            strategistPerformanceCut: 0.75e18,
+            strategistPlatformCut: 0.75e18,
+            strategistPayoutAddress: address(0),
+            platformFee: 0.01e18,
+            performanceFee: 0.1e18,
+            feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55"
+        });
+
+    /**
+     * @notice Get the fee data values for this cellar
+     */
+    function getFeeData() external view returns (FeeData memory) {
+        return feeData;
+    }
 
     /**
      * @notice Set the percentage of platform fees accrued over a year.
      * @param newPlatformFee value out of 1e18 that represents new platform fee percentage
      */
     function setPlatformFee(uint64 newPlatformFee) external onlyOwner {
-        emit PlatformFeeChanged(platformFee, newPlatformFee);
+        emit PlatformFeeChanged(feeData.platformFee, newPlatformFee);
 
-        platformFee = newPlatformFee;
+        feeData.platformFee = newPlatformFee;
     }
 
     /**
@@ -403,9 +444,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param newPerformanceFee value out of 1e18 that represents new performance fee percentage
      */
     function setPerformanceFee(uint64 newPerformanceFee) external onlyOwner {
-        emit PerformanceFeeChanged(performanceFee, newPerformanceFee);
+        emit PerformanceFeeChanged(feeData.performanceFee, newPerformanceFee);
 
-        performanceFee = newPerformanceFee;
+        feeData.performanceFee = newPerformanceFee;
     }
 
     /**
@@ -415,9 +456,32 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param newFeesDistributor formatted address of the new fee distributor module
      */
     function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
-        emit FeesDistributorChanged(feesDistributor, newFeesDistributor);
+        emit FeesDistributorChanged(feeData.feesDistributor, newFeesDistributor);
 
-        feesDistributor = newFeesDistributor;
+        feeData.feesDistributor = newFeesDistributor;
+    }
+
+    ///@dev Sets the Strategists cut of performance fees
+    function setStrategistPerformanceCut(uint64 cut) external onlyOwner {
+        require(cut <= 1e18, "Invalid cut");
+        emit StrategistPerformanceCutChanged(feeData.strategistPerformanceCut, cut);
+
+        feeData.strategistPerformanceCut = cut;
+    }
+
+    ///@dev Sets the Strategists cut of platform fees
+    function setStrategistPlatformCut(uint64 cut) external onlyOwner {
+        require(cut <= 1e18, "Invalid cut");
+        emit StrategistPlatformCutChanged(feeData.strategistPlatformCut, cut);
+
+        feeData.strategistPlatformCut = cut;
+    }
+
+    ///@dev Sets the Strategists payout address
+    function setStrategistPayoutAddress(address payout) external onlyOwner {
+        emit StrategistPayoutAddressChanged(feeData.strategistPayoutAddress, payout);
+
+        feeData.strategistPayoutAddress = payout;
     }
 
     // ============================================= LIMITS CONFIG =============================================
@@ -553,7 +617,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             isTrusted[position] = true;
             isPositionUsed[position] = true;
-            getPositionData[position].positionType = _positionTypes[i];
+            getPositionType[position] = _positionTypes[i];
         }
 
         // Initialize holding position.
@@ -851,7 +915,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        (uint256 feeInAssets, ) = _calculatePerformanceFee(_totalAssets);
+        (uint256 feeInAssets, ) = _previewPerformanceFees(_totalAssets);
         assets = _previewMint(shares, _totalAssets - feeInAssets);
     }
 
@@ -862,7 +926,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        (uint256 feeInAssets, ) = _calculatePerformanceFee(_totalAssets);
+        (uint256 feeInAssets, ) = _previewPerformanceFees(_totalAssets);
         shares = _previewWithdraw(assets, _totalAssets - feeInAssets);
     }
 
@@ -873,7 +937,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        (uint256 feeInAssets, ) = _calculatePerformanceFee(_totalAssets);
+        (uint256 feeInAssets, ) = _previewPerformanceFees(_totalAssets);
         shares = _convertToShares(assets, _totalAssets - feeInAssets);
     }
 
@@ -884,7 +948,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        (uint256 feeInAssets, ) = _calculatePerformanceFee(_totalAssets);
+        (uint256 feeInAssets, ) = _previewPerformanceFees(_totalAssets);
         assets = _convertToAssets(shares, _totalAssets - feeInAssets);
     }
 
@@ -1052,64 +1116,22 @@ contract Cellar is ERC4626, Ownable, Multicall {
     // ========================================= FEES LOGIC =========================================
 
     /**
-     * @notice Stores the share price to be used as a High Watermark to calculate performance fees
-     */
-    uint256 public sharePriceHighWatermark;
-
-    /**
-     * @notice Number 0 -> 1e18 defining how much of the performance fee goes to the strategist
-     */
-    uint256 public strategistPerformanceCut = 0.75e18;
-
-    /**
-     * @notice Number 0 -> 1e18 defining how much of the platform fee goes to the strategist
-     */
-    uint256 public strategistPlatformCut = 0.75e18;
-
-    /**
-     * @notice Address to send the strategists fee shares
-     */
-    address public strategistPayoutAddress;
-
-    ///@dev resets high watermark to current share price
-    function resetHighWatermark() external onlyOwner {
-        sharePriceHighWatermark = totalAssets().mulDivDown(10**decimals, totalSupply);
-    }
-
-    ///@dev Sets the Strategists cut of performance fees
-    function setStrategistPerformanceCut(uint256 cut) external onlyOwner {
-        require(cut <= 1e18, "Invalid cut");
-        strategistPerformanceCut = cut;
-    }
-
-    ///@dev Sets the Strategists cut of platform fees
-    function setStrategistPlatformCut(uint256 cut) external onlyOwner {
-        require(cut <= 1e18, "Invalid cut");
-        strategistPlatformCut = cut;
-    }
-
-    ///@dev Sets the Strategists payout address
-    function setStrategistPayoutAddress(address payout) external onlyOwner {
-        strategistPayoutAddress = payout;
-    }
-
-    /**
      * @notice Calculates how many assets Strategist would earn performance fees
      * @param _totalAssets uint256 value of the total assets in the cellar
      * @return feeInAssets amount of assets
      * @return currentSharePrice current price of shares, used by _takePerformanceFee
      */
-    function _calculatePerformanceFee(uint256 _totalAssets)
+    function _previewPerformanceFees(uint256 _totalAssets)
         internal
         view
         returns (uint256 feeInAssets, uint256 currentSharePrice)
     {
-        if (performanceFee == 0 || _totalAssets == 0) return (0, 0);
+        if (feeData.performanceFee == 0 || _totalAssets == 0) return (0, 0);
         currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
-        if (sharePriceHighWatermark < currentSharePrice) {
+        if (feeData.sharePriceHighWatermark < currentSharePrice) {
             //find how many assets make up the fee
-            uint256 yield = ((currentSharePrice - sharePriceHighWatermark) * totalSupply) / 10**decimals;
-            feeInAssets = yield.mulDivUp(performanceFee, 1e18);
+            uint256 yield = ((currentSharePrice - feeData.sharePriceHighWatermark) * totalSupply) / 10**decimals;
+            feeInAssets = yield.mulDivDown(feeData.performanceFee, 1e18);
         } else {
             return (0, 0);
         }
@@ -1123,13 +1145,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function _takePerformanceFees(uint256 _totalAssets) internal {
         if (_totalAssets == 0) {
-            sharePriceHighWatermark = 10**asset.decimals(); //Since share price always starts out at one asset
+            feeData.sharePriceHighWatermark = 10**asset.decimals(); //Since share price always starts out at one asset
         } else {
-            (uint256 feeInAssets, uint256 currentSharePrice) = _calculatePerformanceFee(_totalAssets);
+            (uint256 feeInAssets, uint256 currentSharePrice) = _previewPerformanceFees(_totalAssets);
             if (feeInAssets > 0) {
                 uint256 platformFeesInShares = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
                 if (platformFeesInShares > 0) {
-                    sharePriceHighWatermark = currentSharePrice;
+                    feeData.sharePriceHighWatermark = currentSharePrice;
                     _mint(address(this), platformFeesInShares);
                 }
             }
@@ -1162,7 +1184,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev assumes cellar's accounting asset is able to be transferred and sent to Cosmos
      */
     function sendFees() public onlyOwner {
-        require(strategistPayoutAddress != address(0), "Strategist Payout not set");
+        require(feeData.strategistPayoutAddress != address(0), "Strategist Payout not set");
         uint256 _totalAssets = totalAssets();
 
         // Since this action mints shares, calculate outstanding performance fees due.
@@ -1170,26 +1192,21 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         uint256 currentBalance = balanceOf[address(this)];
 
-        console.log("Performance Fee Assets", _convertToAssets(currentBalance, _totalAssets)); // This is right
+        console.log("Performance Fee Assets", _convertToAssets(currentBalance, _totalAssets));
 
-        uint256 strategistFeeSharesDue = currentBalance.mulDivDown(strategistPerformanceCut, 1e18);
-
-        console.log("Strategist Performance Fee Assets", _convertToAssets(strategistFeeSharesDue, _totalAssets)); // This is right
+        uint256 strategistFeeSharesDue = currentBalance.mulWadDown(feeData.strategistPerformanceCut);
 
         // Calculate platform fees earned.
         uint256 elapsedTime = block.timestamp - lastAccrual;
-        uint256 platformFeeInAssets = (_totalAssets * elapsedTime * platformFee) / 1e18 / 365 days;
+        uint256 platformFeeInAssets = (_totalAssets * elapsedTime * feeData.platformFee) / 1e18 / 365 days;
         uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
         _mint(address(this), platformFees);
 
         console.log("Platform Fee assets", _convertToAssets(platformFees, _totalAssets)); // This is right
 
-        strategistFeeSharesDue += platformFees.mulDivDown(strategistPlatformCut, 1e18);
+        console.log("Total Fee Assets", _convertToAssets(balanceOf[address(this)], _totalAssets));
 
-        console.log(
-            "Strategist platform Fee Assets",
-            _convertToAssets(platformFees.mulDivDown(strategistPlatformCut, 1e18), _totalAssets)
-        ); // This is right
+        strategistFeeSharesDue += platformFees.mulWadDown(feeData.strategistPlatformCut);
 
         //transfer shares to strategist
         balanceOf[address(this)] -= strategistFeeSharesDue;
@@ -1197,19 +1214,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Cannot overflow because the sum of all user
         // balances can't exceed the max uint256 value.
         unchecked {
-            balanceOf[strategistPayoutAddress] += strategistFeeSharesDue;
+            balanceOf[feeData.strategistPayoutAddress] += strategistFeeSharesDue;
         }
 
-        emit Transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
-
-        console.log("Strategist Fee assets", _convertToAssets(strategistFeeSharesDue, _totalAssets));
+        emit Transfer(address(this), feeData.strategistPayoutAddress, strategistFeeSharesDue);
 
         lastAccrual = uint32(block.timestamp);
 
         // Redeem our fee shares for assets to send to the fee distributor module.
         currentBalance = balanceOf[address(this)];
         uint256 assets = _convertToAssets(currentBalance, _totalAssets);
-        console.log("Protocol Fee assets", assets);
         require(assets != 0, "ZERO_ASSETS");
 
         _burn(address(this), currentBalance);
@@ -1217,7 +1231,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Transfer assets to a fee distributor on the Sommelier chain.
         IGravity gravityBridge = IGravity(registry.getAddress(0));
         asset.safeApprove(address(gravityBridge), assets);
-        gravityBridge.sendToCosmos(address(asset), feesDistributor, assets);
+        gravityBridge.sendToCosmos(address(asset), feeData.feesDistributor, assets);
 
         emit SendFees(currentBalance, assets);
     }
@@ -1228,8 +1242,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Deposit into a position according to its position type and update related state.
      */
     function _depositTo(address position, uint256 assets) internal {
-        PositionData storage positionData = getPositionData[position];
-        PositionType positionType = positionData.positionType;
+        PositionType positionType = getPositionType[position];
 
         // Deposit into position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
@@ -1246,8 +1259,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 assets,
         address receiver
     ) internal {
-        PositionData storage positionData = getPositionData[position];
-        PositionType positionType = positionData.positionType;
+        PositionType positionType = getPositionType[position];
 
         // Withdraw from position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
@@ -1261,7 +1273,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Get the balance of a position according to its position type.
      */
     function _balanceOf(address position) internal view returns (uint256) {
-        PositionType positionType = getPositionData[position].positionType;
+        PositionType positionType = getPositionType[position];
 
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             return ERC4626(position).maxWithdraw(address(this));
@@ -1274,7 +1286,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Get the asset of a position according to its position type.
      */
     function _assetOf(address position) internal view returns (ERC20) {
-        PositionType positionType = getPositionData[position].positionType;
+        PositionType positionType = getPositionType[position];
 
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             return ERC4626(position).asset();

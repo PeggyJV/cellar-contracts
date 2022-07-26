@@ -301,7 +301,7 @@ contract CellarTest is Test {
 
         cellar.deposit(depositB, address(this));
 
-        assertEq(1e6, cellar.sharePriceHighWatermark(), "High Watermark should be 1 USDC");
+        assertEq(1e6, cellar.getFeeData().sharePriceHighWatermark, "High Watermark should be 1 USDC");
 
         // Simulate gains.
         uint256 total = depositA + depositB + yield;
@@ -333,10 +333,10 @@ contract CellarTest is Test {
         );
 
         uint256 newHWM = (total * 1e6) / (depositA + depositB);
-        assertEq(newHWM, cellar.sharePriceHighWatermark(), "High Watermark should be equal to newHWM");
+        assertEq(newHWM, cellar.getFeeData().sharePriceHighWatermark, "High Watermark should be equal to newHWM");
         assertApproxEqRel(
             cellar.previewRedeem(cellar.balanceOf(address(cellar))),
-            yield.mulDivDown(cellar.performanceFee(), 1e18),
+            yield.mulDivDown(cellar.getFeeData().performanceFee, 1e18),
             0.001e18,
             "Should be within 0.1% of yield * PerformanceFee"
         );
@@ -369,7 +369,7 @@ contract CellarTest is Test {
             if (i == 7) random = 6; // force loss
 
             amount = (uint256(keccak256(abi.encode("HOWDY", seed + i))) % 10000e6) + 1000e6; //number between 1,000 -> 10,999 USDC
-            HWM = cellar.sharePriceHighWatermark();
+            HWM = cellar.getFeeData().sharePriceHighWatermark;
             cellarShares = cellar.balanceOf(address(cellar));
             sharePrice = cellar.convertToAssets(1e18);
             totalSupply = cellar.totalSupply();
@@ -422,7 +422,7 @@ contract CellarTest is Test {
             if (random < 4 && sharePrice > HWM) {
                 //don't check this if a loss or gain happened cuz no fees would be minted
                 assertTrue(cellar.balanceOf(address(cellar)) > cellarShares, "Cellar was not minted Fees");
-                expectedFee = ((sharePrice - HWM) * cellar.performanceFee() * totalSupply) / 1e36;
+                expectedFee = ((sharePrice - HWM) * cellar.getFeeData().performanceFee * totalSupply) / 1e36;
                 assertApproxEqRel(
                     expectedFee,
                     cellar.previewRedeem(cellar.balanceOf(address(cellar)) - cellarShares),
@@ -430,11 +430,11 @@ contract CellarTest is Test {
                     "Fee Shares minted exceede deviation"
                 );
                 //sharePrice = cellar.convertToAssets(1e18);
-                assertEq(cellar.sharePriceHighWatermark(), sharePrice, "HWM was not set to new Share Price");
+                assertEq(cellar.getFeeData().sharePriceHighWatermark, sharePrice, "HWM was not set to new Share Price");
             } else {
                 // We don't really need to check this if random >= 4, but it can't hurt
                 assertTrue(cellar.balanceOf(address(cellar)) == cellarShares, "Cellar was minted Fees");
-                assertEq(cellar.sharePriceHighWatermark(), HWM, "HWM was set to new Share Price");
+                assertEq(cellar.getFeeData().sharePriceHighWatermark, HWM, "HWM was set to new Share Price");
             }
         }
     }
@@ -447,8 +447,8 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        uint256 expectedFee = (assets * cellar.platformFee() * timePassed) / (365 days * 1e18);
-        expectedFee = expectedFee.mulDivDown((1e18 - cellar.strategistPlatformCut()), 1e18);
+        uint256 expectedFee = (assets * cellar.getFeeData().platformFee * timePassed) / (365 days * 1e18);
+        expectedFee = expectedFee.mulDivDown((1e18 - cellar.getFeeData().strategistPlatformCut), 1e18);
 
         skip(timePassed); //advance time
         uint256 balanceBefore = USDC.balanceOf(cosmos);
@@ -477,9 +477,9 @@ contract CellarTest is Test {
 
         console.log("Cosmos Bal", balAfter - balBefore);
 
-        uint256 expectedShareWorth = yield.mulDivDown(cellar.performanceFee(), 1e18);
+        uint256 expectedShareWorth = yield.mulDivDown(cellar.getFeeData().performanceFee, 1e18);
 
-        expectedShareWorth += ((assets + yield) * cellar.platformFee() * timePassed) / (365 days * 1e18);
+        expectedShareWorth += ((assets + yield) * cellar.getFeeData().platformFee * timePassed) / (365 days * 1e18);
 
         console.log("Expected Fees", expectedShareWorth);
         console.log(

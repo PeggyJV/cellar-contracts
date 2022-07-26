@@ -294,7 +294,7 @@ contract CellarRouter is ICellarRouter {
 
         for (uint256 i; i < positions.length; i++) {
             address position = positions[i];
-            Cellar.PositionType positionType = cellar.getPositionData(position);
+            Cellar.PositionType positionType = cellar.getPositionType(position);
 
             assets[i] = positionType == Cellar.PositionType.ERC20 ? ERC20(position) : ERC4626(position).asset();
         }
