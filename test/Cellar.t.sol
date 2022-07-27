@@ -284,7 +284,7 @@ contract CellarTest is Test {
         assertEq(usdcCLR.balanceOf(address(cellar)), assets, "Should have not changed position balance.");
     }
 
-    // =========================================== Performance Fee TEST ===========================================
+    // =========================================== FEES TEST ===========================================
     function testHighWatermark(
         uint256 depositA,
         uint256 depositB,
@@ -301,7 +301,7 @@ contract CellarTest is Test {
 
         cellar.deposit(depositB, address(this));
         (uint256 currentHWM, , , , uint64 performanceFee, , ) = cellar.feeData();
-        assertEq(1e6, currentHWM, "High Watermark should be 1 USDC");
+        assertEq(1e18, currentHWM, "High Watermark should be 1 USDC");
 
         // Simulate gains.
         uint256 total = depositA + depositB + yield;
@@ -332,15 +332,79 @@ contract CellarTest is Test {
             "previewRedeem does not return the same as redeem"
         );
 
-        uint256 newHWM = (total * 1e6) / (depositA + depositB);
+        uint256 newHWM = (total * 1e18) / (depositA + depositB);
         (currentHWM, , , , , , ) = cellar.feeData();
         assertEq(newHWM, currentHWM, "High Watermark should be equal to newHWM");
         assertApproxEqRel(
             cellar.previewRedeem(cellar.balanceOf(address(cellar))),
-            yield.mulDivDown(performanceFee, 1e18),
+            yield.mulWadDown(performanceFee),
             0.001e18,
             "Should be within 0.1% of yield * PerformanceFee"
         );
+    }
+
+    function testPerformanceFeesWithPositivePerformance(uint256 deposit, uint256 yield) external {
+        deposit = bound(deposit, 100e6, 1_000_000e6);
+        yield = bound(yield, 10e6, 10_000e6);
+        (, , , , uint64 performanceFee, , ) = cellar.feeData();
+
+        deal(address(USDC), address(this), 3 * deposit);
+        cellar.deposit(deposit, address(this)); //deposit into Cellar
+
+        //Simulate Yield
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
+
+        cellar.deposit(deposit, address(this)); //deposit into Cellar
+
+        uint256 feeSharesInCellar = cellar.balanceOf(address(cellar));
+        assertTrue(feeSharesInCellar > 0, "Cellar should have been minted fee shares");
+
+        assertApproxEqRel(
+            cellar.previewRedeem(feeSharesInCellar),
+            yield.mulWadDown(performanceFee),
+            0.001e18,
+            "Should be within 0.1% of yield * PerformanceFee"
+        );
+
+        cellar.deposit(deposit, address(this)); //deposit into Cellar
+
+        assertTrue(
+            feeSharesInCellar == cellar.balanceOf(address(cellar)),
+            "Cellar should not have been minted more fee shares"
+        );
+    }
+
+    function testPerformanceFeesWithNegativePerformance(uint256 deposit, uint256 loss) external {
+        deposit = bound(deposit, 100_000e6, 1_000_000e6);
+        loss = bound(loss, 10e6, 10_000e6);
+
+        deal(address(USDC), address(this), 2 * deposit);
+        cellar.deposit(deposit, address(this)); //deposit into Cellar
+
+        //Simulate Loss
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) - loss);
+
+        cellar.deposit(deposit, address(this)); //deposit into Cellar
+
+        assertTrue(cellar.balanceOf(address(cellar)) == 0, "Cellar should have not been minted fee shares");
+    }
+
+    function testPerformanceFeesWithNeutralPerformance(uint256 deposit, uint256 amount) external {
+        deposit = bound(deposit, 100_000e6, 1_000_000e6);
+        amount = bound(amount, 10e6, 10_000e6);
+
+        deal(address(USDC), address(this), 2 * deposit);
+        cellar.deposit(deposit, address(this)); //deposit into Cellar
+
+        //Simulate Gain
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + amount);
+
+        //Simulate Loss
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) - amount);
+
+        cellar.deposit(deposit, address(this)); //deposit into Cellar
+
+        assertTrue(cellar.balanceOf(address(cellar)) == 0, "Cellar should have not been minted fee shares");
     }
 
     function testHighWatermarkComplex(uint256 seed) external {
@@ -372,7 +436,7 @@ contract CellarTest is Test {
             amount = (uint256(keccak256(abi.encode("HOWDY", seed + i))) % 10000e6) + 1000e6; //number between 1,000 -> 10,999 USDC
             (HWM, , , , , , ) = cellar.feeData();
             cellarShares = cellar.balanceOf(address(cellar));
-            sharePrice = cellar.convertToAssets(1e18);
+            sharePrice = cellar.convertToAssets(1e30);
             totalSupply = cellar.totalSupply();
             if (random == 0) {
                 //deposit
@@ -424,6 +488,7 @@ contract CellarTest is Test {
                 //don't check this if a loss or gain happened cuz no fees would be minted
                 assertTrue(cellar.balanceOf(address(cellar)) > cellarShares, "Cellar was not minted Fees");
                 expectedFee = ((sharePrice - HWM) * performanceFee * totalSupply) / 1e36;
+                expectedFee = expectedFee / 1e12;
                 assertApproxEqRel(
                     expectedFee,
                     cellar.previewRedeem(cellar.balanceOf(address(cellar)) - cellarShares),

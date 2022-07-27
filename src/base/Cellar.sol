@@ -13,6 +13,7 @@ import { IGravity } from "../interfaces/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
 
+import { Test, console } from "@forge-std/Test.sol";
 import "../Errors.sol";
 
 /**
@@ -636,7 +637,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         lastAccrual = uint64(block.timestamp);
 
         // Initialize highWatermark
-        feeData.highWatermark = 10**_asset.decimals();
+        feeData.highWatermark = 10**decimals;
 
         // Transfer ownership to the Gravity Bridge.
         address gravityBridge = _registry.getAddress(0);
@@ -1132,12 +1133,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint64 performanceFee = feeData.performanceFee;
         if (performanceFee == 0 || _totalAssets == 0) return (0, 0);
         uint256 highWatermark = feeData.highWatermark;
-        uint256 singleShare = 10**decimals;
+        uint256 singleShare = 10**(36 - asset.decimals()); // 36 comes from the high watermark desired precision(18) + decimals of cellar(18)
         currentSharePrice = _convertToAssets(singleShare, _totalAssets);
         if (highWatermark < currentSharePrice) {
             //find how many assets make up the fee
             uint256 yield = (currentSharePrice - highWatermark).mulDivDown(totalSupply, singleShare);
-            feeInAssets = yield.mulDivDown(performanceFee, 1e18);
+            feeInAssets = yield.mulWadDown(performanceFee);
         } else {
             return (0, 0);
         }
