@@ -290,3 +290,19 @@ error STATE_AssetAboveMaxPrice(address asset, uint256 price, uint256 maxPrice);
  * @param heartbeat maximum allowed time between price updates
  */
 error STATE_StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
+
+/**
+ * @notice Attempted to send fee shares to strategist payout address, when address is not set.
+ */
+error STATE_PayoutNotSet();
+
+/**
+ * @notice Attempted to swap with bad parameters.
+ */
+error STATE_WrongSwapParams();
+
+// ========================================== INPUT ERRORS ===========================================
+/**
+ * @notice Attempted to swap with bad parameters.
+ */
+error INPUT_InvalidFeeCut();

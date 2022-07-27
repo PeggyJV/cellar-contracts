@@ -383,7 +383,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @notice Data related to fees.
-     * @param sharePriceHighWatermark Stores the share price to be used as a High Watermark to calculate performance fees.
+     * @param highWatermark Stores the share price to be used as a High Watermark to calculate performance fees.
      * @param strategistPerformanceCut Determines how much performance fees go to strategist.
      *                                 This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
      * @param strategistPlatformCut Determines how much platform fees go to strategist.
@@ -397,7 +397,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param strategistPayoutAddress Address to send the strategists fee shares.
      */
     struct FeeData {
-        uint256 sharePriceHighWatermark;
+        uint256 highWatermark;
         uint64 strategistPerformanceCut;
         uint64 strategistPlatformCut;
         uint64 platformFee;
@@ -411,7 +411,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     FeeData public feeData =
         FeeData({
-            sharePriceHighWatermark: 0,
+            highWatermark: 0,
             strategistPerformanceCut: 0.75e18,
             strategistPlatformCut: 0.75e18,
             strategistPayoutAddress: address(0),
@@ -419,13 +419,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
             performanceFee: 0.1e18,
             feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55"
         });
-
-    /**
-     * @notice Get the fee data values for this cellar
-     */
-    function getFeeData() external view returns (FeeData memory) {
-        return feeData;
-    }
 
     /**
      * @notice Set the percentage of platform fees accrued over a year.
@@ -459,23 +452,32 @@ contract Cellar is ERC4626, Ownable, Multicall {
         feeData.feesDistributor = newFeesDistributor;
     }
 
-    ///@dev Sets the Strategists cut of performance fees
+    /**
+     * @notice Sets the Strategists cut of performance fees
+     * @param cut the performance cut for the strategist
+     */
     function setStrategistPerformanceCut(uint64 cut) external onlyOwner {
-        require(cut <= 1e18, "Invalid cut");
+        if (cut > 1e18) revert INPUT_InvalidFeeCut();
         emit StrategistPerformanceCutChanged(feeData.strategistPerformanceCut, cut);
 
         feeData.strategistPerformanceCut = cut;
     }
 
-    ///@dev Sets the Strategists cut of platform fees
+    /**
+     * @notice Sets the Strategists cut of platform fees
+     * @param cut the platform cut for the strategist
+     */
     function setStrategistPlatformCut(uint64 cut) external onlyOwner {
-        require(cut <= 1e18, "Invalid cut");
+        if (cut > 1e18) revert INPUT_InvalidFeeCut();
         emit StrategistPlatformCutChanged(feeData.strategistPlatformCut, cut);
 
         feeData.strategistPlatformCut = cut;
     }
 
-    ///@dev Sets the Strategists payout address
+    /**
+     * @notice Sets the Strategists payout address
+     * @param payout the new strategist payout address
+     */
     function setStrategistPayoutAddress(address payout) external onlyOwner {
         emit StrategistPayoutAddressChanged(feeData.strategistPayoutAddress, payout);
 
@@ -633,8 +635,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // `accrue` will take platform fees from 1970 to the time it is called.
         lastAccrual = uint64(block.timestamp);
 
-        // Initialize SharePriceHighWatermark
-        feeData.sharePriceHighWatermark = 10**asset.decimals();
+        // Initialize highWatermark
+        feeData.highWatermark = 10**_asset.decimals();
 
         // Transfer ownership to the Gravity Bridge.
         address gravityBridge = _registry.getAddress(0);
@@ -667,7 +669,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         _takePerformanceFees(_totalAssets);
         // Check for rounding error since we round down in previewDeposit.
-        require((shares = _convertToShares(assets, _totalAssets)) != 0, "ZERO_SHARES");
+        if ((shares = _convertToShares(assets, _totalAssets)) == 0) revert USR_ZeroShares();
 
         beforeDeposit(assets, shares, receiver);
 
@@ -783,7 +785,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
 
         // Check for rounding error since we round down in previewRedeem.
-        require((assets = _convertToAssets(shares, _totalAssets)) != 0, "ZERO_ASSETS");
+        if ((assets = _convertToAssets(shares, _totalAssets)) == 0) revert USR_ZeroAssets();
 
         uint256 totalShares = totalSupply;
 
@@ -1127,12 +1129,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
         view
         returns (uint256 feeInAssets, uint256 currentSharePrice)
     {
-        if (feeData.performanceFee == 0 || _totalAssets == 0) return (0, 0);
-        currentSharePrice = _convertToAssets(10**decimals, _totalAssets);
-        if (feeData.sharePriceHighWatermark < currentSharePrice) {
+        uint64 performanceFee = feeData.performanceFee;
+        if (performanceFee == 0 || _totalAssets == 0) return (0, 0);
+        uint256 highWatermark = feeData.highWatermark;
+        uint256 singleShare = 10**decimals;
+        currentSharePrice = _convertToAssets(singleShare, _totalAssets);
+        if (highWatermark < currentSharePrice) {
             //find how many assets make up the fee
-            uint256 yield = ((currentSharePrice - feeData.sharePriceHighWatermark) * totalSupply) / 10**decimals;
-            feeInAssets = yield.mulDivDown(feeData.performanceFee, 1e18);
+            uint256 yield = (currentSharePrice - highWatermark).mulDivDown(totalSupply, singleShare);
+            feeInAssets = yield.mulDivDown(performanceFee, 1e18);
         } else {
             return (0, 0);
         }
@@ -1149,7 +1154,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         if (feeInAssets > 0) {
             uint256 platformFeesInShares = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
             if (platformFeesInShares > 0) {
-                feeData.sharePriceHighWatermark = currentSharePrice;
+                feeData.highWatermark = currentSharePrice;
                 _mint(address(this), platformFeesInShares);
             }
         }
@@ -1181,50 +1186,52 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev assumes cellar's accounting asset is able to be transferred and sent to Cosmos
      */
     function sendFees() public onlyOwner {
-        require(feeData.strategistPayoutAddress != address(0), "Strategist Payout not set");
+        FeeData storage _feeData = feeData;
+        if (_feeData.strategistPayoutAddress == address(0)) revert STATE_PayoutNotSet();
         uint256 _totalAssets = totalAssets();
 
         // Since this action mints shares, calculate outstanding performance fees due.
         _takePerformanceFees(_totalAssets);
 
-        uint256 currentBalance = balanceOf[address(this)];
+        uint256 totalFees = balanceOf[address(this)];
 
-        uint256 strategistFeeSharesDue = currentBalance.mulWadDown(feeData.strategistPerformanceCut);
+        uint256 strategistFeeSharesDue = totalFees.mulWadDown(_feeData.strategistPerformanceCut);
 
         // Calculate platform fees earned.
         uint256 elapsedTime = block.timestamp - lastAccrual;
-        uint256 platformFeeInAssets = (_totalAssets * elapsedTime * feeData.platformFee) / 1e18 / 365 days;
+        uint256 platformFeeInAssets = (_totalAssets * elapsedTime * _feeData.platformFee) / 1e18 / 365 days;
         uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
         _mint(address(this), platformFees);
+        totalFees += platformFees;
 
-        strategistFeeSharesDue += platformFees.mulWadDown(feeData.strategistPlatformCut);
+        strategistFeeSharesDue += platformFees.mulWadDown(_feeData.strategistPlatformCut);
 
         //transfer shares to strategist
-        balanceOf[address(this)] -= strategistFeeSharesDue;
+        totalFees -= strategistFeeSharesDue;
+        balanceOf[address(this)] = totalFees;
 
         // Cannot overflow because the sum of all user
         // balances can't exceed the max uint256 value.
         unchecked {
-            balanceOf[feeData.strategistPayoutAddress] += strategistFeeSharesDue;
+            balanceOf[_feeData.strategistPayoutAddress] += strategistFeeSharesDue;
         }
 
-        emit Transfer(address(this), feeData.strategistPayoutAddress, strategistFeeSharesDue);
+        emit Transfer(address(this), _feeData.strategistPayoutAddress, strategistFeeSharesDue);
 
         lastAccrual = uint32(block.timestamp);
 
         // Redeem our fee shares for assets to send to the fee distributor module.
-        currentBalance = balanceOf[address(this)];
-        uint256 assets = _convertToAssets(currentBalance, _totalAssets);
-        require(assets != 0, "ZERO_ASSETS");
+        uint256 assets = _convertToAssets(totalFees, _totalAssets);
+        if (assets == 0) revert USR_ZeroAssets();
 
-        _burn(address(this), currentBalance);
+        _burn(address(this), totalFees);
 
         // Transfer assets to a fee distributor on the Sommelier chain.
         IGravity gravityBridge = IGravity(registry.getAddress(0));
         asset.safeApprove(address(gravityBridge), assets);
-        gravityBridge.sendToCosmos(address(asset), feeData.feesDistributor, assets);
+        gravityBridge.sendToCosmos(address(asset), _feeData.feesDistributor, assets);
 
-        emit SendFees(currentBalance, assets);
+        emit SendFees(totalFees, assets);
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================
@@ -1310,6 +1317,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
         // specified a different amount of assets to swap then `amountIn`.
-        require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
+        if (assetIn.balanceOf(address(this)) != expectedAssetsInAfter) revert STATE_WrongSwapParams();
     }
 }

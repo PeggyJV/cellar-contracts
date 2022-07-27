@@ -300,8 +300,8 @@ contract CellarTest is Test {
         cellar.deposit(depositA, address(this));
 
         cellar.deposit(depositB, address(this));
-
-        assertEq(1e6, cellar.getFeeData().sharePriceHighWatermark, "High Watermark should be 1 USDC");
+        (uint256 currentHWM, , , , uint64 performanceFee, , ) = cellar.feeData();
+        assertEq(1e6, currentHWM, "High Watermark should be 1 USDC");
 
         // Simulate gains.
         uint256 total = depositA + depositB + yield;
@@ -333,10 +333,11 @@ contract CellarTest is Test {
         );
 
         uint256 newHWM = (total * 1e6) / (depositA + depositB);
-        assertEq(newHWM, cellar.getFeeData().sharePriceHighWatermark, "High Watermark should be equal to newHWM");
+        (currentHWM, , , , , , ) = cellar.feeData();
+        assertEq(newHWM, currentHWM, "High Watermark should be equal to newHWM");
         assertApproxEqRel(
             cellar.previewRedeem(cellar.balanceOf(address(cellar))),
-            yield.mulDivDown(cellar.getFeeData().performanceFee, 1e18),
+            yield.mulDivDown(performanceFee, 1e18),
             0.001e18,
             "Should be within 0.1% of yield * PerformanceFee"
         );
@@ -354,6 +355,7 @@ contract CellarTest is Test {
         uint256 cellarShares;
         uint256 expectedFee;
         uint256 totalSupply;
+        (, , , , uint64 performanceFee, , ) = cellar.feeData();
         for (uint256 i = 0; i < 100; i++) {
             random = uint256(keccak256(abi.encode(seed + i))) % 8; //number between 0 -> 7
 
@@ -368,7 +370,7 @@ contract CellarTest is Test {
             if (i == 7) random = 6; // force loss
 
             amount = (uint256(keccak256(abi.encode("HOWDY", seed + i))) % 10000e6) + 1000e6; //number between 1,000 -> 10,999 USDC
-            HWM = cellar.getFeeData().sharePriceHighWatermark;
+            (HWM, , , , , , ) = cellar.feeData();
             cellarShares = cellar.balanceOf(address(cellar));
             sharePrice = cellar.convertToAssets(1e18);
             totalSupply = cellar.totalSupply();
@@ -421,7 +423,7 @@ contract CellarTest is Test {
             if (random < 4 && sharePrice > HWM) {
                 //don't check this if a loss or gain happened cuz no fees would be minted
                 assertTrue(cellar.balanceOf(address(cellar)) > cellarShares, "Cellar was not minted Fees");
-                expectedFee = ((sharePrice - HWM) * cellar.getFeeData().performanceFee * totalSupply) / 1e36;
+                expectedFee = ((sharePrice - HWM) * performanceFee * totalSupply) / 1e36;
                 assertApproxEqRel(
                     expectedFee,
                     cellar.previewRedeem(cellar.balanceOf(address(cellar)) - cellarShares),
@@ -429,11 +431,13 @@ contract CellarTest is Test {
                     "Fee Shares minted exceede deviation"
                 );
                 //sharePrice = cellar.convertToAssets(1e18);
-                assertEq(cellar.getFeeData().sharePriceHighWatermark, sharePrice, "HWM was not set to new Share Price");
+                (uint256 currentHWM, , , , , , ) = cellar.feeData();
+                assertEq(currentHWM, sharePrice, "HWM was not set to new Share Price");
             } else {
                 // We don't really need to check this if random >= 4, but it can't hurt
                 assertTrue(cellar.balanceOf(address(cellar)) == cellarShares, "Cellar was minted Fees");
-                assertEq(cellar.getFeeData().sharePriceHighWatermark, HWM, "HWM was set to new Share Price");
+                (uint256 currentHWM, , , , , , ) = cellar.feeData();
+                assertEq(currentHWM, HWM, "HWM was set to new Share Price");
             }
         }
     }
@@ -445,9 +449,9 @@ contract CellarTest is Test {
         uint256 assets = 1_000_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
-
-        uint256 expectedFee = (assets * cellar.getFeeData().platformFee * timePassed) / (365 days * 1e18);
-        expectedFee = expectedFee.mulDivDown((1e18 - cellar.getFeeData().strategistPlatformCut), 1e18);
+        (, , uint64 strategistPlatformCut, uint64 platformFee, , , ) = cellar.feeData();
+        uint256 expectedFee = (assets * platformFee * timePassed) / (365 days * 1e18);
+        expectedFee = expectedFee.mulDivDown((1e18 - strategistPlatformCut), 1e18);
 
         skip(timePassed); //advance time
         uint256 balanceBefore = USDC.balanceOf(cosmos);
@@ -458,6 +462,7 @@ contract CellarTest is Test {
 
     function testPlatformAndPerformanceFees() external {
         uint256 timePassed = 1 days;
+        (, uint64 strategistPerformanceCut, , uint64 platformFee, uint64 performanceFee, , ) = cellar.feeData();
         // Deposit into cellar.
         uint256 assets = 100_000e6;
         uint256 yield = 1_000e6;
@@ -474,14 +479,12 @@ contract CellarTest is Test {
         cellar.sendFees();
         uint256 balAfter = USDC.balanceOf(cosmos);
 
-        uint256 expectedShareWorth = yield.mulDivDown(cellar.getFeeData().performanceFee, 1e18);
+        uint256 expectedShareWorth = yield.mulDivDown(performanceFee, 1e18);
 
         // minting platform fees DILUTES share price, so it also dilutes pending performance fees
-        expectedShareWorth =
-            (expectedShareWorth * (1e18 - (cellar.getFeeData().platformFee * timePassed) / 365 days)) /
-            1e18;
+        expectedShareWorth = (expectedShareWorth * (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
 
-        expectedShareWorth += ((assets + yield) * cellar.getFeeData().platformFee * timePassed) / (365 days * 1e18);
+        expectedShareWorth += ((assets + yield) * platformFee * timePassed) / (365 days * 1e18);
 
         assertApproxEqAbs(
             expectedShareWorth,
@@ -492,14 +495,14 @@ contract CellarTest is Test {
 
         //below tests work because the performance cut == platform cut
         assertApproxEqAbs(
-            expectedShareWorth.mulWadDown(cellar.getFeeData().strategistPerformanceCut),
+            expectedShareWorth.mulWadDown(strategistPerformanceCut),
             cellar.previewRedeem(cellar.balanceOf(strategist)),
             1,
             "Incorrect fee for strategist"
         );
 
         assertApproxEqAbs(
-            expectedShareWorth.mulWadDown(1e18 - cellar.getFeeData().strategistPerformanceCut),
+            expectedShareWorth.mulWadDown(1e18 - strategistPerformanceCut),
             (balAfter - balBefore),
             1,
             "Incorrect fee for cosmos"
