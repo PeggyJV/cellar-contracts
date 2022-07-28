@@ -636,9 +636,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // `accrue` will take platform fees from 1970 to the time it is called.
         lastAccrual = uint64(block.timestamp);
 
-        // Initialize highWatermark
-        feeData.highWatermark = 10**decimals;
-
         // Transfer ownership to the Gravity Bridge.
         address gravityBridge = _registry.getAddress(0);
         transferOwnership(gravityBridge);
@@ -669,6 +666,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 _totalAssets = totalAssets();
 
         _takePerformanceFees(_totalAssets);
+
         // Check for rounding error since we round down in previewDeposit.
         if ((shares = _convertToShares(assets, _totalAssets)) == 0) revert USR_ZeroShares();
 
@@ -734,6 +732,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // No need to check for rounding error, `previewWithdraw` rounds up.
         shares = _previewWithdraw(assets, _totalAssets);
 
+        beforeWithdraw(assets, shares, receiver, owner);
+
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -749,6 +749,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         withdrawType == WithdrawType.ORDERLY
             ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
             : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
+
+        afterWithdraw(assets, shares, receiver, owner);
     }
 
     /**
@@ -779,6 +781,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         _takePerformanceFees(_totalAssets);
 
+        beforeWithdraw(assets, shares, receiver, owner);
+
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -797,6 +801,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         withdrawType == WithdrawType.ORDERLY
             ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
             : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
+
+        afterWithdraw(assets, shares, receiver, owner);
     }
 
     /**
@@ -919,7 +925,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        (uint256 feeInAssets, ) = _previewPerformanceFees(_totalAssets);
+        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
         assets = _previewMint(shares, _totalAssets - feeInAssets);
     }
 
@@ -930,7 +936,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        (uint256 feeInAssets, ) = _previewPerformanceFees(_totalAssets);
+        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
         shares = _previewWithdraw(assets, _totalAssets - feeInAssets);
     }
 
@@ -941,7 +947,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        (uint256 feeInAssets, ) = _previewPerformanceFees(_totalAssets);
+        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
         shares = _convertToShares(assets, _totalAssets - feeInAssets);
     }
 
@@ -952,7 +958,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        (uint256 feeInAssets, ) = _previewPerformanceFees(_totalAssets);
+        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
         assets = _convertToAssets(shares, _totalAssets - feeInAssets);
     }
 
@@ -1123,24 +1129,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Calculates how many assets Strategist would earn performance fees
      * @param _totalAssets uint256 value of the total assets in the cellar
      * @return feeInAssets amount of assets
-     * @return currentSharePrice current price of shares, used by _takePerformanceFee
      */
-    function _previewPerformanceFees(uint256 _totalAssets)
-        internal
-        view
-        returns (uint256 feeInAssets, uint256 currentSharePrice)
-    {
+    function _previewPerformanceFees(uint256 _totalAssets) internal view returns (uint256 feeInAssets) {
         uint64 performanceFee = feeData.performanceFee;
-        if (performanceFee == 0 || _totalAssets == 0) return (0, 0);
+        if (performanceFee == 0 || _totalAssets == 0) return 0;
+
         uint256 highWatermark = feeData.highWatermark;
-        uint256 singleShare = 10**(36 - asset.decimals()); // 36 comes from the high watermark desired precision(18) + decimals of cellar(18)
-        currentSharePrice = _convertToAssets(singleShare, _totalAssets);
-        if (highWatermark < currentSharePrice) {
-            //find how many assets make up the fee
-            uint256 yield = (currentSharePrice - highWatermark).mulDivDown(totalSupply, singleShare);
+
+        if (_totalAssets > highWatermark) {
+            uint256 yield = _totalAssets - highWatermark;
             feeInAssets = yield.mulWadDown(performanceFee);
-        } else {
-            return (0, 0);
         }
     }
 
@@ -1151,11 +1149,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param _totalAssets uint256 value of the total assets in the cellar
      */
     function _takePerformanceFees(uint256 _totalAssets) internal {
-        (uint256 feeInAssets, uint256 currentSharePrice) = _previewPerformanceFees(_totalAssets);
+        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
         if (feeInAssets > 0) {
             uint256 platformFeesInShares = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
             if (platformFeesInShares > 0) {
-                feeData.highWatermark = currentSharePrice;
+                feeData.highWatermark = _totalAssets;
                 _mint(address(this), platformFeesInShares);
             }
         }
@@ -1187,8 +1185,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev assumes cellar's accounting asset is able to be transferred and sent to Cosmos
      */
     function sendFees() public onlyOwner {
-        FeeData storage _feeData = feeData;
-        if (_feeData.strategistPayoutAddress == address(0)) revert STATE_PayoutNotSet();
+        address strategistPayoutAddress = feeData.strategistPayoutAddress;
+        if (strategistPayoutAddress == address(0)) revert STATE_PayoutNotSet();
+
         uint256 _totalAssets = totalAssets();
 
         // Since this action mints shares, calculate outstanding performance fees due.
@@ -1196,16 +1195,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         uint256 totalFees = balanceOf[address(this)];
 
-        uint256 strategistFeeSharesDue = totalFees.mulWadDown(_feeData.strategistPerformanceCut);
+        uint256 strategistFeeSharesDue = totalFees.mulWadDown(feeData.strategistPerformanceCut);
 
         // Calculate platform fees earned.
         uint256 elapsedTime = block.timestamp - lastAccrual;
-        uint256 platformFeeInAssets = (_totalAssets * elapsedTime * _feeData.platformFee) / 1e18 / 365 days;
+        uint256 platformFeeInAssets = (_totalAssets * elapsedTime * feeData.platformFee) / 1e18 / 365 days;
         uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
         _mint(address(this), platformFees);
         totalFees += platformFees;
 
-        strategistFeeSharesDue += platformFees.mulWadDown(_feeData.strategistPlatformCut);
+        strategistFeeSharesDue += platformFees.mulWadDown(feeData.strategistPlatformCut);
 
         //transfer shares to strategist
         totalFees -= strategistFeeSharesDue;
@@ -1214,10 +1213,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Cannot overflow because the sum of all user
         // balances can't exceed the max uint256 value.
         unchecked {
-            balanceOf[_feeData.strategistPayoutAddress] += strategistFeeSharesDue;
+            balanceOf[strategistPayoutAddress] += strategistFeeSharesDue;
         }
 
-        emit Transfer(address(this), _feeData.strategistPayoutAddress, strategistFeeSharesDue);
+        emit Transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
 
         lastAccrual = uint32(block.timestamp);
 
@@ -1225,12 +1224,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 assets = _convertToAssets(totalFees, _totalAssets);
         if (assets == 0) revert USR_ZeroAssets();
 
+        // Without this, assets paid out as fees would be counted as a loss.
+        feeData.highWatermark -= assets;
+
         _burn(address(this), totalFees);
 
         // Transfer assets to a fee distributor on the Sommelier chain.
         IGravity gravityBridge = IGravity(registry.getAddress(0));
         asset.safeApprove(address(gravityBridge), assets);
-        gravityBridge.sendToCosmos(address(asset), _feeData.feesDistributor, assets);
+        gravityBridge.sendToCosmos(address(asset), feeData.feesDistributor, assets);
 
         emit SendFees(totalFees, assets);
     }
@@ -1242,6 +1244,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function _depositTo(address position, uint256 assets) internal {
         PositionType positionType = getPositionType[position];
+
+        feeData.highWatermark += assets;
 
         // Deposit into position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
@@ -1259,6 +1263,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address receiver
     ) internal {
         PositionType positionType = getPositionType[position];
+
+        feeData.highWatermark -= assets;
 
         // Withdraw from position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
