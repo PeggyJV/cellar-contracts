@@ -1126,6 +1126,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
     // ========================================= FEES LOGIC =========================================
 
     /**
+     * @notice Emitted when High Watermark is reset.
+     */
+    event HighWatermarkReset();
+
+    /**
+     * @notice Resets High Watermark to equal current total assets.
+     * @notice This function can be abused by Strategists, so it should only be callable by governance.
+     */
+    function resetHighWatermark() external onlyOwner {
+        feeData.highWatermark = totalAssets();
+        emit HighWatermarkReset();
+    }
+
+    /**
      * @notice Calculates how many assets Strategist would earn performance fees
      * @param _totalAssets uint256 value of the total assets in the cellar
      * @return feeInAssets amount of assets

@@ -607,4 +607,61 @@ contract CellarTest is Test {
             "Incorrect fee for cosmos"
         );
     }
+
+    function testResetHighWatermak(
+        uint256 deposit,
+        uint256 loss,
+        uint256 gain
+    ) external {
+        deposit = bound(deposit, 100_000e6, 1_000_000e6);
+        loss = bound(loss, 10e6, 10_000e6);
+        gain = bound(gain, 10e6, 10_000e6);
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), (2 * deposit) + 1);
+
+        // Deposit into the Cellar.
+        cellar.deposit(deposit, address(this)); //deposit into Cellar
+
+        // Simulate Cellar losing yield.
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) - loss);
+
+        // Deposit into the Cellar to check if performance fees are minted.
+        cellar.deposit(deposit, address(this));
+
+        assertEq(
+            cellar.balanceOf(address(cellar)),
+            0,
+            "Cellar should have not been minted any performance fee shares."
+        );
+
+        // Reset Cellar's High Watermark value.
+        cellar.resetHighWatermark();
+
+        (uint256 currentHighWatermark, , , , uint64 performanceFee, , ) = cellar.feeData();
+        uint256 expectedHighWatermark = 2 * deposit - loss;
+        assertEq(
+            currentHighWatermark,
+            expectedHighWatermark,
+            "Cellar should have reset high watermark to the current assets."
+        );
+
+        // Simulate Cellar earning yield.
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + gain);
+
+        // Deposit into the Cellar to check that performance fees are minted.
+        cellar.deposit(1, address(this));
+
+        assertTrue(cellar.balanceOf(address(cellar)) > 0, "Cellar should have been minted performance fee shares.");
+
+        uint256 expectedPerformanceFeeInAssets = gain.mulWadDown(performanceFee);
+
+        // Cellars rounds down when using previewRedeem, so it is acceptable to be off by 1 wei.
+        assertApproxEqAbs(
+            cellar.previewRedeem(cellar.balanceOf(address(cellar))),
+            expectedPerformanceFeeInAssets,
+            1,
+            "Cellar performance fee shares in assets should equal (gain * performanceFee)"
+        );
+    }
 }
