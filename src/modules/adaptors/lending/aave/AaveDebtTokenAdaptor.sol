@@ -70,7 +70,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     }
 
     //============================================ High Level Callable Functions ============================================
-    function borrowFromAave(bytes memory callData) public {
+    function borrowFromAave(bytes memory callData) external {
         (ERC20 tokenToBorrow, uint256 amountToBorrow) = abi.decode(callData, (ERC20, uint256));
         _borrowFromAave(tokenToBorrow, amountToBorrow);
     }
