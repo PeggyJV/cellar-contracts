@@ -178,6 +178,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param newPosition address of position to replace with
      */
     function replacePosition(uint256 index, address newPosition) external onlyOwner whenNotShutdown {
+        if (!isTrusted[newPosition]) revert USR_UntrustedPosition(newPosition);
+        if (isPositionUsed[newPosition]) revert USR_PositionAlreadyUsed(newPosition);
+
         // Store the old position before its replaced.
         address oldPosition = positions[index];
 

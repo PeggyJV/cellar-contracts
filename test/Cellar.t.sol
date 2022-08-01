@@ -460,6 +460,8 @@ contract CellarTest is Test {
         // Check that `replacePosition` reverts if new position is not trusted.
         vm.expectRevert(bytes(abi.encodeWithSelector(USR_UntrustedPosition.selector, address(0))));
         cellar.replacePosition(2, address(0));
+
+        //TODO Check that `replacePosition` reverts if new position is already used.
     }
 
     //TODO Trust Position Tests
