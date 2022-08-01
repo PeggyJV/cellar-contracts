@@ -297,7 +297,6 @@ contract CellarTest is Test {
     function testWithdrawInOrder() external {
         cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
         cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
-
         assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
 
         // Mint shares to user to redeem.
@@ -622,14 +621,15 @@ contract CellarTest is Test {
         path[0] = address(USDC);
         path[1] = address(WETH);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
-        cellar.rebalance(
-            address(USDC),
-            address(WETH),
-            assets,
-            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-            abi.encode(path, assets, 0, address(cellar), address(cellar))
-        );
+        //TODO should rebalancing be prohibited when shut down?
+        //vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
+        //cellar.rebalance(
+        //    address(USDC),
+        //    address(WETH),
+        //    assets,
+        //    SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+        //    abi.encode(path, assets, 0, address(cellar), address(cellar))
+        //);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
         cellar.initiateShutdown();
@@ -1328,10 +1328,10 @@ contract CellarTest is Test {
             (highWatermark, , , , , , ) = assetManagementCellar.feeData();
             console.log("HWM:", highWatermark);
             //performance fees should be minted
-            //assertTrue(
-            //    assetManagementCellar.balanceOf(address(assetManagementCellar)) > 0,
-            //    "Cellar should have been minted performance fees."
-            //);
+            assertTrue(
+                assetManagementCellar.balanceOf(address(assetManagementCellar)) > 0,
+                "Cellar should have been minted performance fees."
+            );
 
             skip(7 days);
 

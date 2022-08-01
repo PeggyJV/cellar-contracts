@@ -14,6 +14,7 @@ import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
 
 import "../Errors.sol";
+import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Cellar
@@ -651,9 +652,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 assets,
         uint256,
         address receiver
-    ) internal view override whenNotShutdown {
+    ) internal override whenNotShutdown {
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
+        feeData.highWatermark += assets;
     }
 
     function afterDeposit(
@@ -662,6 +664,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address
     ) internal override {
         _depositTo(holdingPosition, assets);
+    }
+
+    function beforeWithdraw(
+        uint256 assets,
+        uint256,
+        address,
+        address
+    ) internal override {
+        feeData.highWatermark -= assets;
     }
 
     function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
@@ -783,8 +794,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         _takePerformanceFees(_totalAssets);
 
-        beforeWithdraw(assets, shares, receiver, owner);
-
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -793,6 +802,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Check for rounding error since we round down in previewRedeem.
         if ((assets = _convertToAssets(shares, _totalAssets)) == 0) revert USR_ZeroAssets();
+
+        beforeWithdraw(assets, shares, receiver, owner);
 
         uint256 totalShares = totalSupply;
 
@@ -1261,8 +1272,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
     function _depositTo(address position, uint256 assets) internal {
         PositionType positionType = getPositionType[position];
 
-        feeData.highWatermark += assets;
-
         // Deposit into position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             ERC4626(position).asset().safeApprove(position, assets);
@@ -1279,8 +1288,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address receiver
     ) internal {
         PositionType positionType = getPositionType[position];
-
-        feeData.highWatermark -= assets;
 
         // Withdraw from position.
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
