@@ -46,4 +46,17 @@ contract MockCellar is Cellar, Test {
 
         _depositTo(position, amount);
     }
+
+    function getData()
+        public
+        view
+        returns (
+            uint256 _totalAssets,
+            address[] memory _positions,
+            ERC20[] memory positionAssets,
+            uint256[] memory positionBalances
+        )
+    {
+        (_totalAssets, _positions, positionAssets, positionBalances) = _getData();
+    }
 }
