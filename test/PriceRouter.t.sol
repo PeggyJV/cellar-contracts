@@ -107,7 +107,6 @@ contract PriceRouterTest is Test {
         assertEq(exchangeRates[3], 1e8, "WBTC -> WBTC Exchange Rate Should be 1e8");
     }
 
-    // TODO: Add test case for getting BOND price range.
     function testPriceRange() external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
@@ -132,11 +131,16 @@ contract PriceRouterTest is Test {
         assertEq(min, 10e8, "WBTC Min Price Should be $10");
         assertEq(max, 10_000_000e8, "WBTC Max Price Should be $10,000,000");
 
-        ERC20[] memory baseAssets = new ERC20[](4);
+        (min, max) = priceRouter.getPriceRange(BOND);
+        assertEq(min, 0.1e8, "BOND Min Price Should be $0.1");
+        assertEq(max, 10_000, "BOND Max Price Should be $10,000");
+
+        ERC20[] memory baseAssets = new ERC20[](3);
         baseAssets[0] = USDC;
         baseAssets[1] = DAI;
         baseAssets[2] = WETH;
         baseAssets[3] = WBTC;
+        baseAssets[4] = BOND;
 
         (uint256[] memory mins, uint256[] memory maxes) = priceRouter.getPriceRanges(baseAssets);
 
@@ -148,6 +152,8 @@ contract PriceRouterTest is Test {
         assertEq(maxes[2], 10_000e8, "WETH Max Price Should be $10,000");
         assertEq(mins[3], 10e8, "WBTC Min Price Should be $10");
         assertEq(maxes[3], 10_000_000e8, "WBTC Max Price Should be $10,000,000");
+        assertEq(mins[3], 0.1e8, "BOND Min Price Should be $0.1");
+        assertEq(maxes[3], 10_000e8, "BOND Max Price Should be $10,000");
     }
 
     function testGetValue(
