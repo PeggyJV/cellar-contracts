@@ -1303,6 +1303,8 @@ contract CellarTest is Test {
 
             uint256 yieldEarnedFromWBTCPriceIncrease = wBTCValueAfter - wBTCValueBefore;
 
+            console.log("Yield", yieldEarnedFromWBTCPriceIncrease);
+
             assertEq(
                 newTotalAssets,
                 (totalAssets + yieldEarnedFromWBTCPriceIncrease),
@@ -1327,6 +1329,12 @@ contract CellarTest is Test {
             vm.stopPrank();
             (highWatermark, , , , , , ) = assetManagementCellar.feeData();
             console.log("HWM:", highWatermark);
+            console.log("TVL", assetManagementCellar.totalAssets());
+            assertEq(
+                highWatermark,
+                assetManagementCellar.totalAssets(),
+                "High watermark should be equal to totalAssets."
+            );
             //performance fees should be minted
             assertTrue(
                 assetManagementCellar.balanceOf(address(assetManagementCellar)) > 0,
@@ -1338,26 +1346,127 @@ contract CellarTest is Test {
             assetManagementCellar.sendFees();
             //TODO check that only platform/perfamance fees are handled.
         }
-        //===================================================
-        //change fee data
-        //wBTC price goes down, but WETH goes up enoough so that performance fees are still mintable
-        //rebalance all positions to WETH
-        //user deposits
-        //call send fees
+        {
+            // Set platform fee to 2%.
+            assetManagementCellar.setPlatformFee(0.02e18);
+
+            // Set strategist platform cut to 80%.
+            assetManagementCellar.setStrategistPlatformCut(0.8e18);
+
+            // Set performance fee to 20%.
+            assetManagementCellar.setPerformanceFee(0.2e18);
+
+            // Set strategist performance cut to 85%.
+            assetManagementCellar.setStrategistPerformanceCut(0.85e18);
+
+            // WBTC price goes down. WETH price goes up enough to create yield.
+            priceRouter.setExchangeRate(WETH, WBTC, 0.13333333e8);
+            priceRouter.setExchangeRate(WBTC, WETH, 7.5e18);
+            priceRouter.setExchangeRate(WBTC, USDC, 30_000e6);
+            priceRouter.setExchangeRate(USDC, WBTC, 0.00003333e8);
+            priceRouter.setExchangeRate(USDC, WETH, 0.00025e18);
+            priceRouter.setExchangeRate(WETH, USDC, 4_000e6);
+
+            // Strategist rebalances all positions to only WETH
+            address[] memory path = new address[](2);
+
+            uint256 assetBalanceToRemove = USDC.balanceOf(address(assetManagementCellar));
+            path[0] = address(USDC);
+            path[1] = address(WETH);
+
+            uint256 assetsTo = assetManagementCellar.rebalance(
+                address(USDC),
+                address(WETH),
+                assetBalanceToRemove,
+                SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+                abi.encode(
+                    path,
+                    assetBalanceToRemove,
+                    0,
+                    address(assetManagementCellar),
+                    address(assetManagementCellar)
+                )
+            );
+
+            assetBalanceToRemove = WBTC.balanceOf(address(assetManagementCellar));
+            path[0] = address(WBTC);
+            path[1] = address(WETH);
+
+            assetsTo = assetManagementCellar.rebalance(
+                address(WBTC),
+                address(WETH),
+                assetBalanceToRemove,
+                SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+                abi.encode(
+                    path,
+                    assetBalanceToRemove,
+                    0,
+                    address(assetManagementCellar),
+                    address(assetManagementCellar)
+                )
+            );
+        }
+        {
+            // Bob enters cellar via Mint.
+            //uint256 amount = mutate(salt);
+            uint256 shares = 100e18;
+            uint256 amount;
+            vm.startPrank(bob);
+            assertEq(
+                assetManagementCellar.previewMint(shares),
+                amount = assetManagementCellar.mint(shares, bob),
+                "Mint should be equal to previewMint"
+            );
+
+            vm.stopPrank();
+
+            vm.startPrank(sam);
+            assertEq(
+                assetManagementCellar.previewMint(shares),
+                amount = assetManagementCellar.mint(shares, sam),
+                "Mint should be equal to previewMint"
+            );
+
+            vm.stopPrank();
+            //TODO make sure sam also doesn't mint performance fees
+
+            skip(21 days);
+
+            assetManagementCellar.sendFees();
+            //TODO check that platform/perfamance fees are handled.
+        }
         //=========================================================
-        //wait 4 weeks
-        //===== Neutral Market ====
-        //WETH price goes up then back down, effectively constant
-        //call sendFees
-        //no performance fees should be minted, but platform should
+        {
+            //===== Neutral Market ====
+            skip(28 days);
+            assetManagementCellar.sendFees();
+            //TODO no performance fees should be minted, but platform should
+            //TODO have some people leave and make sure no performance fees are minted
+        }
         //==========================================================
-        //===== Start Bear Market ====
-        //WETH loses value
-        // user exits withdraw in order
-        //no performance fees should be minted
-        //SP rebalances to 80/10/10 USDC/WETH/WBTC
-        //WETH and WBTC lose value
-        //wait 1 week
+        {
+            //===== Start Bear Market ====
+            // ETH price goes down.
+            priceRouter.setExchangeRate(WETH, WBTC, 0.1e8);
+            priceRouter.setExchangeRate(WBTC, WETH, 10e18);
+            priceRouter.setExchangeRate(USDC, WETH, 0.00033333333e18);
+            priceRouter.setExchangeRate(WETH, USDC, 3_000e6);
+
+            // Cellar only has liquidity in WETH, so it should only send withdrawer WETH.
+            // user exits withdraw in order
+
+            //TODO no performance fees should be minted
+
+            // Strategist rebalances to 80/10/10 USDC/WETH/WBTC
+
+            // ETH and WBTC prices go down.
+
+            skip(7 days);
+
+            // user joins.
+
+            assetManagementCellar.sendFees();
+        }
         //user joins
         //call sendFees
         //=========================================================
