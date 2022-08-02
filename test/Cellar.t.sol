@@ -809,7 +809,7 @@ contract CellarTest is Test {
         //should also emit events for any storage variables being changed
     }
 
-    //chaning strategist payout address make sure it actuallychanges the location
+    //TODO chaning strategist payout address make sure it actuallychanges the location
 
     function testPreviewFunctionsAccountForPerformanceFee(uint256 deposit, uint256 yield) external {
         deposit = bound(deposit, 1_000e6, 100_000_000e6);
@@ -1154,9 +1154,138 @@ contract CellarTest is Test {
         }
     }
 
-    Enum Action
-    function _userAction(address user, )
+    enum Action {
+        DEPOSIT,
+        MINT,
+        WITHDRAW,
+        REDEEM
+    }
 
+    function _userAction(
+        Cellar cellar,
+        address user,
+        Action action,
+        uint256 amountOfAssets,
+        uint256 amountOfShares
+    ) internal returns (uint256 assets, uint256 shares) {
+        vm.startPrank(user);
+        if (action == Action.DEPOSIT) {
+            assets = amountOfAssets;
+            assertEq(
+                cellar.previewDeposit(amountOfAssets),
+                shares = cellar.deposit(amountOfAssets, user),
+                "Deposit should be equal to previewDeposit"
+            );
+        } else if (action == Action.WITHDRAW) {
+            assertEq(
+                cellar.previewWithdraw(amountOfAssets),
+                shares = cellar.withdraw(amountOfAssets, user, user),
+                "Withdraw should be equal to previewWithdraw"
+            );
+        } else if (action == Action.MINT) {
+            assertEq(
+                cellar.previewMint(amountOfShares),
+                assets = cellar.mint(amountOfShares, user),
+                "Mint should be equal to previewMint"
+            );
+        } else if (action == Action.REDEEM) {
+            assertEq(
+                cellar.previewRedeem(amountOfShares),
+                assets = cellar.redeem(amountOfShares, user, user),
+                "Redeem should be equal to previewRedeem"
+            );
+        }
+        vm.stopPrank();
+    }
+
+    function _rebalance(
+        Cellar cellar,
+        ERC20 from,
+        ERC20 to,
+        uint256 amount
+    ) internal returns (uint256 assetsTo) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+
+        assetsTo = cellar.rebalance(
+            address(from),
+            address(to),
+            amount,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(path, amount, 0, address(cellar), address(cellar))
+        );
+    }
+
+    function _checkSendFees(
+        Cellar cellar,
+        uint256 amountOfTimeToPass,
+        uint256 yieldEarned
+    ) internal {
+        skip(amountOfTimeToPass);
+
+        (
+            ,
+            uint64 strategistPerformanceCut,
+            uint64 strategistPlatformCut,
+            uint64 platformFee,
+            uint64 performanceFee,
+            ,
+            address strategistPayoutAddress
+        ) = cellar.feeData();
+
+        // Fees sent to Cosmos are transferred to this address, zero out it's balance to easily find fees sent to Cosmos.
+        uint256 cellarTotalAssets = cellar.totalAssets();
+        uint256 feesInAssetsSentToCosmos;
+        uint256 feesInAssetsSentToStrategist;
+        {
+            uint256 cosmosFeeInAssetBefore = cellar.asset().balanceOf(cosmos);
+            uint256 strategistFeeSharesBefore = cellar.balanceOf(strategistPayoutAddress);
+
+            cellar.sendFees();
+
+            feesInAssetsSentToCosmos = USDC.balanceOf(cosmos) - cosmosFeeInAssetBefore;
+            feesInAssetsSentToStrategist = cellar.previewRedeem(
+                cellar.balanceOf(strategistPayoutAddress) - strategistFeeSharesBefore
+            );
+        }
+        uint256 expectedPerformanceFeeInAssets;
+        uint256 expectedPlatformFeeInAssets;
+        // Check if Performance Fees should have been minted.
+        if (yieldEarned > 0) {
+            expectedPerformanceFeeInAssets = yieldEarned.mulWadDown(performanceFee);
+            // When platform fee shares are minted all shares are diluted in value.
+            // Account for share dilution.
+            expectedPerformanceFeeInAssets =
+                (expectedPerformanceFeeInAssets * ((1e18 - (platformFee * amountOfTimeToPass) / 365 days))) /
+                1e18;
+        }
+        expectedPlatformFeeInAssets = (cellarTotalAssets * platformFee * amountOfTimeToPass) / (365 days * 1e18);
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
+            expectedPerformanceFeeInAssets + expectedPlatformFeeInAssets,
+            1,
+            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToStrategist,
+            expectedPlatformFeeInAssets.mulWadDown(strategistPlatformCut) +
+                expectedPerformanceFeeInAssets.mulWadDown(strategistPerformanceCut),
+            1,
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
+        );
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos,
+            expectedPlatformFeeInAssets.mulWadDown(1e18 - strategistPlatformCut) +
+                expectedPerformanceFeeInAssets.mulWadDown(1e18 - strategistPerformanceCut),
+            1,
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
+        );
+    }
+
+    //TODO Add fuzz using salt input and mutate.
+    //TODO Add comments to tell it like a story.
     function testMultipleMintDepositRedeemWithdrawWithGainsLossAndSendFees() external {
         uint8 salt = 100;
         // Initialize Scenario
@@ -1165,27 +1294,32 @@ contract CellarTest is Test {
         address sam = vm.addr(3);
         address mary = vm.addr(4);
 
-        // Create new cellar with WETH, USDC, and WBTC positions.
-        address[] memory positions = new address[](3);
-        positions[0] = address(USDC);
-        positions[1] = address(WETH);
-        positions[2] = address(WBTC);
+        uint256 yieldEarned;
 
-        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](3);
-        positionTypes[0] = Cellar.PositionType.ERC20;
-        positionTypes[1] = Cellar.PositionType.ERC20;
-        positionTypes[2] = Cellar.PositionType.ERC20;
+        MockCellar assetManagementCellar;
+        {
+            // Create new cellar with WETH, USDC, and WBTC positions.
+            address[] memory positions = new address[](3);
+            positions[0] = address(USDC);
+            positions[1] = address(WETH);
+            positions[2] = address(WBTC);
 
-        MockCellar assetManagementCellar = new MockCellar(
-            registry,
-            USDC,
-            positions,
-            positionTypes,
-            address(USDC),
-            Cellar.WithdrawType.ORDERLY,
-            "Asset Management Cellar LP Token",
-            "assetmanagement-CLR"
-        );
+            Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](3);
+            positionTypes[0] = Cellar.PositionType.ERC20;
+            positionTypes[1] = Cellar.PositionType.ERC20;
+            positionTypes[2] = Cellar.PositionType.ERC20;
+
+            assetManagementCellar = new MockCellar(
+                registry,
+                USDC,
+                positions,
+                positionTypes,
+                address(USDC),
+                Cellar.WithdrawType.ORDERLY,
+                "Asset Management Cellar LP Token",
+                "assetmanagement-CLR"
+            );
+        }
 
         assetManagementCellar.setStrategistPayoutAddress(strategist);
 
@@ -1216,51 +1350,22 @@ contract CellarTest is Test {
             uint256 amount = mutate(salt);
             amount = 100e6;
             uint256 shares;
+            uint256 assets;
             uint256 expectedHighWatermark = amount * 3;
             // Alice joins cellar using deposit.
-            vm.startPrank(alice);
-            assertEq(
-                assetManagementCellar.previewDeposit(amount),
-                shares = assetManagementCellar.deposit(amount, alice),
-                "Deposit should be equal to previewDeposit"
-            );
+            (assets, shares) = _userAction(assetManagementCellar, alice, Action.DEPOSIT, amount, 0);
             assertEq(shares, assetManagementCellar.balanceOf(alice), "Alice should have got shares out from deposit.");
-            vm.stopPrank();
             // Bob joins cellar using Mint.
             uint256 bobAssets = USDC.balanceOf(bob);
-            vm.startPrank(bob);
+            (assets, shares) = _userAction(assetManagementCellar, bob, Action.MINT, 0, shares);
             assertEq(
-                assetManagementCellar.previewMint(shares),
-                amount = assetManagementCellar.mint(shares, alice),
-                "Mint should be equal to previewMint"
-            );
-            assertEq(
-                amount,
+                assets,
                 bobAssets - USDC.balanceOf(bob),
                 "Bob should have `amount` of assets taken from his address."
             );
-            vm.stopPrank();
-
-            vm.startPrank(sam);
-            assertEq(
-                assetManagementCellar.previewDeposit(amount),
-                shares = assetManagementCellar.deposit(amount, sam),
-                "Deposit should be equal to previewDeposit"
-            );
-            // Sam withdraws half of his assets.
-            assertEq(
-                assetManagementCellar.previewWithdraw(amount / 2),
-                shares = assetManagementCellar.withdraw(amount / 2, sam, sam),
-                "Withdraw should be equal to previewWithdraw"
-            );
-
-            // Sam re-enters cellar with Mint
-            assertEq(
-                assetManagementCellar.previewMint(shares),
-                amount = assetManagementCellar.mint(shares, sam),
-                "Mint should be equal to previewMint"
-            );
-            vm.stopPrank();
+            (assets, shares) = _userAction(assetManagementCellar, sam, Action.DEPOSIT, amount, 0);
+            (assets, shares) = _userAction(assetManagementCellar, sam, Action.WITHDRAW, amount / 2, 0);
+            (assets, shares) = _userAction(assetManagementCellar, sam, Action.MINT, 0, shares);
 
             // High Watermark should be equal to amount * 3 and it should equal total assets.
             uint256 totalAssets = assetManagementCellar.totalAssets();
@@ -1271,44 +1376,18 @@ contract CellarTest is Test {
                 totalAssets,
                 "High Watermark should equal totalAssets because no yield was earned."
             );
-            console.log("HWM:", highWatermark);
         }
         {
             // Strategy providers swaps into WETH and WBTC using USDC, targeting a 20/40/40 split(USDC/WETH/WBTC)
             uint256 totalAssets = assetManagementCellar.totalAssets();
-            // Calculate 40% of assets to swap into WETH.
-            uint256 usdcToSellForWETH = totalAssets.mulDivDown(4, 10);
-            address[] memory path = new address[](2);
-            path[0] = address(USDC);
-            path[1] = address(WETH);
-
-            uint256 assetsTo = assetManagementCellar.rebalance(
-                address(USDC),
-                address(WETH),
-                usdcToSellForWETH,
-                SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-                abi.encode(path, usdcToSellForWETH, 0, address(assetManagementCellar), address(assetManagementCellar))
-            );
-            // Calculate 40% of assets to swap into WBTC.
-            uint256 usdcToSellForWBTC = totalAssets.mulDivDown(4, 10);
-            path[0] = address(USDC);
-            path[1] = address(WBTC);
-            assetsTo = assetManagementCellar.rebalance(
-                address(USDC),
-                address(WBTC),
-                usdcToSellForWBTC,
-                SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-                abi.encode(path, usdcToSellForWBTC, 0, address(assetManagementCellar), address(assetManagementCellar))
-            );
-
-            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            console.log("HWM!:", highWatermark);
-
-            skip(7 days);
-
-            assetManagementCellar.sendFees();
-            //TODO check that only platform fees are minted.
+            uint256 assetsTo;
+            // Swap 40% of Cellars USDC for WETH.
+            uint256 usdcToSell = totalAssets.mulDivDown(4, 10);
+            assetsTo = _rebalance(assetManagementCellar, USDC, WETH, usdcToSell);
+            // Swap 40% of Cellars USDC for WBTC.
+            assetsTo = _rebalance(assetManagementCellar, USDC, WBTC, usdcToSell);
         }
+        _checkSendFees(assetManagementCellar, 7 days, 0);
         {
             uint256 totalAssets = assetManagementCellar.totalAssets();
             uint256 wBTCValueBefore = priceRouter.getValue(WBTC, WBTC.balanceOf(address(assetManagementCellar)), USDC);
@@ -1329,13 +1408,13 @@ contract CellarTest is Test {
 
             uint256 wBTCValueAfter = priceRouter.getValue(WBTC, WBTC.balanceOf(address(assetManagementCellar)), USDC);
 
-            uint256 yieldEarnedFromWBTCPriceIncrease = wBTCValueAfter - wBTCValueBefore;
+            yieldEarned = wBTCValueAfter - wBTCValueBefore;
 
-            console.log("Yield", yieldEarnedFromWBTCPriceIncrease);
+            console.log("Yield", yieldEarned);
 
             assertEq(
                 newTotalAssets,
-                (totalAssets + yieldEarnedFromWBTCPriceIncrease),
+                (totalAssets + yieldEarned),
                 "totalAssets after price increased by amount of yield earned."
             );
         }
@@ -1344,36 +1423,27 @@ contract CellarTest is Test {
             //uint256 amount = mutate(salt);
             uint256 amount = 100e6;
             uint256 shares;
+            uint256 assets;
             (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            console.log("HWM:", highWatermark);
+
             //
             // Mary joins cellar using deposit.
-            vm.startPrank(mary);
-            assertEq(
-                assetManagementCellar.previewDeposit(amount),
-                shares = assetManagementCellar.deposit(amount, mary),
-                "Deposit should be equal to previewDeposit"
-            );
-            vm.stopPrank();
+            yieldEarned = assetManagementCellar.totalAssets() - highWatermark;
+            (assets, shares) = _userAction(assetManagementCellar, mary, Action.DEPOSIT, amount, 0);
             (highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            console.log("HWM:", highWatermark);
-            console.log("TVL", assetManagementCellar.totalAssets());
+
             assertEq(
                 highWatermark,
                 assetManagementCellar.totalAssets(),
                 "High watermark should be equal to totalAssets."
             );
-            //performance fees should be minted
+
             assertTrue(
                 assetManagementCellar.balanceOf(address(assetManagementCellar)) > 0,
                 "Cellar should have been minted performance fees."
             );
-
-            skip(7 days);
-
-            assetManagementCellar.sendFees();
-            //TODO check that only platform/perfamance fees are handled.
         }
+        _checkSendFees(assetManagementCellar, 7 days, yieldEarned);
         {
             // Set platform fee to 2%.
             assetManagementCellar.setPlatformFee(0.02e18);
@@ -1401,81 +1471,36 @@ contract CellarTest is Test {
             }
 
             // Strategist rebalances all positions to only WETH
-            address[] memory path = new address[](2);
 
             uint256 assetBalanceToRemove = USDC.balanceOf(address(assetManagementCellar));
-            path[0] = address(USDC);
-            path[1] = address(WETH);
-
-            uint256 assetsTo = assetManagementCellar.rebalance(
-                address(USDC),
-                address(WETH),
-                assetBalanceToRemove,
-                SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-                abi.encode(
-                    path,
-                    assetBalanceToRemove,
-                    0,
-                    address(assetManagementCellar),
-                    address(assetManagementCellar)
-                )
-            );
+            _rebalance(assetManagementCellar, USDC, WETH, assetBalanceToRemove);
 
             assetBalanceToRemove = WBTC.balanceOf(address(assetManagementCellar));
-            path[0] = address(WBTC);
-            path[1] = address(WETH);
-
-            assetsTo = assetManagementCellar.rebalance(
-                address(WBTC),
-                address(WETH),
-                assetBalanceToRemove,
-                SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-                abi.encode(
-                    path,
-                    assetBalanceToRemove,
-                    0,
-                    address(assetManagementCellar),
-                    address(assetManagementCellar)
-                )
-            );
+            _rebalance(assetManagementCellar, WBTC, WETH, assetBalanceToRemove);
         }
         {
             // Bob enters cellar via Mint.
             //uint256 amount = mutate(salt);
             uint256 shares = 100e18;
-            uint256 amount;
-            vm.startPrank(bob);
+            uint256 amount = 100e6;
+            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
+            yieldEarned = assetManagementCellar.totalAssets() - highWatermark;
+            (, shares) = _userAction(assetManagementCellar, bob, Action.MINT, 0, shares);
+
+            uint256 feeSharesInCellar = assetManagementCellar.balanceOf(address(assetManagementCellar));
+            (, shares) = _userAction(assetManagementCellar, sam, Action.MINT, 0, shares);
             assertEq(
-                assetManagementCellar.previewMint(shares),
-                amount = assetManagementCellar.mint(shares, bob),
-                "Mint should be equal to previewMint"
+                feeSharesInCellar,
+                assetManagementCellar.balanceOf(address(assetManagementCellar)),
+                "Performance Fees should not have been minted."
             );
-
-            vm.stopPrank();
-
-            vm.startPrank(sam);
-            assertEq(
-                assetManagementCellar.previewMint(shares),
-                amount = assetManagementCellar.mint(shares, sam),
-                "Mint should be equal to previewMint"
-            );
-
-            vm.stopPrank();
-            //TODO make sure sam also doesn't mint performance fees
-
-            skip(21 days);
-
-            assetManagementCellar.sendFees();
-            //TODO check that platform/perfamance fees are handled.
         }
-        //=========================================================
-        {
-            //===== Neutral Market ====
-            skip(28 days);
-            assetManagementCellar.sendFees();
-            //TODO no performance fees should be minted, but platform should
-            //TODO have some people leave and make sure no performance fees are minted
-        }
+        _checkSendFees(assetManagementCellar, 21 days, yieldEarned);
+
+        //===== Neutral Market ====
+        // No yield was earned, and 28 days pass.
+        _checkSendFees(assetManagementCellar, 28 days, 0);
+
         //==========================================================
         {
             //===== Start Bear Market ====
@@ -1497,101 +1522,46 @@ contract CellarTest is Test {
             uint256 shares = assetManagementCellar.balanceOf(alice);
             uint256 assets = assetManagementCellar.previewRedeem(shares);
             // Rebalance Cellar so that it only has 10% of assets needed for Alice's Redeem.
-            {
-                uint256 amountToRebalance = USDC.balanceOf(address(assetManagementCellar)) - (assets / 10);
-                address[] memory path = new address[](2);
-                path[0] = address(USDC);
-                // Choose to rebalance to WBTC so we can confirm no WBTC is taken from the Cellar on Redeem.
-                path[1] = address(WBTC);
 
-                assetManagementCellar.rebalance(
-                    address(USDC),
-                    address(WBTC),
-                    amountToRebalance,
-                    SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-                    abi.encode(
-                        path,
-                        amountToRebalance,
-                        0,
-                        address(assetManagementCellar),
-                        address(assetManagementCellar)
-                    )
-                );
-            }
-            //
+            uint256 amountToRebalance = USDC.balanceOf(address(assetManagementCellar)) - (assets / 10);
+            _rebalance(assetManagementCellar, USDC, WBTC, amountToRebalance);
+
+            uint256 assetsForShares = (assetManagementCellar.totalAssets() * shares) /
+                assetManagementCellar.totalSupply();
             deal(address(USDC), alice, 0); // Set Alice's USDC balance to zero to avoid overflow on transfer
-            vm.startPrank(alice);
-            assertEq(
-                assetManagementCellar.previewRedeem(shares),
-                assets = assetManagementCellar.redeem(shares, alice, alice),
-                "Redeem should be equal to previewRedeem"
-            );
-            vm.stopPrank();
-            //TODO check value out Alice got vs value of Shares
-            //TODO check that Alice only gets USDC and WETH, and no WBTC
-            //TODO check that assets == valuation of USDC and WETH
+            (assets, shares) = _userAction(assetManagementCellar, alice, Action.REDEEM, 0, shares);
+            assertEq(assetsForShares, assets, "Assets out should be worth assetsForShares.");
+            assertTrue(USDC.balanceOf(alice) > 0, "Alice should have gotten USDC.");
+            assertTrue(WETH.balanceOf(alice) > 0, "Alice should have gotten WETH.");
+            assertEq(WBTC.balanceOf(alice), 0, "Alice should not have gotten WBTC.");
+            uint256 WETHworth = priceRouter.getValue(WETH, WETH.balanceOf(alice), USDC);
+            assertApproxEqAbs(USDC.balanceOf(alice) + WETHworth, assets, 1, "Value of assets out should equal assets.");
 
-            //TODO no performance fees should be minted
             assertTrue(
                 assetManagementCellar.balanceOf(address(assetManagementCellar)) == 0,
-                "Cellar should have zero performance fees."
+                "Cellar should have zero performance fees minted."
             );
 
-            skip(7 days);
-
-            // user joins.
-            //TODO this fails if there is not enough USDC in the cellar.
-            // `sendFees` will fail because the cellar currently has nothing in the holding asset.
-            vm.expectRevert(bytes("ERC20: transfer amount exceeds balance"));
-            assetManagementCellar.sendFees();
-
-            // Strategist rebalances some WETH into USDC to covert `sendFees`.
-            {
-                // Take 10% of WETH assets in cellar and convert to USDC.
-                uint256 amountToRebalance = WETH.balanceOf(address(assetManagementCellar)) / 10;
-                address[] memory path = new address[](2);
-                path[0] = address(WETH);
-                // Choose to rebalance to WBTC so we can confirm no WBTC is taken from the Cellar on Redeem.
-                path[1] = address(USDC);
-
-                assetManagementCellar.rebalance(
-                    address(WETH),
-                    address(USDC),
-                    amountToRebalance,
-                    SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-                    abi.encode(
-                        path,
-                        amountToRebalance,
-                        0,
-                        address(assetManagementCellar),
-                        address(assetManagementCellar)
-                    )
-                );
-            }
-            assetManagementCellar.sendFees();
+            // Strategist rebalances some WETH into USDC to cover `sendFees`.
+            amountToRebalance = WETH.balanceOf(address(assetManagementCellar)) / 10;
+            _rebalance(assetManagementCellar, WETH, USDC, amountToRebalance);
         }
+        _checkSendFees(assetManagementCellar, 7 days, 0);
         {
             // Alice rejoins via mint.
             uint256 sharesToMint = 100e18;
             deal(address(USDC), alice, assetManagementCellar.previewMint(sharesToMint));
-            vm.startPrank(alice);
-            assertEq(
-                assetManagementCellar.previewMint(sharesToMint),
-                assetManagementCellar.mint(sharesToMint, alice),
-                "Mint should be equal to previewMint"
-            );
-            vm.stopPrank();
-
-            skip(1 days);
-
-            assetManagementCellar.sendFees();
+            _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToMint);
         }
+        _checkSendFees(assetManagementCellar, 1 days, 0);
         //=========================================================
         (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
         uint256 totalAssets = assetManagementCellar.totalAssets();
-        // Cellar is currently above totalAssets, so reset it.
+        // Cellar High Watermark is currently above totalAssets, so reset it.
         assertTrue(highWatermark > totalAssets, "High watermark should be greater than total assets in cellar.");
         assetManagementCellar.resetHighWatermark();
+        (highWatermark, , , , , , ) = assetManagementCellar.feeData();
+        assertEq(highWatermark, totalAssets, "Should have reset high watermark to totalAssets.");
 
         // WBTC goes up a little, USDC depegs to 0.95.
         {
@@ -1602,19 +1572,22 @@ contract CellarTest is Test {
             assets[2] = WBTC;
             prices[0] = 0.95e8;
             prices[1] = 2_700e8;
-            prices[2] = 31_000e8;
+            prices[2] = 37_000e8;
             _changeMarketPrices(assets, prices);
         }
-        //wait 2 weeks
-        skip(14 days);
-        //call send fees
-        //some performance fees should be distributed with platform fees
-        assetManagementCellar.sendFees();
+
+        totalAssets = assetManagementCellar.totalAssets();
+        assertTrue(totalAssets > highWatermark, "Total Assets should be greater than high watermark.");
+        yieldEarned = totalAssets - highWatermark;
+        console.log("Yield", yieldEarned);
+        console.log("USDC in Cellar", USDC.balanceOf(address(assetManagementCellar)));
+        _checkSendFees(assetManagementCellar, 14 days, yieldEarned);
         //===============================================================
 
         //SP adds new positions LINK
         assetManagementCellar.trustPosition(address(LINK), Cellar.PositionType.ERC20);
         assetManagementCellar.pushPosition(address(LINK));
+        ///@dev no need to set LINK price cuz its assets will always be zero.
         //Nothing is added to it
         //use swap position to move Link to the front
         assetManagementCellar.swapPositions(3, 0);
@@ -1627,22 +1600,86 @@ contract CellarTest is Test {
             assets[2] = WBTC;
             prices[0] = 0.97e8;
             prices[1] = 2_900e8;
-            prices[2] = 36_000e8;
+            prices[2] = 30_000e8;
             _changeMarketPrices(assets, prices);
         }
 
-        //wait 1 week
-        skip(7 days);
-        //call sendFees only platform fees minted
-        assetManagementCellar.sendFees();
+        (highWatermark, , , , , , ) = assetManagementCellar.feeData();
+        totalAssets = assetManagementCellar.totalAssets();
+        assertTrue(totalAssets < highWatermark, "Total Assets should be less than high watermark.");
+        _checkSendFees(assetManagementCellar, 7 days, 0);
+
+        {
+            // Make these nice values.
+            ERC20[] memory assets = new ERC20[](3);
+            uint256[] memory prices = new uint256[](3);
+            assets[0] = USDC;
+            assets[1] = WETH;
+            assets[2] = WBTC;
+            prices[0] = 1e8;
+            prices[1] = 1_000e8;
+            prices[2] = 10_000e8;
+            _changeMarketPrices(assets, prices);
+        }
+
+        // Have everyone completely exit cellar
+        _userAction(assetManagementCellar, alice, Action.REDEEM, 0, assetManagementCellar.balanceOf(alice));
+        _userAction(assetManagementCellar, bob, Action.REDEEM, 0, assetManagementCellar.balanceOf(bob));
+        _userAction(assetManagementCellar, sam, Action.REDEEM, 0, assetManagementCellar.balanceOf(sam));
+        _userAction(assetManagementCellar, mary, Action.REDEEM, 0, assetManagementCellar.balanceOf(mary));
+        _userAction(assetManagementCellar, strategist, Action.REDEEM, 0, assetManagementCellar.balanceOf(strategist));
+
+        assertEq(assetManagementCellar.totalSupply(), 0, "All cellar shares should be burned.");
+        console.log("Total Assets once everyone is gone", assetManagementCellar.totalAssets());
+
+        //Have everyone join with the same amount of shares
+        uint256 sharesToJoinWith = 250e18;
+        uint256 assetsNeeded = assetManagementCellar.previewMint(sharesToJoinWith);
+        deal(address(USDC), alice, assetsNeeded);
+        _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToJoinWith);
+        deal(address(USDC), bob, assetsNeeded);
+        _userAction(assetManagementCellar, bob, Action.MINT, 0, sharesToJoinWith);
+        deal(address(USDC), sam, assetsNeeded);
+        _userAction(assetManagementCellar, sam, Action.MINT, 0, sharesToJoinWith);
+        deal(address(USDC), mary, assetsNeeded);
+        _userAction(assetManagementCellar, mary, Action.MINT, 0, sharesToJoinWith);
         //shutdown cellar
         assetManagementCellar.initiateShutdown();
-        //TODO at this point try to split Shares evenly between everyone
-        //Have user exit where assets balance %s are like so LINK/WETH/WBTC/USDC 0/10/0/90
-        //make sure users can leave with redeem and withdraw Alice and Sam
-        //force cellar to change to withdraw in proportion
-        // have Bob and Mary leave
-        //TODO everytime asset prices change confirm cellar totalAssets changes correctly
+
+        // At this point we know all 4 cellar users have 25% of the shares each.
+
+        // Manually rebalance assets like so LINK/WETH/WBTC/USDC 0/10/0/90.
+        deal(address(LINK), address(assetManagementCellar), 0);
+        deal(address(WBTC), address(assetManagementCellar), 0);
+        deal(address(USDC), address(assetManagementCellar), 900e6);
+        deal(address(WETH), address(assetManagementCellar), 0.1e18);
+
+        console.log("Total Assets", assetManagementCellar.totalAssets());
+
+        // Have Alice exit using withdraw.
+        _userAction(assetManagementCellar, alice, Action.WITHDRAW, 250e6, 0);
+
+        // Have Bob exit using redeem.
+        _userAction(assetManagementCellar, bob, Action.REDEEM, 0, 250e18);
+
+        // Rebalance asses like so LINK/WETH/WBTC/USDC 0/10/45/45
+        deal(address(LINK), address(assetManagementCellar), 0);
+        deal(address(WBTC), address(assetManagementCellar), 0.0225e8);
+        deal(address(USDC), address(assetManagementCellar), 225e6);
+        deal(address(WETH), address(assetManagementCellar), 0.05e18);
+
+        console.log("Total Assets", assetManagementCellar.totalAssets());
+
+        // Change to withdraw in proportion
+        assetManagementCellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
+
+        // Have Sam exit using withdraw.
+        _userAction(assetManagementCellar, sam, Action.WITHDRAW, 250e6, 0);
+
+        // Have Mary exit using redeem.
+        _userAction(assetManagementCellar, mary, Action.REDEEM, 0, 250e18);
+
+        // TODO everyone should have the same amount of Assets, but potentially in differnt tokens.
     }
 
     //TODO test DOS if SP intentioanlly picks a massive amount of positions, and withdraw forloops fail, what is the max, then implement something to fix this
