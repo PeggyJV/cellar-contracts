@@ -814,7 +814,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         withdrawType == WithdrawType.ORDERLY
             ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
             : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
-
         afterWithdraw(assets, shares, receiver, owner);
     }
 
@@ -852,7 +851,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
                 amount = positionBalances[i];
                 assets = assets - totalPositionBalanceInAssets;
             }
-
             // Withdraw from position.
             _withdrawFrom(_positions[i], amount, receiver);
 

@@ -39,6 +39,8 @@ contract CellarTest is Test {
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     MockERC4626 private wbtcCLR;
 
+    ERC20 private LINK = ERC20(0x514910771AF9Ca656af840dff83E8264EcF986CA);
+
     address private immutable strategist = vm.addr(0xBEEF);
 
     address private immutable cosmos = vm.addr(0xCAAA);
@@ -1136,6 +1138,25 @@ contract CellarTest is Test {
         return uint256(keccak256(abi.encode(salt, saltIndex))) % 1e26;
     }
 
+    function _changeMarketPrices(ERC20[] memory assets, uint256[] memory newPricesInUSD) internal {
+        uint256 quoteIndex;
+        uint256 exchangeRate;
+        for (uint256 i = 0; i < assets.length; i++) {
+            for (uint256 j = 1; j < assets.length; j++) {
+                quoteIndex = i + j;
+                if (quoteIndex >= assets.length) quoteIndex -= assets.length;
+                exchangeRate = (10**assets[quoteIndex].decimals()).mulDivDown(
+                    newPricesInUSD[i],
+                    newPricesInUSD[quoteIndex]
+                );
+                priceRouter.setExchangeRate(assets[i], assets[quoteIndex], exchangeRate);
+            }
+        }
+    }
+
+    Enum Action
+    function _userAction(address user, )
+
     function testMultipleMintDepositRedeemWithdrawWithGainsLossAndSendFees() external {
         uint8 salt = 100;
         // Initialize Scenario
@@ -1292,10 +1313,17 @@ contract CellarTest is Test {
             uint256 totalAssets = assetManagementCellar.totalAssets();
             uint256 wBTCValueBefore = priceRouter.getValue(WBTC, WBTC.balanceOf(address(assetManagementCellar)), USDC);
             // WBTC price goes up.
-            priceRouter.setExchangeRate(WETH, WBTC, 0.04444444e8);
-            priceRouter.setExchangeRate(WBTC, WETH, 22.5e18);
-            priceRouter.setExchangeRate(WBTC, USDC, 45_000e6);
-            priceRouter.setExchangeRate(USDC, WBTC, 0.00002222e8);
+            {
+                ERC20[] memory assets = new ERC20[](3);
+                uint256[] memory prices = new uint256[](3);
+                assets[0] = USDC;
+                assets[1] = WETH;
+                assets[2] = WBTC;
+                prices[0] = 1e8;
+                prices[1] = 2_000e8;
+                prices[2] = 45_000e8;
+                _changeMarketPrices(assets, prices);
+            }
 
             uint256 newTotalAssets = assetManagementCellar.totalAssets();
 
@@ -1360,12 +1388,17 @@ contract CellarTest is Test {
             assetManagementCellar.setStrategistPerformanceCut(0.85e18);
 
             // WBTC price goes down. WETH price goes up enough to create yield.
-            priceRouter.setExchangeRate(WETH, WBTC, 0.13333333e8);
-            priceRouter.setExchangeRate(WBTC, WETH, 7.5e18);
-            priceRouter.setExchangeRate(WBTC, USDC, 30_000e6);
-            priceRouter.setExchangeRate(USDC, WBTC, 0.00003333e8);
-            priceRouter.setExchangeRate(USDC, WETH, 0.00025e18);
-            priceRouter.setExchangeRate(WETH, USDC, 4_000e6);
+            {
+                ERC20[] memory assets = new ERC20[](3);
+                uint256[] memory prices = new uint256[](3);
+                assets[0] = USDC;
+                assets[1] = WETH;
+                assets[2] = WBTC;
+                prices[0] = 1e8;
+                prices[1] = 4_000e8;
+                prices[2] = 30_000e8;
+                _changeMarketPrices(assets, prices);
+            }
 
             // Strategist rebalances all positions to only WETH
             address[] memory path = new address[](2);
@@ -1447,43 +1480,172 @@ contract CellarTest is Test {
         {
             //===== Start Bear Market ====
             // ETH price goes down.
-            priceRouter.setExchangeRate(WETH, WBTC, 0.1e8);
-            priceRouter.setExchangeRate(WBTC, WETH, 10e18);
-            priceRouter.setExchangeRate(USDC, WETH, 0.00033333333e18);
-            priceRouter.setExchangeRate(WETH, USDC, 3_000e6);
+            {
+                ERC20[] memory assets = new ERC20[](3);
+                uint256[] memory prices = new uint256[](3);
+                assets[0] = USDC;
+                assets[1] = WETH;
+                assets[2] = WBTC;
+                prices[0] = 1e8;
+                prices[1] = 3_000e8;
+                prices[2] = 30_000e8;
+                _changeMarketPrices(assets, prices);
+            }
 
-            // Cellar only has liquidity in WETH, so it should only send withdrawer WETH.
-            // user exits withdraw in order
+            // Cellar has liquidity in USDC and WETH, rebalance cellar to only Alice some USDC and mainly WETH.
+            // Alice withdraws all their assets.
+            uint256 shares = assetManagementCellar.balanceOf(alice);
+            uint256 assets = assetManagementCellar.previewRedeem(shares);
+            // Rebalance Cellar so that it only has 10% of assets needed for Alice's Redeem.
+            {
+                uint256 amountToRebalance = USDC.balanceOf(address(assetManagementCellar)) - (assets / 10);
+                address[] memory path = new address[](2);
+                path[0] = address(USDC);
+                // Choose to rebalance to WBTC so we can confirm no WBTC is taken from the Cellar on Redeem.
+                path[1] = address(WBTC);
+
+                assetManagementCellar.rebalance(
+                    address(USDC),
+                    address(WBTC),
+                    amountToRebalance,
+                    SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+                    abi.encode(
+                        path,
+                        amountToRebalance,
+                        0,
+                        address(assetManagementCellar),
+                        address(assetManagementCellar)
+                    )
+                );
+            }
+            //
+            deal(address(USDC), alice, 0); // Set Alice's USDC balance to zero to avoid overflow on transfer
+            vm.startPrank(alice);
+            assertEq(
+                assetManagementCellar.previewRedeem(shares),
+                assets = assetManagementCellar.redeem(shares, alice, alice),
+                "Redeem should be equal to previewRedeem"
+            );
+            vm.stopPrank();
+            //TODO check value out Alice got vs value of Shares
+            //TODO check that Alice only gets USDC and WETH, and no WBTC
+            //TODO check that assets == valuation of USDC and WETH
 
             //TODO no performance fees should be minted
-
-            // Strategist rebalances to 80/10/10 USDC/WETH/WBTC
-
-            // ETH and WBTC prices go down.
+            assertTrue(
+                assetManagementCellar.balanceOf(address(assetManagementCellar)) == 0,
+                "Cellar should have zero performance fees."
+            );
 
             skip(7 days);
 
             // user joins.
+            //TODO this fails if there is not enough USDC in the cellar.
+            // `sendFees` will fail because the cellar currently has nothing in the holding asset.
+            vm.expectRevert(bytes("ERC20: transfer amount exceeds balance"));
+            assetManagementCellar.sendFees();
+
+            // Strategist rebalances some WETH into USDC to covert `sendFees`.
+            {
+                // Take 10% of WETH assets in cellar and convert to USDC.
+                uint256 amountToRebalance = WETH.balanceOf(address(assetManagementCellar)) / 10;
+                address[] memory path = new address[](2);
+                path[0] = address(WETH);
+                // Choose to rebalance to WBTC so we can confirm no WBTC is taken from the Cellar on Redeem.
+                path[1] = address(USDC);
+
+                assetManagementCellar.rebalance(
+                    address(WETH),
+                    address(USDC),
+                    amountToRebalance,
+                    SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+                    abi.encode(
+                        path,
+                        amountToRebalance,
+                        0,
+                        address(assetManagementCellar),
+                        address(assetManagementCellar)
+                    )
+                );
+            }
+            assetManagementCellar.sendFees();
+        }
+        {
+            // Alice rejoins via mint.
+            uint256 sharesToMint = 100e18;
+            deal(address(USDC), alice, assetManagementCellar.previewMint(sharesToMint));
+            vm.startPrank(alice);
+            assertEq(
+                assetManagementCellar.previewMint(sharesToMint),
+                assetManagementCellar.mint(sharesToMint, alice),
+                "Mint should be equal to previewMint"
+            );
+            vm.stopPrank();
+
+            skip(1 days);
 
             assetManagementCellar.sendFees();
         }
-        //user joins
-        //call sendFees
         //=========================================================
-        //Reset HWM is called
-        // WBTC goes up a little, USDC goes down 1 penny
+        (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
+        uint256 totalAssets = assetManagementCellar.totalAssets();
+        // Cellar is currently above totalAssets, so reset it.
+        assertTrue(highWatermark > totalAssets, "High watermark should be greater than total assets in cellar.");
+        assetManagementCellar.resetHighWatermark();
+
+        // WBTC goes up a little, USDC depegs to 0.95.
+        {
+            ERC20[] memory assets = new ERC20[](3);
+            uint256[] memory prices = new uint256[](3);
+            assets[0] = USDC;
+            assets[1] = WETH;
+            assets[2] = WBTC;
+            prices[0] = 0.95e8;
+            prices[1] = 2_700e8;
+            prices[2] = 31_000e8;
+            _changeMarketPrices(assets, prices);
+        }
         //wait 2 weeks
+        skip(14 days);
         //call send fees
         //some performance fees should be distributed with platform fees
+        assetManagementCellar.sendFees();
         //===============================================================
+
         //SP adds new positions LINK
+        assetManagementCellar.trustPosition(address(LINK), Cellar.PositionType.ERC20);
+        assetManagementCellar.pushPosition(address(LINK));
         //Nothing is added to it
         //use swap position to move Link to the front
+        assetManagementCellar.swapPositions(3, 0);
         //Asset prices go back down below HWM
+        {
+            ERC20[] memory assets = new ERC20[](3);
+            uint256[] memory prices = new uint256[](3);
+            assets[0] = USDC;
+            assets[1] = WETH;
+            assets[2] = WBTC;
+            prices[0] = 0.97e8;
+            prices[1] = 2_900e8;
+            prices[2] = 36_000e8;
+            _changeMarketPrices(assets, prices);
+        }
+
         //wait 1 week
+        skip(7 days);
         //call sendFees only platform fees minted
+        assetManagementCellar.sendFees();
         //shutdown cellar
+        assetManagementCellar.initiateShutdown();
+        //TODO at this point try to split Shares evenly between everyone
+        //Have user exit where assets balance %s are like so LINK/WETH/WBTC/USDC 0/10/0/90
+        //make sure users can leave with redeem and withdraw Alice and Sam
         //force cellar to change to withdraw in proportion
-        //make sure users can leave with redeem and withdraw
+        // have Bob and Mary leave
+        //TODO everytime asset prices change confirm cellar totalAssets changes correctly
     }
+
+    //TODO test DOS if SP intentioanlly picks a massive amount of positions, and withdraw forloops fail, what is the max, then implement something to fix this
+    //TODO DOS if totalAssets fails
+    //TODO any other unbound for loops?
 }
