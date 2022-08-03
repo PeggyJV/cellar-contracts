@@ -250,8 +250,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Distrust position.
         isTrusted[position] = false;
 
+        //TODO I dont think we do this cuz if there is money in that distrusted position, the share price will drop proportionally.
         // Remove position from the list of positions if it is present.
-        positions.remove(position);
+        if (isPositionUsed[position]) positions.remove(position);
 
         // NOTE: After position has been removed, SP should be notified on the UI that the position
         //       can no longer be used and to exit the position or rebalance its assets into another
@@ -418,10 +419,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
             highWatermark: 0,
             strategistPerformanceCut: 0.75e18,
             strategistPlatformCut: 0.75e18,
-            strategistPayoutAddress: address(0),
             platformFee: 0.01e18,
             performanceFee: 0.1e18,
-            feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55"
+            feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55",
+            strategistPayoutAddress: address(0)
         });
 
     /**
@@ -578,6 +579,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit ShutdownChanged(false);
     }
 
+    //TODO should strategist payout  be set in constructor?
     // =========================================== CONSTRUCTOR ===========================================
 
     /**
