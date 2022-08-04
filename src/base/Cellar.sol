@@ -141,9 +141,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Get position being removed.
         address position = positions[index];
 
-        // Only remove position if it is empty.
+        // Only remove position if it is empty, and if it is not the holding position.
         uint256 positionBalance = _balanceOf(position);
         if (positionBalance > 0) revert USR_PositionNotEmpty(position, positionBalance);
+        if (position == holdingPosition) revert STATE_RemoveHoldingPosition();
 
         // Remove position at the given index.
         positions.remove(index);
@@ -162,9 +163,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 index = positions.length - 1;
         address position = positions[index];
 
-        // Only remove position if it is empty.
+        // Only remove position if it is empty, and if it is not the holding position.
         uint256 positionBalance = _balanceOf(position);
         if (positionBalance > 0) revert USR_PositionNotEmpty(position, positionBalance);
+        if (position == holdingPosition) revert STATE_RemoveHoldingPosition();
 
         // Remove last position.
         positions.pop();
@@ -185,9 +187,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Store the old position before its replaced.
         address oldPosition = positions[index];
 
-        // Only remove position if it is empty.
+        // Only remove position if it is empty, and if it is not the holding position.
         uint256 positionBalance = _balanceOf(oldPosition);
         if (positionBalance > 0) revert USR_PositionNotEmpty(oldPosition, positionBalance);
+        if (oldPosition == holdingPosition) revert STATE_RemoveHoldingPosition();
 
         // Replace old position with new position.
         positions[index] = newPosition;
@@ -250,9 +253,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Distrust position.
         isTrusted[position] = false;
 
-        //TODO I dont think we do this cuz if there is money in that distrusted position, the share price will drop proportionally.
-        // Remove position from the list of positions if it is present.
-        if (isPositionUsed[position]) positions.remove(position);
+        // Only remove position if it is not being used, is empty, and if it is not the holding position.
+        if (isPositionUsed[position]) {
+            uint256 positionBalance = _balanceOf(position);
+            if (positionBalance > 0) revert USR_PositionNotEmpty(position, positionBalance);
+            if (position == holdingPosition) revert STATE_RemoveHoldingPosition();
+            positions.remove(position);
+            isPositionUsed[position] = false;
+        }
 
         // NOTE: After position has been removed, SP should be notified on the UI that the position
         //       can no longer be used and to exit the position or rebalance its assets into another
@@ -421,15 +429,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
             strategistPlatformCut: 0.75e18,
             platformFee: 0.01e18,
             performanceFee: 0.1e18,
-            feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55",
+            feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55", // 20 bytes, so need 12 bytes of zero
             strategistPayoutAddress: address(0)
         });
+
+    uint64 public constant MAX_PERFORMANCE_FEE = 0.5e18;
+    uint64 public constant MAX_PLATFORM_FEE = 0.2e18;
+    uint64 public constant MAX_FEE_CUT = 1e18;
 
     /**
      * @notice Set the percentage of platform fees accrued over a year.
      * @param newPlatformFee value out of 1e18 that represents new platform fee percentage
      */
     function setPlatformFee(uint64 newPlatformFee) external onlyOwner {
+        if (newPlatformFee > MAX_PLATFORM_FEE) revert INPUT_InvalidFee();
         emit PlatformFeeChanged(feeData.platformFee, newPlatformFee);
 
         feeData.platformFee = newPlatformFee;
@@ -440,6 +453,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param newPerformanceFee value out of 1e18 that represents new performance fee percentage
      */
     function setPerformanceFee(uint64 newPerformanceFee) external onlyOwner {
+        if (newPerformanceFee > MAX_PERFORMANCE_FEE) revert INPUT_InvalidFee();
         emit PerformanceFeeChanged(feeData.performanceFee, newPerformanceFee);
 
         feeData.performanceFee = newPerformanceFee;
@@ -452,6 +466,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param newFeesDistributor formatted address of the new fee distributor module
      */
     function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
+        if (uint256(newFeesDistributor) > type(uint160).max) revert INPUT_InvalidCosmosAddress();
         emit FeesDistributorChanged(feeData.feesDistributor, newFeesDistributor);
 
         feeData.feesDistributor = newFeesDistributor;
@@ -462,7 +477,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param cut the performance cut for the strategist
      */
     function setStrategistPerformanceCut(uint64 cut) external onlyOwner {
-        if (cut > 1e18) revert INPUT_InvalidFeeCut();
+        if (cut > MAX_FEE_CUT) revert INPUT_InvalidFeeCut();
         emit StrategistPerformanceCutChanged(feeData.strategistPerformanceCut, cut);
 
         feeData.strategistPerformanceCut = cut;
@@ -473,7 +488,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param cut the platform cut for the strategist
      */
     function setStrategistPlatformCut(uint64 cut) external onlyOwner {
-        if (cut > 1e18) revert INPUT_InvalidFeeCut();
+        if (cut > MAX_FEE_CUT) revert INPUT_InvalidFeeCut();
         emit StrategistPlatformCutChanged(feeData.strategistPlatformCut, cut);
 
         feeData.strategistPlatformCut = cut;
@@ -1211,7 +1226,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Fees are accrued as shares and redeemed upon transfer.
      * @dev assumes cellar's accounting asset is able to be transferred and sent to Cosmos
      */
-    function sendFees() public onlyOwner {
+    function sendFees() public {
         address strategistPayoutAddress = feeData.strategistPayoutAddress;
         if (strategistPayoutAddress == address(0)) revert STATE_PayoutNotSet();
 

@@ -301,8 +301,23 @@ error STATE_PayoutNotSet();
  */
 error STATE_WrongSwapParams();
 
+/**
+ * @notice Attempted to remove holding position.
+ */
+error STATE_RemoveHoldingPosition();
+
 // ========================================== INPUT ERRORS ===========================================
 /**
- * @notice Attempted to swap with bad parameters.
+ * @notice Attempted to change strategist fee cut with invalid value.
  */
 error INPUT_InvalidFeeCut();
+
+/**
+ * @notice Attempted to change performance/platform fee with invalid value.
+ */
+error INPUT_InvalidFee();
+
+/**
+ * @notice Attempted to use an invalid cosmos address.
+ */
+error INPUT_InvalidCosmosAddress();
