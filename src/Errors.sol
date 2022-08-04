@@ -268,6 +268,18 @@ error STATE_ContractPaused();
 error STATE_ContractKilled();
 
 /**
+ * @notice Could not find an asset's price in USD or ETH.
+ * @param asset address of the asset
+ */
+error STATE_PriceNotAvailable(address asset);
+
+/**
+ * @notice Could not find an asset's price range in USD or ETH.
+ * @param asset address of the asset
+ */
+error STATE_PriceRangeNotAvailable(address asset);
+
+/**
  * @notice Attempted an operation to price an asset that under its minimum valid price.
  * @param asset address of the asset that is under its minimum valid price
  * @param price price of the asset

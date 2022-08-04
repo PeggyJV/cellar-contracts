@@ -19,8 +19,14 @@ import { Math } from "src/utils/Math.sol";
 contract PriceRouterTest is Test {
     using Math for uint256;
 
+    event AddAsset(address indexed asset);
+    event RemoveAsset(address indexed asset);
+
     ChainlinkPriceFeedAdaptor private immutable chainlinkAdaptor = new ChainlinkPriceFeedAdaptor();
     PriceRouter private immutable priceRouter = new PriceRouter();
+
+    address private immutable sender = vm.addr(0xABCD);
+    address private immutable receiver = vm.addr(0xBEEF);
 
     // Mainnet contracts:
     ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -28,6 +34,7 @@ contract PriceRouterTest is Test {
     ERC20 private constant USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private constant WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     ERC20 private constant BOND = ERC20(0x0391D2021f89DC339F60Fff84546EA23E337750f);
+    ERC20 private constant USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
     FeedRegistryInterface private constant feedRegistry =
         FeedRegistryInterface(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
     IUniswapV2Router private constant uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
@@ -39,8 +46,32 @@ contract PriceRouterTest is Test {
         priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, 0);
         priceRouter.addAsset(WBTC, ERC20(Denominations.BTC), 0, 0, 0);
         priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0);
-        priceRouter.addAsset(BOND, ERC20(address(0)), 0, 0, 0);
         priceRouter.addAsset(DAI, ERC20(address(0)), 0, 0, 0);
+        priceRouter.addAsset(BOND, ERC20(address(0)), 0, 0, 0);
+    }
+
+    // ======================================= ASSET TESTS =======================================
+
+    function testAddAssetEmit() external {
+        vm.expectEmit(true, false, false, false);
+        emit AddAsset(address(USDT));
+        priceRouter.addAsset(USDT, ERC20(address(0)), 0, 0, 0);
+
+        (,,,uint96 heartbeat, bool isSupported) = priceRouter.assets(USDT);
+
+        assertEq(uint256(heartbeat), uint256(priceRouter.DEFAULT_HEART_BEAT()));
+        assertEq(heartbeat, priceRouter.DEFAULT_HEART_BEAT());
+        assertTrue(isSupported);
+    }
+
+    function testRemoveAssetEmit() external {
+        vm.expectEmit(true, false, false, false);
+        emit RemoveAsset(address(USDT));
+        priceRouter.removeAsset(USDT);
+
+        (,,,,bool isSupported) = priceRouter.assets(USDT);
+
+        assertFalse(isSupported);
     }
 
     // ======================================= SWAP TESTS =======================================
@@ -97,7 +128,7 @@ contract PriceRouterTest is Test {
         exchangeRate = priceRouter.getExchangeRate(USDC, BOND);
         assertApproxEqRel(exchangeRate, amounts[1], 0.02e18, "USDC -> BOND Exchange Rate Failure");
 
-        ERC20[] memory baseAssets = new ERC20[](4);
+        ERC20[] memory baseAssets = new ERC20[](5);
         baseAssets[0] = USDC;
         baseAssets[1] = DAI;
         baseAssets[2] = WETH;
@@ -158,8 +189,8 @@ contract PriceRouterTest is Test {
         assertEq(max, 10_000_000e8, "WBTC Max Price Should be $10,000,000");
 
         (min, max) = priceRouter.getPriceRange(BOND);
-        assertEq(min, 0.1e8, "BOND Min Price Should be $0.1");
-        assertEq(max, 10_000, "BOND Max Price Should be $10,000");
+        assertEq(min, 0, "BOND Min Price Should be $0");
+        assertApproxEqRel(max, 1.5e46, 0.1e18, "BOND Max Price Should be a large number");
 
         ERC20[] memory baseAssets = new ERC20[](5);
         baseAssets[0] = USDC;
@@ -178,8 +209,8 @@ contract PriceRouterTest is Test {
         assertEq(maxes[2], 10_000e8, "WETH Max Price Should be $10,000");
         assertEq(mins[3], 10e8, "WBTC Min Price Should be $10");
         assertEq(maxes[3], 10_000_000e8, "WBTC Max Price Should be $10,000,000");
-        assertEq(mins[4], 0.1e8, "BOND Min Price Should be $0.1");
-        assertEq(maxes[4], 10_000e8, "BOND Max Price Should be $10,000");
+        assertEq(mins[4], 0, "BOND Min Price Should be $0");
+        assertApproxEqRel(maxes[4], 1.5e46, 0.1e18, "BOND Max Price Should be a large number");
     }
 
     function testGetValue(

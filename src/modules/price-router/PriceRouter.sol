@@ -7,6 +7,8 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
 import { Math } from "src/utils/Math.sol";
 
+import { Test, console } from "@forge-std/Test.sol";
+
 import "src/Errors.sol";
 
 /**
@@ -36,7 +38,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         ERC20 remap;
         uint256 minPrice;
         uint256 maxPrice;
-        uint96 heartBeat;
+        uint96 heartbeat;
         bool isSupported;
     }
 
@@ -68,24 +70,34 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         uint256 maxPrice,
         uint96 heartbeat
     ) external onlyOwner {
+        // console.log("1");
+
         require(address(asset) != address(0), "Invalid asset");
+
+        // console.log("2");
 
         if (minPrice == 0 || maxPrice == 0) {
             // If no adaptor is specified, use the Chainlink to get the min and max of the asset.
             ERC20 assetToQuery = address(remap) == address(0) ? asset : remap;
             (uint256 minFromChainklink, uint256 maxFromChainlink) = _getPriceRangeInUSD(assetToQuery);
 
+            // console.log("3");
+
             if (minPrice == 0) minPrice = minFromChainklink;
             if (maxPrice == 0) maxPrice = maxFromChainlink;
         }
+
+        // console.log("4");
 
         assets[asset] = AssetConfig({
             remap: remap,
             minPrice: minPrice,
             maxPrice: maxPrice,
-            heartBeat: heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT,
+            heartbeat: heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT,
             isSupported: true
         });
+
+        // console.log("5");
 
         emit AddAsset(address(asset));
     }
@@ -235,7 +247,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         uint256 maxPrice = config.maxPrice;
         if (value > maxPrice) revert STATE_AssetAboveMaxPrice(address(asset), value, maxPrice);
 
-        uint256 heartbeat = config.heartBeat;
+        uint256 heartbeat = config.heartbeat;
         uint256 timeSinceLastUpdate = block.timestamp - timestamp;
         if (timeSinceLastUpdate > heartbeat) revert STATE_StalePrice(address(asset), timeSinceLastUpdate, heartbeat);
     }

@@ -10,6 +10,8 @@ import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 
+import "src/Errors.sol";
+
 contract ChainlinkPriceFeedAdaptor {
     using SafeCast for int256;
     using Math for uint256;
@@ -34,11 +36,19 @@ contract ChainlinkPriceFeedAdaptor {
             timestamp = _timestamp;
         } catch {
             // If we can't find the USD price, then try the ETH price.
-            (, int256 _price, , uint256 _timestamp, ) = feedRegistry.latestRoundData(address(asset), Denominations.ETH);
-
-            // Change quote from ETH to USD.
-            price = _price.toUint256().mulWadDown(_getExchangeRateFromETHToUSD());
-            timestamp = _timestamp;
+            try feedRegistry.latestRoundData(address(asset), Denominations.ETH) returns (
+                uint80,
+                int256 _price,
+                uint256,
+                uint256 _timestamp,
+                uint80
+            ) {
+                // Change quote from ETH to USD.
+                price = _price.toUint256().mulWadDown(_getExchangeRateFromETHToUSD());
+                timestamp = _timestamp;
+            } catch {
+                revert STATE_PriceNotAvailable(address(asset));
+            }
         }
     }
 
@@ -50,16 +60,19 @@ contract ChainlinkPriceFeedAdaptor {
             max = uint256(uint192(chainlinkAggregator.maxAnswer()));
         } catch {
             // If we can't find the USD price, then try the ETH price.
-            AggregatorV2V3Interface aggregator = feedRegistry.getFeed(address(asset), Denominations.ETH);
-            IChainlinkAggregator chainlinkAggregator = IChainlinkAggregator(address(aggregator));
+            try feedRegistry.getFeed(address(asset), Denominations.ETH) returns (AggregatorV2V3Interface aggregator) {
+                IChainlinkAggregator chainlinkAggregator = IChainlinkAggregator(address(aggregator));
 
-            min = uint256(uint192(chainlinkAggregator.minAnswer()));
-            max = uint256(uint192(chainlinkAggregator.maxAnswer()));
+                min = uint256(uint192(chainlinkAggregator.minAnswer()));
+                max = uint256(uint192(chainlinkAggregator.maxAnswer()));
 
-            // Change quote from ETH to USD.
-            uint256 exchangeRateFromETHToUSD = _getExchangeRateFromETHToUSD();
-            min = min.mulWadDown(exchangeRateFromETHToUSD);
-            max = max.mulWadDown(exchangeRateFromETHToUSD);
+                // Change quote from ETH to USD.
+                uint256 exchangeRateFromETHToUSD = _getExchangeRateFromETHToUSD();
+                min = min.mulWadDown(exchangeRateFromETHToUSD);
+                max = max.mulWadDown(exchangeRateFromETHToUSD);
+            } catch {
+                revert STATE_PriceRangeNotAvailable(address(asset));
+            }
         }
     }
 
