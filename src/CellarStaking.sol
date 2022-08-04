@@ -4,9 +4,7 @@ pragma solidity 0.8.15;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ICellarStaking } from "./interfaces/ICellarStaking.sol";
-
-import "./Errors.sol";
+import { ICellarStaking } from "src/interfaces/ICellarStaking.sol";
 
 /**
  * @title Sommelier Staking
@@ -212,8 +210,8 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @param lock                  The amount of time to lock stake for.
      */
     function stake(uint256 amount, Lock lock) external override whenNotPaused updateRewards {
-        if (amount == 0) revert USR_ZeroDeposit();
-        if (amount < minimumDeposit) revert USR_MinimumDeposit(amount, minimumDeposit);
+        if (amount == 0) revert CellarStaking__ZeroDeposit();
+        if (amount < minimumDeposit) revert CellarStaking__MinimumDeposit(amount, minimumDeposit);
 
         if (totalDeposits == 0 && rewardsReady > 0) {
             _startProgram(rewardsReady);
@@ -222,7 +220,7 @@ contract CellarStaking is ICellarStaking, Ownable {
             // Need to run updateRewards again
             _updateRewards();
         } else if (block.timestamp > endTimestamp) {
-            revert STATE_NoRewardsLeft();
+            revert CellarStaking__NoRewardsLeft();
         }
 
         // Do share accounting and populate user stake information
@@ -289,8 +287,8 @@ contract CellarStaking is ICellarStaking, Ownable {
         UserStake storage s = stakes[msg.sender][depositId];
 
         uint256 depositAmount = s.amount;
-        if (depositAmount == 0) revert USR_NoDeposit(depositId);
-        if (s.unbondTimestamp > 0) revert USR_AlreadyUnbonding(depositId);
+        if (depositAmount == 0) revert CellarStaking__NoDeposit(depositId);
+        if (s.unbondTimestamp > 0) revert CellarStaking__AlreadyUnbonding(depositId);
 
         _updateRewardForStake(msg.sender, depositId);
 
@@ -346,8 +344,8 @@ contract CellarStaking is ICellarStaking, Ownable {
         UserStake storage s = stakes[msg.sender][depositId];
 
         uint256 depositAmount = s.amount;
-        if (depositAmount == 0) revert USR_NoDeposit(depositId);
-        if (s.unbondTimestamp == 0) revert USR_NotUnbonding(depositId);
+        if (depositAmount == 0) revert CellarStaking__NoDeposit(depositId);
+        if (s.unbondTimestamp == 0) revert CellarStaking__NotUnbonding(depositId);
 
         _updateRewardForStake(msg.sender, depositId);
 
@@ -415,8 +413,8 @@ contract CellarStaking is ICellarStaking, Ownable {
 
         uint256 depositAmount = s.amount;
 
-        if (depositAmount == 0) revert USR_NoDeposit(depositId);
-        if (s.unbondTimestamp == 0 || block.timestamp < s.unbondTimestamp) revert USR_StakeLocked(depositId);
+        if (depositAmount == 0) revert CellarStaking__NoDeposit(depositId);
+        if (s.unbondTimestamp == 0 || block.timestamp < s.unbondTimestamp) revert CellarStaking__StakeLocked(depositId);
 
         _updateRewardForStake(msg.sender, depositId);
 
@@ -506,7 +504,7 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @dev     In emergency mode, staking time locks do not apply.
      */
     function emergencyUnstake() external override {
-        if (!ended) revert STATE_NoEmergencyUnstake();
+        if (!ended) revert CellarStaking__NoEmergencyUnstake();
 
         UserStake[] storage userStakes = stakes[msg.sender];
         for (uint256 i = 0; i < userStakes.length; i++) {
@@ -538,8 +536,8 @@ contract CellarStaking is ICellarStaking, Ownable {
      *          was active.
      */
     function emergencyClaim() external override {
-        if (!ended) revert STATE_NoEmergencyUnstake();
-        if (!claimable) revert STATE_NoEmergencyClaim();
+        if (!ended) revert CellarStaking__NoEmergencyUnstake();
+        if (!claimable) revert CellarStaking__NoEmergencyClaim();
 
         uint256 reward;
 
@@ -578,16 +576,16 @@ contract CellarStaking is ICellarStaking, Ownable {
             reward += leftover;
         }
 
-        if (reward < nextEpochDuration) revert USR_ZeroRewardsPerEpoch();
+        if (reward < nextEpochDuration) revert CellarStaking__ZeroRewardsPerEpoch();
 
         uint256 rewardBalance = distributionToken.balanceOf(address(this));
         uint256 pendingRewards = reward + rewardsReady;
-        if (rewardBalance < pendingRewards) revert STATE_RewardsNotFunded(rewardBalance, pendingRewards);
+        if (rewardBalance < pendingRewards) revert CellarStaking__RewardsNotFunded(rewardBalance, pendingRewards);
 
         // prevent overflow when computing rewardPerToken
         uint256 proposedRewardRate = reward / nextEpochDuration;
         if (proposedRewardRate >= ((type(uint256).max / ONE) / nextEpochDuration)) {
-            revert USR_RewardTooLarge();
+            revert CellarStaking__RewardTooLarge();
         }
 
         if (totalDeposits == 0) {
@@ -608,7 +606,7 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @param _epochDuration        The new duration for reward schedules.
      */
     function setRewardsDuration(uint256 _epochDuration) external override onlyOwner {
-        if (rewardsReady > 0) revert STATE_RewardsReady();
+        if (rewardsReady > 0) revert CellarStaking__RewardsReady();
 
         nextEpochDuration = _epochDuration;
         emit EpochDurationChange(nextEpochDuration);
@@ -644,7 +642,7 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @param makeRewardsClaimable  Whether any previously accumulated rewards should be claimable.
      */
     function emergencyStop(bool makeRewardsClaimable) external override onlyOwner {
-        if (ended) revert STATE_AlreadyShutdown();
+        if (ended) revert CellarStaking__AlreadyShutdown();
 
         // Update state and put in irreversible emergency mode
         ended = true;
@@ -729,8 +727,8 @@ contract CellarStaking is ICellarStaking, Ownable {
      * @dev Blocks calls if contract is paused or killed.
      */
     modifier whenNotPaused() {
-        if (paused) revert STATE_ContractPaused();
-        if (ended) revert STATE_ContractKilled();
+        if (paused) revert CellarStaking__ContractPaused();
+        if (ended) revert CellarStaking__ContractKilled();
         _;
     }
 
@@ -792,7 +790,7 @@ contract CellarStaking is ICellarStaking, Ownable {
         } else if (_lock == Lock.long) {
             return (LONG_BOOST, LONG_BOOST_TIME);
         } else {
-            revert USR_InvalidLockValue(uint256(_lock));
+            revert CellarStaking__InvalidLockValue(uint256(_lock));
         }
     }
 }

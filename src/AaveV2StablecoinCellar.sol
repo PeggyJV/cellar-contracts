@@ -4,16 +4,14 @@ pragma solidity 0.8.15;
 import { ERC4626, ERC20, SafeTransferLib } from "./base/ERC4626.sol";
 import { Multicall } from "./base/Multicall.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { IAaveV2StablecoinCellar } from "./interfaces/IAaveV2StablecoinCellar.sol";
-import { IAaveIncentivesController } from "./interfaces/IAaveIncentivesController.sol";
-import { IStakedTokenV2 } from "./interfaces/IStakedTokenV2.sol";
-import { ICurveSwaps } from "./interfaces/ICurveSwaps.sol";
-import { ISushiSwapRouter } from "./interfaces/ISushiSwapRouter.sol";
-import { IGravity } from "./interfaces/IGravity.sol";
-import { ILendingPool } from "./interfaces/ILendingPool.sol";
+import { IAaveV2StablecoinCellar } from "src/interfaces/IAaveV2StablecoinCellar.sol";
+import { IAaveIncentivesController } from "src/interfaces/external/IAaveIncentivesController.sol";
+import { IStakedTokenV2 } from "src/interfaces/external/IStakedTokenV2.sol";
+import { ICurveSwaps } from "src/interfaces/external/ICurveSwaps.sol";
+import { ISushiSwapRouter } from "src/interfaces/external/ISushiSwapRouter.sol";
+import { IGravity } from "src/interfaces/external/IGravity.sol";
+import { ILendingPool } from "src/interfaces/external/ILendingPool.sol";
 import { Math } from "./utils/Math.sol";
-
-import "./Errors.sol";
 
 /**
  * @title Sommelier Aave V2 Stablecoin Cellar
@@ -77,7 +75,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      */
     function setAccrualPeriod(uint32 newAccrualPeriod) external onlyOwner {
         // Ensure that the change is not disrupting a currently ongoing distribution of accrued yield.
-        if (totalLocked() > 0) revert STATE_AccrualOngoing();
+        if (totalLocked() > 0) revert AaveV2StablecoinCellar__AccrualOngoing();
 
         emit AccrualPeriodChanged(accrualPeriod, newAccrualPeriod);
 
@@ -187,7 +185,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
      * @notice Prevent a function from being called during a shutdown.
      */
     modifier whenNotShutdown() {
-        if (isShutdown) revert STATE_ContractShutdown();
+        if (isShutdown) revert AaveV2StablecoinCellar__ContractShutdown();
 
         _;
     }
@@ -319,7 +317,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         // Check that the deposit is not restricted by a deposit limit or liquidity limit and
         // prevent deposits during a shutdown.
         uint256 maxAssets = maxDeposit(receiver);
-        if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
+        if (assets > maxAssets) revert AaveV2StablecoinCellar__DepositRestricted(assets, maxAssets);
 
         // Check for rounding error since we round down in previewDeposit.
         require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
@@ -332,7 +330,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         // Check that the balance transferred is what was expected.
         uint256 assetsReceived = cellarAsset.balanceOf(address(this)) - assetsBeforeDeposit;
-        if (assetsReceived != assets) revert STATE_AssetUsesFeeOnTransfer(address(cellarAsset));
+        if (assetsReceived != assets) revert AaveV2StablecoinCellar__AssetUsesFeeOnTransfer(address(cellarAsset));
 
         _mint(receiver, shares);
 
@@ -345,7 +343,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         // Check that the deposit is not restricted by a deposit limit or liquidity limit and
         // prevent deposits during a shutdown.
         uint256 maxAssets = maxDeposit(receiver);
-        if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
+        if (assets > maxAssets) revert AaveV2StablecoinCellar__DepositRestricted(assets, maxAssets);
 
         ERC20 cellarAsset = asset;
         uint256 assetsBeforeDeposit = cellarAsset.balanceOf(address(this));
@@ -355,7 +353,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         // Check that the balance transferred is what was expected.
         uint256 assetsReceived = cellarAsset.balanceOf(address(this)) - assetsBeforeDeposit;
-        if (assetsReceived != assets) revert STATE_AssetUsesFeeOnTransfer(address(cellarAsset));
+        if (assetsReceived != assets) revert AaveV2StablecoinCellar__AssetUsesFeeOnTransfer(address(cellarAsset));
 
         _mint(receiver, shares);
 
@@ -551,7 +549,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
 
         // Without this check, malicious actors could do a slowdown attack on the distribution of
         // yield by continuously resetting the accrual period.
-        if (msg.sender != owner() && totalLockedYield > 0) revert STATE_AccrualOngoing();
+        if (msg.sender != owner() && totalLockedYield > 0) revert AaveV2StablecoinCellar__AccrualOngoing();
 
         // Compute and store current exchange rate between assets and shares for gas efficiency.
         uint256 oneAsset = 10**assetDecimals;
@@ -666,12 +664,12 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         }
 
         // Ensure the asset position is trusted.
-        if (!isTrusted[newPosition]) revert USR_UntrustedPosition(address(newPosition));
+        if (!isTrusted[newPosition]) revert AaveV2StablecoinCellar__UntrustedPosition(address(newPosition));
 
         ERC20 oldPosition = asset;
 
         // Doesn't make sense to rebalance into the same position.
-        if (newPosition == oldPosition) revert USR_SamePosition(address(oldPosition));
+        if (newPosition == oldPosition) revert AaveV2StablecoinCellar__SamePosition(address(oldPosition));
 
         // Store this for later when updating total balance.
         uint256 totalAssetsInHolding = totalHoldings();
@@ -822,7 +820,7 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
     function sweep(ERC20 token, address to) external onlyOwner {
         // Prevent sweeping of assets managed by the cellar and shares minted to the cellar as fees.
         if (token == asset || token == assetAToken || token == this || address(token) == address(stkAAVE))
-            revert USR_ProtectedAsset(address(token));
+            revert AaveV2StablecoinCellar__ProtectedAsset(address(token));
 
         // Transfer out tokens in this cellar that shouldn't be here.
         uint256 amount = token.balanceOf(address(this));
@@ -889,14 +887,14 @@ contract AaveV2StablecoinCellar is IAaveV2StablecoinCellar, ERC4626, Multicall, 
         (, , , , , , , address aTokenAddress, , , , ) = lendingPool.getReserveData(address(newPosition));
 
         // If the address is not null, it is supported by Aave.
-        if (aTokenAddress == address(0)) revert USR_UnsupportedPosition(address(newPosition));
+        if (aTokenAddress == address(0)) revert AaveV2StablecoinCellar__UnsupportedPosition(address(newPosition));
 
         // Update the decimals used by limits if necessary.
         uint8 oldAssetDecimals = assetDecimals;
         newAssetDecimals = newPosition.decimals();
 
         // Ensure the decimals of precision of the new position uses will not break the cellar.
-        if (newAssetDecimals > 18) revert USR_TooManyDecimals(newAssetDecimals, 18);
+        if (newAssetDecimals > 18) revert AaveV2StablecoinCellar__TooManyDecimals(newAssetDecimals, 18);
 
         // Ignore if decimals are the same or if it is the first time initializing a position.
         if (oldAssetDecimals != 0 && oldAssetDecimals != newAssetDecimals) {

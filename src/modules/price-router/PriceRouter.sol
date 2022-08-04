@@ -7,8 +7,6 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
 import { Math } from "src/utils/Math.sol";
 
-import "src/Errors.sol";
-
 /**
  * @title Sommelier Price Router
  * @notice Provides a universal interface allowing Sommelier contracts to retrieve secure pricing
@@ -18,6 +16,41 @@ import "src/Errors.sol";
 contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
+
+    /**
+     * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
+     */
+    error PriceRouter__LengthMismatch();
+
+    /**
+     * @notice Attempted to update the asset to one that is not supported by the platform.
+     * @param asset address of the unsupported asset
+     */
+    error PriceRouter__UnsupportedAsset(address asset);
+
+    /**
+     * @notice Attempted to fetch a price for an asset that has not been updated in too long.
+     * @param asset address of the asset thats price is stale
+     * @param timeSinceLastUpdate seconds since the last price update
+     * @param heartbeat maximum allowed time between price updates
+     */
+    error PriceRouter__StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
+
+    /**
+     * @notice Attempted an operation to price an asset that under its minimum valid price.
+     * @param asset address of the asset that is under its minimum valid price
+     * @param price price of the asset
+     * @param minPrice minimum valid price of the asset
+     */
+    error PriceRouter__AssetBelowMinPrice(address asset, uint256 price, uint256 minPrice);
+
+    /**
+     * @notice Attempted an operation to price an asset that under its maximum valid price.
+     * @param asset address of the asset that is under its maximum valid price
+     * @param price price of the asset
+     * @param maxPrice maximum valid price of the asset
+     */
+    error PriceRouter__AssetAboveMaxPrice(address asset, uint256 price, uint256 maxPrice);
 
     // =========================================== ASSETS CONFIG ===========================================
 
@@ -123,7 +156,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         ERC20 quoteAsset
     ) external view returns (uint256 value) {
         uint256 numOfAssets = baseAssets.length;
-        if (numOfAssets != amounts.length) revert USR_LengthMismatch();
+        if (numOfAssets != amounts.length) revert PriceRouter__LengthMismatch();
 
         uint8 quoteAssetDecimals = quoteAsset.decimals();
 
@@ -215,7 +248,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
         AssetData storage assetData = getAssetData[asset];
 
-        if (!assetData.isSupported) revert USR_UnsupportedAsset(address(asset));
+        if (!assetData.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
 
         if (address(assetData.remap) != address(0)) asset = assetData.remap;
 
@@ -223,13 +256,14 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         (value, timestamp) = _getValueInUSDAndTimestamp(asset);
 
         uint256 minPrice = assetData.minPrice;
-        if (value < minPrice) revert STATE_AssetBelowMinPrice(address(asset), value, minPrice);
+        if (value < minPrice) revert PriceRouter__AssetBelowMinPrice(address(asset), value, minPrice);
 
         uint256 maxPrice = assetData.maxPrice;
-        if (value > maxPrice) revert STATE_AssetAboveMaxPrice(address(asset), value, maxPrice);
+        if (value > maxPrice) revert PriceRouter__AssetAboveMaxPrice(address(asset), value, maxPrice);
 
         uint256 heartbeat = assetData.heartBeat;
         uint256 timeSinceLastUpdate = block.timestamp - timestamp;
-        if (timeSinceLastUpdate > heartbeat) revert STATE_StalePrice(address(asset), timeSinceLastUpdate, heartbeat);
+        if (timeSinceLastUpdate > heartbeat)
+            revert PriceRouter__StalePrice(address(asset), timeSinceLastUpdate, heartbeat);
     }
 }

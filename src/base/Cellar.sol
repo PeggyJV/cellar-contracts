@@ -9,11 +9,9 @@ import { SafeCast } from "src/utils/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { IGravity } from "../interfaces/IGravity.sol";
+import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
-import { Math } from "../utils/Math.sol";
-
-import "../Errors.sol";
+import { Math } from "src/utils/Math.sol";
 
 /**
  * @title Sommelier Cellar
@@ -60,6 +58,39 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param index2 index of second position involved in the swap.
      */
     event PositionSwapped(address indexed newPosition1, address indexed newPosition2, uint256 index1, uint256 index2);
+
+    /**
+     * @notice Attempted an operation on an untrusted position.
+     * @param position address of the position
+     */
+    error Cellar__UntrustedPosition(address position);
+
+    /**
+     * @notice Attempted to add a position that is already being used.
+     * @param position address of the position
+     */
+    error Cellar__PositionAlreadyUsed(address position);
+
+    /**
+     * @notice Attempted an action on a position that is required to be empty before the action can be performed.
+     * @param position address of the non-empty position
+     * @param sharesRemaining amount of shares remaining in the position
+     */
+    error Cellar__PositionNotEmpty(address position, uint256 sharesRemaining);
+
+    /**
+     * @notice Attempted an operation with an asset that was different then the one expected.
+     * @param asset address of the asset
+     * @param expectedAsset address of the expected asset
+     */
+    error Cellar__AssetMismatch(address asset, address expectedAsset);
+
+    /**
+     * @notice Attempted an action on a position that is not being used by the cellar but must be for
+     *         the operation to succeed.
+     * @param position address of the invalid position
+     */
+    error Cellar__InvalidPosition(address position);
 
     /**
      * @notice Value specifying the interface a position uses.
@@ -112,10 +143,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of position to add
      */
     function addPosition(uint256 index, address position) external onlyOwner whenNotShutdown {
-        if (!isTrusted[position]) revert USR_UntrustedPosition(position);
+        if (!isTrusted[position]) revert Cellar__UntrustedPosition(position);
 
         // Check if position is already being used.
-        if (isPositionUsed[position]) revert USR_PositionAlreadyUsed(position);
+        if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
 
         // Add new position at a specified index.
         positions.add(index, position);
@@ -131,10 +162,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of position to add
      */
     function pushPosition(address position) external onlyOwner whenNotShutdown {
-        if (!isTrusted[position]) revert USR_UntrustedPosition(position);
+        if (!isTrusted[position]) revert Cellar__UntrustedPosition(position);
 
         // Check if position is already being used.
-        if (isPositionUsed[position]) revert USR_PositionAlreadyUsed(position);
+        if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
 
         // Add new position to the end of the positions.
         positions.push(position);
@@ -153,7 +184,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Only remove position if it is empty.
         uint256 positionBalance = _balanceOf(position);
-        if (positionBalance > 0) revert USR_PositionNotEmpty(position, positionBalance);
+        if (positionBalance > 0) revert Cellar__PositionNotEmpty(position, positionBalance);
 
         // Remove position at the given index.
         positions.remove(index);
@@ -174,7 +205,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Only remove position if it is empty.
         uint256 positionBalance = _balanceOf(position);
-        if (positionBalance > 0) revert USR_PositionNotEmpty(position, positionBalance);
+        if (positionBalance > 0) revert Cellar__PositionNotEmpty(position, positionBalance);
 
         // Remove last position.
         positions.pop();
@@ -194,7 +225,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Only remove position if it is empty.
         uint256 positionBalance = _balanceOf(oldPosition);
-        if (positionBalance > 0) revert USR_PositionNotEmpty(oldPosition, positionBalance);
+        if (positionBalance > 0) revert Cellar__PositionNotEmpty(oldPosition, positionBalance);
 
         // Replace old position with new position.
         positions[index] = newPosition;
@@ -330,10 +361,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param newHoldingPosition address of the new holding position to use
      */
     function setHoldingPosition(address newHoldingPosition) external onlyOwner {
-        if (!isPositionUsed[newHoldingPosition]) revert USR_InvalidPosition(newHoldingPosition);
+        if (!isPositionUsed[newHoldingPosition]) revert Cellar__InvalidPosition(newHoldingPosition);
 
         ERC20 holdingPositionAsset = _assetOf(newHoldingPosition);
-        if (holdingPositionAsset == asset) revert USR_AssetMismatch(address(holdingPositionAsset), address(asset));
+        if (holdingPositionAsset == asset) revert Cellar__AssetMismatch(address(holdingPositionAsset), address(asset));
 
         emit HoldingPositionChanged(holdingPosition, newHoldingPosition);
 
@@ -438,6 +469,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
     event DepositLimitChanged(uint256 oldLimit, uint256 newLimit);
 
     /**
+     * @notice Attempted deposit more than the max deposit.
+     * @param assets the assets user attempted to deposit
+     * @param maxDeposit the max assets that can be deposited
+     */
+    error Cellar__DepositRestricted(uint256 assets, uint256 maxDeposit);
+
+    /**
      * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals
      *         as the current asset.
      * @dev Set to `type(uint256).max` to have no limit.
@@ -479,6 +517,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
     event ShutdownChanged(bool isShutdown);
 
     /**
+     * @notice Attempted action was prevented due to contract being shutdown.
+     */
+    error Cellar__ContractShutdown();
+
+    /**
      * @notice Whether or not the contract is shutdown in case of an emergency.
      */
     bool public isShutdown;
@@ -487,7 +530,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Prevent a function from being called during a shutdown.
      */
     modifier whenNotShutdown() {
-        if (isShutdown) revert STATE_ContractShutdown();
+        if (isShutdown) revert Cellar__ContractShutdown();
 
         _;
     }
@@ -550,7 +593,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         for (uint256 i; i < _positions.length; i++) {
             address position = _positions[i];
 
-            if (isPositionUsed[position]) revert USR_PositionAlreadyUsed(position);
+            if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
 
             isTrusted[position] = true;
             isPositionUsed[position] = true;
@@ -558,10 +601,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
         }
 
         // Initialize holding position.
-        if (!isPositionUsed[_holdingPosition]) revert USR_InvalidPosition(_holdingPosition);
+        if (!isPositionUsed[_holdingPosition]) revert Cellar__InvalidPosition(_holdingPosition);
 
         ERC20 holdingPositionAsset = _assetOf(_holdingPosition);
-        if (holdingPositionAsset != _asset) revert USR_AssetMismatch(address(holdingPositionAsset), address(_asset));
+        if (holdingPositionAsset != _asset)
+            revert Cellar__AssetMismatch(address(holdingPositionAsset), address(_asset));
 
         holdingPosition = _holdingPosition;
 
@@ -587,7 +631,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address receiver
     ) internal view override whenNotShutdown {
         uint256 maxAssets = maxDeposit(receiver);
-        if (assets > maxAssets) revert USR_DepositRestricted(assets, maxAssets);
+        if (assets > maxAssets) revert Cellar__DepositRestricted(assets, maxAssets);
     }
 
     function afterDeposit(
@@ -1003,7 +1047,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         bytes calldata params
     ) external onlyOwner returns (uint256 assetsTo) {
         // Check that position being rebalanced to is currently being used.
-        if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(address(toPosition));
+        if (!isPositionUsed[toPosition]) revert Cellar__InvalidPosition(address(toPosition));
 
         // Withdraw from position.
         _withdrawFrom(fromPosition, assetsFrom, address(this));

@@ -3,12 +3,12 @@ pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { AaveV2StablecoinCellar } from "src/AaveV2StablecoinCellar.sol";
-import { IAaveIncentivesController } from "src/interfaces/IAaveIncentivesController.sol";
-import { IStakedTokenV2 } from "src/interfaces/IStakedTokenV2.sol";
-import { ICurveSwaps } from "src/interfaces/ICurveSwaps.sol";
-import { ISushiSwapRouter } from "src/interfaces/ISushiSwapRouter.sol";
-import { IGravity } from "src/interfaces/IGravity.sol";
-import { ILendingPool } from "src/interfaces/ILendingPool.sol";
+import { IAaveIncentivesController } from "src/interfaces/external/IAaveIncentivesController.sol";
+import { IStakedTokenV2 } from "src/interfaces/external/IStakedTokenV2.sol";
+import { ICurveSwaps } from "src/interfaces/external/ICurveSwaps.sol";
+import { ISushiSwapRouter } from "src/interfaces/external/ISushiSwapRouter.sol";
+import { IGravity } from "src/interfaces/external/IGravity.sol";
+import { ILendingPool } from "src/interfaces/external/ILendingPool.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC20WithTransferFee } from "src/mocks/MockERC20WithTransferFee.sol";
 import { MockAToken } from "src/mocks/MockAToken.sol";
