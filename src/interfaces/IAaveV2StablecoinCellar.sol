@@ -2,12 +2,12 @@
 pragma solidity 0.8.15;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { IAaveIncentivesController } from "../interfaces/IAaveIncentivesController.sol";
-import { IStakedTokenV2 } from "../interfaces/IStakedTokenV2.sol";
-import { ICurveSwaps } from "../interfaces/ICurveSwaps.sol";
-import { ISushiSwapRouter } from "../interfaces/ISushiSwapRouter.sol";
-import { ILendingPool } from "../interfaces/ILendingPool.sol";
-import { IGravity } from "../interfaces/IGravity.sol";
+import { IAaveIncentivesController } from "src/interfaces/external/IAaveIncentivesController.sol";
+import { IStakedTokenV2 } from "src/interfaces/external/IStakedTokenV2.sol";
+import { ICurveSwaps } from "src/interfaces/external/ICurveSwaps.sol";
+import { ISushiSwapRouter } from "src/interfaces/external/ISushiSwapRouter.sol";
+import { ILendingPool } from "src/interfaces/external/ILendingPool.sol";
+import { IGravity } from "src/interfaces/external/IGravity.sol";
 
 /**
  * @title Interface for AaveV2StablecoinCellar
@@ -97,6 +97,13 @@ interface IAaveV2StablecoinCellar {
      * @param newLimit amount the limit was changed to
      */
     event DepositLimitChanged(uint256 oldLimit, uint256 newLimit);
+
+    /**
+     * @notice Attempted deposit more than the max deposit.
+     * @param assets the assets user attempted to deposit
+     * @param maxDeposit the max assets that can be deposited
+     */
+    error AaveV2StablecoinCellar__DepositRestricted(uint256 assets, uint256 maxDeposit);
 
     function liquidityLimit() external view returns (uint256);
 
@@ -259,4 +266,53 @@ interface IAaveV2StablecoinCellar {
     event Sweep(address indexed token, address indexed to, uint256 amount);
 
     function sweep(ERC20 token, address to) external;
+
+    // ============================================ ERRORS ============================================
+
+    /**
+     * @notice Attempted an operation that is prohibited while yield is still being distributed from the last accrual.
+     */
+    error AaveV2StablecoinCellar__AccrualOngoing();
+
+    /**
+     * @notice Attempted action was prevented due to contract being shutdown.
+     */
+    error AaveV2StablecoinCellar__ContractShutdown();
+
+    /**
+     * @notice Attempted an action when cellar is using an asset that has a fee on transfer.
+     * @param assetWithFeeOnTransfer address of the asset with fee on transfer
+     */
+    error AaveV2StablecoinCellar__AssetUsesFeeOnTransfer(address assetWithFeeOnTransfer);
+
+    /**
+     * @notice Attempted to update a position to an asset that uses an incompatible amount of decimals.
+     * @param newDecimals decimals of precision that the new position uses
+     * @param maxDecimals maximum decimals of precision for a position to be compatible with the cellar
+     */
+    error AaveV2StablecoinCellar__TooManyDecimals(uint8 newDecimals, uint8 maxDecimals);
+
+    /**
+     * @notice Attempted an operation on an untrusted position.
+     * @param position address of the position
+     */
+    error AaveV2StablecoinCellar__UntrustedPosition(address position);
+
+    /**
+     * @notice Attempted to update the position to one that is not supported by the platform.
+     * @param position address of the unsupported position
+     */
+    error AaveV2StablecoinCellar__UnsupportedPosition(address position);
+
+    /**
+     * @notice Attempted rebalance into the same position.
+     * @param position address of the position
+     */
+    error AaveV2StablecoinCellar__SamePosition(address position);
+
+    /**
+     * @notice Attempted to sweep an asset that is managed by the cellar.
+     * @param token address of the token that can't be sweeped
+     */
+    error AaveV2StablecoinCellar__ProtectedAsset(address token);
 }
