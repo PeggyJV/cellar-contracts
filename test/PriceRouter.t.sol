@@ -102,9 +102,35 @@ contract PriceRouterTest is Test {
         baseAssets[1] = DAI;
         baseAssets[2] = WETH;
         baseAssets[3] = WBTC;
+        baseAssets[4] = BOND;
 
         uint256[] memory exchangeRates = priceRouter.getExchangeRates(baseAssets, WBTC);
+
+        path[0] = address(USDC);
+        path[1] = address(WBTC);
+        amounts = uniV2Router.getAmountsOut(1e18, path);
+
+        assertApproxEqRel(exchangeRates[0], amounts[1], 1e16, "WBTC exchangeRates failed against USDC");
+
+        path[0] = address(DAI);
+        path[1] = address(WBTC);
+        amounts = uniV2Router.getAmountsOut(1e18, path);
+
+        assertApproxEqRel(exchangeRates[1], amounts[1], 1e16, "WBTC exchangeRates failed against DAI");
+
+        path[0] = address(WETH);
+        path[1] = address(WBTC);
+        amounts = uniV2Router.getAmountsOut(1e18, path);
+
+        assertApproxEqRel(exchangeRates[2], amounts[1], 1e16, "WBTC exchangeRates failed against WETH");
+
         assertEq(exchangeRates[3], 1e8, "WBTC -> WBTC Exchange Rate Should be 1e8");
+
+        path[0] = address(BOND);
+        path[1] = address(WBTC);
+        amounts = uniV2Router.getAmountsOut(1e18, path);
+
+        assertApproxEqRel(exchangeRates[4], amounts[1], 1e16, "WBTC exchangeRates failed against BOND");
     }
 
     function testPriceRange() external {
@@ -135,7 +161,7 @@ contract PriceRouterTest is Test {
         assertEq(min, 0.1e8, "BOND Min Price Should be $0.1");
         assertEq(max, 10_000, "BOND Max Price Should be $10,000");
 
-        ERC20[] memory baseAssets = new ERC20[](3);
+        ERC20[] memory baseAssets = new ERC20[](5);
         baseAssets[0] = USDC;
         baseAssets[1] = DAI;
         baseAssets[2] = WETH;
@@ -152,8 +178,8 @@ contract PriceRouterTest is Test {
         assertEq(maxes[2], 10_000e8, "WETH Max Price Should be $10,000");
         assertEq(mins[3], 10e8, "WBTC Min Price Should be $10");
         assertEq(maxes[3], 10_000_000e8, "WBTC Max Price Should be $10,000,000");
-        assertEq(mins[3], 0.1e8, "BOND Min Price Should be $0.1");
-        assertEq(maxes[3], 10_000e8, "BOND Max Price Should be $10,000");
+        assertEq(mins[4], 0.1e8, "BOND Min Price Should be $0.1");
+        assertEq(maxes[4], 10_000e8, "BOND Max Price Should be $10,000");
     }
 
     function testGetValue(

@@ -29,7 +29,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @param heartbeat maximum allowed time that can pass with no update before price data is considered stale
      * @param isSupported whether this asset is supported by the platform or not
      */
-    struct AssetData {
+    struct AssetConfig {
         ERC20 remap;
         uint256 minPrice;
         uint256 maxPrice;
@@ -40,7 +40,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     /**
      * @notice Get the asset data for a given asset.
      */
-    mapping(ERC20 => AssetData) public getAssetData;
+    mapping(ERC20 => AssetConfig) public assets;
 
     uint96 public constant DEFAULT_HEART_BEAT = 1 days;
 
@@ -76,7 +76,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
             if (maxPrice == 0) maxPrice = maxFromChainlink;
         }
 
-        getAssetData[asset] = AssetData({
+        assets[asset] = AssetConfig({
             remap: remap,
             minPrice: minPrice,
             maxPrice: maxPrice,
@@ -90,7 +90,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @param asset address of asset to remove support for
      */
     function removeAsset(ERC20 asset) external onlyOwner {
-        getAssetData[asset].isSupported = false;
+        assets[asset].isSupported = false;
     }
 
     // ======================================= PRICING OPERATIONS =======================================
@@ -173,21 +173,21 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @return max maximum valid price for the asset
      */
     function getPriceRange(ERC20 asset) public view returns (uint256 min, uint256 max) {
-        AssetData storage assetData = getAssetData[asset];
+        AssetConfig memory config = assets[asset];
 
-        (min, max) = (assetData.minPrice, assetData.maxPrice);
+        (min, max) = (config.minPrice, config.maxPrice);
     }
 
     /**
      * @notice Get the minimum and maximum valid prices for an asset.
-     * @param assets addresses of the assets to get the price ranges for
+     * @param _assets addresses of the assets to get the price ranges for
      * @return min minimum valid price for each asset
      * @return max maximum valid price for each asset
      */
-    function getPriceRanges(ERC20[] memory assets) external view returns (uint256[] memory min, uint256[] memory max) {
-        uint256 numOfAssets = assets.length;
+    function getPriceRanges(ERC20[] memory _assets) external view returns (uint256[] memory min, uint256[] memory max) {
+        uint256 numOfAssets = _assets.length;
         (min, max) = (new uint256[](numOfAssets), new uint256[](numOfAssets));
-        for (uint256 i; i < numOfAssets; i++) (min[i], max[i]) = getPriceRange(assets[i]);
+        for (uint256 i; i < numOfAssets; i++) (min[i], max[i]) = getPriceRange(_assets[i]);
     }
 
     // =========================================== HELPER FUNCTIONS ===========================================
@@ -213,22 +213,22 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @return value the value of asset in USD
      */
     function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
-        AssetData storage assetData = getAssetData[asset];
+        AssetConfig memory config = assets[asset];
 
-        if (!assetData.isSupported) revert USR_UnsupportedAsset(address(asset));
+        if (!config.isSupported) revert USR_UnsupportedAsset(address(asset));
 
-        if (address(assetData.remap) != address(0)) asset = assetData.remap;
+        if (address(config.remap) != address(0)) asset = config.remap;
 
         uint256 timestamp;
         (value, timestamp) = _getValueInUSDAndTimestamp(asset);
 
-        uint256 minPrice = assetData.minPrice;
+        uint256 minPrice = config.minPrice;
         if (value < minPrice) revert STATE_AssetBelowMinPrice(address(asset), value, minPrice);
 
-        uint256 maxPrice = assetData.maxPrice;
+        uint256 maxPrice = config.maxPrice;
         if (value > maxPrice) revert STATE_AssetAboveMaxPrice(address(asset), value, maxPrice);
 
-        uint256 heartbeat = assetData.heartBeat;
+        uint256 heartbeat = config.heartBeat;
         uint256 timeSinceLastUpdate = block.timestamp - timestamp;
         if (timeSinceLastUpdate > heartbeat) revert STATE_StalePrice(address(asset), timeSinceLastUpdate, heartbeat);
     }
