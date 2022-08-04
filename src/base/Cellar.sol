@@ -594,7 +594,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit ShutdownChanged(false);
     }
 
-    //TODO should strategist payout  be set in constructor?
     // =========================================== CONSTRUCTOR ===========================================
 
     /**
@@ -615,6 +614,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param _withdrawType withdraw type to use for the cellar
      * @param _name name of this cellar's share token
      * @param _name symbol of this cellar's share token
+     * @param _strategistPayout The address to send the strategists fee shares.
      */
     constructor(
         Registry _registry,
@@ -624,7 +624,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address _holdingPosition,
         WithdrawType _withdrawType,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        address _strategistPayout
     ) ERC4626(_asset, _name, _symbol, 18) Ownable() {
         registry = _registry;
 
@@ -655,6 +656,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Initialize last accrual timestamp to time that cellar was created, otherwise the first
         // `accrue` will take platform fees from 1970 to the time it is called.
         lastAccrual = uint64(block.timestamp);
+
+        feeData.strategistPayoutAddress = _strategistPayout;
 
         // Transfer ownership to the Gravity Bridge.
         address gravityBridge = _registry.getAddress(0);
@@ -689,7 +692,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address,
         address
     ) internal override {
-        feeData.highWatermark -= assets;
+        // Need to check if assets is greater than the high watermark
+        // because if the performanceFee is set to zero, and all cellar shares are redeemed,
+        // if the cellar has earned any yield, assets will be greater than the high watermark.
+        // Becuase the high watermark is only updated when performance fees are minted.
+        feeData.highWatermark = assets > feeData.highWatermark ? 0 : feeData.highWatermark - assets;
     }
 
     function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
@@ -1085,7 +1092,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 assetsFrom,
         SwapRouter.Exchange exchange,
         bytes calldata params
-    ) external onlyOwner returns (uint256 assetsTo) {
+    ) external onlyOwner whenNotShutdown returns (uint256 assetsTo) {
         // Check that position being rebalanced to is currently being used.
         if (!isPositionUsed[toPosition]) revert USR_InvalidPosition(address(toPosition));
 
@@ -1264,17 +1271,17 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Redeem our fee shares for assets to send to the fee distributor module.
         uint256 assets = _convertToAssets(totalFees, _totalAssets);
-        if (assets == 0) revert USR_ZeroAssets();
+        if (assets > 0) {
+            // Without this, assets paid out as fees would be counted as a loss.
+            feeData.highWatermark -= assets;
 
-        // Without this, assets paid out as fees would be counted as a loss.
-        feeData.highWatermark -= assets;
+            _burn(address(this), totalFees);
 
-        _burn(address(this), totalFees);
-
-        // Transfer assets to a fee distributor on the Sommelier chain.
-        IGravity gravityBridge = IGravity(registry.getAddress(0));
-        asset.safeApprove(address(gravityBridge), assets);
-        gravityBridge.sendToCosmos(address(asset), feeData.feesDistributor, assets);
+            // Transfer assets to a fee distributor on the Sommelier chain.
+            IGravity gravityBridge = IGravity(registry.getAddress(0));
+            asset.safeApprove(address(gravityBridge), assets);
+            gravityBridge.sendToCosmos(address(asset), feeData.feesDistributor, assets);
+        }
 
         emit SendFees(totalFees, assets);
     }
