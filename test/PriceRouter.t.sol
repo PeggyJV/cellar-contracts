@@ -11,16 +11,16 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-// TODO: Test exchange rate against DEX's.
 // TODO: Test new price sanity checks.
+// - Test unsupported asset
+// - Test asset below min price
+// - Test asset above max price
+// - Test stale price
 contract PriceRouterTest is Test {
     using Math for uint256;
 
     ChainlinkPriceFeedAdaptor private immutable chainlinkAdaptor = new ChainlinkPriceFeedAdaptor();
     PriceRouter private immutable priceRouter = new PriceRouter();
-
-    address private immutable sender = vm.addr(0xABCD);
-    address private immutable receiver = vm.addr(0xBEEF);
 
     // Mainnet contracts:
     ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);

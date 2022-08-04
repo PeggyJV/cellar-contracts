@@ -19,6 +19,9 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
+    event AddAsset(address indexed asset);
+    event RemoveAsset(address indexed asset);
+
     // =========================================== ASSETS CONFIG ===========================================
 
     /**
@@ -83,6 +86,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
             heartBeat: heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT,
             isSupported: true
         });
+
+        emit AddAsset(address(asset));
     }
 
     /**
@@ -91,6 +96,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      */
     function removeAsset(ERC20 asset) external onlyOwner {
         assets[asset].isSupported = false;
+
+        emit RemoveAsset(address(asset));
     }
 
     // ======================================= PRICING OPERATIONS =======================================
