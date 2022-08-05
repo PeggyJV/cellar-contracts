@@ -12,7 +12,7 @@ import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockERC20WithTransferFee } from "src/mocks/MockERC20WithTransferFee.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 
-import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
+import { Test, console, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 import "src/Errors.sol";
 
@@ -229,7 +229,7 @@ contract CellarTest is Test {
         (uint256 highWatermarkBeforeWithdraw, , , , , , ) = cellar.feeData();
 
         // Try withdrawing more assets than allowed.
-        vm.expectRevert(bytes("Arithmetic over/underflow."));
+        vm.expectRevert(bytes(stdError.arithmeticError));
         cellar.withdraw(assets + 1, address(this), address(this));
 
         // Test single withdraw.
@@ -298,38 +298,6 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0, "Should return zero assets.");
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
-    }
-
-    function testFailDepositUsingAssetWithTransferFee() external {
-        MockERC20 tokenWithTransferFee = MockERC20(address(new MockERC20WithTransferFee("TKN", 6)));
-
-        stdstore.target(address(cellar)).sig(cellar.asset.selector).checked_write(address(tokenWithTransferFee));
-
-        assertEq(
-            address(cellar.asset()),
-            address(tokenWithTransferFee),
-            "Cellar asset should be token with transfer fee."
-        );
-
-        tokenWithTransferFee.mint(address(this), 100e6);
-        tokenWithTransferFee.approve(address(cellar), 100e6);
-        cellar.deposit(100e6, address(this));
-    }
-
-    function testFailMintUsingAssetWithTransferFee() external {
-        MockERC20 tokenWithTransferFee = MockERC20(address(new MockERC20WithTransferFee("TKN", 6)));
-
-        stdstore.target(address(cellar)).sig(cellar.asset.selector).checked_write(address(tokenWithTransferFee));
-
-        assertEq(
-            address(cellar.asset()),
-            address(tokenWithTransferFee),
-            "Cellar asset should be token with transfer fee."
-        );
-
-        tokenWithTransferFee.mint(address(this), 100e6);
-        tokenWithTransferFee.approve(address(cellar), 100e6);
-        cellar.mint(100e18, address(this));
     }
 
     function testWithdrawInOrder() external {
@@ -949,28 +917,32 @@ contract CellarTest is Test {
         // Simulate Cellar earning yield.
         deal(address(USDC), address(cellar), deposit + yield);
 
-        assertEq(
+        assertApproxEqAbs(
             cellar.previewMint(100e18),
             cellar.mint(100e18, address(this)),
+            1,
             "`previewMint` should return the same as `mint`."
         );
 
-        assertEq(
+        assertApproxEqAbs(
             cellar.previewDeposit(100e6),
             cellar.deposit(100e6, address(this)),
+            1,
             "`previewDeposit` should return the same as `deposit`."
         );
 
         cellar.approve(address(cellar), type(uint256).max);
-        assertEq(
+        assertApproxEqAbs(
             cellar.previewWithdraw(100e6),
             cellar.withdraw(100e6, address(this), address(this)),
+            1,
             "`previewWithdraw` should return the same as `withdraw`."
         );
 
-        assertEq(
+        assertApproxEqAbs(
             cellar.previewRedeem(100e18),
             cellar.redeem(100e18, address(this), address(this)),
+            1,
             "`previewRedeem` should return the same as `redeem`."
         );
     }
@@ -1486,12 +1458,6 @@ contract CellarTest is Test {
         // and add a check to make sure strategists can not perform a DOS attack on cellar users.
     }
 
-    //TODO exit plans for positions(like if something depegs)
-
-    function testCellarAssetDepegs() external {
-        //
-    }
-
     //TODO what about a cellar whose asset is WETH not USDC
 
     function testAllFeesToStrategist(
@@ -1951,7 +1917,7 @@ contract CellarTest is Test {
             assertApproxEqAbs(
                 cellar.previewDeposit(amountOfAssets),
                 shares = cellar.deposit(amountOfAssets, user),
-                200,
+                200, // When the amount being deposited is much larger than the TVL, because of how the preview deposit function works, there is much worse precision.
                 "Deposit should be equal to previewDeposit"
             );
         } else if (action == Action.WITHDRAW) {
@@ -2058,7 +2024,7 @@ contract CellarTest is Test {
         assertApproxEqAbs(
             feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
             expectedPerformanceFeeInAssets + expectedPlatformFeeInAssets,
-            1,
+            2,
             "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
         );
 
@@ -2113,7 +2079,7 @@ contract CellarTest is Test {
         assetReq =
             expectedPlatformFeeInAssets.mulWadDown(1e18 - strategistPlatformCut) +
             expectedPerformanceFeeInAssets.mulWadDown(1e18 - strategistPerformanceCut) +
-            1e6;
+            1e6; // Add an extra USDC to account for rounding errors.
     }
 
     function ensureEnoughAssetsToCoverSendFees(
@@ -2140,8 +2106,6 @@ contract CellarTest is Test {
             }
         }
     }
-
-    //TODO check that trying to withdraw more assets than what is in the cellar fails.
 
     function testMultipleMintDepositRedeemWithdrawWithGainsLossAndSendFees(uint256 salt) external {
         //salt = 154;
