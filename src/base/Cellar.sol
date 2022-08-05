@@ -696,7 +696,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // because if the performanceFee is set to zero, and all cellar shares are redeemed,
         // if the cellar has earned any yield, assets will be greater than the high watermark.
         // Becuase the high watermark is only updated when performance fees are minted.
-        feeData.highWatermark = assets > feeData.highWatermark ? 0 : feeData.highWatermark - assets;
+        uint256 highWatermark = feeData.highWatermark;
+        feeData.highWatermark = assets > highWatermark ? 0 : highWatermark - assets;
     }
 
     function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
@@ -1254,18 +1255,19 @@ contract Cellar is ERC4626, Ownable, Multicall {
         totalFees += platformFees;
 
         strategistFeeSharesDue += platformFees.mulWadDown(feeData.strategistPlatformCut);
+        if (strategistFeeSharesDue > 0) {
+            //transfer shares to strategist
+            totalFees -= strategistFeeSharesDue;
+            balanceOf[address(this)] = totalFees;
 
-        //transfer shares to strategist
-        totalFees -= strategistFeeSharesDue;
-        balanceOf[address(this)] = totalFees;
+            // Cannot overflow because the sum of all user
+            // balances can't exceed the max uint256 value.
+            unchecked {
+                balanceOf[strategistPayoutAddress] += strategistFeeSharesDue;
+            }
 
-        // Cannot overflow because the sum of all user
-        // balances can't exceed the max uint256 value.
-        unchecked {
-            balanceOf[strategistPayoutAddress] += strategistFeeSharesDue;
+            emit Transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
         }
-
-        emit Transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
 
         lastAccrual = uint32(block.timestamp);
 

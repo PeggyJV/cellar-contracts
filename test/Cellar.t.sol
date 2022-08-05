@@ -114,6 +114,7 @@ contract CellarTest is Test {
             strategist
         );
         vm.label(address(cellar), "cellar");
+        vm.label(strategist, "strategist");
 
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(exchange), type(uint224).max);
@@ -226,6 +227,10 @@ contract CellarTest is Test {
         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
         (uint256 highWatermarkBeforeWithdraw, , , , , , ) = cellar.feeData();
+
+        // Try withdrawing more assets than allowed.
+        vm.expectRevert(bytes("Arithmetic over/underflow."));
+        cellar.withdraw(assets + 1, address(this), address(this));
 
         // Test single withdraw.
         cellar.withdraw(assets, address(this), address(this));
@@ -1183,7 +1188,180 @@ contract CellarTest is Test {
         );
     }
 
-    //TODO is yield ever non zero.
+    function testPerformanceFeesWithZeroPlatformFees(
+        uint256 timePassed,
+        uint256 deposit,
+        uint256 yield
+    ) external {
+        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        timePassed = bound(timePassed, 1 days, 365 days);
+        deposit = bound(deposit, 100e6, 1_000_000_000e6);
+        // Cap yield to 10,000% APR
+        {
+            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
+            // Floor yield above 0.01% APR
+            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
+            yield = bound(yield, yieldLowerBound, yieldUpperBound);
+        }
+
+        cellar.setPlatformFee(0);
+        (
+            ,
+            uint64 strategistPerformanceCut,
+            uint64 strategistPlatformCut,
+            uint64 platformFee,
+            uint64 performanceFee,
+            ,
+
+        ) = cellar.feeData();
+
+        uint256 assetAmount = deposit / 2;
+        uint256 sharesAmount = assetAmount.changeDecimals(6, 18);
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), deposit);
+
+        // Deposit into cellar.
+        cellar.deposit(assetAmount, address(this));
+        // Mint shares from the cellar.
+        cellar.mint(sharesAmount, address(this));
+
+        (uint256 highWatermark, , , , , , ) = cellar.feeData();
+        assertEq(highWatermark, cellar.totalAssets(), "High watermark should equal totalAssets.");
+
+        // Advance time by `timePassed` seconds.
+        skip(timePassed);
+
+        // Simulate Cellar earning yield.
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
+
+        cellar.sendFees();
+
+        // Redeem all shares from the cellar.
+        uint256 shares = cellar.balanceOf(address(this));
+        cellar.redeem(shares, address(this), address(this));
+
+        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
+
+        // Check that no fees are minted.
+        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
+        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
+            expectedPerformanceFees,
+            2,
+            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected performance fee."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToStrategist,
+            expectedPerformanceFees.mulWadDown(strategistPerformanceCut),
+            2,
+            "Shares converted to assets sent to strategist should be equal to (total performance fees * strategist performance cut)."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos,
+            expectedPerformanceFees.mulWadDown(1e18 - strategistPerformanceCut),
+            2,
+            "Assets sent to Cosmos should be equal to (total performance fees * (1-strategist performance cut))."
+        );
+
+        assertApproxEqAbs(
+            cellar.previewRedeem(cellar.balanceOf(address(cellar))),
+            0,
+            1,
+            "Cellar fee shares should be redeemable for zero assets."
+        );
+    }
+
+    function testPlatformFeesWithZeroPerformanceFees(
+        uint256 timePassed,
+        uint256 deposit,
+        uint256 yield
+    ) external {
+        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        timePassed = bound(timePassed, 1 days, 365 days);
+        deposit = bound(deposit, 100e6, 1_000_000_000e6);
+        // Cap yield to 10,000% APR
+        {
+            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
+            // Floor yield above 0.01% APR
+            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
+            yield = bound(yield, yieldLowerBound, yieldUpperBound);
+        }
+
+        cellar.setPerformanceFee(0);
+        (
+            ,
+            uint64 strategistPerformanceCut,
+            uint64 strategistPlatformCut,
+            uint64 platformFee,
+            uint64 performanceFee,
+            ,
+
+        ) = cellar.feeData();
+
+        uint256 assetAmount = deposit / 2;
+        uint256 sharesAmount = assetAmount.changeDecimals(6, 18);
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), deposit);
+
+        // Deposit into cellar.
+        cellar.deposit(assetAmount, address(this));
+        // Mint shares from the cellar.
+        cellar.mint(sharesAmount, address(this));
+
+        (uint256 highWatermark, , , , , , ) = cellar.feeData();
+        assertEq(highWatermark, cellar.totalAssets(), "High watermark should equal totalAssets.");
+
+        // Advance time by `timePassed` seconds.
+        skip(timePassed);
+
+        // Simulate Cellar earning yield.
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
+
+        cellar.sendFees();
+
+        // Redeem all shares from the cellar.
+        uint256 shares = cellar.balanceOf(address(this));
+        cellar.redeem(shares, address(this), address(this));
+
+        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
+
+        // Check that no fees are minted.
+        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
+        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
+            expectedPlatformFees,
+            2,
+            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected platform fees."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToStrategist,
+            expectedPlatformFees.mulWadDown(strategistPlatformCut),
+            2,
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut)."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos,
+            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut),
+            2,
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut))."
+        );
+
+        assertApproxEqAbs(
+            cellar.previewRedeem(cellar.balanceOf(address(cellar))),
+            0,
+            1,
+            "Cellar fee shares should be redeemable for zero assets."
+        );
+    }
+
     function testPlatformAndPerformanceFeesWithZeroFees(
         uint256 timePassed,
         uint256 deposit,
@@ -1302,6 +1480,420 @@ contract CellarTest is Test {
         cellar.sendFees();
     }
 
+    //TODO test DOS if SP intentioanlly picks a massive amount of positions, and withdraw forloops fail, what is the max, then implement something to fix this
+    function testMalicousStrategistWithUnBoundForLoop() external {
+        // Cellar for loops are unbound by the size of `positions` array, figure out what the max size of the positions array can be,
+        // and add a check to make sure strategists can not perform a DOS attack on cellar users.
+    }
+
+    //TODO exit plans for positions(like if something depegs)
+
+    function testCellarAssetDepegs() external {
+        //
+    }
+
+    //TODO what about a cellar whose asset is WETH not USDC
+
+    function testAllFeesToStrategist(
+        uint256 timePassed,
+        uint256 deposit,
+        uint256 yield
+    ) external {
+        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        timePassed = bound(timePassed, 1 days, 365 days);
+        deposit = bound(deposit, 100e6, 1_000_000_000e6);
+        // Cap yield to 10,000% APR
+        {
+            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
+            // Floor yield above 0.01% APR
+            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
+            yield = bound(yield, yieldLowerBound, yieldUpperBound);
+        }
+
+        cellar.setStrategistPerformanceCut(1e18);
+        cellar.setStrategistPlatformCut(1e18);
+
+        (
+            ,
+            uint64 strategistPerformanceCut,
+            uint64 strategistPlatformCut,
+            uint64 platformFee,
+            uint64 performanceFee,
+            ,
+
+        ) = cellar.feeData();
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), deposit);
+
+        deal(address(USDC), address(cosmos), 0);
+
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
+
+        // Advance time by `timePassed` seconds.
+        skip(timePassed);
+
+        // Simulate Cellar earning yield.
+        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
+        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
+
+        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        cellar.sendFees();
+
+        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
+
+        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
+        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
+            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
+
+        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
+
+        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
+            expectedPlatformFees;
+
+        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
+        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
+            expectedTotalFeesAdjustedForDilution,
+            2,
+            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToStrategist,
+            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
+                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
+            2,
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos,
+            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
+                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
+            2,
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
+        );
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
+
+        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
+
+        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
+
+        assertEq(
+            highWatermarkAfterSendFees,
+            expectedHighWatermark,
+            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
+        );
+
+        vm.startPrank(strategist);
+        cellar.redeem(cellar.balanceOf(strategist), strategist, strategist);
+        vm.stopPrank();
+    }
+
+    function testAllFeesToPlatform(
+        uint256 timePassed,
+        uint256 deposit,
+        uint256 yield
+    ) external {
+        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        timePassed = bound(timePassed, 1 days, 365 days);
+        deposit = bound(deposit, 100e6, 1_000_000_000e6);
+        // Cap yield to 10,000% APR
+        {
+            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
+            // Floor yield above 0.01% APR
+            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
+            yield = bound(yield, yieldLowerBound, yieldUpperBound);
+        }
+
+        cellar.setStrategistPerformanceCut(0);
+        cellar.setStrategistPlatformCut(0);
+
+        (
+            ,
+            uint64 strategistPerformanceCut,
+            uint64 strategistPlatformCut,
+            uint64 platformFee,
+            uint64 performanceFee,
+            ,
+
+        ) = cellar.feeData();
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), deposit);
+
+        deal(address(USDC), address(cosmos), 0);
+
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
+
+        // Advance time by `timePassed` seconds.
+        skip(timePassed);
+
+        // Simulate Cellar earning yield.
+        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
+        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
+
+        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        cellar.sendFees();
+
+        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
+
+        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
+        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
+            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
+
+        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
+
+        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
+            expectedPlatformFees;
+
+        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
+        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
+            expectedTotalFeesAdjustedForDilution,
+            2,
+            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToStrategist,
+            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
+                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
+            2,
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos,
+            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
+                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
+            2,
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
+        );
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
+
+        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
+
+        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
+
+        assertEq(
+            highWatermarkAfterSendFees,
+            expectedHighWatermark,
+            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
+        );
+    }
+
+    function testPerformanceFeesToStrategistPlatformFeesToPlatform(
+        uint256 timePassed,
+        uint256 deposit,
+        uint256 yield
+    ) external {
+        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        timePassed = bound(timePassed, 1 days, 365 days);
+        deposit = bound(deposit, 100e6, 1_000_000_000e6);
+        // Cap yield to 10,000% APR
+        {
+            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
+            // Floor yield above 0.01% APR
+            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
+            yield = bound(yield, yieldLowerBound, yieldUpperBound);
+        }
+
+        cellar.setStrategistPerformanceCut(1e18);
+        cellar.setStrategistPlatformCut(0);
+
+        (
+            ,
+            uint64 strategistPerformanceCut,
+            uint64 strategistPlatformCut,
+            uint64 platformFee,
+            uint64 performanceFee,
+            ,
+
+        ) = cellar.feeData();
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), deposit);
+
+        deal(address(USDC), address(cosmos), 0);
+
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
+
+        // Advance time by `timePassed` seconds.
+        skip(timePassed);
+
+        // Simulate Cellar earning yield.
+        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
+        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
+
+        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        cellar.sendFees();
+
+        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
+
+        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
+        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
+            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
+
+        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
+
+        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
+            expectedPlatformFees;
+
+        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
+        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
+            expectedTotalFeesAdjustedForDilution,
+            2,
+            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToStrategist,
+            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
+                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
+            2,
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos,
+            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
+                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
+            2,
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
+        );
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
+
+        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
+
+        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
+
+        assertEq(
+            highWatermarkAfterSendFees,
+            expectedHighWatermark,
+            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
+        );
+
+        vm.startPrank(strategist);
+        cellar.redeem(cellar.balanceOf(strategist), strategist, strategist);
+        vm.stopPrank();
+    }
+
+    function testPlatformFeesToStrategistPerformanceFeesToPlatform(
+        uint256 timePassed,
+        uint256 deposit,
+        uint256 yield
+    ) external {
+        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        timePassed = bound(timePassed, 1 days, 365 days);
+        deposit = bound(deposit, 100e6, 1_000_000_000e6);
+        // Cap yield to 10,000% APR
+        {
+            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
+            // Floor yield above 0.01% APR
+            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
+            yield = bound(yield, yieldLowerBound, yieldUpperBound);
+        }
+
+        cellar.setStrategistPerformanceCut(0);
+        cellar.setStrategistPlatformCut(1e18);
+
+        (
+            ,
+            uint64 strategistPerformanceCut,
+            uint64 strategistPlatformCut,
+            uint64 platformFee,
+            uint64 performanceFee,
+            ,
+
+        ) = cellar.feeData();
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), deposit);
+
+        deal(address(USDC), address(cosmos), 0);
+
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
+
+        // Advance time by `timePassed` seconds.
+        skip(timePassed);
+
+        // Simulate Cellar earning yield.
+        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
+        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
+
+        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        cellar.sendFees();
+
+        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
+
+        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
+        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
+            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
+
+        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
+
+        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
+            expectedPlatformFees;
+
+        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
+        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
+            expectedTotalFeesAdjustedForDilution,
+            2,
+            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToStrategist,
+            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
+                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
+            2,
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
+        );
+
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos,
+            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
+                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
+            2,
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
+        );
+
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
+
+        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
+
+        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
+
+        assertEq(
+            highWatermarkAfterSendFees,
+            expectedHighWatermark,
+            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
+        );
+
+        vm.startPrank(strategist);
+        cellar.redeem(cellar.balanceOf(strategist), strategist, strategist);
+        vm.stopPrank();
+    }
+
     // ======================================== INTEGRATION TESTS ========================================
     uint256 public saltIndex;
 
@@ -1359,7 +1951,7 @@ contract CellarTest is Test {
             assertApproxEqAbs(
                 cellar.previewDeposit(amountOfAssets),
                 shares = cellar.deposit(amountOfAssets, user),
-                3,
+                200,
                 "Deposit should be equal to previewDeposit"
             );
         } else if (action == Action.WITHDRAW) {
@@ -1375,7 +1967,7 @@ contract CellarTest is Test {
             assertApproxEqAbs(
                 cellar.previewMint(amountOfShares),
                 assets = cellar.mint(amountOfShares, user),
-                3,
+                1,
                 "Mint should be equal to previewMint"
             );
         } else if (action == Action.REDEEM) {
@@ -1383,7 +1975,7 @@ contract CellarTest is Test {
             assertApproxEqAbs(
                 cellar.previewRedeem(amountOfShares),
                 assets = cellar.redeem(amountOfShares, user, user),
-                10,
+                1,
                 "Redeem should be equal to previewRedeem"
             );
         }
@@ -1437,7 +2029,6 @@ contract CellarTest is Test {
             address strategistPayoutAddress
         ) = cellar.feeData();
 
-        // Fees sent to Cosmos are transferred to this address, zero out it's balance to easily find fees sent to Cosmos.
         uint256 cellarTotalAssets = cellar.totalAssets();
         uint256 feesInAssetsSentToCosmos;
         uint256 feesInAssetsSentToStrategist;
@@ -1487,9 +2078,74 @@ contract CellarTest is Test {
         );
     }
 
-    //TODO Better manage state so that test can be more reliable.
-    function testMultipleMintDepositRedeemWithdrawWithGainsLossAndSendFees(uint8 salt) external {
+    /** @notice Calcualtes the minimum assets required to complete sendFees call.
+     *
+     */
+    function previewAssetMinimumsForSendFee(
+        Cellar cellar,
+        uint256 amountOfTimeToPass,
+        uint256 yieldEarned
+    ) public view returns (uint256 assetReq) {
+        (
+            ,
+            uint64 strategistPerformanceCut,
+            uint64 strategistPlatformCut,
+            uint64 platformFee,
+            uint64 performanceFee,
+            ,
+            address strategistPayoutAddress
+        ) = cellar.feeData();
+
+        uint256 expectedPerformanceFeeInAssets;
+        uint256 expectedPlatformFeeInAssets;
+        uint256 cellarTotalAssets = cellar.totalAssets();
+        // Check if Performance Fees should have been minted.
+        if (yieldEarned > 0) {
+            expectedPerformanceFeeInAssets = yieldEarned.mulWadDown(performanceFee);
+            // When platform fee shares are minted all shares are diluted in value.
+            // Account for share dilution.
+            expectedPerformanceFeeInAssets =
+                (expectedPerformanceFeeInAssets * ((1e18 - (platformFee * amountOfTimeToPass) / 365 days))) /
+                1e18;
+        }
+        expectedPlatformFeeInAssets = (cellarTotalAssets * platformFee * amountOfTimeToPass) / (365 days * 1e18);
+
+        assetReq =
+            expectedPlatformFeeInAssets.mulWadDown(1e18 - strategistPlatformCut) +
+            expectedPerformanceFeeInAssets.mulWadDown(1e18 - strategistPerformanceCut) +
+            1e6;
+    }
+
+    function ensureEnoughAssetsToCoverSendFees(
+        Cellar cellar,
+        uint256 amountOfTimeToPass,
+        uint256 yieldEarned,
+        ERC20 assetToTakeFrom
+    ) public {
+        {
+            ERC20 asset = cellar.asset();
+            uint256 assetsReq = previewAssetMinimumsForSendFee(cellar, amountOfTimeToPass, yieldEarned);
+            uint256 cellarAssetBalance = asset.balanceOf(address(cellar));
+            if (assetsReq > cellarAssetBalance) {
+                // Mint cellar enough asset to cover sendFees.
+                uint256 totalAssets = cellar.totalAssets();
+
+                // Remove added value from assetToTakeFrom position to preserve totalAssets().
+                assetsReq = assetsReq - cellarAssetBalance;
+                uint256 remove = priceRouter.getValue(asset, assetsReq, assetToTakeFrom);
+                deal(address(assetToTakeFrom), address(cellar), assetToTakeFrom.balanceOf(address(cellar)) - remove);
+
+                deal(address(asset), address(cellar), cellarAssetBalance + totalAssets - cellar.totalAssets());
+                assertEq(totalAssets, cellar.totalAssets(), "Function should not change the totalAssets.");
+            }
+        }
+    }
+
+    //TODO check that trying to withdraw more assets than what is in the cellar fails.
+
+    function testMultipleMintDepositRedeemWithdrawWithGainsLossAndSendFees(uint256 salt) external {
         //salt = 154;
+        //salt = 114;
         // Initialize users.
         address alice = vm.addr(1);
         address bob = vm.addr(2);
@@ -1595,6 +2251,7 @@ contract CellarTest is Test {
             // Swap 40% of Cellars USDC for WBTC.
             _rebalance(assetManagementCellar, USDC, WBTC, usdcToSell);
         }
+        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 7 days, 0);
 
         // WBTC price increases enough to create yield, Mary joins the cellar, and sendFees is called.
@@ -1628,17 +2285,14 @@ contract CellarTest is Test {
         }
         {
             uint256 amount = mutate(salt) * 1e6;
-            //uint256 amount = 100e6;
             uint256 shares;
             uint256 assets;
             (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            console.log("Amount", amount);
-            console.log("HOWDY");
+
             // Mary joins cellar using deposit.
             yieldEarned = assetManagementCellar.totalAssets() - highWatermark;
             (assets, shares) = _userAction(assetManagementCellar, mary, Action.DEPOSIT, amount, 0);
             (highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            console.log("HOWDY");
             assertEq(
                 highWatermark,
                 assetManagementCellar.totalAssets(),
@@ -1650,6 +2304,7 @@ contract CellarTest is Test {
                 "Cellar should have been minted performance fees."
             );
         }
+        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, yieldEarned, WETH);
         _checkSendFees(assetManagementCellar, 7 days, yieldEarned);
 
         // Adjust fee variables, lower WBTC price but raise WETH price enough to create yield, rebalance all positions into WETH, Bob and Sam join cellar, and sendFees is called.
@@ -1688,14 +2343,11 @@ contract CellarTest is Test {
         }
         {
             // Bob enters cellar via Mint.
-            //uint256 amount = mutate(salt) * 1e6;
             uint256 shares = mutate(salt) * 1e18;
-            //uint256 amount = 100e6;
-            _rebalance(assetManagementCellar, WETH, USDC, WETH.balanceOf(address(assetManagementCellar)) / 10);
             uint256 totalAssets = assetManagementCellar.totalAssets();
-
             (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
             yieldEarned = totalAssets - highWatermark;
+
             deal(address(USDC), bob, type(uint256).max);
             (, shares) = _userAction(assetManagementCellar, bob, Action.MINT, 0, shares);
             deal(address(USDC), bob, 0);
@@ -1709,10 +2361,12 @@ contract CellarTest is Test {
                 "Performance Fees should not have been minted."
             );
 
+            ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, yieldEarned, WETH);
             _checkSendFees(assetManagementCellar, 21 days, yieldEarned);
         }
 
         // No yield was earned, and 28 days pass.
+        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 28 days, 0);
 
         // WETH price decreases, rebalance cellar so that USDC in Cellar can not cover Alice's redeem. Alice redeems shares, and call sendFees.
@@ -1735,12 +2389,40 @@ contract CellarTest is Test {
             uint256 shares = assetManagementCellar.balanceOf(alice);
             uint256 assets = assetManagementCellar.previewRedeem(shares);
 
-            // Rebalance Cellar so that it only has 10% of assets needed for Alice's Redeem.
-            uint256 amountToRebalance = USDC.balanceOf(address(assetManagementCellar)) - (assets / 10);
-            _rebalance(assetManagementCellar, USDC, WBTC, amountToRebalance);
+            // Manually rebalance Cellar so that it only has 10% of assets needed for Alice's Redeem.
+            {
+                uint256 targetUSDCBalance = assets / 10;
+                uint256 currentUSDCBalance = USDC.balanceOf(address(assetManagementCellar));
+                uint256 totalAssets = assetManagementCellar.totalAssets();
+                deal(address(USDC), address(assetManagementCellar), 0);
+                if (targetUSDCBalance > currentUSDCBalance) {
+                    // Need to move assets too USDC.
+                    uint256 wethToRemove = priceRouter.getValue(USDC, (targetUSDCBalance - currentUSDCBalance), WETH);
+                    deal(
+                        address(WETH),
+                        address(assetManagementCellar),
+                        WETH.balanceOf(address(assetManagementCellar)) - wethToRemove
+                    );
+                } else if (targetUSDCBalance < currentUSDCBalance) {
+                    // Need to move assets from USDC.
+                    uint256 wethToAdd = priceRouter.getValue(USDC, (currentUSDCBalance - targetUSDCBalance), WETH);
+                    deal(
+                        address(WETH),
+                        address(assetManagementCellar),
+                        WETH.balanceOf(address(assetManagementCellar)) + wethToAdd
+                    );
+                }
+                // Give cellar target USDC Balance such that total assets remains unchanged.
+                deal(address(USDC), address(assetManagementCellar), totalAssets - assetManagementCellar.totalAssets());
 
-            uint256 assetsForShares = (assetManagementCellar.totalAssets() * shares) /
-                assetManagementCellar.totalSupply();
+                assertEq(
+                    assetManagementCellar.totalAssets(),
+                    totalAssets,
+                    "Cellar total assets should not be changed."
+                );
+            }
+
+            uint256 assetsForShares = assetManagementCellar.convertToAssets(shares);
 
             // Set Alice's USDC balance to zero to avoid overflow on transfer.
             deal(address(USDC), alice, 0);
@@ -1758,11 +2440,9 @@ contract CellarTest is Test {
                 assetManagementCellar.balanceOf(address(assetManagementCellar)) == 0,
                 "Cellar should have zero performance fees minted."
             );
-
-            // Strategist rebalances some WETH into USDC to cover `sendFees`.
-            amountToRebalance = WETH.balanceOf(address(assetManagementCellar)) / 10;
-            _rebalance(assetManagementCellar, WETH, USDC, amountToRebalance);
         }
+
+        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 7 days, 0);
 
         // Alice rejoins cellar, call sendFees.
@@ -1772,7 +2452,12 @@ contract CellarTest is Test {
             deal(address(USDC), alice, assetManagementCellar.previewMint(sharesToMint));
             _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToMint);
         }
+
+        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 1 days, 0);
+
+        // Rebalance cellar to move assets from WETH to WBTC.
+        _rebalance(assetManagementCellar, WETH, WBTC, WETH.balanceOf(address(assetManagementCellar)) / 2);
 
         // Reset high watermark.
         (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
@@ -1799,6 +2484,8 @@ contract CellarTest is Test {
         totalAssets = assetManagementCellar.totalAssets();
         assertTrue(totalAssets > highWatermark, "Total Assets should be greater than high watermark.");
         yieldEarned = totalAssets - highWatermark;
+
+        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 14 days, yieldEarned, WETH);
         _checkSendFees(assetManagementCellar, 14 days, yieldEarned);
         //===============================================================
 
@@ -1826,6 +2513,7 @@ contract CellarTest is Test {
         (highWatermark, , , , , , ) = assetManagementCellar.feeData();
         totalAssets = assetManagementCellar.totalAssets();
         assertTrue(totalAssets < highWatermark, "Total Assets should be less than high watermark.");
+        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 7 days, 0);
 
         {
@@ -1850,27 +2538,30 @@ contract CellarTest is Test {
         _userAction(assetManagementCellar, strategist, Action.REDEEM, 0, assetManagementCellar.balanceOf(strategist));
 
         assertEq(assetManagementCellar.totalSupply(), 0, "All cellar shares should be burned.");
+        assertEq(assetManagementCellar.totalAssets(), 0, "All cellar assets should be removed.");
 
-        //Have everyone join with the same amount of shares.
-        uint256 sharesToJoinWith = 250e18;
-        uint256 assetsNeeded = assetManagementCellar.previewMint(sharesToJoinWith);
+        //Have everyone join with the same amount of assets.
+        uint256 assetsNeeded = mutate(salt) * 1e6;
+        uint256 sharesToJoinWith = assetManagementCellar.convertToShares(assetsNeeded);
+
         deal(address(USDC), alice, assetsNeeded);
         deal(address(WETH), alice, 0);
         deal(address(WBTC), alice, 0);
-        _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToJoinWith);
+        _userAction(assetManagementCellar, alice, Action.DEPOSIT, assetsNeeded, 0);
         deal(address(USDC), bob, assetsNeeded);
         deal(address(WBTC), bob, 0);
         deal(address(WETH), bob, 0);
-        _userAction(assetManagementCellar, bob, Action.MINT, 0, sharesToJoinWith);
+        _userAction(assetManagementCellar, bob, Action.DEPOSIT, assetsNeeded, 0);
         deal(address(USDC), sam, assetsNeeded);
         deal(address(WBTC), sam, 0);
         deal(address(WETH), sam, 0);
-        _userAction(assetManagementCellar, sam, Action.MINT, 0, sharesToJoinWith);
+        _userAction(assetManagementCellar, sam, Action.DEPOSIT, assetsNeeded, 0);
         deal(address(USDC), mary, assetsNeeded);
         deal(address(WBTC), mary, 0);
         deal(address(WETH), mary, 0);
-        _userAction(assetManagementCellar, mary, Action.MINT, 0, sharesToJoinWith);
-        //shutdown cellar
+        _userAction(assetManagementCellar, mary, Action.DEPOSIT, assetsNeeded, 0);
+
+        // Shutdown the cellar.
         assetManagementCellar.initiateShutdown();
 
         /// @dev At this point we know all 4 cellar users have 25% of the shares each.
@@ -1878,32 +2569,34 @@ contract CellarTest is Test {
         // Manually rebalance assets like so LINK/WETH/WBTC/USDC 0/10/0/90.
         deal(address(LINK), address(assetManagementCellar), 0);
         deal(address(WBTC), address(assetManagementCellar), 0);
-        deal(address(USDC), address(assetManagementCellar), 900e6);
-        deal(address(WETH), address(assetManagementCellar), 0.1e18);
+        deal(address(USDC), address(assetManagementCellar), (4 * assetsNeeded).mulDivDown(9, 10));
+        deal(address(WETH), address(assetManagementCellar), ((4 * assetsNeeded) / 10000).changeDecimals(6, 18));
 
         // Have Alice exit using withdraw.
-        _userAction(assetManagementCellar, alice, Action.WITHDRAW, 250e6, 0);
+        _userAction(assetManagementCellar, alice, Action.WITHDRAW, assetsNeeded, 0);
 
         // Have Bob exit using redeem.
-        _userAction(assetManagementCellar, bob, Action.REDEEM, 0, 250e18);
+        _userAction(assetManagementCellar, bob, Action.REDEEM, 0, sharesToJoinWith);
 
         // Rebalance asses like so LINK/WETH/WBTC/USDC 0/10/45/45
         deal(address(LINK), address(assetManagementCellar), 0);
-        deal(address(WBTC), address(assetManagementCellar), 0.0225e8);
-        deal(address(USDC), address(assetManagementCellar), 225e6);
-        deal(address(WETH), address(assetManagementCellar), 0.05e18);
+        // Set WBTC balance in cellar to equal 45% of the cellars total assets.
+        deal(address(WBTC), address(assetManagementCellar), ((2 * assetsNeeded * 45) / 1000000).changeDecimals(6, 8));
+        deal(address(USDC), address(assetManagementCellar), (2 * assetsNeeded).mulDivDown(1, 10));
+        // Set WETH balance in cellar to equal 45% of the cellars total assets.
+        deal(address(WETH), address(assetManagementCellar), ((2 * assetsNeeded * 45) / 100000).changeDecimals(6, 18));
 
         // Change to withdraw in proportion
         assetManagementCellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
 
         // Have Sam exit using withdraw.
-        _userAction(assetManagementCellar, sam, Action.WITHDRAW, 250e6, 0);
+        _userAction(assetManagementCellar, sam, Action.WITHDRAW, assetsNeeded, 0);
 
         // Have Mary exit using redeem.
-        _userAction(assetManagementCellar, mary, Action.REDEEM, 0, 250e18);
+        _userAction(assetManagementCellar, mary, Action.REDEEM, 0, sharesToJoinWith);
 
         // The total value we expect each user to have after redeeming their shares.
-        uint256 expectedValue = 250e6;
+        uint256 expectedValue = assetsNeeded;
 
         // Alice should have some WETH and USDC.
         {
@@ -1977,17 +2670,5 @@ contract CellarTest is Test {
                 "Mary's USDC, WETH, and WBTC worth should equal expectedValue."
             );
         }
-    }
-
-    //TODO test DOS if SP intentioanlly picks a massive amount of positions, and withdraw forloops fail, what is the max, then implement something to fix this
-    function testMalicousStrategistWithUnBoundForLoop() external {
-        // Cellar for loops are unbound by the size of `positions` array, figure out what the max size of the positions array can be,
-        // and add a check to make sure strategists can not perform a DOS attack on cellar users.
-    }
-
-    //TODO exit plans for positions(like if something depegs)
-
-    function testCellarAssetDepegs() external {
-        //
     }
 }
