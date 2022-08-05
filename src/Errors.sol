@@ -306,6 +306,11 @@ error STATE_WrongSwapParams();
  */
 error STATE_RemoveHoldingPosition();
 
+/**
+ * @notice Attempted to remove holding position.
+ */
+error STATE_PositionArrayFull();
+
 // ========================================== INPUT ERRORS ===========================================
 /**
  * @notice Attempted to change strategist fee cut with invalid value.

@@ -1452,10 +1452,67 @@ contract CellarTest is Test {
         cellar.sendFees();
     }
 
-    //TODO test DOS if SP intentioanlly picks a massive amount of positions, and withdraw forloops fail, what is the max, then implement something to fix this
-    function testMalicousStrategistWithUnBoundForLoop() external {
-        // Cellar for loops are unbound by the size of `positions` array, figure out what the max size of the positions array can be,
-        // and add a check to make sure strategists can not perform a DOS attack on cellar users.
+    //TODO
+    // Talk with SC homies about this. Technically if an SP had 32 positions, and evenly spread TVL over all 32 positions,
+    // if someone tried to redeem all the shares, they would use ALOT more gas than is used in this test, though I would guesstimate that would still be less than 5M
+    function testMaliciousStrategistWithUnBoundForLoop() external {
+        // Initialize test Cellar.
+        MockCellar multiPositionCellar;
+        {
+            // Create new cellar with WETH, USDC, and WBTC positions.
+            address[] memory positions = new address[](1);
+            positions[0] = address(USDC);
+
+            Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](1);
+            positionTypes[0] = Cellar.PositionType.ERC20;
+
+            multiPositionCellar = new MockCellar(
+                registry,
+                USDC,
+                positions,
+                positionTypes,
+                address(USDC),
+                Cellar.WithdrawType.ORDERLY,
+                "Asset Management Cellar LP Token",
+                "assetmanagement-CLR",
+                strategist
+            );
+        }
+
+        MockERC20 position;
+        for (uint256 i = 1; i < 32; i++) {
+            position = new MockERC20("Howdy", 18);
+            multiPositionCellar.trustPosition(address(position), Cellar.PositionType.ERC20);
+            multiPositionCellar.pushPosition(address(position));
+        }
+
+        assertEq(multiPositionCellar.getPositions().length, 32, "Cellar should have 32 positions.");
+
+        // Adding one more position should revert.
+        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_PositionArrayFull.selector)));
+        multiPositionCellar.addPosition(32, vm.addr(777));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_PositionArrayFull.selector)));
+        multiPositionCellar.pushPosition(vm.addr(777));
+
+        // Check that users can still interact with the cellar even at max positions size.
+        deal(address(USDC), address(this), 100e6);
+        USDC.approve(address(multiPositionCellar), 100e6);
+        uint256 gas = gasleft();
+        multiPositionCellar.deposit(100e6, address(this));
+        uint256 remainingGas = gasleft();
+        assertTrue(
+            (gas - remainingGas) < 500_000,
+            "Gas used on deposit should be comfortably less than the block gas limit."
+        );
+
+        gas = gasleft();
+        multiPositionCellar.withdraw(100e6, address(this), address(this));
+        remainingGas = gasleft();
+        assertTrue(
+            (gas - remainingGas) < 500_000,
+            "Gas used on withdraw should be comfortably less than the block gas limit."
+        );
     }
 
     //TODO what about a cellar whose asset is WETH not USDC

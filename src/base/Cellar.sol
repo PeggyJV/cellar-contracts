@@ -96,12 +96,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
         return positions;
     }
 
+    uint8 public constant MAX_POSITIONS = 32;
+
     /**
      * @notice Insert a trusted position to the list of positions used by the cellar at a given index.
      * @param index index at which to insert the position
      * @param position address of position to add
      */
     function addPosition(uint256 index, address position) external onlyOwner whenNotShutdown {
+        if (positions.length >= MAX_POSITIONS) revert STATE_PositionArrayFull();
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Check if position is already being used.
@@ -121,6 +124,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of position to add
      */
     function pushPosition(address position) external onlyOwner whenNotShutdown {
+        if (positions.length >= MAX_POSITIONS) revert STATE_PositionArrayFull();
         if (!isTrusted[position]) revert USR_UntrustedPosition(position);
 
         // Check if position is already being used.
