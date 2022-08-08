@@ -145,9 +145,6 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
   },
-  contractSizer: {
-    only: ["AaveV2StablecoinCellar.sol"],
-  },
   gasReporter: {
     currency: "USD",
     enabled: process.env.REPORT_GAS ? true : false,
