@@ -28,7 +28,7 @@ abstract contract SwapRouterTest is Test {
     ERC20 internal DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 internal USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 
-    function setUp() public virtual {
+    function setUp() public {
         /// @dev When adding a new exchange for the swap router to support, make
         ///      sure to update this.
         swapRouter = new SwapRouter(UniswapV2Router(uniV2Router), UniswapV3Router(uniV3Router));
@@ -60,36 +60,31 @@ abstract contract SwapRouterTest is Test {
 
     // ==================================== SWAP TEST ====================================
 
-    function testSingleSwap(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint72).max);
-
-        // Sender executes swap from DAI -> WETH which is received by receiver.
+    function _testSwap(uint256 assets, function(uint256) internal returns (uint256) _swap) internal {
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        uint256 received = _doSwap(assets);
+        uint256 received = _swap(assets);
 
         // Estimate approximate amount that should of been received.
         uint256 expectedReceived = priceRouter.getValue(DAI, assets, WETH);
 
         assertEq(DAI.balanceOf(sender), 0, "Should have swapped all DAI");
+        assertEq(DAI.balanceOf(address(swapRouter)), 0, "Router should not have a DAI balance.");
+        assertEq(USDC.balanceOf(address(swapRouter)), 0, "Router should not have a USDC balance.");
         assertApproxEqRel(WETH.balanceOf(receiver), expectedReceived, 0.05e18, "Should have received USDC");
         assertEq(received, WETH.balanceOf(receiver), "Should return correct amount received");
+    }
+
+    function testSingleSwap(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint72).max);
+
+        _testSwap(assets, _doSwap);
     }
 
     function testMultiSwap(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
-        // Sender executes multi-swap from DAI -> USDC -> WETH which is received by receiver.
-        deal(address(DAI), sender, assets, true);
-        DAI.approve(address(swapRouter), assets);
-        uint256 received = _doMultiSwap(assets);
-
-        // Estimate approximate amount that should of been received.
-        uint256 expectedReceived = priceRouter.getValue(DAI, assets, WETH);
-
-        assertEq(DAI.balanceOf(sender), 0, "Should have swapped all DAI");
-        assertApproxEqRel(WETH.balanceOf(receiver), expectedReceived, 0.05e18, "Should have received USDC");
-        assertEq(received, WETH.balanceOf(receiver), "Should return correct amount received");
+        _testSwap(assets, _doMultiSwap);
     }
 
     function testFailSwapWithoutEnoughAssets() external {
