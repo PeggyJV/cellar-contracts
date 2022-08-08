@@ -10,6 +10,8 @@ import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 
+import { Test, console } from "@forge-std/Test.sol";
+
 import "src/Errors.sol";
 
 contract ChainlinkPriceFeedAdaptor {
@@ -34,6 +36,8 @@ contract ChainlinkPriceFeedAdaptor {
         ) {
             price = _price.toUint256();
             timestamp = _timestamp;
+
+            console.log("Found USD Price", address(asset), price);
         } catch {
             // If we can't find the USD price, then try the ETH price.
             try feedRegistry.latestRoundData(address(asset), Denominations.ETH) returns (
@@ -46,6 +50,8 @@ contract ChainlinkPriceFeedAdaptor {
                 // Change quote from ETH to USD.
                 price = _price.toUint256().mulWadDown(_getExchangeRateFromETHToUSD());
                 timestamp = _timestamp;
+
+                // console.log("Found ETH Price", address(asset), price);
             } catch {
                 revert STATE_PriceNotAvailable(address(asset));
             }
