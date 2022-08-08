@@ -3,6 +3,8 @@ pragma solidity 0.8.15;
 
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
+import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 
@@ -13,6 +15,8 @@ contract SwapRouterTest is Test {
     using Math for uint256;
 
     SwapRouter private swapRouter;
+    // Used to estimate the amount that should be received from swaps.
+    PriceRouter private priceRouter;
 
     uint256 private constant privateKey0 = 0xABCD;
     uint256 private constant privateKey1 = 0xBEEF;
@@ -28,108 +32,115 @@ contract SwapRouterTest is Test {
 
     function setUp() public {
         swapRouter = new SwapRouter(UniswapV2Router(uniV2Router), UniswapV3Router(uniV3Router));
+        priceRouter = new PriceRouter();
+
+        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, 0);
+        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0);
+        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 0, 0);
 
         vm.startPrank(sender);
     }
 
-    // ======================================= SWAP TESTS =======================================
+    // ================================ UNISWAP V2 TEST ================================
 
-    function testSimplePathSwapV2(uint256 assets) external {
-        // Ignore if not on mainnet.
-        if (block.chainid != 1) return;
-
+    function testSingleSwapUsingUniswapV2(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
-        // Specify the swap path.
+        // Specify single swap path from DAI -> WETH.
         address[] memory path = new address[](2);
         path[0] = address(DAI);
         path[1] = address(WETH);
 
-        // Test swap.
+        // Test single swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, assets, 0);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
+        uint256 received = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
 
-        assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of receiver should be greater than 0");
-        assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
+        // Estimate approximate amount that should of been received.
+        uint256 expectedReceived = priceRouter.getValue(DAI, assets, WETH);
+
+        assertEq(DAI.balanceOf(sender), 0, "Should have swapped all DAI");
+        assertApproxEqRel(WETH.balanceOf(receiver), expectedReceived, 0.05e18, "Should have received USDC");
+        assertEq(received, WETH.balanceOf(receiver), "Should return correct amount received");
     }
 
-    function testMultiPathSwapV2(uint256 assets) external {
-        // Ignore if not on mainnet.
-        if (block.chainid != 1) return;
-
+    function testMultiSwapUsingUniswapV2(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
-        // Specify the swap path.
+        // Specify multi-swap path from DAI -> WETH -> USDC.
         address[] memory path = new address[](3);
         path[0] = address(DAI);
         path[1] = address(WETH);
         path[2] = address(USDC);
 
-        // Test swap.
+        // Test multi-swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, assets, 0);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
+        uint256 received = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
 
-        assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of receiver should be greater than 0");
-        assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
+        // Estimate approximate amount that should of been received.
+        uint256 expectedReceived = priceRouter.getValue(DAI, assets, USDC);
+
+        assertEq(DAI.balanceOf(sender), 0, "Should have swapped all DAI");
+        assertApproxEqRel(USDC.balanceOf(receiver), expectedReceived, 0.05e18, "Should have received USDC");
+        assertEq(received, USDC.balanceOf(receiver), "Should return correct amount received");
     }
 
-    function testSimplePathSwapV3(uint256 assets) external {
-        // Ignore if not on mainnet.
-        if (block.chainid != 1) return;
+    // ================================ UNISWAP V3 TEST ================================
 
+    function testSingleSwapUsingUniswapV3(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
-        // Specify the swap path.
+        // Specify single swap path from DAI -> WETH.
         address[] memory path = new address[](2);
         path[0] = address(DAI);
         path[1] = address(WETH);
 
-        // Specify the pool fee tiers to use for each swap, 0.3% for DAI <-> WETH.
+        // Specify fee tiers for each swap.
         uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = 3000;
+        poolFees[0] = 3000; // 0.3%
 
-        // Test swap.
+        // Test multi-swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, poolFees, assets, 0);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
+        uint256 received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
 
-        assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(WETH.balanceOf(receiver) > 0, "WETH Balance of receiver should be greater than 0");
-        assertEq(out, WETH.balanceOf(receiver), "Amount Out should equal WETH Balance of receiver");
+        // Estimate approximate amount that should of been received.
+        uint256 expectedReceived = priceRouter.getValue(DAI, assets, WETH);
+
+        assertEq(DAI.balanceOf(sender), 0, "Should have swapped all DAI");
+        assertApproxEqRel(WETH.balanceOf(receiver), expectedReceived, 0.05e18, "Should have received WETH");
+        assertEq(received, WETH.balanceOf(receiver), "Should return correct amount received");
     }
 
-    function testMultiPathSwapV3(uint256 assets) external {
-        // Ignore if not on mainnet.
-        if (block.chainid != 1) return;
-
+    function testMultiSwapUsingUniswapV3(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint72).max);
 
-        // Specify the swap path.
+        // Specify multi-swap path from DAI -> WETH -> USDC.
         address[] memory path = new address[](3);
         path[0] = address(DAI);
         path[1] = address(WETH);
         path[2] = address(USDC);
 
-        // Specify the pool fee tiers to use for each swap
+        // Specify fee tiers for each swap.
         uint24[] memory poolFees = new uint24[](2);
         poolFees[0] = 3000; // 0.3%
         poolFees[1] = 100; // 0.01%
 
-        // Test swap.
+        // Test multi-swap.
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
         bytes memory swapData = abi.encode(path, poolFees, assets, 0);
-        uint256 out = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
+        uint256 received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
 
-        assertTrue(DAI.balanceOf(sender) == 0, "DAI Balance of sender should be 0");
-        assertTrue(USDC.balanceOf(receiver) > 0, "USDC Balance of receiver should be greater than 0");
-        assertEq(out, USDC.balanceOf(receiver), "Amount Out should equal USDC Balance of receiver");
+        // Estimate approximate amount that should of been received.
+        uint256 expectedReceived = priceRouter.getValue(DAI, assets, USDC);
+
+        assertEq(DAI.balanceOf(sender), 0, "Should have swapped all DAI");
+        assertApproxEqRel(USDC.balanceOf(receiver), expectedReceived, 0.05e18, "Should have received USDC");
+        assertEq(received, USDC.balanceOf(receiver), "Should return correct amount received");
     }
 }
