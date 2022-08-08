@@ -1452,9 +1452,6 @@ contract CellarTest is Test {
         cellar.sendFees();
     }
 
-    //TODO
-    // Talk with SC homies about this. Technically if an SP had 32 positions, and evenly spread TVL over all 32 positions,
-    // if someone tried to redeem all the shares, they would use ALOT more gas than is used in this test, though I would guesstimate that would still be less than 5M
     function testMaliciousStrategistWithUnBoundForLoop() external {
         // Initialize test Cellar.
         MockCellar multiPositionCellar;
@@ -1512,6 +1509,32 @@ contract CellarTest is Test {
         assertTrue(
             (gas - remainingGas) < 500_000,
             "Gas used on withdraw should be comfortably less than the block gas limit."
+        );
+
+        // Now check a worst case scenario, Strategist maxes out positions, and evenly distributes funds to every position, then user withdraws.
+        deal(address(USDC), address(this), 32e6);
+        USDC.approve(address(multiPositionCellar), 32e6);
+        multiPositionCellar.deposit(32e6, address(this));
+
+        uint256 totalAssets = multiPositionCellar.totalAssets();
+
+        // Change the cellars USDC balance, so that we can deal cellar assets in other positions and not change the share price.
+        deal(address(USDC), address(multiPositionCellar), 1e6);
+
+        address[] memory positions = multiPositionCellar.getPositions();
+        for (uint256 i = 1; i < positions.length; i++) {
+            priceRouter.setExchangeRate(ERC20(positions[i]), USDC, 1e6);
+            deal(positions[i], address(multiPositionCellar), 1e18);
+        }
+
+        assertEq(multiPositionCellar.totalAssets(), totalAssets, "Cellar total assets should be unchanged.");
+
+        gas = gasleft();
+        multiPositionCellar.withdraw(32e6, address(this), address(this));
+        remainingGas = gasleft();
+        assertTrue(
+            (gas - remainingGas) < 1_200_000,
+            "Gas used on worst case scenario withdraw should be comfortably less than the block gas limit."
         );
     }
 
