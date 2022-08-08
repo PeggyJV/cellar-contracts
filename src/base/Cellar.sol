@@ -869,48 +869,44 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Used to more efficiently convert amount of shares to assets using a stored `totalAssets` value.
      */
     function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-        uint8 assetDecimals = asset.decimals();
-        uint256 totalAssetsNormalized = _totalAssets.changeDecimals(assetDecimals, 18);
+        uint256 totalShares = totalSupply;
 
-        assets = totalShares == 0 ? shares : shares.mulDivDown(totalAssetsNormalized, totalShares);
-        assets = assets.changeDecimals(18, assetDecimals);
+        assets = totalShares == 0
+            ? shares.changeDecimals(18, asset.decimals())
+            : shares.mulDivDown(_totalAssets, totalShares);
     }
 
     /**
      * @dev Used to more efficiently convert amount of assets to shares using a stored `totalAssets` value.
      */
     function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-        uint8 assetDecimals = asset.decimals();
-        uint256 assetsNormalized = assets.changeDecimals(assetDecimals, 18);
-        uint256 totalAssetsNormalized = _totalAssets.changeDecimals(assetDecimals, 18);
+        uint256 totalShares = totalSupply;
 
-        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivDown(totalShares, totalAssetsNormalized);
+        shares = totalShares == 0
+            ? assets.changeDecimals(asset.decimals(), 18)
+            : assets.mulDivDown(totalShares, _totalAssets);
     }
 
     /**
      * @dev Used to more efficiently simulate minting shares using a stored `totalAssets` value.
      */
     function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-        uint8 assetDecimals = asset.decimals();
-        uint256 totalAssetsNormalized = _totalAssets.changeDecimals(assetDecimals, 18);
+        uint256 totalShares = totalSupply;
 
-        assets = totalShares == 0 ? shares : shares.mulDivUp(totalAssetsNormalized, totalShares);
-        assets = assets.changeDecimals(18, assetDecimals);
+        assets = totalShares == 0
+            ? shares.changeDecimals(18, asset.decimals())
+            : shares.mulDivUp(_totalAssets, totalShares);
     }
 
     /**
      * @dev Used to more efficiently simulate withdrawing assets using a stored `totalAssets` value.
      */
     function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-        uint8 assetDecimals = asset.decimals();
-        uint256 assetsNormalized = assets.changeDecimals(assetDecimals, 18);
-        uint256 totalAssetsNormalized = _totalAssets.changeDecimals(assetDecimals, 18);
+        uint256 totalShares = totalSupply;
 
-        shares = totalShares == 0 ? assetsNormalized : assetsNormalized.mulDivUp(totalShares, totalAssetsNormalized);
+        shares = totalShares == 0
+            ? assets.changeDecimals(asset.decimals(), 18)
+            : assets.mulDivUp(totalShares, _totalAssets);
     }
 
     /**
