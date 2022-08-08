@@ -85,7 +85,7 @@ contract SwapRouter is Multicall {
                     revert(add(32, result), returndata_size)
                 }
             } else {
-                revert("Swap reverted.");
+                revert("Swap reverted");
             }
         }
 

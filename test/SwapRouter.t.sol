@@ -149,11 +149,11 @@ contract UniswapV3SwapRouterTest is SwapRouterTest {
         path[1] = address(USDC);
         path[2] = address(WETH);
 
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = 3000; // 0.3%
-        poolFees[1] = 100; // 0.01%
+        uint24[] memory poolFees = new uint24[](2);
+        poolFees[0] = 100; // 0.01%
+        poolFees[1] = 3000; // 0.3%
 
-        bytes memory swapData = abi.encode(path, assets, 0);
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
         received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
     }
 }
