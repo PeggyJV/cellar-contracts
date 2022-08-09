@@ -127,35 +127,6 @@ contract CellarTest is Test {
         WBTC.approve(address(cellar), type(uint256).max);
     }
 
-    // ============================================ HELPER FUNCTIONS ============================================
-
-    // For some reason `deal(address(position.asset()), address(position), assets)` isn't working at
-    // the time of writing but dealing to this address is. This is a workaround.
-    function simulateGains(address position, uint256 assets) internal {
-        ERC20 asset = ERC4626(position).asset();
-
-        deal(address(asset), address(this), assets);
-
-        asset.safeTransfer(position, assets);
-    }
-
-    function simulateLoss(address position, uint256 assets) internal {
-        ERC20 asset = ERC4626(position).asset();
-
-        vm.prank(position);
-        asset.approve(address(this), assets);
-
-        asset.safeTransferFrom(position, address(1), assets);
-    }
-
-    function sendToCosmos(
-        address asset,
-        bytes32,
-        uint256 assets
-    ) external {
-        ERC20(asset).transferFrom(msg.sender, cosmos, assets);
-    }
-
     // ========================================= INITIALIZATION TEST =========================================
 
     function testInitialization() external {
