@@ -13,8 +13,6 @@ import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
 
-import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
-
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
@@ -101,8 +99,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @notice Attempted to remove holding position.
+     * @param maxPositions maximum number of positions that can be used
      */
-    error Cellar__PositionArrayFull();
+    error Cellar__PositionArrayFull(uint256 maxPositions);
 
     /**
      * @notice Value specifying the interface a position uses.
@@ -146,7 +145,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of position to add
      */
     function addPosition(uint256 index, address position) external onlyOwner whenNotShutdown {
-        if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull();
+        if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
         if (!isTrusted[position]) revert Cellar__UntrustedPosition(position);
 
         // Check if position is already being used.
@@ -166,7 +165,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param position address of position to add
      */
     function pushPosition(address position) external onlyOwner whenNotShutdown {
-        if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull();
+        if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
         if (!isTrusted[position]) revert Cellar__UntrustedPosition(position);
 
         // Check if position is already being used.
@@ -299,18 +298,21 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Distrust position.
         isTrusted[position] = false;
 
-        // Only remove position if it is not being used, is empty, and if it is not the holding position.
+        // Only remove position if it is not being used, is empty, and if it is
+        // not the holding position.
         if (isPositionUsed[position]) {
             uint256 positionBalance = _balanceOf(position);
+
             if (positionBalance > 0) revert Cellar__PositionNotEmpty(position, positionBalance);
             if (position == holdingPosition) revert Cellar__RemoveHoldingPosition();
+
             positions.remove(position);
             isPositionUsed[position] = false;
         }
 
-        // NOTE: After position has been removed, SP should be notified on the UI that the position
-        //       can no longer be used and to exit the position or rebalance its assets into another
-        //       position ASAP.
+        // NOTE: After position has been removed, SP should be notified on the
+        //       UI that the position can no longer be used and to exit the position
+        //       or rebalance its assets into another position ASAP.
         emit TrustChanged(position, false);
     }
 
@@ -326,9 +328,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @notice The withdraw type to use for the cellar.
      * @param ORDERLY use `positions` in specify the order in which assets are withdrawn (eg.
-     *                `positions[0]` is withdrawn from first), least impactful position (position
+     *                `positions[0]` is withdrawn from first); least impactful positions (position
      *                that will have its core positions impacted the least by having funds removed)
-     *                should be first and most impactful position should be last
+     *                should be withdrawn from first and most impactful position should be last
      * @param PROPORTIONAL pull assets from each position proportionally when withdrawing, used if
      *                     trying to maintain a specific ratio
      */
@@ -923,6 +925,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         withdrawType == WithdrawType.ORDERLY
             ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
             : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
+
         afterWithdraw(assets, shares, receiver, owner);
     }
 
@@ -960,6 +963,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
                 amount = positionBalances[i];
                 assets = assets - totalPositionBalanceInAssets;
             }
+
             // Withdraw from position.
             _withdrawFrom(_positions[i], amount, receiver);
 
@@ -1161,6 +1165,15 @@ contract Cellar is ERC4626, Ownable, Multicall {
     // =========================================== POSITION LOGIC ===========================================
 
     /**
+     * @notice Emitted on rebalancing positions.
+     * @param fromPosition the address of the position rebalanced from
+     * @param toPosition the address of the position rebalanced to
+     * @param assetsFrom the amount of assets withdrawn from the position rebalanced from
+     * @param assetsTo the amount of assets desposited to the position rebalanced to
+     */
+    event Rebalance(address indexed fromPosition, address indexed toPosition, uint256 assetsFrom, uint256 assetsTo);
+
+    /**
      * @notice Move assets between positions. To move assets from/to this cellar's holdings, specify
      *         the address of this cellar as the `fromPosition`/`toPosition`.
      * @param fromPosition address of the position to move assets from
@@ -1187,6 +1200,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Deposit into position.
         _depositTo(toPosition, assetsTo);
+
+        emit Rebalance(fromPosition, toPosition, assetsFrom, assetsTo);
     }
 
     // ============================================ LIMITS LOGIC ============================================
@@ -1243,8 +1258,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @notice Emitted when High Watermark is reset.
+     * @param newHighWatermark new high watermark
      */
-    event HighWatermarkReset();
+    event HighWatermarkReset(uint256 newHighWatermark);
 
     /**
      * @notice Attempted to send fee shares to strategist payout address, when address is not set.
@@ -1256,14 +1272,16 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice This function can be abused by Strategists, so it should only be callable by governance.
      */
     function resetHighWatermark() external onlyOwner {
-        feeData.highWatermark = totalAssets();
-        emit HighWatermarkReset();
+        uint256 _totalAssets = totalAssets();
+        feeData.highWatermark = _totalAssets;
+
+        emit HighWatermarkReset(_totalAssets);
     }
 
     /**
      * @notice Calculates how many assets Strategist would earn performance fees
      * @param _totalAssets uint256 value of the total assets in the cellar
-     * @return feeInAssets amount of assets
+     * @return feeInAssets amount of assets to take as fees
      */
     function _previewPerformanceFees(uint256 _totalAssets) internal view returns (uint256 feeInAssets) {
         uint64 performanceFee = feeData.performanceFee;

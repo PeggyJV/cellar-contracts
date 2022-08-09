@@ -1575,10 +1575,10 @@ contract CellarTest is Test {
         assertEq(multiPositionCellar.getPositions().length, 32, "Cellar should have 32 positions.");
 
         // Adding one more position should revert.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(32))));
         multiPositionCellar.addPosition(32, vm.addr(777));
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(32))));
         multiPositionCellar.pushPosition(vm.addr(777));
 
         // Check that users can still interact with the cellar even at max positions size.
@@ -3392,4 +3392,16 @@ contract CellarTest is Test {
      * the fund protector contract, and trade their shares (from the depegged
      * cellar) for assets in the fund protector.
      */
+
+    // ========================================= GRAVITY FUNCTIONS =========================================
+
+    // Since this contract is set as the Gravity Bridge, this will be called by
+    // the Cellar's `sendFees` function to send funds Cosmos.
+    function sendToCosmos(
+        address asset,
+        bytes32,
+        uint256 assets
+    ) external {
+        ERC20(asset).transferFrom(msg.sender, cosmos, assets);
+    }
 }
