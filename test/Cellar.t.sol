@@ -3213,7 +3213,6 @@ contract CellarTest is Test {
         );
     }
 
-    //TODO can we rely on a pricefeed to get an accurate price data during a depeg event?
     function testDepeggedCellarAsset() external {
         // Scenario 4: Depegged asset is the cellars asset.
         // Worst case scenario, rebalance out of position into some new stable position, set fees to zero, initiate a shutdown, and have users withdraw funds asap.
