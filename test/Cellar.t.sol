@@ -3190,10 +3190,11 @@ contract CellarTest is Test {
         // Governance uses multicall to rebalance cellar out of position, set a new holding position, and distrust it.
 
         uint256 positionsLengthBefore = cellar.getPositions().length;
+        cellar.setHoldingPosition(address(usdcCLR));
         // Rebalance into usdcCLR.
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
-        cellar.rebalance(address(USDC), address(usdcCLR), 50e6, SwapRouter.Exchange.UNIV2, abi.encode(0)); // No swap is made because both positions use USDC.
+        cellar.rebalance(address(usdcCLR), address(USDC), 50e6, SwapRouter.Exchange.UNIV2, abi.encode(0)); // No swap is made because both positions use USDC.
 
         // usdcCLR depegs from USDC
         deal(address(USDC), address(usdcCLR), 45e6);
@@ -3201,8 +3202,15 @@ contract CellarTest is Test {
         assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
         assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
 
-        // Governance votes to rebalance out of usdcCLR, and distrust usdcCLR.
-        cellar.rebalance(address(usdcCLR), address(USDC), 45e6, SwapRouter.Exchange.UNIV2, abi.encode(0)); // No swap is made because both positions use USDC.
+        // Governance votes to rebalance out of usdcCLR, change the holding position, and distrust usdcCLR.
+        cellar.rebalance(
+            address(usdcCLR),
+            address(USDC),
+            usdcCLR.maxWithdraw(address(cellar)),
+            SwapRouter.Exchange.UNIV2,
+            abi.encode(0)
+        ); // No swap is made because both positions use USDC.
+        cellar.setHoldingPosition(address(USDC));
         cellar.distrustPosition(address(usdcCLR));
         assertTrue(!cellar.isTrusted(address(usdcCLR)), "Cellar should not trust usdcCLR.");
         assertTrue(!cellar.isPositionUsed(address(usdcCLR)), "Cellar should not be using usdcCLR.");
