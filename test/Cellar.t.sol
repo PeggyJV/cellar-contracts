@@ -3272,11 +3272,13 @@ contract CellarTest is Test {
         // of position, set a new holding position, and distrust it.
 
         uint256 positionsLengthBefore = cellar.getPositions().length;
-        // Rebalance into usdcCLR.
+        cellar.setHoldingPosition(address(usdcCLR));
+
+        // Rebalance into usdcCLR. No swap is made because both positions use
+        // USDC.
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
-        // No swap is made because both positions use USDC.
-        cellar.rebalance(address(USDC), address(usdcCLR), 50e6, SwapRouter.Exchange.UNIV2, abi.encode(0));
+        cellar.rebalance(address(usdcCLR), address(USDC), 50e6, SwapRouter.Exchange.UNIV2, abi.encode(0));
 
         // usdcCLR depeggs from USDC
         deal(address(USDC), address(usdcCLR), 45e6);
@@ -3284,9 +3286,17 @@ contract CellarTest is Test {
         assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
         assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
 
-        // Governance votes to rebalance out of usdcCLR, and distrust usdcCLR.
-        // No swap is made because both positions use USDC.
-        cellar.rebalance(address(usdcCLR), address(USDC), 45e6, SwapRouter.Exchange.UNIV2, abi.encode(0));
+        // Governance votes to rebalance out of usdcCLR, change the holding
+        // position, and distrust usdcCLR. No swap is made because both
+        // positions use USDC.
+        cellar.rebalance(
+            address(usdcCLR),
+            address(USDC),
+            usdcCLR.maxWithdraw(address(cellar)),
+            SwapRouter.Exchange.UNIV2,
+            abi.encode(0)
+        );
+        cellar.setHoldingPosition(address(USDC));
         cellar.distrustPosition(address(usdcCLR));
         assertFalse(cellar.isTrusted(address(usdcCLR)), "Cellar should not trust usdcCLR.");
         assertFalse(cellar.isPositionUsed(address(usdcCLR)), "Cellar should not be using usdcCLR.");
@@ -3297,7 +3307,6 @@ contract CellarTest is Test {
         );
     }
 
-    // TODO: Can we rely on a pricefeed to get an accurate price data during a depegging event?
     function testDepeggedCellarAsset() external {
         // Scenario 4: Depegged asset is the cellars asset. Worst case
         // scenario, rebalance out of position into some new stable position,
