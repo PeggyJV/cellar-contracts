@@ -131,9 +131,41 @@ contract CellarTest is Test {
 
     function testInitialization() external {
         assertEq(address(cellar.registry()), address(registry), "Should initialize registry to test registry.");
+
+        address[] memory expectedPositions = new address[](5);
+        expectedPositions[0] = address(USDC);
+        expectedPositions[1] = address(usdcCLR);
+        expectedPositions[2] = address(wethCLR);
+        expectedPositions[3] = address(wbtcCLR);
+        expectedPositions[4] = address(WETH);
+
+        Cellar.PositionType[] memory expectedPositionTypes = new Cellar.PositionType[](5);
+        expectedPositionTypes[0] = Cellar.PositionType.ERC20;
+        expectedPositionTypes[1] = Cellar.PositionType.ERC4626;
+        expectedPositionTypes[2] = Cellar.PositionType.ERC4626;
+        expectedPositionTypes[3] = Cellar.PositionType.ERC4626;
+        expectedPositionTypes[4] = Cellar.PositionType.ERC20;
+
+        address[] memory positions = cellar.getPositions();
+
         assertEq(cellar.getPositions().length, 5, "Position length should be 5.");
+
+        for (uint256 i; i < positions.length; i++) {
+            assertEq(positions[i], expectedPositions[i], "Position should be initialized in order.");
+            assertEq(
+                uint256(cellar.getPositionType(positions[i])),
+                uint256(expectedPositionTypes[i]),
+                "Position type should be initialized."
+            );
+        }
+
         assertEq(address(cellar.asset()), address(USDC), "Should initialize asset to be USDC.");
-        assertEq(cellar.holdingPosition(), address(USDC), "Should initializse holding position to be USDC.");
+        assertEq(cellar.holdingPosition(), address(USDC), "Should initialize holding position to be USDC.");
+        assertEq(
+            uint256(cellar.withdrawType()),
+            uint256(Cellar.WithdrawType.ORDERLY),
+            "Should initialize withdraw type."
+        );
         assertEq(
             cellar.lastAccrual(),
             uint64(block.timestamp),
@@ -163,6 +195,8 @@ contract CellarTest is Test {
 
         assertEq(cellar.liquidityLimit(), type(uint256).max, "Liquidity Limit should be max uint256.");
         assertEq(cellar.depositLimit(), type(uint256).max, "Deposit Limit should be max uint256.");
+
+        assertEq(cellar.owner(), address(this), "Should initialize owner to this contract.");
     }
 
     // ========================================= DEPOSIT/WITHDRAW TEST =========================================
@@ -173,6 +207,10 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), assets);
 
         (uint256 highWatermarkBeforeDeposit, , , , , , ) = cellar.feeData();
+
+        // Try depositing more assets than balance.
+        vm.expectRevert("TRANSFER_FROM_FAILED");
+        cellar.deposit(assets + 1, address(this));
 
         // Test single deposit.
         uint256 expectedShares = cellar.previewDeposit(assets);
@@ -194,6 +232,7 @@ contract CellarTest is Test {
         assertEq(cellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
         assertEq(cellar.totalAssets(), assets, "Should have updated total assets with assets deposited.");
         assertEq(cellar.balanceOf(address(this)), shares, "Should have updated user's share balance.");
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets, "Should return all user's assets.");
         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
@@ -218,6 +257,7 @@ contract CellarTest is Test {
 
         assertEq(cellar.totalAssets(), 0, "Should have updated total assets with assets withdrawn.");
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0, "Should return zero assets.");
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
     }
@@ -225,9 +265,14 @@ contract CellarTest is Test {
     function testMintAndRedeem(uint256 shares) external {
         shares = bound(shares, 1e18, type(uint112).max);
 
+        // Change decimals from the 18 used by shares to the 6 used by USDC.
         deal(address(USDC), address(this), shares.changeDecimals(18, 6));
 
         (uint256 highWatermarkBeforeMint, , , , , , ) = cellar.feeData();
+
+        // Try minting more assets than balance.
+        vm.expectRevert("TRANSFER_FROM_FAILED");
+        cellar.mint(shares + 1e18, address(this));
 
         // Test single mint.
         uint256 assets = cellar.mint(shares, address(this));
@@ -248,6 +293,7 @@ contract CellarTest is Test {
         assertEq(cellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
         assertEq(cellar.totalAssets(), assets, "Should have updated total assets with assets deposited.");
         assertEq(cellar.balanceOf(address(this)), shares, "Should have updated user's share balance.");
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets, "Should return all user's assets.");
         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
@@ -267,6 +313,7 @@ contract CellarTest is Test {
         );
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0, "Should return zero assets.");
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
     }
@@ -283,9 +330,12 @@ contract CellarTest is Test {
         uint256 shares = cellar.withdraw(32_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(shares, 32_000e18, "Should returned all redeemed shares.");
         assertEq(WETH.balanceOf(address(this)), 1e18, "Should have transferred position balance to user.");
         assertEq(WBTC.balanceOf(address(this)), 1e8, "Should have transferred position balance to user.");
+        assertEq(WETH.balanceOf(address(wethCLR)), 0, "Should have transferred balance from WETH position.");
+        assertEq(WBTC.balanceOf(address(wbtcCLR)), 0, "Should have transferred balance from BTC position.");
         assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
     }
 
@@ -304,9 +354,12 @@ contract CellarTest is Test {
         uint256 shares = cellar.withdraw(16_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(shares, 16_000e18, "Should returned all redeemed shares.");
         assertEq(WETH.balanceOf(address(this)), 0.5e18, "Should have transferred position balance to user.");
         assertEq(WBTC.balanceOf(address(this)), 0.5e8, "Should have transferred position balance to user.");
+        assertEq(WETH.balanceOf(address(wethCLR)), 0.5e18, "Should have transferred balance from WETH position.");
+        assertEq(WBTC.balanceOf(address(wbtcCLR)), 0.5e8, "Should have transferred balance from WBTC position.");
         assertEq(cellar.totalAssets(), 16_000e6, "Should have half of assets remaining in cellar.");
     }
 
@@ -330,6 +383,8 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
         assertEq(shares, 3000e18, "Should returned all redeemed shares.");
         assertEq(WETH.balanceOf(address(this)), 1.5e18, "Should have transferred position balance to user.");
+        assertEq(WETH.balanceOf(address(wethCLR)), 0, "Should have transferred balance from WETH cellar position.");
+        assertEq(WETH.balanceOf(address(wethVault)), 0, "Should have transferred balance from WETH vault position.");
         assertEq(cellar.totalAssets(), 0, "Should have no assets remaining in cellar.");
     }
 
@@ -345,7 +400,8 @@ contract CellarTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
         cellar.redeem(0, address(this), address(this));
 
-        // Because no assets are deposited, `_withdrawInOrder` for loop continues until it indexes out of the positions array.
+        // Because no assets are deposited, `_withdrawInOrder` for loop
+        // continues until it indexes out of the positions array.
         vm.expectRevert(bytes(stdError.indexOOBError));
         cellar.withdraw(0, address(this), address(this));
 
@@ -369,7 +425,7 @@ contract CellarTest is Test {
             "Cellar positions array should be equal to previous length minus 1."
         );
 
-        assertTrue(!cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be false for WETH.");
+        assertFalse(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be false for WETH.");
 
         // Check that `addPosition` actually adds it.
         cellar.addPosition(4, address(WETH));
@@ -381,7 +437,6 @@ contract CellarTest is Test {
         );
 
         assertEq(cellar.positions(4), address(WETH), "`positions[4]` should be WETH.");
-
         assertTrue(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be true for WETH.");
 
         // Check that `popPosition` actually removes it.
@@ -393,7 +448,7 @@ contract CellarTest is Test {
             "Cellar positions array should be equal to previous length minus 1."
         );
 
-        assertTrue(!cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be false for WETH.");
+        assertFalse(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be false for WETH.");
 
         // Check that `pushPosition` actually adds it.
         cellar.pushPosition(address(WETH));
@@ -405,7 +460,6 @@ contract CellarTest is Test {
         );
 
         assertEq(cellar.positions(4), address(WETH), "`positions[4]` should be WETH.");
-
         assertTrue(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be true for WETH.");
 
         // Check that `pushPosition` reverts if position is already used.
@@ -416,7 +470,7 @@ contract CellarTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionAlreadyUsed.selector, address(WETH))));
         cellar.addPosition(4, address(WETH));
 
-        // Give Cellar 1 wei of wETH.
+        // Give Cellar 1 wei of WETH.
         deal(address(WETH), address(cellar), 1);
 
         // Check that `removePosition` reverts if position has any funds in it.
@@ -465,7 +519,7 @@ contract CellarTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
         cellar.addPosition(4, address(0));
 
-        // Set Cellar wETH balance to 0.
+        // Set Cellar WETH balance to 0.
         deal(address(WETH), address(cellar), 0);
 
         // Check that `swapPosition` works as expected.
@@ -527,7 +581,7 @@ contract CellarTest is Test {
         );
 
         cellar.distrustPosition(newPosition);
-        assertTrue(!cellar.isTrusted(newPosition), "New position should not be trusted.");
+        assertFalse(cellar.isTrusted(newPosition), "New position should not be trusted.");
 
         // Check that distrusting a non empty position reverts.
         deal(address(USDC), address(cellar), 1);
@@ -550,7 +604,7 @@ contract CellarTest is Test {
 
     // ========================================== REBALANCE TEST ==========================================
 
-    function testRebalanceBetweenPositions(uint256 assets) external {
+    function testRebalanceBetweenCellarOrERC4626Positions(uint256 assets) external {
         assets = bound(assets, 1, type(uint72).max);
 
         cellar.depositIntoPosition(address(usdcCLR), assets);
@@ -558,6 +612,8 @@ contract CellarTest is Test {
         address[] memory path = new address[](2);
         path[0] = address(USDC);
         path[1] = address(WETH);
+
+        (uint256 highWatermarkBeforeRebalance, , , , , , ) = cellar.feeData();
 
         uint256 assetsTo = cellar.rebalance(
             address(usdcCLR),
@@ -567,6 +623,9 @@ contract CellarTest is Test {
             abi.encode(path, assets, 0, address(cellar), address(cellar))
         );
 
+        (uint256 highWatermarkAfterRebalance, , , , , , ) = cellar.feeData();
+
+        assertEq(highWatermarkBeforeRebalance, highWatermarkAfterRebalance, "Should not change highwatermark.");
         assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
         assertEq(usdcCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
         assertEq(wethCLR.balanceOf(address(cellar)), assetsTo, "Should have rebalanced to position.");
@@ -633,7 +692,8 @@ contract CellarTest is Test {
     function testRebalanceWithInvalidSwapAmount() external {
         uint256 assets = 100e6;
 
-        // Check that encoding the swap prarms with the wrong amount of assets reverts the rebalance call.
+        // Check that encoding the swap params with the wrong amount of assets
+        // reverts the rebalance call.
         uint256 invalidAssets = assets - 1;
 
         cellar.depositIntoPosition(address(usdcCLR), assets);
@@ -757,7 +817,6 @@ contract CellarTest is Test {
         // Hit global liquidity limit and deposit limit for other user.
         vm.startPrank(otherUser);
         deal(address(USDC), address(otherUser), amount * 2);
-        //USDC.mint(otherUser, amount * 2);
         USDC.approve(address(cellar), amount * 2);
         cellar.deposit(amount * 2, otherUser);
         vm.stopPrank();
@@ -884,13 +943,13 @@ contract CellarTest is Test {
             totalAssets,
             expectedTotalAssets,
             1,
-            "totalAssets should equal all asset values summed together."
+            "`totalAssets` should equal all asset values summed together."
         );
         (uint256 getDataTotalAssets, , , ) = cellar.getData();
-        assertEq(getDataTotalAssets, totalAssets, "getData totalAssets should be the same as cellar totalAssets.");
+        assertEq(getDataTotalAssets, totalAssets, "`getData` total assets should be the same as cellar `totalAssets`.");
     }
 
-    // =========================================== PERFORMANCE/PLATFORM FEE TEST ===========================================
+    // ====================================== PERFORMANCE/PLATFORM FEE TEST ======================================
 
     function testChangingFeeData() external {
         address newStrategistAddress = vm.addr(777);
@@ -1067,7 +1126,8 @@ contract CellarTest is Test {
     }
 
     function testPlatformFees(uint256 timePassed, uint256 deposit) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the
+        // order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 1e6, 1_000_000_000e6);
 
@@ -1084,7 +1144,8 @@ contract CellarTest is Test {
         // Advance time by `timePassed` seconds.
         skip(timePassed);
 
-        // Call `sendFees` to calculate pending platform fees, and distribute them to strategist, and Cosmos.
+        // Call `sendFees` to calculate pending platform fees, and distribute
+        // them to strategist, and Cosmos.
         cellar.sendFees();
 
         uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
@@ -1097,6 +1158,7 @@ contract CellarTest is Test {
         );
 
         uint256 expectedPlatformFeeInAssetsSentToStrategist = expectedPlatformFee.mulWadDown(strategistPlatformCut);
+
         // It is okay for actual fees sent to strategist to be equal to or 1 wei less than expected.
         assertTrue(
             feesInAssetsSentToStrategist == expectedPlatformFeeInAssetsSentToStrategist ||
@@ -1112,7 +1174,8 @@ contract CellarTest is Test {
         uint256 deposit,
         uint256 yield
     ) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the
+        // order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 100e6, 1_000_000_000e6);
         // Cap yield to 10,000% APR
@@ -1147,7 +1210,8 @@ contract CellarTest is Test {
         uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
         deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
 
-        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        // Call `sendFees` to calculate pending performance and platform fees,
+        // and distribute them to strategist, and Cosmos.
         cellar.sendFees();
 
         uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
@@ -1205,7 +1269,7 @@ contract CellarTest is Test {
         uint256 deposit,
         uint256 yield
     ) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 100e6, 1_000_000_000e6);
         // Cap yield to 10,000% APR
@@ -1284,7 +1348,7 @@ contract CellarTest is Test {
         uint256 deposit,
         uint256 yield
     ) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 100e6, 1_000_000_000e6);
         // Cap yield to 10,000% APR
@@ -1363,7 +1427,7 @@ contract CellarTest is Test {
         uint256 deposit,
         uint256 yield
     ) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 100e6, 1_000_000_000e6);
         // Cap yield to 10,000% APR
@@ -1476,7 +1540,7 @@ contract CellarTest is Test {
         cellar.sendFees();
     }
 
-    function testMaliciousStrategistWithUnBoundForLoop() external {
+    function testMaliciousStrategistWithUnboundForLoop() external {
         // Initialize test Cellar.
         MockCellar multiPositionCellar;
         address[] memory positions;
@@ -1523,27 +1587,31 @@ contract CellarTest is Test {
         uint256 gas = gasleft();
         multiPositionCellar.deposit(100e6, address(this));
         uint256 remainingGas = gasleft();
-        assertTrue(
-            (gas - remainingGas) < 500_000,
+        assertLt(
+            gas - remainingGas,
+            500_000,
             "Gas used on deposit should be comfortably less than the block gas limit."
         );
 
         gas = gasleft();
         multiPositionCellar.withdraw(100e6, address(this), address(this));
         remainingGas = gasleft();
-        assertTrue(
-            (gas - remainingGas) < 500_000,
+        assertLt(
+            gas - remainingGas,
+            500_000,
             "Gas used on withdraw should be comfortably less than the block gas limit."
         );
 
-        // Now check a worst case scenario, Strategist maxes out positions, and evenly distributes funds to every position, then user withdraws.
+        // Now check a worst case scenario, SP maxes out positions, and evenly
+        // distributes funds to every position, then user withdraws.
         deal(address(USDC), address(this), 32e6);
         USDC.approve(address(multiPositionCellar), 32e6);
         multiPositionCellar.deposit(32e6, address(this));
 
         uint256 totalAssets = multiPositionCellar.totalAssets();
 
-        // Change the cellars USDC balance, so that we can deal cellar assets in other positions and not change the share price.
+        // Change the cellars USDC balance, so that we can deal cellar assets in
+        // other positions and not change the share price.
         deal(address(USDC), address(multiPositionCellar), 1e6);
 
         positions = multiPositionCellar.getPositions();
@@ -1557,8 +1625,9 @@ contract CellarTest is Test {
         gas = gasleft();
         multiPositionCellar.withdraw(32e6, address(this), address(this));
         remainingGas = gasleft();
-        assertTrue(
-            (gas - remainingGas) < 1_200_000,
+        assertLt(
+            gas - remainingGas,
+            1_200_000,
             "Gas used on worst case scenario withdraw should be comfortably less than the block gas limit."
         );
     }
@@ -1568,9 +1637,11 @@ contract CellarTest is Test {
         uint256 deposit,
         uint256 yield
     ) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the
+        // order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 100e6, 1_000_000_000e6);
+
         // Cap yield to 10,000% APR
         {
             uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
@@ -1607,7 +1678,8 @@ contract CellarTest is Test {
         uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
         deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
 
-        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        // Call `sendFees` to calculate pending performance and platform fees,
+        // and distribute them to strategist, and Cosmos.
         cellar.sendFees();
 
         uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
@@ -1669,9 +1741,11 @@ contract CellarTest is Test {
         uint256 deposit,
         uint256 yield
     ) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the
+        // order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 100e6, 1_000_000_000e6);
+
         // Cap yield to 10,000% APR
         {
             uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
@@ -1708,12 +1782,14 @@ contract CellarTest is Test {
         uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
         deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
 
-        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        // Call `sendFees` to calculate pending performance and platform fees,
+        // and distribute them to strategist, and Cosmos.
         cellar.sendFees();
 
         uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
 
-        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
+        // Minting platform fees dilutes share price, so it also dilutes pending
+        // performance fees.
         uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
             (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
 
@@ -1766,9 +1842,11 @@ contract CellarTest is Test {
         uint256 deposit,
         uint256 yield
     ) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the
+        // order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 100e6, 1_000_000_000e6);
+
         // Cap yield to 10,000% APR
         {
             uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
@@ -1805,7 +1883,8 @@ contract CellarTest is Test {
         uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
         deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
 
-        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        // Call `sendFees` to calculate pending performance and platform fees,
+        // and distribute them to strategist, and Cosmos.
         cellar.sendFees();
 
         uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
@@ -1867,9 +1946,11 @@ contract CellarTest is Test {
         uint256 deposit,
         uint256 yield
     ) external {
-        // Cap timePassed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+        // Cap time passed to 1 year. Platform fees will be collected on the
+        // order of weeks possibly months.
         timePassed = bound(timePassed, 1 days, 365 days);
         deposit = bound(deposit, 100e6, 1_000_000_000e6);
+
         // Cap yield to 10,000% APR
         {
             uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
@@ -1906,7 +1987,8 @@ contract CellarTest is Test {
         uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
         deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
 
-        // Call `sendFees` to calculate pending performance and platform fees, and distribute them to strategist, and Cosmos.
+        // Call `sendFees` to calculate pending performance and platform fees,
+        // and distribute them to strategist, and Cosmos.
         cellar.sendFees();
 
         uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
@@ -1964,12 +2046,13 @@ contract CellarTest is Test {
     }
 
     // ======================================== INTEGRATION TESTS ========================================
+
     uint256 public saltIndex;
 
-    /** @notice Generates a random number between 1 and 1e9.
-     *
+    /**
+     * @notice Generates a random number between 1 and 1e9.
      */
-    function mutate(uint256 salt) internal returns (uint256) {
+    function _mutate(uint256 salt) internal returns (uint256) {
         saltIndex++;
         uint256 random = uint256(keccak256(abi.encode(salt, saltIndex)));
         random = bound(random, 1, 1_000_000_000);
@@ -1999,8 +2082,9 @@ contract CellarTest is Test {
         REDEEM
     }
 
-    /** @notice Helper function that performs 1 of 4 user actions.
-     *          Validates that the preview function returns the same as the actual function.
+    /**
+     * @notice Helper function that performs 1 of 4 user actions.
+     *         Validates that the preview function returns the same as the actual function.
      * @param target Cellar to work with.
      * @param user Address that is performing the action.
      * @param action Enum dictating what `Action` is performed.
@@ -2051,7 +2135,8 @@ contract CellarTest is Test {
         vm.stopPrank();
     }
 
-    /** @notice Helper function that calls `rebalance` for a cellar.
+    /**
+     * @notice Helper function that calls `rebalance` for a cellar.
      * @param target Cellar to call `rebalance` on.
      * @param from Token to sell.
      * @param to Token to buy.
@@ -2076,7 +2161,9 @@ contract CellarTest is Test {
         );
     }
 
-    /** @notice Helper function that calls `sendFees` for a cellar, and validates performance fees, platform fees, and destination of them.
+    /**
+     * @notice Helper function that calls `sendFees` for a cellar, and validates
+     *         performance fees, platform fees, and destination of them.
      * @param target Cellar to call `sendFees` on.
      * @param amountOfTimeToPass How much time should pass before `sendFees` is called.
      * @param yieldEarned The amount of yield earned since performance fees were last minted.
@@ -2106,15 +2193,18 @@ contract CellarTest is Test {
         }
         uint256 expectedPerformanceFeeInAssets;
         uint256 expectedPlatformFeeInAssets;
-        // Check if Performance Fees should have been minted.
+
+        // Check if performance fees should have been minted.
         if (yieldEarned > 0) {
             expectedPerformanceFeeInAssets = yieldEarned.mulWadDown(performanceFee);
+
             // When platform fee shares are minted all shares are diluted in value.
             // Account for share dilution.
             expectedPerformanceFeeInAssets =
                 (expectedPerformanceFeeInAssets * ((1e18 - (platformFee * amountOfTimeToPass) / 365 days))) /
                 1e18;
         }
+
         expectedPlatformFeeInAssets = (cellarTotalAssets * platformFee * amountOfTimeToPass) / 1e18 / 365 days;
 
         assertApproxEqRel(
@@ -2142,8 +2232,8 @@ contract CellarTest is Test {
         );
     }
 
-    /** @notice Calcualtes the minimum assets required to complete sendFees call.
-     *
+    /**
+     * @notice Calculates the minimum assets required to complete sendFees call.
      */
     function previewAssetMinimumsForSendFee(
         Cellar target,
@@ -2177,15 +2267,17 @@ contract CellarTest is Test {
         assetReq =
             expectedPlatformFeeInAssets.mulWadDown(1e18 - strategistPlatformCut) +
             expectedPerformanceFeeInAssets.mulWadDown(1e18 - strategistPerformanceCut) +
-            10**target.asset().decimals(); // Add an extra asset to account for rounding errors, and insure cellar has enough to cover sendFees.
+            // Add an extra asset to account for rounding errors, and insure
+            // cellar has enough to cover sendFees.
+            10**target.asset().decimals();
     }
 
-    function ensureEnoughAssetsToCoverSendFees(
+    function _ensureEnoughAssetsToCoverSendFees(
         Cellar target,
         uint256 amountOfTimeToPass,
         uint256 yieldEarned,
         ERC20 assetToTakeFrom
-    ) public {
+    ) internal {
         {
             ERC20 asset = target.asset();
             uint256 assetsReq = previewAssetMinimumsForSendFee(target, amountOfTimeToPass, yieldEarned);
@@ -2206,8 +2298,6 @@ contract CellarTest is Test {
     }
 
     function testMultipleMintDepositRedeemWithdrawWithGainsLossAndSendFees(uint8 salt) external {
-        //salt = 154;
-        //salt = 114;
         // Initialize users.
         address alice = vm.addr(1);
         address bob = vm.addr(2);
@@ -2264,10 +2354,10 @@ contract CellarTest is Test {
         USDC.approve(address(assetManagementCellar), type(uint256).max);
 
         // ====================== BEGIN SCENERIO ======================
+
         // Users join  cellar, cellar rebalances into WETH and WBTC positions, and sendFees is called.
         {
-            uint256 amount = mutate(salt) * 1e6;
-            //amount = 100e6;
+            uint256 amount = _mutate(salt) * 1e6;
             uint256 shares;
             uint256 assets;
 
@@ -2313,7 +2403,8 @@ contract CellarTest is Test {
             // Swap 40% of Cellars USDC for WBTC.
             _rebalance(assetManagementCellar, USDC, WBTC, usdcToSell);
         }
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
+
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 7 days, 0);
 
         // WBTC price increases enough to create yield, Mary joins the cellar, and sendFees is called.
@@ -2346,7 +2437,7 @@ contract CellarTest is Test {
             );
         }
         {
-            uint256 amount = mutate(salt) * 1e6;
+            uint256 amount = _mutate(salt) * 1e6;
             uint256 shares;
             uint256 assets;
             (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
@@ -2366,10 +2457,12 @@ contract CellarTest is Test {
                 "Cellar should have been minted performance fees."
             );
         }
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, yieldEarned, WETH);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, yieldEarned, WETH);
         _checkSendFees(assetManagementCellar, 7 days, yieldEarned);
 
-        // Adjust fee variables, lower WBTC price but raise WETH price enough to create yield, rebalance all positions into WETH, Bob and Sam join cellar, and sendFees is called.
+        // Adjust fee variables, lower WBTC price but raise WETH price enough to
+        // create yield, rebalance all positions into WETH, Bob and Sam join
+        // cellar, and sendFees is called.
         {
             // Set platform fee to 2%.
             assetManagementCellar.setPlatformFee(0.02e18);
@@ -2404,8 +2497,8 @@ contract CellarTest is Test {
             }
         }
         {
-            // Bob enters cellar via Mint.
-            uint256 shares = mutate(salt) * 1e18;
+            // Bob enters cellar via `mint`.
+            uint256 shares = _mutate(salt) * 1e18;
             uint256 totalAssets = assetManagementCellar.totalAssets();
             (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
             yieldEarned = totalAssets - highWatermark;
@@ -2423,15 +2516,16 @@ contract CellarTest is Test {
                 "Performance Fees should not have been minted."
             );
 
-            ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, yieldEarned, WETH);
+            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, yieldEarned, WETH);
             _checkSendFees(assetManagementCellar, 21 days, yieldEarned);
         }
 
         // No yield was earned, and 28 days pass.
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, 0, WETH);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 28 days, 0);
 
-        // WETH price decreases, rebalance cellar so that USDC in Cellar can not cover Alice's redeem. Alice redeems shares, and call sendFees.
+        // WETH price decreases, rebalance cellar so that USDC in Cellar can not
+        // cover Alice's redeem. Alice redeems shares, and call sendFees.
         {
             //===== Start Bear Market ====
             // ETH price goes down.
@@ -2447,7 +2541,8 @@ contract CellarTest is Test {
                 _changeMarketPrices(assetsToAdjust, prices);
             }
 
-            // Cellar has liquidity in USDC and WETH, rebalance cellar so it must take from USDC, and WETH position to cover Alice's redeem.
+            // Cellar has liquidity in USDC and WETH, rebalance cellar so it
+            // must take from USDC, and WETH position to cover Alice's redeem.
             uint256 shares = assetManagementCellar.balanceOf(alice);
             uint256 assets = assetManagementCellar.previewRedeem(shares);
 
@@ -2504,18 +2599,18 @@ contract CellarTest is Test {
             );
         }
 
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 7 days, 0);
 
         // Alice rejoins cellar, call sendFees.
         {
             // Alice rejoins via mint.
-            uint256 sharesToMint = mutate(salt) * 1e18;
+            uint256 sharesToMint = _mutate(salt) * 1e18;
             deal(address(USDC), alice, assetManagementCellar.previewMint(sharesToMint));
             _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToMint);
         }
 
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, 0, WETH);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, 0, WETH);
         _checkSendFees(assetManagementCellar, 1 days, 0);
 
         // Rebalance cellar to move assets from WETH to WBTC.
@@ -2531,7 +2626,7 @@ contract CellarTest is Test {
             (highWatermark, , , , , , ) = assetManagementCellar.feeData();
             assertEq(highWatermark, totalAssets, "Should have reset high watermark to totalAssets.");
 
-            // WBTC goes up a little, USDC depegs to 0.95.
+            // WBTC goes up a little, USDC depeggs to 0.95.
 
             ERC20[] memory assetsToAdjust = new ERC20[](3);
             uint256[] memory prices = new uint256[](3);
@@ -2547,18 +2642,18 @@ contract CellarTest is Test {
             assertTrue(totalAssets > highWatermark, "Total Assets should be greater than high watermark.");
             yieldEarned = totalAssets - highWatermark;
 
-            ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 14 days, yieldEarned, WETH);
+            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 14 days, yieldEarned, WETH);
             _checkSendFees(assetManagementCellar, 14 days, yieldEarned);
 
             // Strategists trusts LINK, and then adds it as a position.
+            // No need to set LINK price since its assets will always be zero.
             assetManagementCellar.trustPosition(address(LINK), Cellar.PositionType.ERC20);
             assetManagementCellar.pushPosition(address(LINK));
-            ///@dev no need to set LINK price since its assets will always be zero.
 
             // Swap LINK position with USDC position.
             assetManagementCellar.swapPositions(3, 0);
 
-            // Adjust asset prices such that the Cellar's TVL drops below the High Watermark.
+            // Adjust asset prices such that the cellar's TVL drops below the high watermark.
 
             assetsToAdjust = new ERC20[](3);
             prices = new uint256[](3);
@@ -2573,7 +2668,7 @@ contract CellarTest is Test {
             (highWatermark, , , , , , ) = assetManagementCellar.feeData();
             totalAssets = assetManagementCellar.totalAssets();
             assertTrue(totalAssets < highWatermark, "Total Assets should be less than high watermark.");
-            ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
+            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WETH);
             _checkSendFees(assetManagementCellar, 7 days, 0);
         }
         {
@@ -2593,7 +2688,10 @@ contract CellarTest is Test {
         _userAction(assetManagementCellar, alice, Action.REDEEM, 0, assetManagementCellar.balanceOf(alice));
         _userAction(assetManagementCellar, bob, Action.REDEEM, 0, assetManagementCellar.balanceOf(bob));
         _userAction(assetManagementCellar, sam, Action.REDEEM, 0, assetManagementCellar.balanceOf(sam));
-        deal(address(USDC), mary, 0); // Mary has a ton of USDC from the initial deal, zero out her balance so she can redeem her shares.
+
+        // Mary has a ton of USDC from the initial deal, zero out her balance so
+        // she can redeem her shares.
+        deal(address(USDC), mary, 0);
         _userAction(assetManagementCellar, mary, Action.REDEEM, 0, assetManagementCellar.balanceOf(mary));
         _userAction(assetManagementCellar, strategist, Action.REDEEM, 0, assetManagementCellar.balanceOf(strategist));
 
@@ -2601,21 +2699,24 @@ contract CellarTest is Test {
         assertEq(assetManagementCellar.totalAssets(), 0, "All cellar assets should be removed.");
 
         //Have everyone join with the same amount of assets.
-        uint256 assetsNeeded = mutate(salt) * 1e6;
+        uint256 assetsNeeded = _mutate(salt) * 1e6;
         uint256 sharesToJoinWith = assetManagementCellar.convertToShares(assetsNeeded);
 
         deal(address(USDC), alice, assetsNeeded);
         deal(address(WETH), alice, 0);
         deal(address(WBTC), alice, 0);
         _userAction(assetManagementCellar, alice, Action.DEPOSIT, assetsNeeded, 0);
+
         deal(address(USDC), bob, assetsNeeded);
         deal(address(WBTC), bob, 0);
         deal(address(WETH), bob, 0);
         _userAction(assetManagementCellar, bob, Action.DEPOSIT, assetsNeeded, 0);
+
         deal(address(USDC), sam, assetsNeeded);
         deal(address(WBTC), sam, 0);
         deal(address(WETH), sam, 0);
         _userAction(assetManagementCellar, sam, Action.DEPOSIT, assetsNeeded, 0);
+
         deal(address(USDC), mary, assetsNeeded);
         deal(address(WBTC), mary, 0);
         deal(address(WETH), mary, 0);
@@ -2624,7 +2725,7 @@ contract CellarTest is Test {
         // Shutdown the cellar.
         assetManagementCellar.initiateShutdown();
 
-        /// @dev At this point we know all 4 cellar users have 25% of the shares each.
+        // At this point we know all 4 cellar users have 25% of the shares each.
 
         // Manually rebalance assets like so LINK/WETH/WBTC/USDC 0/10/0/90.
         deal(address(LINK), address(assetManagementCellar), 0);
@@ -2640,9 +2741,11 @@ contract CellarTest is Test {
 
         // Rebalance asses like so LINK/WETH/WBTC/USDC 0/10/45/45
         deal(address(LINK), address(assetManagementCellar), 0);
+
         // Set WBTC balance in cellar to equal 45% of the cellars total assets.
         deal(address(WBTC), address(assetManagementCellar), ((2 * assetsNeeded * 45) / 1000000).changeDecimals(6, 8));
         deal(address(USDC), address(assetManagementCellar), (2 * assetsNeeded).mulDivDown(1, 10));
+
         // Set WETH balance in cellar to equal 45% of the cellars total assets.
         deal(address(WETH), address(assetManagementCellar), ((2 * assetsNeeded * 45) / 100000).changeDecimals(6, 18));
 
@@ -2789,9 +2892,11 @@ contract CellarTest is Test {
         WETH.approve(address(assetManagementCellar), type(uint256).max);
 
         // ====================== BEGIN SCENERIO ======================
-        // Users join  cellar, cellar rebalances into USDC and WBTC positions, and sendFees is called.
+
+        // Users join  cellar, cellar rebalances into USDC and WBTC positions,
+        // and sendFees is called.
         {
-            uint256 amount = (mutate(salt) * 1e18) / 2000;
+            uint256 amount = (_mutate(salt) * 1e18) / 2000;
             uint256 shares;
             uint256 assets;
 
@@ -2837,7 +2942,7 @@ contract CellarTest is Test {
             // Swap 40% of Cellars WETH for WBTC.
             _rebalance(assetManagementCellar, WETH, WBTC, wethToSell);
         }
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, USDC);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, USDC);
         _checkSendFees(assetManagementCellar, 7 days, 0);
 
         // WBTC price increases enough to create yield, Mary joins the cellar, and sendFees is called.
@@ -2870,7 +2975,7 @@ contract CellarTest is Test {
             );
         }
         {
-            uint256 amount = (mutate(salt) * 1e18) / 2000;
+            uint256 amount = (_mutate(salt) * 1e18) / 2000;
             uint256 shares;
             uint256 assets;
             (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
@@ -2891,10 +2996,12 @@ contract CellarTest is Test {
             );
         }
 
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 0 days, yieldEarned, USDC);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 0 days, yieldEarned, USDC);
         _checkSendFees(assetManagementCellar, 7 days, yieldEarned);
 
-        // Adjust fee variables, lower WETH price but raise WBTC price enough to create yield, rebalance all positions into WBTC, Bob and Sam join cellar, and sendFees is called.
+        // Adjust fee variables, lower WETH price but raise WBTC price enough to
+        // create yield, rebalance all positions into WBTC, Bob and Sam join
+        // cellar, and sendFees is called.
         {
             // Set platform fee to 2%.
             assetManagementCellar.setPlatformFee(0.02e18);
@@ -2932,8 +3039,8 @@ contract CellarTest is Test {
         }
 
         {
-            // Bob enters cellar via Mint.
-            uint256 shares = (mutate(salt) * 1e18) / 2000;
+            // Bob enters cellar via `mint`.
+            uint256 shares = (_mutate(salt) * 1e18) / 2000;
             uint256 totalAssets = assetManagementCellar.totalAssets();
             (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
             yieldEarned = totalAssets - highWatermark;
@@ -2951,15 +3058,16 @@ contract CellarTest is Test {
                 "Performance Fees should not have been minted."
             );
 
-            ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, yieldEarned, WBTC);
+            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, yieldEarned, WBTC);
             _checkSendFees(assetManagementCellar, 21 days, yieldEarned);
         }
 
         // No yield was earned, and 28 days pass.
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, 0, WBTC);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, 0, WBTC);
         _checkSendFees(assetManagementCellar, 28 days, 0);
 
-        // WBTC price decreases, rebalance cellar so that WETH in Cellar can not cover Alice's redeem. Alice redeems shares, and call sendFees.
+        // WBTC price decreases, rebalance cellar so that WETH in Cellar can not
+        // cover Alice's redeem. Alice redeems shares, and call sendFees.
         {
             //===== Start Bear Market ====
             // WBTC price goes down.
@@ -2975,7 +3083,8 @@ contract CellarTest is Test {
                 _changeMarketPrices(assetsToAdjust, prices);
             }
 
-            // Cellar has liquidity in WBTC and WETH, rebalance cellar so it must take from USDC, and WETH position to cover Alice's redeem.
+            // Cellar has liquidity in WBTC and WETH, rebalance cellar so it
+            // must take from USDC, and WETH position to cover Alice's redeem.
             uint256 shares = assetManagementCellar.balanceOf(alice);
             uint256 assets = assetManagementCellar.previewRedeem(shares);
 
@@ -3037,18 +3146,18 @@ contract CellarTest is Test {
             );
         }
 
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WBTC);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WBTC);
         _checkSendFees(assetManagementCellar, 7 days, 0);
 
         // Alice rejoins cellar, call sendFees.
         {
             // Alice rejoins via mint.
-            uint256 sharesToMint = mutate(salt) * 1e18;
+            uint256 sharesToMint = _mutate(salt) * 1e18;
             deal(address(WETH), alice, assetManagementCellar.previewMint(sharesToMint));
             _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToMint);
         }
 
-        ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, 0, WBTC);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, 0, WBTC);
         _checkSendFees(assetManagementCellar, 1 days, 0);
 
         // Rebalance cellar to move assets from WETH to WBTC.
@@ -3064,7 +3173,7 @@ contract CellarTest is Test {
             (highWatermark, , , , , , ) = assetManagementCellar.feeData();
             assertEq(highWatermark, totalAssets, "Should have reset high watermark to totalAssets.");
 
-            // WBTC goes up a little, USDC depegs to 1.05.
+            // WBTC goes up a little, USDC depeggs to 1.05.
 
             ERC20[] memory assetsToAdjust = new ERC20[](3);
             uint256[] memory prices = new uint256[](3);
@@ -3080,7 +3189,7 @@ contract CellarTest is Test {
             assertTrue(totalAssets > highWatermark, "Total Assets should be greater than high watermark.");
             yieldEarned = totalAssets - highWatermark;
 
-            ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 14 days, yieldEarned, WBTC);
+            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 14 days, yieldEarned, WBTC);
             _checkSendFees(assetManagementCellar, 14 days, yieldEarned);
         }
     }
@@ -3099,7 +3208,7 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
 
-        // USDT Depegs to $0.90.
+        // USDT depeggs to $0.90.
         priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
         priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
 
@@ -3108,8 +3217,8 @@ contract CellarTest is Test {
 
         // Governance votes to distrust USDT position.
         cellar.distrustPosition(address(USDT));
-        assertTrue(!cellar.isTrusted(address(USDT)), "Cellar should not trust USDT.");
-        assertTrue(!cellar.isPositionUsed(address(USDT)), "Cellar should not be using USDT.");
+        assertFalse(cellar.isTrusted(address(USDT)), "Cellar should not trust USDT.");
+        assertFalse(cellar.isPositionUsed(address(USDT)), "Cellar should not be using USDT.");
         assertEq(
             cellar.getPositions().length,
             positionsLengthBefore,
@@ -3118,8 +3227,9 @@ contract CellarTest is Test {
     }
 
     function testDepeggedAssetUsedByTheCellar() external {
-        // Scenario 2: Depegged asset is being used by the cellar.
-        // Governance uses multicall to rebalance cellar out of position, and to distrust it.
+        // Scenario 2: Depegged asset is being used by the cellar. Governance
+        // uses multicall to rebalance cellar out of position, and to distrust
+        // it.
 
         // Add asset that will be depegged.
         uint256 positionsLengthBefore = cellar.getPositions().length;
@@ -3135,7 +3245,7 @@ contract CellarTest is Test {
         deal(address(USDC), address(cellar), 50e6);
         deal(address(USDT), address(cellar), 50e6);
 
-        // USDT Depegs to $0.90.
+        // USDT depeggs to $0.90.
         priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
         priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
 
@@ -3147,8 +3257,8 @@ contract CellarTest is Test {
         deal(address(USDC), address(cellar), 95e6);
         deal(address(USDT), address(cellar), 0);
         cellar.distrustPosition(address(USDT));
-        assertTrue(!cellar.isTrusted(address(USDT)), "Cellar should not trust USDT.");
-        assertTrue(!cellar.isPositionUsed(address(USDT)), "Cellar should not be using USDT.");
+        assertFalse(cellar.isTrusted(address(USDT)), "Cellar should not trust USDT.");
+        assertFalse(cellar.isPositionUsed(address(USDT)), "Cellar should not be using USDT.");
         assertEq(
             cellar.getPositions().length,
             positionsLengthBefore,
@@ -3157,26 +3267,29 @@ contract CellarTest is Test {
     }
 
     function testDepeggedHoldingPosition() external {
-        // Scenario 3: Depegged asset is being used by the cellar, and it is the holding position.
-        // Governance uses multicall to rebalance cellar out of position, set a new holding position, and distrust it.
+        // Scenario 3: Depegged asset is being used by the cellar, and it is the
+        // holding position. Governance uses multicall to rebalance cellar out
+        // of position, set a new holding position, and distrust it.
 
         uint256 positionsLengthBefore = cellar.getPositions().length;
         // Rebalance into usdcCLR.
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
-        cellar.rebalance(address(USDC), address(usdcCLR), 50e6, SwapRouter.Exchange.UNIV2, abi.encode(0)); // No swap is made because both positions use USDC.
+        // No swap is made because both positions use USDC.
+        cellar.rebalance(address(USDC), address(usdcCLR), 50e6, SwapRouter.Exchange.UNIV2, abi.encode(0));
 
-        // usdcCLR depegs from USDC
+        // usdcCLR depeggs from USDC
         deal(address(USDC), address(usdcCLR), 45e6);
 
         assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
         assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
 
         // Governance votes to rebalance out of usdcCLR, and distrust usdcCLR.
-        cellar.rebalance(address(usdcCLR), address(USDC), 45e6, SwapRouter.Exchange.UNIV2, abi.encode(0)); // No swap is made because both positions use USDC.
+        // No swap is made because both positions use USDC.
+        cellar.rebalance(address(usdcCLR), address(USDC), 45e6, SwapRouter.Exchange.UNIV2, abi.encode(0));
         cellar.distrustPosition(address(usdcCLR));
-        assertTrue(!cellar.isTrusted(address(usdcCLR)), "Cellar should not trust usdcCLR.");
-        assertTrue(!cellar.isPositionUsed(address(usdcCLR)), "Cellar should not be using usdcCLR.");
+        assertFalse(cellar.isTrusted(address(usdcCLR)), "Cellar should not trust usdcCLR.");
+        assertFalse(cellar.isPositionUsed(address(usdcCLR)), "Cellar should not be using usdcCLR.");
         assertEq(
             cellar.getPositions().length,
             positionsLengthBefore - 1,
@@ -3184,12 +3297,15 @@ contract CellarTest is Test {
         );
     }
 
-    //TODO can we rely on a pricefeed to get an accurate price data during a depeg event?
+    // TODO: Can we rely on a pricefeed to get an accurate price data during a depegging event?
     function testDepeggedCellarAsset() external {
-        // Scenario 4: Depegged asset is the cellars asset.
-        // Worst case scenario, rebalance out of position into some new stable position, set fees to zero, initiate a shutdown, and have users withdraw funds asap.
-        // Want to ensure that attackers can not join using the depegged asset.
-        // Emergency governance proposal to move funds into some new safety contract, shutdown old cellar, and allow users to withdraw from the safety contract.
+        // Scenario 4: Depegged asset is the cellars asset. Worst case
+        // scenario, rebalance out of position into some new stable position,
+        // set fees to zero, initiate a shutdown, and have users withdraw funds
+        // asap. Want to ensure that attackers can not join using the depegged
+        // asset. Emergency governance proposal to move funds into some new
+        // safety contract, shutdown old cellar, and allow users to withdraw
+        // from the safety contract.
 
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
         cellar.pushPosition(address(USDT));
@@ -3199,17 +3315,20 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), 100e6);
         cellar.deposit(100e6, address(this));
 
-        // USDC depegs to $0.90.
+        // USDC depeggs to $0.90.
         priceRouter.setExchangeRate(USDC, USDT, 0.9e6);
         priceRouter.setExchangeRate(USDT, USDC, 1.111111e6);
 
         assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
 
-        // Governance rebalances to USDT, sets performance and paltform fees to zero, initiates a shutdown, and has users withdraw their funds.
+        // Governance rebalances to USDT, sets performance and platform fees to
+        // zero, initiates a shutdown, and has users withdraw their funds.
         // Manually rebalance to USDT.
         deal(address(USDC), address(cellar), 0);
         deal(address(USDT), address(cellar), 90e6);
-        // Important to set fees to zero, else performance fees are minted as the cellars asset depegs further.
+
+        // Important to set fees to zero, else performance fees are minted as
+        // the cellars asset depeggs further.
         cellar.setPerformanceFee(0);
         cellar.setPlatformFee(0);
         cellar.initiateShutdown();
@@ -3225,39 +3344,52 @@ contract CellarTest is Test {
 
         cellar.redeem(50e18, address(this), address(this));
 
-        // USDC depegs to $0.10.
+        // USDC depeggs to $0.10.
         priceRouter.setExchangeRate(USDC, USDT, 0.1e6);
         priceRouter.setExchangeRate(USDT, USDC, 10e6);
 
         cellar.redeem(50e18, address(this), address(this));
 
-        // Eventhough USDC depegged further, cellar rebalanced out of USDC removing its exposure to it.
-        // So users can expect to get the remaining value out of the cellar.
+        // Eventhough USDC depegged further, cellar rebalanced out of USDC
+        // removing its exposure to it.  So users can expect to get the
+        // remaining value out of the cellar.
         assertEq(
             USDT.balanceOf(address(this)),
             90e6,
             "Withdraws should total the amount of USDT in the cellar after rebalance."
         );
 
-        // Governance can not distrust USDC, because it is the holding position, and
-        // changing the holding position is pointless because the asset of the new holding position must be USDC.
-        // Therefore the cellar is lost, and should be exitted completely.
+        // Governance can not distrust USDC, because it is the holding position,
+        // and changing the holding position is pointless because the asset of
+        // the new holding position must be USDC.  Therefore the cellar is lost,
+        // and should be exitted completely.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.distrustPosition(address(USDC));
     }
 
     /**
-     * Some notes about the above tests.
-     * It will be difficult for Governance to set some safe min asset amount when rebalancing a cellar from a depegging asset. Ideally this
-     * would be done by the strategist, but even then if the price is volatile enough, strategists might not be able to set a fair min amount out value.
-     * We might be able to use Chainlink price feeds to get around this, and rely on the Chainlink oracle data in order to calculate a fair min amount out on chain.
+     * Some notes about the above tests:
+     * It will be difficult for Governance to set some safe min asset amount
+     * when rebalancing a cellar from a depegging asset. Ideally this would be
+     * done by the strategist, but even then if the price is volatile enough,
+     * strategists might not be able to set a fair min amount out value. We
+     * might be able to use Chainlink price feeds to get around this, and rely
+     * on the Chainlink oracle data in order to calculate a fair min amount out
+     * on chain.
      *
-     * Users will be able to exit the cellar as long as the depegged asset is still within its price envelope defined in the price router as minPrice and maxPrice.
-     * Once an asset is outside this envelope, or Chainlink stope reporting pricing data, the situation becomes difficult.
-     * Any calls involving `totalAssets()` will fail because the price router will not be able to get a safe price for teh depegged asset.
-     * With this in mind we should consider creating some emergency fund protector contract, where in the event a violent depegging occurs,
-     * Governance can vote to trust the fund protector contract as a position, and all the cellars assets can be converted into some safe asset then deposited into the fund protector
-     * contract. Doing this decouples the depegged asset pricing data from assets in the cellar.
-     * In order to get their funds out users would go to the fund protector contract, and trade their shares(from the depegged cellar) for assets in the fund protector.
+     * Users will be able to exit the cellar as long as the depegged asset is
+     * still within its price envelope defined in the price router as minPrice
+     * and maxPrice. Once an asset is outside this envelope, or Chainlink stops
+     * reporting pricing data, the situation becomes difficult. Any calls
+     * involving `totalAssets()` will fail because the price router will not be
+     * able to get a safe price for the depegged asset. With this in mind we
+     * should consider creating some emergency fund protector contract, where in
+     * the event a violent depegging occurs, Governance can vote to trust the
+     * fund protector contract as a position, and all the cellars assets can be
+     * converted into some safe asset then deposited into the fund protector
+     * contract. Doing this decouples the depegged asset pricing data from
+     * assets in the cellar. In order to get their funds out users would go to
+     * the fund protector contract, and trade their shares (from the depegged
+     * cellar) for assets in the fund protector.
      */
 }
