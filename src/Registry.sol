@@ -2,7 +2,6 @@
 pragma solidity 0.8.15;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import "src/Errors.sol";
 
 contract Registry is Ownable {
     /**
@@ -21,6 +20,12 @@ contract Registry is Ownable {
     event AddressChanged(uint256 indexed id, address oldAddress, address newAddress);
 
     /**
+     * @notice Attempted to set the address of a contract that is not registered.
+     * @param id id of the contract that is not registered
+     */
+    error Registry__ContractNotRegistered(uint256 id);
+
+    /**
      * @notice The unique ID that the next registered contract will have.
      */
     uint256 public nextId;
@@ -34,7 +39,7 @@ contract Registry is Ownable {
      * @notice Set the address of the contract at a given id.
      */
     function setAddress(uint256 id, address newAddress) external onlyOwner {
-        if (id >= nextId) revert USR_ContractNotRegistered(id);
+        if (id >= nextId) revert Registry__ContractNotRegistered(id);
 
         emit AddressChanged(id, getAddress[id], newAddress);
 

@@ -6,12 +6,10 @@ import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
-import { IUniswapV2Router02 as IUniswapV2Router } from "./interfaces/IUniswapV2Router02.sol";
-import { IUniswapV3Router } from "./interfaces/IUniswapV3Router.sol";
-import { ICellarRouter } from "./interfaces/ICellarRouter.sol";
+import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
+import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
+import { ICellarRouter } from "src/interfaces/ICellarRouter.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-
-import "./Errors.sol";
 
 /**
  * @title Sommelier Cellar Router
@@ -232,6 +230,13 @@ contract CellarRouter is ICellarRouter {
     // ========================================= HELPER FUNCTIONS =========================================
 
     /**
+     * @notice Attempted an operation with an invalid signature.
+     * @param signatureLength length of the signature
+     * @param expectedSignatureLength expected length of the signature
+     */
+    error CellarRouter__InvalidSignature(uint256 signatureLength, uint256 expectedSignatureLength);
+
+    /**
      * @notice Split a signature into its components.
      * @param signature a valid secp256k1 signature
      * @return v a component of the secp256k1 signature
@@ -247,7 +252,7 @@ contract CellarRouter is ICellarRouter {
             bytes32 s
         )
     {
-        if (signature.length != 65) revert USR_InvalidSignature(signature.length, 65);
+        if (signature.length != 65) revert CellarRouter__InvalidSignature(signature.length, 65);
 
         // Read each parameter directly from the signature's memory region.
         assembly {

@@ -9,12 +9,10 @@ import { MockExchange } from "src/mocks/MockExchange.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
-import { MockERC20WithTransferFee } from "src/mocks/MockERC20WithTransferFee.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 
-import { Test, console, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
+import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
-import "src/Errors.sol";
 
 contract CellarTest is Test {
     using SafeTransferLib for ERC20;
@@ -416,11 +414,11 @@ contract CellarTest is Test {
         assertTrue(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be true for WETH.");
 
         // Check that `pushPosition` reverts if position is already used.
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_PositionAlreadyUsed.selector, address(WETH))));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionAlreadyUsed.selector, address(WETH))));
         cellar.pushPosition(address(WETH));
 
         // Check that `addPosition` reverts if position is already used.
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_PositionAlreadyUsed.selector, address(WETH))));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionAlreadyUsed.selector, address(WETH))));
         cellar.addPosition(4, address(WETH));
 
         // Give Cellar 1 wei of wETH.
@@ -428,22 +426,34 @@ contract CellarTest is Test {
 
         // Check that `removePosition` reverts if position has any funds in it.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(USR_PositionNotEmpty.selector, address(WETH), WETH.balanceOf(address(cellar))))
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__PositionNotEmpty.selector,
+                    address(WETH),
+                    WETH.balanceOf(address(cellar))
+                )
+            )
         );
         cellar.removePosition(4);
 
         // Check that `popPosition` reverts if position has any funds in it.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(USR_PositionNotEmpty.selector, address(WETH), WETH.balanceOf(address(cellar))))
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__PositionNotEmpty.selector,
+                    address(WETH),
+                    WETH.balanceOf(address(cellar))
+                )
+            )
         );
         cellar.popPosition();
 
         // Check that `pushPosition` reverts if position is not trusted.
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_UntrustedPosition.selector, address(0))));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
         cellar.pushPosition(address(0));
 
         // Check that `addPosition` reverts if position is not trusted.
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_UntrustedPosition.selector, address(0))));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
         cellar.addPosition(4, address(0));
 
         // Set Cellar wETH balance to 0.
@@ -461,27 +471,38 @@ contract CellarTest is Test {
         assertEq(cellar.positions(2), address(wethCLR), "`positions[2]` should be wethCLR.");
 
         // Check that `replacePosition` reverts if new position is not trusted.
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_UntrustedPosition.selector, address(0))));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
         cellar.replacePosition(2, address(0));
 
         // Check that `replacePosition` reverts if new position is already used.
         cellar.pushPosition(address(WETH));
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_PositionAlreadyUsed.selector, address(WETH))));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionAlreadyUsed.selector, address(WETH))));
         cellar.replacePosition(2, address(WETH));
 
         // Check that removing the holding position reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_RemoveHoldingPosition.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.removePosition(0);
 
         address newPosition = vm.addr(45);
         cellar.trustPosition(newPosition, Cellar.PositionType.ERC20);
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_RemoveHoldingPosition.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.replacePosition(0, newPosition);
 
         cellar.swapPositions(4, 0);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_RemoveHoldingPosition.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.popPosition();
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
+        cellar.popPosition();
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidPosition.selector, address(0))));
+        cellar.setHoldingPosition(address(0));
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(WETH), address(USDC)))
+        );
+        cellar.setHoldingPosition(address(WETH));
     }
 
     function testTrustingPositions() external {
@@ -501,13 +522,19 @@ contract CellarTest is Test {
         // Check that distrusting a non empty position reverts.
         deal(address(USDC), address(cellar), 1);
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(USR_PositionNotEmpty.selector, address(USDC), USDC.balanceOf(address(cellar))))
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__PositionNotEmpty.selector,
+                    address(USDC),
+                    USDC.balanceOf(address(cellar))
+                )
+            )
         );
         cellar.distrustPosition(address(USDC));
 
         // Check that distrusting the holding position reverts.
         deal(address(USDC), address(cellar), 0);
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_RemoveHoldingPosition.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.distrustPosition(address(USDC));
     }
 
@@ -583,7 +610,7 @@ contract CellarTest is Test {
 
         cellar.depositIntoPosition(address(usdcCLR), assets);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_InvalidPosition.selector, address(0))));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidPosition.selector, address(0))));
         cellar.rebalance(
             address(usdcCLR),
             address(0), // An Invalid Position
@@ -605,7 +632,7 @@ contract CellarTest is Test {
         path[0] = address(USDC);
         path[1] = address(WETH);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_WrongSwapParams.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__WrongSwapParams.selector)));
         cellar.rebalance(
             address(usdcCLR),
             address(wethCLR),
@@ -651,23 +678,23 @@ contract CellarTest is Test {
 
         deal(address(USDC), address(this), 1);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.deposit(1, address(this));
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.addPosition(5, address(0));
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.pushPosition(address(0));
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.replacePosition(2, address(0));
 
         address[] memory path = new address[](2);
         path[0] = address(USDC);
         path[1] = address(WETH);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.rebalance(
             address(USDC),
             address(WETH),
@@ -676,7 +703,7 @@ contract CellarTest is Test {
             abi.encode(path, assets, 0, address(cellar), address(cellar))
         );
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_ContractShutdown.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.initiateShutdown();
     }
 
@@ -760,7 +787,7 @@ contract CellarTest is Test {
 
         deal(address(USDC), address(this), amount);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_DepositRestricted.selector, amount, limit)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DepositRestricted.selector, amount, limit)));
         cellar.deposit(amount, address(this));
     }
 
@@ -773,7 +800,7 @@ contract CellarTest is Test {
 
         deal(address(USDC), address(this), amount * 1e6);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_DepositRestricted.selector, amount * 1e6, limit)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DepositRestricted.selector, amount * 1e6, limit)));
         cellar.mint(amount * 1e18, address(this));
     }
 
@@ -786,7 +813,7 @@ contract CellarTest is Test {
 
         deal(address(USDC), address(this), amount);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_DepositRestricted.selector, amount, limit)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DepositRestricted.selector, amount, limit)));
         cellar.deposit(amount, address(this));
     }
 
@@ -799,7 +826,7 @@ contract CellarTest is Test {
 
         deal(address(USDC), address(this), amount * 1e6);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(USR_DepositRestricted.selector, amount * 1e6, limit)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DepositRestricted.selector, amount * 1e6, limit)));
         cellar.mint(amount * 1e18, address(this));
     }
 
@@ -881,19 +908,19 @@ contract CellarTest is Test {
             "Strategist payout address should be set to `newStrategistAddress`."
         );
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(INPUT_InvalidFee.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFee.selector)));
         cellar.setPlatformFee(0.21e18);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(INPUT_InvalidFee.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFee.selector)));
         cellar.setPerformanceFee(0.51e18);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(INPUT_InvalidCosmosAddress.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidCosmosAddress.selector)));
         cellar.setFeesDistributor(hex"0000000000000000000000010000000000000000000000000000000000000000");
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(INPUT_InvalidFeeCut.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFeeCut.selector)));
         cellar.setStrategistPerformanceCut(1.1e18);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(INPUT_InvalidFeeCut.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFeeCut.selector)));
         cellar.setStrategistPlatformCut(1.1e18);
     }
 
@@ -1432,7 +1459,7 @@ contract CellarTest is Test {
 
     function testPayoutNotSet() external {
         cellar.setStrategistPayoutAddress(address(0));
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_PayoutNotSet.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PayoutNotSet.selector)));
         cellar.sendFees();
     }
 
@@ -1471,10 +1498,10 @@ contract CellarTest is Test {
         assertEq(multiPositionCellar.getPositions().length, 32, "Cellar should have 32 positions.");
 
         // Adding one more position should revert.
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_PositionArrayFull.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector)));
         multiPositionCellar.addPosition(32, vm.addr(777));
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(STATE_PositionArrayFull.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector)));
         multiPositionCellar.pushPosition(vm.addr(777));
 
         // Check that users can still interact with the cellar even at max positions size.
