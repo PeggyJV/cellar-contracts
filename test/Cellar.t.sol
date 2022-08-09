@@ -11,7 +11,7 @@ import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 
-import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
+import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract CellarTest is Test {
@@ -38,6 +38,8 @@ contract CellarTest is Test {
     MockERC4626 private wbtcCLR;
 
     ERC20 private LINK = ERC20(0x514910771AF9Ca656af840dff83E8264EcF986CA);
+
+    ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
 
     address private immutable strategist = vm.addr(0xBEEF);
 
@@ -360,6 +362,28 @@ contract CellarTest is Test {
         assertEq(cellar.totalAssets(), 0, "Should have no assets remaining in cellar.");
     }
 
+    function testDepositMintWithdrawRedeemWithZeroInputs() external {
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroShares.selector)));
+        cellar.deposit(0, address(this));
+
+        cellar.mint(0, address(this));
+        assertEq(cellar.totalSupply(), 0, "Cellar should not have minted any shares.");
+        assertEq(cellar.totalAssets(), 0, "Cellar should not have any assets.");
+        assertEq(cellar.balanceOf(address(this)), 0, "Cellar should not have minted any shares to this address.");
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
+        cellar.redeem(0, address(this), address(this));
+
+        // Because no assets are deposited, `_withdrawInOrder` for loop continues until it indexes out of the positions array.
+        vm.expectRevert(bytes(stdError.indexOOBError));
+        cellar.withdraw(0, address(this), address(this));
+
+        // Deal cellar 1 wei of USDC to check that above explanation is correct.
+        deal(address(USDC), address(cellar), 1);
+        cellar.withdraw(0, address(this), address(this));
+        assertEq(USDC.balanceOf(address(this)), 0, "Cellar should not have sent any assets to this address.");
+    }
+
     // ========================================== POSITIONS TEST ==========================================
 
     function testManagingPositions() external {
@@ -448,6 +472,20 @@ contract CellarTest is Test {
         );
         cellar.popPosition();
 
+        // Check that `replacePosition` reverts if position has any funds in it.
+        address positionA = vm.addr(45);
+        cellar.trustPosition(positionA, Cellar.PositionType.ERC20);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__PositionNotEmpty.selector,
+                    address(WETH),
+                    WETH.balanceOf(address(cellar))
+                )
+            )
+        );
+        cellar.replacePosition(4, positionA);
+
         // Check that `pushPosition` reverts if position is not trusted.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
         cellar.pushPosition(address(0));
@@ -483,6 +521,7 @@ contract CellarTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.removePosition(0);
 
+        // Check that replacing the holding position reverts.
         address newPosition = vm.addr(45);
         cellar.trustPosition(newPosition, Cellar.PositionType.ERC20);
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
@@ -490,15 +529,15 @@ contract CellarTest is Test {
 
         cellar.swapPositions(4, 0);
 
+        // Check that popping the holding position reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.popPosition();
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
-        cellar.popPosition();
-
+        // Check that setting holding position to unused position reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidPosition.selector, address(0))));
         cellar.setHoldingPosition(address(0));
 
+        // Check that setting holding position to position with mismatched assets reverts.
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(WETH), address(USDC)))
         );
@@ -677,6 +716,9 @@ contract CellarTest is Test {
         cellar.initiateShutdown();
 
         deal(address(USDC), address(this), 1);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
+        cellar.initiateShutdown();
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.deposit(1, address(this));
@@ -3071,4 +3113,180 @@ contract CellarTest is Test {
             _checkSendFees(assetManagementCellar, 14 days, yieldEarned);
         }
     }
+
+    function testDepeggedAssetNotUsedByCellar() external {
+        // Scenario 1: Depegged asset is not being used by the cellar.
+        // Governance can remove it itself by calling `distrustPosition`.
+
+        // Add asset that will be depegged.
+        uint256 positionsLengthBefore = cellar.getPositions().length;
+        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
+        cellar.pushPosition(address(USDT));
+        priceRouter.setExchangeRate(USDT, USDC, 1e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1e6);
+
+        deal(address(USDC), address(this), 200e6);
+        cellar.deposit(100e6, address(this));
+
+        // USDT Depegs to $0.90.
+        priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
+
+        assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
+        assertEq(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should not change.");
+
+        // Governance votes to distrust USDT position.
+        cellar.distrustPosition(address(USDT));
+        assertTrue(!cellar.isTrusted(address(USDT)), "Cellar should not trust USDT.");
+        assertTrue(!cellar.isPositionUsed(address(USDT)), "Cellar should not be using USDT.");
+        assertEq(
+            cellar.getPositions().length,
+            positionsLengthBefore,
+            "Cellar should have removed USDT from positions array."
+        );
+    }
+
+    function testDepeggedAssetUsedByTheCellar() external {
+        // Scenario 2: Depegged asset is being used by the cellar.
+        // Governance uses multicall to rebalance cellar out of position, and to distrust it.
+
+        // Add asset that will be depegged.
+        uint256 positionsLengthBefore = cellar.getPositions().length;
+        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
+        cellar.pushPosition(address(USDT));
+        priceRouter.setExchangeRate(USDT, USDC, 1e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1e6);
+
+        deal(address(USDC), address(this), 200e6);
+        cellar.deposit(100e6, address(this));
+
+        //Change Cellar holdings manually to 50/50 USDC/USDT.
+        deal(address(USDC), address(cellar), 50e6);
+        deal(address(USDT), address(cellar), 50e6);
+
+        // USDT Depegs to $0.90.
+        priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
+
+        assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
+        assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
+
+        // Governance votes to rebalance out of USDT, and distrust USDT.
+        // Manually rebalance into USDC.
+        deal(address(USDC), address(cellar), 95e6);
+        deal(address(USDT), address(cellar), 0);
+        cellar.distrustPosition(address(USDT));
+        assertTrue(!cellar.isTrusted(address(USDT)), "Cellar should not trust USDT.");
+        assertTrue(!cellar.isPositionUsed(address(USDT)), "Cellar should not be using USDT.");
+        assertEq(
+            cellar.getPositions().length,
+            positionsLengthBefore,
+            "Cellar should have removed USDT from positions array."
+        );
+    }
+
+    function testDepeggedHoldingPosition() external {
+        // Scenario 3: Depegged asset is being used by the cellar, and it is the holding position.
+        // Governance uses multicall to rebalance cellar out of position, set a new holding position, and distrust it.
+
+        uint256 positionsLengthBefore = cellar.getPositions().length;
+        // Rebalance into usdcCLR.
+        deal(address(USDC), address(this), 200e6);
+        cellar.deposit(100e6, address(this));
+        cellar.rebalance(address(USDC), address(usdcCLR), 50e6, SwapRouter.Exchange.UNIV2, abi.encode(0)); // No swap is made because both positions use USDC.
+
+        // usdcCLR depegs from USDC
+        deal(address(USDC), address(usdcCLR), 45e6);
+
+        assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
+        assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
+
+        // Governance votes to rebalance out of usdcCLR, and distrust usdcCLR.
+        cellar.rebalance(address(usdcCLR), address(USDC), 45e6, SwapRouter.Exchange.UNIV2, abi.encode(0)); // No swap is made because both positions use USDC.
+        cellar.distrustPosition(address(usdcCLR));
+        assertTrue(!cellar.isTrusted(address(usdcCLR)), "Cellar should not trust usdcCLR.");
+        assertTrue(!cellar.isPositionUsed(address(usdcCLR)), "Cellar should not be using usdcCLR.");
+        assertEq(
+            cellar.getPositions().length,
+            positionsLengthBefore - 1,
+            "Cellar should have removed usdcCLR from positions array."
+        );
+    }
+
+    //TODO can we rely on a pricefeed to get an accurate price data during a depeg event?
+    function testDepeggedCellarAsset() external {
+        // Scenario 4: Depegged asset is the cellars asset.
+        // Worst case scenario, rebalance out of position into some new stable position, set fees to zero, initiate a shutdown, and have users withdraw funds asap.
+        // Want to ensure that attackers can not join using the depegged asset.
+        // Emergency governance proposal to move funds into some new safety contract, shutdown old cellar, and allow users to withdraw from the safety contract.
+
+        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
+        cellar.pushPosition(address(USDT));
+        priceRouter.setExchangeRate(USDT, USDC, 1e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1e6);
+
+        deal(address(USDC), address(this), 100e6);
+        cellar.deposit(100e6, address(this));
+
+        // USDC depegs to $0.90.
+        priceRouter.setExchangeRate(USDC, USDT, 0.9e6);
+        priceRouter.setExchangeRate(USDT, USDC, 1.111111e6);
+
+        assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
+
+        // Governance rebalances to USDT, sets performance and paltform fees to zero, initiates a shutdown, and has users withdraw their funds.
+        // Manually rebalance to USDT.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(USDT), address(cellar), 90e6);
+        // Important to set fees to zero, else performance fees are minted as the cellars asset depegs further.
+        cellar.setPerformanceFee(0);
+        cellar.setPlatformFee(0);
+        cellar.initiateShutdown();
+
+        // Attacker tries to join with depegged asset.
+        address attacker = vm.addr(34534);
+        deal(address(USDC), attacker, 1);
+        vm.startPrank(attacker);
+        USDC.approve(address(cellar), 1);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
+        cellar.deposit(1, attacker);
+        vm.stopPrank();
+
+        cellar.redeem(50e18, address(this), address(this));
+
+        // USDC depegs to $0.10.
+        priceRouter.setExchangeRate(USDC, USDT, 0.1e6);
+        priceRouter.setExchangeRate(USDT, USDC, 10e6);
+
+        cellar.redeem(50e18, address(this), address(this));
+
+        // Eventhough USDC depegged further, cellar rebalanced out of USDC removing its exposure to it.
+        // So users can expect to get the remaining value out of the cellar.
+        assertEq(
+            USDT.balanceOf(address(this)),
+            90e6,
+            "Withdraws should total the amount of USDT in the cellar after rebalance."
+        );
+
+        // Governance can not distrust USDC, because it is the holding position, and
+        // changing the holding position is pointless because the asset of the new holding position must be USDC.
+        // Therefore the cellar is lost, and should be exitted completely.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
+        cellar.distrustPosition(address(USDC));
+    }
+
+    /**
+     * Some notes about the above tests.
+     * It will be difficult for Governance to set some safe min asset amount when rebalancing a cellar from a depegging asset. Ideally this
+     * would be done by the strategist, but even then if the price is volatile enough, strategists might not be able to set a fair min amount out value.
+     * We might be able to use Chainlink price feeds to get around this, and rely on the Chainlink oracle data in order to calculate a fair min amount out on chain.
+     *
+     * Users will be able to exit the cellar as long as the depegged asset is still within its price envelope defined in the price router as minPrice and maxPrice.
+     * Once an asset is outside this envelope, or Chainlink stope reporting pricing data, the situation becomes difficult.
+     * Any calls involving `totalAssets()` will fail because the price router will not be able to get a safe price for teh depegged asset.
+     * With this in mind we should consider creating some emergency fund protector contract, where in the event a violent depegging occurs,
+     * Governance can vote to trust the fund protector contract as a position, and all the cellars assets can be converted into some safe asset then deposited into the fund protector
+     * contract. Doing this decouples the depegged asset pricing data from assets in the cellar.
+     * In order to get their funds out users would go to the fund protector contract, and trade their shares(from the depegged cellar) for assets in the fund protector.
+     */
 }
