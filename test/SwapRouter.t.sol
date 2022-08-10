@@ -87,19 +87,21 @@ abstract contract SwapRouterTest is Test {
         _testSwap(assets, _doMultiSwap);
     }
 
-    function testFailSwapWithoutEnoughAssets() external {
+    function testSwapWithoutEnoughAssets() external {
         uint256 assets = 100e18;
 
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         _doSwap(assets * 2);
     }
 
-    function testFailSwapWithoutEnoughApproved() external {
+    function testSwapWithoutEnoughApproved() external {
         uint256 assets = 100e18;
 
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets / 2);
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         _doSwap(assets);
     }
 }
