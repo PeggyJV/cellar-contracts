@@ -59,6 +59,12 @@ contract SwapRouter is Multicall {
     }
 
     // ======================================= SWAP OPERATIONS =======================================
+
+    /**
+     * @notice Attempted to perform a swap that reverted without a message.
+     */
+    error SwapRouter__SwapReverted();
+
     /**
      * @notice Perform a swap using a supported exchange.
      * @param exchange value dictating which exchange to use to make the swap
@@ -85,7 +91,7 @@ contract SwapRouter is Multicall {
                     revert(add(32, result), returndata_size)
                 }
             } else {
-                revert("Swap reverted.");
+                revert SwapRouter__SwapReverted();
             }
         }
 
