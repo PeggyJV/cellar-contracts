@@ -50,6 +50,16 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     // ======================================= ADAPTOR OPERATIONS =======================================
 
     /**
+     * @notice Attempted to set a minPrice below the Chainlink minimum buffer.
+     */
+    error PriceRouter__InvalidMinPrice(uint256 proposed, uint256 bufferedMinimum);
+
+    /**
+     * @notice Attempted to set a maxPrice above the Chainlink maximum buffer.
+     */
+    error PriceRouter__InvalidMaxPrice(uint256 proposed, uint256 bufferedMaximum);
+
+    /**
      * @notice Add an asset for the price router to support.
      * @param asset address of asset to support on the platform
      * @param remap address of asset to get pricing data for instead if a price feed is not
@@ -75,8 +85,22 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
             ERC20 assetToQuery = address(remap) == address(0) ? asset : remap;
             (uint256 minFromChainklink, uint256 maxFromChainlink) = _getPriceRangeInUSD(assetToQuery);
 
-            if (minPrice == 0) minPrice = minFromChainklink;
-            if (maxPrice == 0) maxPrice = maxFromChainlink;
+            // Add a ~10% buffer to minimum and maximum price from Chainlink because Chainlink can stop updating
+            // its price before/above the min/max price.
+            uint256 bufferedMinPrice = minFromChainklink.mulWadDown(1.1e18);
+            uint256 bufferedMaxPrice = maxFromChainlink.mulWadDown(0.9e18);
+
+            if (minPrice == 0) {
+                minPrice = bufferedMinPrice;
+            } else {
+                if (minPrice < bufferedMinPrice) revert PriceRouter__InvalidMinPrice(minPrice, bufferedMinPrice);
+            }
+
+            if (maxPrice == 0) {
+                maxPrice = bufferedMaxPrice;
+            } else {
+                if (maxPrice > bufferedMaxPrice) revert PriceRouter__InvalidMaxPrice(maxPrice, bufferedMaxPrice);
+            }
         }
 
         assets[asset] = AssetConfig({

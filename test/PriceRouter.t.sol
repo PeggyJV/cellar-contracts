@@ -11,6 +11,8 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
+//TODO test reverts in chainlink adaptor
+//TODO test reverts in addAsset for min/max price
 contract PriceRouterTest is Test {
     using Math for uint256;
 
@@ -586,24 +588,24 @@ contract PriceRouterTest is Test {
 
         // Check that exchange rates work when quote == base.
         (min, max) = priceRouter.getPriceRange(USDC);
-        assertEq(min, 0.01e8, "USDC Min Price Should be $0.01");
-        assertEq(max, 1000e8, "USDC Max Price Should be $1000");
+        assertEq(min, 0.011e8, "USDC Min Price Should be $0.01");
+        assertEq(max, 900e8, "USDC Max Price Should be $1000");
 
         (min, max) = priceRouter.getPriceRange(DAI);
-        assertEq(min, 0.01e8, "DAI Min Price Should be $0.01");
-        assertEq(max, 100e8, "DAI Max Price Should be $100");
+        assertEq(min, 0.011e8, "DAI Min Price Should be $0.01");
+        assertEq(max, 90e8, "DAI Max Price Should be $100");
 
         (min, max) = priceRouter.getPriceRange(WETH);
-        assertEq(min, 1e8, "WETH Min Price Should be $1");
-        assertEq(max, 10_000e8, "WETH Max Price Should be $10,000");
+        assertEq(min, 1.1e8, "WETH Min Price Should be $1");
+        assertEq(max, 9_000e8, "WETH Max Price Should be $10,000");
 
         (min, max) = priceRouter.getPriceRange(WBTC);
-        assertEq(min, 10e8, "WBTC Min Price Should be $10");
-        assertEq(max, 10_000_000e8, "WBTC Max Price Should be $10,000,000");
+        assertEq(min, 11e8, "WBTC Min Price Should be $10");
+        assertEq(max, 9_000_000e8, "WBTC Max Price Should be $10,000,000");
 
         (min, max) = priceRouter.getPriceRange(BOND);
         assertEq(min, 0, "BOND Min Price Should be $0");
-        assertGt(max, 1e46, "BOND Max Price Should be a large number");
+        assertGt(max, 9e45, "BOND Max Price Should be a large number");
 
         ERC20[] memory baseAssets = new ERC20[](5);
         baseAssets[0] = USDC;
@@ -614,16 +616,16 @@ contract PriceRouterTest is Test {
 
         (uint256[] memory mins, uint256[] memory maxes) = priceRouter.getPriceRanges(baseAssets);
 
-        assertEq(mins[0], 0.01e8, "USDC Min Price Should be $0.01");
-        assertEq(maxes[0], 1000e8, "USDC Max Price Should be $1000");
-        assertEq(mins[1], 0.01e8, "DAI Min Price Should be $0.01");
-        assertEq(maxes[1], 100e8, "DAI Max Price Should be $100");
-        assertEq(mins[2], 1e8, "WETH Min Price Should be $1");
-        assertEq(maxes[2], 10_000e8, "WETH Max Price Should be $10,000");
-        assertEq(mins[3], 10e8, "WBTC Min Price Should be $10");
-        assertEq(maxes[3], 10_000_000e8, "WBTC Max Price Should be $10,000,000");
+        assertEq(mins[0], 0.011e8, "USDC Min Price Should be $0.01");
+        assertEq(maxes[0], 900e8, "USDC Max Price Should be $1000");
+        assertEq(mins[1], 0.011e8, "DAI Min Price Should be $0.01");
+        assertEq(maxes[1], 90e8, "DAI Max Price Should be $100");
+        assertEq(mins[2], 1.1e8, "WETH Min Price Should be $1");
+        assertEq(maxes[2], 9_000e8, "WETH Max Price Should be $10,000");
+        assertEq(mins[3], 11e8, "WBTC Min Price Should be $10");
+        assertEq(maxes[3], 9_000_000e8, "WBTC Max Price Should be $10,000,000");
         assertEq(mins[4], 0, "BOND Min Price Should be $0");
-        assertGt(maxes[4], 1e46, "BOND Max Price Should be a large number");
+        assertGt(maxes[4], 9e45, "BOND Max Price Should be a large number");
     }
 
     function testGetValue(
