@@ -104,6 +104,11 @@ abstract contract SwapRouterTest is Test {
         vm.expectRevert("TRANSFER_FROM_FAILED");
         _doSwap(assets);
     }
+
+    function testInvalidSwapData() external {
+        vm.expectRevert(SwapRouter.SwapRouter__SwapReverted.selector);
+        swapRouter.swap(SwapRouter.Exchange.UNIV2, abi.encode(0), receiver);
+    }
 }
 
 contract UniswapV2SwapRouterTest is SwapRouterTest {
