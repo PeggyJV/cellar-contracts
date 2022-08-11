@@ -16,8 +16,21 @@ contract MockCellar is Cellar, Test {
         address _holdingPosition,
         WithdrawType _withdrawType,
         string memory _name,
-        string memory _symbol
-    ) Cellar(_registry, _asset, _positions, _positionTypes, _holdingPosition, _withdrawType, _name, _symbol) {}
+        string memory _symbol,
+        address _strategistPayout
+    )
+        Cellar(
+            _registry,
+            _asset,
+            _positions,
+            _positionTypes,
+            _holdingPosition,
+            _withdrawType,
+            _name,
+            _symbol,
+            _strategistPayout
+        )
+    {}
 
     function depositIntoPosition(
         address position,
@@ -45,5 +58,19 @@ contract MockCellar is Cellar, Test {
         deal(address(positionAsset), address(this), amount);
 
         _depositTo(position, amount);
+        feeData.highWatermark += amountInAssets;
+    }
+
+    function getData()
+        public
+        view
+        returns (
+            uint256 _totalAssets,
+            address[] memory _positions,
+            ERC20[] memory positionAssets,
+            uint256[] memory positionBalances
+        )
+    {
+        (_totalAssets, _positions, positionAssets, positionBalances) = _getData();
     }
 }

@@ -119,7 +119,8 @@ contract CellarRouterTest is Test {
             address(USDC),
             Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
-            "multiposition-CLR"
+            "multiposition-CLR",
+            address(0)
         );
         vm.label(address(cellar), "cellar");
 
