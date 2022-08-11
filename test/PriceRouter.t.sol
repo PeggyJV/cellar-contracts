@@ -137,16 +137,6 @@ contract PriceRouterTest is Test {
 
         uint256[] memory exchangeRates = priceRouter.getExchangeRates(baseAssets, WBTC);
 
-        address[] memory pathWithHop = new address[](3);
-
-        pathWithHop[0] = address(USDC);
-        pathWithHop[1] = address(WETH);
-        pathWithHop[2] = address(WBTC);
-        amounts = uniV2Router.getAmountsOut(1e18, pathWithHop);
-        console.log("Got WBTC to USDC Out", amounts[0], amounts[1]);
-
-        assertApproxEqRel(exchangeRates[0], amounts[1], 1e16, "WBTC exchangeRates failed against USDC");
-
         path[0] = address(WETH);
         path[1] = address(WBTC);
         amounts = uniV2Router.getAmountsOut(1e18, path);
@@ -154,13 +144,6 @@ contract PriceRouterTest is Test {
         assertApproxEqRel(exchangeRates[2], amounts[1], 1e16, "WBTC exchangeRates failed against WETH");
 
         assertEq(exchangeRates[3], 1e8, "WBTC -> WBTC Exchange Rate Should be 1e8");
-
-        pathWithHop[0] = address(BOND);
-        pathWithHop[1] = address(WETH);
-        pathWithHop[2] = address(WBTC);
-        amounts = uniV2Router.getAmountsOut(1e8, pathWithHop);
-
-        assertApproxEqRel(exchangeRates[4], amounts[1], 1e16, "WBTC exchangeRates failed against BOND");
     }
 
     function testPriceRange() external {

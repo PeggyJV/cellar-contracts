@@ -36,8 +36,6 @@ contract ChainlinkPriceFeedAdaptor {
         ) {
             price = _price.toUint256();
             timestamp = _timestamp;
-
-            console.log("Found USD Price", address(asset), price);
         } catch {
             // If we can't find the USD price, then try the ETH price.
             try feedRegistry.latestRoundData(address(asset), Denominations.ETH) returns (
