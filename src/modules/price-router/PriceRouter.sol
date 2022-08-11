@@ -9,8 +9,6 @@ import { Math } from "src/utils/Math.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 
-import "src/Errors.sol";
-
 /**
  * @title Sommelier Price Router
  * @notice Provides a universal interface allowing Sommelier contracts to retrieve secure pricing
@@ -70,24 +68,16 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         uint256 maxPrice,
         uint96 heartbeat
     ) external onlyOwner {
-        // console.log("1");
-
         require(address(asset) != address(0), "Invalid asset");
-
-        // console.log("2");
 
         if (minPrice == 0 || maxPrice == 0) {
             // If no adaptor is specified, use the Chainlink to get the min and max of the asset.
             ERC20 assetToQuery = address(remap) == address(0) ? asset : remap;
             (uint256 minFromChainklink, uint256 maxFromChainlink) = _getPriceRangeInUSD(assetToQuery);
 
-            // console.log("3");
-
             if (minPrice == 0) minPrice = minFromChainklink;
             if (maxPrice == 0) maxPrice = maxFromChainlink;
         }
-
-        // console.log("4");
 
         assets[asset] = AssetConfig({
             remap: remap,
@@ -96,8 +86,6 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
             heartbeat: heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT,
             isSupported: true
         });
-
-        // console.log("5");
 
         emit AddAsset(address(asset));
     }
@@ -130,6 +118,11 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     }
 
     /**
+     * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
+     */
+    error PriceRouter__LengthMismatch();
+
+    /**
      * @notice Get the total value of multiple assets in terms of another asset.
      * @param baseAssets addresses of the assets to get the price of in terms of the quote asset
      * @param amounts amounts of each base asset to price
@@ -142,7 +135,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         ERC20 quoteAsset
     ) external view returns (uint256 value) {
         uint256 numOfAssets = baseAssets.length;
-        if (numOfAssets != amounts.length) revert USR_LengthMismatch();
+        if (numOfAssets != amounts.length) revert PriceRouter__LengthMismatch();
 
         uint8 quoteAssetDecimals = quoteAsset.decimals();
 
@@ -194,6 +187,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     function getPriceRange(ERC20 asset) public view returns (uint256 min, uint256 max) {
         AssetConfig memory config = assets[asset];
 
+        if (!config.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
+
         (min, max) = (config.minPrice, config.maxPrice);
     }
 
@@ -226,6 +221,36 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     }
 
     /**
+     * @notice Attempted to update the asset to one that is not supported by the platform.
+     * @param asset address of the unsupported asset
+     */
+    error PriceRouter__UnsupportedAsset(address asset);
+
+    /**
+     * @notice Attempted an operation to price an asset that under its minimum valid price.
+     * @param asset address of the asset that is under its minimum valid price
+     * @param price price of the asset
+     * @param minPrice minimum valid price of the asset
+     */
+    error PriceRouter__AssetBelowMinPrice(address asset, uint256 price, uint256 minPrice);
+
+    /**
+     * @notice Attempted an operation to price an asset that under its maximum valid price.
+     * @param asset address of the asset that is under its maximum valid price
+     * @param price price of the asset
+     * @param maxPrice maximum valid price of the asset
+     */
+    error PriceRouter__AssetAboveMaxPrice(address asset, uint256 price, uint256 maxPrice);
+
+    /**
+     * @notice Attempted to fetch a price for an asset that has not been updated in too long.
+     * @param asset address of the asset thats price is stale
+     * @param timeSinceLastUpdate seconds since the last price update
+     * @param heartbeat maximum allowed time between price updates
+     */
+    error PriceRouter__StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
+
+    /**
      * @notice Gets the valuation of some asset in USD
      * @dev USD valuation has 8 decimals
      * @param asset the asset to get the value of in USD
@@ -234,7 +259,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
         AssetConfig memory config = assets[asset];
 
-        if (!config.isSupported) revert USR_UnsupportedAsset(address(asset));
+        if (!config.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
 
         if (address(config.remap) != address(0)) asset = config.remap;
 
@@ -242,13 +267,14 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         (value, timestamp) = _getValueInUSDAndTimestamp(asset);
 
         uint256 minPrice = config.minPrice;
-        if (value < minPrice) revert STATE_AssetBelowMinPrice(address(asset), value, minPrice);
+        if (value < minPrice) revert PriceRouter__AssetBelowMinPrice(address(asset), value, minPrice);
 
         uint256 maxPrice = config.maxPrice;
-        if (value > maxPrice) revert STATE_AssetAboveMaxPrice(address(asset), value, maxPrice);
+        if (value > maxPrice) revert PriceRouter__AssetAboveMaxPrice(address(asset), value, maxPrice);
 
         uint256 heartbeat = config.heartbeat;
         uint256 timeSinceLastUpdate = block.timestamp - timestamp;
-        if (timeSinceLastUpdate > heartbeat) revert STATE_StalePrice(address(asset), timeSinceLastUpdate, heartbeat);
+        if (timeSinceLastUpdate > heartbeat)
+            revert PriceRouter__StalePrice(address(asset), timeSinceLastUpdate, heartbeat);
     }
 }
