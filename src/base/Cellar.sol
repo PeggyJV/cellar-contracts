@@ -654,7 +654,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @dev In the case where
      */
-    function initiateShutdown() public whenNotShutdown onlyOwner {
+    function initiateShutdown() external whenNotShutdown onlyOwner {
         isShutdown = true;
 
         emit ShutdownChanged(true);
@@ -663,7 +663,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @notice Restart the cellar.
      */
-    function liftShutdown() public onlyOwner {
+    function liftShutdown() external onlyOwner {
         isShutdown = false;
 
         emit ShutdownChanged(false);
@@ -754,6 +754,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     error Cellar__ZeroAssets();
 
+    /**
+     * @notice called at the beginning of deposit.
+     * @param assets amount of assets deposited by user.
+     * @param receiver address receiving the shares.
+     */
     function beforeDeposit(
         uint256 assets,
         uint256,
@@ -764,6 +769,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         feeData.highWatermark += assets;
     }
 
+    /**
+     * @notice called at the end of deposit.
+     * @param assets amount of assets deposited by user.
+     */
     function afterDeposit(
         uint256 assets,
         uint256,
@@ -772,6 +781,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
         _depositTo(holdingPosition, assets);
     }
 
+    /**
+     * @notice called at the beginning of withdraw.
+     * @param assets amount of assets withdrawn by user.
+     */
     function beforeWithdraw(
         uint256 assets,
         uint256,
@@ -786,6 +799,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
         feeData.highWatermark = assets > highWatermark ? 0 : highWatermark - assets;
     }
 
+    /**
+     * @notice Deposits assets into the cellar, and returns shares to receiver.
+     * @param assets amount of assets deposited by user.
+     * @param receiver address to receive the shares.
+     * @return shares amount of shares given for deposit.
+     */
     function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
 
@@ -806,6 +825,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
         afterDeposit(assets, shares, receiver);
     }
 
+    /**
+     * @notice Mints shares from the cellar, and returns shares to receiver.
+     * @param shares amount of shares requested by user.
+     * @param receiver address to receive the shares.
+     * @return assets amount of assets deposited into the cellar.
+     */
     function mint(uint256 shares, address receiver) public override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
 
@@ -932,6 +957,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @dev Withdraw from positions in the order defined by `positions`. Used if the withdraw type
      *      is `ORDERLY`.
+     * @param assets the amount of assets to withdraw from cellar
+     * @param receiver the address to sent withdrawn assets to
+     * @param _positions positions to withdraw from
+     * @param positionAssets underlying asset for each position
+     * @param positionBalances underlying balances for each position
      */
     function _withdrawInOrder(
         uint256 assets,
@@ -977,6 +1007,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
     /**
      * @dev Withdraw from each position proportional to that of shares redeemed. Used if the
      *      withdraw type is `PROPORTIONAL`.
+     * @param shares the user is burning to withdraw
+     * @param totalShares the total amount of oustanding shares
+     * @param receiver the address to sent withdrawn assets to
+     * @param _positions positions to withdraw from
+     * @param positionBalances underlying balances for each position
      */
     function _withdrawInProportion(
         uint256 shares,
@@ -1337,7 +1372,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Fees are accrued as shares and redeemed upon transfer.
      * @dev assumes cellar's accounting asset is able to be transferred and sent to Cosmos
      */
-    function sendFees() public {
+    function sendFees() external {
         address strategistPayoutAddress = feeData.strategistPayoutAddress;
         if (strategistPayoutAddress == address(0)) revert Cellar__PayoutNotSet();
 
@@ -1395,6 +1430,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @dev Deposit into a position according to its position type and update related state.
+     * @param position address to deposit funds into
+     * @param assets the amount of assets to deposit into the position
      */
     function _depositTo(address position, uint256 assets) internal {
         PositionType positionType = getPositionType[position];
@@ -1408,6 +1445,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @dev Withdraw from a position according to its position type and update related state.
+     * @param position address to withdraw funds from
+     * @param assets the amount of assets to withdraw from the position
+     * @param receiver the address to sent withdrawn assets to
      */
     function _withdrawFrom(
         address position,
@@ -1426,6 +1466,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @dev Get the balance of a position according to its position type.
+     * @param position position to get the balance of
      */
     function _balanceOf(address position) internal view returns (uint256) {
         PositionType positionType = getPositionType[position];
@@ -1439,6 +1480,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @dev Get the asset of a position according to its position type.
+     * @param position to get the asset of
      */
     function _assetOf(address position) internal view returns (ERC20) {
         PositionType positionType = getPositionType[position];
@@ -1457,6 +1499,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
     /**
      * @dev Perform a swap using the swap router and check that it behaves as expected.
+     * @param assetIn the asset to sell
+     * @param amountIn the amount of `assetIn` to sell
+     * @param exchange the exchange to sell `assetIn` on
+     * @param params Abi encoded swap parameters dependent on the `exchange` selected.
+     *               Refer to SwapRouter.sol for `params` makeup
+     * @param receiver the address to send the swapped assets to
      */
     function _swap(
         ERC20 assetIn,
