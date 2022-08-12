@@ -17,40 +17,8 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-    /**
-     * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
-     */
-    error PriceRouter__LengthMismatch();
-
-    /**
-     * @notice Attempted to update the asset to one that is not supported by the platform.
-     * @param asset address of the unsupported asset
-     */
-    error PriceRouter__UnsupportedAsset(address asset);
-
-    /**
-     * @notice Attempted to fetch a price for an asset that has not been updated in too long.
-     * @param asset address of the asset thats price is stale
-     * @param timeSinceLastUpdate seconds since the last price update
-     * @param heartbeat maximum allowed time between price updates
-     */
-    error PriceRouter__StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
-
-    /**
-     * @notice Attempted an operation to price an asset that under its minimum valid price.
-     * @param asset address of the asset that is under its minimum valid price
-     * @param price price of the asset
-     * @param minPrice minimum valid price of the asset
-     */
-    error PriceRouter__AssetBelowMinPrice(address asset, uint256 price, uint256 minPrice);
-
-    /**
-     * @notice Attempted an operation to price an asset that under its maximum valid price.
-     * @param asset address of the asset that is under its maximum valid price
-     * @param price price of the asset
-     * @param maxPrice maximum valid price of the asset
-     */
-    error PriceRouter__AssetAboveMaxPrice(address asset, uint256 price, uint256 maxPrice);
+    event AddAsset(address indexed asset);
+    event RemoveAsset(address indexed asset);
 
     // =========================================== ASSETS CONFIG ===========================================
 
@@ -62,22 +30,42 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @param heartbeat maximum allowed time that can pass with no update before price data is considered stale
      * @param isSupported whether this asset is supported by the platform or not
      */
-    struct AssetData {
+    struct AssetConfig {
         ERC20 remap;
         uint256 minPrice;
         uint256 maxPrice;
-        uint96 heartBeat;
+        uint96 heartbeat;
         bool isSupported;
     }
 
     /**
      * @notice Get the asset data for a given asset.
      */
-    mapping(ERC20 => AssetData) public getAssetData;
+    mapping(ERC20 => AssetConfig) public getAssetConfig;
 
     uint96 public constant DEFAULT_HEART_BEAT = 1 days;
 
     // ======================================= ADAPTOR OPERATIONS =======================================
+
+    /**
+     * @notice Attempted to set a minimum price below the Chainlink minimum price (with buffer).
+     * @param minPrice minimum price attempted to set
+     * @param bufferedMinPrice minimum price that can be set including buffer
+     */
+    error PriceRouter__InvalidMinPrice(uint256 minPrice, uint256 bufferedMinPrice);
+
+    /**
+     * @notice Attempted to set a maximum price above the Chainlink maximum price (with buffer).
+     * @param maxPrice maximum price attempted to set
+     * @param bufferedMaxPrice maximum price that can be set including buffer
+     */
+    error PriceRouter__InvalidMaxPrice(uint256 maxPrice, uint256 bufferedMaxPrice);
+
+    /**
+     * @notice Attempted to add an invalid asset.
+     * @param asset address of the invalid asset
+     */
+    error PriceRouter__InvalidAsset(address asset);
 
     /**
      * @notice Add an asset for the price router to support.
@@ -98,24 +86,40 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         uint256 maxPrice,
         uint96 heartbeat
     ) external onlyOwner {
-        require(address(asset) != address(0), "Invalid asset");
+        if (address(asset) == address(0)) revert PriceRouter__InvalidAsset(address(asset));
 
         if (minPrice == 0 || maxPrice == 0) {
             // If no adaptor is specified, use the Chainlink to get the min and max of the asset.
             ERC20 assetToQuery = address(remap) == address(0) ? asset : remap;
             (uint256 minFromChainklink, uint256 maxFromChainlink) = _getPriceRangeInUSD(assetToQuery);
 
-            if (minPrice == 0) minPrice = minFromChainklink;
-            if (maxPrice == 0) maxPrice = maxFromChainlink;
+            // Add a ~10% buffer to minimum and maximum price from Chainlink because Chainlink can stop updating
+            // its price before/above the min/max price.
+            uint256 bufferedMinPrice = minFromChainklink.mulWadDown(1.1e18);
+            uint256 bufferedMaxPrice = maxFromChainlink.mulWadDown(0.9e18);
+
+            if (minPrice == 0) {
+                minPrice = bufferedMinPrice;
+            } else {
+                if (minPrice < bufferedMinPrice) revert PriceRouter__InvalidMinPrice(minPrice, bufferedMinPrice);
+            }
+
+            if (maxPrice == 0) {
+                maxPrice = bufferedMaxPrice;
+            } else {
+                if (maxPrice > bufferedMaxPrice) revert PriceRouter__InvalidMaxPrice(maxPrice, bufferedMaxPrice);
+            }
         }
 
-        getAssetData[asset] = AssetData({
+        getAssetConfig[asset] = AssetConfig({
             remap: remap,
             minPrice: minPrice,
             maxPrice: maxPrice,
-            heartBeat: heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT,
+            heartbeat: heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT,
             isSupported: true
         });
+
+        emit AddAsset(address(asset));
     }
 
     /**
@@ -123,7 +127,9 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @param asset address of asset to remove support for
      */
     function removeAsset(ERC20 asset) external onlyOwner {
-        getAssetData[asset].isSupported = false;
+        getAssetConfig[asset].isSupported = false;
+
+        emit RemoveAsset(address(asset));
     }
 
     // ======================================= PRICING OPERATIONS =======================================
@@ -142,6 +148,11 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     ) external view returns (uint256 value) {
         value = amount.mulDivDown(getExchangeRate(baseAsset, quoteAsset), 10**baseAsset.decimals());
     }
+
+    /**
+     * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
+     */
+    error PriceRouter__LengthMismatch();
 
     /**
      * @notice Get the total value of multiple assets in terms of another asset.
@@ -206,21 +217,23 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @return max maximum valid price for the asset
      */
     function getPriceRange(ERC20 asset) public view returns (uint256 min, uint256 max) {
-        AssetData storage assetData = getAssetData[asset];
+        AssetConfig memory config = getAssetConfig[asset];
 
-        (min, max) = (assetData.minPrice, assetData.maxPrice);
+        if (!config.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
+
+        (min, max) = (config.minPrice, config.maxPrice);
     }
 
     /**
      * @notice Get the minimum and maximum valid prices for an asset.
-     * @param assets addresses of the assets to get the price ranges for
+     * @param _assets addresses of the assets to get the price ranges for
      * @return min minimum valid price for each asset
      * @return max maximum valid price for each asset
      */
-    function getPriceRanges(ERC20[] memory assets) external view returns (uint256[] memory min, uint256[] memory max) {
-        uint256 numOfAssets = assets.length;
+    function getPriceRanges(ERC20[] memory _assets) external view returns (uint256[] memory min, uint256[] memory max) {
+        uint256 numOfAssets = _assets.length;
         (min, max) = (new uint256[](numOfAssets), new uint256[](numOfAssets));
-        for (uint256 i; i < numOfAssets; i++) (min[i], max[i]) = getPriceRange(assets[i]);
+        for (uint256 i; i < numOfAssets; i++) (min[i], max[i]) = getPriceRange(_assets[i]);
     }
 
     // =========================================== HELPER FUNCTIONS ===========================================
@@ -240,28 +253,58 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     }
 
     /**
+     * @notice Attempted to update the asset to one that is not supported by the platform.
+     * @param asset address of the unsupported asset
+     */
+    error PriceRouter__UnsupportedAsset(address asset);
+
+    /**
+     * @notice Attempted an operation to price an asset that under its minimum valid price.
+     * @param asset address of the asset that is under its minimum valid price
+     * @param price price of the asset
+     * @param minPrice minimum valid price of the asset
+     */
+    error PriceRouter__AssetBelowMinPrice(address asset, uint256 price, uint256 minPrice);
+
+    /**
+     * @notice Attempted an operation to price an asset that under its maximum valid price.
+     * @param asset address of the asset that is under its maximum valid price
+     * @param price price of the asset
+     * @param maxPrice maximum valid price of the asset
+     */
+    error PriceRouter__AssetAboveMaxPrice(address asset, uint256 price, uint256 maxPrice);
+
+    /**
+     * @notice Attempted to fetch a price for an asset that has not been updated in too long.
+     * @param asset address of the asset thats price is stale
+     * @param timeSinceLastUpdate seconds since the last price update
+     * @param heartbeat maximum allowed time between price updates
+     */
+    error PriceRouter__StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
+
+    /**
      * @notice Gets the valuation of some asset in USD
      * @dev USD valuation has 8 decimals
      * @param asset the asset to get the value of in USD
      * @return value the value of asset in USD
      */
     function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
-        AssetData storage assetData = getAssetData[asset];
+        AssetConfig memory config = getAssetConfig[asset];
 
-        if (!assetData.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
+        if (!config.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
 
-        if (address(assetData.remap) != address(0)) asset = assetData.remap;
+        if (address(config.remap) != address(0)) asset = config.remap;
 
         uint256 timestamp;
         (value, timestamp) = _getValueInUSDAndTimestamp(asset);
 
-        uint256 minPrice = assetData.minPrice;
+        uint256 minPrice = config.minPrice;
         if (value < minPrice) revert PriceRouter__AssetBelowMinPrice(address(asset), value, minPrice);
 
-        uint256 maxPrice = assetData.maxPrice;
+        uint256 maxPrice = config.maxPrice;
         if (value > maxPrice) revert PriceRouter__AssetAboveMaxPrice(address(asset), value, maxPrice);
 
-        uint256 heartbeat = assetData.heartBeat;
+        uint256 heartbeat = config.heartbeat;
         uint256 timeSinceLastUpdate = block.timestamp - timestamp;
         if (timeSinceLastUpdate > heartbeat)
             revert PriceRouter__StalePrice(address(asset), timeSinceLastUpdate, heartbeat);
