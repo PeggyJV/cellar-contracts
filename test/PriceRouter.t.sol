@@ -227,7 +227,7 @@ contract PriceRouterTest is Test {
     }
 
     function testAssetAboveMaxPrice() external {
-        // Store price of USDC/
+        // Store price of USDC.
         (, int256 iPrice, , , ) = feedRegistry.latestRoundData(address(USDC), Denominations.USD);
         uint256 price = uint256(iPrice);
 
@@ -549,20 +549,20 @@ contract PriceRouterTest is Test {
 
         // Check that exchange rates work when quote == base.
         (min, max) = priceRouter.getPriceRange(USDC);
-        assertEq(min, 0.011e8, "USDC Min Price Should be $0.01");
-        assertEq(max, 900e8, "USDC Max Price Should be $1000");
+        assertEq(min, 0.011e8, "USDC Min Price Should be $0.011");
+        assertEq(max, 900e8, "USDC Max Price Should be $900");
 
         (min, max) = priceRouter.getPriceRange(DAI);
-        assertEq(min, 0.011e8, "DAI Min Price Should be $0.01");
-        assertEq(max, 90e8, "DAI Max Price Should be $100");
+        assertEq(min, 0.011e8, "DAI Min Price Should be $0.011");
+        assertEq(max, 90e8, "DAI Max Price Should be $90");
 
         (min, max) = priceRouter.getPriceRange(WETH);
-        assertEq(min, 1.1e8, "WETH Min Price Should be $1");
-        assertEq(max, 9_000e8, "WETH Max Price Should be $10,000");
+        assertEq(min, 1.1e8, "WETH Min Price Should be $1.1");
+        assertEq(max, 9_000e8, "WETH Max Price Should be $9,000");
 
         (min, max) = priceRouter.getPriceRange(WBTC);
-        assertEq(min, 11e8, "WBTC Min Price Should be $10");
-        assertEq(max, 9_000_000e8, "WBTC Max Price Should be $10,000,000");
+        assertEq(min, 11e8, "WBTC Min Price Should be $11");
+        assertEq(max, 9_000_000e8, "WBTC Max Price Should be $9,000,000");
 
         (min, max) = priceRouter.getPriceRange(BOND);
         assertEq(min, 0, "BOND Min Price Should be $0");
@@ -577,14 +577,14 @@ contract PriceRouterTest is Test {
 
         (uint256[] memory mins, uint256[] memory maxes) = priceRouter.getPriceRanges(baseAssets);
 
-        assertEq(mins[0], 0.011e8, "USDC Min Price Should be $0.01");
-        assertEq(maxes[0], 900e8, "USDC Max Price Should be $1000");
-        assertEq(mins[1], 0.011e8, "DAI Min Price Should be $0.01");
-        assertEq(maxes[1], 90e8, "DAI Max Price Should be $100");
-        assertEq(mins[2], 1.1e8, "WETH Min Price Should be $1");
-        assertEq(maxes[2], 9_000e8, "WETH Max Price Should be $10,000");
-        assertEq(mins[3], 11e8, "WBTC Min Price Should be $10");
-        assertEq(maxes[3], 9_000_000e8, "WBTC Max Price Should be $10,000,000");
+        assertEq(mins[0], 0.011e8, "USDC Min Price Should be $0.011");
+        assertEq(maxes[0], 900e8, "USDC Max Price Should be $900");
+        assertEq(mins[1], 0.011e8, "DAI Min Price Should be $0.011");
+        assertEq(maxes[1], 90e8, "DAI Max Price Should be $90");
+        assertEq(mins[2], 1.1e8, "WETH Min Price Should be $1.1");
+        assertEq(maxes[2], 9_000e8, "WETH Max Price Should be $9,000");
+        assertEq(mins[3], 11e8, "WBTC Min Price Should be $11");
+        assertEq(maxes[3], 9_000_000e8, "WBTC Max Price Should be $9,000,000");
         assertEq(mins[4], 0, "BOND Min Price Should be $0");
         assertGt(maxes[4], 9e45, "BOND Max Price Should be a large number");
     }
