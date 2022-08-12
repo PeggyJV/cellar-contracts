@@ -6,9 +6,6 @@ on:
       - main
   pull_request:
 
-env:
-  FOUNDRY_PROFILE: ci
-
 jobs:
   foundry:
     strategy:
@@ -25,12 +22,6 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
-
-      - name: Run Forge build
-        run: |
-          forge --version
-          forge build --sizes
-        id: build
 
       - name: Run Forge tests
         run: |

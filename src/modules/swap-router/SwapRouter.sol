@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.15;
+pragma solidity 0.8.16;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Multicall } from "src/base/Multicall.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/IUniswapV2Router02.sol";
-import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
+import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
+import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { Multicall } from "src/base/Multicall.sol";
 
 /**
@@ -59,6 +59,12 @@ contract SwapRouter is Multicall {
     }
 
     // ======================================= SWAP OPERATIONS =======================================
+
+    /**
+     * @notice Attempted to perform a swap that reverted without a message.
+     */
+    error SwapRouter__SwapReverted();
+
     /**
      * @notice Perform a swap using a supported exchange.
      * @param exchange value dictating which exchange to use to make the swap
@@ -85,7 +91,7 @@ contract SwapRouter is Multicall {
                     revert(add(32, result), returndata_size)
                 }
             } else {
-                revert("Swap reverted.");
+                revert SwapRouter__SwapReverted();
             }
         }
 

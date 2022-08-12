@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.15;
+pragma solidity 0.8.16;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-
-// TODO: add natspec
 
 /**
  * @notice A library to extend the address array data type.
@@ -11,6 +9,12 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 library AddressArray {
     // =========================================== ADDRESS STORAGE ===========================================
 
+    /**
+     * @notice Add an address to the array at a given index.
+     * @param array address array to add the address to
+     * @param index index to add the address at
+     * @param value address to add to the array
+     */
     function add(
         address[] storage array,
         uint256 index,
@@ -25,6 +29,11 @@ library AddressArray {
         array[index] = value;
     }
 
+    /**
+     * @notice Remove an address from the array at a given index.
+     * @param array address array to remove the address from
+     * @param index index to remove the address at
+     */
     function remove(address[] storage array, uint256 index) internal {
         uint256 len = array.length;
 
@@ -37,6 +46,8 @@ library AddressArray {
 
     /**
      * @notice Remove the first occurrence of a value in an array.
+     * @param array address array to remove the address from
+     * @param value address to remove from the array
      */
     function remove(address[] storage array, address value) internal {
         uint256 len = array.length;
@@ -53,17 +64,14 @@ library AddressArray {
         revert("Value not found");
     }
 
+    /**
+     * @notice Check whether an array contains an address.
+     * @param array address array to check
+     * @param value address to check for
+     */
     function contains(address[] storage array, address value) internal view returns (bool) {
         for (uint256 i; i < array.length; i++) if (value == array[i]) return true;
 
         return false;
-    }
-
-    // =========================================== ERC20 MEMORY ===========================================
-
-    function contains(ERC20[] memory array, ERC20 value) internal pure returns (bool, uint256) {
-        for (uint256 i; i < array.length; i++) if (value == array[i]) return (true, i);
-
-        return (false, type(uint256).max);
     }
 }

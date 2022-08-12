@@ -105,7 +105,7 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.8.15",
+        version: "0.8.16",
         settings: {
           optimizer: {
             enabled: optimizerEnabled,
@@ -144,9 +144,6 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
-  },
-  contractSizer: {
-    only: ["AaveV2StablecoinCellar.sol"],
   },
   gasReporter: {
     currency: "USD",

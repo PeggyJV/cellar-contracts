@@ -1,7 +1,7 @@
 [profile.default]
 # Sets the concrete solc version to use
 # This overrides the `auto_detect_solc` value
-solc_version = '0.8.15'
+solc_version = '0.8.16'
 auto_detect_solc = false
 
 # eth_rpc_url = "YOUR_ALCHEMY_HTTPS_URL_HERE"

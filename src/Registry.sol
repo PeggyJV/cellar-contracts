@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.15;
+pragma solidity 0.8.16;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import "src/Errors.sol";
 
 contract Registry is Ownable {
-    /**
-     * @notice Emitted when a new contract is registered.
-     * @param id value representing the unique ID tied to the new contract
-     * @param newContract address of the new contract
-     */
-    event Registered(uint256 indexed id, address indexed newContract);
+    // ============================================= ADDRESS CONFIG =============================================
 
     /**
      * @notice Emitted when the address of a contract is changed.
@@ -19,6 +13,12 @@ contract Registry is Ownable {
      * @param newAddress address of the contract after the contract
      */
     event AddressChanged(uint256 indexed id, address oldAddress, address newAddress);
+
+    /**
+     * @notice Attempted to set the address of a contract that is not registered.
+     * @param id id of the contract that is not registered
+     */
+    error Registry__ContractNotRegistered(uint256 id);
 
     /**
      * @notice The unique ID that the next registered contract will have.
@@ -34,12 +34,14 @@ contract Registry is Ownable {
      * @notice Set the address of the contract at a given id.
      */
     function setAddress(uint256 id, address newAddress) external onlyOwner {
-        if (id >= nextId) revert USR_ContractNotRegistered(id);
+        if (id >= nextId) revert Registry__ContractNotRegistered(id);
 
         emit AddressChanged(id, getAddress[id], newAddress);
 
         getAddress[id] = newAddress;
     }
+
+    // ============================================= INITIALIZATION =============================================
 
     /**
      * @param gravityBridge address of GravityBridge contract
@@ -55,6 +57,15 @@ contract Registry is Ownable {
         _register(swapRouter);
         _register(priceRouter);
     }
+
+    // ============================================ REGISTER CONFIG ============================================
+
+    /**
+     * @notice Emitted when a new contract is registered.
+     * @param id value representing the unique ID tied to the new contract
+     * @param newContract address of the new contract
+     */
+    event Registered(uint256 indexed id, address indexed newContract);
 
     /**
      * @notice Register the address of a new contract.

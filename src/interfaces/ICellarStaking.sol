@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.15;
+pragma solidity 0.8.16;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 
@@ -22,6 +22,118 @@ interface ICellarStaking {
     event EmergencyUnstake(address indexed user, uint256 depositId, uint256 amount);
     event EmergencyClaim(address indexed user, uint256 amount);
     event EpochDurationChange(uint256 duration);
+
+    // ===================== Errors =======================
+
+    /**
+     * @notice Attempted to shutdown the contract when it was already shutdown.
+     */
+    error CellarStaking__AlreadyShutdown();
+
+    /**
+     * @notice The caller attempted to start a reward period, but the contract did not have enough tokens
+     *         for the specified amount of rewards.
+     *
+     * @param rewardBalance         The amount of distributionToken held by the contract.
+     * @param reward                The amount of rewards the caller attempted to distribute.
+     */
+    error CellarStaking__RewardsNotFunded(uint256 rewardBalance, uint256 reward);
+
+    /**
+     * @notice The caller attempted to change the next epoch duration, but there are rewards ready.
+     */
+    error CellarStaking__RewardsReady();
+
+    /**
+     * @notice The caller attempted to deposit stake, but there are no remaining rewards to pay out.
+     */
+    error CellarStaking__NoRewardsLeft();
+
+    /**
+     * @notice The caller attempted to perform an an emergency unstake, but the contract
+     *         is not in emergency mode.
+     */
+    error CellarStaking__NoEmergencyUnstake();
+
+    /**
+     * @notice The caller attempted to perform an an emergency unstake, but the contract
+     *         is not in emergency mode, or the emergency mode does not allow claiming rewards.
+     */
+    error CellarStaking__NoEmergencyClaim();
+
+    /**
+     * @notice The caller attempted to perform a state-mutating action (e.g. staking or unstaking)
+     *         while the contract was paused.
+     */
+    error CellarStaking__ContractPaused();
+
+    /**
+     * @notice The caller attempted to perform a state-mutating action (e.g. staking or unstaking)
+     *         while the contract was killed (placed in emergency mode).
+     * @dev    Emergency mode is irreversible.
+     */
+    error CellarStaking__ContractKilled();
+
+    /**
+     * @notice The caller attempted to stake with a lock value that did not
+     *         correspond to a valid staking time.
+     *
+     * @param lock                  The provided lock value.
+     */
+    error CellarStaking__InvalidLockValue(uint256 lock);
+
+    /**
+     * @notice The reward distributor attempted to update rewards but 0 rewards per epoch.
+     *         This can also happen if there is less than 1 wei of rewards per second of the
+     *         epoch - due to integer division this will also lead to 0 rewards.
+     */
+    error CellarStaking__ZeroRewardsPerEpoch();
+
+    /**
+     * @notice The contract owner attempted to update rewards but the new reward rate would cause overflow.
+     */
+    error CellarStaking__RewardTooLarge();
+
+    /**
+     * @notice User attempted to stake an amount smaller than the minimum deposit.
+     *
+     * @param amount                Amount user attmpted to stake.
+     * @param minimumDeposit        The minimum deopsit amount accepted.
+     */
+    error CellarStaking__MinimumDeposit(uint256 amount, uint256 minimumDeposit);
+
+    /**
+     * @notice The specified deposit ID does not exist for the caller.
+     *
+     * @param depositId             The deposit ID provided for lookup.
+     */
+    error CellarStaking__NoDeposit(uint256 depositId);
+
+    /**
+     * @notice The user is attempting to cancel unbonding for a deposit which is not unbonding.
+     *
+     * @param depositId             The deposit ID the user attempted to cancel.
+     */
+    error CellarStaking__NotUnbonding(uint256 depositId);
+
+    /**
+     * @notice The user is attempting to unbond a deposit which has already been unbonded.
+     *
+     * @param depositId             The deposit ID the user attempted to unbond.
+     */
+    error CellarStaking__AlreadyUnbonding(uint256 depositId);
+
+    /**
+     * @notice The user is attempting to unstake a deposit which is still timelocked.
+     *
+     * @param depositId             The deposit ID the user attempted to unstake.
+     */
+    error CellarStaking__StakeLocked(uint256 depositId);
+
+    /**
+     * @notice User attempted to stake zero amount.
+     */
+    error CellarStaking__ZeroDeposit();
 
     // ===================== Structs ======================
 
