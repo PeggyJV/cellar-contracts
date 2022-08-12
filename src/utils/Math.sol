@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.15;
+pragma solidity 0.8.16;
 
 library Math {
     /**
-     * @notice Substract and return 0 instead if results are negative.
+     * @notice Substract with a floor of 0 for the result.
      */
     function subMinZero(uint256 x, uint256 y) internal pure returns (uint256) {
         return x > y ? x - y : 0;

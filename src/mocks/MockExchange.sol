@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.15;
+pragma solidity 0.8.16;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { Math } from "src/utils/Math.sol";
+import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 
 library BytesLib {
     function slice(
@@ -153,11 +155,18 @@ library Path {
     }
 }
 
-contract MockSwapRouter {
+contract MockExchange {
     using Path for bytes;
     using Math for uint256;
 
-    uint256 public constant EXCHANGE_RATE = 0.95e18;
+    uint256 public constant PRICE_IMPACT = 5_00;
+    uint256 public constant DENOMINATOR = 100_00;
+
+    MockPriceRouter public priceRouter;
+
+    constructor(MockPriceRouter _priceRouter) {
+        priceRouter = _priceRouter;
+    }
 
     struct ExactInputSingleParams {
         address tokenIn;
@@ -170,48 +179,40 @@ contract MockSwapRouter {
         uint160 sqrtPriceLimitX96;
     }
 
-    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256) {
-        ERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
+    function exactInputSingle(ExactInputSingleParams calldata params) external returns (uint256) {
+        ERC20 tokenIn = ERC20(params.tokenIn);
+        ERC20 tokenOut = ERC20(params.tokenOut);
 
-        uint256 amountOut = params.amountIn.mulWadDown(EXCHANGE_RATE);
+        tokenIn.transferFrom(msg.sender, address(this), params.amountIn);
 
-        uint8 fromDecimals = ERC20(params.tokenIn).decimals();
-        uint8 toDecimals = ERC20(params.tokenOut).decimals();
-        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+        uint256 amountOut = priceRouter.getValue(tokenIn, params.amountIn, tokenOut);
+        amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
 
         require(amountOut >= params.amountOutMinimum, "amountOutMin invariant failed");
 
-        ERC20(params.tokenOut).transfer(params.recipient, amountOut);
+        tokenOut.transfer(params.recipient, amountOut);
         return amountOut;
     }
 
-    struct ExactInputParams {
-        bytes path;
-        address recipient;
-        uint256 deadline;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-    }
-
-    function exactInput(ExactInputParams memory params) external payable returns (uint256) {
-        (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
+    function exactInput(IUniswapV3Router.ExactInputParams memory params) external returns (uint256) {
+        (address _tokenIn, address _tokenOut, ) = params.path.decodeFirstPool();
+        ERC20 tokenIn = ERC20(_tokenIn);
+        ERC20 tokenOut = ERC20(_tokenOut);
 
         while (params.path.hasMultiplePools()) {
             params.path = params.path.skipToken();
-            (, tokenOut, ) = params.path.decodeFirstPool();
+            (, _tokenOut, ) = params.path.decodeFirstPool();
+            tokenOut = ERC20(_tokenOut);
         }
 
-        ERC20(tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
+        tokenIn.transferFrom(msg.sender, address(this), params.amountIn);
 
-        uint256 amountOut = params.amountIn.mulWadDown(EXCHANGE_RATE);
-
-        uint8 fromDecimals = ERC20(tokenIn).decimals();
-        uint8 toDecimals = ERC20(tokenOut).decimals();
-        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+        uint256 amountOut = priceRouter.getValue(tokenIn, params.amountIn, tokenOut);
+        amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
 
         require(amountOut >= params.amountOutMinimum, "amountOutMin invariant failed");
 
-        ERC20(tokenOut).transfer(params.recipient, amountOut);
+        tokenOut.transfer(params.recipient, amountOut);
         return amountOut;
     }
 
@@ -222,20 +223,17 @@ contract MockSwapRouter {
         address to,
         uint256
     ) external returns (uint256[] memory) {
-        address tokenIn = path[0];
-        address tokenOut = path[path.length - 1];
+        ERC20 tokenIn = ERC20(path[0]);
+        ERC20 tokenOut = ERC20(path[path.length - 1]);
 
-        ERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
+        tokenIn.transferFrom(msg.sender, address(this), amountIn);
 
-        uint256 amountOut = amountIn.mulWadDown(EXCHANGE_RATE);
-
-        uint8 fromDecimals = ERC20(tokenIn).decimals();
-        uint8 toDecimals = ERC20(tokenOut).decimals();
-        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+        uint256 amountOut = priceRouter.getValue(tokenIn, amountIn, tokenOut);
+        amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
 
         require(amountOut >= amountOutMin, "amountOutMin invariant failed");
 
-        ERC20(tokenOut).transfer(to, amountOut);
+        tokenOut.transfer(to, amountOut);
 
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amountOut;
@@ -249,41 +247,33 @@ contract MockSwapRouter {
         uint256 _amount,
         uint256 _expected
     ) external returns (uint256) {
-        address tokenIn = _route[0];
+        ERC20 tokenIn = ERC20(_route[0]);
 
-        address tokenOut;
+        ERC20 tokenOut;
         for (uint256 i; ; i += 2) {
             if (i == 8 || _route[i + 1] == address(0)) {
-                tokenOut = _route[i];
+                tokenOut = ERC20(_route[i]);
                 break;
             }
         }
 
-        ERC20(tokenIn).transferFrom(msg.sender, address(this), _amount);
+        tokenIn.transferFrom(msg.sender, address(this), _amount);
 
-        uint256 amountOut = _amount.mulWadDown(EXCHANGE_RATE);
-
-        uint8 fromDecimals = ERC20(tokenIn).decimals();
-        uint8 toDecimals = ERC20(tokenOut).decimals();
-        amountOut = amountOut.changeDecimals(fromDecimals, toDecimals);
+        uint256 amountOut = priceRouter.getValue(tokenIn, _amount, tokenOut);
+        amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
 
         require(amountOut >= _expected, "received less than expected");
 
-        ERC20(tokenOut).transfer(msg.sender, amountOut);
+        tokenOut.transfer(msg.sender, amountOut);
 
         return amountOut;
     }
 
-    function quote(uint256 amountIn, address[] calldata path) external view returns (uint256) {
-        address tokenIn = path[0];
-        address tokenOut = path[path.length - 1];
+    function quote(uint256 amountIn, address[] calldata path) external view returns (uint256 amountOut) {
+        ERC20 tokenIn = ERC20(path[0]);
+        ERC20 tokenOut = ERC20(path[path.length - 1]);
 
-        uint256 amountOut = amountIn.mulWadDown(EXCHANGE_RATE);
-
-        uint8 fromDecimals = ERC20(tokenIn).decimals();
-        uint8 toDecimals = ERC20(tokenOut).decimals();
-        return amountOut.changeDecimals(fromDecimals, toDecimals);
+        amountOut = priceRouter.getValue(tokenIn, amountIn, tokenOut);
+        amountOut = amountOut.mulDivDown(DENOMINATOR - PRICE_IMPACT, DENOMINATOR);
     }
-
-    receive() external payable {}
 }
