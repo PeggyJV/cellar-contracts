@@ -48,8 +48,6 @@ contract ChainlinkPriceFeedAdaptor {
                 // Change quote from ETH to USD.
                 price = _price.toUint256().mulWadDown(_getExchangeRateFromETHToUSD());
                 timestamp = _timestamp;
-
-                // console.log("Found ETH Price", address(asset), price);
             } catch {
                 revert STATE_PriceNotAvailable(address(asset));
             }
