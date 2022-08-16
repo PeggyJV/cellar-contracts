@@ -1,6 +1,7 @@
 # Foundry
 cache/
 out/
+broadcast/
 
 # Environment variables!
 .env
