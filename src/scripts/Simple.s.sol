@@ -13,10 +13,12 @@ contract SimpleScript is Script {
     Cellar private cellar = Cellar(0xDde063eBe8E85D666AD99f731B4Dbf8C98F29708);
 
     function run() external {
-        vm.startBroadcast();
+        vm.startBroadcast(0x8EB8a3b98659Cce290402893d0123abb75E3ab28);
+        //vm.deal(address(this), 100e18);
         USDC.approve(address(cellar), 100e6);
         cellar.deposit(100e6, address(this));
         console.log("Cellar USDC Balance", USDC.balanceOf(address(cellar)));
+        //vm.stopPrank();
         vm.stopBroadcast();
     }
 }
