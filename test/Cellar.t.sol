@@ -3467,6 +3467,14 @@ contract CellarTest is Test {
         console.log("Attacker Share worth", badCellar.maxWithdraw(address(this)));
     }
 
+    function testSetInvalidWithdrawType() external {
+        // Try setting withdraw type to an invlaid value.
+        bytes memory data = abi.encodeWithSelector(Cellar.setWithdrawType.selector, uint8(2));
+
+        (bool success, ) = address(cellar).call(data);
+        assertTrue(!success, "Call should have failed.");
+    }
+
     // ========================================= GRAVITY FUNCTIONS =========================================
 
     // Since this contract is set as the Gravity Bridge, this will be called by

@@ -15,6 +15,7 @@ contract CellarMultiAssetManagerScript is Script {
     address private uniswapV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     address private uniswapV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private mockGravityBridge = 0xF07Ba2229b4Da47895ce0a4Ab4298ad7F8Cb3a4D; // Address you want as the owner
+    address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -35,6 +36,9 @@ contract CellarMultiAssetManagerScript is Script {
         priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0);
 
         createTonnCellar();
+
+        // Set registry to use correct gravity bridge.
+        registry.setAddress(0, gravityBridge);
 
         vm.stopBroadcast();
     }
