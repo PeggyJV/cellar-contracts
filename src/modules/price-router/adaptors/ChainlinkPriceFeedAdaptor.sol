@@ -35,6 +35,8 @@ contract ChainlinkPriceFeedAdaptor {
      * @return price the price of `asset` in USD
      * @return timestamp the last timestamp the price was updated by Chainlink nodes
      */
+    //TODO do min/max checks in here?
+    // checks if price range is in ETH or USD and does a conversion if required
     function _getValueInUSDAndTimestamp(ERC20 asset) internal view returns (uint256 price, uint256 timestamp) {
         try feedRegistry.latestRoundData(address(asset), Denominations.USD) returns (
             uint80,
@@ -45,6 +47,7 @@ contract ChainlinkPriceFeedAdaptor {
         ) {
             price = _price.toUint256();
             timestamp = _timestamp;
+            //TODO do min/max check for USD, revert if stored min/max values are in ETH? Would happen if they added USD?
         } catch {
             // If we can't find the USD price, then try the ETH price.
             try feedRegistry.latestRoundData(address(asset), Denominations.ETH) returns (
@@ -54,6 +57,7 @@ contract ChainlinkPriceFeedAdaptor {
                 uint256 _timestamp,
                 uint80
             ) {
+                //TODO do min/max check for ETH, revert if stored min/max value is stored in USD? Would happen if they removed a USD price feed
                 // Change quote from ETH to USD.
                 price = _price.toUint256().mulWadDown(_getExchangeRateFromETHToUSD());
                 timestamp = _timestamp;
@@ -76,6 +80,7 @@ contract ChainlinkPriceFeedAdaptor {
      * @return min the minimum price where Chainlink nodes stop updating the oracle
      * @return max the maximum price where Chainlink nodes stop updating the oracle
      */
+    //TODO this would return a bool for whether it is ETH or USD price range, then that gets compared against user input?
     function _getPriceRangeInUSD(ERC20 asset) internal view returns (uint256 min, uint256 max) {
         try feedRegistry.getFeed(address(asset), Denominations.USD) returns (AggregatorV2V3Interface aggregator) {
             IChainlinkAggregator chainlinkAggregator = IChainlinkAggregator(address(aggregator));
@@ -104,7 +109,9 @@ contract ChainlinkPriceFeedAdaptor {
      * @notice helper function to grab pricing data for ETH in USD
      * @return exchangeRate the exchange rate for ETH in terms of USD
      */
+    //TODO maybe store a price range in either ETH or USD, then a bool that says whether it is ETH or USD? Then if doing a conversion in chainlink adaptor we check the price range against the stored value?
     function _getExchangeRateFromETHToUSD() internal view returns (uint256 exchangeRate) {
+        //TODO add min/max check for ETH to USD? Maybe could add a global bool for check ETHtoUSDMinMax? At the end of the call it is set back to zero?
         exchangeRate = uint256(feedRegistry.latestAnswer(Denominations.ETH, Denominations.USD));
     }
 }
