@@ -185,7 +185,7 @@ contract CellarRouterTest is Test {
     // ======================================= WITHDRAW TESTS =======================================
 
     function testWithdrawAndSwap() external {
-        // Deposut initial funds into cellar.
+        // Deposit initial funds into cellar.
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
         USDC.approve(address(cellar), assets);
@@ -238,7 +238,174 @@ contract CellarRouterTest is Test {
         assertEq(WBTC.allowance(address(router), address(swapRouter)), 0, "Should have no WBTC allowances.");
     }
 
-    function testWithdrawWithInvalidInputs() external {
-        //make sure it reverts if inputs are not correct
+    function testFailWithdrawWithInvalidSwapPath() external {
+        // Deposit initial funds into cellar.
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+
+        // Distribute funds into WETH and WBTC.
+        deal(address(WETH), address(cellar), 3e18);
+        deal(address(WBTC), address(cellar), 0.3e8);
+        deal(address(USDC), address(cellar), 0);
+
+        // Encode swaps with an invalid swap path
+        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
+        exchanges[0] = SwapRouter.Exchange.UNIV2;
+        exchanges[1] = SwapRouter.Exchange.UNIV3;
+        exchanges[2] = SwapRouter.Exchange.UNIV2;
+
+        address[][] memory paths = new address[][](3);
+        paths[0] = new address[](2);
+        paths[0][0] = address(WETH);
+        paths[0][1] = address(USDC);
+
+        paths[1] = new address[](2);
+        paths[1][0] = address(WETH);
+        paths[1][1] = address(0);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3% fee.
+
+        paths[2] = new address[](2);
+        paths[2][0] = address(WBTC);
+        paths[2][1] = address(USDC);
+
+        bytes[] memory swapData = new bytes[](3);
+        swapData[0] = abi.encode(paths[0], 1.5e18, 0);
+        swapData[1] = abi.encode(paths[1], poolFees, 1.5e18, 0);
+        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+
+        cellar.approve(address(router), type(uint256).max);
+        router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(this));
+    }
+
+    function testFailWithdrawWithInvalidSwapData() external {
+        // Deposit initial funds into cellar.
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+
+        // Distribute funds into WETH and WBTC.
+        deal(address(WETH), address(cellar), 3e18);
+        deal(address(WBTC), address(cellar), 0.3e8);
+        deal(address(USDC), address(cellar), 0);
+
+        // Encode swaps with an invalid swap path
+        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
+        exchanges[0] = SwapRouter.Exchange.UNIV2;
+        exchanges[1] = SwapRouter.Exchange.UNIV3;
+        exchanges[2] = SwapRouter.Exchange.UNIV2;
+
+        address[][] memory paths = new address[][](3);
+        paths[0] = new address[](2);
+        paths[0][0] = address(WETH);
+        paths[0][1] = address(USDC);
+
+        paths[1] = new address[](2);
+        paths[1][0] = address(WETH);
+        paths[1][1] = address(0);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3% fee.
+
+        paths[2] = new address[](2);
+        paths[2][0] = address(WBTC);
+        paths[2][1] = address(USDC);
+
+        bytes[] memory swapData = new bytes[](3);
+        swapData[0] = abi.encode(paths[0], 1.5e18, 0);
+        // Do not encode the poolFees argument.
+        swapData[1] = abi.encode(paths[1], 1.5e18, 0);
+        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+
+        cellar.approve(address(router), type(uint256).max);
+        router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(this));
+    }
+
+    function testFailWithdrawWithInvalidMinAmountOut() external {
+        // Deposit initial funds into cellar.
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+
+        // Distribute funds into WETH and WBTC.
+        deal(address(WETH), address(cellar), 3e18);
+        deal(address(WBTC), address(cellar), 0.3e8);
+        deal(address(USDC), address(cellar), 0);
+
+        // Encode swaps with an invalid swap path
+        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
+        exchanges[0] = SwapRouter.Exchange.UNIV2;
+        exchanges[1] = SwapRouter.Exchange.UNIV3;
+        exchanges[2] = SwapRouter.Exchange.UNIV2;
+
+        address[][] memory paths = new address[][](3);
+        paths[0] = new address[](2);
+        paths[0][0] = address(WETH);
+        paths[0][1] = address(USDC);
+
+        paths[1] = new address[](2);
+        paths[1][0] = address(WETH);
+        paths[1][1] = address(0);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3% fee.
+
+        paths[2] = new address[](2);
+        paths[2][0] = address(WBTC);
+        paths[2][1] = address(USDC);
+
+        bytes[] memory swapData = new bytes[](3);
+        // Encode an invalid min amount out.
+        swapData[0] = abi.encode(paths[0], 1.5e18, type(uint256).max);
+        swapData[1] = abi.encode(paths[1], poolFees, 1.5e18, 0);
+        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+
+        cellar.approve(address(router), type(uint256).max);
+        router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(this));
+    }
+
+    function testFailWithdrawWithInvalidReceiver() external {
+        // Deposit initial funds into cellar.
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+
+        // Distribute funds into WETH and WBTC.
+        deal(address(WETH), address(cellar), 3e18);
+        deal(address(WBTC), address(cellar), 0.3e8);
+        deal(address(USDC), address(cellar), 0);
+
+        // Encode swaps with an invalid swap path
+        SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
+        exchanges[0] = SwapRouter.Exchange.UNIV2;
+        exchanges[1] = SwapRouter.Exchange.UNIV3;
+        exchanges[2] = SwapRouter.Exchange.UNIV2;
+
+        address[][] memory paths = new address[][](3);
+        paths[0] = new address[](2);
+        paths[0][0] = address(WETH);
+        paths[0][1] = address(USDC);
+
+        paths[1] = new address[](2);
+        paths[1][0] = address(WETH);
+        paths[1][1] = address(0);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3% fee.
+
+        paths[2] = new address[](2);
+        paths[2][0] = address(WBTC);
+        paths[2][1] = address(USDC);
+
+        bytes[] memory swapData = new bytes[](3);
+        // Encode an invalid min amount out.
+        swapData[0] = abi.encode(paths[0], 1.5e18, 0);
+        swapData[1] = abi.encode(paths[1], poolFees, 1.5e18, 0);
+        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+
+        cellar.approve(address(router), type(uint256).max);
+        router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(0));
     }
 }
