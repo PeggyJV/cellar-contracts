@@ -103,6 +103,9 @@ contract CellarRouter is ICellarRouter {
 
         // Deposit assets into the cellar.
         shares = cellar.deposit(assets, receiver);
+
+        uint256 remainingBalance = assetIn.balanceOf(address(this));
+        if (remainingBalance != 0) assetIn.transfer(msg.sender, remainingBalance);
     }
 
     /**

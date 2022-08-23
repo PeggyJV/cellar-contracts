@@ -182,6 +182,53 @@ contract CellarRouterTest is Test {
         assertEq(DAI.balanceOf(address(this)), 0, "Should have deposited assets from user.");
     }
 
+    function testDepositWithAssetInDifferentFromPath() external {
+        uint256 assets = 100e18;
+        // Specify the swap path.
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(USDC);
+
+        // Give user USDC.
+        deal(address(USDC), address(this), assets);
+
+        // Test deposit and swap.
+        deal(address(DAI), address(this), assets);
+        DAI.approve(address(router), assets);
+        bytes memory swapData = abi.encode(path, assets, 0);
+        vm.expectRevert("TRANSFER_FROM_FAILED");
+        // Specify USDC as assetIn when it should be DAI.
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), USDC);
+    }
+
+    function testDepositWithAssetAmountMisMatch() external {
+        uint256 assets = 100e18;
+        // Specify the swap path.
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(USDC);
+
+        // Previously a user sent DAI to the router on accident.
+        deal(address(DAI), address(router), assets);
+        bytes memory swapData = abi.encode(path, assets, 0);
+        vm.expectRevert("TRANSFER_FROM_FAILED");
+        // Specify 0 for assets. Should revert since swap router is approved to spend 0 tokens from router.
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, 0, address(this), DAI);
+
+        // Reset routers DAI balance.
+        deal(address(DAI), address(router), 0);
+
+        // Give user some DAI.
+        deal(address(DAI), address(this), assets);
+        DAI.approve(address(router), assets);
+
+        // User calls deposit and swap but specifies a lower amount in swapData then actual.
+        swapData = abi.encode(path, assets / 2, 0);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), DAI);
+
+        assertEq(DAI.balanceOf(address(this)), assets / 2, "Caller should have been sent back their remaining assets.");
+    }
+
     // ======================================= WITHDRAW TESTS =======================================
 
     function testWithdrawAndSwap() external {
