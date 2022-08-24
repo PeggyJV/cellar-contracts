@@ -36,9 +36,9 @@ abstract contract SwapRouterTest is Test {
         // Used to estimate the amount that should be received from swaps.
         priceRouter = new PriceRouter();
 
-        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, 0);
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0);
-        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 0, 0);
+        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, false, 0);
+        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, false, 0);
+        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 0, false, 0);
 
         vm.startPrank(sender);
     }

@@ -4,8 +4,14 @@ pragma solidity 0.8.16;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
+import { FeedRegistryInterface } from "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
+import { AggregatorV2V3Interface } from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
+
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Price Router
@@ -13,8 +19,9 @@ import { Math } from "src/utils/Math.sol";
  *         data from Chainlink and arbitrary adaptors.
  * @author crispymangoes, Brian Le
  */
-contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
+contract PriceRouter is Ownable {
     using SafeTransferLib for ERC20;
+    using SafeCast for int256;
     using Math for uint256;
 
     event AddAsset(address indexed asset);
@@ -27,6 +34,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      *              available (eg. ETH for WETH), set to `address(0)` for no remapping
      * @param minPrice minimum price in USD for the asset before reverting
      * @param maxPrice maximum price in USD for the asset before reverting
+     * @param isPriceRangeInETH if true price range values are given in ETH, if false price range is given in USD
      * @param heartbeat maximum allowed time that can pass with no update before price data is considered stale
      * @param isSupported whether this asset is supported by the platform or not
      */
@@ -34,6 +42,7 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         ERC20 remap;
         uint256 minPrice;
         uint256 maxPrice;
+        bool isPriceRangeInETH;
         uint96 heartbeat;
         bool isSupported;
     }
@@ -68,6 +77,17 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
     error PriceRouter__InvalidAsset(address asset);
 
     /**
+     * @notice Attempted to add an asset with a certain price range denomination, but actual denomination was different.
+     * @param expected price range denomination
+     * @param actual price range denomination
+     * @dev If an asset has price feeds in USD and ETH, the feed in USD is favored
+     */
+    error PriceRouter__PriceRangeDenominationMisMatch(bool expected, bool actual);
+
+    //TODO add test checking this
+    //TODO add test where only price is in ETH, and ETH price is too high, low, and stale.
+
+    /**
      * @notice Add an asset for the price router to support.
      * @param asset address of asset to support on the platform
      * @param remap address of asset to get pricing data for instead if a price feed is not
@@ -84,37 +104,40 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
         ERC20 remap,
         uint256 minPrice,
         uint256 maxPrice,
+        bool rangeInETH,
         uint96 heartbeat
     ) external onlyOwner {
         if (address(asset) == address(0)) revert PriceRouter__InvalidAsset(address(asset));
 
-        if (minPrice == 0 || maxPrice == 0) {
-            // If no adaptor is specified, use the Chainlink to get the min and max of the asset.
-            ERC20 assetToQuery = address(remap) == address(0) ? asset : remap;
-            (uint256 minFromChainklink, uint256 maxFromChainlink) = _getPriceRangeInUSD(assetToQuery);
+        // Use Chainlink to get the min and max of the asset.
+        ERC20 assetToQuery = address(remap) == address(0) ? asset : remap;
+        (uint256 minFromChainklink, uint256 maxFromChainlink, bool isETH) = _getPriceRange(assetToQuery);
 
-            // Add a ~10% buffer to minimum and maximum price from Chainlink because Chainlink can stop updating
-            // its price before/above the min/max price.
-            uint256 bufferedMinPrice = minFromChainklink.mulWadDown(1.1e18);
-            uint256 bufferedMaxPrice = maxFromChainlink.mulWadDown(0.9e18);
+        // Check if callers expected price range  denomination matches actual.
+        if (rangeInETH != isETH) revert PriceRouter__PriceRangeDenominationMisMatch(rangeInETH, isETH);
 
-            if (minPrice == 0) {
-                minPrice = bufferedMinPrice;
-            } else {
-                if (minPrice < bufferedMinPrice) revert PriceRouter__InvalidMinPrice(minPrice, bufferedMinPrice);
-            }
+        // Add a ~10% buffer to minimum and maximum price from Chainlink because Chainlink can stop updating
+        // its price before/above the min/max price.
+        uint256 bufferedMinPrice = minFromChainklink.mulWadDown(1.1e18);
+        uint256 bufferedMaxPrice = maxFromChainlink.mulWadDown(0.9e18);
 
-            if (maxPrice == 0) {
-                maxPrice = bufferedMaxPrice;
-            } else {
-                if (maxPrice > bufferedMaxPrice) revert PriceRouter__InvalidMaxPrice(maxPrice, bufferedMaxPrice);
-            }
+        if (minPrice == 0) {
+            minPrice = bufferedMinPrice;
+        } else {
+            if (minPrice < bufferedMinPrice) revert PriceRouter__InvalidMinPrice(minPrice, bufferedMinPrice);
+        }
+
+        if (maxPrice == 0) {
+            maxPrice = bufferedMaxPrice;
+        } else {
+            if (maxPrice > bufferedMaxPrice) revert PriceRouter__InvalidMaxPrice(maxPrice, bufferedMaxPrice);
         }
 
         getAssetConfig[asset] = AssetConfig({
             remap: remap,
             minPrice: minPrice,
             maxPrice: maxPrice,
+            isPriceRangeInETH: isETH,
             heartbeat: heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT,
             isSupported: true
         });
@@ -216,12 +239,20 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @return min minimum valid price for the asset
      * @return max maximum valid price for the asset
      */
-    function getPriceRange(ERC20 asset) public view returns (uint256 min, uint256 max) {
+    function getPriceRange(ERC20 asset)
+        public
+        view
+        returns (
+            uint256 min,
+            uint256 max,
+            bool isETH
+        )
+    {
         AssetConfig memory config = getAssetConfig[asset];
 
         if (!config.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
 
-        (min, max) = (config.minPrice, config.maxPrice);
+        (min, max, isETH) = (config.minPrice, config.maxPrice, config.isPriceRangeInETH);
     }
 
     /**
@@ -230,10 +261,18 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @return min minimum valid price for each asset
      * @return max maximum valid price for each asset
      */
-    function getPriceRanges(ERC20[] memory _assets) external view returns (uint256[] memory min, uint256[] memory max) {
+    function getPriceRanges(ERC20[] memory _assets)
+        external
+        view
+        returns (
+            uint256[] memory min,
+            uint256[] memory max,
+            bool[] memory isETH
+        )
+    {
         uint256 numOfAssets = _assets.length;
-        (min, max) = (new uint256[](numOfAssets), new uint256[](numOfAssets));
-        for (uint256 i; i < numOfAssets; i++) (min[i], max[i]) = getPriceRange(_assets[i]);
+        (min, max, isETH) = (new uint256[](numOfAssets), new uint256[](numOfAssets), new bool[](numOfAssets));
+        for (uint256 i; i < numOfAssets; i++) (min[i], max[i], isETH[i]) = getPriceRange(_assets[i]);
     }
 
     // =========================================== HELPER FUNCTIONS ===========================================
@@ -289,15 +328,118 @@ contract PriceRouter is Ownable, ChainlinkPriceFeedAdaptor {
      * @return value the value of asset in USD
      */
     function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
+        if (!getAssetConfig[asset].isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
+
+        value = getValueInUSD(asset);
+    }
+
+    // =========================================== CHAINLINK PRICING FUNCTIONS ===========================================\
+    /**
+     * @notice Feed Registry contract used to get chainlink data feeds, use getFeed!!
+     */
+    FeedRegistryInterface public constant feedRegistry =
+        FeedRegistryInterface(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
+
+    /**
+     * @notice Could not find an asset's price in USD or ETH.
+     * @param asset address of the asset
+     */
+    error PriceRouter__PriceNotAvailable(address asset);
+
+    /**
+     * @notice Interacts with Chainlink feed registry and first tries to get `asset` price in USD,
+     *         if that fails, then it tries to get `asset` price in ETH, and then converts the answer into USD.
+     * @param asset the ERC20 token to get the price of.
+     * @return price the price of `asset` in USD
+     */
+    function getValueInUSD(ERC20 asset) public view returns (uint256 price) {
         AssetConfig memory config = getAssetConfig[asset];
 
-        if (!config.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
-
+        // Store this so it can be passed to _checkPriceFeed.
+        ERC20 nonRemapped = asset;
         if (address(config.remap) != address(0)) asset = config.remap;
 
-        uint256 timestamp;
-        (value, timestamp) = _getValueInUSDAndTimestamp(asset);
+        if (!config.isPriceRangeInETH) {
+            // Price feed is in USD.
+            (, int256 _price, , uint256 _timestamp, ) = feedRegistry.latestRoundData(address(asset), Denominations.USD);
+            price = _price.toUint256();
+            _checkPriceFeed(nonRemapped, price, _timestamp, config);
+        } else {
+            // Price feed is in ETH.
+            (, int256 _price, , uint256 _timestamp, ) = feedRegistry.latestRoundData(address(asset), Denominations.ETH);
+            price = _price.toUint256();
+            _checkPriceFeed(nonRemapped, price, _timestamp, config);
 
+            // Convert price from ETH to USD.
+            price = _price.toUint256().mulWadDown(_getExchangeRateFromETHToUSD());
+        }
+    }
+
+    /**
+     * @notice Could not find an asset's price range in USD or ETH.
+     * @param asset address of the asset
+     */
+    error PriceRouter__PriceRangeNotAvailable(address asset);
+
+    /**
+     * @notice Interacts with Chainlink feed registry and first tries to get `asset` price range in USD,
+     *         if that fails, then it tries to get `asset` price range in ETH, and then converts the range into USD.
+     * @param asset the ERC20 token to get the price range of.
+     * @return min the minimum price where Chainlink nodes stop updating the oracle
+     * @return max the maximum price where Chainlink nodes stop updating the oracle
+     */
+    function _getPriceRange(ERC20 asset)
+        internal
+        view
+        returns (
+            uint256 min,
+            uint256 max,
+            bool isETH
+        )
+    {
+        try feedRegistry.getFeed(address(asset), Denominations.USD) returns (AggregatorV2V3Interface aggregator) {
+            IChainlinkAggregator chainlinkAggregator = IChainlinkAggregator(address(aggregator));
+
+            min = uint256(uint192(chainlinkAggregator.minAnswer()));
+            max = uint256(uint192(chainlinkAggregator.maxAnswer()));
+            isETH = false;
+        } catch {
+            // If we can't find the USD price, then try the ETH price.
+            try feedRegistry.getFeed(address(asset), Denominations.ETH) returns (AggregatorV2V3Interface aggregator) {
+                IChainlinkAggregator chainlinkAggregator = IChainlinkAggregator(address(aggregator));
+
+                min = uint256(uint192(chainlinkAggregator.minAnswer()));
+                max = uint256(uint192(chainlinkAggregator.maxAnswer()));
+                isETH = true;
+            } catch {
+                revert PriceRouter__PriceRangeNotAvailable(address(asset));
+            }
+        }
+    }
+
+    /**
+     * @notice WETH on mainnet, used by `_getExchangeRateFromETHToUSD` to validate pricing information.
+     */
+    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    /**
+     * @notice helper function to grab pricing data for ETH in USD
+     * @return exchangeRate the exchange rate for ETH in terms of USD
+     * @dev It is inefficient to re-calculate _checkPriceFeed for ETH -> USD multiple times for a single TX,
+     * but this is done in the explicit way because it is simpler and less prone to logic errors.
+     */
+    function _getExchangeRateFromETHToUSD() internal view returns (uint256 exchangeRate) {
+        (, int256 _price, , uint256 _timestamp, ) = feedRegistry.latestRoundData(Denominations.ETH, Denominations.USD);
+        exchangeRate = _price.toUint256();
+        _checkPriceFeed(WETH, exchangeRate, _timestamp, getAssetConfig[WETH]);
+    }
+
+    function _checkPriceFeed(
+        ERC20 asset,
+        uint256 value,
+        uint256 timestamp,
+        AssetConfig memory config
+    ) internal view {
         uint256 minPrice = config.minPrice;
         if (value < minPrice) revert PriceRouter__AssetBelowMinPrice(address(asset), value, minPrice);
 
