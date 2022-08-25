@@ -430,6 +430,13 @@ contract PriceRouter is Ownable {
         _checkPriceFeed(WETH, exchangeRate, _timestamp, getAssetConfig[WETH]);
     }
 
+    /**
+     * @notice helper function to validate a price feed is safe to use.
+     * @param asset ERC20 asset price feed data is for.
+     * @param value the price value the price feed gave.
+     * @param timestamp the last timestamp the price feed was updated.
+     * @param config the assets config storing min price, max price, and heartbeat requirements.
+     */
     function _checkPriceFeed(
         ERC20 asset,
         uint256 value,
