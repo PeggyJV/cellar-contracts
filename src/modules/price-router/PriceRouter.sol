@@ -11,8 +11,6 @@ import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 
-import { console } from "@forge-std/Test.sol";
-
 /**
  * @title Sommelier Price Router
  * @notice Provides a universal interface allowing Sommelier contracts to retrieve secure pricing
@@ -84,9 +82,6 @@ contract PriceRouter is Ownable {
      */
     error PriceRouter__PriceRangeDenominationMisMatch(bool expected, bool actual);
 
-    //TODO add test checking this
-    //TODO add test where only price is in ETH, and ETH price is too high, low, and stale.
-
     /**
      * @notice Add an asset for the price router to support.
      * @param asset address of asset to support on the platform
@@ -149,6 +144,7 @@ contract PriceRouter is Ownable {
      * @notice Remove support for an asset, causing all operations that use the asset to revert.
      * @param asset address of asset to remove support for
      */
+    //TODO remove this?
     function removeAsset(ERC20 asset) external onlyOwner {
         getAssetConfig[asset].isSupported = false;
 

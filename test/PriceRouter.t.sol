@@ -75,6 +75,20 @@ contract PriceRouterTest is Test {
         priceRouter.addAsset(ERC20(address(0)), ERC20(address(0)), 0, 0, false, 0);
     }
 
+    function testAddAssetWrongPriceRangeDenomination() external {
+        // Make sure adding an asset specifying USD price range, fails if the asset only has ETH pricing.
+        vm.expectRevert(
+            abi.encodeWithSelector(PriceRouter.PriceRouter__PriceRangeDenominationMisMatch.selector, false, true)
+        );
+        priceRouter.addAsset(BOND, ERC20(address(0)), 1e8, 100e8, false, 0);
+
+        // Make sure adding an asset specifying ETH price range, fails if the asset has both USD and ETH pricing.
+        vm.expectRevert(
+            abi.encodeWithSelector(PriceRouter.PriceRouter__PriceRangeDenominationMisMatch.selector, true, false)
+        );
+        priceRouter.addAsset(USDC, ERC20(address(0)), 1e8, 100e8, true, 0);
+    }
+
     function testAddAssetEmit() external {
         vm.expectEmit(true, false, false, false);
         emit AddAsset(address(USDT));
@@ -348,7 +362,7 @@ contract PriceRouterTest is Test {
     }
 
     function testAssetStalePrice() external {
-        // Store price of USDC.
+        // Store timestamp of USDC.
         (, , , uint256 timestamp, ) = feedRegistry.latestRoundData(address(USDC), Denominations.USD);
         timestamp = block.timestamp - timestamp;
 
@@ -466,6 +480,64 @@ contract PriceRouterTest is Test {
             )
         );
         priceRouter.getExchangeRates(assets, USDC);
+    }
+
+    function testPriceChecksETHTOUSD() external {
+        // Store price of WETH.
+        (, int256 iPrice, , uint256 timestamp, ) = feedRegistry.latestRoundData(Denominations.ETH, Denominations.USD);
+        uint256 price = uint256(iPrice);
+        timestamp = block.timestamp - timestamp;
+
+        // Add WETH again, but set a bad maxPrice.
+        uint256 badMaxPrice = 1e8;
+        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, badMaxPrice, false, 0);
+
+        // Check that price router `getValueInUSD` reverts if the asset's value is within price range, but the ETH-USD value is too high.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__AssetAboveMaxPrice.selector,
+                    address(WETH),
+                    price,
+                    badMaxPrice
+                )
+            )
+        );
+        priceRouter.getValueInUSD(BOND);
+
+        // Add WETH again, but set a bad minPrice.
+        uint256 badMinPrice = 1_000_000e8;
+        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), badMinPrice, 0, false, 0);
+
+        // Check that price router `getValueInUSD` reverts if the asset's value is within price range, but the ETH-USD value is too low.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__AssetBelowMinPrice.selector,
+                    address(WETH),
+                    price,
+                    badMinPrice
+                )
+            )
+        );
+        priceRouter.getValueInUSD(BOND);
+
+        // Add WETH again, but set a bad heartbeat.
+        uint96 badHeartbeat = 1;
+        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, false, badHeartbeat);
+
+        // Check that price router `getValueInUSD` reverts if the asset's value is within price range, but the ETH-USD value is too stale.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__StalePrice.selector,
+                    address(WETH),
+                    timestamp,
+                    badHeartbeat
+                )
+            )
+        );
+        priceRouter.getValueInUSD(BOND);
     }
 
     // ======================================= PRICING TESTS =======================================
