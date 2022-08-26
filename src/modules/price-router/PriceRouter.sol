@@ -28,8 +28,6 @@ contract PriceRouter is Ownable {
     // =========================================== ASSETS CONFIG ===========================================
 
     /**
-     * @param remap address of asset to get pricing data for instead if a price feed is not
-     *              available (eg. ETH for WETH), set to `address(0)` for no remapping
      * @param minPrice minimum price in USD for the asset before reverting
      * @param maxPrice maximum price in USD for the asset before reverting
      * @param isPriceRangeInETH if true price range values are given in ETH, if false price range is given in USD
@@ -37,7 +35,6 @@ contract PriceRouter is Ownable {
      * @param isSupported whether this asset is supported by the platform or not
      */
     struct AssetConfig {
-        ERC20 remap;
         uint256 minPrice;
         uint256 maxPrice;
         bool isPriceRangeInETH;
@@ -83,10 +80,15 @@ contract PriceRouter is Ownable {
     error PriceRouter__PriceRangeDenominationMisMatch(bool expected, bool actual);
 
     /**
+     * @notice Attempted to add an asset with invalid min/max prices.
+     * @param min price
+     * @param max price
+     */
+    error PriceRouter__MinPriceGreaterThanMaxPrice(uint256 min, uint256 max);
+
+    /**
      * @notice Add an asset for the price router to support.
      * @param asset address of asset to support on the platform
-     * @param remap address of asset to get pricing data for instead if a price feed is not
-     *              available (eg. ETH for WETH), set to `address(0)` for no remapping
      * @param minPrice minimum price in USD with 8 decimals for the asset before reverting,
      *                 set to `0` to use Chainlink's default
      * @param maxPrice maximum price in USD with 8 decimals for the asset before reverting,
@@ -96,7 +98,6 @@ contract PriceRouter is Ownable {
      */
     function addAsset(
         ERC20 asset,
-        ERC20 remap,
         uint256 minPrice,
         uint256 maxPrice,
         bool rangeInETH,
@@ -105,7 +106,7 @@ contract PriceRouter is Ownable {
         if (address(asset) == address(0)) revert PriceRouter__InvalidAsset(address(asset));
 
         // Use Chainlink to get the min and max of the asset.
-        ERC20 assetToQuery = address(remap) == address(0) ? asset : remap;
+        ERC20 assetToQuery = _remap(asset);
         (uint256 minFromChainklink, uint256 maxFromChainlink, bool isETH) = _getPriceRange(assetToQuery);
 
         // Check if callers expected price range  denomination matches actual.
@@ -128,8 +129,9 @@ contract PriceRouter is Ownable {
             if (maxPrice > bufferedMaxPrice) revert PriceRouter__InvalidMaxPrice(maxPrice, bufferedMaxPrice);
         }
 
+        if (minPrice >= maxPrice) revert PriceRouter__MinPriceGreaterThanMaxPrice(minPrice, maxPrice);
+
         getAssetConfig[asset] = AssetConfig({
-            remap: remap,
             minPrice: minPrice,
             maxPrice: maxPrice,
             isPriceRangeInETH: isETH,
@@ -138,17 +140,6 @@ contract PriceRouter is Ownable {
         });
 
         emit AddAsset(address(asset));
-    }
-
-    /**
-     * @notice Remove support for an asset, causing all operations that use the asset to revert.
-     * @param asset address of asset to remove support for
-     */
-    //TODO remove this?
-    function removeAsset(ERC20 asset) external onlyOwner {
-        getAssetConfig[asset].isSupported = false;
-
-        emit RemoveAsset(address(asset));
     }
 
     // ======================================= PRICING OPERATIONS =======================================
@@ -273,6 +264,15 @@ contract PriceRouter is Ownable {
 
     // =========================================== HELPER FUNCTIONS ===========================================
 
+    ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 private constant WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
+
+    function _remap(ERC20 asset) internal pure returns (ERC20) {
+        if (asset == WETH) return ERC20(Denominations.ETH);
+        if (asset == WBTC) return ERC20(Denominations.BTC);
+        return asset;
+    }
+
     /**
      * @notice Gets the exchange rate between a base and a quote asset
      * @param baseAsset the asset to convert into quoteAsset
@@ -351,20 +351,19 @@ contract PriceRouter is Ownable {
     function getValueInUSD(ERC20 asset) public view returns (uint256 price) {
         AssetConfig memory config = getAssetConfig[asset];
 
-        // Store this so it can be passed to _checkPriceFeed.
-        ERC20 nonRemapped = asset;
-        if (address(config.remap) != address(0)) asset = config.remap;
+        // Remap asset if need be.
+        asset = _remap(asset);
 
         if (!config.isPriceRangeInETH) {
             // Price feed is in USD.
             (, int256 _price, , uint256 _timestamp, ) = feedRegistry.latestRoundData(address(asset), Denominations.USD);
             price = _price.toUint256();
-            _checkPriceFeed(nonRemapped, price, _timestamp, config);
+            _checkPriceFeed(asset, price, _timestamp, config);
         } else {
             // Price feed is in ETH.
             (, int256 _price, , uint256 _timestamp, ) = feedRegistry.latestRoundData(address(asset), Denominations.ETH);
             price = _price.toUint256();
-            _checkPriceFeed(nonRemapped, price, _timestamp, config);
+            _checkPriceFeed(asset, price, _timestamp, config);
 
             // Convert price from ETH to USD.
             price = _price.toUint256().mulWadDown(_getExchangeRateFromETHToUSD());
@@ -412,11 +411,6 @@ contract PriceRouter is Ownable {
             }
         }
     }
-
-    /**
-     * @notice WETH on mainnet, used by `_getExchangeRateFromETHToUSD` to validate pricing information.
-     */
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     /**
      * @notice helper function to grab pricing data for ETH in USD

@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { ChainlinkPriceFeedAdaptor } from "src/modules/price-router/adaptors/ChainlinkPriceFeedAdaptor.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { FeedRegistryInterface } from "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
@@ -18,7 +17,6 @@ contract PriceRouterTest is Test {
     event AddAsset(address indexed asset);
     event RemoveAsset(address indexed asset);
 
-    ChainlinkPriceFeedAdaptor private immutable chainlinkAdaptor = new ChainlinkPriceFeedAdaptor();
     PriceRouter private immutable priceRouter = new PriceRouter();
 
     address private immutable sender = vm.addr(0xABCD);
@@ -39,40 +37,41 @@ contract PriceRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, false, 0);
-        priceRouter.addAsset(WBTC, ERC20(Denominations.BTC), 0, 0, false, 0);
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, false, 0);
-        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 0, false, 0);
-        priceRouter.addAsset(BOND, ERC20(address(0)), 0, 0, true, 0);
+        priceRouter.addAsset(WETH, 0, 0, false, 0);
+        priceRouter.addAsset(WBTC, 0, 0, false, 0);
+        priceRouter.addAsset(USDC, 0, 0, false, 0);
+        priceRouter.addAsset(DAI, 0, 0, false, 0);
+        priceRouter.addAsset(BOND, 0, 0, true, 0);
     }
 
     // ======================================= ASSET TESTS =======================================
 
     function testAddAsset() external {
-        /*ERC20 newAsset = ERC20(vm.addr(0xABCD));
-        priceRouter.addAsset(newAsset, ERC20(Denominations.USD), 10e18, 100e18, 2 days);
+        priceRouter.addAsset(BOND, 10e18, 100e18, true, 2 days);
 
-        (ERC20 remap, uint256 minPrice, uint256 maxPrice, uint96 heartbeat, bool isSupported) = priceRouter
-            .getAssetConfig(newAsset);
+        (uint256 minPrice, uint256 maxPrice, bool isETH, uint96 heartbeat, bool isSupported) = priceRouter
+            .getAssetConfig(BOND);
 
-        assertEq(address(remap), Denominations.USD, "Should set remap");
+        assertTrue(isETH, "BOND data feed should be in ETH");
         assertEq(minPrice, 10e18, "Should set min price");
         assertEq(maxPrice, 100e18, "Should set max price");
         assertEq(heartbeat, 2 days, "Should set heartbeat");
-        assertTrue(isSupported, "Asset should be supported");*/
+        assertTrue(isSupported, "Asset should be supported");
     }
 
-    function testRemoveAsset() external {
-        priceRouter.removeAsset(USDC);
-
-        (, , , , , bool isSupported) = priceRouter.getAssetConfig(USDC);
-
-        assertFalse(isSupported, "Should remove suport for asset");
+    function testMinPriceGreaterThanMaxPrice() external {
+        // Make sure adding an asset with an invalid price range fails.
+        uint256 minPrice = 2e8;
+        uint256 maxPrice = 1e8;
+        vm.expectRevert(
+            abi.encodeWithSelector(PriceRouter.PriceRouter__MinPriceGreaterThanMaxPrice.selector, minPrice, maxPrice)
+        );
+        priceRouter.addAsset(USDC, minPrice, maxPrice, false, 0);
     }
 
     function testAddInvalidAsset() external {
         vm.expectRevert(abi.encodeWithSelector(PriceRouter.PriceRouter__InvalidAsset.selector, address(0)));
-        priceRouter.addAsset(ERC20(address(0)), ERC20(address(0)), 0, 0, false, 0);
+        priceRouter.addAsset(ERC20(address(0)), 0, 0, false, 0);
     }
 
     function testAddAssetWrongPriceRangeDenomination() external {
@@ -80,43 +79,37 @@ contract PriceRouterTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(PriceRouter.PriceRouter__PriceRangeDenominationMisMatch.selector, false, true)
         );
-        priceRouter.addAsset(BOND, ERC20(address(0)), 1e8, 100e8, false, 0);
+        priceRouter.addAsset(BOND, 1e8, 100e8, false, 0);
 
         // Make sure adding an asset specifying ETH price range, fails if the asset has both USD and ETH pricing.
         vm.expectRevert(
             abi.encodeWithSelector(PriceRouter.PriceRouter__PriceRangeDenominationMisMatch.selector, true, false)
         );
-        priceRouter.addAsset(USDC, ERC20(address(0)), 1e8, 100e8, true, 0);
+        priceRouter.addAsset(USDC, 1e8, 100e8, true, 0);
     }
 
     function testAddAssetEmit() external {
         vm.expectEmit(true, false, false, false);
         emit AddAsset(address(USDT));
-        priceRouter.addAsset(USDT, ERC20(address(0)), 0, 0, false, 0);
+        priceRouter.addAsset(USDT, 0, 0, false, 0);
 
-        (, , , , uint96 heartbeat, bool isSupported) = priceRouter.getAssetConfig(USDT);
+        (, , , uint96 heartbeat, bool isSupported) = priceRouter.getAssetConfig(USDT);
 
         assertEq(uint256(heartbeat), uint256(priceRouter.DEFAULT_HEART_BEAT()));
         assertEq(heartbeat, priceRouter.DEFAULT_HEART_BEAT());
         assertTrue(isSupported);
     }
 
-    function testRemoveAssetEmit() external {
-        vm.expectEmit(true, false, false, false);
-        emit RemoveAsset(address(USDT));
-        priceRouter.removeAsset(USDT);
-    }
-
     function testAddAssetWithInvalidMinPrice() external {
         vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__InvalidMinPrice.selector, 1, 1100000)));
-        priceRouter.addAsset(USDC, ERC20(address(0)), 1, 0, false, 0);
+        priceRouter.addAsset(USDC, 1, 0, false, 0);
     }
 
     function testAddAssetWithInvalidMaxPrice() external {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__InvalidMaxPrice.selector, 999e18, 90000000000))
         );
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 999e18, false, 0);
+        priceRouter.addAsset(USDC, 0, 999e18, false, 0);
     }
 
     function testAssetBelowMinPrice() external {
@@ -126,7 +119,7 @@ contract PriceRouterTest is Test {
 
         // Add USDC again, but set a bad minPrice.
         uint256 badMinPrice = 1.1e8;
-        priceRouter.addAsset(USDC, ERC20(address(0)), badMinPrice, 0, false, 0);
+        priceRouter.addAsset(USDC, badMinPrice, 0, false, 0);
 
         // Check that price router `getValue` reverts if the base asset's value is below the min price.
         vm.expectRevert(
@@ -247,7 +240,7 @@ contract PriceRouterTest is Test {
 
         // Add USDC again, but set a bad maxPrice.
         uint256 badMaxPrice = 0.9e8;
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, badMaxPrice, false, 0);
+        priceRouter.addAsset(USDC, 0, badMaxPrice, false, 0);
 
         // Check that price router `getValue` reverts if the base asset's value is above the max price.
         vm.expectRevert(
@@ -368,7 +361,7 @@ contract PriceRouterTest is Test {
 
         // Add USDC again, but set a bad heartbeat.
         uint96 badHeartbeat = 1;
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, false, badHeartbeat);
+        priceRouter.addAsset(USDC, 0, 0, false, badHeartbeat);
 
         // Check that price router `getValue` reverts if the base asset's price is stale.
         vm.expectRevert(
@@ -489,8 +482,8 @@ contract PriceRouterTest is Test {
         timestamp = block.timestamp - timestamp;
 
         // Add WETH again, but set a bad maxPrice.
-        uint256 badMaxPrice = 1e8;
-        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, badMaxPrice, false, 0);
+        uint256 badMaxPrice = 1_000e8;
+        priceRouter.addAsset(WETH, 0, badMaxPrice, false, 0);
 
         // Check that price router `getValueInUSD` reverts if the asset's value is within price range, but the ETH-USD value is too high.
         vm.expectRevert(
@@ -506,8 +499,8 @@ contract PriceRouterTest is Test {
         priceRouter.getValueInUSD(BOND);
 
         // Add WETH again, but set a bad minPrice.
-        uint256 badMinPrice = 1_000_000e8;
-        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), badMinPrice, 0, false, 0);
+        uint256 badMinPrice = 5_000e8;
+        priceRouter.addAsset(WETH, badMinPrice, 0, false, 0);
 
         // Check that price router `getValueInUSD` reverts if the asset's value is within price range, but the ETH-USD value is too low.
         vm.expectRevert(
@@ -524,7 +517,7 @@ contract PriceRouterTest is Test {
 
         // Add WETH again, but set a bad heartbeat.
         uint96 badHeartbeat = 1;
-        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, false, badHeartbeat);
+        priceRouter.addAsset(WETH, 0, 0, false, badHeartbeat);
 
         // Check that price router `getValueInUSD` reverts if the asset's value is within price range, but the ETH-USD value is too stale.
         vm.expectRevert(
@@ -713,73 +706,73 @@ contract PriceRouterTest is Test {
     }
 
     function testUnsupportedAsset() external {
-        priceRouter.removeAsset(USDC);
+        ERC20 LINK = ERC20(0x514910771AF9Ca656af840dff83E8264EcF986CA);
 
         // Check that price router `getValue` reverts if the base asset is not supported.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
-        priceRouter.getValue(USDC, 0, WETH);
+        priceRouter.getValue(LINK, 0, WETH);
 
         // Check that price router `getValue` reverts if the quote asset is not supported.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
-        priceRouter.getValue(WETH, 0, USDC);
+        priceRouter.getValue(WETH, 0, LINK);
 
         ERC20[] memory assets = new ERC20[](1);
         uint256[] memory amounts = new uint256[](1);
 
         // Check that price router `getValues` reverts if the base asset is not supported.
-        assets[0] = USDC;
+        assets[0] = LINK;
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
         priceRouter.getValues(assets, amounts, WETH);
 
         // Check that price router `getValues` reverts if the quote asset is not supported.
         assets[0] = WETH;
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
-        priceRouter.getValues(assets, amounts, USDC);
+        priceRouter.getValues(assets, amounts, LINK);
 
         // Check that price router `getExchange` reverts if the base asset is not supported.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
-        priceRouter.getExchangeRate(USDC, WETH);
+        priceRouter.getExchangeRate(LINK, WETH);
 
         // Check that price router `getExchangeRate` reverts if the quote asset is not supported.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
-        priceRouter.getExchangeRate(WETH, USDC);
+        priceRouter.getExchangeRate(WETH, LINK);
 
         // Check that price router `getExchangeRates` reverts if the base asset is not supported.
-        assets[0] = USDC;
+        assets[0] = LINK;
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
         priceRouter.getExchangeRates(assets, WETH);
 
         // Check that price router `getExchangeRates` reverts if the quote asset is not supported.
         assets[0] = WETH;
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
-        priceRouter.getExchangeRates(assets, USDC);
+        priceRouter.getExchangeRates(assets, LINK);
 
         // Check that price router `getPriceRange` reverts if the asset is not supported.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
-        priceRouter.getPriceRange(USDC);
+        priceRouter.getPriceRange(LINK);
 
         // Check that price router `getPriceRanges` reverts if the asset is not supported.
-        assets[0] = USDC;
+        assets[0] = LINK;
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(USDC)))
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
         priceRouter.getPriceRanges(assets);
     }
