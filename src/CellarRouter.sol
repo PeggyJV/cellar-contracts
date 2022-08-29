@@ -96,10 +96,11 @@ contract CellarRouter is ICellarRouter {
         // Swap assets into desired token
         SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
         assetIn.safeApprove(address(swapRouter), assets);
-        assets = swapRouter.swap(exchange, swapData, address(this));
+        ERC20 assetOut = cellar.asset();
+        assets = swapRouter.swap(exchange, swapData, address(this), assetIn, assetOut);
 
         // Approve the cellar to spend assets.
-        cellar.asset().safeApprove(address(cellar), assets);
+        assetOut.safeApprove(address(cellar), assets);
 
         // Deposit assets into the cellar.
         shares = cellar.deposit(assets, receiver);
@@ -172,8 +173,14 @@ contract CellarRouter is ICellarRouter {
         if (swapDatas.length != 0) {
             // Encode data used to perform swap.
             bytes[] memory data = new bytes[](swapDatas.length);
-            for (uint256 i; i < swapDatas.length; i++)
-                data[i] = abi.encodeCall(SwapRouter.swap, (exchanges[i], swapDatas[i], receiver));
+            for (uint256 i; i < swapDatas.length; i++) {
+                // Grab path data from swapDatas to pass in assetIn and assetOut to swap router.
+                address[] memory path = abi.decode(swapDatas[i], (address[]));
+                data[i] = abi.encodeCall(
+                    SwapRouter.swap,
+                    (exchanges[i], swapDatas[i], receiver, ERC20(path[0]), ERC20(path[path.length - 1]))
+                );
+            }
 
             // Approve swap router to swap each asset.
             for (uint256 i; i < positionAssets.length; i++)

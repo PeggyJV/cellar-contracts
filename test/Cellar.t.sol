@@ -605,7 +605,10 @@ contract CellarTest is Test {
     // ========================================== REBALANCE TEST ==========================================
 
     function testRebalanceBetweenCellarOrERC4626Positions(uint256 assets) external {
-        assets = bound(assets, 1, type(uint72).max);
+        assets = bound(assets, 1e6, type(uint72).max);
+
+        // Update allowed rebalance deviation to work with mock swap router.
+        cellar.setRebalanceDeviation(0.051e18);
 
         cellar.depositIntoPosition(address(usdcCLR), assets);
 
@@ -632,7 +635,10 @@ contract CellarTest is Test {
     }
 
     function testRebalanceBetweenERC20Positions(uint256 assets) external {
-        assets = bound(assets, 1, type(uint72).max);
+        assets = bound(assets, 1e6, type(uint72).max);
+
+        // Update allowed rebalance deviation to work with mock swap router.
+        cellar.setRebalanceDeviation(0.051e18);
 
         // Give this address enough USDC to cover deposits.
         deal(address(USDC), address(this), assets);
@@ -1632,6 +1638,84 @@ contract CellarTest is Test {
         );
     }
 
+    function testRebalanceDeviation(uint256 assets) external {
+        assets = bound(assets, 1e6, type(uint72).max);
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), assets);
+
+        // Deposit USDC into Cellar.
+        cellar.deposit(assets, address(this));
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WETH);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector,
+                    assets.mulWadDown(0.95e18),
+                    assets.mulDivUp(0.997e18, 1e18),
+                    assets.mulWadDown(1.003e18)
+                )
+            )
+        );
+        cellar.rebalance(
+            address(USDC),
+            address(WETH),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(path, assets, 0, address(cellar), address(cellar))
+        );
+    }
+
+    function testMaliciousRebalanceIntoUntrackedPosition() external {
+        // Create a new Cellar with two positions USDC, and WETH.
+        // Setup Cellar:
+        address[] memory positions = new address[](2);
+        positions[0] = address(USDC);
+        positions[1] = address(WETH);
+
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](2);
+        positionTypes[0] = Cellar.PositionType.ERC20;
+        positionTypes[1] = Cellar.PositionType.ERC20;
+
+        Cellar badCellar = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            address(USDC),
+            Cellar.WithdrawType.ORDERLY,
+            "Multiposition Cellar LP Token",
+            "multiposition-CLR",
+            strategist
+        );
+
+        // User join bad cellar.
+        address alice = vm.addr(77777);
+        deal(address(USDC), alice, 1_000_000e6);
+        vm.startPrank(alice);
+        USDC.approve(address(badCellar), 1_000_000e6);
+        badCellar.deposit(1_000_000e6, alice);
+        vm.stopPrank();
+
+        // Strategist calls rebalance with malicious swap data.
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WBTC);
+        uint256 amount = 500_000e6;
+        bytes memory params = abi.encode(path, amount, 0);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(SwapRouter.SwapRouter__AssetOutMisMatch.selector, address(WBTC), address(WETH))
+            )
+        );
+        badCellar.rebalance(address(USDC), address(WETH), amount, SwapRouter.Exchange.UNIV2, params);
+    }
+
     function testAllFeesToStrategist(
         uint256 timePassed,
         uint256 deposit,
@@ -2334,6 +2418,9 @@ contract CellarTest is Test {
             );
         }
 
+        // Update allowed rebalance deviation to work with mock swap router.
+        assetManagementCellar.setRebalanceDeviation(0.05e18);
+
         // Give users USDC to interact with the Cellar.
         deal(address(USDC), alice, type(uint256).max);
         deal(address(USDC), bob, type(uint256).max);
@@ -2871,6 +2958,9 @@ contract CellarTest is Test {
                 strategist
             );
         }
+
+        // Update allowed rebalance deviation to work with mock swap router.
+        assetManagementCellar.setRebalanceDeviation(0.05e18);
 
         // Give users WETH to interact with the Cellar.
         deal(address(WETH), alice, type(uint256).max);

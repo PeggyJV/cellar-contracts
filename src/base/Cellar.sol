@@ -1209,6 +1209,28 @@ contract Cellar is ERC4626, Ownable, Multicall {
     event Rebalance(address indexed fromPosition, address indexed toPosition, uint256 assetsFrom, uint256 assetsTo);
 
     /**
+     * @notice totalAssets deviated outside the range set by `allowedRebalanceDeviation`.
+     * @param assets the total assets in the cellar
+     * @param min the minimum allowed assets
+     * @param max the maximum allowed assets
+     */
+    error Cellar__TotalAssetDeviatedOutsideRange(uint256 assets, uint256 min, uint256 max);
+
+    /**
+     * @notice Total shares in a cellar changed when they should stay constant.
+     * @param current the current amount of total shares
+     * @param expected the expected amount of total shares
+     */
+    error Cellar__TotalSharesMustRemainConstant(uint256 current, uint256 expected);
+
+    // 0 -> 1e18. Used after callOnAdaptor to help safeguard against adaptor moving into positions that are not added here
+    uint256 public allowedRebalanceDeviation = 0.003e18; //currently set to 99.7%
+
+    function setRebalanceDeviation(uint256 newDeviation) external onlyOwner {
+        allowedRebalanceDeviation = newDeviation;
+    }
+
+    /**
      * @notice Move assets between positions. To move assets from/to this cellar's holdings, specify
      *         the address of this cellar as the `fromPosition`/`toPosition`.
      * @param fromPosition address of the position to move assets from
@@ -1225,16 +1247,30 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Check that position being rebalanced to is currently being used.
         if (!isPositionUsed[toPosition]) revert Cellar__InvalidPosition(address(toPosition));
 
+        // Before making any external calls save the current `totalAssets` and `totalSupply`.
+        uint256 assets = totalAssets();
+        uint256 totalShares = totalSupply;
+
         // Withdraw from position.
         _withdrawFrom(fromPosition, assetsFrom, address(this));
 
         // Swap to the asset of the other position if necessary.
         ERC20 fromAsset = _assetOf(fromPosition);
         ERC20 toAsset = _assetOf(toPosition);
-        assetsTo = fromAsset != toAsset ? _swap(fromAsset, assetsFrom, exchange, params, address(this)) : assetsFrom;
+        assetsTo = fromAsset != toAsset
+            ? _swap(fromAsset, toAsset, assetsFrom, exchange, params, address(this))
+            : assetsFrom;
 
         // Deposit into position.
         _depositTo(toPosition, assetsTo);
+
+        // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
+        uint256 minimumAllowedAssets = assets.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
+        uint256 maximumAllowedAssets = assets.mulDivDown((1e18 + allowedRebalanceDeviation), 1e18);
+        assets = totalAssets();
+        if (assets > maximumAllowedAssets || assets < minimumAllowedAssets)
+            revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
+        if (totalShares != totalSupply) revert Cellar__TotalSharesMustRemainConstant(totalSupply, totalShares);
 
         emit Rebalance(fromPosition, toPosition, assetsFrom, assetsTo);
     }
@@ -1508,6 +1544,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function _swap(
         ERC20 assetIn,
+        ERC20 assetOut,
         uint256 amountIn,
         SwapRouter.Exchange exchange,
         bytes calldata params,
@@ -1523,7 +1560,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         assetIn.safeApprove(address(swapRouter), amountIn);
 
         // Perform swap.
-        amountOut = swapRouter.swap(exchange, params, receiver);
+        amountOut = swapRouter.swap(exchange, params, receiver, assetIn, assetOut);
 
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
         // specified a different amount of assets to swap then `amountIn`.
