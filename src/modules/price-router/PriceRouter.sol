@@ -14,7 +14,7 @@ import { Math } from "src/utils/Math.sol";
 /**
  * @title Sommelier Price Router
  * @notice Provides a universal interface allowing Sommelier contracts to retrieve secure pricing
- *         data from Chainlink and arbitrary adaptors.
+ *         data from Chainlink.
  * @author crispymangoes, Brian Le
  */
 contract PriceRouter is Ownable {
