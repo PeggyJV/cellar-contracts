@@ -20,7 +20,7 @@ contract DeployedCellarTest is Test {
     address public strategist = 0xF07Ba2229b4Da47895ce0a4Ab4298ad7F8Cb3a4D;
 
     function setUp() external {
-        cellar = Cellar(0xDde063eBe8E85D666AD99f731B4Dbf8C98F29708);
+        cellar = Cellar(0xbc5D133107DeeBc4525b6f8c1B8209E6f34104a1);
     }
 
     function testCellar() external {
@@ -59,7 +59,7 @@ contract DeployedCellarTest is Test {
         assertApproxEqRel(
             cellar.totalAssets(),
             100_000e6,
-            0.001e18,
+            0.005e18,
             "Total assets should approximately be equal to 100,000 USDC."
         );
 
