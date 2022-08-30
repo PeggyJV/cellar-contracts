@@ -20,6 +20,8 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 contract CellarRouter is ICellarRouter {
     using SafeTransferLib for ERC20;
 
+    uint256 public constant SWAP_ROUTER_REGISTRY_SLOT = 1;
+
     // ========================================== CONSTRUCTOR ==========================================
 
     /**
@@ -94,7 +96,7 @@ contract CellarRouter is ICellarRouter {
         assetIn.safeTransferFrom(msg.sender, address(this), assets);
 
         // Swap assets into desired token
-        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
+        SwapRouter swapRouter = SwapRouter(registry.getAddress(SWAP_ROUTER_REGISTRY_SLOT));
         assetIn.safeApprove(address(swapRouter), assets);
         assets = swapRouter.swap(exchange, swapData, address(this));
 
@@ -103,6 +105,10 @@ contract CellarRouter is ICellarRouter {
 
         // Deposit assets into the cellar.
         shares = cellar.deposit(assets, receiver);
+
+        // Transfer any remaining assetIn back to sender.
+        uint256 remainingBalance = assetIn.balanceOf(address(this));
+        if (remainingBalance != 0) assetIn.transfer(msg.sender, remainingBalance);
     }
 
     /**
@@ -164,7 +170,7 @@ contract CellarRouter is ICellarRouter {
         shares = cellar.withdraw(assets, address(this), msg.sender);
 
         // Get the address of the swap router.
-        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
+        SwapRouter swapRouter = SwapRouter(registry.getAddress(SWAP_ROUTER_REGISTRY_SLOT));
 
         // Get all the assets that could potentially have been received.
         ERC20[] memory positionAssets = _getPositionAssets(cellar);
