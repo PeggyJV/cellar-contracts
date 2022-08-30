@@ -14,7 +14,7 @@ import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 
-import { Test, console } from "@forge-std/Test.sol";
+import { Test } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 /**
@@ -232,6 +232,9 @@ contract CellarRouterTest is Test {
     // ======================================= WITHDRAW TESTS =======================================
 
     function testWithdrawAndSwap() external {
+        // Set performance fees to zero, so test is not dependent to price movements.
+        cellar.setPerformanceFee(0);
+
         // Deposit initial funds into cellar.
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
