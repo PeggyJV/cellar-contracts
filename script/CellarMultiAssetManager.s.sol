@@ -55,7 +55,7 @@ contract CellarMultiAssetManagerScript is Script {
         positionTypes[1] = Cellar.PositionType.ERC20;
         positionTypes[2] = Cellar.PositionType.ERC20;
 
-        Cellar tonnCellar = new Cellar(
+        new Cellar(
             registry,
             USDC,
             positions,
