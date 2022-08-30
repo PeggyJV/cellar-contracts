@@ -35,7 +35,7 @@ contract CellarMultiAssetManagerScript is Script {
         priceRouter.addAsset(WBTC, ERC20(Denominations.BTC), 0, 0, 0);
         priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0);
 
-        createTonnCellar();
+        createMultiAssetCellar();
 
         // Set registry to use correct gravity bridge.
         registry.setAddress(0, gravityBridge);
@@ -43,7 +43,7 @@ contract CellarMultiAssetManagerScript is Script {
         vm.stopBroadcast();
     }
 
-    function createTonnCellar() internal {
+    function createMultiAssetCellar() internal {
         // Setup Cellar:
         address[] memory positions = new address[](3);
         positions[0] = address(USDC);
