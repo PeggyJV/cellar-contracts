@@ -104,26 +104,31 @@ contract CellarAssetManagerTest is Test {
         Cellar.PositionData[] memory positionData = new Cellar.PositionData[](5);
         positionData[0] = Cellar.PositionData({
             positionType: Cellar.PositionType.ERC20,
+            isDebt: false,
             adaptor: address(0),
             adaptorData: abi.encode(0)
         });
         positionData[1] = Cellar.PositionData({
             positionType: Cellar.PositionType.ERC4626,
+            isDebt: false,
             adaptor: address(0),
             adaptorData: abi.encode(0)
         });
         positionData[2] = Cellar.PositionData({
             positionType: Cellar.PositionType.ERC4626,
+            isDebt: false,
             adaptor: address(0),
             adaptorData: abi.encode(0)
         });
         positionData[3] = Cellar.PositionData({
             positionType: Cellar.PositionType.ERC4626,
+            isDebt: false,
             adaptor: address(0),
             adaptorData: abi.encode(0)
         });
         positionData[4] = Cellar.PositionData({
             positionType: Cellar.PositionType.ERC20,
+            isDebt: false,
             adaptor: address(0),
             adaptorData: abi.encode(0)
         });
@@ -673,16 +678,19 @@ contract CellarAssetManagerTest is Test {
             Cellar.PositionData[] memory positionData = new Cellar.PositionData[](3);
             positionData[0] = Cellar.PositionData({
                 positionType: Cellar.PositionType.ERC20,
+                isDebt: false,
                 adaptor: address(0),
                 adaptorData: abi.encode(0)
             });
             positionData[1] = Cellar.PositionData({
                 positionType: Cellar.PositionType.ERC20,
+                isDebt: false,
                 adaptor: address(0),
                 adaptorData: abi.encode(0)
             });
             positionData[2] = Cellar.PositionData({
                 positionType: Cellar.PositionType.ERC20,
+                isDebt: false,
                 adaptor: address(0),
                 adaptorData: abi.encode(0)
             });
@@ -1018,7 +1026,13 @@ contract CellarAssetManagerTest is Test {
 
             // Strategists trusts LINK, and then adds it as a position.
             // No need to set LINK price since its assets will always be zero.
-            assetManagementCellar.trustPosition(address(LINK), Cellar.PositionType.ERC20, address(0), abi.encode(0));
+            assetManagementCellar.trustPosition(
+                address(LINK),
+                Cellar.PositionType.ERC20,
+                false,
+                address(0),
+                abi.encode(0)
+            );
             assetManagementCellar.pushPosition(address(LINK));
 
             // Swap LINK position with USDC position.
@@ -1228,16 +1242,19 @@ contract CellarAssetManagerTest is Test {
             Cellar.PositionData[] memory positionData = new Cellar.PositionData[](3);
             positionData[0] = Cellar.PositionData({
                 positionType: Cellar.PositionType.ERC20,
+                isDebt: false,
                 adaptor: address(0),
                 adaptorData: abi.encode(0)
             });
             positionData[1] = Cellar.PositionData({
                 positionType: Cellar.PositionType.ERC20,
+                isDebt: false,
                 adaptor: address(0),
                 adaptorData: abi.encode(0)
             });
             positionData[2] = Cellar.PositionData({
                 positionType: Cellar.PositionType.ERC20,
+                isDebt: false,
                 adaptor: address(0),
                 adaptorData: abi.encode(0)
             });

@@ -122,6 +122,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     //TODO add natspec
     struct PositionData {
         PositionType positionType;
+        bool isDebt;
         address adaptor;
         bytes adaptorData;
     }
@@ -130,6 +131,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @notice Addresses of the positions current used by the cellar.
      */
     address[] public positions;
+
+    //TODO add natspec
+    uint256 public numberOfDebtPositions;
 
     /**
      * @notice Tell whether a position is currently used.
@@ -165,6 +169,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Add new position at a specified index.
         positions.add(index, position);
         isPositionUsed[position] = true;
+        if (getPositionData[position].isDebt) numberOfDebtPositions++;
 
         emit PositionAdded(position, index);
     }
@@ -185,6 +190,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Add new position to the end of the positions.
         positions.push(position);
         isPositionUsed[position] = true;
+        if (getPositionData[position].isDebt) numberOfDebtPositions++;
 
         emit PositionAdded(position, positions.length - 1);
     }
@@ -205,6 +211,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Remove position at the given index.
         positions.remove(index);
         isPositionUsed[position] = false;
+        if (getPositionData[position].isDebt) numberOfDebtPositions--;
 
         emit PositionRemoved(position, index);
     }
@@ -227,6 +234,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         // Remove last position.
         positions.pop();
         isPositionUsed[position] = false;
+        if (getPositionData[position].isDebt) numberOfDebtPositions--;
 
         emit PositionRemoved(position, index);
     }
@@ -252,6 +260,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         positions[index] = newPosition;
         isPositionUsed[oldPosition] = false;
         isPositionUsed[newPosition] = true;
+        if (getPositionData[oldPosition].isDebt) numberOfDebtPositions--;
+        if (getPositionData[newPosition].isDebt) numberOfDebtPositions++;
 
         emit PositionReplaced(oldPosition, newPosition, index);
     }
@@ -294,6 +304,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
     function trustPosition(
         address position,
         PositionType positionType,
+        bool isDebt,
         address adaptor,
         bytes memory adaptorData
     ) external onlyOwner {
@@ -302,6 +313,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Set position type.
         getPositionData[position].positionType = positionType;
+
+        // Set position debt.
+        getPositionData[position].isDebt = isDebt;
 
         if (positionType == PositionType.Adaptor) {
             require(getAdaptorInfo[adaptor].isSetup, "Invalid Adaptor");
@@ -330,6 +344,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             positions.remove(position);
             isPositionUsed[position] = false;
+            if (getPositionData[position].isDebt) numberOfDebtPositions--;
         }
 
         // NOTE: After position has been removed, SP should be notified on the
@@ -737,6 +752,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             isTrusted[position] = true;
             isPositionUsed[position] = true;
             getPositionData[position] = _positionData[i];
+            if (_positionData[i].isDebt) numberOfDebtPositions++;
         }
 
         // Initialize holding position.
@@ -1068,17 +1084,31 @@ contract Cellar is ERC4626, Ownable, Multicall {
      */
     function totalAssets() public view override returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
-        ERC20[] memory positionAssets = new ERC20[](numOfPositions);
-        uint256[] memory balances = new uint256[](numOfPositions);
+        ERC20[] memory positionAssets = new ERC20[](numOfPositions - numberOfDebtPositions);
+        uint256[] memory balances = new uint256[](numOfPositions - numberOfDebtPositions);
+        ERC20[] memory debtPositionAssets = new ERC20[](numberOfDebtPositions);
+        uint256[] memory debtBalances = new uint256[](numberOfDebtPositions);
+        uint256 collateralIndex;
+        uint256 debtIndex;
 
         for (uint256 i; i < numOfPositions; i++) {
             address position = positions[i];
-            positionAssets[i] = _assetOf(position);
-            balances[i] = _balanceOf(position);
+            if (getPositionData[position].isDebt) {
+                debtPositionAssets[debtIndex] = _assetOf(position);
+                debtBalances[debtIndex] = _balanceOf(position);
+                debtIndex++;
+            } else {
+                positionAssets[collateralIndex] = _assetOf(position);
+                balances[collateralIndex] = _balanceOf(position);
+                collateralIndex++;
+            }
         }
 
+        //TODO use multicall to reduce external calls.
         PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
-        assets = priceRouter.getValues(positionAssets, balances, asset);
+        assets =
+            priceRouter.getValues(positionAssets, balances, asset) -
+            priceRouter.getValues(debtPositionAssets, debtBalances, asset);
     }
 
     /**
@@ -1197,26 +1227,45 @@ contract Cellar is ERC4626, Ownable, Multicall {
         returns (
             uint256 _totalAssets,
             address[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
+            ERC20[] memory _positionAssets,
+            uint256[] memory _positionBalances
         )
     {
         uint256 len = positions.length;
 
         _positions = new address[](len);
-        positionAssets = new ERC20[](len);
-        positionBalances = new uint256[](len);
+        _positionAssets = new ERC20[](len);
+        _positionBalances = new uint256[](len);
+        ERC20[] memory positionAssets = new ERC20[](len - numberOfDebtPositions);
+        uint256[] memory balances = new uint256[](len - numberOfDebtPositions);
+        ERC20[] memory debtPositionAssets = new ERC20[](numberOfDebtPositions);
+        uint256[] memory debtBalances = new uint256[](numberOfDebtPositions);
+        uint256 collateralIndex;
+        uint256 debtIndex;
 
         for (uint256 i; i < len; i++) {
             address position = positions[i];
 
             _positions[i] = position;
-            positionAssets[i] = _assetOf(position);
-            positionBalances[i] = _balanceOf(position);
+            _positionAssets[i] = _assetOf(position);
+            _positionBalances[i] = _balanceOf(position);
+
+            if (getPositionData[position].isDebt) {
+                debtPositionAssets[debtIndex] = _assetOf(position);
+                debtBalances[debtIndex] = _balanceOf(position);
+                debtIndex++;
+            } else {
+                positionAssets[collateralIndex] = _assetOf(position);
+                balances[collateralIndex] = _balanceOf(position);
+                collateralIndex++;
+            }
         }
 
+        //TODO use multicall
         PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
-        _totalAssets = priceRouter.getValues(positionAssets, positionBalances, asset);
+        _totalAssets =
+            priceRouter.getValues(positionAssets, balances, asset) -
+            priceRouter.getValues(debtPositionAssets, debtBalances, asset);
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================
