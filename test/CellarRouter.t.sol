@@ -94,8 +94,8 @@ contract CellarRouterTest is Test {
     // ======================================= DEPOSIT TESTS =======================================
 
     function testDepositAndSwapUsingUniswapV2(uint256 assets) external {
-        //assets = bound(assets, 1e18, type(uint112).max);
-        assets = 100e18;
+        assets = bound(assets, 1e18, type(uint112).max);
+
         // Specify the swap path.
         address[] memory path = new address[](2);
         path[0] = address(DAI);
@@ -127,8 +127,7 @@ contract CellarRouterTest is Test {
     }
 
     function testDepositAndSwapUsingUniswapV3(uint256 assets) external {
-        //assets = bound(assets, 1e18, type(uint112).max);
-        assets = 100e18;
+        assets = bound(assets, 1e18, type(uint112).max);
 
         // Specify the swap path.
         address[] memory path = new address[](3);
@@ -168,6 +167,7 @@ contract CellarRouterTest is Test {
 
     function testDepositWithAssetInDifferentFromPath() external {
         uint256 assets = 100e18;
+
         // Specify the swap path.
         address[] memory path = new address[](2);
         path[0] = address(DAI);
@@ -187,6 +187,7 @@ contract CellarRouterTest is Test {
 
     function testDepositWithAssetAmountMisMatch() external {
         uint256 assets = 100e18;
+
         // Specify the swap path.
         address[] memory path = new address[](2);
         path[0] = address(DAI);
