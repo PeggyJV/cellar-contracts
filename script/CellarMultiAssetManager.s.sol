@@ -31,9 +31,9 @@ contract CellarMultiAssetManagerScript is Script {
         swapRouter = new SwapRouter(IUniswapV2Router(uniswapV2Router), IUniswapV3Router(uniswapV3Router));
         registry = new Registry(mockGravityBridge, address(swapRouter), address(priceRouter));
 
-        priceRouter.addAsset(WETH, ERC20(Denominations.ETH), 0, 0, 0);
-        priceRouter.addAsset(WBTC, ERC20(Denominations.BTC), 0, 0, 0);
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0);
+        priceRouter.addAsset(WETH, 0, 0, false, 0);
+        priceRouter.addAsset(WBTC, 0, 0, false, 0);
+        priceRouter.addAsset(USDC, 0, 0, false, 0);
 
         createMultiAssetCellar();
 

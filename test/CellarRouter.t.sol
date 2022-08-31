@@ -17,22 +17,6 @@ import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { Test } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-/**
- * Security wise since this contract stores no user funds, and keeps track of no state, we aren't really concerned with re-entrancy attacks,
- * or any attacks that try to extract value from this contract(since there is no value in it). This being said the biggest security concern
- * is attackers being able to exploit users ERC20 approvals, and attackers  exploiting users shares, either by minting them to their address,
- * or redeeming them for themselves.
- *
- * To mitigate attackers exploiting users ERC20 approvals, this contract always calls `safeTransferFrom` with the `from` address as `msg.sender`
- *
- * As for attackers exploiting users shares by minting them to themselves, `receiver` is an input to the deposit functions, which isolates the risk to a malicious front-end
- * which is already a risk in the existing cellar architecture so we can accept it and not mitigate it.
- *
- * As for attackers exploiting users by redeeming users shares, the `owner` address(which is the address the cellar will burn shares from) is always `msg.sender`
- *
- * @notice if a user sent funds to this contract by accident, anyone would be able to "steal" them either on purpose or by accident. We will accept this risk
- * because users have to make a big and unlikely mistake in order for attackers to exploit this.
- */
 // solhint-disable-next-line max-states-count
 contract CellarRouterTest is Test {
     using Math for uint256;
@@ -71,10 +55,10 @@ contract CellarRouterTest is Test {
         router = new CellarRouter(registry);
 
         // Set up exchange rates:
-        priceRouter.addAsset(USDC, ERC20(address(0)), 0, 0, 0);
-        priceRouter.addAsset(DAI, ERC20(address(0)), 0, 0, 0);
-        priceRouter.addAsset(WETH, ERC20(address(Denominations.ETH)), 0, 0, 0);
-        priceRouter.addAsset(WBTC, ERC20(address(Denominations.BTC)), 0, 0, 0);
+        priceRouter.addAsset(USDC, 0, 0, false, 0);
+        priceRouter.addAsset(DAI, 0, 0, false, 0);
+        priceRouter.addAsset(WETH, 0, 0, false, 0);
+        priceRouter.addAsset(WBTC, 0, 0, false, 0);
 
         address[] memory positions = new address[](4);
         positions[0] = address(USDC);
