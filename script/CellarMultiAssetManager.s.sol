@@ -53,16 +53,19 @@ contract CellarMultiAssetManagerScript is Script {
         Cellar.PositionData[] memory positionData = new Cellar.PositionData[](3);
         positionData[0] = Cellar.PositionData({
             positionType: Cellar.PositionType.ERC20,
+            isDebt: false,
             adaptor: address(0),
             adaptorData: abi.encode(0)
         });
         positionData[1] = Cellar.PositionData({
             positionType: Cellar.PositionType.ERC20,
+            isDebt: false,
             adaptor: address(0),
             adaptorData: abi.encode(0)
         });
         positionData[2] = Cellar.PositionData({
             positionType: Cellar.PositionType.ERC20,
+            isDebt: false,
             adaptor: address(0),
             adaptorData: abi.encode(0)
         });
