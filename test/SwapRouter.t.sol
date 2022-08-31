@@ -107,7 +107,7 @@ abstract contract SwapRouterTest is Test {
 
     function testInvalidSwapData() external {
         vm.expectRevert(SwapRouter.SwapRouter__SwapReverted.selector);
-        swapRouter.swap(SwapRouter.Exchange.UNIV2, abi.encode(0), receiver);
+        swapRouter.swap(SwapRouter.Exchange.UNIV2, abi.encode(0), receiver, ERC20(address(0)), ERC20(address(0)));
     }
 }
 
@@ -118,7 +118,7 @@ contract UniswapV2SwapRouterTest is SwapRouterTest {
         path[1] = address(WETH);
 
         bytes memory swapData = abi.encode(path, assets, 0);
-        received = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
+        received = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver, DAI, WETH);
     }
 
     function _doMultiSwap(uint256 assets) internal override returns (uint256 received) {
@@ -128,7 +128,7 @@ contract UniswapV2SwapRouterTest is SwapRouterTest {
         path[2] = address(WETH);
 
         bytes memory swapData = abi.encode(path, assets, 0);
-        received = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver);
+        received = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver, DAI, WETH);
     }
 }
 
@@ -142,7 +142,7 @@ contract UniswapV3SwapRouterTest is SwapRouterTest {
         poolFees[0] = 3000; // 0.3%
 
         bytes memory swapData = abi.encode(path, poolFees, assets, 0);
-        received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
+        received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, WETH);
     }
 
     function _doMultiSwap(uint256 assets) internal override returns (uint256 received) {
@@ -156,6 +156,6 @@ contract UniswapV3SwapRouterTest is SwapRouterTest {
         poolFees[1] = 3000; // 0.3%
 
         bytes memory swapData = abi.encode(path, poolFees, assets, 0);
-        received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver);
+        received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, WETH);
     }
 }

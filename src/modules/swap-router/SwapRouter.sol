@@ -66,6 +66,20 @@ contract SwapRouter is Multicall {
     error SwapRouter__SwapReverted();
 
     /**
+     * @notice Attempted to perform a swap with mismatched assetIn and swap data.
+     * @param actual the address encoded into the swap data
+     * @param expected the address passed in with assetIn
+     */
+    error SwapRouter__AssetInMisMatch(address actual, address expected);
+
+    /**
+     * @notice Attempted to perform a swap with mismatched assetOut and swap data.
+     * @param actual the address encoded into the swap data
+     * @param expected the address passed in with assetIn
+     */
+    error SwapRouter__AssetOutMisMatch(address actual, address expected);
+
+    /**
      * @notice Perform a swap using a supported exchange.
      * @param exchange value dictating which exchange to use to make the swap
      * @param swapData encoded data used for the swap
@@ -75,11 +89,13 @@ contract SwapRouter is Multicall {
     function swap(
         Exchange exchange,
         bytes memory swapData,
-        address receiver
+        address receiver,
+        ERC20 assetIn,
+        ERC20 assetOut
     ) external returns (uint256 amountOut) {
         // Route swap call to appropriate function using selector.
         (bool success, bytes memory result) = address(this).delegatecall(
-            abi.encodeWithSelector(getExchangeSelector[exchange], swapData, receiver)
+            abi.encodeWithSelector(getExchangeSelector[exchange], swapData, receiver, assetIn, assetOut)
         );
 
         if (!success) {
@@ -107,14 +123,23 @@ contract SwapRouter is Multicall {
      * @param receiver address to send the received assets to
      * @return amountOut amount of assets received from the swap
      */
-    function swapWithUniV2(bytes memory swapData, address receiver) public returns (uint256 amountOut) {
+    function swapWithUniV2(
+        bytes memory swapData,
+        address receiver,
+        ERC20 assetIn,
+        ERC20 assetOut
+    ) public returns (uint256 amountOut) {
         (address[] memory path, uint256 amount, uint256 amountOutMin) = abi.decode(
             swapData,
             (address[], uint256, uint256)
         );
 
+        // Check that path matches assetIn and assetOut.
+        if (assetIn != ERC20(path[0])) revert SwapRouter__AssetInMisMatch(path[0], address(assetIn));
+        if (assetOut != ERC20(path[path.length - 1]))
+            revert SwapRouter__AssetOutMisMatch(path[path.length - 1], address(assetOut));
+
         // Transfer assets to this contract to swap.
-        ERC20 assetIn = ERC20(path[0]);
         assetIn.safeTransferFrom(msg.sender, address(this), amount);
 
         // Approve assets to be swapped through the router.
@@ -142,14 +167,23 @@ contract SwapRouter is Multicall {
      * @param receiver address to send the received assets to
      * @return amountOut amount of assets received from the swap
      */
-    function swapWithUniV3(bytes memory swapData, address receiver) public returns (uint256 amountOut) {
+    function swapWithUniV3(
+        bytes memory swapData,
+        address receiver,
+        ERC20 assetIn,
+        ERC20 assetOut
+    ) public returns (uint256 amountOut) {
         (address[] memory path, uint24[] memory poolFees, uint256 amount, uint256 amountOutMin) = abi.decode(
             swapData,
             (address[], uint24[], uint256, uint256)
         );
 
+        // Check that path matches assetIn and assetOut.
+        if (assetIn != ERC20(path[0])) revert SwapRouter__AssetInMisMatch(path[0], address(assetIn));
+        if (assetOut != ERC20(path[path.length - 1]))
+            revert SwapRouter__AssetOutMisMatch(path[path.length - 1], address(assetOut));
+
         // Transfer assets to this contract to swap.
-        ERC20 assetIn = ERC20(path[0]);
         assetIn.safeTransferFrom(msg.sender, address(this), amount);
 
         // Approve assets to be swapped through the router.
