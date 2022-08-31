@@ -10,6 +10,7 @@ import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
+import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -43,6 +44,8 @@ contract CellarTest is Test {
 
     address private immutable cosmos = vm.addr(0xCAAA);
 
+    CellarAdaptor private cellarAdaptor;
+
     function setUp() external {
         usdcCLR = new MockERC4626(USDC, "USDC Cellar LP Token", "USDC-CLR", 6);
         vm.label(address(usdcCLR), "usdcCLR");
@@ -58,6 +61,7 @@ contract CellarTest is Test {
         exchange = new MockExchange(priceRouter);
         swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
         gravity = new MockGravity();
+        cellarAdaptor = new CellarAdaptor();
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -93,18 +97,38 @@ contract CellarTest is Test {
         positions[3] = address(wbtcCLR);
         positions[4] = address(WETH);
 
-        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](5);
-        positionTypes[0] = Cellar.PositionType.ERC20;
-        positionTypes[1] = Cellar.PositionType.ERC4626;
-        positionTypes[2] = Cellar.PositionType.ERC4626;
-        positionTypes[3] = Cellar.PositionType.ERC4626;
-        positionTypes[4] = Cellar.PositionType.ERC20;
+        Cellar.PositionData[] memory positionData = new Cellar.PositionData[](5);
+        positionData[0] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC20,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
+        positionData[1] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC4626,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
+        positionData[2] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC4626,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
+        positionData[3] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC4626,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
+        positionData[4] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC20,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
 
         cellar = new MockCellar(
             registry,
             USDC,
             positions,
-            positionTypes,
+            positionData,
             address(USDC),
             Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
@@ -113,6 +137,9 @@ contract CellarTest is Test {
         );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
+
+        // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
+        cellar.setupAdaptor(address(cellarAdaptor));
 
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(exchange), type(uint224).max);
@@ -149,12 +176,9 @@ contract CellarTest is Test {
         assertEq(cellar.getPositions().length, 5, "Position length should be 5.");
 
         for (uint256 i; i < positions.length; i++) {
+            (Cellar.PositionType positionType, , ) = cellar.getPositionData(positions[i]);
             assertEq(positions[i], expectedPositions[i], "Position should be initialized in order.");
-            assertEq(
-                uint256(cellar.getPositionType(positions[i])),
-                uint256(expectedPositionTypes[i]),
-                "Position type should be initialized."
-            );
+            assertEq(uint256(positionType), uint256(expectedPositionTypes[i]), "Position type should be initialized.");
         }
 
         assertEq(address(cellar.asset()), address(USDC), "Should initialize asset to be USDC.");
@@ -363,7 +387,7 @@ contract CellarTest is Test {
 
     function testWithdrawWithDuplicateReceivedAssets() external {
         MockERC4626 wethVault = new MockERC4626(WETH, "WETH Vault LP Token", "WETH-VLT", 18);
-        cellar.trustPosition(address(wethVault), Cellar.PositionType.ERC4626);
+        cellar.trustPosition(address(wethVault), Cellar.PositionType.ERC4626, address(0), abi.encode(0));
         cellar.pushPosition(address(wethVault));
 
         cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
@@ -497,7 +521,7 @@ contract CellarTest is Test {
 
         // Check that `replacePosition` reverts if position has any funds in it.
         address positionA = vm.addr(45);
-        cellar.trustPosition(positionA, Cellar.PositionType.ERC20);
+        cellar.trustPosition(positionA, Cellar.PositionType.ERC20, address(0), abi.encode(0));
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
@@ -546,7 +570,7 @@ contract CellarTest is Test {
 
         // Check that replacing the holding position reverts.
         address newPosition = vm.addr(45);
-        cellar.trustPosition(newPosition, Cellar.PositionType.ERC20);
+        cellar.trustPosition(newPosition, Cellar.PositionType.ERC20, address(0), abi.encode(0));
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.replacePosition(0, newPosition);
 
@@ -570,13 +594,10 @@ contract CellarTest is Test {
     function testTrustingPositions() external {
         address newPosition = vm.addr(45);
 
-        cellar.trustPosition(newPosition, Cellar.PositionType.ERC20);
+        cellar.trustPosition(newPosition, Cellar.PositionType.ERC20, address(0), abi.encode(0));
         assertTrue(cellar.isTrusted(newPosition), "New position should now be trusted.");
-        assertEq(
-            uint256(cellar.getPositionType(newPosition)),
-            uint256(Cellar.PositionType.ERC20),
-            "New position's type should be ERC20."
-        );
+        (Cellar.PositionType positionType, , ) = cellar.getPositionData(newPosition);
+        assertEq(uint256(positionType), uint256(Cellar.PositionType.ERC20), "New position's type should be ERC20.");
 
         cellar.distrustPosition(newPosition);
         assertFalse(cellar.isTrusted(newPosition), "New position should not be trusted.");
@@ -655,14 +676,9 @@ contract CellarTest is Test {
         path[0] = address(USDC);
         path[1] = address(WETH);
 
+        Cellar.AdaptorCall[] memory adaptorCallData;
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
-        cellar.rebalance(
-            address(USDC),
-            address(WETH),
-            assets,
-            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
-            abi.encode(path, assets, 0, address(cellar), address(cellar))
-        );
+        cellar.callOnAdaptor(adaptorCallData);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.initiateShutdown();
@@ -1397,14 +1413,18 @@ contract CellarTest is Test {
             positions = new address[](1);
             positions[0] = address(USDC);
 
-            Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](1);
-            positionTypes[0] = Cellar.PositionType.ERC20;
+            Cellar.PositionData[] memory positionData = new Cellar.PositionData[](1);
+            positionData[0] = Cellar.PositionData({
+                positionType: Cellar.PositionType.ERC20,
+                adaptor: address(0),
+                adaptorData: abi.encode(0)
+            });
 
             multiPositionCellar = new MockCellar(
                 registry,
                 USDC,
                 positions,
-                positionTypes,
+                positionData,
                 address(USDC),
                 Cellar.WithdrawType.ORDERLY,
                 "Asset Management Cellar LP Token",
@@ -1416,7 +1436,7 @@ contract CellarTest is Test {
         MockERC20 position;
         for (uint256 i = 1; i < 32; i++) {
             position = new MockERC20("Howdy", 18);
-            multiPositionCellar.trustPosition(address(position), Cellar.PositionType.ERC20);
+            multiPositionCellar.trustPosition(address(position), Cellar.PositionType.ERC20, address(0), abi.encode(0));
             multiPositionCellar.pushPosition(address(position));
         }
 
@@ -1901,7 +1921,7 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         uint256 positionsLengthBefore = cellar.getPositions().length;
-        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
+        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, address(0), abi.encode(0));
         cellar.pushPosition(address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1934,7 +1954,7 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         uint256 positionsLengthBefore = cellar.getPositions().length;
-        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
+        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, address(0), abi.encode(0));
         cellar.pushPosition(address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1975,11 +1995,22 @@ contract CellarTest is Test {
         uint256 positionsLengthBefore = cellar.getPositions().length;
         cellar.setHoldingPosition(address(usdcCLR));
 
-        // Rebalance into usdcCLR. No swap is made because both positions use
+        // Rebalance into USDC. No swap is made because both positions use
         // USDC.
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
-        cellar.rebalance(address(usdcCLR), address(USDC), 50e6, SwapRouter.Exchange.UNIV2, abi.encode(0));
+
+        // Make call to adaptor to remove funds from usdcCLR into USDC position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = abi.encodeWithSelector(CellarAdaptor.withdrawFromCellar.selector, usdcCLR, 50e6);
+        bool[] memory isRevertOkay = new bool[](1);
+        data[0] = Cellar.AdaptorCall({
+            adaptor: address(cellarAdaptor),
+            callData: adaptorCalls,
+            isRevertOkay: isRevertOkay
+        });
+        cellar.callOnAdaptor(data);
 
         // usdcCLR depeggs from USDC
         deal(address(USDC), address(usdcCLR), 45e6);
@@ -1990,13 +2021,18 @@ contract CellarTest is Test {
         // Governance votes to rebalance out of usdcCLR, change the holding
         // position, and distrust usdcCLR. No swap is made because both
         // positions use USDC.
-        cellar.rebalance(
-            address(usdcCLR),
-            address(USDC),
-            usdcCLR.maxWithdraw(address(cellar)),
-            SwapRouter.Exchange.UNIV2,
-            abi.encode(0)
+        adaptorCalls[0] = abi.encodeWithSelector(
+            CellarAdaptor.withdrawFromCellar.selector,
+            usdcCLR,
+            usdcCLR.maxWithdraw(address(cellar))
         );
+        data[0] = Cellar.AdaptorCall({
+            adaptor: address(cellarAdaptor),
+            callData: adaptorCalls,
+            isRevertOkay: isRevertOkay
+        });
+        cellar.callOnAdaptor(data);
+
         cellar.setHoldingPosition(address(USDC));
         cellar.distrustPosition(address(usdcCLR));
         assertFalse(cellar.isTrusted(address(usdcCLR)), "Cellar should not trust usdcCLR.");
@@ -2017,7 +2053,7 @@ contract CellarTest is Test {
         // safety contract, shutdown old cellar, and allow users to withdraw
         // from the safety contract.
 
-        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
+        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, address(0), abi.encode(0));
         cellar.pushPosition(address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);

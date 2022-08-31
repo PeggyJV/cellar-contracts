@@ -50,16 +50,28 @@ contract CellarMultiAssetManagerScript is Script {
         positions[1] = address(WETH);
         positions[2] = address(WBTC);
 
-        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](3);
-        positionTypes[0] = Cellar.PositionType.ERC20;
-        positionTypes[1] = Cellar.PositionType.ERC20;
-        positionTypes[2] = Cellar.PositionType.ERC20;
+        Cellar.PositionData[] memory positionData = new Cellar.PositionData[](3);
+        positionData[0] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC20,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
+        positionData[1] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC20,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
+        positionData[2] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC20,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
 
         new Cellar(
             registry,
             USDC,
             positions,
-            positionTypes,
+            positionData,
             address(USDC),
             Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
