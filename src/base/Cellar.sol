@@ -1261,7 +1261,6 @@ contract Cellar is ERC4626, Ownable, Multicall {
             }
         }
 
-        //TODO use multicall
         PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
         _totalAssets =
             priceRouter.getValues(positionAssets, balances, asset) -

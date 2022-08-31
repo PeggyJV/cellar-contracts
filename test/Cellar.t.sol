@@ -1927,11 +1927,86 @@ contract CellarTest is Test {
 
     //TODO
     function testDebtTokensInCellars() external {
+        // Setup Cellar with debt positions:
+        address[] memory positions = new address[](2);
+        positions[0] = address(USDC);
+        positions[1] = address(WETH); // not a real debt position, but for test will be treated as such
+
+        Cellar.PositionData[] memory positionData = new Cellar.PositionData[](2);
+        positionData[0] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC20,
+            isDebt: false,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
+        positionData[1] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC20,
+            isDebt: true,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
+
+        MockCellar debtCellar = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionData,
+            address(USDC),
+            Cellar.WithdrawType.ORDERLY,
+            "Multiposition Cellar LP Token",
+            "multiposition-CLR",
+            strategist
+        );
+
         //constructor should set isDebt
-        //trust position should set it as debt
-        //add/push/remove/replace/pop position should update number of debt positions
-        //total Assets and get data should both account for debt positions
+        (, bool isDebt, , ) = debtCellar.getPositionData(address(WETH));
+        assertTrue(isDebt, "Constructor should have set WETH as a debt position.");
+        assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
+
+        //Add another debt position WBTC.
+        debtCellar.trustPosition(address(WBTC), Cellar.PositionType.ERC20, true, address(0), abi.encode(0));
+        (, isDebt, , ) = debtCellar.getPositionData(address(WBTC));
+        assertTrue(isDebt, "Constructor should have set WETH as a debt position.");
+        assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
+
+        // adding WBTC should increment number of debt positions.
+        debtCellar.addPosition(2, address(WBTC));
+        assertEq(debtCellar.numberOfDebtPositions(), 2, "Debt cellar should have 2 debt positions.");
+
+        // removing WBTC should decrement number of debt positions.
+        debtCellar.removePosition(2);
+        assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
+
+        // popping debt position should decrement number of debt positons.
+        debtCellar.addPosition(2, address(WBTC));
+        debtCellar.popPosition();
+        assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
+
+        //replace position should update number of debt positions
+        debtCellar.replacePosition(1, address(WBTC));
+        assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
+
+        // pushing position should update number of debt positions
+        debtCellar.pushPosition(address(WETH));
+        assertEq(debtCellar.numberOfDebtPositions(), 2, "Debt cellar should have 2 debt positions.");
+
+        // Give debt cellar some assets.
+        deal(address(USDC), address(debtCellar), 100_000e6);
+        deal(address(WBTC), address(debtCellar), 1e8);
+        deal(address(WETH), address(debtCellar), 10e18);
+
+        uint256 totalAssets = debtCellar.totalAssets();
+        uint256 expectedTotalAssets = 50_000e6;
+
+        assertEq(totalAssets, expectedTotalAssets, "Debt cellar total assets should equal expected.");
+
+        (uint256 getDataTotalAssets, , , ) = debtCellar.getData();
+        assertEq(getDataTotalAssets, totalAssets, "`getData` total assets should be the same as cellar `totalAssets`.");
+
         //distrust position should change num of debt positions
+        deal(address(WBTC), address(debtCellar), 0);
+        debtCellar.distrustPosition(address(WBTC));
+        assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
     }
 
     // ======================================== DEPEGGING ASSET TESTS ========================================
