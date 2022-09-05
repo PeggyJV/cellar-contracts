@@ -10,6 +10,8 @@ contract MockPriceRouter {
 
     mapping(ERC20 => mapping(ERC20 => uint256)) public getExchangeRate;
 
+    mapping(ERC20 => bool) public isSupported;
+
     function setExchangeRate(
         ERC20 baseAsset,
         ERC20 quoteAsset,
@@ -32,5 +34,9 @@ contract MockPriceRouter {
         ERC20 quoteAsset
     ) public view returns (uint256 value) {
         value = amount.mulDivDown(getExchangeRate[baseAsset][quoteAsset], 10**baseAsset.decimals());
+    }
+
+    function supportAsset(ERC20 asset) external {
+        isSupported[asset] = true;
     }
 }

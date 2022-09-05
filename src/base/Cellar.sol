@@ -13,12 +13,14 @@ import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
 
+import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
  * @author Brian Le
  */
-contract Cellar is ERC4626, Ownable, Multicall {
+contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     using AddressArray for address[];
     using AddressArray for ERC20[];
     using SafeTransferLib for ERC20;
@@ -271,6 +273,12 @@ contract Cellar is ERC4626, Ownable, Multicall {
     event TrustChanged(address indexed position, bool isTrusted);
 
     /**
+     * @notice Attempted to trust a position not being used.
+     * @param position address of the invalid position
+     */
+    error Cellar__PositionPricingNotSetUp(address position);
+
+    /**
      * @notice Tell whether a position is trusted.
      */
     mapping(address => bool) public isTrusted;
@@ -286,6 +294,11 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
         // Set position type.
         getPositionType[position] = positionType;
+
+        // Now that position type is set up, check that asset of position is supported for pricing operations.
+        ERC20 positionAsset = _assetOf(position);
+        if (!PriceRouter(registry.getAddress(2)).isSupported(positionAsset))
+            revert Cellar__PositionPricingNotSetUp(address(positionAsset));
 
         emit TrustChanged(position, true);
     }
@@ -755,6 +768,18 @@ contract Cellar is ERC4626, Ownable, Multicall {
     error Cellar__ZeroAssets();
 
     /**
+     * @notice Withdraw did not withdraw all assets.
+     * @param assetsOwed the remaining assets owed that were not withdrawn.
+     */
+    error Cellar__IncompleteWithdraw(uint256 assetsOwed);
+
+    /**
+     * @notice Attempted to withdraw an illiquid position.
+     * @param illiquidPosition the illiquid position.
+     */
+    error Cellar__IlliquidWithdraw(address illiquidPosition);
+
+    /**
      * @notice called at the beginning of deposit.
      * @param assets amount of assets deposited by user.
      * @param receiver address receiving the shares.
@@ -805,7 +830,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param receiver address to receive the shares.
      * @return shares amount of shares given for deposit.
      */
-    function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
 
         _takePerformanceFees(_totalAssets);
@@ -831,12 +856,13 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @param receiver address to receive the shares.
      * @return assets amount of assets deposited into the cellar.
      */
-    function mint(uint256 shares, address receiver) public override returns (uint256 assets) {
+    function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
 
         _takePerformanceFees(_totalAssets);
 
-        assets = _previewMint(shares, _totalAssets); // No need to check for rounding error, previewMint rounds up.
+        // previewMintRoundsUp, but iniital mint could return zero assets, so check for rounding error.
+        if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets(); // No need to check for rounding error, previewMint rounds up.
 
         beforeDeposit(assets, shares, receiver);
 
@@ -867,13 +893,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 assets,
         address receiver,
         address owner
-    ) public override returns (uint256 shares) {
+    ) public override nonReentrant returns (uint256 shares) {
         // Get data efficiently.
         (
             uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
             address[] memory _positions,
             ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
+            uint256[] memory positionBalances,
+            uint256[] memory withdrawableBalances
         ) = _getData();
 
         _takePerformanceFees(_totalAssets);
@@ -896,8 +923,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
         withdrawType == WithdrawType.ORDERLY
-            ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
-            : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
+            ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances, withdrawableBalances)
+            : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances, withdrawableBalances);
 
         afterWithdraw(assets, shares, receiver, owner);
     }
@@ -919,13 +946,14 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 shares,
         address receiver,
         address owner
-    ) public override returns (uint256 assets) {
+    ) public override nonReentrant returns (uint256 assets) {
         // Get data efficiently.
         (
             uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
             address[] memory _positions,
             ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
+            uint256[] memory positionBalances,
+            uint256[] memory withdrawableBalances
         ) = _getData();
 
         _takePerformanceFees(_totalAssets);
@@ -948,8 +976,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
         withdrawType == WithdrawType.ORDERLY
-            ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances)
-            : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances);
+            ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances, withdrawableBalances)
+            : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances, withdrawableBalances);
 
         afterWithdraw(assets, shares, receiver, owner);
     }
@@ -968,7 +996,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         address receiver,
         address[] memory _positions,
         ERC20[] memory positionAssets,
-        uint256[] memory positionBalances
+        uint256[] memory positionBalances,
+        uint256[] memory withdrawableBalances
     ) internal {
         // Get the price router.
         PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
@@ -981,17 +1010,20 @@ contract Cellar is ERC4626, Ownable, Multicall {
             uint256 exchangeRate = priceRouter.getExchangeRate(positionAssets[i], asset);
 
             // Denominate position balance in cellar's asset.
-            uint256 totalPositionBalanceInAssets = positionBalances[i].mulDivDown(exchangeRate, onePositionAsset);
+            uint256 totalWithdrawableBalanceInAssets = withdrawableBalances[i].mulDivDown(
+                exchangeRate,
+                onePositionAsset
+            );
 
             // We want to pull as much as we can from this position, but no more than needed.
             uint256 amount;
 
-            if (totalPositionBalanceInAssets > assets) {
+            if (totalWithdrawableBalanceInAssets > assets) {
                 amount = assets.mulDivDown(onePositionAsset, exchangeRate);
                 assets = 0;
             } else {
                 amount = positionBalances[i];
-                assets = assets - totalPositionBalanceInAssets;
+                assets = assets - totalWithdrawableBalanceInAssets;
             }
 
             // Withdraw from position.
@@ -1002,6 +1034,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             // Stop if no more assets to withdraw.
             if (assets == 0) break;
         }
+        // If withdraw did not remove all assets owed, revert.
+        if (assets > 0) revert Cellar__IncompleteWithdraw(assets);
     }
 
     /**
@@ -1018,7 +1052,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 totalShares,
         address receiver,
         address[] memory _positions,
-        uint256[] memory positionBalances
+        uint256[] memory positionBalances,
+        uint256[] memory withdrawableBalances
     ) internal {
         // Withdraw assets from positions in proportion to shares redeemed.
         for (uint256 i; i < _positions.length; i++) {
@@ -1030,6 +1065,10 @@ contract Cellar is ERC4626, Ownable, Multicall {
 
             // Get the amount of assets to withdraw from this position based on proportion to shares redeemed.
             uint256 amount = positionBalance.mulDivDown(shares, totalShares);
+
+            // If straetgist locks the enirety of a positions funds, then all withdraw calls revert.
+            // If this happens,  goverance should vote out malicious strategist, then change withdraw type to in oder, and move bad position to back of queue.
+            if (amount > withdrawableBalances[i]) revert Cellar__IlliquidWithdraw(position);
 
             // Withdraw from position to receiver.
             _withdrawFrom(position, amount, receiver);
@@ -1176,7 +1215,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
             uint256 _totalAssets,
             address[] memory _positions,
             ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
+            uint256[] memory positionBalances,
+            uint256[] memory withdrawableBalances
         )
     {
         uint256 len = positions.length;
@@ -1184,6 +1224,8 @@ contract Cellar is ERC4626, Ownable, Multicall {
         _positions = new address[](len);
         positionAssets = new ERC20[](len);
         positionBalances = new uint256[](len);
+        positionBalances = new uint256[](len);
+        withdrawableBalances = new uint256[](len);
 
         for (uint256 i; i < len; i++) {
             address position = positions[i];
@@ -1191,6 +1233,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
             _positions[i] = position;
             positionAssets[i] = _assetOf(position);
             positionBalances[i] = _balanceOf(position);
+            withdrawableBalances[i] = _withdrawableFrom(position);
         }
 
         PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
@@ -1243,7 +1286,7 @@ contract Cellar is ERC4626, Ownable, Multicall {
         uint256 assetsFrom,
         SwapRouter.Exchange exchange,
         bytes calldata params
-    ) external onlyOwner whenNotShutdown returns (uint256 assetsTo) {
+    ) external onlyOwner whenNotShutdown nonReentrant returns (uint256 assetsTo) {
         // Check that position being rebalanced to is currently being used.
         if (!isPositionUsed[toPosition]) revert Cellar__InvalidPosition(address(toPosition));
 
@@ -1504,11 +1547,28 @@ contract Cellar is ERC4626, Ownable, Multicall {
      * @dev Get the balance of a position according to its position type.
      * @param position position to get the balance of
      */
-    function _balanceOf(address position) internal view returns (uint256) {
+    function _withdrawableFrom(address position) internal view returns (uint256) {
         PositionType positionType = getPositionType[position];
 
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             return ERC4626(position).maxWithdraw(address(this));
+        } else {
+            return ERC20(position).balanceOf(address(this));
+        }
+    }
+
+    /**
+     * @dev Get the balance of a position according to its position type.
+     * @param position position to get the balance of
+     */
+    /**
+     * Uses preview redeem as opposed to `convertToAssets` so that balanceOf ERC4626 positions includes fees taken on withdraw.
+     */
+    function _balanceOf(address position) internal view returns (uint256) {
+        PositionType positionType = getPositionType[position];
+
+        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
+            return ERC4626(position).previewRedeem(ERC4626(position).balanceOf(address(this)));
         } else {
             return ERC20(position).balanceOf(address(this));
         }

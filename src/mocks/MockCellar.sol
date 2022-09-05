@@ -68,9 +68,10 @@ contract MockCellar is Cellar, Test {
             uint256 _totalAssets,
             address[] memory _positions,
             ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
+            uint256[] memory positionBalances,
+            uint256[] memory withdrawableBalances
         )
     {
-        (_totalAssets, _positions, positionAssets, positionBalances) = _getData();
+        (_totalAssets, _positions, positionAssets, positionBalances, withdrawableBalances) = _getData();
     }
 }

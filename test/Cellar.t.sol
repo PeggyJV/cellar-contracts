@@ -365,6 +365,7 @@ contract CellarTest is Test {
 
     function testWithdrawWithDuplicateReceivedAssets() external {
         MockERC4626 wethVault = new MockERC4626(WETH, "WETH Vault LP Token", "WETH-VLT", 18);
+        priceRouter.supportAsset(WETH);
         cellar.trustPosition(address(wethVault), Cellar.PositionType.ERC4626);
         cellar.pushPosition(address(wethVault));
 
@@ -392,10 +393,8 @@ contract CellarTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroShares.selector)));
         cellar.deposit(0, address(this));
 
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
         cellar.mint(0, address(this));
-        assertEq(cellar.totalSupply(), 0, "Cellar should not have minted any shares.");
-        assertEq(cellar.totalAssets(), 0, "Cellar should not have any assets.");
-        assertEq(cellar.balanceOf(address(this)), 0, "Cellar should not have minted any shares to this address.");
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
         cellar.redeem(0, address(this), address(this));
@@ -499,6 +498,7 @@ contract CellarTest is Test {
 
         // Check that `replacePosition` reverts if position has any funds in it.
         address positionA = vm.addr(45);
+        priceRouter.supportAsset(ERC20(positionA));
         cellar.trustPosition(positionA, Cellar.PositionType.ERC20);
         vm.expectRevert(
             bytes(
@@ -548,6 +548,7 @@ contract CellarTest is Test {
 
         // Check that replacing the holding position reverts.
         address newPosition = vm.addr(45);
+        priceRouter.supportAsset(ERC20(newPosition));
         cellar.trustPosition(newPosition, Cellar.PositionType.ERC20);
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.replacePosition(0, newPosition);
@@ -572,6 +573,7 @@ contract CellarTest is Test {
     function testTrustingPositions() external {
         address newPosition = vm.addr(45);
 
+        priceRouter.supportAsset(ERC20(newPosition));
         cellar.trustPosition(newPosition, Cellar.PositionType.ERC20);
         assertTrue(cellar.isTrusted(newPosition), "New position should now be trusted.");
         assertEq(
@@ -951,7 +953,7 @@ contract CellarTest is Test {
             1,
             "`totalAssets` should equal all asset values summed together."
         );
-        (uint256 getDataTotalAssets, , , ) = cellar.getData();
+        (uint256 getDataTotalAssets, , , , ) = cellar.getData();
         assertEq(getDataTotalAssets, totalAssets, "`getData` total assets should be the same as cellar `totalAssets`.");
     }
 
@@ -1574,6 +1576,7 @@ contract CellarTest is Test {
         MockERC20 position;
         for (uint256 i = 1; i < 32; i++) {
             position = new MockERC20("Howdy", 18);
+            priceRouter.supportAsset(position);
             multiPositionCellar.trustPosition(address(position), Cellar.PositionType.ERC20);
             multiPositionCellar.pushPosition(address(position));
         }
@@ -2734,6 +2737,7 @@ contract CellarTest is Test {
 
             // Strategists trusts LINK, and then adds it as a position.
             // No need to set LINK price since its assets will always be zero.
+            priceRouter.supportAsset(LINK);
             assetManagementCellar.trustPosition(address(LINK), Cellar.PositionType.ERC20);
             assetManagementCellar.pushPosition(address(LINK));
 
@@ -3290,6 +3294,7 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         uint256 positionsLengthBefore = cellar.getPositions().length;
+        priceRouter.supportAsset(USDT);
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
         cellar.pushPosition(address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
@@ -3323,6 +3328,7 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         uint256 positionsLengthBefore = cellar.getPositions().length;
+        priceRouter.supportAsset(USDT);
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
         cellar.pushPosition(address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
@@ -3405,7 +3411,7 @@ contract CellarTest is Test {
         // asset. Emergency governance proposal to move funds into some new
         // safety contract, shutdown old cellar, and allow users to withdraw
         // from the safety contract.
-
+        priceRouter.supportAsset(USDT);
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
         cellar.pushPosition(address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
@@ -3502,5 +3508,61 @@ contract CellarTest is Test {
         uint256 assets
     ) external {
         ERC20(asset).transferFrom(msg.sender, cosmos, assets);
+    }
+
+    // ========================================= MACRO FINDINGS =========================================
+
+    // H-1 done.
+
+    // H-2 NA, cellars will not increase their TVL during rebalance calls.
+
+    // M-1
+    //TODO add test where a strategist malicously tries to lock everyone funds in a cellar by taking on an illiquid position, and useing withdrawInProportion
+
+    //TODO add some re-entrancy attacks, like an ERC4626 position that tries to enter the cellar when it is depositing into it.
+
+    // L-4 handle via using a centralized contract storing valid positions(to reduce num of governance props), and rely on voters to see mismatched position and types.
+
+    //M-6 handled offchain using a subgraph to verify no weird webs are happening
+    // difficult bc we can control downstream, but can't control upstream. IE
+    // Cellar A wants to add a position in Cellar B, but Cellar B already has a position in Cellar C. Cellar A could see this, but...
+    // If Cellar A takes a postion in Cellar B, then Cellar B takes a position in Cellar C, Cellar B would need to look upstream to see the nested postions which is unreasonable,
+    // and it means Cellar A can dictate what positions Cellar B takes which is not good.
+
+    // M-4, change in mint function
+    function testAttackOnFirstMint() external {
+        // An attacker attacks as first minter
+        address attacker = vm.addr(1337);
+
+        vm.startPrank(attacker);
+
+        deal(address(USDC), address(attacker), 10000e6);
+        USDC.approve(address(cellar), 10000e6);
+
+        // Attacker mints shares < 1e12 on first mint
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
+        cellar.mint(9e11, attacker);
+
+        vm.stopPrank();
+    }
+
+    // M-2, changes in trustPosition.
+    function testTrustPositionForUnsupportedAssetLocksAllFunds() external {
+        // USDT is not a supported PriceRouter asset.
+
+        uint256 assets = 10e18;
+
+        deal(address(USDC), address(this), assets);
+
+        // Deposit USDC
+        cellar.previewDeposit(assets);
+        cellar.deposit(assets, address(this));
+        assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
+
+        // USDT is added as a trusted Cellar position,
+        // but is not supported by the PriceRouter.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionPricingNotSetUp.selector, address(USDT))));
+        cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
     }
 }

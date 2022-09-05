@@ -142,6 +142,10 @@ contract PriceRouter is Ownable {
         emit AddAsset(address(asset));
     }
 
+    function isSupported(ERC20 asset) external view returns (bool) {
+        return getAssetConfig[asset].isSupported;
+    }
+
     // ======================================= PRICING OPERATIONS =======================================
 
     /**
@@ -350,6 +354,9 @@ contract PriceRouter is Ownable {
      */
     function getValueInUSD(ERC20 asset) public view returns (uint256 price) {
         AssetConfig memory config = getAssetConfig[asset];
+
+        // Make sure asset is supported.
+        if (!config.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
 
         // Remap asset if need be.
         asset = _remap(asset);
