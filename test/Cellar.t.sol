@@ -2,6 +2,8 @@
 pragma solidity 0.8.16;
 
 import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
+import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
@@ -86,6 +88,10 @@ contract CellarTest is Test {
 
         priceRouter.setExchangeRate(WETH, WBTC, 0.06666666e8);
         priceRouter.setExchangeRate(WBTC, WETH, 15e18);
+
+        priceRouter.supportAsset(USDC);
+        priceRouter.supportAsset(WETH);
+        priceRouter.supportAsset(WBTC);
 
         // Setup Cellar:
         address[] memory positions = new address[](5);
@@ -3517,9 +3523,65 @@ contract CellarTest is Test {
     // H-2 NA, cellars will not increase their TVL during rebalance calls.
 
     // M-1
-    //TODO add test where a strategist malicously tries to lock everyone funds in a cellar by taking on an illiquid position, and useing withdrawInProportion
+    function testMaliciousStrategistFundsLocked() external {
+        LockedERC4626 maliciousCellar = new LockedERC4626(USDC, "Bad Cellar", "BC", 18);
 
-    //TODO add some re-entrancy attacks, like an ERC4626 position that tries to enter the cellar when it is depositing into it.
+        cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626);
+        cellar.pushPosition(address(maliciousCellar));
+
+        // Deposit into cellar.
+        uint256 assets = 10000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(maliciousCellar), assets);
+        cellar.deposit(assets, address(this));
+
+        uint256 totalAssetsBefore = cellar.totalAssets();
+
+        // Rebalance USDC deposit into maliciousCellar.
+        cellar.rebalance(address(USDC), address(maliciousCellar), 1e6, SwapRouter.Exchange.UNIV2, abi.encode(0));
+
+        uint256 totalAssetsAfter = cellar.totalAssets();
+        // Eventhough withdrawable amount is assets -1, totalAssets should not change from rebalance.
+        assertEq(totalAssetsAfter, totalAssetsBefore, "Total assets should not change from rebalance call.");
+
+        // Strategist changes cellar withdrawType to proportional.
+        cellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
+
+        // Strategist has effectively blocked all withdrawals because of chaning withdraw type to proportional.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__IlliquidWithdraw.selector, address(maliciousCellar)))
+        );
+        cellar.withdraw(1e6, address(this), address(this));
+
+        // If a strategist is maliciously doing this, the best bet would be to remove them from power and change the withdraw type back to in order.
+        // In addition new strategist might be able to unlock locked funds.
+        cellar.setWithdrawType(Cellar.WithdrawType.ORDERLY);
+
+        // User still can not withdraw all assets since some of them are still locked.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__IncompleteWithdraw.selector, 1e6)));
+        cellar.withdraw(assets, address(this), address(this));
+
+        // User can withdraw all their assets except for assets locked.
+        cellar.withdraw(assets - 1e6, address(this), address(this));
+    }
+
+    //TODO add test confirming new withdrawable amount makes sense,  and that withdraws behave as expected if
+    // liquid position / illiquid where only  10% of it can be withdrawn / illiquid where non can be withdrawn / liquid to withdraw the rest
+
+    function testReentrancyAttack() external {
+        ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", 18);
+
+        cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626);
+        cellar.pushPosition(address(maliciousCellar));
+        cellar.setHoldingPosition(address(maliciousCellar));
+
+        uint256 assets = 10000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(maliciousCellar), assets);
+
+        vm.expectRevert(bytes("ReentrancyGuard: reentrant call"));
+        cellar.deposit(assets, address(this));
+    }
 
     // L-4 handle via using a centralized contract storing valid positions(to reduce num of governance props), and rely on voters to see mismatched position and types.
 

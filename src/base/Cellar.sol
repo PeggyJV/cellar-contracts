@@ -15,6 +15,8 @@ import { Math } from "../utils/Math.sol";
 
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+import { console } from "@forge-std/Test.sol"; //TODO remove
+
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
@@ -719,7 +721,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         // Initialize positions.
         positions = _positions;
-
+        ERC20 positionAsset;
         for (uint256 i; i < _positions.length; i++) {
             address position = _positions[i];
 
@@ -728,6 +730,10 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
             isTrusted[position] = true;
             isPositionUsed[position] = true;
             getPositionType[position] = _positionTypes[i];
+
+            positionAsset = _assetOf(position);
+            if (!PriceRouter(registry.getAddress(2)).isSupported(positionAsset))
+                revert Cellar__PositionPricingNotSetUp(address(positionAsset));
         }
 
         // Initialize holding position.
@@ -1002,7 +1008,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         // Get the price router.
         PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
 
-        for (uint256 i; ; i++) {
+        for (uint256 i; i < _positions.length; i++) {
             // Move on to next position if this one is empty.
             if (positionBalances[i] == 0) continue;
 
@@ -1041,6 +1047,8 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     /**
      * @dev Withdraw from each position proportional to that of shares redeemed. Used if the
      *      withdraw type is `PROPORTIONAL`.
+     * @dev It is possible that the `amount` calculated to withdraw is zero. This is only a problem
+     *      for a low percision ERC20, which we have no plans to support.
      * @param shares the user is burning to withdraw
      * @param totalShares the total amount of oustanding shares
      * @param receiver the address to sent withdrawn assets to
