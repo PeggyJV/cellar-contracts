@@ -1209,7 +1209,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         if (withdrawType == WithdrawType.ORDERLY) {
             uint256 withdrawable = totalAssetsWithdrawable();
-            return withdrawable >= assets ? assets : withdrawable;
+            return assets <= withdrawable ? assets : withdrawable;
         } else {
             (
                 ,
