@@ -405,11 +405,6 @@ contract CellarTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
         cellar.redeem(0, address(this), address(this));
 
-        // Because no assets are deposited, `_withdrawInOrder` for loop
-        // continues until it indexes out of the positions array.
-        vm.expectRevert(bytes(stdError.indexOOBError));
-        cellar.withdraw(0, address(this), address(this));
-
         // Deal cellar 1 wei of USDC to check that above explanation is correct.
         deal(address(USDC), address(cellar), 1);
         cellar.withdraw(0, address(this), address(this));
@@ -3524,7 +3519,7 @@ contract CellarTest is Test {
 
     // M-1
     function testMaliciousStrategistFundsLocked() external {
-        LockedERC4626 maliciousCellar = new LockedERC4626(USDC, "Bad Cellar", "BC", 18);
+        LockedERC4626 maliciousCellar = new LockedERC4626(USDC, "Bad Cellar", "BC", 18, 1e18);
 
         cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626);
         cellar.pushPosition(address(maliciousCellar));
@@ -3565,8 +3560,186 @@ contract CellarTest is Test {
         cellar.withdraw(assets - 1e6, address(this), address(this));
     }
 
-    //TODO add test confirming new withdrawable amount makes sense,  and that withdraws behave as expected if
-    // liquid position / illiquid where only  10% of it can be withdrawn / illiquid where non can be withdrawn / liquid to withdraw the rest
+    function createCellarWithLockedFunds(uint256 assets)
+        internal
+        returns (
+            MockCellar,
+            LockedERC4626,
+            LockedERC4626
+        )
+    {
+        // New Cellar with positions in USDC, locked USDC, locked WETH, and  WETH
+        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 18, 0.9e18); // 90% of funds are locked.
+        LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 18, 1e18); // 100% of funds are locked
+
+        // Setup Cellar:
+        address[] memory positions = new address[](4);
+        positions[0] = address(USDC);
+        positions[1] = address(lockedUSDC);
+        positions[2] = address(lockedWETH);
+        positions[3] = address(WETH);
+
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](4);
+        positionTypes[0] = Cellar.PositionType.ERC20;
+        positionTypes[1] = Cellar.PositionType.ERC4626;
+        positionTypes[2] = Cellar.PositionType.ERC4626;
+        positionTypes[3] = Cellar.PositionType.ERC20;
+
+        MockCellar cellarWithLockedFunds = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            address(USDC),
+            Cellar.WithdrawType.ORDERLY,
+            "Multiposition Cellar LP Token",
+            "multiposition-CLR",
+            strategist
+        );
+
+        // Make initial deposit into cellar.
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellarWithLockedFunds), assets);
+        cellarWithLockedFunds.deposit(assets, address(this));
+
+        // Rebalance so 25% of assets are in each position.
+        deal(address(USDC), address(cellarWithLockedFunds), assets / 2);
+
+        uint256 WETHAssets = priceRouter.getValue(USDC, assets / 2, WETH);
+        deal(address(WETH), address(cellarWithLockedFunds), WETHAssets);
+
+        cellarWithLockedFunds.rebalance(
+            address(USDC),
+            address(lockedUSDC),
+            assets / 4,
+            SwapRouter.Exchange.UNIV2,
+            abi.encode(0)
+        );
+        cellarWithLockedFunds.rebalance(
+            address(WETH),
+            address(lockedWETH),
+            WETHAssets / 2,
+            SwapRouter.Exchange.UNIV2,
+            abi.encode(0)
+        );
+
+        assertEq(
+            cellarWithLockedFunds.totalAssets(),
+            assets,
+            "Total assets should not have been changed during rebalance."
+        );
+
+        (uint256 getDataTotalAssets, , , , uint256[] memory withdrawable) = cellarWithLockedFunds.getData();
+
+        assertEq(
+            cellarWithLockedFunds.totalAssets(),
+            getDataTotalAssets,
+            "Total assets should equal getData total assets."
+        );
+
+        assertEq(withdrawable[0], assets / 4, "Everything should be withdrawable from the first position.");
+        assertEq(withdrawable[1], assets / 40, "Only 10% of assets should be withdrawable from second position.");
+        assertEq(withdrawable[2], 0, "No assets should be withdrawable from the third position.");
+        assertEq(withdrawable[3], WETHAssets / 2, "Everything should be withdrawable from the fourth position.");
+
+        return (cellarWithLockedFunds, lockedUSDC, lockedWETH);
+    }
+
+    function testCellarLockedAssetsOrderlyWithdraw() external {
+        uint256 assets = 1_000_000e6;
+        (MockCellar testCellar, , ) = createCellarWithLockedFunds(assets);
+
+        assertEq(testCellar.maxWithdraw(address(this)), assets.mulWadDown(0.525e18));
+        assertEq(testCellar.totalAssetsWithdrawable(), assets.mulWadDown(0.525e18));
+
+        // User redeems 50% of their shares.
+        testCellar.withdraw(assets / 2, address(this), address(this));
+
+        // User should now have 27.5% of assets in USDC, and 22.5% of assets in WETH.
+        assertEq(USDC.balanceOf(address(this)), assets.mulWadDown(0.275e18), "USDC balance should be 27.5% of assets.");
+        uint256 WETHAssetsInUSDC = priceRouter.getValue(WETH, WETH.balanceOf(address(this)), USDC);
+        assertEq(WETHAssetsInUSDC, assets.mulWadDown(0.225e18), "WETH balance should be 22.5% of assets.");
+
+        assertEq(testCellar.totalAssets(), assets.mulWadDown(0.5e18), "Total assets should have decreased by 50%.");
+    }
+
+    function testCellarLockedAssetsProportionalWithdraw() external {
+        uint256 assets = 1_000_000e6;
+        (MockCellar testCellar, LockedERC4626 lockedUSDC, LockedERC4626 lockedWETH) = createCellarWithLockedFunds(
+            assets
+        );
+
+        testCellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
+
+        // User can not redeem any of their tokens because some positions have funds locked in them.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__IlliquidWithdraw.selector, address(lockedUSDC))));
+        testCellar.withdraw(assets / 2, address(this), address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__IlliquidWithdraw.selector, address(lockedWETH))));
+        testCellar.withdraw(assets / 10, address(this), address(this));
+
+        // In order to remedy this, if the the strategist can get funds out of the most restricting locked position they should.
+        testCellar.rebalance(
+            address(lockedWETH),
+            address(WETH),
+            WETH.balanceOf(address(lockedWETH)),
+            SwapRouter.Exchange.UNIV2,
+            abi.encode(0)
+        );
+
+        // Now withdraws up to the next locked position can be performed.
+        testCellar.withdraw(assets / 10, address(this), address(this));
+
+        // Larger withdraws still fail because there is still a position with funds locked in it.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__IlliquidWithdraw.selector, address(lockedUSDC))));
+        testCellar.withdraw(assets / 2, address(this), address(this));
+
+        // If the strategist can not move funds out of this position, then they should change their Cellar back to an orderly withdraw.
+        testCellar.setWithdrawType(Cellar.WithdrawType.ORDERLY);
+
+        // Then move the illiquid position to the back of the position array to allow users to withdraw as much as they can from liquid positions.
+        testCellar.swapPositions(1, 3);
+        testCellar.withdraw(testCellar.maxWithdraw(address(this)), address(this), address(this));
+    }
+
+    function testMaxWithdraw() external {
+        uint256 assets = 1_000_000e6;
+        (MockCellar testCellar, , LockedERC4626 lockedWETH) = createCellarWithLockedFunds(assets);
+        uint256 expectedMaxWithdraw = assets.mulWadDown(0.525e18);
+        assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected.");
+
+        testCellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
+        expectedMaxWithdraw = 0; // Since lockedWETH position has no withdrawable funds.
+        assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected.");
+
+        // Rebalance funds from lockedWETH to WETH.
+        testCellar.rebalance(
+            address(lockedWETH),
+            address(WETH),
+            WETH.balanceOf(address(lockedWETH)),
+            SwapRouter.Exchange.UNIV2,
+            abi.encode(0)
+        );
+
+        expectedMaxWithdraw = assets.mulWadDown(0.025e18);
+        assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected.");
+
+        // Give another user some shares worth less than 2.5% of assets.
+        address otherUser = vm.addr(7777);
+        uint256 shares = testCellar.convertToShares(assets.mulWadDown(0.02e18));
+        testCellar.transfer(otherUser, shares);
+
+        // Make sure that if max withdraw is less than the withdrawable funds, it returns the full share worth.
+        expectedMaxWithdraw = assets.mulWadDown(0.02e18);
+        assertEq(testCellar.maxWithdraw(otherUser), expectedMaxWithdraw, "Max withdraw should equal expected.");
+
+        testCellar.setWithdrawType(Cellar.WithdrawType.ORDERLY);
+        expectedMaxWithdraw = assets.mulWadDown(0.02e18);
+        assertEq(testCellar.maxWithdraw(otherUser), expectedMaxWithdraw, "Max withdraw should equal expected.");
+
+        expectedMaxWithdraw = assets.mulWadDown(0.775e18);
+        assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected.");
+    }
 
     function testReentrancyAttack() external {
         ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", 18);

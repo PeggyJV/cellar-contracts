@@ -18,7 +18,7 @@ contract ReentrancyERC4626 is ERC4626, Test {
         return asset.balanceOf(address(this));
     }
 
-    function deposit(uint256 assets, address receiver) public override returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public override returns (uint256) {
         // transfer shares into this contract
         asset.safeTransferFrom(msg.sender, address(this), assets);
 
@@ -26,5 +26,8 @@ contract ReentrancyERC4626 is ERC4626, Test {
 
         // Try to re-enter into cellar via deposit
         ERC4626(msg.sender).deposit(assets, receiver);
+
+        // This return should never be hit because the above deposit calls fails from re-entrancy.
+        return 0;
     }
 }

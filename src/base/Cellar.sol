@@ -1028,7 +1028,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
                 amount = assets.mulDivDown(onePositionAsset, exchangeRate);
                 assets = 0;
             } else {
-                amount = positionBalances[i];
+                amount = withdrawableBalances[i];
                 assets = assets - totalWithdrawableBalanceInAssets;
             }
 
@@ -1089,7 +1089,9 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
     /**
      * @notice The total amount of assets in the cellar.
-     * @dev Excludes locked yield that hasn't been distributed.
+     * @notice EIP4626 states totalAssets needs to be inclusive of fees.
+     * Since performance fees mint shares, total assets remains unchanged,
+     * so this implementation is inclusive of fees eventhough it does not explicitly show it.
      */
     function totalAssets() public view override returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
@@ -1107,7 +1109,27 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     }
 
     /**
+     * @notice The total amount of assets in the cellar.
+     * @dev Excludes locked yield that hasn't been distributed.
+     */
+    function totalAssetsWithdrawable() public view returns (uint256 assets) {
+        uint256 numOfPositions = positions.length;
+        ERC20[] memory positionAssets = new ERC20[](numOfPositions);
+        uint256[] memory balances = new uint256[](numOfPositions);
+
+        for (uint256 i; i < numOfPositions; i++) {
+            address position = positions[i];
+            positionAssets[i] = _assetOf(position);
+            balances[i] = _withdrawableFrom(position);
+        }
+
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+        assets = priceRouter.getValues(positionAssets, balances, asset);
+    }
+
+    /**
      * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
+     * @notice is NOT inclusive of performance fees.
      * @param shares amount of shares to convert
      * @return assets the shares can be exchanged for
      */
@@ -1166,6 +1188,42 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         uint256 _totalAssets = totalAssets();
         uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
         assets = _convertToAssets(shares, _totalAssets - feeInAssets);
+    }
+
+    //TODO Write test for this.
+    /**
+     * @notice Returns the max amount withdrawable by a user inclusive of performance fees
+     * @param owner address to check maxWithdraw  of.
+     * @return the max amount of assets withdrawable by `owner`.
+     */
+    function maxWithdraw(address owner) public view override returns (uint256) {
+        // Get amount of assets to withdraw with fees accounted for.
+        uint256 assets = previewRedeem(balanceOf[owner]);
+
+        if (withdrawType == WithdrawType.ORDERLY) {
+            uint256 withdrawable = totalAssetsWithdrawable();
+            return withdrawable >= assets ? assets : withdrawable;
+        } else {
+            (
+                ,
+                ,
+                ERC20[] memory positionAssets,
+                uint256[] memory positionBalances,
+                uint256[] memory withdrawableBalances
+            ) = _getData();
+            uint256 smallestWithdrawable = type(uint256).max;
+            PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+            for (uint256 i = 0; i < withdrawableBalances.length; i++) {
+                if (positionBalances[i] == 0) continue;
+                if (withdrawableBalances[i] == 0) return 0;
+                uint256 amountInAssets = priceRouter.getValue(positionAssets[i], withdrawableBalances[i], asset);
+                if (amountInAssets < smallestWithdrawable) smallestWithdrawable = amountInAssets;
+
+                // If smallestWithdrawable is zero, we are done looking.
+                if (smallestWithdrawable == 0) return 0;
+            }
+            return assets <= smallestWithdrawable ? assets : smallestWithdrawable;
+        }
     }
 
     /**
@@ -1328,6 +1386,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
     // ============================================ LIMITS LOGIC ============================================
 
+    //TODO this function does not take performance fees into account, but that doen't really cahnge how much someone can deposit right?
     /**
      * @notice Total amount of assets that can be deposited for a user.
      * @param receiver address of account that would receive the shares
@@ -1352,6 +1411,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         assets = Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
     }
 
+    //TODO this function does not take performance fees into account, but that doen't really cahnge how much someone can mint right?
     /**
      * @notice Total amount of shares that can be minted for a user.
      * @param receiver address of account that would receive the shares
