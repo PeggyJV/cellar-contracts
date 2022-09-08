@@ -1585,6 +1585,9 @@ contract Cellar is ERC4626, Ownable, Multicall {
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================
+    //TODO for _depositTo and _withdrawFrom, call before and after hooks around the operation, so that Aave health checks can be enforced.
+    //TODO add withdrawable from to adaptors so this contract knows how much it can withdraw from Aave.
+    //Weird cuz if an aUSDC position says you can withdraw this much USDC from me, but then a debt position says you can borrow this much more, the two answers are dependent on eachother, but each position doesn't know that.
 
     /**
      * @dev Deposit into a position according to its position type and update related state.
