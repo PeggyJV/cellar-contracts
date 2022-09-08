@@ -102,7 +102,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     error Cellar__RemoveHoldingPosition();
 
     /**
-     * @notice Attempted to remove holding position.
+     * @notice Attempted to add a position when the position array is full.
      * @param maxPositions maximum number of positions that can be used
      */
     error Cellar__PositionArrayFull(uint256 maxPositions);
@@ -120,7 +120,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     }
 
     /**
-     * @notice Addresses of the positions current used by the cellar.
+     * @notice Addresses of the positions currently used by the cellar.
      */
     address[] public positions;
 
@@ -652,6 +652,11 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     error Cellar__ContractShutdown();
 
     /**
+     * @notice Attempted action was prevented due to contract not being shutdown.
+     */
+    error Cellar__ContractNotShutdown();
+
+    /**
      * @notice Whether or not the contract is shutdown in case of an emergency.
      */
     bool public isShutdown;
@@ -679,6 +684,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @notice Restart the cellar.
      */
     function liftShutdown() external onlyOwner {
+        if (!isShutdown) revert Cellar__ContractNotShutdown();
         isShutdown = false;
 
         emit ShutdownChanged(false);
@@ -1089,9 +1095,11 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
     /**
      * @notice The total amount of assets in the cellar.
-     * @notice EIP4626 states totalAssets needs to be inclusive of fees.
+     * @dev EIP4626 states totalAssets needs to be inclusive of fees.
      * Since performance fees mint shares, total assets remains unchanged,
      * so this implementation is inclusive of fees eventhough it does not explicitly show it.
+     * @dev EIP4626 states totalAssets  must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
      */
     function totalAssets() public view override returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
@@ -1190,7 +1198,6 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         assets = _convertToAssets(shares, _totalAssets - feeInAssets);
     }
 
-    //TODO Write test for this.
     /**
      * @notice Returns the max amount withdrawable by a user inclusive of performance fees
      * @param owner address to check maxWithdraw  of.
