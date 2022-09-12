@@ -288,7 +288,7 @@ contract PriceRouter is Ownable {
         ERC20 quoteAsset,
         uint8 quoteAssetDecimals
     ) internal view returns (uint256 exchangeRate) {
-        exchangeRate = _getValueInUSD(baseAsset).mulDivDown(10**quoteAssetDecimals, _getValueInUSD(quoteAsset));
+        exchangeRate = getValueInUSD(baseAsset).mulDivDown(10**quoteAssetDecimals, getValueInUSD(quoteAsset));
     }
 
     /**
@@ -320,18 +320,6 @@ contract PriceRouter is Ownable {
      * @param heartbeat maximum allowed time between price updates
      */
     error PriceRouter__StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
-
-    /**
-     * @notice Gets the valuation of some asset in USD
-     * @dev USD valuation has 8 decimals
-     * @param asset the asset to get the value of in USD
-     * @return value the value of asset in USD
-     */
-    function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
-        if (!getAssetConfig[asset].isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
-
-        value = getValueInUSD(asset);
-    }
 
     // =========================================== CHAINLINK PRICING FUNCTIONS ===========================================\
     /**
