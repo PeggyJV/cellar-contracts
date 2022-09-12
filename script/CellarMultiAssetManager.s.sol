@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity 0.8.16;
 
 import "forge-std/Script.sol";
 import { Registry } from "src/Registry.sol";
