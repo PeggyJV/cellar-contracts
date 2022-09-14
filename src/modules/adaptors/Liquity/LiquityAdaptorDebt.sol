@@ -4,7 +4,8 @@ pragma solidity 0.8.16;
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { Cellar } from "src/base/Cellar.sol";
+import { Cellar, Registry, PriceRouter } from "src/base/Cellar.sol";
+import { LiquityAdaptor } from "src/modules/adaptors/Liquity/LiquityAdaptor.sol";
 
 import { console } from "@forge-std/Test.sol";
 
@@ -17,29 +18,12 @@ import { console } from "@forge-std/Test.sol";
  * Block where USDC-1 in == aUSDC out 15000000
  */
 
-contract LiquityAdaptorDebt is BaseAdaptor {
+contract LiquityAdaptorDebt is BaseAdaptor, LiquityAdaptor {
     using SafeTransferLib for ERC20;
-
-    /*
-        adaptorData = abi.encode(aToken address)
-    */
-
-    //============================================ Global Functions ===========================================
-    function borrowerOperations() internal pure returns (address) {
-        return 0x24179CD81c9e782A4096035f7eC97fB8B783e007;
-    }
-
-    function troveManager() internal pure returns (address) {
-        return 0xA39739EF8b0231DbFA0DcdA07d7e29faAbCf4bb2;
-    }
-
-    function LUSD() internal pure returns (ERC20) {
-        return ERC20(0x5f98805A4E8be255a32880FDeC7F6728C6568bA0);
-    }
 
     //============================================ Implement Base Functions ===========================================
     function deposit(uint256 assets, bytes memory adaptorData) public override {
-        revert("Note Allowed to deposit into a trove");
+        revert("Unable to repay debt.");
     }
 
     function withdraw(
@@ -51,8 +35,8 @@ contract LiquityAdaptorDebt is BaseAdaptor {
     }
 
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        // Go to TroveManager  https://etherscan.io/address/0xa39739ef8b0231dbfa0dcda07d7e29faabcf4bb2#readContract
-        // Look at Troves(msg.sender) -> debt
+        (uint256 debt, , , , ) = troveManager().Troves(msg.sender);
+        return debt;
     }
 
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
@@ -61,25 +45,10 @@ contract LiquityAdaptorDebt is BaseAdaptor {
 
     //============================================ Override Hooks ===========================================
     function afterHook(bytes memory hookData) public view virtual override returns (bool) {
-        //TODO hookDat would contain a minimum healthFactor or something
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(msg.sender);
-
-        uint256 minHealthFactor = abi.decode(hookData, (uint256));
-
-        return healthFactor >= minHealthFactor;
+        PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(2));
+        uint256 minICR = abi.decode(hookData, (uint256));
+        uint256 price = priceRouter.getExchangeRate(WETHERC20(), LUSD());
+        uint256 ICR = troveManager().getCurrentICR(msg.sender, price);
+        return ICR >= minICR;
     }
-
-    //============================================ High Level Callable Functions ============================================
-    //TODO might need to add a check that toggles use reserve as collateral
-    function openTrove() public {}
-
-    function addColl() public {}
-
-    function withdrawColl() public {}
-
-    function closeTrove() public {}
-
-    function claimCollateral() public {}
-
-    //============================================ AAVE Logic ============================================
 }
