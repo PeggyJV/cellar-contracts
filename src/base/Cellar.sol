@@ -281,6 +281,11 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     error Cellar__PositionPricingNotSetUp(address position);
 
     /**
+     * @notice Addresses of the positions currently used by the cellar.
+     */
+    uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
+
+    /**
      * @notice Tell whether a position is trusted.
      */
     mapping(address => bool) public isTrusted;
@@ -299,7 +304,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         // Now that position type is set up, check that asset of position is supported for pricing operations.
         ERC20 positionAsset = _assetOf(position);
-        if (!PriceRouter(registry.getAddress(2)).isSupported(positionAsset))
+        if (!PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT)).isSupported(positionAsset))
             revert Cellar__PositionPricingNotSetUp(address(positionAsset));
 
         emit TrustChanged(position, true);
@@ -738,7 +743,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
             getPositionType[position] = _positionTypes[i];
 
             positionAsset = _assetOf(position);
-            if (!PriceRouter(registry.getAddress(2)).isSupported(positionAsset))
+            if (!PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT)).isSupported(positionAsset))
                 revert Cellar__PositionPricingNotSetUp(address(positionAsset));
         }
 
@@ -1012,7 +1017,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         uint256[] memory withdrawableBalances
     ) internal {
         // Get the price router.
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
 
         for (uint256 i; i < _positions.length; i++) {
             // Move on to next position if this one is empty.
@@ -1112,7 +1117,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
             balances[i] = _balanceOf(position);
         }
 
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         assets = priceRouter.getValues(positionAssets, balances, asset);
     }
 
@@ -1131,7 +1136,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
             balances[i] = _withdrawableFrom(position);
         }
 
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         assets = priceRouter.getValues(positionAssets, balances, asset);
     }
 
@@ -1219,7 +1224,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
                 uint256[] memory withdrawableBalances
             ) = _getData();
             uint256 smallestWithdrawable = type(uint256).max;
-            PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+            PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
             for (uint256 i = 0; i < withdrawableBalances.length; i++) {
                 if (positionBalances[i] == 0) continue;
                 if (withdrawableBalances[i] == 0) return 0;
@@ -1309,7 +1314,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
             withdrawableBalances[i] = _withdrawableFrom(position);
         }
 
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         _totalAssets = priceRouter.getValues(positionAssets, positionBalances, asset);
     }
 
@@ -1393,9 +1398,11 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
     // ============================================ LIMITS LOGIC ============================================
 
-    //TODO this function does not take performance fees into account, but that doen't really cahnge how much someone can deposit right?
     /**
      * @notice Total amount of assets that can be deposited for a user.
+     * @dev This function does not take into account performance fees.
+     *      Performance fees would reduce `receiver`s `ownedAssets`,
+     *      making the `assets` value returned lower than actual
      * @param receiver address of account that would receive the shares
      * @return assets maximum amount of assets that can be deposited
      */
@@ -1418,9 +1425,11 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         assets = Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
     }
 
-    //TODO this function does not take performance fees into account, but that doen't really cahnge how much someone can mint right?
     /**
      * @notice Total amount of shares that can be minted for a user.
+     * @dev This function does not take into account performance fees.
+     *      Performance fees would reduce `receiver`s `ownedAssets`,
+     *      making the `shares` value returned lower than actual
      * @param receiver address of account that would receive the shares
      * @return shares maximum amount of shares that can be minted
      */
@@ -1634,10 +1643,9 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
     /**
      * @dev Get the balance of a position according to its position type.
+     * @dev For ERC4626 position balances, this uses `previewRedeem` as opposed
+     *      to `convertToAssets` so that balanceOf ERC4626 positions includes fees taken on withdraw.
      * @param position position to get the balance of
-     */
-    /**
-     * Uses preview redeem as opposed to `convertToAssets` so that balanceOf ERC4626 positions includes fees taken on withdraw.
      */
     function _balanceOf(address position) internal view returns (uint256) {
         PositionType positionType = getPositionType[position];
