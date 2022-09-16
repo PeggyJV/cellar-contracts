@@ -2192,7 +2192,7 @@ contract CellarTest is Test {
             assertApproxEqAbs(
                 target.previewDeposit(amountOfAssets),
                 shares = target.deposit(amountOfAssets, user),
-                200, // When the amount being deposited is much larger than the TVL, because of how the preview deposit function works, there is much worse precision.
+                300, // When the amount being deposited is much larger than the TVL, because of how the preview deposit function works, there is much worse precision.
                 "Deposit should be equal to previewDeposit"
             );
         } else if (action == Action.WITHDRAW) {
@@ -3804,10 +3804,7 @@ contract CellarTest is Test {
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
     }
 
-    //TODO add an integration test for a cellar with 2 locked positions and 2 liquid ERC20 positions.
-    // Eventhough it is very unlikely any of these cellars  will use the ERC4626 positions, it should still be tested in an  integration test.
-    function testMultiAssetCellarWithIlliquidPositions() external {
-        uint8 salt;
+    function testMultiAssetCellarWithIlliquidPositions(uint8 salt) external {
         // Initialize users.
         address alice = vm.addr(1);
         address bob = vm.addr(2);
@@ -4078,40 +4075,41 @@ contract CellarTest is Test {
 
         _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, 0, USDC);
         _checkSendFees(assetManagementCellar, 1 days, 0);
+        {
+            // Everyone leaves  the cellar. Strategist must rebalance into liquid positions.
+            uint256 assets = assetManagementCellar.maxWithdraw(bob);
+            _userAction(assetManagementCellar, bob, Action.WITHDRAW, assets, 0);
 
-        // Everyone leaves  the cellar. Strategist must rebalance into liquid positions.
-        uint256 assets = assetManagementCellar.maxWithdraw(bob);
-        _userAction(assetManagementCellar, bob, Action.WITHDRAW, assets, 0);
+            assets = assetManagementCellar.maxWithdraw(alice);
+            _userAction(assetManagementCellar, alice, Action.WITHDRAW, assets, 0);
 
-        assets = assetManagementCellar.maxWithdraw(alice);
-        _userAction(assetManagementCellar, alice, Action.WITHDRAW, assets, 0);
+            assets = assetManagementCellar.maxWithdraw(mary);
+            _userAction(assetManagementCellar, mary, Action.WITHDRAW, assets, 0);
 
-        assets = assetManagementCellar.maxWithdraw(mary);
-        _userAction(assetManagementCellar, mary, Action.WITHDRAW, assets, 0);
+            assets = assetManagementCellar.maxWithdraw(sam);
+            _userAction(assetManagementCellar, sam, Action.WITHDRAW, assets, 0);
 
-        assets = assetManagementCellar.maxWithdraw(sam);
-        _userAction(assetManagementCellar, sam, Action.WITHDRAW, assets, 0);
+            // Strategist rebalances into liquid positions.
+            _rebalance(assetManagementCellar, ERC20(address(lockedWETH)), WETH, WETH.balanceOf(address(lockedWETH)));
+            _rebalance(assetManagementCellar, ERC20(address(lockedUSDC)), USDC, USDC.balanceOf(address(lockedUSDC)));
 
-        // Strategist rebalances into liquid positions.
-        _rebalance(assetManagementCellar, ERC20(address(lockedWETH)), WETH, WETH.balanceOf(address(lockedWETH)));
-        _rebalance(assetManagementCellar, ERC20(address(lockedUSDC)), USDC, USDC.balanceOf(address(lockedUSDC)));
+            // Have everyone completely exit the cellar.
+            uint256 shares = assetManagementCellar.maxRedeem(bob);
+            if (shares > 0) _userAction(assetManagementCellar, bob, Action.REDEEM, 0, shares);
 
-        // Have everyone  try to withdraw again.
-        assets = assetManagementCellar.maxWithdraw(bob);
-        _userAction(assetManagementCellar, bob, Action.WITHDRAW, assets, 0);
+            shares = assetManagementCellar.maxRedeem(alice);
+            if (shares > 0) _userAction(assetManagementCellar, alice, Action.REDEEM, 0, shares);
 
-        assets = assetManagementCellar.maxWithdraw(alice);
-        _userAction(assetManagementCellar, alice, Action.WITHDRAW, assets, 0);
+            shares = assetManagementCellar.maxRedeem(mary);
+            if (shares > 0) _userAction(assetManagementCellar, mary, Action.REDEEM, 0, shares);
 
-        assets = assetManagementCellar.maxWithdraw(mary);
-        _userAction(assetManagementCellar, mary, Action.WITHDRAW, assets, 0);
+            shares = assetManagementCellar.maxRedeem(sam);
+            if (shares > 0) _userAction(assetManagementCellar, sam, Action.REDEEM, 0, shares);
 
-        assets = assetManagementCellar.maxWithdraw(sam);
-        _userAction(assetManagementCellar, sam, Action.WITHDRAW, assets, 0);
-
-        assertEq(assetManagementCellar.balanceOf(alice), 0, "alice should have no more shares.");
-        assertEq(assetManagementCellar.balanceOf(bob), 0, "bob should have no more shares.");
-        assertEq(assetManagementCellar.balanceOf(mary), 0, "mary should have no more shares.");
-        assertEq(assetManagementCellar.balanceOf(sam), 0, "sam should have no more shares.");
+            assertEq(assetManagementCellar.balanceOf(alice), 0, "alice should have no more shares.");
+            assertEq(assetManagementCellar.balanceOf(bob), 0, "bob should have no more shares.");
+            assertEq(assetManagementCellar.balanceOf(mary), 0, "mary should have no more shares.");
+            assertEq(assetManagementCellar.balanceOf(sam), 0, "sam should have no more shares.");
+        }
     }
 }

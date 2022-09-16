@@ -12,10 +12,7 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
-
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-
-import { console } from "@forge-std/Test.sol"; //TODO remove
 
 /**
  * @title Sommelier Cellar
@@ -141,6 +138,9 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         return positions;
     }
 
+    /**
+     * @notice Maximum amount of positions a cellar can use at once.
+     */
     uint8 public constant MAX_POSITIONS = 32;
 
     /**
@@ -1026,7 +1026,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
             uint256 onePositionAsset = 10**positionAssets[i].decimals();
             uint256 exchangeRate = priceRouter.getExchangeRate(positionAssets[i], asset);
 
-            // Denominate position balance in cellar's asset.
+            // Denominate withdrawable position balance in cellar's asset.
             uint256 totalWithdrawableBalanceInAssets = withdrawableBalances[i].mulDivDown(
                 exchangeRate,
                 onePositionAsset
@@ -1102,7 +1102,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @notice The total amount of assets in the cellar.
      * @dev EIP4626 states totalAssets needs to be inclusive of fees.
      * Since performance fees mint shares, total assets remains unchanged,
-     * so this implementation is inclusive of fees eventhough it does not explicitly show it.
+     * so this implementation is inclusive of fees even though it does not explicitly show it.
      * @dev EIP4626 states totalAssets  must not revert, but it is possible for `totalAssets` to revert
      * so it does NOT conform to ERC4626 standards.
      */
@@ -1330,6 +1330,13 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     event Rebalance(address indexed fromPosition, address indexed toPosition, uint256 assetsFrom, uint256 assetsTo);
 
     /**
+     * @notice Emitted on when the rebalance deviation is changed.
+     * @param oldDeviation the old rebalance deviation
+     * @param newDeviation the new rebalance deviation
+     */
+    event RebalanceDeviationChanged(uint256 oldDeviation, uint256 newDeviation);
+
+    /**
      * @notice totalAssets deviated outside the range set by `allowedRebalanceDeviation`.
      * @param assets the total assets in the cellar
      * @param min the minimum allowed assets
@@ -1344,11 +1351,32 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      */
     error Cellar__TotalSharesMustRemainConstant(uint256 current, uint256 expected);
 
-    // 0 -> 1e18. Used after callOnAdaptor to help safeguard against adaptor moving into positions that are not added here
-    uint256 public allowedRebalanceDeviation = 0.003e18; //currently set to 99.7%
+    /**
+     * @notice Total shares in a cellar changed when they should stay constant.
+     * @param requested the requested rebalance  deviation
+     * @param max the max rebalance deviation.
+     */
+    error Cellar__InvalidRebalanceDeviation(uint256 requested, uint256 max);
 
+    uint64 public constant MAX_REBALANCE_DEVIATION = 0.1e18;
+
+    /**
+     * @notice The percent the total assets of a cellar may deviate during a rebalance call.
+     */
+    uint256 public allowedRebalanceDeviation = 0.003e18; // Currently set to 0.3%
+
+    /**
+     * @notice Allows governance to change this cellars rebalance deviation.
+     * @param newDeviation the new reabalance deviation value.
+     */
     function setRebalanceDeviation(uint256 newDeviation) external onlyOwner {
+        if (newDeviation > MAX_REBALANCE_DEVIATION)
+            revert Cellar__InvalidRebalanceDeviation(newDeviation, MAX_REBALANCE_DEVIATION);
+
+        uint256 oldDeviation = allowedRebalanceDeviation;
         allowedRebalanceDeviation = newDeviation;
+
+        emit RebalanceDeviationChanged(oldDeviation, newDeviation);
     }
 
     /**
@@ -1628,8 +1656,8 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     }
 
     /**
-     * @dev Get the balance of a position according to its position type.
-     * @param position position to get the balance of
+     * @dev Get the withdrawable balance of a position according to its position type.
+     * @param position position to get the withdrawable balance of
      */
     function _withdrawableFrom(address position) internal view returns (uint256) {
         PositionType positionType = getPositionType[position];
