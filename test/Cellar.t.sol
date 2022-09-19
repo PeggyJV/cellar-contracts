@@ -3722,7 +3722,7 @@ contract CellarTest is Test {
             abi.encode(0)
         );
 
-        expectedMaxWithdraw = assets.mulWadDown(0.025e18);
+        expectedMaxWithdraw = assets.mulWadDown(0.10e18);
         assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected.");
 
         // Give another user some shares worth less than 2.5% of assets.
@@ -3732,14 +3732,14 @@ contract CellarTest is Test {
 
         // Make sure that if max withdraw is less than the withdrawable funds, it returns the full share worth.
         expectedMaxWithdraw = assets.mulWadDown(0.02e18);
-        assertEq(testCellar.maxWithdraw(otherUser), expectedMaxWithdraw, "Max withdraw should equal expected.");
+        assertEq(testCellar.maxWithdraw(otherUser), expectedMaxWithdraw, "Max withdraw should equal expected..");
 
         testCellar.setWithdrawType(Cellar.WithdrawType.ORDERLY);
         expectedMaxWithdraw = assets.mulWadDown(0.02e18);
-        assertEq(testCellar.maxWithdraw(otherUser), expectedMaxWithdraw, "Max withdraw should equal expected.");
+        assertEq(testCellar.maxWithdraw(otherUser), expectedMaxWithdraw, "Max withdraw should equal expected..");
 
         expectedMaxWithdraw = assets.mulWadDown(0.775e18);
-        assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected.");
+        assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected..");
     }
 
     // M5

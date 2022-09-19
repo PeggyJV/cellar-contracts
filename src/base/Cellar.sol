@@ -1210,31 +1210,30 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      */
     function maxWithdraw(address owner) public view override returns (uint256) {
         // Get amount of assets to withdraw with fees accounted for.
-        uint256 assets = previewRedeem(balanceOf[owner]);
+        uint256 _totalAssets = totalAssets();
+        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
+        uint256 assets = _convertToAssets(balanceOf[owner], _totalAssets - feeInAssets);
 
         if (withdrawType == WithdrawType.ORDERLY) {
             uint256 withdrawable = totalAssetsWithdrawable();
             return assets <= withdrawable ? assets : withdrawable;
         } else {
-            (
-                ,
-                ,
-                ERC20[] memory positionAssets,
-                uint256[] memory positionBalances,
-                uint256[] memory withdrawableBalances
-            ) = _getData();
-            uint256 smallestWithdrawable = type(uint256).max;
-            PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+            (, , , uint256[] memory positionBalances, uint256[] memory withdrawableBalances) = _getData();
+            uint256 totalShares = totalSupply;
+            uint256 shares = balanceOf[owner];
+            uint256 smallestPercentWithdrawable = 1e18;
             for (uint256 i = 0; i < withdrawableBalances.length; i++) {
                 if (positionBalances[i] == 0) continue;
                 if (withdrawableBalances[i] == 0) return 0;
-                uint256 amountInAssets = priceRouter.getValue(positionAssets[i], withdrawableBalances[i], asset);
-                if (amountInAssets < smallestWithdrawable) smallestWithdrawable = amountInAssets;
-
-                // If smallestWithdrawable is zero, we are done looking.
-                if (smallestWithdrawable == 0) return 0;
+                uint256 percentWithdrawable = withdrawableBalances[i].mulDivDown(1e18, positionBalances[i]);
+                if (percentWithdrawable < smallestPercentWithdrawable)
+                    smallestPercentWithdrawable = percentWithdrawable;
             }
-            return assets <= smallestWithdrawable ? assets : smallestWithdrawable;
+            uint256 userOwnershipPercent = shares.mulDivDown(1e18, totalShares);
+            return
+                userOwnershipPercent <= smallestPercentWithdrawable
+                    ? assets
+                    : _totalAssets.mulDivDown(smallestPercentWithdrawable, 1e18);
         }
     }
 
