@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
@@ -9,7 +9,7 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
-import { MockCellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { MockCellar, ERC4626 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";

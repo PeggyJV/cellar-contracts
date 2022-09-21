@@ -131,6 +131,9 @@ contract CellarTest is Test {
         USDC.approve(address(cellar), type(uint256).max);
         WETH.approve(address(cellar), type(uint256).max);
         WBTC.approve(address(cellar), type(uint256).max);
+
+        // Manipulate  test contracts storage so that minimum shareLockPeriod is zero blocks.
+        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
 
     // ========================================= INITIALIZATION TEST =========================================
@@ -215,7 +218,7 @@ contract CellarTest is Test {
         (uint256 highWatermarkBeforeDeposit, , , , , , ) = cellar.feeData();
 
         // Try depositing more assets than balance.
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert("ERC20: transfer amount exceeds balance");
         cellar.deposit(assets + 1, address(this));
 
         // Test single deposit.
@@ -245,7 +248,7 @@ contract CellarTest is Test {
         (uint256 highWatermarkBeforeWithdraw, , , , , , ) = cellar.feeData();
 
         // Try withdrawing more assets than allowed.
-        vm.expectRevert(bytes(stdError.arithmeticError));
+        vm.expectRevert("ERC20: burn amount exceeds balance");
         cellar.withdraw(assets + 1, address(this), address(this));
 
         // Test single withdraw.
@@ -277,7 +280,7 @@ contract CellarTest is Test {
         (uint256 highWatermarkBeforeMint, , , , , , ) = cellar.feeData();
 
         // Try minting more assets than balance.
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert("ERC20: transfer amount exceeds balance");
         cellar.mint(shares + 1e18, address(this));
 
         // Test single mint.
@@ -1572,6 +1575,10 @@ contract CellarTest is Test {
                 "assetmanagement-CLR",
                 strategist
             );
+            stdstore
+                .target(address(multiPositionCellar))
+                .sig(multiPositionCellar.shareLockPeriod.selector)
+                .checked_write(uint256(0));
         }
 
         MockERC20 position;
@@ -1637,7 +1644,7 @@ contract CellarTest is Test {
         remainingGas = gasleft();
         assertLt(
             gas - remainingGas,
-            1_200_000,
+            1_400_000,
             "Gas used on worst case scenario withdraw should be comfortably less than the block gas limit."
         );
     }
@@ -1696,6 +1703,7 @@ contract CellarTest is Test {
             "multiposition-CLR",
             strategist
         );
+        stdstore.target(address(badCellar)).sig(badCellar.shareLockPeriod.selector).checked_write(uint256(0));
 
         // User join bad cellar.
         address alice = vm.addr(77777);
@@ -2421,6 +2429,10 @@ contract CellarTest is Test {
                 strategist
             );
         }
+        stdstore
+            .target(address(assetManagementCellar))
+            .sig(assetManagementCellar.shareLockPeriod.selector)
+            .checked_write(uint256(0));
 
         // Update allowed rebalance deviation to work with mock swap router.
         assetManagementCellar.setRebalanceDeviation(0.05e18);
@@ -2962,6 +2974,11 @@ contract CellarTest is Test {
                 "assetmanagement-CLR",
                 strategist
             );
+
+            stdstore
+                .target(address(assetManagementCellar))
+                .sig(assetManagementCellar.shareLockPeriod.selector)
+                .checked_write(uint256(0));
         }
 
         // Update allowed rebalance deviation to work with mock swap router.
@@ -3520,7 +3537,7 @@ contract CellarTest is Test {
 
     // M-1
     function testMaliciousStrategistFundsLocked() external {
-        LockedERC4626 maliciousCellar = new LockedERC4626(USDC, "Bad Cellar", "BC", 18, 1e18);
+        LockedERC4626 maliciousCellar = new LockedERC4626(USDC, "Bad Cellar", "BC", 1e18);
 
         cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626);
         cellar.pushPosition(address(maliciousCellar));
@@ -3570,8 +3587,8 @@ contract CellarTest is Test {
         )
     {
         // New Cellar with positions in USDC, locked USDC, locked WETH, and  WETH
-        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 18, 0.9e18); // 90% of funds are locked.
-        LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 18, 1e18); // 100% of funds are locked
+        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 0.9e18); // 90% of funds are locked.
+        LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 1e18); // 100% of funds are locked
 
         // Setup Cellar:
         address[] memory positions = new address[](4);
@@ -3597,6 +3614,11 @@ contract CellarTest is Test {
             "multiposition-CLR",
             strategist
         );
+
+        stdstore
+            .target(address(cellarWithLockedFunds))
+            .sig(cellarWithLockedFunds.shareLockPeriod.selector)
+            .checked_write(uint256(0));
 
         // Make initial deposit into cellar.
         deal(address(USDC), address(this), assets);
@@ -3744,7 +3766,7 @@ contract CellarTest is Test {
 
     // M5
     function testReentrancyAttack() external {
-        ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", 18);
+        ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC");
 
         cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626);
         cellar.pushPosition(address(maliciousCellar));
@@ -3818,8 +3840,8 @@ contract CellarTest is Test {
         MockCellar assetManagementCellar;
 
         // Create two ERC4626 positions one with fully locked funds, and one with 90% of funds locked.
-        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 18, 0.9e18); // 90% of funds are locked.
-        LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 18, 1e18); // 100% of funds are locked
+        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 0.9e18); // 90% of funds are locked.
+        LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 1e18); // 100% of funds are locked
         {
             // Create new cellar with WETH, USDC, and WBTC positions.
             address[] memory positions = new address[](4);
@@ -3845,6 +3867,11 @@ contract CellarTest is Test {
                 "assetmanagement-CLR",
                 strategist
             );
+
+            stdstore
+                .target(address(assetManagementCellar))
+                .sig(assetManagementCellar.shareLockPeriod.selector)
+                .checked_write(uint256(0));
         }
 
         // Update allowed rebalance deviation to work with mock swap router.
@@ -4111,5 +4138,31 @@ contract CellarTest is Test {
             assertEq(assetManagementCellar.balanceOf(mary), 0, "mary should have no more shares.");
             assertEq(assetManagementCellar.balanceOf(sam), 0, "sam should have no more shares.");
         }
+    }
+
+    // Crows Audit Tests
+    //M-1 Accepted
+    //M-2
+    function testCellarDNOSPerformanceFeesWithZeroShares() external {
+        //Attacker deposits 1 USDC into Cellar.
+        uint256 assets = 1e6;
+        address attacker = vm.addr(101);
+        deal(address(USDC), attacker, assets);
+        vm.prank(attacker);
+        USDC.transfer(address(cellar), assets);
+
+        address user = vm.addr(10101);
+        deal(address(USDC), user, assets);
+
+        vm.startPrank(user);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        vm.stopPrank();
+
+        assertEq(
+            cellar.maxWithdraw(user),
+            assets.mulWadDown(1.9e18),
+            "User should be able to withdraw their assets and the attackers(minus performance fees)."
+        );
     }
 }

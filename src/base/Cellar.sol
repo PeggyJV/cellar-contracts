@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, ERC20 } from "./ERC4626.sol";
+import { ERC4626, SafeERC20 } from "./ERC4626.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Multicall } from "./Multicall.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { SafeCast } from "src/utils/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
@@ -22,7 +22,7 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
 contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     using AddressArray for address[];
     using AddressArray for ERC20[];
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for ERC20;
     using SafeCast for uint256;
     using SafeCast for int256;
     using Math for uint256;
@@ -727,7 +727,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         string memory _name,
         string memory _symbol,
         address _strategistPayout
-    ) ERC4626(_asset, _name, _symbol, 18) Ownable() {
+    ) ERC4626(_asset, _name, _symbol) Ownable() {
         registry = _registry;
 
         // Initialize positions.
@@ -797,6 +797,52 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     error Cellar__IlliquidWithdraw(address illiquidPosition);
 
     /**
+     * @notice Attempted to set `shareLockPeriod` to an invalid number.
+     */
+    error Cellar__InvalidShareLockPeriod();
+
+    //TODO
+    /**
+     * @notice Attempted to burn shares when they are locked.
+     */
+    error Cellar__SharesAreLocked(uint256 blockSharesAreUnlocked, uint256 currentBlock);
+
+    /**
+     * @notice Attempted deposit on behalf of a user without being approved.
+     */
+    error Cellar__NotApprovedToDepositOnBehalf(address depositor);
+
+    // Shares must be locked for 8 blocks after minting.
+    uint256 public constant MINIMUM_SHARE_LOCK_PERIOD = 8;
+
+    // After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
+    uint256 public shareLockPeriod = 10;
+
+    mapping(address => uint256) public userShareLockStartBlock;
+
+    function setShareLockPeriod(uint256 newLock) external onlyOwner {
+        if (newLock < MINIMUM_SHARE_LOCK_PERIOD) revert Cellar__InvalidShareLockPeriod();
+        shareLockPeriod = newLock;
+    }
+
+    function _checkIfSharesLocked(address owner) internal view {
+        uint256 lockBlock = userShareLockStartBlock[owner];
+        if (lockBlock != 0) {
+            uint256 blockSharesAreUnlocked = lockBlock + shareLockPeriod;
+            if (blockSharesAreUnlocked > block.number)
+                revert Cellar__SharesAreLocked(blockSharesAreUnlocked, block.number);
+        }
+    }
+
+    function _beforeTokenTransfer(
+        address from,
+        address,
+        uint256
+    ) internal view override {
+        _checkIfSharesLocked(from);
+    }
+
+    /**
      * @notice called at the beginning of deposit.
      * @param assets amount of assets deposited by user.
      * @param receiver address receiving the shares.
@@ -806,6 +852,10 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         uint256,
         address receiver
     ) internal override whenNotShutdown {
+        if (msg.sender != receiver) {
+            if (!registry.approvedForDepositOnBehalf(msg.sender))
+                revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
+        }
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) revert Cellar__DepositRestricted(assets, maxAssets);
         feeData.highWatermark += assets;
@@ -818,9 +868,10 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     function afterDeposit(
         uint256 assets,
         uint256,
-        address
+        address receiver
     ) internal override {
         _depositTo(holdingPosition, assets);
+        userShareLockStartBlock[receiver] = block.number;
     }
 
     /**
@@ -831,8 +882,11 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         uint256 assets,
         uint256,
         address,
-        address
+        address owner
     ) internal override {
+        // Make sure users shares are not locked.
+        _checkIfSharesLocked(owner);
+
         // Need to check if assets is greater than the high watermark
         // because if the performanceFee is set to zero, and all cellar shares are redeemed,
         // if the cellar has earned any yield, assets will be greater than the high watermark.
@@ -928,12 +982,10 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         beforeWithdraw(assets, shares, receiver, owner);
 
         if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+            _spendAllowance(owner, msg.sender, shares);
         }
 
-        uint256 totalShares = totalSupply;
+        uint256 totalShares = totalSupply();
 
         _burn(owner, shares);
 
@@ -976,9 +1028,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         _takePerformanceFees(_totalAssets);
 
         if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
-
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+            _spendAllowance(owner, msg.sender, shares);
         }
 
         // Check for rounding error since we round down in previewRedeem.
@@ -986,7 +1036,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         beforeWithdraw(assets, shares, receiver, owner);
 
-        uint256 totalShares = totalSupply;
+        uint256 totalShares = totalSupply();
 
         _burn(owner, shares);
 
@@ -1212,15 +1262,15 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         // Get amount of assets to withdraw with fees accounted for.
         uint256 _totalAssets = totalAssets();
         uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        uint256 assets = _convertToAssets(balanceOf[owner], _totalAssets - feeInAssets);
+        uint256 assets = _convertToAssets(balanceOf(owner), _totalAssets - feeInAssets);
 
         if (withdrawType == WithdrawType.ORDERLY) {
             uint256 withdrawable = totalAssetsWithdrawable();
             return assets <= withdrawable ? assets : withdrawable;
         } else {
             (, , , uint256[] memory positionBalances, uint256[] memory withdrawableBalances) = _getData();
-            uint256 totalShares = totalSupply;
-            uint256 shares = balanceOf[owner];
+            uint256 totalShares = totalSupply();
+            uint256 shares = balanceOf(owner);
             uint256 smallestPercentWithdrawable = 1e18;
             for (uint256 i = 0; i < withdrawableBalances.length; i++) {
                 if (positionBalances[i] == 0) continue;
@@ -1241,7 +1291,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @dev Used to more efficiently convert amount of shares to assets using a stored `totalAssets` value.
      */
     function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply;
+        uint256 totalShares = totalSupply();
 
         assets = totalShares == 0
             ? shares.changeDecimals(18, asset.decimals())
@@ -1252,7 +1302,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @dev Used to more efficiently convert amount of assets to shares using a stored `totalAssets` value.
      */
     function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply;
+        uint256 totalShares = totalSupply();
 
         shares = totalShares == 0
             ? assets.changeDecimals(asset.decimals(), 18)
@@ -1263,7 +1313,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @dev Used to more efficiently simulate minting shares using a stored `totalAssets` value.
      */
     function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply;
+        uint256 totalShares = totalSupply();
 
         assets = totalShares == 0
             ? shares.changeDecimals(18, asset.decimals())
@@ -1274,7 +1324,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @dev Used to more efficiently simulate withdrawing assets using a stored `totalAssets` value.
      */
     function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply;
+        uint256 totalShares = totalSupply();
 
         shares = totalShares == 0
             ? assets.changeDecimals(asset.decimals(), 18)
@@ -1397,7 +1447,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         // Before making any external calls save the current `totalAssets` and `totalSupply`.
         uint256 assets = totalAssets();
-        uint256 totalShares = totalSupply;
+        uint256 totalShares = totalSupply();
 
         // Withdraw from position.
         _withdrawFrom(fromPosition, assetsFrom, address(this));
@@ -1418,7 +1468,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         assets = totalAssets();
         if (assets > maximumAllowedAssets || assets < minimumAllowedAssets)
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
-        if (totalShares != totalSupply) revert Cellar__TotalSharesMustRemainConstant(totalSupply, totalShares);
+        if (totalShares != totalSupply()) revert Cellar__TotalSharesMustRemainConstant(totalSupply(), totalShares);
 
         emit Rebalance(fromPosition, toPosition, assetsFrom, assetsTo);
     }
@@ -1443,7 +1493,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         // Get data efficiently.
         uint256 _totalAssets = totalAssets();
-        uint256 ownedAssets = _convertToAssets(balanceOf[receiver], _totalAssets);
+        uint256 ownedAssets = _convertToAssets(balanceOf(receiver), _totalAssets);
 
         uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(ownedAssets);
         uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(_totalAssets);
@@ -1470,7 +1520,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         // Get data efficiently.
         uint256 _totalAssets = totalAssets();
-        uint256 ownedAssets = _convertToAssets(balanceOf[receiver], _totalAssets);
+        uint256 ownedAssets = _convertToAssets(balanceOf(receiver), _totalAssets);
 
         uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(ownedAssets);
         uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(_totalAssets);
@@ -1542,12 +1592,16 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      */
     function _convertToFees(uint256 feesInShares) internal view returns (uint256 fees) {
         // Saves an SLOAD.
-        uint256 totalShares = totalSupply;
+        uint256 totalShares = totalSupply();
 
         // Get the amount of fees to mint. Without this, the value of fees minted would be slightly
         // diluted because total shares increased while total assets did not. This counteracts that.
-        uint256 denominator = totalShares - feesInShares;
-        fees = denominator > 0 ? feesInShares.mulDivUp(totalShares, denominator) : 0;
+        if (totalShares > feesInShares) {
+            // Denominator is greater than zero
+            uint256 denominator = totalShares - feesInShares;
+            fees = feesInShares.mulDivUp(totalShares, denominator);
+        }
+        // If denominator is less than or equal to zero, `fees` should be zero.
     }
 
     /**
@@ -1571,7 +1625,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         // Since this action mints shares, calculate outstanding performance fees due.
         _takePerformanceFees(_totalAssets);
 
-        uint256 totalFees = balanceOf[address(this)];
+        uint256 totalFees = balanceOf(address(this));
 
         uint256 strategistFeeSharesDue = totalFees.mulWadDown(feeData.strategistPerformanceCut);
 
@@ -1585,16 +1639,9 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         strategistFeeSharesDue += platformFees.mulWadDown(feeData.strategistPlatformCut);
         if (strategistFeeSharesDue > 0) {
             //transfer shares to strategist
+            _transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
+
             totalFees -= strategistFeeSharesDue;
-            balanceOf[address(this)] = totalFees;
-
-            // Cannot overflow because the sum of all user
-            // balances can't exceed the max uint256 value.
-            unchecked {
-                balanceOf[strategistPayoutAddress] += strategistFeeSharesDue;
-            }
-
-            emit Transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
         }
 
         lastAccrual = uint32(block.timestamp);

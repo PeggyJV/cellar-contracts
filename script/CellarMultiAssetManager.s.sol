@@ -9,7 +9,7 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract CellarMultiAssetManagerScript is Script {
     address private uniswapV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;

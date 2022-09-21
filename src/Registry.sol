@@ -31,6 +31,11 @@ contract Registry is Ownable {
     mapping(uint256 => address) public getAddress;
 
     /**
+     * In order for an address to make deposits on behalf of users they must be approved.
+     */
+    mapping(address => bool) public approvedForDepositOnBehalf;
+
+    /**
      * @notice Set the address of the contract at a given id.
      */
     function setAddress(uint256 id, address newAddress) external onlyOwner {
