@@ -54,4 +54,16 @@ contract RegistryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(Registry.Registry__ContractNotRegistered.selector, 999));
         registry.setAddress(999, newAddress);
     }
+
+    function testSetApprovedForDepositOnBehalf() external {
+        address router = vm.addr(333);
+        assertTrue(!registry.approvedForDepositOnBehalf(router), "Router should not be set up as a depositor.");
+        // Give approval.
+        registry.setApprovedForDepositOnBehalf(router, true);
+        assertTrue(registry.approvedForDepositOnBehalf(router), "Router should be set up as a depositor.");
+
+        // Revoke approval.
+        registry.setApprovedForDepositOnBehalf(router, false);
+        assertTrue(!registry.approvedForDepositOnBehalf(router), "Router should not be set up as a depositor.");
+    }
 }

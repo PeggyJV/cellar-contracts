@@ -449,4 +449,68 @@ contract CellarRouterTest is Test {
         cellar.approve(address(router), type(uint256).max);
         router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(0));
     }
+
+    function testDepositOnBehalf(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint112).max);
+
+        // Revoke depositor privilege.
+        registry.setApprovedForDepositOnBehalf(address(router), false);
+
+        // Specify the swap path.
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(USDC);
+
+        // Test deposit and swap.
+        deal(address(DAI), address(this), assets);
+        DAI.approve(address(router), assets);
+        bytes memory swapData = abi.encode(path, assets, 0);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__NotApprovedToDepositOnBehalf.selector, address(router)))
+        );
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), DAI);
+
+        // Grant depositor privilege.
+        registry.setApprovedForDepositOnBehalf(address(router), true);
+
+        // Require shares are held for 8 blocks.
+        cellar.setShareLockPeriod(8);
+
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), DAI);
+        // Receiver should not be able to redeem, withdraw, or transfer shares for locking period.
+        uint256 shares = cellar.balanceOf(address(this));
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.transfer(vm.addr(111), shares);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.redeem(shares, address(this), address(this));
+
+        // Try to withdraw something from the cellar
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.withdraw(1e6, address(this), address(this));
+    }
 }

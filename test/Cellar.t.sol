@@ -4140,7 +4140,231 @@ contract CellarTest is Test {
         }
     }
 
-    // Crows Audit Tests
+    //H-1
+    function testChainlinkPriceFeedUpdateSandwichAttack() external {
+        // Initialize test Cellar.
+
+        // Create new cellar with WETH, and USDC positions.
+        address[] memory positions = new address[](2);
+        positions[0] = address(USDC);
+        positions[1] = address(WETH);
+
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](2);
+        positionTypes[0] = Cellar.PositionType.ERC20;
+        positionTypes[1] = Cellar.PositionType.ERC20;
+
+        MockCellar cellarA = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            address(USDC),
+            Cellar.WithdrawType.ORDERLY,
+            "Asset Management Cellar LP Token",
+            "assetmanagement-CLR",
+            strategist
+        );
+
+        // Set up worst case scenario where
+        // Cellar has all of its funds in mispriced asset(WETH)
+        // Chainlink updates price because of max price deviation(1%)
+
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellarA), assets);
+        cellarA.deposit(assets, address(this));
+        // Manually rebalance funds from USDC to WETH.
+        deal(address(USDC), address(cellarA), 0);
+        deal(address(WETH), address(cellarA), 5e18);
+
+        // Attacker joins cellar right before price update.
+        address attacker = vm.addr(8349058);
+        deal(address(USDC), attacker, assets);
+        vm.startPrank(attacker);
+        USDC.approve(address(cellarA), assets);
+        cellarA.deposit(assets, attacker);
+        vm.stopPrank();
+
+        // Price updates
+        priceRouter.setExchangeRate(USDC, WETH, 0.000495e18);
+        priceRouter.setExchangeRate(WETH, USDC, 2020e6);
+
+        // Confirm attackers shares are worth more.
+        console.log(cellarA.maxWithdraw(attacker));
+
+        vm.startPrank(attacker);
+        uint256 shares = cellarA.balanceOf(attacker);
+        // Attacker tries to redeem their shares.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellarA.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellarA.redeem(shares, attacker, attacker);
+
+        // Attacker tries to transfer shares to another address.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellarA.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellarA.transfer(address(this), shares);
+        vm.stopPrank();
+    }
+
+    function testShareLockUpPeriod() external {
+        // Try to set lock period to illogical value.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidShareLockPeriod.selector)));
+        cellar.setShareLockPeriod(type(uint32).max);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidShareLockPeriod.selector)));
+        cellar.setShareLockPeriod(0);
+
+        // Set lock period to reasonable value.
+        uint256 newLock = 8;
+        cellar.setShareLockPeriod(newLock);
+        assertEq(cellar.shareLockPeriod(), newLock, "Cellar share lock should equal newLock.");
+
+        // Make sure user's who join with mint or deposit can not transfer, withdraw, or redeem for the shareLockPeriod.
+        uint256 assets = 100e6;
+        uint256 shares = 100e18;
+        address depositUser = vm.addr(7777);
+        address mintUser = vm.addr(77777);
+        vm.startPrank(depositUser);
+        deal(address(USDC), depositUser, assets);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, depositUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.withdraw(assets, depositUser, depositUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.redeem(shares, depositUser, depositUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.transfer(address(this), shares);
+        vm.stopPrank();
+
+        vm.startPrank(mintUser);
+        deal(address(USDC), mintUser, assets);
+        USDC.approve(address(cellar), assets);
+        cellar.mint(shares, mintUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.withdraw(assets, mintUser, mintUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.redeem(shares, mintUser, mintUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.transfer(address(this), shares);
+        vm.stopPrank();
+
+        // Advance block number to end of share lock period.
+        vm.roll(block.number + cellar.shareLockPeriod());
+
+        // Users can withdraw.
+        vm.prank(depositUser);
+        cellar.withdraw(assets, depositUser, depositUser);
+
+        // Users can transfer.
+        vm.prank(mintUser);
+        cellar.transfer(depositUser, shares);
+
+        // Users can redeem.
+        vm.prank(depositUser);
+        cellar.redeem(shares, depositUser, depositUser);
+
+        // Check that if a user has waited the lock period but then decides to deposit again, they must wait for the new lock period to end.
+        vm.startPrank(depositUser);
+        deal(address(USDC), depositUser, assets);
+        USDC.approve(address(cellar), 2 * assets);
+        cellar.deposit(assets, depositUser);
+        // Advance block number to end of share lock period.
+        vm.roll(block.number + cellar.shareLockPeriod());
+
+        // If user joins again, they must wait the lock period again, even if withdrawing previous amount.
+        deal(address(USDC), depositUser, assets);
+        cellar.deposit(assets, depositUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.withdraw(assets, depositUser, depositUser);
+        vm.stopPrank();
+    }
+
+    function testDepositOnBehalf() external {
+        address user = vm.addr(1111);
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__NotApprovedToDepositOnBehalf.selector, address(this)))
+        );
+        cellar.deposit(assets, user);
+
+        // Add this address as an approved depositor.
+        registry.setApprovedForDepositOnBehalf(address(this), true);
+        // Deposits are now allowed.
+        cellar.deposit(assets, user);
+    }
+
+    // Crowd Audit Tests
     //M-1 Accepted
     //M-2
     function testCellarDNOSPerformanceFeesWithZeroShares() external {

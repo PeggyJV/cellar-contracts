@@ -772,7 +772,19 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
     // =========================================== CORE LOGIC ===========================================
 
+    /**
+     * @notice Emitted when withdraws are made from a position.
+     * @param position the position assets were withdrawn from
+     * @param amount the amount of assets withdrawn
+     */
     event PulledFromPosition(address indexed position, uint256 amount);
+
+    /**
+     * @notice Emitted when share locking period is changed.
+     * @param oldPeriod the old locking period
+     * @param newPeriod the new locking period
+     */
+    event ShareLockingPeriodChanged(uint256 oldPeriod, uint256 newPeriod);
 
     /**
      * @notice Attempted an action with zero shares.
@@ -801,9 +813,10 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      */
     error Cellar__InvalidShareLockPeriod();
 
-    //TODO
     /**
      * @notice Attempted to burn shares when they are locked.
+     * @param blockSharesAreUnlocked the block number when caller can transfer/redeem shares
+     * @param currentBlock the current block number.
      */
     error Cellar__SharesAreLocked(uint256 blockSharesAreUnlocked, uint256 currentBlock);
 
@@ -812,19 +825,42 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      */
     error Cellar__NotApprovedToDepositOnBehalf(address depositor);
 
-    // Shares must be locked for 8 blocks after minting.
+    /**
+     * @notice Shares must be locked for atleaset 8 blocks after minting.
+     */
     uint256 public constant MINIMUM_SHARE_LOCK_PERIOD = 8;
 
-    // After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
+    /**
+     * @notice Shares can be locked for at most 256 blocks after minting.
+     */
+    uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 256;
+
+    /**
+     * @notice After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
+     */
     uint256 public shareLockPeriod = 10;
 
+    /**
+     * @notice mapping that stores every users last block they minted shares.
+     */
     mapping(address => uint256) public userShareLockStartBlock;
 
+    /**
+     * @notice Allows share lock period to be updated.
+     * @param newLock the new lock period
+     */
     function setShareLockPeriod(uint256 newLock) external onlyOwner {
-        if (newLock < MINIMUM_SHARE_LOCK_PERIOD) revert Cellar__InvalidShareLockPeriod();
+        if (newLock < MINIMUM_SHARE_LOCK_PERIOD || newLock > MAXIMUM_SHARE_LOCK_PERIOD)
+            revert Cellar__InvalidShareLockPeriod();
+        uint256 oldLockingPeriod = shareLockPeriod;
         shareLockPeriod = newLock;
+        emit ShareLockingPeriodChanged(oldLockingPeriod, newLock);
     }
 
+    /**
+     * @notice helper function that checks enough blocks have passed to unlock shares.
+     * @param owner the address of the user to check
+     */
     function _checkIfSharesLocked(address owner) internal view {
         uint256 lockBlock = userShareLockStartBlock[owner];
         if (lockBlock != 0) {
@@ -834,6 +870,10 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
         }
     }
 
+    /**
+     * @notice modifies before transfer hook to check that shares are not locked
+     * @param from the address transferring shares
+     */
     function _beforeTokenTransfer(
         address from,
         address,
