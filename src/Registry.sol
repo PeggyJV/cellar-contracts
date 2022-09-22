@@ -35,6 +35,10 @@ contract Registry is Ownable {
      */
     mapping(address => bool) public approvedForDepositOnBehalf;
 
+    function setApprovedForDepositOnBehalf(address depositor, bool state) external onlyOwner {
+        approvedForDepositOnBehalf[depositor] = state;
+    }
+
     /**
      * @notice Set the address of the contract at a given id.
      */

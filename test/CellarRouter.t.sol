@@ -14,12 +14,13 @@ import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 
-import { Test } from "@forge-std/Test.sol";
+import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 // solhint-disable-next-line max-states-count
 contract CellarRouterTest is Test {
     using Math for uint256;
+    using stdStorage for StdStorage;
 
     MockGravity private gravity;
     Registry private registry;
@@ -54,6 +55,8 @@ contract CellarRouterTest is Test {
 
         router = new CellarRouter(registry);
 
+        registry.setApprovedForDepositOnBehalf(address(router), true);
+
         // Set up exchange rates:
         priceRouter.addAsset(USDC, 0, 0, false, 0);
         priceRouter.addAsset(DAI, 0, 0, false, 0);
@@ -84,6 +87,9 @@ contract CellarRouterTest is Test {
             address(0)
         );
         vm.label(address(cellar), "cellar");
+
+        // Manipulate  test contracts storage so that minimum shareLockPeriod is zero blocks.
+        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
@@ -180,7 +186,7 @@ contract CellarRouterTest is Test {
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
         bytes memory swapData = abi.encode(path, assets, 0);
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert("ERC20: transfer amount exceeds allowance");
         // Specify USDC as assetIn when it should be DAI.
         router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), USDC);
     }
@@ -196,7 +202,7 @@ contract CellarRouterTest is Test {
         // Previously a user sent DAI to the router on accident.
         deal(address(DAI), address(router), assets);
         bytes memory swapData = abi.encode(path, assets, 0);
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert("Dai/insufficient-allowance");
         // Specify 0 for assets. Should revert since swap router is approved to spend 0 tokens from router.
         router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, 0, address(this), DAI);
 

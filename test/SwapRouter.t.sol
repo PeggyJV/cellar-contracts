@@ -92,7 +92,7 @@ abstract contract SwapRouterTest is Test {
 
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert("Dai/insufficient-balance");
         _doSwap(assets * 2);
     }
 
@@ -101,7 +101,7 @@ abstract contract SwapRouterTest is Test {
 
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets / 2);
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert("Dai/insufficient-allowance");
         _doSwap(assets);
     }
 
