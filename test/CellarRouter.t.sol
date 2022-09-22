@@ -111,7 +111,7 @@ contract CellarRouterTest is Test {
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
         bytes memory swapData = abi.encode(path, assets, 0);
-        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), DAI);
+        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
 
         // Assets received by the cellar will be equal to WETH currently in forked cellar because no
         // other deposits have been made.
@@ -150,7 +150,7 @@ contract CellarRouterTest is Test {
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
         bytes memory swapData = abi.encode(path, poolFees, assets, 0);
-        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV3, swapData, assets, address(this), DAI);
+        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV3, swapData, assets, DAI);
 
         // Assets received by the cellar will be equal to WETH currently in forked cellar because no
         // other deposits have been made.
@@ -188,7 +188,7 @@ contract CellarRouterTest is Test {
         bytes memory swapData = abi.encode(path, assets, 0);
         vm.expectRevert("ERC20: transfer amount exceeds allowance");
         // Specify USDC as assetIn when it should be DAI.
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), USDC);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, USDC);
     }
 
     function testDepositWithAssetAmountMisMatch() external {
@@ -204,7 +204,7 @@ contract CellarRouterTest is Test {
         bytes memory swapData = abi.encode(path, assets, 0);
         vm.expectRevert("Dai/insufficient-allowance");
         // Specify 0 for assets. Should revert since swap router is approved to spend 0 tokens from router.
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, 0, address(this), DAI);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, 0, DAI);
 
         // Reset routers DAI balance.
         deal(address(DAI), address(router), 0);
@@ -215,7 +215,7 @@ contract CellarRouterTest is Test {
 
         // User calls deposit and swap but specifies a lower amount in swapData then actual.
         swapData = abi.encode(path, assets / 2, 0);
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), DAI);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
 
         assertEq(DAI.balanceOf(address(this)), assets / 2, "Caller should have been sent back their remaining assets.");
     }
@@ -468,7 +468,7 @@ contract CellarRouterTest is Test {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Cellar.Cellar__NotApprovedToDepositOnBehalf.selector, address(router)))
         );
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), DAI);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
 
         // Grant depositor privilege.
         registry.setApprovedForDepositOnBehalf(address(router), true);
@@ -476,7 +476,7 @@ contract CellarRouterTest is Test {
         // Require shares are held for 8 blocks.
         cellar.setShareLockPeriod(8);
 
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, address(this), DAI);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
         // Receiver should not be able to redeem, withdraw, or transfer shares for locking period.
         uint256 shares = cellar.balanceOf(address(this));
         vm.expectRevert(

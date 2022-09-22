@@ -11,7 +11,6 @@ interface ICellarRouter {
     function depositWithPermit(
         Cellar cellar,
         uint256 assets,
-        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares);
@@ -21,7 +20,6 @@ interface ICellarRouter {
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
         uint256 assets,
-        address receiver,
         ERC20 assetIn
     ) external returns (uint256 shares);
 
@@ -31,7 +29,6 @@ interface ICellarRouter {
         bytes calldata swapData,
         uint256 assets,
         ERC20 assetIn,
-        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares);

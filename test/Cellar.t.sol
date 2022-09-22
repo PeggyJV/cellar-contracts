@@ -13,7 +13,7 @@ import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 
-import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
+import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract CellarTest is Test {
@@ -4190,7 +4190,7 @@ contract CellarTest is Test {
         priceRouter.setExchangeRate(WETH, USDC, 2020e6);
 
         // Confirm attackers shares are worth more.
-        console.log(cellarA.maxWithdraw(attacker));
+        assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more.");
 
         vm.startPrank(attacker);
         uint256 shares = cellarA.balanceOf(attacker);
