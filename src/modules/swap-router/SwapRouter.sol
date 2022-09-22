@@ -3,10 +3,9 @@ pragma solidity 0.8.16;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Multicall } from "src/base/Multicall.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title Sommelier Swap Router

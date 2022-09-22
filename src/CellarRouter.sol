@@ -3,7 +3,6 @@ pragma solidity 0.8.16;
 
 import { ERC4626, ERC20Permit, SafeERC20 } from "src/base/ERC4626.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";

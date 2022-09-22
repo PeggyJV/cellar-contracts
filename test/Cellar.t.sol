@@ -5,7 +5,7 @@ import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { MockExchange } from "src/mocks/MockExchange.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
@@ -17,7 +17,7 @@ import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test
 import { Math } from "src/utils/Math.sol";
 
 contract CellarTest is Test {
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
