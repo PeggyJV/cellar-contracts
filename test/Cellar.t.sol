@@ -1700,8 +1700,35 @@ contract CellarTest is Test {
     }
 
     function testRebalanceWithSharesMinted() external {
-        //TODO
-        // Can't use reentry, so this is tough to test, thinking about making a new cellar, that on withdraw will mint shares of the calling cellar?
+        // False specifies that this cellar tries to change the callers totalSupply on deposit calls.
+        ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", false);
+
+        cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626);
+        cellar.pushPosition(address(maliciousCellar));
+
+        uint256 assets = 10000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(maliciousCellar), assets);
+
+        cellar.deposit(assets, address(this));
+
+        // Try to rebalance into malicous cellar that will change this cellars totalSupply.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__TotalSharesMustRemainConstant.selector,
+                    cellar.totalSupply() + 1,
+                    cellar.totalSupply()
+                )
+            )
+        );
+        cellar.rebalance(
+            address(USDC),
+            address(maliciousCellar),
+            assets,
+            SwapRouter.Exchange.UNIV2, // Using a mock exchange to swap, this param does not matter.
+            abi.encode(0)
+        );
     }
 
     function testMaliciousRebalanceIntoUntrackedPosition() external {
@@ -3845,7 +3872,8 @@ contract CellarTest is Test {
 
     // M5
     function testReentrancyAttack() external {
-        ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC");
+        // True means this cellar tries to re-enter caller on deposit calls.
+        ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", true);
 
         cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626);
         cellar.pushPosition(address(maliciousCellar));

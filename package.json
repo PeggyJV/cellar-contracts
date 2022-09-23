@@ -17,7 +17,8 @@
     "clear": "npm run clean && rm -rf node_modules cache_hardhat",
     "reinstall": "npm run clear && npm run setup",
     "forkTest": "source .env && forge test -vv --fork-url $MAINNET_RPC_URL --fork-block-number $BLOCK_NUMBER",
-    "forkCoverage": "source .env && forge coverage --fork-url $MAINNET_RPC_URL --fork-block-number $BLOCK_NUMBER --report lcov"
+    "forkCoverage": "source .env && forge coverage --fork-url $MAINNET_RPC_URL --fork-block-number $BLOCK_NUMBER",
+    "forkCoverageLCOV": "source .env && forge coverage --fork-url $MAINNET_RPC_URL --fork-block-number $BLOCK_NUMBER --report lcov"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.6",
