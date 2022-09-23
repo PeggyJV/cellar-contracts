@@ -988,6 +988,16 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     }
 
     /**
+     * @notice helper function that checks if msg.sender has the allowance to spend owner's shares.
+     * @dev reverts if msg.sender != owner, and msg.sender does not have enough allowance.
+     */
+    function _checkAllowance(address owner, uint256 shares) internal {
+        if (msg.sender != owner) {
+            _spendAllowance(owner, msg.sender, shares);
+        }
+    }
+
+    /**
      * @notice Withdraw assets from the cellar by redeeming shares.
      * @dev Unlike conventional ERC4626 contracts, this may not always return one asset to the receiver.
      *      Since there are no swaps involved in this function, the receiver may receive multiple
@@ -1021,9 +1031,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         beforeWithdraw(assets, shares, receiver, owner);
 
-        if (msg.sender != owner) {
-            _spendAllowance(owner, msg.sender, shares);
-        }
+        _checkAllowance(owner, shares);
 
         uint256 totalShares = totalSupply();
 
@@ -1067,9 +1075,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
 
         _takePerformanceFees(_totalAssets);
 
-        if (msg.sender != owner) {
-            _spendAllowance(owner, msg.sender, shares);
-        }
+        _checkAllowance(owner, shares);
 
         // Check for rounding error since we round down in previewRedeem.
         if ((assets = _convertToAssets(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();

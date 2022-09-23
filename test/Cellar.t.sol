@@ -610,6 +610,21 @@ contract CellarTest is Test {
 
     // ========================================== REBALANCE TEST ==========================================
 
+    function testSettingBadRebalanceDeviation() external {
+        // Max rebalance deviation value is 10%.
+        uint256 deviation = 0.2e18;
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__InvalidRebalanceDeviation.selector,
+                    deviation,
+                    cellar.MAX_REBALANCE_DEVIATION()
+                )
+            )
+        );
+        cellar.setRebalanceDeviation(deviation);
+    }
+
     function testRebalanceBetweenCellarOrERC4626Positions(uint256 assets) external {
         assets = bound(assets, 1e6, type(uint72).max);
 
@@ -727,6 +742,9 @@ contract CellarTest is Test {
     // ======================================== EMERGENCY TESTS ========================================
 
     function testShutdown() external {
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractNotShutdown.selector)));
+        cellar.liftShutdown();
+
         cellar.initiateShutdown();
 
         assertTrue(cellar.isShutdown(), "Should have initiated shutdown.");
@@ -1681,6 +1699,11 @@ contract CellarTest is Test {
         );
     }
 
+    function testRebalanceWithSharesMinted() external {
+        //TODO
+        // Can't use reentry, so this is tough to test, thinking about making a new cellar, that on withdraw will mint shares of the calling cellar?
+    }
+
     function testMaliciousRebalanceIntoUntrackedPosition() external {
         // Create a new Cellar with two positions USDC, and WETH.
         // Setup Cellar:
@@ -2142,6 +2165,62 @@ contract CellarTest is Test {
     }
 
     // ======================================== INTEGRATION TESTS ========================================
+
+    function testCellarWithCellarPositions() external {
+        // Cellar A's asset is USDC, holding position is Cellar B shares, whose holding asset is USDC.
+        // Initialize test Cellars.
+        MockCellar cellarA;
+        MockCellar cellarB;
+
+        address[] memory positions = new address[](1);
+        positions[0] = address(USDC);
+
+        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](1);
+        positionTypes[0] = Cellar.PositionType.ERC20;
+
+        cellarB = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            address(USDC),
+            Cellar.WithdrawType.ORDERLY,
+            "Ultimate Stablecoin cellar",
+            "USC-CLR",
+            strategist
+        );
+
+        stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
+
+        positions[0] = address(cellarB);
+
+        positionTypes[0] = Cellar.PositionType.Cellar;
+
+        cellarA = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            positionTypes,
+            address(cellarB),
+            Cellar.WithdrawType.ORDERLY,
+            "Stablecoin cellar",
+            "SC-CLR",
+            strategist
+        );
+
+        stdstore.target(address(cellarA)).sig(cellarA.shareLockPeriod.selector).checked_write(uint256(0));
+
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellarA), assets);
+        cellarA.deposit(assets, address(this));
+
+        uint256 withdrawAmount = cellarA.maxWithdraw(address(this));
+        assertEq(assets, withdrawAmount, "Assets should not have changed.");
+        assertEq(cellarA.totalAssets(), cellarB.totalAssets(), "Total assets should be the same.");
+
+        cellarA.withdraw(withdrawAmount, address(this), address(this));
+    }
 
     uint256 public saltIndex;
 
