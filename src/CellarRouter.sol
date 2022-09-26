@@ -221,13 +221,14 @@ contract CellarRouter is ICellarRouter {
         SwapRouter.Exchange[] calldata exchanges,
         bytes[] calldata swapDatas,
         uint256 assets,
+        uint256 sharesIn,
         uint256 deadline,
         bytes memory signature,
         address receiver
     ) external returns (uint256 shares) {
         // Approve for router to burn user shares via permit.
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
-        cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
+        cellar.permit(msg.sender, address(this), sharesIn, deadline, v, r, s);
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
         shares = withdrawAndSwap(cellar, exchanges, swapDatas, assets, receiver);
