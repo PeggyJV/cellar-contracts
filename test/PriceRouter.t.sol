@@ -98,6 +98,7 @@ contract PriceRouterTest is Test {
         assertEq(uint256(heartbeat), uint256(priceRouter.DEFAULT_HEART_BEAT()));
         assertEq(heartbeat, priceRouter.DEFAULT_HEART_BEAT());
         assertTrue(isSupported);
+        assertTrue(priceRouter.isSupported(USDT));
     }
 
     function testAddAssetWithInvalidMinPrice() external {
@@ -663,16 +664,22 @@ contract PriceRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
+        // Check if `getValues` reverts if assets array and amount array lengths differ
+        ERC20[] memory baseAssets = new ERC20[](3);
+        uint256[] memory amounts = new uint256[](2);
+        vm.expectRevert(PriceRouter.PriceRouter__LengthMismatch.selector);
+        priceRouter.getValues(baseAssets, amounts, USDC);
+
         assets0 = bound(assets0, 1e6, type(uint72).max);
         assets1 = bound(assets1, 1e18, type(uint112).max);
         assets2 = bound(assets2, 1e8, type(uint48).max);
 
-        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets = new ERC20[](3);
         baseAssets[0] = USDC;
         baseAssets[1] = BOND;
         baseAssets[2] = WBTC;
 
-        uint256[] memory amounts = new uint256[](3);
+        amounts = new uint256[](3);
         amounts[0] = assets0;
         amounts[1] = assets1;
         amounts[2] = assets2;

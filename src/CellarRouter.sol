@@ -274,26 +274,6 @@ contract CellarRouter is ICellarRouter {
     }
 
     /**
-     * @notice Used to determine the amounts of assets Router had using current balances and amountsReceived.
-     * @param assets array of ERC20 tokens to query the balances of
-     * @param amountsReceived the amount of each assets received
-     * @return balancesBefore array of balances before amounts were received
-     */
-    function _getBalancesBefore(ERC20[] memory assets, uint256[] memory amountsReceived)
-        internal
-        view
-        returns (uint256[] memory balancesBefore)
-    {
-        balancesBefore = new uint256[](assets.length);
-
-        for (uint256 i; i < assets.length; i++) {
-            ERC20 asset = assets[i];
-
-            balancesBefore[i] = asset.balanceOf(address(this)) - amountsReceived[i];
-        }
-    }
-
-    /**
      * @notice Find what assets a cellar's positions uses.
      * @param cellar address of the cellar
      * @return assets array of assets that make up cellar's positions

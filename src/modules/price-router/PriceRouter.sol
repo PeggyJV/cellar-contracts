@@ -23,7 +23,6 @@ contract PriceRouter is Ownable {
     using Math for uint256;
 
     event AddAsset(address indexed asset);
-    event RemoveAsset(address indexed asset);
 
     // =========================================== ASSETS CONFIG ===========================================
 

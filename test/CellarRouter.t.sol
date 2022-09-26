@@ -13,6 +13,7 @@ import { MockCellar, ERC4626 } from "src/mocks/MockCellar.sol";
 import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
+import { SigUtils } from "src/utils/SigUtils.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -98,6 +99,36 @@ contract CellarRouterTest is Test {
     }
 
     // ======================================= DEPOSIT TESTS =======================================
+
+    /*function testDepositWithPermit() external {
+        MockERC20 usdcPermit = MockERC20(address(USDC));
+        SigUtils sigUtils = new SigUtils(usdcPermit.DOMAIN_SEPARATOR());
+        uint256 ownerPrivateKey = 0xA11CE;
+        uint256 spenderPrivateKey = 0xB0B;
+        address pOwner = vm.addr(ownerPrivateKey);
+        address spender = vm.addr(spenderPrivateKey);
+        uint256 assets = 1e6;
+        deal(address(USDC), pOwner, assets);
+
+        SigUtils.Permit memory permit = SigUtils.Permit({
+            owner: pOwner,
+            spender: spender,
+            value: assets,
+            nonce: 0,
+            deadline: 1 days
+        });
+
+        bytes32 digest = sigUtils.getTypedDataHash(permit);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+
+        bytes memory sig = abi.encode(r, s, v);
+        //Try encodePacked
+        // bytes.concat
+
+        // Deposit into cellar with permit.
+        router.depositWithPermit(cellar, assets, 1 days, sig);
+    }*/
 
     function testDepositAndSwapUsingUniswapV2(uint256 assets) external {
         assets = bound(assets, 1e18, type(uint112).max);

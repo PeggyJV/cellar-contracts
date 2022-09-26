@@ -109,6 +109,38 @@ abstract contract SwapRouterTest is Test {
         vm.expectRevert(SwapRouter.SwapRouter__SwapReverted.selector);
         swapRouter.swap(SwapRouter.Exchange.UNIV2, abi.encode(0), receiver, ERC20(address(0)), ERC20(address(0)));
     }
+
+    function testInvalidAssetIn() external {
+        uint256 assets = 100e18;
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(WETH);
+
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3%
+
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__AssetInMisMatch.selector, path[0], address(USDC)))
+        );
+        swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, USDC, WETH);
+    }
+
+    function testInvalidAssetOut() external {
+        uint256 assets = 100e18;
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(WETH);
+
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3%
+
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__AssetOutMisMatch.selector, path[1], address(USDC)))
+        );
+        swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, USDC);
+    }
 }
 
 contract UniswapV2SwapRouterTest is SwapRouterTest {

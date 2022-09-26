@@ -1662,7 +1662,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @dev Fees are accrued as shares and redeemed upon transfer.
      * @dev assumes cellar's accounting asset is able to be transferred and sent to Cosmos
      */
-    function sendFees() external {
+    function sendFees() external nonReentrant {
         address strategistPayoutAddress = feeData.strategistPayoutAddress;
         if (strategistPayoutAddress == address(0)) revert Cellar__PayoutNotSet();
 
