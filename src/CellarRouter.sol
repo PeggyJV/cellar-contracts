@@ -210,7 +210,7 @@ contract CellarRouter is ICellarRouter {
      *                  `SwapRouter.sol` for list of available options
      * @param swapDatas bytes variable containing all the data needed to make a swap, refer to
      *                  `SwapRouter.sol` to see what parameters need to be encoded for each exchange
-     * @param assets amount of assets to withdraw
+     * @param sharesToRedeem amount of shares to withdraw
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
      * @param receiver the address swapped tokens are sent to
@@ -220,15 +220,16 @@ contract CellarRouter is ICellarRouter {
         Cellar cellar,
         SwapRouter.Exchange[] calldata exchanges,
         bytes[] calldata swapDatas,
-        uint256 assets,
-        uint256 sharesIn,
+        uint256 sharesToRedeem,
         uint256 deadline,
         bytes memory signature,
         address receiver
     ) external returns (uint256 shares) {
         // Approve for router to burn user shares via permit.
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
-        cellar.permit(msg.sender, address(this), sharesIn, deadline, v, r, s);
+        cellar.permit(msg.sender, address(this), sharesToRedeem, deadline, v, r, s);
+
+        uint256 assets = cellar.previewRedeem(sharesToRedeem);
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
         shares = withdrawAndSwap(cellar, exchanges, swapDatas, assets, receiver);

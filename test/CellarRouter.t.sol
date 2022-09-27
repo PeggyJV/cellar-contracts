@@ -126,6 +126,10 @@ contract CellarRouterTest is Test {
         vm.prank(pOwner);
         uint256 shares = router.depositWithPermit(cellar, assets, 1000000 days, sig);
         assertEq(shares, assets.changeDecimals(6, 18), "pOwner should have received their shares.");
+
+        // Check that permit sigs with incorrect length revert.
+        vm.expectRevert(abi.encodeWithSelector(CellarRouter.CellarRouter__InvalidSignature.selector, 32, 65));
+        router.depositWithPermit(cellar, assets, 1000000 days, abi.encode(0));
     }
 
     function testDepositAndSwapWithPermit(uint256 assets) external {
@@ -282,6 +286,40 @@ contract CellarRouterTest is Test {
         assertEq(DAI.balanceOf(address(this)), 0, "Should have deposited assets from user.");
     }
 
+    function testDepositAndSwapWithWrongSwapAmount(uint256 assets) external {
+        assets = bound(assets, 1e18, type(uint112).max);
+
+        // Specify the swap path.
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(USDC);
+
+        // Test deposit and swap.
+        deal(address(DAI), address(this), assets);
+        DAI.approve(address(router), assets);
+        // Encode swap data to only use half the assets.
+        bytes memory swapData = abi.encode(path, assets / 2, 0);
+        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
+
+        // Assets received by the cellar will be equal to WETH currently in forked cellar because no
+        // other deposits have been made.
+        uint256 assetsReceived = USDC.balanceOf(address(cellar));
+
+        // Run test.
+        assertEq(shares, assetsReceived.changeDecimals(6, 18), "Should have 1:1 exchange rate for initial deposit.");
+        assertEq(cellar.previewWithdraw(assetsReceived), shares, "Withdrawing assets should burn shares given.");
+        assertEq(cellar.previewDeposit(assetsReceived), shares, "Depositing assets should mint shares given.");
+        assertEq(cellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
+        assertEq(cellar.totalAssets(), assetsReceived, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.balanceOf(address(this)), shares, "Should have updated user's share balance.");
+        assertEq(
+            cellar.convertToAssets(cellar.balanceOf(address(this))),
+            assetsReceived,
+            "Should return all user's assets."
+        );
+        assertApproxEqAbs(DAI.balanceOf(address(this)), assets / 2, 1, "Should have received extra DAI from router.");
+    }
+
     function testDepositWithAssetInDifferentFromPath() external {
         uint256 assets = 100e18;
 
@@ -398,12 +436,14 @@ contract CellarRouterTest is Test {
         address pOwner = vm.addr(ownerPrivateKey);
 
         // Deposit initial funds into cellar.
-        vm.startPrank(pOwner);
-        uint256 assets = 10_000e6;
-        deal(address(USDC), pOwner, assets);
-        USDC.approve(address(cellar), assets);
-        cellar.deposit(assets, pOwner);
-        vm.stopPrank();
+        {
+            vm.startPrank(pOwner);
+            uint256 assets = 10_000e6;
+            deal(address(USDC), pOwner, assets);
+            USDC.approve(address(cellar), assets);
+            cellar.deposit(assets, pOwner);
+            vm.stopPrank();
+        }
 
         // Distribute funds into WETH and WBTC.
         deal(address(WETH), address(cellar), 3e18);
@@ -441,12 +481,13 @@ contract CellarRouterTest is Test {
 
         // Create permit sig.
         bytes memory sig;
+        uint256 shares = cellar.balanceOf(pOwner);
         {
             SigUtils sigUtils = new SigUtils(cellar.DOMAIN_SEPARATOR());
             SigUtils.Permit memory permit = SigUtils.Permit({
                 owner: pOwner,
                 spender: address(router),
-                value: cellar.balanceOf(pOwner),
+                value: shares,
                 nonce: 0,
                 deadline: 1000000 days
             });
@@ -457,17 +498,8 @@ contract CellarRouterTest is Test {
             sig = abi.encodePacked(r, s, v);
         }
         vm.prank(pOwner);
-        router.withdrawAndSwapWithPermit(
-            cellar,
-            exchanges,
-            swapData,
-            cellar.totalAssets(),
-            cellar.balanceOf(pOwner),
-            1000000 days,
-            sig,
-            pOwner
-        );
-        /*
+        shares = router.withdrawAndSwapWithPermit(cellar, exchanges, swapData, shares, 1000000 days, sig, pOwner);
+
         assertEq(WETH.balanceOf(pOwner), 0, "Should receive no WETH.");
         assertGt(WBTC.balanceOf(pOwner), 0, "Should receive WBTC");
         assertGt(USDC.balanceOf(pOwner), 0, "Should receive USDC");
@@ -475,7 +507,39 @@ contract CellarRouterTest is Test {
         assertEq(WBTC.balanceOf(address(router)), 0, "Router Should receive no WBTC");
         assertEq(USDC.balanceOf(address(router)), 0, "Router Should receive no USDC");
         assertEq(WETH.allowance(address(router), address(swapRouter)), 0, "Should have no WETH allowances.");
-        assertEq(WBTC.allowance(address(router), address(swapRouter)), 0, "Should have no WBTC allowances.");*/
+        assertEq(WBTC.allowance(address(router), address(swapRouter)), 0, "Should have no WBTC allowances.");
+    }
+
+    function testWithdrawWithNoSwaps() external {
+        // Set performance fees to zero, so test is not dependent to price movements.
+        cellar.setPerformanceFee(0);
+
+        // Deposit initial funds into cellar.
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+
+        // Distribute funds into WETH and WBTC.
+        deal(address(WETH), address(cellar), 3e18);
+        deal(address(WBTC), address(cellar), 0.3e8);
+        deal(address(USDC), address(cellar), 0);
+
+        SwapRouter.Exchange[] memory exchanges;
+
+        bytes[] memory swapData;
+
+        cellar.approve(address(router), type(uint256).max);
+        router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(this));
+
+        assertGt(WETH.balanceOf(address(this)), 0, "Should receive WETH.");
+        assertGt(WBTC.balanceOf(address(this)), 0, "Should receive WBTC");
+        assertEq(USDC.balanceOf(address(this)), 0, "Should receive no USDC");
+        assertEq(WETH.balanceOf(address(router)), 0, "Router Should receive no WETH.");
+        assertEq(WBTC.balanceOf(address(router)), 0, "Router Should receive no WBTC");
+        assertEq(USDC.balanceOf(address(router)), 0, "Router Should receive no USDC");
+        assertEq(WETH.allowance(address(router), address(swapRouter)), 0, "Should have no WETH allowances.");
+        assertEq(WBTC.allowance(address(router), address(swapRouter)), 0, "Should have no WBTC allowances.");
     }
 
     function testFailWithdrawWithInvalidSwapPath() external {
