@@ -49,7 +49,7 @@ contract VestingSimple {
     /// @notice The total amount of deposits to the contract.
     uint256 public totalDeposits;
     /// @notice The total amount of deposits to the contract that haven't vested
-    ///         through withdrawals. Note that based on point-of-time calculatinos,
+    ///         through withdrawals. Note that based on point-of-time calculations,
     ///         some of these tokens may be available for withdrawal.
     uint256 public unvestedDeposits;
 
