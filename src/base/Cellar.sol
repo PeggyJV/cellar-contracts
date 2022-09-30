@@ -5,7 +5,7 @@ import { ERC4626, SafeERC20 } from "./ERC4626.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Multicall } from "./Multicall.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { SafeCast } from "src/utils/SafeCast.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -833,7 +833,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     /**
      * @notice Shares can be locked for at most 256 blocks after minting.
      */
-    uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 256;
+    uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 7200;
 
     /**
      * @notice After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
@@ -1305,6 +1305,12 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @return the max amount of assets withdrawable by `owner`.
      */
     function maxWithdraw(address owner) public view override returns (uint256) {
+        // Check if owner shares are locked, return 0 if so.
+        uint256 lockBlock = userShareLockStartBlock[owner];
+        if (lockBlock != 0) {
+            uint256 blockSharesAreUnlocked = lockBlock + shareLockPeriod;
+            if (blockSharesAreUnlocked > block.number) return 0;
+        }
         // Get amount of assets to withdraw with fees accounted for.
         uint256 _totalAssets = totalAssets();
         uint256 feeInAssets = _previewPerformanceFees(_totalAssets);

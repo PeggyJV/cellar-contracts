@@ -4296,8 +4296,8 @@ contract CellarTest is Test {
         priceRouter.setExchangeRate(USDC, WETH, 0.000495e18);
         priceRouter.setExchangeRate(WETH, USDC, 2020e6);
 
-        // Confirm attackers shares are worth more.
-        assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more.");
+        // Confirm attackers maxWithdraw is zero while shares are locked.
+        assertEq(cellarA.maxWithdraw(attacker), 0, "Attackers maxWithdraw should be zero while shares are locked.");
 
         vm.startPrank(attacker);
         uint256 shares = cellarA.balanceOf(attacker);
@@ -4325,6 +4325,13 @@ contract CellarTest is Test {
         );
         cellarA.transfer(address(this), shares);
         vm.stopPrank();
+
+        vm.roll(block.number + 10);
+
+        // Confirm attackers shares are worth more once shares are unlocked.
+        assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more than deposit.");
+
+        // Note the attacker was able to arbitrage the price feed update, but must wait the share lock period in order to capture profit.
     }
 
     function testShareLockUpPeriod() external {
@@ -4496,4 +4503,6 @@ contract CellarTest is Test {
             "User should be able to withdraw their assets and the attackers(minus performance fees)."
         );
     }
+
+    //TODO add test that sees if maxWithdraw returns 0 when in the shrae lock period
 }
