@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
@@ -92,7 +92,7 @@ abstract contract SwapRouterTest is Test {
 
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert("Dai/insufficient-balance");
         _doSwap(assets * 2);
     }
 
@@ -101,13 +101,45 @@ abstract contract SwapRouterTest is Test {
 
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets / 2);
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert("Dai/insufficient-allowance");
         _doSwap(assets);
     }
 
     function testInvalidSwapData() external {
         vm.expectRevert(SwapRouter.SwapRouter__SwapReverted.selector);
         swapRouter.swap(SwapRouter.Exchange.UNIV2, abi.encode(0), receiver, ERC20(address(0)), ERC20(address(0)));
+    }
+
+    function testInvalidAssetIn() external {
+        uint256 assets = 100e18;
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(WETH);
+
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3%
+
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__AssetInMisMatch.selector, path[0], address(USDC)))
+        );
+        swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, USDC, WETH);
+    }
+
+    function testInvalidAssetOut() external {
+        uint256 assets = 100e18;
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(WETH);
+
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3%
+
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__AssetOutMisMatch.selector, path[1], address(USDC)))
+        );
+        swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, USDC);
     }
 }
 

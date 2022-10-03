@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 
@@ -11,7 +11,6 @@ interface ICellarRouter {
     function depositWithPermit(
         Cellar cellar,
         uint256 assets,
-        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares);
@@ -21,7 +20,6 @@ interface ICellarRouter {
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
         uint256 assets,
-        address receiver,
         ERC20 assetIn
     ) external returns (uint256 shares);
 
@@ -31,7 +29,6 @@ interface ICellarRouter {
         bytes calldata swapData,
         uint256 assets,
         ERC20 assetIn,
-        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares);
@@ -48,7 +45,7 @@ interface ICellarRouter {
         Cellar cellar,
         SwapRouter.Exchange[] calldata exchanges,
         bytes[] calldata swapDatas,
-        uint256 assets,
+        uint256 sharesToRedeem,
         uint256 deadline,
         bytes memory signature,
         address receiver

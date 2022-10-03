@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { FeedRegistryInterface } from "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import { AggregatorV2V3Interface } from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
@@ -18,12 +18,11 @@ import { Math } from "src/utils/Math.sol";
  * @author crispymangoes, Brian Le
  */
 contract PriceRouter is Ownable {
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for ERC20;
     using SafeCast for int256;
     using Math for uint256;
 
     event AddAsset(address indexed asset);
-    event RemoveAsset(address indexed asset);
 
     // =========================================== ASSETS CONFIG ===========================================
 
@@ -140,6 +139,10 @@ contract PriceRouter is Ownable {
         });
 
         emit AddAsset(address(asset));
+    }
+
+    function isSupported(ERC20 asset) external view returns (bool) {
+        return getAssetConfig[asset].isSupported;
     }
 
     // ======================================= PRICING OPERATIONS =======================================
@@ -284,7 +287,7 @@ contract PriceRouter is Ownable {
         ERC20 quoteAsset,
         uint8 quoteAssetDecimals
     ) internal view returns (uint256 exchangeRate) {
-        exchangeRate = _getValueInUSD(baseAsset).mulDivDown(10**quoteAssetDecimals, _getValueInUSD(quoteAsset));
+        exchangeRate = getValueInUSD(baseAsset).mulDivDown(10**quoteAssetDecimals, getValueInUSD(quoteAsset));
     }
 
     /**
@@ -317,18 +320,6 @@ contract PriceRouter is Ownable {
      */
     error PriceRouter__StalePrice(address asset, uint256 timeSinceLastUpdate, uint256 heartbeat);
 
-    /**
-     * @notice Gets the valuation of some asset in USD
-     * @dev USD valuation has 8 decimals
-     * @param asset the asset to get the value of in USD
-     * @return value the value of asset in USD
-     */
-    function _getValueInUSD(ERC20 asset) internal view returns (uint256 value) {
-        if (!getAssetConfig[asset].isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
-
-        value = getValueInUSD(asset);
-    }
-
     // =========================================== CHAINLINK PRICING FUNCTIONS ===========================================\
     /**
      * @notice Feed Registry contract used to get chainlink data feeds, use getFeed!!
@@ -350,6 +341,9 @@ contract PriceRouter is Ownable {
      */
     function getValueInUSD(ERC20 asset) public view returns (uint256 price) {
         AssetConfig memory config = getAssetConfig[asset];
+
+        // Make sure asset is supported.
+        if (!config.isSupported) revert PriceRouter__UnsupportedAsset(address(asset));
 
         // Remap asset if need be.
         asset = _remap(asset);

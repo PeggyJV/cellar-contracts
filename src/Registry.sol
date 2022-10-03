@@ -21,6 +21,13 @@ contract Registry is Ownable {
     error Registry__ContractNotRegistered(uint256 id);
 
     /**
+     * @notice Emitted when depositor privilege changes.
+     * @param depositor depositor address
+     * @param state the new state of the depositor privilege
+     */
+    event DepositorOnBehalfChanged(address depositor, bool state);
+
+    /**
      * @notice The unique ID that the next registered contract will have.
      */
     uint256 public nextId;
@@ -29,6 +36,19 @@ contract Registry is Ownable {
      * @notice Get the address associated with an id.
      */
     mapping(uint256 => address) public getAddress;
+
+    /**
+     * @notice In order for an address to make deposits on behalf of users they must be approved.
+     */
+    mapping(address => bool) public approvedForDepositOnBehalf;
+
+    /**
+     * @notice toggles a depositors  ability to deposit into cellars on behalf of users.
+     */
+    function setApprovedForDepositOnBehalf(address depositor, bool state) external onlyOwner {
+        approvedForDepositOnBehalf[depositor] = state;
+        emit DepositorOnBehalfChanged(depositor, state);
+    }
 
     /**
      * @notice Set the address of the contract at a given id.
