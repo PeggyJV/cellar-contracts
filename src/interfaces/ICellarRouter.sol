@@ -45,7 +45,7 @@ interface ICellarRouter {
         Cellar cellar,
         SwapRouter.Exchange[] calldata exchanges,
         bytes[] calldata swapDatas,
-        uint256 assets,
+        uint256 sharesToRedeem,
         uint256 deadline,
         bytes memory signature,
         address receiver
