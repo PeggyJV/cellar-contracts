@@ -3363,6 +3363,4 @@ contract CellarTest is Test {
             "User should be able to withdraw their assets and the attackers(minus performance fees)."
         );
     }
-
-    //TODO add test that sees if maxWithdraw returns 0 when in the shrae lock period
 }
