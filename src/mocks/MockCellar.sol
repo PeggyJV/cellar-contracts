@@ -2,11 +2,12 @@
 pragma solidity 0.8.16;
 
 import { Cellar, Registry, PriceRouter, ERC4626, ERC20, SafeCast } from "src/base/Cellar.sol";
-import { Test, console } from "@forge-std/Test.sol";
+import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 
 contract MockCellar is Cellar, Test {
     using SafeCast for uint256;
     using SafeCast for int256;
+    using stdStorage for StdStorage;
 
     constructor(
         Registry _registry,
@@ -45,7 +46,8 @@ contract MockCellar is Cellar, Test {
     function depositIntoPosition(address position, uint256 amount) external returns (uint256 shares) {
         shares = _depositIntoPosition(position, amount);
 
-        totalSupply += shares;
+        // Increase totalSupply by shares amount.
+        stdstore.target(address(this)).sig(this.totalSupply.selector).checked_write(totalSupply() + shares);
     }
 
     function _depositIntoPosition(address position, uint256 amount) internal returns (uint256 shares) {
@@ -68,9 +70,10 @@ contract MockCellar is Cellar, Test {
             uint256 _totalAssets,
             address[] memory _positions,
             ERC20[] memory positionAssets,
-            uint256[] memory positionBalances
+            uint256[] memory positionBalances,
+            uint256[] memory withdrawableBalances
         )
     {
-        (_totalAssets, _positions, positionAssets, positionBalances) = _getData();
+        (_totalAssets, _positions, positionAssets, positionBalances, withdrawableBalances) = _getData();
     }
 }

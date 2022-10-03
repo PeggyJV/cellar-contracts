@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC4626, ERC20Permit, SafeERC20 } from "src/base/ERC4626.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
@@ -18,7 +17,7 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
  * @author Brian Le
  */
 contract CellarRouter is ICellarRouter {
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for ERC20;
 
     uint256 public constant SWAP_ROUTER_REGISTRY_SLOT = 1;
 
@@ -42,7 +41,6 @@ contract CellarRouter is ICellarRouter {
      * @notice Deposit assets into a cellar using permit.
      * @param cellar address of the cellar to deposit into
      * @param assets amount of assets to deposit
-     * @param receiver address receiving the shares
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
@@ -50,7 +48,6 @@ contract CellarRouter is ICellarRouter {
     function depositWithPermit(
         Cellar cellar,
         uint256 assets,
-        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares) {
@@ -59,7 +56,7 @@ contract CellarRouter is ICellarRouter {
 
         // Approve the assets from the user to the router via permit.
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
-        asset.permit(msg.sender, address(this), assets, deadline, v, r, s);
+        ERC20Permit(address(asset)).permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Transfer assets from the user to the router.
         asset.safeTransferFrom(msg.sender, address(this), assets);
@@ -68,7 +65,7 @@ contract CellarRouter is ICellarRouter {
         asset.safeApprove(address(cellar), assets);
 
         // Deposit assets into the cellar.
-        shares = cellar.deposit(assets, receiver);
+        shares = cellar.deposit(assets, msg.sender);
     }
 
     /**
@@ -80,7 +77,6 @@ contract CellarRouter is ICellarRouter {
      * @param swapData bytes variable containing all the data needed to make a swap, refer to
      *                 `SwapRouter.sol` to see what parameters need to be encoded for each exchange
      * @param assets amount of assets to swap, must match initial swap asset in swapData
-     * @param receiver address to receive the cellar shares
      * @param assetIn ERC20 token used to swap for deposit token
      * @return shares amount of shares minted
      */
@@ -89,7 +85,6 @@ contract CellarRouter is ICellarRouter {
         SwapRouter.Exchange exchange,
         bytes calldata swapData,
         uint256 assets,
-        address receiver,
         ERC20 assetIn
     ) public returns (uint256 shares) {
         // Transfer assets from the user to the router.
@@ -105,7 +100,7 @@ contract CellarRouter is ICellarRouter {
         assetOut.safeApprove(address(cellar), assets);
 
         // Deposit assets into the cellar.
-        shares = cellar.deposit(assets, receiver);
+        shares = cellar.deposit(assets, msg.sender);
 
         // Transfer any remaining assetIn back to sender.
         uint256 remainingBalance = assetIn.balanceOf(address(this));
@@ -122,7 +117,6 @@ contract CellarRouter is ICellarRouter {
      *                 `SwapRouter.sol` to see what parameters need to be encoded for each exchange
      * @param assets amount of assets to swap, must match initial swap asset in swapData
      * @param assetIn ERC20 asset caller wants to swap and deposit with
-     * @param receiver address to receive the cellar shares
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
      * @return shares amount of shares minted
@@ -133,16 +127,15 @@ contract CellarRouter is ICellarRouter {
         bytes calldata swapData,
         uint256 assets,
         ERC20 assetIn,
-        address receiver,
         uint256 deadline,
         bytes memory signature
     ) external returns (uint256 shares) {
         // Approve for router to burn user shares via permit.
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
-        assetIn.permit(msg.sender, address(this), assets, deadline, v, r, s);
+        ERC20Permit(address(assetIn)).permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Deposit assets into the cellar using a swap if necessary.
-        shares = depositAndSwap(cellar, exchange, swapData, assets, receiver, assetIn);
+        shares = depositAndSwap(cellar, exchange, swapData, assets, assetIn);
     }
 
     // ======================================= WITHDRAW OPERATIONS =======================================
@@ -217,7 +210,7 @@ contract CellarRouter is ICellarRouter {
      *                  `SwapRouter.sol` for list of available options
      * @param swapDatas bytes variable containing all the data needed to make a swap, refer to
      *                  `SwapRouter.sol` to see what parameters need to be encoded for each exchange
-     * @param assets amount of assets to withdraw
+     * @param sharesToRedeem amount of shares to withdraw
      * @param deadline timestamp after which permit is invalid
      * @param signature a valid secp256k1 signature
      * @param receiver the address swapped tokens are sent to
@@ -227,14 +220,16 @@ contract CellarRouter is ICellarRouter {
         Cellar cellar,
         SwapRouter.Exchange[] calldata exchanges,
         bytes[] calldata swapDatas,
-        uint256 assets,
+        uint256 sharesToRedeem,
         uint256 deadline,
         bytes memory signature,
         address receiver
     ) external returns (uint256 shares) {
         // Approve for router to burn user shares via permit.
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
-        cellar.permit(msg.sender, address(this), assets, deadline, v, r, s);
+        cellar.permit(msg.sender, address(this), sharesToRedeem, deadline, v, r, s);
+
+        uint256 assets = cellar.previewRedeem(sharesToRedeem);
 
         // Withdraw assets from the cellar and swap to another asset if necessary.
         shares = withdrawAndSwap(cellar, exchanges, swapDatas, assets, receiver);
@@ -277,26 +272,6 @@ contract CellarRouter is ICellarRouter {
 
             // Place final byte on the stack at v.
             v := byte(0, mload(add(signature, 96)))
-        }
-    }
-
-    /**
-     * @notice Used to determine the amounts of assets Router had using current balances and amountsReceived.
-     * @param assets array of ERC20 tokens to query the balances of
-     * @param amountsReceived the amount of each assets received
-     * @return balancesBefore array of balances before amounts were received
-     */
-    function _getBalancesBefore(ERC20[] memory assets, uint256[] memory amountsReceived)
-        internal
-        view
-        returns (uint256[] memory balancesBefore)
-    {
-        balancesBefore = new uint256[](assets.length);
-
-        for (uint256 i; i < assets.length; i++) {
-            ERC20 asset = assets[i];
-
-            balancesBefore[i] = asset.balanceOf(address(this)) - amountsReceived[i];
         }
     }
 
