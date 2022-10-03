@@ -442,16 +442,8 @@ contract CellarTest is Test {
         assertEq(cellar.positions(4), address(WETH), "`positions[4]` should be WETH.");
         assertTrue(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be true for WETH.");
 
-        // Check that `popPosition` actually removes it.
-        cellar.popPosition();
-
-        assertEq(
-            positionLength - 1,
-            cellar.getPositions().length,
-            "Cellar positions array should be equal to previous length minus 1."
-        );
-
-        assertFalse(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be false for WETH.");
+        // Remove WETH position.
+        cellar.removePosition(4);
 
         // Check that `pushPosition` actually adds it.
         cellar.pushPosition(address(WETH));
@@ -488,33 +480,6 @@ contract CellarTest is Test {
         );
         cellar.removePosition(4);
 
-        // Check that `popPosition` reverts if position has any funds in it.
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__PositionNotEmpty.selector,
-                    address(WETH),
-                    WETH.balanceOf(address(cellar))
-                )
-            )
-        );
-        cellar.popPosition();
-
-        // Check that `replacePosition` reverts if position has any funds in it.
-        address positionA = vm.addr(45);
-        priceRouter.supportAsset(ERC20(positionA));
-        cellar.trustPosition(positionA, Cellar.PositionType.ERC20);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__PositionNotEmpty.selector,
-                    address(WETH),
-                    WETH.balanceOf(address(cellar))
-                )
-            )
-        );
-        cellar.replacePosition(4, positionA);
-
         // Check that `pushPosition` reverts if position is not trusted.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
         cellar.pushPosition(address(0));
@@ -531,37 +496,11 @@ contract CellarTest is Test {
         assertEq(cellar.positions(4), address(wethCLR), "`positions[4]` should be wethCLR.");
         assertEq(cellar.positions(2), address(WETH), "`positions[2]` should be WETH.");
 
-        cellar.popPosition();
-
-        // Check that replace position works.
-        cellar.replacePosition(2, address(wethCLR));
-        assertEq(cellar.positions(2), address(wethCLR), "`positions[2]` should be wethCLR.");
-
-        // Check that `replacePosition` reverts if new position is not trusted.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
-        cellar.replacePosition(2, address(0));
-
-        // Check that `replacePosition` reverts if new position is already used.
-        cellar.pushPosition(address(WETH));
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionAlreadyUsed.selector, address(WETH))));
-        cellar.replacePosition(2, address(WETH));
-
         // Check that removing the holding position reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
         cellar.removePosition(0);
 
-        // Check that replacing the holding position reverts.
-        address newPosition = vm.addr(45);
-        priceRouter.supportAsset(ERC20(newPosition));
-        cellar.trustPosition(newPosition, Cellar.PositionType.ERC20);
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
-        cellar.replacePosition(0, newPosition);
-
         cellar.swapPositions(4, 0);
-
-        // Check that popping the holding position reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
-        cellar.popPosition();
 
         // Check that setting holding position to unused position reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidPosition.selector, address(0))));
@@ -585,27 +524,6 @@ contract CellarTest is Test {
             uint256(Cellar.PositionType.ERC20),
             "New position's type should be ERC20."
         );
-
-        cellar.distrustPosition(newPosition);
-        assertFalse(cellar.isTrusted(newPosition), "New position should not be trusted.");
-
-        // Check that distrusting a non empty position reverts.
-        deal(address(USDC), address(cellar), 1);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__PositionNotEmpty.selector,
-                    address(USDC),
-                    USDC.balanceOf(address(cellar))
-                )
-            )
-        );
-        cellar.distrustPosition(address(USDC));
-
-        // Check that distrusting the holding position reverts.
-        deal(address(USDC), address(cellar), 0);
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
-        cellar.distrustPosition(address(USDC));
     }
 
     // ========================================== REBALANCE TEST ==========================================
@@ -789,9 +707,6 @@ contract CellarTest is Test {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.pushPosition(address(0));
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
-        cellar.replacePosition(2, address(0));
 
         address[] memory path = new address[](2);
         path[0] = address(USDC);
@@ -3417,7 +3332,6 @@ contract CellarTest is Test {
         // Governance can remove it itself by calling `distrustPosition`.
 
         // Add asset that will be depegged.
-        uint256 positionsLengthBefore = cellar.getPositions().length;
         priceRouter.supportAsset(USDT);
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
         cellar.pushPosition(address(USDT));
@@ -3433,16 +3347,6 @@ contract CellarTest is Test {
 
         assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
         assertEq(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should not change.");
-
-        // Governance votes to distrust USDT position.
-        cellar.distrustPosition(address(USDT));
-        assertFalse(cellar.isTrusted(address(USDT)), "Cellar should not trust USDT.");
-        assertFalse(cellar.isPositionUsed(address(USDT)), "Cellar should not be using USDT.");
-        assertEq(
-            cellar.getPositions().length,
-            positionsLengthBefore,
-            "Cellar should have removed USDT from positions array."
-        );
     }
 
     function testDepeggedAssetUsedByTheCellar() external {
@@ -3451,7 +3355,6 @@ contract CellarTest is Test {
         // it.
 
         // Add asset that will be depegged.
-        uint256 positionsLengthBefore = cellar.getPositions().length;
         priceRouter.supportAsset(USDT);
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20);
         cellar.pushPosition(address(USDT));
@@ -3476,14 +3379,6 @@ contract CellarTest is Test {
         // Manually rebalance into USDC.
         deal(address(USDC), address(cellar), 95e6);
         deal(address(USDT), address(cellar), 0);
-        cellar.distrustPosition(address(USDT));
-        assertFalse(cellar.isTrusted(address(USDT)), "Cellar should not trust USDT.");
-        assertFalse(cellar.isPositionUsed(address(USDT)), "Cellar should not be using USDT.");
-        assertEq(
-            cellar.getPositions().length,
-            positionsLengthBefore,
-            "Cellar should have removed USDT from positions array."
-        );
     }
 
     function testDepeggedHoldingPosition() external {
@@ -3491,7 +3386,6 @@ contract CellarTest is Test {
         // holding position. Governance uses multicall to rebalance cellar out
         // of position, set a new holding position, and distrust it.
 
-        uint256 positionsLengthBefore = cellar.getPositions().length;
         cellar.setHoldingPosition(address(usdcCLR));
 
         // Rebalance into usdcCLR. No swap is made because both positions use
@@ -3517,14 +3411,6 @@ contract CellarTest is Test {
             abi.encode(0)
         );
         cellar.setHoldingPosition(address(USDC));
-        cellar.distrustPosition(address(usdcCLR));
-        assertFalse(cellar.isTrusted(address(usdcCLR)), "Cellar should not trust usdcCLR.");
-        assertFalse(cellar.isPositionUsed(address(usdcCLR)), "Cellar should not be using usdcCLR.");
-        assertEq(
-            cellar.getPositions().length,
-            positionsLengthBefore - 1,
-            "Cellar should have removed usdcCLR from positions array."
-        );
     }
 
     function testDepeggedCellarAsset() external {
@@ -3592,8 +3478,6 @@ contract CellarTest is Test {
         // and changing the holding position is pointless because the asset of
         // the new holding position must be USDC.  Therefore the cellar is lost,
         // and should be exitted completely.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemoveHoldingPosition.selector)));
-        cellar.distrustPosition(address(USDC));
     }
 
     /**
@@ -4296,8 +4180,8 @@ contract CellarTest is Test {
         priceRouter.setExchangeRate(USDC, WETH, 0.000495e18);
         priceRouter.setExchangeRate(WETH, USDC, 2020e6);
 
-        // Confirm attackers shares are worth more.
-        assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more.");
+        // Confirm attackers maxWithdraw is zero while shares are locked.
+        assertEq(cellarA.maxWithdraw(attacker), 0, "Attackers maxWithdraw should be zero while shares are locked.");
 
         vm.startPrank(attacker);
         uint256 shares = cellarA.balanceOf(attacker);
@@ -4325,6 +4209,13 @@ contract CellarTest is Test {
         );
         cellarA.transfer(address(this), shares);
         vm.stopPrank();
+
+        vm.roll(block.number + 10);
+
+        // Confirm attackers shares are worth more once shares are unlocked.
+        assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more than deposit.");
+
+        // Note the attacker was able to arbitrage the price feed update, but must wait the share lock period in order to capture profit.
     }
 
     function testShareLockUpPeriod() external {
@@ -4496,4 +4387,6 @@ contract CellarTest is Test {
             "User should be able to withdraw their assets and the attackers(minus performance fees)."
         );
     }
+
+    //TODO add test that sees if maxWithdraw returns 0 when in the shrae lock period
 }

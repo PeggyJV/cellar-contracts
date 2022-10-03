@@ -3,9 +3,8 @@ pragma solidity 0.8.16;
 
 import { ERC4626, SafeERC20 } from "./ERC4626.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { Multicall } from "./Multicall.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { SafeCast } from "src/utils/SafeCast.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -19,12 +18,11 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
  * @author Brian Le
  */
-contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
+contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     using AddressArray for address[];
     using AddressArray for ERC20[];
     using SafeERC20 for ERC20;
     using SafeCast for uint256;
-    using SafeCast for int256;
     using Math for uint256;
 
     // ========================================= POSITIONS CONFIG =========================================
@@ -42,14 +40,6 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @param index index that position was removed from
      */
     event PositionRemoved(address indexed position, uint256 index);
-
-    /**
-     * @notice Emitted when a position is replaced.
-     * @param oldPosition address of position at index before being replaced
-     * @param newPosition address of position at index after being replaced
-     * @param index index of position replaced
-     */
-    event PositionReplaced(address indexed oldPosition, address indexed newPosition, uint256 index);
 
     /**
      * @notice Emitted when the positions at two indexes are swapped.
@@ -203,53 +193,6 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     }
 
     /**
-     * @notice Remove the last position in the list of positions used by the cellar.
-     * @dev If you know you are going to remove a position from the end of the array, this is more
-     *      efficient then `removePosition`.
-     */
-    function popPosition() external onlyOwner {
-        // Get the index of the last position and last position itself.
-        uint256 index = positions.length - 1;
-        address position = positions[index];
-
-        // Only remove position if it is empty, and if it is not the holding position.
-        uint256 positionBalance = _balanceOf(position);
-        if (positionBalance > 0) revert Cellar__PositionNotEmpty(position, positionBalance);
-        if (position == holdingPosition) revert Cellar__RemoveHoldingPosition();
-
-        // Remove last position.
-        positions.pop();
-        isPositionUsed[position] = false;
-
-        emit PositionRemoved(position, index);
-    }
-
-    /**
-     * @notice Replace a position at a given index with a new position.
-     * @param index index at which to replace the position
-     * @param newPosition address of position to replace with
-     */
-    function replacePosition(uint256 index, address newPosition) external onlyOwner whenNotShutdown {
-        if (!isTrusted[newPosition]) revert Cellar__UntrustedPosition(newPosition);
-        if (isPositionUsed[newPosition]) revert Cellar__PositionAlreadyUsed(newPosition);
-
-        // Store the old position before its replaced.
-        address oldPosition = positions[index];
-
-        // Only remove position if it is empty, and if it is not the holding position.
-        uint256 positionBalance = _balanceOf(oldPosition);
-        if (positionBalance > 0) revert Cellar__PositionNotEmpty(oldPosition, positionBalance);
-        if (oldPosition == holdingPosition) revert Cellar__RemoveHoldingPosition();
-
-        // Replace old position with new position.
-        positions[index] = newPosition;
-        isPositionUsed[oldPosition] = false;
-        isPositionUsed[newPosition] = true;
-
-        emit PositionReplaced(oldPosition, newPosition, index);
-    }
-
-    /**
      * @notice Swap the positions at two given indexes.
      * @param index1 index of first position to swap
      * @param index2 index of second position to swap
@@ -308,32 +251,6 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
             revert Cellar__PositionPricingNotSetUp(address(positionAsset));
 
         emit TrustChanged(position, true);
-    }
-
-    /**
-     * @notice Distrust a position to prevent it from being used by the cellar.
-     * @param position address of position to distrust
-     */
-    function distrustPosition(address position) external onlyOwner {
-        // Distrust position.
-        isTrusted[position] = false;
-
-        // Only remove position if it is not being used, is empty, and if it is
-        // not the holding position.
-        if (isPositionUsed[position]) {
-            uint256 positionBalance = _balanceOf(position);
-
-            if (positionBalance > 0) revert Cellar__PositionNotEmpty(position, positionBalance);
-            if (position == holdingPosition) revert Cellar__RemoveHoldingPosition();
-
-            positions.remove(position);
-            isPositionUsed[position] = false;
-        }
-
-        // NOTE: After position has been removed, SP should be notified on the
-        //       UI that the position can no longer be used and to exit the position
-        //       or rebalance its assets into another position ASAP.
-        emit TrustChanged(position, false);
     }
 
     // ============================================ WITHDRAW CONFIG ============================================
@@ -833,7 +750,7 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
     /**
      * @notice Shares can be locked for at most 256 blocks after minting.
      */
-    uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 256;
+    uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 7200;
 
     /**
      * @notice After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
@@ -1305,6 +1222,12 @@ contract Cellar is ERC4626, Ownable, Multicall, ReentrancyGuard {
      * @return the max amount of assets withdrawable by `owner`.
      */
     function maxWithdraw(address owner) public view override returns (uint256) {
+        // Check if owner shares are locked, return 0 if so.
+        uint256 lockBlock = userShareLockStartBlock[owner];
+        if (lockBlock != 0) {
+            uint256 blockSharesAreUnlocked = lockBlock + shareLockPeriod;
+            if (blockSharesAreUnlocked > block.number) return 0;
+        }
         // Get amount of assets to withdraw with fees accounted for.
         uint256 _totalAssets = totalAssets();
         uint256 feeInAssets = _previewPerformanceFees(_totalAssets);

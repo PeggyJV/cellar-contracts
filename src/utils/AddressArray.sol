@@ -22,11 +22,15 @@ library AddressArray {
     ) internal {
         uint256 len = array.length;
 
-        array.push(array[len - 1]);
+        if (len > 0) {
+            array.push(array[len - 1]);
 
-        for (uint256 i = len - 1; i > index; i--) array[i] = array[i - 1];
+            for (uint256 i = len - 1; i > index; i--) array[i] = array[i - 1];
 
-        array[index] = value;
+            array[index] = value;
+        } else {
+            array.push(value);
+        }
     }
 
     /**
