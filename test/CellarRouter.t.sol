@@ -164,14 +164,19 @@ contract CellarRouterTest is Test {
         address[] memory positions = new address[](1);
         positions[0] = address(WETH);
 
-        Cellar.PositionType[] memory positionTypes = new Cellar.PositionType[](1);
-        positionTypes[0] = Cellar.PositionType.ERC20;
+        Cellar.PositionData[] memory positionData = new Cellar.PositionData[](1);
+        positionData[0] = Cellar.PositionData({
+            positionType: Cellar.PositionType.ERC20,
+            isDebt: false,
+            adaptor: address(0),
+            adaptorData: abi.encode(0)
+        });
 
         MockCellar wethCellar = new MockCellar(
             registry,
             WETH,
             positions,
-            positionTypes,
+            positionData,
             address(WETH),
             Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",

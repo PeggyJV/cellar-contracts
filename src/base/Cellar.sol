@@ -21,6 +21,8 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
  * @author Brian Le
  */
+
+//TODO if cellar has debt positions it should NOT support proportional withdraw.
 contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     using AddressArray for address[];
     using AddressArray for ERC20[];
@@ -692,7 +694,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
             isPositionUsed[position] = true;
             getPositionData[position] = _positionData[i];
             if (_positionData[i].isDebt) numberOfDebtPositions++;
-            getPositionType[position] = _positionTypes[i];
 
             positionAsset = _assetOf(position);
             if (!PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT)).isSupported(positionAsset))
@@ -1187,7 +1188,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @notice The total amount of assets in the cellar.
      * @dev Excludes locked yield that hasn't been distributed.
      */
-    //TODO update to work with debt positions
+    //TODO I think it would be best if debt positions return zero for their withdrawableFrom amount?
     function totalAssetsWithdrawable() public view returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
         ERC20[] memory positionAssets = new ERC20[](numOfPositions);
@@ -1360,13 +1361,12 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         returns (
             uint256 _totalAssets,
             address[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances,
-            uint256[] memory withdrawableBalances
+            ERC20[] memory _positionAssets,
+            uint256[] memory _positionBalances,
+            uint256[] memory _withdrawableBalances
         )
     {
         uint256 len = positions.length;
-        //TODO Current
         _positions = new address[](len);
         _positionAssets = new ERC20[](len);
         _positionBalances = new uint256[](len);
@@ -1377,11 +1377,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         uint256 collateralIndex;
         uint256 debtIndex;
 
-        //TODO Incoming
-        positionAssets = new ERC20[](len);
-        positionBalances = new uint256[](len);
-        positionBalances = new uint256[](len);
-        withdrawableBalances = new uint256[](len);
+        _withdrawableBalances = new uint256[](len);
 
         for (uint256 i; i < len; i++) {
             address position = positions[i];
@@ -1389,6 +1385,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
             _positions[i] = position;
             _positionAssets[i] = _assetOf(position);
             _positionBalances[i] = _balanceOf(position);
+            _withdrawableBalances[i] = _withdrawableFrom(position);
 
             if (getPositionData[position].isDebt) {
                 debtPositionAssets[debtIndex] = _assetOf(position);
@@ -1405,15 +1402,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         _totalAssets =
             priceRouter.getValues(positionAssets, balances, asset) -
             priceRouter.getValues(debtPositionAssets, debtBalances, asset);
-        positionAssets[i] = _assetOf(position);
-        positionBalances[i] = _balanceOf(position);
-        withdrawableBalances[i] = _withdrawableFrom(position);
     }
-
-    // Incoming
-    //PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-    //_totalAssets = priceRouter.getValues(positionAssets, positionBalances, asset);
-    //}
 
     // =========================================== ADAPTOR LOGIC ===========================================
 
@@ -1479,9 +1468,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         getAdaptorInfo[_adaptor].afterAdaptorHook = _afterHook;
     }
 
-    // 0 -> 1e18. Used after callOnAdaptor to help safeguard against adaptor moving into positions that are not added here
-    uint256 public allowedRebalanceDeviation = 0.003e18; //currently set to 99.7%
-
     uint64 public constant MAX_REBALANCE_DEVIATION = 0.1e18;
 
     /**
@@ -1527,11 +1513,13 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
         uint256 minimumAllowedAssets;
         uint256 maximumAllowedAssets;
+        uint256 totalShares;
         {
             //record totalAssets
             uint256 assetsBeforeAdaptorCall = totalAssets();
             minimumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
             maximumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
+            totalShares = totalSupply();
         }
 
         //run all adaptor functions
@@ -1567,35 +1555,12 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
                 require(BaseAdaptor(data[i].adaptor).afterHook(info.afterAdaptorHook), "After Adaptor Hook Failed");
         }
 
-        // Make sure that totalAssets deviation is within acceptible bounds.
+        // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
         uint256 assets = totalAssets();
         if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
         }
-        /* Incoming
-        uint256 totalShares = totalSupply();
-
-        // Withdraw from position.
-        _withdrawFrom(fromPosition, assetsFrom, address(this));
-
-        // Swap to the asset of the other position if necessary.
-        ERC20 fromAsset = _assetOf(fromPosition);
-        ERC20 toAsset = _assetOf(toPosition);
-        assetsTo = fromAsset != toAsset
-            ? _swap(fromAsset, toAsset, assetsFrom, exchange, params, address(this))
-            : assetsFrom;
-
-        // Deposit into position.
-        _depositTo(toPosition, assetsTo);
-
-        // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
-        uint256 minimumAllowedAssets = assets.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
-        uint256 maximumAllowedAssets = assets.mulDivDown((1e18 + allowedRebalanceDeviation), 1e18);
-        assets = totalAssets();
-        if (assets > maximumAllowedAssets || assets < minimumAllowedAssets)
-            revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
         if (totalShares != totalSupply()) revert Cellar__TotalSharesMustRemainConstant(totalSupply(), totalShares);
-        */
 
         blockExternalReceiver = false;
     }
@@ -1792,7 +1757,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
     // ========================================== HELPER FUNCTIONS ==========================================
     //TODO for _depositTo and _withdrawFrom, call before and after hooks around the operation, so that Aave health checks can be enforced.
-    //TODO add withdrawable from to adaptors so this contract knows how much it can withdraw from Aave.
+    // ^^^^ might be better to enforce this using withdrawableFrom?
     //Weird cuz if an aUSDC position says you can withdraw this much USDC from me, but then a debt position says you can borrow this much more, the two answers are dependent on eachother, but each position doesn't know that.
 
     /**
@@ -1852,15 +1817,17 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @dev Get the withdrawable balance of a position according to its position type.
      * @param position position to get the withdrawable balance of
      */
-    //TODO add adaptor logic
     function _withdrawableFrom(address position) internal view returns (uint256) {
-        PositionType positionType = getPositionType[position];
+        PositionType positionType = getPositionData[position].positionType;
 
         if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
             return ERC4626(position).maxWithdraw(address(this));
-        } else {
+        } else if (positionType == PositionType.ERC20) {
             return ERC20(position).balanceOf(address(this));
-        }
+        } else if (positionType == PositionType.Adaptor) {
+            address adaptor = getPositionData[position].adaptor;
+            return BaseAdaptor(adaptor).withdrawableFrom(getPositionData[position].adaptorData);
+        } else revert("Unknown Position Type");
     }
 
     /**

@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { ERC4626, ERC20 } from "src/base/ERC4626.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Registry } from "src/Registry.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -20,7 +20,7 @@ import { Math } from "src/utils/Math.sol";
 
 contract BaseAdaptor {
     Registry public registry;
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for ERC20;
     using Math for uint256;
 
     function deposit(uint256 assets, bytes memory adaptorData) public virtual {}
@@ -32,6 +32,10 @@ contract BaseAdaptor {
     ) public virtual {}
 
     function balanceOf(bytes memory adaptorData) public view virtual returns (uint256) {}
+
+    function withdrawableFrom(bytes memory) public view virtual returns (uint256) {
+        return 0;
+    }
 
     function assetOf(bytes memory adaptorData) public view virtual returns (ERC20) {}
 

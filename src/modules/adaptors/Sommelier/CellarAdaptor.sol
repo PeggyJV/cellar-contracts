@@ -2,8 +2,8 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Cellar } from "src/base/Cellar.sol";
 
 import { console } from "@forge-std/Test.sol";
@@ -15,7 +15,7 @@ import { console } from "@forge-std/Test.sol";
  */
 
 contract CellarAdaptor is BaseAdaptor {
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for ERC20;
 
     /*
         adaptorData = abi.encode(Cellar cellar)
