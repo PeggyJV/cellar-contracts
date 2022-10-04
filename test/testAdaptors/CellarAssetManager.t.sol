@@ -813,7 +813,7 @@ contract CellarAssetManagerTest is Test {
         ERC20 to,
         uint256 amount
     ) internal returns (uint256 assetsTo) {
-        // Make call to adaptor to move funds from USDC into WETH position.
+        // Make call to adaptor to move funds from `from` into `to` positions.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         bool[] memory isRevertOkay = new bool[](1);
@@ -840,6 +840,46 @@ contract CellarAssetManagerTest is Test {
         uint256 toBalance = to.balanceOf(address(target));
         target.callOnAdaptor(data);
         assetsTo = to.balanceOf(address(target)) - toBalance;
+    }
+
+    /**
+     * @notice Helper function that calls `rebalance` for a cellar.
+     * @param target Cellar to call `rebalance` on.
+     * @param from Token to sell.
+     * @param to Token to buy.
+     * @param amount The amount of `from` token to sell.
+     */
+    //TODO return value is incorrect
+    function _rebalanceWithERC4626Positions(
+        Cellar target,
+        ERC20 from,
+        ERC20 to,
+        uint256 amount
+    ) internal returns (uint256 assetsTo) {
+        // Make call to adaptor to move funds from `from` into `to` positions.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        bool[] memory isRevertOkay = new bool[](1);
+
+        // See if `from` is an ERC4626 or an ERC20
+        Cellar fromPosition = Cellar(address(from));
+        try fromPosition.totalAssets() returns (uint256) {
+            // From position is an ERC4626.
+            adaptorCalls[0] = abi.encodeWithSelector(CellarAdaptor.withdrawFromCellar.selector, fromPosition, amount);
+        } catch {
+            // To position is an ERC4626.
+            Cellar toPosition = Cellar(address(to));
+            adaptorCalls[0] = abi.encodeWithSelector(CellarAdaptor.depositToCellar.selector, toPosition, amount);
+        }
+
+        data[0] = Cellar.AdaptorCall({
+            adaptor: address(cellarAdaptor),
+            callData: adaptorCalls,
+            isRevertOkay: isRevertOkay
+        });
+        //uint256 toBalance = to.balanceOf(address(target));
+        target.callOnAdaptor(data);
+        //assetsTo = to.balanceOf(address(target)) - toBalance;
     }
 
     /**
@@ -2072,16 +2112,21 @@ contract CellarAssetManagerTest is Test {
             // Swap 50% of Cellars WETH for USDC.
             uint256 wethToSell = totalAssets.mulDivDown(5, 10);
             _rebalance(assetManagementCellar, WETH, USDC, wethToSell);
-            //TODO below rebalance is causing test to fail, I think it is not tracking the lockedWETH position.
-            // // Swap 40% of Cellars WETH for lockedWETH.
-            // wethToSell = totalAssets.mulDivDown(1, 10);
-            // _rebalance(assetManagementCellar, WETH, ERC20(address(lockedWETH)), wethToSell);
 
-            // // Move 80% of cellars  USDC into lockedUSDC.
-            // uint256 usdcBal = USDC.balanceOf(address(assetManagementCellar));
-            // _rebalance(assetManagementCellar, USDC, ERC20(address(lockedUSDC)), usdcBal.mulDivDown(4, 5));
+            // Swap 40% of Cellars WETH for lockedWETH.
+            wethToSell = totalAssets.mulDivDown(1, 10);
+            _rebalanceWithERC4626Positions(assetManagementCellar, WETH, ERC20(address(lockedWETH)), wethToSell);
+
+            // Move 80% of cellars  USDC into lockedUSDC.
+            uint256 usdcBal = USDC.balanceOf(address(assetManagementCellar));
+            _rebalanceWithERC4626Positions(
+                assetManagementCellar,
+                USDC,
+                ERC20(address(lockedUSDC)),
+                usdcBal.mulDivDown(4, 5)
+            );
         }
-        /*_ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, USDC);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, USDC);
         _checkSendFees(assetManagementCellar, 7 days, 0);
 
         // WETH price decreases enough to create yield, Mary joins the cellar, and sendFees is called.
@@ -2246,8 +2291,18 @@ contract CellarAssetManagerTest is Test {
             _userAction(assetManagementCellar, sam, Action.WITHDRAW, assets, 0);
 
             // Strategist rebalances into liquid positions.
-            _rebalance(assetManagementCellar, ERC20(address(lockedWETH)), WETH, WETH.balanceOf(address(lockedWETH)));
-            _rebalance(assetManagementCellar, ERC20(address(lockedUSDC)), USDC, USDC.balanceOf(address(lockedUSDC)));
+            _rebalanceWithERC4626Positions(
+                assetManagementCellar,
+                ERC20(address(lockedWETH)),
+                WETH,
+                WETH.balanceOf(address(lockedWETH))
+            );
+            _rebalanceWithERC4626Positions(
+                assetManagementCellar,
+                ERC20(address(lockedUSDC)),
+                USDC,
+                USDC.balanceOf(address(lockedUSDC))
+            );
 
             // Have everyone completely exit the cellar.
             uint256 shares = assetManagementCellar.maxRedeem(bob);
@@ -2266,7 +2321,7 @@ contract CellarAssetManagerTest is Test {
             assertEq(assetManagementCellar.balanceOf(bob), 0, "bob should have no more shares.");
             assertEq(assetManagementCellar.balanceOf(mary), 0, "mary should have no more shares.");
             assertEq(assetManagementCellar.balanceOf(sam), 0, "sam should have no more shares.");
-        }*/
+        }
     }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
