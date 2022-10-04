@@ -4210,7 +4210,7 @@ contract CellarTest is Test {
         cellarA.transfer(address(this), shares);
         vm.stopPrank();
 
-        vm.roll(block.number + 10);
+        vm.roll(block.number + cellarA.shareLockPeriod());
 
         // Confirm attackers shares are worth more once shares are unlocked.
         assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more than deposit.");

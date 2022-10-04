@@ -748,14 +748,14 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     uint256 public constant MINIMUM_SHARE_LOCK_PERIOD = 8;
 
     /**
-     * @notice Shares can be locked for at most 256 blocks after minting.
+     * @notice Shares can be locked for at most 7200 blocks after minting.
      */
     uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 7200;
 
     /**
      * @notice After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
      */
-    uint256 public shareLockPeriod = 10;
+    uint256 public shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
 
     /**
      * @notice mapping that stores every users last block they minted shares.
@@ -1252,7 +1252,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
             return
                 userOwnershipPercent <= smallestPercentWithdrawable
                     ? assets
-                    : _totalAssets.mulDivDown(smallestPercentWithdrawable, 1e18);
+                    : (_totalAssets - feeInAssets).mulDivDown(smallestPercentWithdrawable, 1e18);
         }
     }
 
