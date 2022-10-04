@@ -60,7 +60,6 @@ contract MockCellar is Cellar, Test {
         deal(address(positionAsset), address(this), amount);
 
         _depositTo(position, amount);
-        feeData.highWatermark += amountInAssets;
     }
 
     function getData()

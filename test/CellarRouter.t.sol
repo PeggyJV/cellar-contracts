@@ -397,9 +397,6 @@ contract CellarRouterTest is Test {
     // ======================================= WITHDRAW TESTS =======================================
 
     function testWithdrawAndSwap() external {
-        // Set performance fees to zero, so test is not dependent to price movements.
-        cellar.setPerformanceFee(0);
-
         // Deposit initial funds into cellar.
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
@@ -454,9 +451,6 @@ contract CellarRouterTest is Test {
     }
 
     function testWithdrawAndSwapWithPermit() external {
-        // Set performance fees to zero, so test is not dependent to price movements.
-        cellar.setPerformanceFee(0);
-
         uint256 ownerPrivateKey = 0xA11CE;
         address pOwner = vm.addr(ownerPrivateKey);
 
@@ -536,9 +530,6 @@ contract CellarRouterTest is Test {
     }
 
     function testWithdrawWithNoSwaps() external {
-        // Set performance fees to zero, so test is not dependent to price movements.
-        cellar.setPerformanceFee(0);
-
         // Deposit initial funds into cellar.
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);

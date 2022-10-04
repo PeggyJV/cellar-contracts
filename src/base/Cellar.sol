@@ -171,27 +171,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Push a trusted position to the end of the list of positions used by the cellar.
-     * @dev If you know you are going to add a position to the end of the array, this is more
-     *      efficient then `addPosition`.
-     * @param position address of position to add
-     */
-    function pushPosition(address position) external onlyOwner whenNotShutdown {
-        if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
-        if (!isTrusted[position]) revert Cellar__UntrustedPosition(position);
-
-        // Check if position is already being used.
-        if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
-
-        // Add new position to the end of the positions.
-        positions.push(position);
-        isPositionUsed[position] = true;
-        if (getPositionData[position].isDebt) numberOfDebtPositions++;
-
-        emit PositionAdded(position, positions.length - 1);
-    }
-
-    /**
      * @notice Remove the position at a given index from the list of positions used by the cellar.
      * @param index index at which to remove the position
      */
@@ -380,25 +359,11 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     event PlatformFeeChanged(uint64 oldPlatformFee, uint64 newPlatformFee);
 
     /**
-     * @notice Emitted when performance fees is changed.
-     * @param oldPerformanceFee value performance fee was changed from
-     * @param newPerformanceFee value performance fee was changed to
-     */
-    event PerformanceFeeChanged(uint64 oldPerformanceFee, uint64 newPerformanceFee);
-
-    /**
      * @notice Emitted when fees distributor is changed.
      * @param oldFeesDistributor address of fee distributor was changed from
      * @param newFeesDistributor address of fee distributor was changed to
      */
     event FeesDistributorChanged(bytes32 oldFeesDistributor, bytes32 newFeesDistributor);
-
-    /**
-     * @notice Emitted when strategist performance fee cut is changed.
-     * @param oldPerformanceCut value strategist performance fee cut was changed from
-     * @param newPerformanceCut value strategist performance fee cut was changed to
-     */
-    event StrategistPerformanceCutChanged(uint64 oldPerformanceCut, uint64 newPerformanceCut);
 
     /**
      * @notice Emitted when strategist platform fee cut is changed.
@@ -425,31 +390,23 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     error Cellar__InvalidFeeCut();
 
     /**
-     * @notice Attempted to change performance/platform fee with invalid value.
+     * @notice Attempted to change platform fee with invalid value.
      */
     error Cellar__InvalidFee();
 
     /**
      * @notice Data related to fees.
-     * @param highWatermark Stores the share price to be used as a High Watermark to calculate performance fees.
-     * @param strategistPerformanceCut Determines how much performance fees go to strategist.
-     *                                 This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
      * @param strategistPlatformCut Determines how much platform fees go to strategist.
      *                              This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
      * @param platformFee The percentage of total assets accrued as platform fees over a year.
                           This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
-     * @param performanceFee The percentage of total assets accrued as platform fees over a year.
-     *                       This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
      * @param feesDistributor Cosmos address of module that distributes fees, specified as a hex value.
      *                        The Gravity contract expects a 32-byte value formatted in a specific way.
      * @param strategistPayoutAddress Address to send the strategists fee shares.
      */
     struct FeeData {
-        uint256 highWatermark;
-        uint64 strategistPerformanceCut;
         uint64 strategistPlatformCut;
         uint64 platformFee;
-        uint64 performanceFee;
         bytes32 feesDistributor;
         address strategistPayoutAddress;
     }
@@ -459,16 +416,12 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      */
     FeeData public feeData =
         FeeData({
-            highWatermark: 0,
-            strategistPerformanceCut: 0.75e18,
             strategistPlatformCut: 0.75e18,
             platformFee: 0.01e18,
-            performanceFee: 0.1e18,
             feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55", // 20 bytes, so need 12 bytes of zero
             strategistPayoutAddress: address(0)
         });
 
-    uint64 public constant MAX_PERFORMANCE_FEE = 0.5e18;
     uint64 public constant MAX_PLATFORM_FEE = 0.2e18;
     uint64 public constant MAX_FEE_CUT = 1e18;
 
@@ -484,17 +437,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Set the percentage of performance fees accrued from yield.
-     * @param newPerformanceFee value out of 1e18 that represents new performance fee percentage
-     */
-    function setPerformanceFee(uint64 newPerformanceFee) external onlyOwner {
-        if (newPerformanceFee > MAX_PERFORMANCE_FEE) revert Cellar__InvalidFee();
-        emit PerformanceFeeChanged(feeData.performanceFee, newPerformanceFee);
-
-        feeData.performanceFee = newPerformanceFee;
-    }
-
-    /**
      * @notice Set the address of the fee distributor on the Sommelier chain.
      * @dev IMPORTANT: Ensure that the address is formatted in the specific way that the Gravity contract
      *      expects it to be.
@@ -505,17 +447,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         emit FeesDistributorChanged(feeData.feesDistributor, newFeesDistributor);
 
         feeData.feesDistributor = newFeesDistributor;
-    }
-
-    /**
-     * @notice Sets the Strategists cut of performance fees
-     * @param cut the performance cut for the strategist
-     */
-    function setStrategistPerformanceCut(uint64 cut) external onlyOwner {
-        if (cut > MAX_FEE_CUT) revert Cellar__InvalidFeeCut();
-        emit StrategistPerformanceCutChanged(feeData.strategistPerformanceCut, cut);
-
-        feeData.strategistPerformanceCut = cut;
     }
 
     /**
@@ -844,14 +775,13 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         uint256 assets,
         uint256,
         address receiver
-    ) internal override whenNotShutdown {
+    ) internal view override whenNotShutdown {
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
                 revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
         }
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) revert Cellar__DepositRestricted(assets, maxAssets);
-        feeData.highWatermark += assets;
     }
 
     /**
@@ -869,23 +799,15 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
     /**
      * @notice called at the beginning of withdraw.
-     * @param assets amount of assets withdrawn by user.
      */
     function beforeWithdraw(
-        uint256 assets,
+        uint256,
         uint256,
         address,
         address owner
-    ) internal override {
+    ) internal view override {
         // Make sure users shares are not locked.
         _checkIfSharesLocked(owner);
-
-        // Need to check if assets is greater than the high watermark
-        // because if the performanceFee is set to zero, and all cellar shares are redeemed,
-        // if the cellar has earned any yield, assets will be greater than the high watermark.
-        // Becuase the high watermark is only updated when performance fees are minted.
-        uint256 highWatermark = feeData.highWatermark;
-        feeData.highWatermark = assets > highWatermark ? 0 : highWatermark - assets;
     }
 
     /**
@@ -896,8 +818,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      */
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-
-        _takePerformanceFees(_totalAssets);
 
         // Check for rounding error since we round down in previewDeposit.
         if ((shares = _convertToShares(assets, _totalAssets)) == 0) revert Cellar__ZeroShares();
@@ -922,8 +842,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      */
     function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-
-        _takePerformanceFees(_totalAssets);
 
         // previewMintRoundsUp, but iniital mint could return zero assets, so check for rounding error.
         if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets(); // No need to check for rounding error, previewMint rounds up.
@@ -977,8 +895,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
             uint256[] memory withdrawableBalances
         ) = _getData();
 
-        _takePerformanceFees(_totalAssets);
-
         // No need to check for rounding error, `previewWithdraw` rounds up.
         shares = _previewWithdraw(assets, _totalAssets);
 
@@ -1025,8 +941,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
             uint256[] memory positionBalances,
             uint256[] memory withdrawableBalances
         ) = _getData();
-
-        _takePerformanceFees(_totalAssets);
 
         _checkAllowance(owner, shares);
 
@@ -1149,9 +1063,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
     /**
      * @notice The total amount of assets in the cellar.
-     * @dev EIP4626 states totalAssets needs to be inclusive of fees.
-     * Since performance fees mint shares, total assets remains unchanged,
-     * so this implementation is inclusive of fees even though it does not explicitly show it.
      * @dev EIP4626 states totalAssets  must not revert, but it is possible for `totalAssets` to revert
      * so it does NOT conform to ERC4626 standards.
      */
@@ -1206,7 +1117,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
     /**
      * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
-     * @notice is NOT inclusive of performance fees.
      * @param shares amount of shares to convert
      * @return assets the shares can be exchanged for
      */
@@ -1230,8 +1140,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        assets = _previewMint(shares, _totalAssets - feeInAssets);
+        assets = _previewMint(shares, _totalAssets);
     }
 
     /**
@@ -1241,8 +1150,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        shares = _previewWithdraw(assets, _totalAssets - feeInAssets);
+        shares = _previewWithdraw(assets, _totalAssets);
     }
 
     /**
@@ -1252,8 +1160,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      */
     function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        shares = _convertToShares(assets, _totalAssets - feeInAssets);
+        shares = _convertToShares(assets, _totalAssets);
     }
 
     /**
@@ -1263,12 +1170,11 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      */
     function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        assets = _convertToAssets(shares, _totalAssets - feeInAssets);
+        assets = _convertToAssets(shares, _totalAssets);
     }
 
     /**
-     * @notice Returns the max amount withdrawable by a user inclusive of performance fees
+     * @notice Returns the max amount withdrawable by a user
      * @param owner address to check maxWithdraw  of.
      * @return the max amount of assets withdrawable by `owner`.
      */
@@ -1279,10 +1185,9 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
             uint256 blockSharesAreUnlocked = lockBlock + shareLockPeriod;
             if (blockSharesAreUnlocked > block.number) return 0;
         }
-        // Get amount of assets to withdraw with fees accounted for.
+        // Get amount of assets to withdraw.
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        uint256 assets = _convertToAssets(balanceOf(owner), _totalAssets - feeInAssets);
+        uint256 assets = _convertToAssets(balanceOf(owner), _totalAssets);
 
         if (withdrawType == WithdrawType.ORDERLY) {
             uint256 withdrawable = totalAssetsWithdrawable();
@@ -1500,7 +1405,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         bool[] isRevertOkay;
     }
 
-    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner whenNotShutdown {
+    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner whenNotShutdown nonReentrant {
         AdaptorInfo memory info;
         blockExternalReceiver = true;
         //first make sure all adaptors are trusts, and call all adaptors beforeHooks
@@ -1569,9 +1474,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
     /**
      * @notice Total amount of assets that can be deposited for a user.
-     * @dev This function does not take into account performance fees.
-     *      Performance fees would reduce `receiver`s `ownedAssets`,
-     *      making the `assets` value returned lower than actual
      * @param receiver address of account that would receive the shares
      * @return assets maximum amount of assets that can be deposited
      */
@@ -1596,9 +1498,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
     /**
      * @notice Total amount of shares that can be minted for a user.
-     * @dev This function does not take into account performance fees.
-     *      Performance fees would reduce `receiver`s `ownedAssets`,
-     *      making the `shares` value returned lower than actual
      * @param receiver address of account that would receive the shares
      * @return shares maximum amount of shares that can be minted
      */
@@ -1624,60 +1523,9 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     // ========================================= FEES LOGIC =========================================
 
     /**
-     * @notice Emitted when High Watermark is reset.
-     * @param newHighWatermark new high watermark
-     */
-    event HighWatermarkReset(uint256 newHighWatermark);
-
-    /**
      * @notice Attempted to send fee shares to strategist payout address, when address is not set.
      */
     error Cellar__PayoutNotSet();
-
-    /**
-     * @notice Resets High Watermark to equal current total assets.
-     * @notice This function can be abused by Strategists, so it should only be callable by governance.
-     */
-    function resetHighWatermark() external onlyOwner {
-        uint256 _totalAssets = totalAssets();
-        feeData.highWatermark = _totalAssets;
-
-        emit HighWatermarkReset(_totalAssets);
-    }
-
-    /**
-     * @notice Calculates how many assets Strategist would earn performance fees
-     * @param _totalAssets uint256 value of the total assets in the cellar
-     * @return feeInAssets amount of assets to take as fees
-     */
-    function _previewPerformanceFees(uint256 _totalAssets) internal view returns (uint256 feeInAssets) {
-        uint64 performanceFee = feeData.performanceFee;
-        if (performanceFee == 0 || _totalAssets == 0) return 0;
-
-        uint256 highWatermark = feeData.highWatermark;
-
-        if (_totalAssets > highWatermark) {
-            uint256 yield = _totalAssets - highWatermark;
-            feeInAssets = yield.mulWadDown(performanceFee);
-        }
-    }
-
-    /**
-     * @notice Mints cellar performance fee shares if current share price is above high watermark
-     * @dev If performance fees are minted, the resulting HWM will be greater than the current share price
-     *      since performance fees dilute share value.
-     * @param _totalAssets uint256 value of the total assets in the cellar
-     */
-    function _takePerformanceFees(uint256 _totalAssets) internal {
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        if (feeInAssets > 0) {
-            uint256 platformFeesInShares = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
-            if (platformFeesInShares > 0) {
-                feeData.highWatermark = _totalAssets;
-                _mint(address(this), platformFeesInShares);
-            }
-        }
-    }
 
     /**
      * @dev Calculate the amount of fees to mint such that value of fees after minting is not diluted.
@@ -1714,37 +1562,26 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
         uint256 _totalAssets = totalAssets();
 
-        // Since this action mints shares, calculate outstanding performance fees due.
-        _takePerformanceFees(_totalAssets);
-
-        uint256 totalFees = balanceOf(address(this));
-
-        uint256 strategistFeeSharesDue = totalFees.mulWadDown(feeData.strategistPerformanceCut);
-
         // Calculate platform fees earned.
         uint256 elapsedTime = block.timestamp - lastAccrual;
         uint256 platformFeeInAssets = (_totalAssets * elapsedTime * feeData.platformFee) / 1e18 / 365 days;
         uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
         _mint(address(this), platformFees);
-        totalFees += platformFees;
 
-        strategistFeeSharesDue += platformFees.mulWadDown(feeData.strategistPlatformCut);
+        uint256 strategistFeeSharesDue = platformFees.mulWadDown(feeData.strategistPlatformCut);
         if (strategistFeeSharesDue > 0) {
             //transfer shares to strategist
             _transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
 
-            totalFees -= strategistFeeSharesDue;
+            platformFees -= strategistFeeSharesDue;
         }
 
         lastAccrual = uint32(block.timestamp);
 
         // Redeem our fee shares for assets to send to the fee distributor module.
-        uint256 assets = _convertToAssets(totalFees, _totalAssets);
+        uint256 assets = _convertToAssets(platformFees, _totalAssets);
         if (assets > 0) {
-            // Without this, assets paid out as fees would be counted as a loss.
-            feeData.highWatermark -= assets;
-
-            _burn(address(this), totalFees);
+            _burn(address(this), platformFees);
 
             // Transfer assets to a fee distributor on the Sommelier chain.
             IGravity gravityBridge = IGravity(registry.getAddress(0));
@@ -1752,7 +1589,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
             gravityBridge.sendToCosmos(address(asset), feeData.feesDistributor, assets);
         }
 
-        emit SendFees(totalFees, assets);
+        emit SendFees(platformFees, assets);
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================

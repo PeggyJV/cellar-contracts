@@ -209,18 +209,12 @@ contract CellarTest is Test {
         );
 
         (
-            uint256 highWatermark,
-            uint64 strategistPerformanceCut,
             uint64 strategistPlatformCut,
             uint64 platformFee,
-            uint64 performanceFee,
             bytes32 feeDistributor,
             address strategistPayoutAddress
         ) = cellar.feeData();
-        assertEq(highWatermark, 0, "High watermark should be zero.");
-        assertEq(strategistPerformanceCut, 0.75e18, "Performance cut should be set to 0.75e18.");
         assertEq(strategistPlatformCut, 0.75e18, "Platform cut should be set to 0.75e18.");
-        assertEq(performanceFee, 0.1e18, "Performance fee should be set to 0.1e18.");
         assertEq(platformFee, 0.01e18, "Platform fee should be set to 0.01e18.");
         assertEq(
             feeDistributor,
@@ -242,8 +236,6 @@ contract CellarTest is Test {
 
         deal(address(USDC), address(this), assets);
 
-        (uint256 highWatermarkBeforeDeposit, , , , , , ) = cellar.feeData();
-
         // Try depositing more assets than balance.
         vm.expectRevert("ERC20: transfer amount exceeds balance");
         cellar.deposit(assets + 1, address(this));
@@ -251,16 +243,6 @@ contract CellarTest is Test {
         // Test single deposit.
         uint256 expectedShares = cellar.previewDeposit(assets);
         uint256 shares = cellar.deposit(assets, address(this));
-
-        uint256 expectedHighWatermark = highWatermarkBeforeDeposit + assets;
-
-        (uint256 highWatermarkAfterDeposit, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterDeposit,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before deposit plus assets deposited by user."
-        );
 
         assertEq(shares, assets.changeDecimals(6, 18), "Should have 1:1 exchange rate for initial deposit.");
         assertEq(cellar.previewWithdraw(assets), shares, "Withdrawing assets should burn shares given.");
@@ -272,24 +254,12 @@ contract CellarTest is Test {
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets, "Should return all user's assets.");
         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
-        (uint256 highWatermarkBeforeWithdraw, , , , , , ) = cellar.feeData();
-
         // Try withdrawing more assets than allowed.
         vm.expectRevert("ERC20: burn amount exceeds balance");
         cellar.withdraw(assets + 1, address(this), address(this));
 
         // Test single withdraw.
         cellar.withdraw(assets, address(this), address(this));
-
-        expectedHighWatermark = highWatermarkBeforeWithdraw - assets;
-
-        (uint256 highWatermarkAfterWithdraw, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterWithdraw,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before withdraw minus assets withdrawn by user."
-        );
 
         assertEq(cellar.totalAssets(), 0, "Should have updated total assets with assets withdrawn.");
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
@@ -304,24 +274,12 @@ contract CellarTest is Test {
         // Change decimals from the 18 used by shares to the 6 used by USDC.
         deal(address(USDC), address(this), shares.changeDecimals(18, 6));
 
-        (uint256 highWatermarkBeforeMint, , , , , , ) = cellar.feeData();
-
         // Try minting more assets than balance.
         vm.expectRevert("ERC20: transfer amount exceeds balance");
         cellar.mint(shares + 1e18, address(this));
 
         // Test single mint.
         uint256 assets = cellar.mint(shares, address(this));
-
-        uint256 expectedHighWatermark = highWatermarkBeforeMint + assets;
-
-        (uint256 highWatermarkAfterMint, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterMint,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before mint plus assets deposited by user."
-        );
 
         assertEq(shares.changeDecimals(18, 6), assets, "Should have 1:1 exchange rate for initial deposit.");
         assertEq(cellar.previewRedeem(shares), assets, "Redeeming shares should withdraw assets owed.");
@@ -333,20 +291,8 @@ contract CellarTest is Test {
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets, "Should return all user's assets.");
         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
-        (uint256 highWatermarkBeforeRedeem, , , , , , ) = cellar.feeData();
-
         // Test single redeem.
         cellar.redeem(shares, address(this), address(this));
-
-        expectedHighWatermark = highWatermarkBeforeRedeem - assets;
-
-        (uint256 highWatermarkAfterRedeem, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterRedeem,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before redeem minus assets redeemed by user."
-        );
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
         assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
@@ -404,7 +350,7 @@ contract CellarTest is Test {
 
         priceRouter.supportAsset(WETH);
         cellar.trustPosition(address(wethVault), Cellar.PositionType.ERC4626, false, address(0), abi.encode(0));
-        cellar.pushPosition(address(wethVault));
+        cellar.addPosition(5, address(wethVault));
 
         cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
         cellar.depositIntoPosition(address(wethVault), 0.5e18); // $1000
@@ -470,25 +416,6 @@ contract CellarTest is Test {
         assertEq(cellar.positions(4), address(WETH), "`positions[4]` should be WETH.");
         assertTrue(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be true for WETH.");
 
-        // Remove WETH position.
-        cellar.removePosition(4);
-
-        // Check that `pushPosition` actually adds it.
-        cellar.pushPosition(address(WETH));
-
-        assertEq(
-            positionLength,
-            cellar.getPositions().length,
-            "Cellar positions array should be equal to previous length."
-        );
-
-        assertEq(cellar.positions(4), address(WETH), "`positions[4]` should be WETH.");
-        assertTrue(cellar.isPositionUsed(address(WETH)), "`isPositionUsed` should be true for WETH.");
-
-        // Check that `pushPosition` reverts if position is already used.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionAlreadyUsed.selector, address(WETH))));
-        cellar.pushPosition(address(WETH));
-
         // Check that `addPosition` reverts if position is already used.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionAlreadyUsed.selector, address(WETH))));
         cellar.addPosition(4, address(WETH));
@@ -507,10 +434,6 @@ contract CellarTest is Test {
             )
         );
         cellar.removePosition(4);
-
-        // Check that `pushPosition` reverts if position is not trusted.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
-        cellar.pushPosition(address(0));
 
         // Check that `addPosition` reverts if position is not trusted.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__UntrustedPosition.selector, address(0))));
@@ -615,9 +538,6 @@ contract CellarTest is Test {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.addPosition(5, address(0));
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
-        cellar.pushPosition(address(0));
 
         address[] memory path = new address[](2);
         path[0] = address(USDC);
@@ -800,30 +720,23 @@ contract CellarTest is Test {
         assertEq(getDataTotalAssets, totalAssets, "`getData` total assets should be the same as cellar `totalAssets`.");
     }
 
-    // ====================================== PERFORMANCE/PLATFORM FEE TEST ======================================
+    // ====================================== PLATFORM FEE TEST ======================================
 
     function testChangingFeeData() external {
         address newStrategistAddress = vm.addr(777);
         bytes32 validCosmosAddress = hex"000000000000000000000000ffffffffffffffffffffffffffffffffffffffff";
         cellar.setPlatformFee(0.2e18);
-        cellar.setPerformanceFee(0.03e18);
         cellar.setFeesDistributor(validCosmosAddress);
-        cellar.setStrategistPerformanceCut(0.8e18);
         cellar.setStrategistPlatformCut(0.8e18);
         cellar.setStrategistPayoutAddress(newStrategistAddress);
         (
-            ,
-            uint64 strategistPerformanceCut,
             uint64 strategistPlatformCut,
             uint64 platformFee,
-            uint64 performanceFee,
             bytes32 feeDistributor,
             address strategistPayoutAddress
         ) = cellar.feeData();
-        assertEq(strategistPerformanceCut, 0.8e18, "Performance cut should be set to 0.8e18.");
         assertEq(strategistPlatformCut, 0.8e18, "Platform cut should be set to 0.8e18.");
         assertEq(platformFee, 0.2e18, "Platform fee should be set to 0.2e18.");
-        assertEq(performanceFee, 0.03e18, "Performance fee should be set to 0.03e18.");
         assertEq(feeDistributor, validCosmosAddress, "Fee Distributor should be set to `validCosmosAddress`.");
         assertEq(
             strategistPayoutAddress,
@@ -834,146 +747,11 @@ contract CellarTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFee.selector)));
         cellar.setPlatformFee(0.21e18);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFee.selector)));
-        cellar.setPerformanceFee(0.51e18);
-
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidCosmosAddress.selector)));
         cellar.setFeesDistributor(hex"0000000000000000000000010000000000000000000000000000000000000000");
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFeeCut.selector)));
-        cellar.setStrategistPerformanceCut(1.1e18);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFeeCut.selector)));
         cellar.setStrategistPlatformCut(1.1e18);
-    }
-
-    function testPreviewFunctionsAccountForPerformanceFee(uint256 deposit, uint256 yield) external {
-        deposit = bound(deposit, 1_000e6, 100_000_000e6);
-        // Cap yield to 100x deposit
-        uint256 yieldUpperBound = 100 * deposit;
-        // Floor yield above 1e-6x of the deposit
-        uint256 yieldLowerBound = deposit / 1_000_000;
-        yield = bound(yield, yieldLowerBound, yieldUpperBound);
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), type(uint256).max);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        (uint256 currentHWM, , , , , , ) = cellar.feeData();
-        assertEq(currentHWM, deposit, "High Watermark should be equal to deposits.");
-
-        // Simulate Cellar earning yield.
-        deal(address(USDC), address(cellar), deposit + yield);
-
-        assertApproxEqAbs(
-            cellar.previewMint(100e18),
-            cellar.mint(100e18, address(this)),
-            1,
-            "`previewMint` should return the same as `mint`."
-        );
-
-        assertApproxEqAbs(
-            cellar.previewDeposit(100e6),
-            cellar.deposit(100e6, address(this)),
-            1,
-            "`previewDeposit` should return the same as `deposit`."
-        );
-
-        cellar.approve(address(cellar), type(uint256).max);
-        assertApproxEqAbs(
-            cellar.previewWithdraw(100e6),
-            cellar.withdraw(100e6, address(this), address(this)),
-            1,
-            "`previewWithdraw` should return the same as `withdraw`."
-        );
-
-        assertApproxEqAbs(
-            cellar.previewRedeem(100e18),
-            cellar.redeem(100e18, address(this), address(this)),
-            1,
-            "`previewRedeem` should return the same as `redeem`."
-        );
-    }
-
-    function testPerformanceFeesWithPositivePerformance(uint256 deposit, uint256 yield) external {
-        deposit = bound(deposit, 100e6, 1_000_000e6);
-        yield = bound(yield, 10e6, 10_000e6);
-        (, , , , uint64 performanceFee, , ) = cellar.feeData();
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), 3 * deposit);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Simulate Cellar earning yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
-
-        // Deposit into cellar to trigger performance fee calculation.
-        cellar.deposit(deposit, address(this));
-
-        uint256 feeSharesInCellar = cellar.balanceOf(address(cellar));
-        assertTrue(feeSharesInCellar > 0, "Cellar should have been minted fee shares.");
-
-        uint256 performanceFeeInAssets = cellar.previewRedeem(feeSharesInCellar);
-        uint256 expectedPerformanceFeeInAssets = yield.mulWadDown(performanceFee);
-        // It is okay for actual performance fee in assets to be equal to or 1 wei less than expected.
-        assertTrue(
-            performanceFeeInAssets == expectedPerformanceFeeInAssets ||
-                performanceFeeInAssets + 1 == expectedPerformanceFeeInAssets,
-            "Actual performance fees should equal expected, or actual can be 1 less wei than expected."
-        );
-
-        // Deposit into cellar to trigger performance fee calculation.
-        cellar.deposit(deposit, address(this));
-
-        assertTrue(
-            feeSharesInCellar == cellar.balanceOf(address(cellar)),
-            "Cellar should not have been minted more fee shares."
-        );
-    }
-
-    function testPerformanceFeesWithNegativePerformance(uint256 deposit, uint256 loss) external {
-        deposit = bound(deposit, 100_000e6, 1_000_000e6);
-        loss = bound(loss, 10e6, 10_000e6);
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), 2 * deposit);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Simulate Cellar losing yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) - loss);
-
-        // Deposit into cellar to trigger performance fee calculation.
-        cellar.deposit(deposit, address(this));
-
-        assertTrue(cellar.balanceOf(address(cellar)) == 0, "Cellar should not have any fee shares.");
-    }
-
-    function testPerformanceFeesWithNeutralPerformance(uint256 deposit, uint256 amount) external {
-        deposit = bound(deposit, 100_000e6, 1_000_000e6);
-        amount = bound(amount, 10e6, 10_000e6);
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), 2 * deposit);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Simulate Cellar earning yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + amount);
-
-        // Simulate Cellar losing yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) - amount);
-
-        // Deposit into cellar to trigger performance fee calculation.
-        cellar.deposit(deposit, address(this)); //deposit into Cellar
-
-        assertTrue(cellar.balanceOf(address(cellar)) == 0, "Cellar should not have any fee shares.");
     }
 
     function testPlatformFees(uint256 timePassed, uint256 deposit) external {
@@ -989,7 +767,7 @@ contract CellarTest is Test {
         cellar.deposit(deposit, address(this));
 
         // Calculate expected platform fee.
-        (, , uint64 strategistPlatformCut, uint64 platformFee, , , ) = cellar.feeData();
+        (uint64 strategistPlatformCut, uint64 platformFee, , ) = cellar.feeData();
         uint256 expectedPlatformFee = (deposit * platformFee * timePassed) / (365 days * 1e18);
 
         // Advance time by `timePassed` seconds.
@@ -1020,370 +798,61 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all performance fee shares.");
     }
 
-    function testPlatformAndPerformanceFees(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the
-        // order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-        (
-            ,
-            uint64 strategistPerformanceCut,
-            uint64 strategistPlatformCut,
-            uint64 platformFee,
-            uint64 performanceFee,
-            ,
-
-        ) = cellar.feeData();
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        deal(address(USDC), address(cosmos), 0);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
-        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
-
-        // Call `sendFees` to calculate pending performance and platform fees,
-        // and distribute them to strategist, and Cosmos.
-        cellar.sendFees();
-
-        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
-
-        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
-        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
-            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
-
-        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
-
-        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
-            expectedPlatformFees;
-
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
-            expectedTotalFeesAdjustedForDilution,
-            2,
-            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToStrategist,
-            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
-            2,
-            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos,
-            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
-            2,
-            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
-        );
-
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
-
-        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
-
-        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterSendFees,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
-        );
-    }
-
-    function testPerformanceFeesWithZeroPlatformFees(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-
-        cellar.setPlatformFee(0);
-        (, uint64 strategistPerformanceCut, , , uint64 performanceFee, , ) = cellar.feeData();
-
-        uint256 assetAmount = deposit / 2;
-        uint256 sharesAmount = assetAmount.changeDecimals(6, 18);
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        // Deposit into cellar.
-        cellar.deposit(assetAmount, address(this));
-        // Mint shares from the cellar.
-        cellar.mint(sharesAmount, address(this));
-
-        (uint256 highWatermark, , , , , , ) = cellar.feeData();
-        assertEq(highWatermark, cellar.totalAssets(), "High watermark should equal totalAssets.");
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
-
-        cellar.sendFees();
-
-        // Redeem all shares from the cellar.
-        uint256 shares = cellar.balanceOf(address(this));
-        cellar.redeem(shares, address(this), address(this));
-
-        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
-
-        // Check that no fees are minted.
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
-            expectedPerformanceFees,
-            2,
-            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected performance fee."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToStrategist,
-            expectedPerformanceFees.mulWadDown(strategistPerformanceCut),
-            2,
-            "Shares converted to assets sent to strategist should be equal to (total performance fees * strategist performance cut)."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos,
-            expectedPerformanceFees.mulWadDown(1e18 - strategistPerformanceCut),
-            2,
-            "Assets sent to Cosmos should be equal to (total performance fees * (1-strategist performance cut))."
-        );
-
-        assertApproxEqAbs(
-            cellar.previewRedeem(cellar.balanceOf(address(cellar))),
-            0,
-            1,
-            "Cellar fee shares should be redeemable for zero assets."
-        );
-    }
-
-    function testPlatformFeesWithZeroPerformanceFees(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-
-        cellar.setPerformanceFee(0);
-        (, , uint64 strategistPlatformCut, uint64 platformFee, , , ) = cellar.feeData();
-
-        uint256 assetAmount = deposit / 2;
-        uint256 sharesAmount = assetAmount.changeDecimals(6, 18);
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        // Deposit into cellar.
-        cellar.deposit(assetAmount, address(this));
-        // Mint shares from the cellar.
-        cellar.mint(sharesAmount, address(this));
-
-        (uint256 highWatermark, , , , , , ) = cellar.feeData();
-        assertEq(highWatermark, cellar.totalAssets(), "High watermark should equal totalAssets.");
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
-
-        cellar.sendFees();
-
-        // Redeem all shares from the cellar.
-        uint256 shares = cellar.balanceOf(address(this));
-        cellar.redeem(shares, address(this), address(this));
-
-        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
-
-        // Check that no fees are minted.
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
-            expectedPlatformFees,
-            2,
-            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected platform fees."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToStrategist,
-            expectedPlatformFees.mulWadDown(strategistPlatformCut),
-            2,
-            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut)."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos,
-            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut),
-            2,
-            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut))."
-        );
-
-        assertApproxEqAbs(
-            cellar.previewRedeem(cellar.balanceOf(address(cellar))),
-            0,
-            1,
-            "Cellar fee shares should be redeemable for zero assets."
-        );
-    }
-
-    function testPlatformAndPerformanceFeesWithZeroFees(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-
-        cellar.setPerformanceFee(0);
-        cellar.setPlatformFee(0);
-
-        uint256 assetAmount = deposit / 2;
-        uint256 sharesAmount = assetAmount.changeDecimals(6, 18);
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        // Deposit into cellar.
-        cellar.deposit(assetAmount, address(this));
-        // Mint shares from the cellar.
-        cellar.mint(sharesAmount, address(this));
-
-        (uint256 highWatermark, , , , , , ) = cellar.feeData();
-        assertEq(highWatermark, cellar.totalAssets(), "High watermark should equal totalAssets.");
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
-
-        cellar.sendFees();
-
-        // Redeem all shares from the cellar.
-        uint256 shares = cellar.balanceOf(address(this));
-        cellar.redeem(shares, address(this), address(this));
-
-        // Check that no fees are minted.
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-        assertEq(feesInAssetsSentToCosmos, 0, "Fees sent to Cosmos should be zero.");
-        assertEq(feesInAssetsSentToStrategist, 0, "Fees sent to strategist should be zero.");
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have zero fee shares");
-
-        (highWatermark, , , , , , ) = cellar.feeData();
-        assertEq(highWatermark, 0, "High watermark should equal zero.");
-    }
-
-    function testResetHighWatermark(
-        uint256 deposit,
-        uint256 loss,
-        uint256 gain
-    ) external {
-        deposit = bound(deposit, 100_000e6, 1_000_000e6);
-        loss = bound(loss, 10e6, 10_000e6);
-        gain = bound(gain, 10e6, 10_000e6);
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), (2 * deposit) + 1);
-
-        // Deposit into the Cellar.
-        cellar.deposit(deposit, address(this)); //deposit into Cellar
-
-        // Simulate Cellar losing yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) - loss);
-
-        // Deposit into the Cellar to check if performance fees are minted.
-        cellar.deposit(deposit, address(this));
-
-        assertEq(
-            cellar.balanceOf(address(cellar)),
-            0,
-            "Cellar should have not been minted any performance fee shares."
-        );
-
-        // Reset Cellar's High Watermark value.
-        cellar.resetHighWatermark();
-
-        (uint256 currentHighWatermark, , , , uint64 performanceFee, , ) = cellar.feeData();
-        uint256 expectedHighWatermark = 2 * deposit - loss;
-        assertEq(
-            currentHighWatermark,
-            expectedHighWatermark,
-            "Cellar should have reset high watermark to the current assets."
-        );
-
-        // Simulate Cellar earning yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + gain);
-
-        // Deposit into the Cellar to check that performance fees are minted.
-        cellar.deposit(1, address(this));
-
-        assertTrue(cellar.balanceOf(address(cellar)) > 0, "Cellar should have been minted performance fee shares.");
-
-        uint256 expectedPerformanceFeeInAssets = gain.mulWadDown(performanceFee);
-
-        // Cellars rounds down when using previewRedeem, so it is acceptable to be off by 1 wei.
-        assertApproxEqAbs(
-            cellar.previewRedeem(cellar.balanceOf(address(cellar))),
-            expectedPerformanceFeeInAssets,
-            1,
-            "Cellar performance fee shares in assets should equal (gain * performanceFee)."
-        );
-    }
+    //TODO change to testing zero platform fees
+    // function testPlatformAndPerformanceFeesWithZeroFees(
+    //     uint256 timePassed,
+    //     uint256 deposit,
+    //     uint256 yield
+    // ) external {
+    //     // Cap time passed to 1 year. Platform fees will be collected on the order of weeks possibly months.
+    //     timePassed = bound(timePassed, 1 days, 365 days);
+    //     deposit = bound(deposit, 100e6, 1_000_000_000e6);
+    //     // Cap yield to 10,000% APR
+    //     {
+    //         uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
+    //         // Floor yield above 0.01% APR
+    //         uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
+    //         yield = bound(yield, yieldLowerBound, yieldUpperBound);
+    //     }
+
+    //     cellar.setPerformanceFee(0);
+    //     cellar.setPlatformFee(0);
+
+    //     uint256 assetAmount = deposit / 2;
+    //     uint256 sharesAmount = assetAmount.changeDecimals(6, 18);
+    //     // Give this address enough USDC to cover deposits.
+    //     deal(address(USDC), address(this), deposit);
+
+    //     // Deposit into cellar.
+    //     cellar.deposit(assetAmount, address(this));
+    //     // Mint shares from the cellar.
+    //     cellar.mint(sharesAmount, address(this));
+
+    //     (uint256 highWatermark, , , , , , ) = cellar.feeData();
+    //     assertEq(highWatermark, cellar.totalAssets(), "High watermark should equal totalAssets.");
+
+    //     // Advance time by `timePassed` seconds.
+    //     skip(timePassed);
+
+    //     // Simulate Cellar earning yield.
+    //     deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
+
+    //     cellar.sendFees();
+
+    //     // Redeem all shares from the cellar.
+    //     uint256 shares = cellar.balanceOf(address(this));
+    //     cellar.redeem(shares, address(this), address(this));
+
+    //     // Check that no fees are minted.
+    //     uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
+    //     uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
+    //     assertEq(feesInAssetsSentToCosmos, 0, "Fees sent to Cosmos should be zero.");
+    //     assertEq(feesInAssetsSentToStrategist, 0, "Fees sent to strategist should be zero.");
+    //     assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have zero fee shares");
+
+    //     (highWatermark, , , , , , ) = cellar.feeData();
+    //     assertEq(highWatermark, 0, "High watermark should equal zero.");
+    // }
 
     function testPayoutNotSet() external {
         cellar.setStrategistPayoutAddress(address(0));
@@ -1436,7 +905,7 @@ contract CellarTest is Test {
                 address(0),
                 abi.encode(0)
             );
-            multiPositionCellar.pushPosition(address(position));
+            multiPositionCellar.addPosition(multiPositionCellar.getPositions().length, address(position));
         }
 
         assertEq(multiPositionCellar.getPositions().length, 32, "Cellar should have 32 positions.");
@@ -1444,9 +913,6 @@ contract CellarTest is Test {
         // Adding one more position should revert.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(32))));
         multiPositionCellar.addPosition(32, vm.addr(777));
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(32))));
-        multiPositionCellar.pushPosition(vm.addr(777));
 
         // Check that users can still interact with the cellar even at max positions size.
         deal(address(USDC), address(this), 100e6);
@@ -1517,18 +983,9 @@ contract CellarTest is Test {
             yield = bound(yield, yieldLowerBound, yieldUpperBound);
         }
 
-        cellar.setStrategistPerformanceCut(1e18);
         cellar.setStrategistPlatformCut(1e18);
 
-        (
-            ,
-            uint64 strategistPerformanceCut,
-            uint64 strategistPlatformCut,
-            uint64 platformFee,
-            uint64 performanceFee,
-            ,
-
-        ) = cellar.feeData();
+        (uint64 strategistPlatformCut, uint64 platformFee, , ) = cellar.feeData();
 
         // Give this address enough USDC to cover deposits.
         deal(address(USDC), address(this), deposit);
@@ -1549,16 +1006,9 @@ contract CellarTest is Test {
         // and distribute them to strategist, and Cosmos.
         cellar.sendFees();
 
-        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
-
-        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
-        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
-            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
-
         uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
 
-        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
-            expectedPlatformFees;
+        uint256 expectedTotalFeesAdjustedForDilution = expectedPlatformFees;
 
         uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
         uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
@@ -1572,31 +1022,19 @@ contract CellarTest is Test {
 
         assertApproxEqAbs(
             feesInAssetsSentToStrategist,
-            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
+            expectedPlatformFees.mulWadDown(strategistPlatformCut),
             2,
-            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut)."
         );
 
         assertApproxEqAbs(
             feesInAssetsSentToCosmos,
-            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
+            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut),
             2,
-            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut))."
         );
 
         assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
-
-        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
-
-        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterSendFees,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
-        );
 
         vm.startPrank(strategist);
         cellar.redeem(cellar.balanceOf(strategist), strategist, strategist);
@@ -1621,18 +1059,9 @@ contract CellarTest is Test {
             yield = bound(yield, yieldLowerBound, yieldUpperBound);
         }
 
-        cellar.setStrategistPerformanceCut(0);
         cellar.setStrategistPlatformCut(0);
 
-        (
-            ,
-            uint64 strategistPerformanceCut,
-            uint64 strategistPlatformCut,
-            uint64 platformFee,
-            uint64 performanceFee,
-            ,
-
-        ) = cellar.feeData();
+        (uint64 strategistPlatformCut, uint64 platformFee, , ) = cellar.feeData();
 
         // Give this address enough USDC to cover deposits.
         deal(address(USDC), address(this), deposit);
@@ -1653,17 +1082,9 @@ contract CellarTest is Test {
         // and distribute them to strategist, and Cosmos.
         cellar.sendFees();
 
-        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
-
-        // Minting platform fees dilutes share price, so it also dilutes pending
-        // performance fees.
-        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
-            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
-
         uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
 
-        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
-            expectedPlatformFees;
+        uint256 expectedTotalFeesAdjustedForDilution = expectedPlatformFees;
 
         uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
         uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
@@ -1677,239 +1098,19 @@ contract CellarTest is Test {
 
         assertApproxEqAbs(
             feesInAssetsSentToStrategist,
-            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
+            expectedPlatformFees.mulWadDown(strategistPlatformCut),
             2,
-            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut)."
         );
 
         assertApproxEqAbs(
             feesInAssetsSentToCosmos,
-            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
+            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut),
             2,
-            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut))."
         );
 
         assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
-
-        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
-
-        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterSendFees,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
-        );
-    }
-
-    function testPerformanceFeesToStrategistPlatformFeesToPlatform(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the
-        // order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-
-        cellar.setStrategistPerformanceCut(1e18);
-        cellar.setStrategistPlatformCut(0);
-
-        (
-            ,
-            uint64 strategistPerformanceCut,
-            uint64 strategistPlatformCut,
-            uint64 platformFee,
-            uint64 performanceFee,
-            ,
-
-        ) = cellar.feeData();
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        deal(address(USDC), address(cosmos), 0);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
-        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
-
-        // Call `sendFees` to calculate pending performance and platform fees,
-        // and distribute them to strategist, and Cosmos.
-        cellar.sendFees();
-
-        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
-
-        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
-        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
-            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
-
-        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
-
-        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
-            expectedPlatformFees;
-
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
-            expectedTotalFeesAdjustedForDilution,
-            2,
-            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToStrategist,
-            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
-            2,
-            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos,
-            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
-            2,
-            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
-        );
-
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
-
-        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
-
-        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterSendFees,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
-        );
-
-        vm.startPrank(strategist);
-        cellar.redeem(cellar.balanceOf(strategist), strategist, strategist);
-        vm.stopPrank();
-    }
-
-    function testPlatformFeesToStrategistPerformanceFeesToPlatform(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the
-        // order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-
-        cellar.setStrategistPerformanceCut(0);
-        cellar.setStrategistPlatformCut(1e18);
-
-        (
-            ,
-            uint64 strategistPerformanceCut,
-            uint64 strategistPlatformCut,
-            uint64 platformFee,
-            uint64 performanceFee,
-            ,
-
-        ) = cellar.feeData();
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        deal(address(USDC), address(cosmos), 0);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
-        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
-
-        // Call `sendFees` to calculate pending performance and platform fees,
-        // and distribute them to strategist, and Cosmos.
-        cellar.sendFees();
-
-        uint256 expectedPerformanceFees = yield.mulDivDown(performanceFee, 1e18);
-
-        // Minting platform fees dilutes share price, so it also dilutes pending performance fees.
-        uint256 expectedPerformanceFeesAdjustedForDilution = (expectedPerformanceFees *
-            (1e18 - (platformFee * timePassed) / 365 days)) / 1e18;
-
-        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
-
-        uint256 expectedTotalFeesAdjustedForDilution = expectedPerformanceFeesAdjustedForDilution +
-            expectedPlatformFees;
-
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
-            expectedTotalFeesAdjustedForDilution,
-            2,
-            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToStrategist,
-            expectedPlatformFees.mulWadDown(strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(strategistPerformanceCut),
-            2,
-            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut) + (total performance fees * strategist performance cut)."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos,
-            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut) +
-                expectedPerformanceFeesAdjustedForDilution.mulWadDown(1e18 - strategistPerformanceCut),
-            2,
-            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut)) + (total performance fees * (1-strategist performance cut))."
-        );
-
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
-
-        uint256 expectedHighWatermark = totalAssetsBeforeSendFees - feesInAssetsSentToCosmos;
-
-        (uint256 highWatermarkAfterSendFees, , , , , , ) = cellar.feeData();
-
-        assertEq(
-            highWatermarkAfterSendFees,
-            expectedHighWatermark,
-            "High watermark should equal high watermark before send fees minus assets sent to Cosmos."
-        );
-
-        vm.startPrank(strategist);
-        cellar.redeem(cellar.balanceOf(strategist), strategist, strategist);
-        vm.stopPrank();
     }
 
     //TODO
@@ -1964,7 +1165,7 @@ contract CellarTest is Test {
         debtCellar.removePosition(2);
         assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
 
-        debtCellar.pushPosition(address(WBTC));
+        debtCellar.addPosition(2, address(WBTC));
 
         // Give debt cellar some assets.
         deal(address(USDC), address(debtCellar), 100_000e6);
@@ -2055,7 +1256,7 @@ contract CellarTest is Test {
         // Add asset that will be depegged.
         priceRouter.supportAsset(USDT);
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, false, address(0), abi.encode(0));
-        cellar.pushPosition(address(USDT));
+        cellar.addPosition(5, address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
 
@@ -2078,7 +1279,7 @@ contract CellarTest is Test {
         // Add asset that will be depegged.
         priceRouter.supportAsset(USDT);
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, false, address(0), abi.encode(0));
-        cellar.pushPosition(address(USDT));
+        cellar.addPosition(5, address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
 
@@ -2161,7 +1362,7 @@ contract CellarTest is Test {
 
         priceRouter.supportAsset(USDT);
         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, false, address(0), abi.encode(0));
-        cellar.pushPosition(address(USDT));
+        cellar.addPosition(5, address(USDT));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
 
@@ -2182,7 +1383,6 @@ contract CellarTest is Test {
 
         // Important to set fees to zero, else performance fees are minted as
         // the cellars asset depeggs further.
-        cellar.setPerformanceFee(0);
         cellar.setPlatformFee(0);
         cellar.initiateShutdown();
 
@@ -2271,7 +1471,7 @@ contract CellarTest is Test {
         ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", true);
 
         cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626, false, address(0), abi.encode(0));
-        cellar.pushPosition(address(maliciousCellar));
+        cellar.addPosition(5, address(maliciousCellar));
         cellar.setHoldingPosition(address(maliciousCellar));
 
         uint256 assets = 10000e6;
