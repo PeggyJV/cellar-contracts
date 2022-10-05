@@ -23,6 +23,9 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
  */
 
 //TODO if cellar has debt positions it should NOT support proportional withdraw.
+//TODO possibly remove withdraw in proportion
+//TODO remove trust positio/adaptor logic and put it in Registry
+//TODO figure out some method to store revert messages else where.
 contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     using AddressArray for address[];
     using AddressArray for ERC20[];
@@ -470,62 +473,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         feeData.strategistPayoutAddress = payout;
     }
 
-    // ============================================= LIMITS CONFIG =============================================
-
-    /**
-     * @notice Emitted when the liquidity limit is changed.
-     * @param oldLimit amount the limit was changed from
-     * @param newLimit amount the limit was changed to
-     */
-    event LiquidityLimitChanged(uint256 oldLimit, uint256 newLimit);
-
-    /**
-     * @notice Emitted when the deposit limit is changed.
-     * @param oldLimit amount the limit was changed from
-     * @param newLimit amount the limit was changed to
-     */
-    event DepositLimitChanged(uint256 oldLimit, uint256 newLimit);
-
-    /**
-     * @notice Attempted deposit more than the max deposit.
-     * @param assets the assets user attempted to deposit
-     * @param maxDeposit the max assets that can be deposited
-     */
-    error Cellar__DepositRestricted(uint256 assets, uint256 maxDeposit);
-
-    /**
-     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals
-     *         as the current asset.
-     * @dev Set to `type(uint256).max` to have no limit.
-     */
-    uint256 public liquidityLimit = type(uint256).max;
-
-    /**
-     * @notice Maximum amount of assets per wallet. Denominated in the same decimals as the current asset.
-     * @dev Set to `type(uint256).max` to have no limit.
-     */
-    uint256 public depositLimit = type(uint256).max;
-
-    /**
-     * @notice Set the maximum liquidity that cellar can manage. Uses the same decimals as the current asset.
-     * @param newLimit amount of assets to set as the new limit
-     */
-    function setLiquidityLimit(uint256 newLimit) external onlyOwner {
-        emit LiquidityLimitChanged(liquidityLimit, newLimit);
-
-        liquidityLimit = newLimit;
-    }
-
-    /**
-     * @notice Set the per-wallet deposit limit. Uses the same decimals as the current asset.
-     * @param newLimit amount of assets to set as the new limit
-     */
-    function setDepositLimit(uint256 newLimit) external onlyOwner {
-        emit DepositLimitChanged(depositLimit, newLimit);
-
-        depositLimit = newLimit;
-    }
-
     // =========================================== EMERGENCY LOGIC ===========================================
 
     /**
@@ -715,14 +662,14 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     uint256 public constant MINIMUM_SHARE_LOCK_PERIOD = 8;
 
     /**
-     * @notice Shares can be locked for at most 256 blocks after minting.
+     * @notice Shares can be locked for at most 7200 blocks after minting.
      */
     uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 7200;
 
     /**
      * @notice After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
      */
-    uint256 public shareLockPeriod = 10;
+    uint256 public shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
 
     /**
      * @notice mapping that stores every users last block they minted shares.
@@ -765,6 +712,13 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     ) internal view override {
         _checkIfSharesLocked(from);
     }
+
+    /**
+     * @notice Attempted deposit more than the max deposit.
+     * @param assets the assets user attempted to deposit
+     * @param maxDeposit the max assets that can be deposited
+     */
+    error Cellar__DepositRestricted(uint256 assets, uint256 maxDeposit);
 
     /**
      * @notice called at the beginning of deposit.
@@ -1260,6 +1214,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @dev Used to efficiently get and store accounting information to avoid having to expensively
      *      recompute it.
      */
+    // Can this be used to replace logic in totalAssets, and withdrawable from?
     function _getData()
         internal
         view
@@ -1281,17 +1236,13 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         uint256[] memory debtBalances = new uint256[](numberOfDebtPositions);
         uint256 collateralIndex;
         uint256 debtIndex;
-
         _withdrawableBalances = new uint256[](len);
-
         for (uint256 i; i < len; i++) {
             address position = positions[i];
-
             _positions[i] = position;
             _positionAssets[i] = _assetOf(position);
             _positionBalances[i] = _balanceOf(position);
             _withdrawableBalances[i] = _withdrawableFrom(position);
-
             if (getPositionData[position].isDebt) {
                 debtPositionAssets[debtIndex] = _assetOf(position);
                 debtBalances[debtIndex] = _balanceOf(position);
@@ -1302,7 +1253,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
                 collateralIndex++;
             }
         }
-
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         _totalAssets =
             priceRouter.getValues(positionAssets, balances, asset) -
@@ -1310,15 +1260,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================
-
-    /**
-     * @notice Emitted on rebalancing positions.
-     * @param fromPosition the address of the position rebalanced from
-     * @param toPosition the address of the position rebalanced to
-     * @param assetsFrom the amount of assets withdrawn from the position rebalanced from
-     * @param assetsTo the amount of assets desposited to the position rebalanced to
-     */
-    event Rebalance(address indexed fromPosition, address indexed toPosition, uint256 assetsFrom, uint256 assetsTo);
 
     /**
      * @notice Emitted on when the rebalance deviation is changed.
@@ -1465,6 +1406,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
         }
+        //require(totalShares == totalSupply());
         if (totalShares != totalSupply()) revert Cellar__TotalSharesMustRemainConstant(totalSupply(), totalShares);
 
         blockExternalReceiver = false;
@@ -1477,23 +1419,10 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @param receiver address of account that would receive the shares
      * @return assets maximum amount of assets that can be deposited
      */
-    function maxDeposit(address receiver) public view override returns (uint256 assets) {
+    function maxDeposit(address receiver) public view override returns (uint256) {
         if (isShutdown) return 0;
 
-        uint256 asssetDepositLimit = depositLimit;
-        uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
-            return type(uint256).max;
-
-        // Get data efficiently.
-        uint256 _totalAssets = totalAssets();
-        uint256 ownedAssets = _convertToAssets(balanceOf(receiver), _totalAssets);
-
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(ownedAssets);
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(_totalAssets);
-
-        // Only return the more relevant of the two.
-        assets = Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
+        return type(uint256).max;
     }
 
     /**
@@ -1501,23 +1430,10 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @param receiver address of account that would receive the shares
      * @return shares maximum amount of shares that can be minted
      */
-    function maxMint(address receiver) public view override returns (uint256 shares) {
+    function maxMint(address receiver) public view override returns (uint256) {
         if (isShutdown) return 0;
 
-        uint256 asssetDepositLimit = depositLimit;
-        uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
-            return type(uint256).max;
-
-        // Get data efficiently.
-        uint256 _totalAssets = totalAssets();
-        uint256 ownedAssets = _convertToAssets(balanceOf(receiver), _totalAssets);
-
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(ownedAssets);
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(_totalAssets);
-
-        // Only return the more relevant of the two.
-        shares = _convertToShares(Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit), _totalAssets);
+        return type(uint256).max;
     }
 
     // ========================================= FEES LOGIC =========================================

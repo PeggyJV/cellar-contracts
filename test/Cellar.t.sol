@@ -223,9 +223,6 @@ contract CellarTest is Test {
         );
         assertEq(strategistPayoutAddress, strategist, "Strategist payout address should be equal to strategist.");
 
-        assertEq(cellar.liquidityLimit(), type(uint256).max, "Liquidity Limit should be max uint256.");
-        assertEq(cellar.depositLimit(), type(uint256).max, "Deposit Limit should be max uint256.");
-
         assertEq(cellar.owner(), address(this), "Should initialize owner to this contract.");
     }
 
@@ -549,135 +546,6 @@ contract CellarTest is Test {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
         cellar.initiateShutdown();
-    }
-
-    // ========================================= LIMITS TESTS =========================================
-
-    function testLimits(uint256 amount) external {
-        amount = bound(amount, 1, type(uint72).max);
-
-        deal(address(USDC), address(this), amount);
-        USDC.approve(address(cellar), amount);
-        cellar.deposit(amount, address(this));
-
-        assertEq(cellar.maxDeposit(address(this)), type(uint256).max, "Should have no max deposit.");
-        assertEq(cellar.maxMint(address(this)), type(uint256).max, "Should have no max mint.");
-
-        cellar.setDepositLimit(amount * 2);
-        cellar.setLiquidityLimit(amount / 2);
-
-        assertEq(cellar.depositLimit(), amount * 2, "Should have changed the deposit limit.");
-        assertEq(cellar.liquidityLimit(), amount / 2, "Should have changed the liquidity limit.");
-        assertEq(cellar.maxDeposit(address(this)), 0, "Should have reached new max deposit.");
-        assertEq(cellar.maxMint(address(this)), 0, "Should have reached new max mint.");
-
-        cellar.setLiquidityLimit(amount * 3);
-
-        assertEq(cellar.maxDeposit(address(this)), amount, "Should not have reached new max deposit.");
-        assertEq(cellar.maxMint(address(this)), amount.changeDecimals(6, 18), "Should not have reached new max mint.");
-
-        address otherUser = vm.addr(1);
-
-        assertEq(cellar.maxDeposit(otherUser), amount * 2, "Should have different max deposits for other user.");
-        assertEq(
-            cellar.maxMint(otherUser),
-            (amount * 2).changeDecimals(6, 18),
-            "Should have different max mint for other user."
-        );
-
-        // Hit global liquidity limit and deposit limit for other user.
-        vm.startPrank(otherUser);
-        deal(address(USDC), address(otherUser), amount * 2);
-        USDC.approve(address(cellar), amount * 2);
-        cellar.deposit(amount * 2, otherUser);
-        vm.stopPrank();
-
-        assertEq(cellar.maxDeposit(address(this)), 0, "Should have hit liquidity limit for max deposit.");
-        assertEq(cellar.maxMint(address(this)), 0, "Should have hit liquidity limit for max mint.");
-
-        // Reduce liquidity limit by withdrawing.
-        cellar.withdraw(amount, address(this), address(this));
-
-        assertEq(cellar.maxDeposit(address(this)), amount, "Should have reduced liquidity limit for max deposit.");
-        assertEq(
-            cellar.maxMint(address(this)),
-            amount.changeDecimals(6, 18),
-            "Should have reduced liquidity limit for max mint."
-        );
-        assertEq(
-            cellar.maxDeposit(otherUser),
-            0,
-            "Should have not changed max deposit for other user because they are still at the deposit limit."
-        );
-        assertEq(
-            cellar.maxMint(otherUser),
-            0,
-            "Should have not changed max mint for other user because they are still at the deposit limit."
-        );
-
-        cellar.initiateShutdown();
-
-        assertEq(cellar.maxDeposit(address(this)), 0, "Should show no assets can be deposited when shutdown.");
-        assertEq(cellar.maxMint(address(this)), 0, "Should show no shares can be minted when shutdown.");
-    }
-
-    function testDepositAboveDepositLimit(uint256 amount) external {
-        // Depositing above the deposit limit should revert.
-        amount = bound(amount, 101e6, type(uint112).max);
-
-        uint256 limit = 100e6;
-        cellar.setDepositLimit(limit);
-
-        deal(address(USDC), address(this), amount);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DepositRestricted.selector, amount, limit)));
-        cellar.deposit(amount, address(this));
-    }
-
-    function testMintAboveDepositLimit(uint256 amount) external {
-        // Minting above the deposit limit should revert.
-        amount = bound(amount, 101, type(uint112).max);
-
-        uint256 limit = 100e6;
-        cellar.setDepositLimit(limit);
-
-        deal(address(USDC), address(this), amount * 1e6);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DepositRestricted.selector, amount * 1e6, limit)));
-        cellar.mint(amount * 1e18, address(this));
-    }
-
-    function testDepositAboveLiquidityLimit(uint256 amount) external {
-        // Depositing above the deposit limit should revert.
-        amount = bound(amount, 101e6, type(uint112).max);
-
-        uint256 limit = 100e6;
-        cellar.setLiquidityLimit(limit);
-
-        deal(address(USDC), address(this), amount);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DepositRestricted.selector, amount, limit)));
-        cellar.deposit(amount, address(this));
-    }
-
-    function testMintAboveLiquidityLimit(uint256 amount) external {
-        // Minting above the deposit limit should revert.
-        amount = bound(amount, 101, type(uint112).max);
-
-        uint256 limit = 100e6;
-        cellar.setLiquidityLimit(limit);
-
-        deal(address(USDC), address(this), amount * 1e6);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DepositRestricted.selector, amount * 1e6, limit)));
-        cellar.mint(amount * 1e18, address(this));
-    }
-
-    function testChangingLimits() external {
-        cellar.setLiquidityLimit(777);
-        cellar.setDepositLimit(777_777);
-        assertEq(cellar.liquidityLimit(), 777, "Liquidity limit should be set to 777.");
-        assertEq(cellar.depositLimit(), 777_777, "Deposit limit should be set to 777,777.");
     }
 
     // =========================================== TOTAL ASSETS TEST ===========================================
@@ -1617,7 +1485,7 @@ contract CellarTest is Test {
         cellarA.transfer(address(this), shares);
         vm.stopPrank();
 
-        vm.roll(block.number + 10);
+        vm.roll(block.number + cellarA.shareLockPeriod());
 
         // Confirm attackers shares are worth more once shares are unlocked.
         assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more than deposit.");
