@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, ERC20 } from "src/base/ERC4626.sol";
+import { ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
@@ -30,9 +30,10 @@ contract VestingSimple {
         uint256 vested;
     }
 
-    uint256 public constant MAX_VESTING_SCHEDULES = 10;
-
     // ============================================= STATE =============================================
+
+    /// @notice Used for retaining maximum precision in amountPerSecond.
+    uint256 internal constant ONE = 1e18;
 
     /// @notice The deposit token for the vesting contract.
     ERC20 public immutable asset;
@@ -94,7 +95,7 @@ contract VestingSimple {
         allUserDepositIds[receiver].add(newDepositId);
         VestingSchedule storage s = vests[receiver][newDepositId];
 
-        s.amountPerSecond = assets / vestingPeriod;
+        s.amountPerSecond = assets * ONE / vestingPeriod;
         s.until = uint128(block.timestamp + vestingPeriod);
         s.lastClaimed = uint128(block.timestamp);
 
@@ -103,7 +104,7 @@ contract VestingSimple {
         unvestedDeposits += assets;
 
         // Collect tokens
-        ERC20(asset).safeTransferFrom(msg.sender, address(this), assets);
+        ERC20(asset).transferFrom(msg.sender, address(this), assets);
 
         emit Deposit(receiver, assets);
     }
@@ -120,7 +121,7 @@ contract VestingSimple {
      */
     function withdraw(uint256 depositId, uint256 assets) public returns (uint256 shares) {
         // Check for rounding error since we round down in previewDeposit.
-        require(assets > 0, "Deposit amount 0");
+        require(assets > 0, "Withdraw amount 0");
 
         // Used for compatibility
         shares = assets;
@@ -199,7 +200,7 @@ contract VestingSimple {
             if (s.amountPerSecond > 0 && (s.vested > 0 || s.lastClaimed < s.until)) {
                 uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
                 uint256 timeElapsed = lastTimestamp - s.lastClaimed;
-                uint256 newlyVested = timeElapsed * s.amountPerSecond;
+                uint256 newlyVested = timeElapsed * s.amountPerSecond / ONE;
 
                 balance += (s.vested + newlyVested);
             }
@@ -221,7 +222,7 @@ contract VestingSimple {
 
         uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
         uint256 timeElapsed = lastTimestamp - s.lastClaimed;
-        uint256 newlyVested = timeElapsed * s.amountPerSecond;
+        uint256 newlyVested = timeElapsed * s.amountPerSecond / ONE;
 
         balance = (s.vested + newlyVested);
     }
@@ -243,17 +244,29 @@ contract VestingSimple {
 
             if (s.amountPerSecond > 0 && (s.vested > 0 || s.lastClaimed < s.until)) {
                 // Get total amount for the schedule
-                uint256 totalAmount = s.amountPerSecond * vestingPeriod;
+                uint256 totalAmount = s.amountPerSecond * vestingPeriod / ONE;
                 uint256 startTime = s.until - vestingPeriod;
 
                 uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
                 uint256 timeElapsed = lastTimestamp - startTime;
-                uint256 earned = timeElapsed * s.amountPerSecond;
+
+                uint256 earned = timeElapsed * s.amountPerSecond / ONE;
                 uint256 claimed = earned - s.vested;
 
                 balance += (totalAmount - claimed);
             }
         }
+    }
+
+    /**
+     * @notice Returns all deposit IDs in an array. Only contains active deposits.
+     *
+     * @param user                          The user whose balance should be reported.
+     *
+     * @return ids                          An array of the user's active deposit IDs.
+     */
+    function userDepositIds(address user) public view returns (uint256[] memory) {
+        return allUserDepositIds[user].values();
     }
 
     // ===================================== INTERNAL FUNCTIONS =======================================
@@ -276,7 +289,7 @@ contract VestingSimple {
 
         uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
         uint256 timeElapsed = lastTimestamp - s.lastClaimed;
-        newlyVested = timeElapsed * s.amountPerSecond;
+        newlyVested = timeElapsed * s.amountPerSecond / ONE;
 
         s.vested += newlyVested;
         s.lastClaimed = uint128(lastTimestamp);
