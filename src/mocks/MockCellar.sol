@@ -13,25 +13,12 @@ contract MockCellar is Cellar, Test {
         Registry _registry,
         ERC20 _asset,
         address[] memory _positions,
-        PositionData[] memory _positionData,
+        Registry.PositionData[] memory _positionData,
         address _holdingPosition,
-        WithdrawType _withdrawType,
         string memory _name,
         string memory _symbol,
         address _strategistPayout
-    )
-        Cellar(
-            _registry,
-            _asset,
-            _positions,
-            _positionData,
-            _holdingPosition,
-            _withdrawType,
-            _name,
-            _symbol,
-            _strategistPayout
-        )
-    {}
+    ) Cellar(_registry, _asset, _positions, _positionData, _holdingPosition, _name, _symbol, _strategistPayout) {}
 
     function depositIntoPosition(
         address position,
@@ -62,17 +49,16 @@ contract MockCellar is Cellar, Test {
         _depositTo(position, amount);
     }
 
-    function getData()
-        public
-        view
-        returns (
-            uint256 _totalAssets,
-            address[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances,
-            uint256[] memory withdrawableBalances
-        )
-    {
-        (_totalAssets, _positions, positionAssets, positionBalances, withdrawableBalances) = _getData();
-    }
+    // function getData()
+    //     public
+    //     view
+    //     returns (
+    //         uint256 _totalAssets,
+    //         address[] memory _positions,
+    //         ERC20[] memory positionAssets,
+    //         uint256[] memory positionBalances
+    //     )
+    // {
+    //     (_totalAssets, _positions, positionAssets, positionBalances) = _getData();
+    // }
 }

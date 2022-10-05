@@ -144,7 +144,6 @@ contract CellarAssetManagerTest is Test {
             positions,
             positionData,
             address(USDC),
-            Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             strategist
@@ -1017,7 +1016,6 @@ contract CellarAssetManagerTest is Test {
                 positions,
                 positionData,
                 address(USDC),
-                Cellar.WithdrawType.ORDERLY,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
                 strategist
@@ -1390,7 +1388,7 @@ contract CellarAssetManagerTest is Test {
         // Set WETH balance in cellar to equal 45% of the cellars total assets.
         deal(address(WETH), address(assetManagementCellar), ((2 * assetsNeeded * 45) / 100000).changeDecimals(6, 18));
 
-        // Change to withdraw in proportion
+        /*// Change to withdraw in proportion
         assetManagementCellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
 
         // Have Sam exit using withdraw.
@@ -1473,7 +1471,7 @@ contract CellarAssetManagerTest is Test {
                 0,
                 "Mary's USDC, WETH, and WBTC worth should equal expectedValue."
             );
-        }
+        }*/
     }
 
     /*

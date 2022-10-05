@@ -141,7 +141,6 @@ contract CellarTest is Test {
             positions,
             positionData,
             address(USDC),
-            Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             strategist
@@ -197,11 +196,6 @@ contract CellarTest is Test {
 
         assertEq(address(cellar.asset()), address(USDC), "Should initialize asset to be USDC.");
         assertEq(cellar.holdingPosition(), address(USDC), "Should initialize holding position to be USDC.");
-        assertEq(
-            uint256(cellar.withdrawType()),
-            uint256(Cellar.WithdrawType.ORDERLY),
-            "Should initialize withdraw type."
-        );
         assertEq(
             cellar.lastAccrual(),
             uint64(block.timestamp),
@@ -316,30 +310,6 @@ contract CellarTest is Test {
         assertEq(WETH.balanceOf(address(wethCLR)), 0, "Should have transferred balance from WETH position.");
         assertEq(WBTC.balanceOf(address(wbtcCLR)), 0, "Should have transferred balance from BTC position.");
         assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
-    }
-
-    function testWithdrawInProportion() external {
-        cellar.depositIntoPosition(address(wethCLR), 1e18); // $2000
-        cellar.depositIntoPosition(address(wbtcCLR), 1e8); // $30,000
-
-        assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
-        assertEq(cellar.totalSupply(), 32_000e18);
-
-        // Mint shares to user to redeem.
-        deal(address(cellar), address(this), cellar.previewWithdraw(16_000e6));
-
-        // Withdraw from position.
-        cellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
-        uint256 shares = cellar.withdraw(16_000e6, address(this), address(this));
-
-        assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
-        assertEq(shares, 16_000e18, "Should returned all redeemed shares.");
-        assertEq(WETH.balanceOf(address(this)), 0.5e18, "Should have transferred position balance to user.");
-        assertEq(WBTC.balanceOf(address(this)), 0.5e8, "Should have transferred position balance to user.");
-        assertEq(WETH.balanceOf(address(wethCLR)), 0.5e18, "Should have transferred balance from WETH position.");
-        assertEq(WBTC.balanceOf(address(wbtcCLR)), 0.5e8, "Should have transferred balance from WBTC position.");
-        assertEq(cellar.totalAssets(), 16_000e6, "Should have half of assets remaining in cellar.");
     }
 
     function testWithdrawWithDuplicateReceivedAssets() external {
@@ -751,7 +721,6 @@ contract CellarTest is Test {
                 positions,
                 positionData,
                 address(USDC),
-                Cellar.WithdrawType.ORDERLY,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
                 strategist
@@ -1008,7 +977,6 @@ contract CellarTest is Test {
             positions,
             positionData,
             address(USDC),
-            Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             strategist
@@ -1072,7 +1040,6 @@ contract CellarTest is Test {
             positions,
             positionData,
             address(USDC),
-            Cellar.WithdrawType.ORDERLY,
             "Ultimate Stablecoin cellar",
             "USC-CLR",
             strategist
@@ -1095,7 +1062,6 @@ contract CellarTest is Test {
             positions,
             positionData,
             address(cellarB),
-            Cellar.WithdrawType.ORDERLY,
             "Stablecoin cellar",
             "SC-CLR",
             strategist
@@ -1425,7 +1391,6 @@ contract CellarTest is Test {
             positions,
             positionData,
             address(USDC),
-            Cellar.WithdrawType.ORDERLY,
             "Asset Management Cellar LP Token",
             "assetmanagement-CLR",
             strategist

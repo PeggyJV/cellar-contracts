@@ -102,7 +102,6 @@ contract CellarRouterTest is Test {
             positions,
             positionData,
             address(USDC),
-            Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             address(0)
@@ -178,7 +177,6 @@ contract CellarRouterTest is Test {
             positions,
             positionData,
             address(WETH),
-            Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             address(0)

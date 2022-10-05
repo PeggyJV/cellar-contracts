@@ -76,7 +76,6 @@ contract CellarMultiAssetManagerScript is Script {
             positions,
             positionData,
             address(USDC),
-            Cellar.WithdrawType.ORDERLY,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             mockGravityBridge
