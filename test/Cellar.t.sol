@@ -668,109 +668,95 @@ contract CellarTest is Test {
         cellar.sendFees();
     }
 
-    // function testMaliciousStrategistWithUnboundForLoop() external {
-    //     // Initialize test Cellar.
-    //     MockCellar multiPositionCellar;
-    //     address[] memory positions;
-    //     {
-    //         // Create new cellar with WETH, USDC, and WBTC positions.
-    //         positions = new address[](1);
-    //         positions[0] = address(USDC);
+    function testMaliciousStrategistWithUnboundForLoop() external {
+        // Initialize test Cellar.
+        MockCellar multiPositionCellar;
+        uint256[] memory positions;
+        {
+            // Create new cellar with USDC position.
+            positions = new uint256[](1);
+            positions[0] = usdcPosition;
 
-    //         Cellar.PositionData[] memory positionData = new Cellar.PositionData[](1);
-    //         positionData[0] = Cellar.PositionData({
-    //             positionType: Cellar.PositionType.ERC20,
-    //             isDebt: false,
-    //             adaptor: address(0),
-    //             adaptorData: abi.encode(0)
-    //         });
+            multiPositionCellar = new MockCellar(
+                registry,
+                USDC,
+                positions,
+                "Asset Management Cellar LP Token",
+                "assetmanagement-CLR",
+                strategist
+            );
+            stdstore
+                .target(address(multiPositionCellar))
+                .sig(multiPositionCellar.shareLockPeriod.selector)
+                .checked_write(uint256(0));
+        }
 
-    //         multiPositionCellar = new MockCellar(
-    //             registry,
-    //             USDC,
-    //             positions,
-    //             positionData,
-    //             address(USDC),
-    //             "Asset Management Cellar LP Token",
-    //             "assetmanagement-CLR",
-    //             strategist
-    //         );
-    //         stdstore
-    //             .target(address(multiPositionCellar))
-    //             .sig(multiPositionCellar.shareLockPeriod.selector)
-    //             .checked_write(uint256(0));
-    //     }
+        MockERC20 position;
+        for (uint256 i = 1; i < 32; i++) {
+            position = new MockERC20("Howdy", 18);
+            priceRouter.supportAsset(position);
+            uint256 id = registry.trustPosition(address(erc20Adaptor), false, abi.encode(position));
+            multiPositionCellar.addPosition(multiPositionCellar.getPositions().length, id);
+        }
 
-    //     MockERC20 position;
-    //     for (uint256 i = 1; i < 32; i++) {
-    //         position = new MockERC20("Howdy", 18);
-    //         priceRouter.supportAsset(position);
-    //         multiPositionCellar.trustPosition(
-    //             address(position),
-    //             Cellar.PositionType.ERC20,
-    //             false,
-    //             address(0),
-    //             abi.encode(0)
-    //         );
-    //         multiPositionCellar.addPosition(multiPositionCellar.getPositions().length, address(position));
-    //     }
+        assertEq(multiPositionCellar.getPositions().length, 32, "Cellar should have 32 positions.");
 
-    //     assertEq(multiPositionCellar.getPositions().length, 32, "Cellar should have 32 positions.");
+        // Adding one more position should revert.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(32))));
+        multiPositionCellar.addPosition(32, 0);
 
-    //     // Adding one more position should revert.
-    //     vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(32))));
-    //     multiPositionCellar.addPosition(32, vm.addr(777));
+        // Check that users can still interact with the cellar even at max positions size.
+        deal(address(USDC), address(this), 100e6);
+        USDC.approve(address(multiPositionCellar), 100e6);
+        uint256 gas = gasleft();
+        multiPositionCellar.deposit(100e6, address(this));
+        uint256 remainingGas = gasleft();
+        assertLt(
+            gas - remainingGas,
+            600_000,
+            "Gas used on deposit should be comfortably less than the block gas limit."
+        );
 
-    //     // Check that users can still interact with the cellar even at max positions size.
-    //     deal(address(USDC), address(this), 100e6);
-    //     USDC.approve(address(multiPositionCellar), 100e6);
-    //     uint256 gas = gasleft();
-    //     multiPositionCellar.deposit(100e6, address(this));
-    //     uint256 remainingGas = gasleft();
-    //     assertLt(
-    //         gas - remainingGas,
-    //         500_000,
-    //         "Gas used on deposit should be comfortably less than the block gas limit."
-    //     );
+        gas = gasleft();
+        multiPositionCellar.withdraw(100e6, address(this), address(this));
+        remainingGas = gasleft();
+        assertLt(
+            gas - remainingGas,
+            600_000,
+            "Gas used on withdraw should be comfortably less than the block gas limit."
+        );
 
-    //     gas = gasleft();
-    //     multiPositionCellar.withdraw(100e6, address(this), address(this));
-    //     remainingGas = gasleft();
-    //     assertLt(
-    //         gas - remainingGas,
-    //         500_000,
-    //         "Gas used on withdraw should be comfortably less than the block gas limit."
-    //     );
+        // Now check a worst case scenario, SP maxes out positions, and evenly
+        // distributes funds to every position, then user withdraws.
+        deal(address(USDC), address(this), 32e6);
+        USDC.approve(address(multiPositionCellar), 32e6);
+        multiPositionCellar.deposit(32e6, address(this));
 
-    //     // Now check a worst case scenario, SP maxes out positions, and evenly
-    //     // distributes funds to every position, then user withdraws.
-    //     deal(address(USDC), address(this), 32e6);
-    //     USDC.approve(address(multiPositionCellar), 32e6);
-    //     multiPositionCellar.deposit(32e6, address(this));
+        uint256 totalAssets = multiPositionCellar.totalAssets();
 
-    //     uint256 totalAssets = multiPositionCellar.totalAssets();
+        // Change the cellars USDC balance, so that we can deal cellar assets in
+        // other positions and not change the share price.
+        deal(address(USDC), address(multiPositionCellar), 1e6);
 
-    //     // Change the cellars USDC balance, so that we can deal cellar assets in
-    //     // other positions and not change the share price.
-    //     deal(address(USDC), address(multiPositionCellar), 1e6);
+        positions = multiPositionCellar.getPositions();
+        for (uint256 i = 1; i < positions.length; i++) {
+            (, , bytes memory data) = multiPositionCellar.getPositionData(positions[i]);
+            ERC20 token = abi.decode(data, (ERC20));
+            priceRouter.setExchangeRate(token, USDC, 1e6);
+            deal(address(token), address(multiPositionCellar), 1e18);
+        }
 
-    //     positions = multiPositionCellar.getPositions();
-    //     for (uint256 i = 1; i < positions.length; i++) {
-    //         priceRouter.setExchangeRate(ERC20(positions[i]), USDC, 1e6);
-    //         deal(positions[i], address(multiPositionCellar), 1e18);
-    //     }
+        assertEq(multiPositionCellar.totalAssets(), totalAssets, "Cellar total assets should be unchanged.");
 
-    //     assertEq(multiPositionCellar.totalAssets(), totalAssets, "Cellar total assets should be unchanged.");
-
-    //     gas = gasleft();
-    //     multiPositionCellar.withdraw(32e6, address(this), address(this));
-    //     remainingGas = gasleft();
-    //     assertLt(
-    //         gas - remainingGas,
-    //         1_400_000,
-    //         "Gas used on worst case scenario withdraw should be comfortably less than the block gas limit."
-    //     );
-    // }
+        gas = gasleft();
+        multiPositionCellar.withdraw(32e6, address(this), address(this));
+        remainingGas = gasleft();
+        assertLt(
+            gas - remainingGas,
+            1_700_000,
+            "Gas used on worst case scenario withdraw should be comfortably less than the block gas limit."
+        );
+    }
 
     function testAllFeesToStrategist(
         uint256 timePassed,
@@ -848,232 +834,215 @@ contract CellarTest is Test {
         vm.stopPrank();
     }
 
-    //     function testAllFeesToPlatform(
-    //         uint256 timePassed,
-    //         uint256 deposit,
-    //         uint256 yield
-    //     ) external {
-    //         // Cap time passed to 1 year. Platform fees will be collected on the
-    //         // order of weeks possibly months.
-    //         timePassed = bound(timePassed, 1 days, 365 days);
-    //         deposit = bound(deposit, 100e6, 1_000_000_000e6);
+    function testAllFeesToPlatform(
+        uint256 timePassed,
+        uint256 deposit,
+        uint256 yield
+    ) external {
+        // Cap time passed to 1 year. Platform fees will be collected on the
+        // order of weeks possibly months.
+        timePassed = bound(timePassed, 1 days, 365 days);
+        deposit = bound(deposit, 100e6, 1_000_000_000e6);
 
-    //         // Cap yield to 10,000% APR
-    //         {
-    //             uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-    //             // Floor yield above 0.01% APR
-    //             uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-    //             yield = bound(yield, yieldLowerBound, yieldUpperBound);
-    //         }
+        // Cap yield to 10,000% APR
+        {
+            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
+            // Floor yield above 0.01% APR
+            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
+            yield = bound(yield, yieldLowerBound, yieldUpperBound);
+        }
 
-    //         cellar.setStrategistPlatformCut(0);
+        cellar.setStrategistPlatformCut(0);
 
-    //         (uint64 strategistPlatformCut, uint64 platformFee, , ) = cellar.feeData();
+        (uint64 strategistPlatformCut, uint64 platformFee, , ) = cellar.feeData();
 
-    //         // Give this address enough USDC to cover deposits.
-    //         deal(address(USDC), address(this), deposit);
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), deposit);
 
-    //         deal(address(USDC), address(cosmos), 0);
+        deal(address(USDC), address(cosmos), 0);
 
-    //         // Deposit into cellar.
-    //         cellar.deposit(deposit, address(this));
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
 
-    //         // Advance time by `timePassed` seconds.
-    //         skip(timePassed);
+        // Advance time by `timePassed` seconds.
+        skip(timePassed);
 
-    //         // Simulate Cellar earning yield.
-    //         uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
-    //         deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
+        // Simulate Cellar earning yield.
+        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
+        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
 
-    //         // Call `sendFees` to calculate pending performance and platform fees,
-    //         // and distribute them to strategist, and Cosmos.
-    //         cellar.sendFees();
+        // Call `sendFees` to calculate pending performance and platform fees,
+        // and distribute them to strategist, and Cosmos.
+        cellar.sendFees();
 
-    //         uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
+        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
 
-    //         uint256 expectedTotalFeesAdjustedForDilution = expectedPlatformFees;
+        uint256 expectedTotalFeesAdjustedForDilution = expectedPlatformFees;
 
-    //         uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-    //         uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
+        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
+        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
 
-    //         assertApproxEqAbs(
-    //             feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
-    //             expectedTotalFeesAdjustedForDilution,
-    //             2,
-    //             "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
-    //         );
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
+            expectedTotalFeesAdjustedForDilution,
+            2,
+            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
+        );
 
-    //         assertApproxEqAbs(
-    //             feesInAssetsSentToStrategist,
-    //             expectedPlatformFees.mulWadDown(strategistPlatformCut),
-    //             2,
-    //             "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut)."
-    //         );
+        assertApproxEqAbs(
+            feesInAssetsSentToStrategist,
+            expectedPlatformFees.mulWadDown(strategistPlatformCut),
+            2,
+            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut)."
+        );
 
-    //         assertApproxEqAbs(
-    //             feesInAssetsSentToCosmos,
-    //             expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut),
-    //             2,
-    //             "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut))."
-    //         );
+        assertApproxEqAbs(
+            feesInAssetsSentToCosmos,
+            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut),
+            2,
+            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut))."
+        );
 
-    //         assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
-    //     }
+        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
+    }
 
-    //     //TODO
-    //     function testDebtTokensInCellars() external {
-    //         // Setup Cellar with debt positions:
-    //         address[] memory positions = new address[](2);
-    //         positions[0] = address(USDC);
-    //         positions[1] = address(WETH); // not a real debt position, but for test will be treated as such
+    //TODO
+    function testDebtTokensInCellars() external {
+        uint256 debtWethPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WETH));
+        uint256 debtWbtcPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WBTC));
 
-    //         Cellar.PositionData[] memory positionData = new Cellar.PositionData[](2);
-    //         positionData[0] = Cellar.PositionData({
-    //             positionType: Cellar.PositionType.ERC20,
-    //             isDebt: false,
-    //             adaptor: address(0),
-    //             adaptorData: abi.encode(0)
-    //         });
-    //         positionData[1] = Cellar.PositionData({
-    //             positionType: Cellar.PositionType.ERC20,
-    //             isDebt: true,
-    //             adaptor: address(0),
-    //             adaptorData: abi.encode(0)
-    //         });
+        // Setup Cellar with debt positions:
+        uint256[] memory positions = new uint256[](2);
+        positions[0] = usdcPosition;
+        positions[1] = debtWethPosition; // not a real debt position, but for test will be treated as such
 
-    //         MockCellar debtCellar = new MockCellar(
-    //             registry,
-    //             USDC,
-    //             positions,
-    //             positionData,
-    //             address(USDC),
-    //             "Multiposition Cellar LP Token",
-    //             "multiposition-CLR",
-    //             strategist
-    //         );
+        MockCellar debtCellar = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            "Multiposition Cellar LP Token",
+            "multiposition-CLR",
+            strategist
+        );
 
-    //         //constructor should set isDebt
-    //         (, bool isDebt, , ) = debtCellar.getPositionData(address(WETH));
-    //         assertTrue(isDebt, "Constructor should have set WETH as a debt position.");
-    //         assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
+        //constructor should set isDebt
+        (, bool isDebt, ) = debtCellar.getPositionData(debtWethPosition);
+        assertTrue(isDebt, "Constructor should have set WETH as a debt position.");
+        assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
 
-    //         //Add another debt position WBTC.
-    //         debtCellar.trustPosition(address(WBTC), Cellar.PositionType.ERC20, true, address(0), abi.encode(0));
-    //         (, isDebt, , ) = debtCellar.getPositionData(address(WBTC));
-    //         assertTrue(isDebt, "Constructor should have set WETH as a debt position.");
-    //         assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
+        //Add another debt position WBTC.
+        // adding WBTC should increment number of debt positions.
+        debtCellar.addPosition(2, debtWbtcPosition);
+        assertEq(debtCellar.numberOfDebtPositions(), 2, "Debt cellar should have 2 debt positions.");
 
-    //         // adding WBTC should increment number of debt positions.
-    //         debtCellar.addPosition(2, address(WBTC));
-    //         assertEq(debtCellar.numberOfDebtPositions(), 2, "Debt cellar should have 2 debt positions.");
+        (, isDebt, ) = debtCellar.getPositionData(debtWbtcPosition);
+        assertTrue(isDebt, "Constructor should have set WBTC as a debt position.");
+        assertEq(debtCellar.numberOfDebtPositions(), 2, "Debt cellar should have 1 debt position.");
 
-    //         // removing WBTC should decrement number of debt positions.
-    //         debtCellar.removePosition(2);
-    //         assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
+        // removing WBTC should decrement number of debt positions.
+        debtCellar.removePosition(2);
+        assertEq(debtCellar.numberOfDebtPositions(), 1, "Debt cellar should have 1 debt position.");
 
-    //         debtCellar.addPosition(2, address(WBTC));
+        debtCellar.addPosition(2, debtWbtcPosition);
 
-    //         // Give debt cellar some assets.
-    //         deal(address(USDC), address(debtCellar), 100_000e6);
-    //         deal(address(WBTC), address(debtCellar), 1e8);
-    //         deal(address(WETH), address(debtCellar), 10e18);
+        // Give debt cellar some assets.
+        deal(address(USDC), address(debtCellar), 100_000e6);
+        deal(address(WBTC), address(debtCellar), 1e8);
+        deal(address(WETH), address(debtCellar), 10e18);
 
-    //         uint256 totalAssets = debtCellar.totalAssets();
-    //         uint256 expectedTotalAssets = 50_000e6;
+        uint256 totalAssets = debtCellar.totalAssets();
+        uint256 expectedTotalAssets = 50_000e6;
 
-    //         assertEq(totalAssets, expectedTotalAssets, "Debt cellar total assets should equal expected.");
+        assertEq(totalAssets, expectedTotalAssets, "Debt cellar total assets should equal expected.");
+    }
 
-    //         (uint256 getDataTotalAssets, , , , ) = debtCellar.getData();
-    //         assertEq(getDataTotalAssets, totalAssets, "`getData` total assets should be the same as cellar `totalAssets`.");
-    //     }
+    // function testCellarWithCellarPositions() external {
+    //     // Cellar A's asset is USDC, holding position is Cellar B shares, whose holding asset is USDC.
+    //     // Initialize test Cellars.
+    //     MockCellar cellarA;
+    //     MockCellar cellarB;
 
-    //     function testCellarWithCellarPositions() external {
-    //         // Cellar A's asset is USDC, holding position is Cellar B shares, whose holding asset is USDC.
-    //         // Initialize test Cellars.
-    //         MockCellar cellarA;
-    //         MockCellar cellarB;
+    //     address[] memory positions = new address[](1);
+    //     positions[0] = address(USDC);
 
-    //         address[] memory positions = new address[](1);
-    //         positions[0] = address(USDC);
+    //     Cellar.PositionData[] memory positionData = new Cellar.PositionData[](1);
+    //     positionData[0] = Cellar.PositionData({
+    //         positionType: Cellar.PositionType.ERC20,
+    //         isDebt: false,
+    //         adaptor: address(0),
+    //         adaptorData: abi.encode(0)
+    //     });
 
-    //         Cellar.PositionData[] memory positionData = new Cellar.PositionData[](1);
-    //         positionData[0] = Cellar.PositionData({
-    //             positionType: Cellar.PositionType.ERC20,
-    //             isDebt: false,
-    //             adaptor: address(0),
-    //             adaptorData: abi.encode(0)
-    //         });
+    //     cellarB = new MockCellar(
+    //         registry,
+    //         USDC,
+    //         positions,
+    //         positionData,
+    //         address(USDC),
+    //         "Ultimate Stablecoin cellar",
+    //         "USC-CLR",
+    //         strategist
+    //     );
 
-    //         cellarB = new MockCellar(
-    //             registry,
-    //             USDC,
-    //             positions,
-    //             positionData,
-    //             address(USDC),
-    //             "Ultimate Stablecoin cellar",
-    //             "USC-CLR",
-    //             strategist
-    //         );
+    //     stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
 
-    //         stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
+    //     positions[0] = address(cellarB);
 
-    //         positions[0] = address(cellarB);
+    //     positionData[0] = Cellar.PositionData({
+    //         positionType: Cellar.PositionType.Cellar,
+    //         isDebt: false,
+    //         adaptor: address(0),
+    //         adaptorData: abi.encode(0)
+    //     });
 
-    //         positionData[0] = Cellar.PositionData({
-    //             positionType: Cellar.PositionType.Cellar,
-    //             isDebt: false,
-    //             adaptor: address(0),
-    //             adaptorData: abi.encode(0)
-    //         });
+    //     cellarA = new MockCellar(
+    //         registry,
+    //         USDC,
+    //         positions,
+    //         positionData,
+    //         address(cellarB),
+    //         "Stablecoin cellar",
+    //         "SC-CLR",
+    //         strategist
+    //     );
 
-    //         cellarA = new MockCellar(
-    //             registry,
-    //             USDC,
-    //             positions,
-    //             positionData,
-    //             address(cellarB),
-    //             "Stablecoin cellar",
-    //             "SC-CLR",
-    //             strategist
-    //         );
+    //     stdstore.target(address(cellarA)).sig(cellarA.shareLockPeriod.selector).checked_write(uint256(0));
 
-    //         stdstore.target(address(cellarA)).sig(cellarA.shareLockPeriod.selector).checked_write(uint256(0));
+    //     uint256 assets = 100e6;
+    //     deal(address(USDC), address(this), assets);
+    //     USDC.approve(address(cellarA), assets);
+    //     cellarA.deposit(assets, address(this));
 
-    //         uint256 assets = 100e6;
-    //         deal(address(USDC), address(this), assets);
-    //         USDC.approve(address(cellarA), assets);
-    //         cellarA.deposit(assets, address(this));
+    //     uint256 withdrawAmount = cellarA.maxWithdraw(address(this));
+    //     assertEq(assets, withdrawAmount, "Assets should not have changed.");
+    //     assertEq(cellarA.totalAssets(), cellarB.totalAssets(), "Total assets should be the same.");
 
-    //         uint256 withdrawAmount = cellarA.maxWithdraw(address(this));
-    //         assertEq(assets, withdrawAmount, "Assets should not have changed.");
-    //         assertEq(cellarA.totalAssets(), cellarB.totalAssets(), "Total assets should be the same.");
+    //     cellarA.withdraw(withdrawAmount, address(this), address(this));
+    // }
 
-    //         cellarA.withdraw(withdrawAmount, address(this), address(this));
-    //     }
+    // ======================================== DEPEGGING ASSET TESTS ========================================
 
-    //     // ======================================== DEPEGGING ASSET TESTS ========================================
+    function testDepeggedAssetNotUsedByCellar() external {
+        // Scenario 1: Depegged asset is not being used by the cellar.
+        // Governance can remove it itself by calling `distrustPosition`.
 
-    //     function testDepeggedAssetNotUsedByCellar() external {
-    //         // Scenario 1: Depegged asset is not being used by the cellar.
-    //         // Governance can remove it itself by calling `distrustPosition`.
+        // Add asset that will be depegged.
+        priceRouter.supportAsset(USDT);
+        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT));
+        cellar.addPosition(5, usdtPosition);
+        priceRouter.setExchangeRate(USDT, USDC, 1e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1e6);
 
-    //         // Add asset that will be depegged.
-    //         priceRouter.supportAsset(USDT);
-    //         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, false, address(0), abi.encode(0));
-    //         cellar.addPosition(5, address(USDT));
-    //         priceRouter.setExchangeRate(USDT, USDC, 1e6);
-    //         priceRouter.setExchangeRate(USDC, USDT, 1e6);
+        deal(address(USDC), address(this), 200e6);
+        cellar.deposit(100e6, address(this));
 
-    //         deal(address(USDC), address(this), 200e6);
-    //         cellar.deposit(100e6, address(this));
+        // USDT depeggs to $0.90.
+        priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
 
-    //         // USDT depeggs to $0.90.
-    //         priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
-    //         priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
-
-    //         assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
-    //         assertEq(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should not change.");
-    //     }
+        assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
+        assertEq(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should not change.");
+    }
 
     //     function testDepeggedAssetUsedByTheCellar() external {
     //         // Scenario 2: Depegged asset is being used by the cellar. Governance
