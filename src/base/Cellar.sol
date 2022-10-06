@@ -1238,4 +1238,11 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         address adaptor = getPositionData[position].adaptor;
         return BaseAdaptor(adaptor).assetOf(getPositionData[position].adaptorData);
     }
+
+    function getPositionAssets() external view returns (ERC20[] memory assets) {
+        assets = new ERC20[](positions.length);
+        for (uint256 i = 0; i < positions.length; i++) {
+            assets[i] = _assetOf(positions[i]);
+        }
+    }
 }

@@ -906,7 +906,6 @@ contract CellarTest is Test {
         assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
     }
 
-    //TODO
     function testDebtTokensInCellars() external {
         uint256 debtWethPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WETH));
         uint256 debtWbtcPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WBTC));
@@ -956,69 +955,37 @@ contract CellarTest is Test {
         assertEq(totalAssets, expectedTotalAssets, "Debt cellar total assets should equal expected.");
     }
 
-    // function testCellarWithCellarPositions() external {
-    //     // Cellar A's asset is USDC, holding position is Cellar B shares, whose holding asset is USDC.
-    //     // Initialize test Cellars.
-    //     MockCellar cellarA;
-    //     MockCellar cellarB;
+    function testCellarWithCellarPositions() external {
+        // Cellar A's asset is USDC, holding position is Cellar B shares, whose holding asset is USDC.
+        // Initialize test Cellars.
+        MockCellar cellarA;
+        MockCellar cellarB;
 
-    //     address[] memory positions = new address[](1);
-    //     positions[0] = address(USDC);
+        uint256[] memory positions = new uint256[](1);
+        positions[0] = usdcPosition;
 
-    //     Cellar.PositionData[] memory positionData = new Cellar.PositionData[](1);
-    //     positionData[0] = Cellar.PositionData({
-    //         positionType: Cellar.PositionType.ERC20,
-    //         isDebt: false,
-    //         adaptor: address(0),
-    //         adaptorData: abi.encode(0)
-    //     });
+        cellarB = new MockCellar(registry, USDC, positions, "Ultimate Stablecoin cellar", "USC-CLR", strategist);
 
-    //     cellarB = new MockCellar(
-    //         registry,
-    //         USDC,
-    //         positions,
-    //         positionData,
-    //         address(USDC),
-    //         "Ultimate Stablecoin cellar",
-    //         "USC-CLR",
-    //         strategist
-    //     );
+        stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
 
-    //     stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
+        uint256 cellarBPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(cellarB));
+        positions[0] = cellarBPosition;
 
-    //     positions[0] = address(cellarB);
+        cellarA = new MockCellar(registry, USDC, positions, "Stablecoin cellar", "SC-CLR", strategist);
 
-    //     positionData[0] = Cellar.PositionData({
-    //         positionType: Cellar.PositionType.Cellar,
-    //         isDebt: false,
-    //         adaptor: address(0),
-    //         adaptorData: abi.encode(0)
-    //     });
+        stdstore.target(address(cellarA)).sig(cellarA.shareLockPeriod.selector).checked_write(uint256(0));
 
-    //     cellarA = new MockCellar(
-    //         registry,
-    //         USDC,
-    //         positions,
-    //         positionData,
-    //         address(cellarB),
-    //         "Stablecoin cellar",
-    //         "SC-CLR",
-    //         strategist
-    //     );
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellarA), assets);
+        cellarA.deposit(assets, address(this));
 
-    //     stdstore.target(address(cellarA)).sig(cellarA.shareLockPeriod.selector).checked_write(uint256(0));
+        uint256 withdrawAmount = cellarA.maxWithdraw(address(this));
+        assertEq(assets, withdrawAmount, "Assets should not have changed.");
+        assertEq(cellarA.totalAssets(), cellarB.totalAssets(), "Total assets should be the same.");
 
-    //     uint256 assets = 100e6;
-    //     deal(address(USDC), address(this), assets);
-    //     USDC.approve(address(cellarA), assets);
-    //     cellarA.deposit(assets, address(this));
-
-    //     uint256 withdrawAmount = cellarA.maxWithdraw(address(this));
-    //     assertEq(assets, withdrawAmount, "Assets should not have changed.");
-    //     assertEq(cellarA.totalAssets(), cellarB.totalAssets(), "Total assets should be the same.");
-
-    //     cellarA.withdraw(withdrawAmount, address(this), address(this));
-    // }
+        cellarA.withdraw(withdrawAmount, address(this), address(this));
+    }
 
     // ======================================== DEPEGGING ASSET TESTS ========================================
 
@@ -1044,152 +1011,143 @@ contract CellarTest is Test {
         assertEq(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should not change.");
     }
 
-    //     function testDepeggedAssetUsedByTheCellar() external {
-    //         // Scenario 2: Depegged asset is being used by the cellar. Governance
-    //         // uses multicall to rebalance cellar out of position, and to distrust
-    //         // it.
+    function testDepeggedAssetUsedByTheCellar() external {
+        // Scenario 2: Depegged asset is being used by the cellar. Governance
+        // uses multicall to rebalance cellar out of position, and to distrust
+        // it.
 
-    //         // Add asset that will be depegged.
-    //         priceRouter.supportAsset(USDT);
-    //         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, false, address(0), abi.encode(0));
-    //         cellar.addPosition(5, address(USDT));
-    //         priceRouter.setExchangeRate(USDT, USDC, 1e6);
-    //         priceRouter.setExchangeRate(USDC, USDT, 1e6);
+        // Add asset that will be depegged.
+        priceRouter.supportAsset(USDT);
+        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT));
+        cellar.addPosition(5, usdtPosition);
+        priceRouter.setExchangeRate(USDT, USDC, 1e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1e6);
 
-    //         deal(address(USDC), address(this), 200e6);
-    //         cellar.deposit(100e6, address(this));
+        deal(address(USDC), address(this), 200e6);
+        cellar.deposit(100e6, address(this));
 
-    //         //Change Cellar holdings manually to 50/50 USDC/USDT.
-    //         deal(address(USDC), address(cellar), 50e6);
-    //         deal(address(USDT), address(cellar), 50e6);
+        //Change Cellar holdings manually to 50/50 USDC/USDT.
+        deal(address(USDC), address(cellar), 50e6);
+        deal(address(USDT), address(cellar), 50e6);
 
-    //         // USDT depeggs to $0.90.
-    //         priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
-    //         priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
+        // USDT depeggs to $0.90.
+        priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
 
-    //         assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
-    //         assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
+        assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
+        assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
 
-    //         // Governance votes to rebalance out of USDT, and distrust USDT.
-    //         // Manually rebalance into USDC.
-    //         deal(address(USDC), address(cellar), 95e6);
-    //         deal(address(USDT), address(cellar), 0);
-    //     }
+        // Governance votes to rebalance out of USDT, and distrust USDT.
+        // Manually rebalance into USDC.
+        deal(address(USDC), address(cellar), 95e6);
+        deal(address(USDT), address(cellar), 0);
+    }
 
-    //     function testDepeggedHoldingPosition() external {
-    //         // Scenario 3: Depegged asset is being used by the cellar, and it is the
-    //         // holding position. Governance uses multicall to rebalance cellar out
-    //         // of position, set a new holding position, and distrust it.
+    function testDepeggedHoldingPosition() external {
+        // Scenario 3: Depegged asset is being used by the cellar, and it is the
+        // holding position. Governance uses multicall to rebalance cellar out
+        // of position, set a new holding position, and distrust it.
 
-    //         cellar.setHoldingPosition(address(usdcCLR));
+        cellar.swapPositions(0, 1);
 
-    //         // Rebalance into USDC. No swap is made because both positions use
-    //         // USDC.
-    //         deal(address(USDC), address(this), 200e6);
-    //         cellar.deposit(100e6, address(this));
+        // Rebalance into USDC. No swap is made because both positions use
+        // USDC.
+        deal(address(USDC), address(this), 200e6);
+        cellar.deposit(100e6, address(this));
 
-    //         // Make call to adaptor to remove funds from usdcCLR into USDC position.
-    //         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = abi.encodeWithSelector(CellarAdaptor.withdrawFromCellar.selector, usdcCLR, 50e6);
-    //         bool[] memory isRevertOkay = new bool[](1);
-    //         data[0] = Cellar.AdaptorCall({
-    //             adaptor: address(cellarAdaptor),
-    //             callData: adaptorCalls,
-    //             isRevertOkay: isRevertOkay
-    //         });
-    //         cellar.callOnAdaptor(data);
+        // Make call to adaptor to remove funds from usdcCLR into USDC position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = abi.encodeWithSelector(CellarAdaptor.withdrawFromCellar.selector, usdcCLR, 50e6);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
-    //         // usdcCLR depeggs from USDC
-    //         deal(address(USDC), address(usdcCLR), 45e6);
+        // usdcCLR depeggs from USDC
+        deal(address(USDC), address(usdcCLR), 45e6);
 
-    //         assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
-    //         assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
+        assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
+        assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
 
-    //         // Governance votes to rebalance out of usdcCLR, change the holding
-    //         // position, and distrust usdcCLR. No swap is made because both
-    //         // positions use USDC.
-    //         adaptorCalls[0] = abi.encodeWithSelector(
-    //             CellarAdaptor.withdrawFromCellar.selector,
-    //             usdcCLR,
-    //             usdcCLR.maxWithdraw(address(cellar))
-    //         );
-    //         data[0] = Cellar.AdaptorCall({
-    //             adaptor: address(cellarAdaptor),
-    //             callData: adaptorCalls,
-    //             isRevertOkay: isRevertOkay
-    //         });
-    //         cellar.callOnAdaptor(data);
+        // Governance votes to rebalance out of usdcCLR, change the holding
+        // position, and distrust usdcCLR. No swap is made because both
+        // positions use USDC.
+        adaptorCalls[0] = abi.encodeWithSelector(
+            CellarAdaptor.withdrawFromCellar.selector,
+            usdcCLR,
+            usdcCLR.maxWithdraw(address(cellar))
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
-    //         cellar.setHoldingPosition(address(USDC));
-    //     }
+        cellar.swapPositions(0, 1);
+    }
 
-    //     function testDepeggedCellarAsset() external {
-    //         // Scenario 4: Depegged asset is the cellars asset. Worst case
-    //         // scenario, rebalance out of position into some new stable position,
-    //         // set fees to zero, initiate a shutdown, and have users withdraw funds
-    //         // asap. Want to ensure that attackers can not join using the depegged
-    //         // asset. Emergency governance proposal to move funds into some new
-    //         // safety contract, shutdown old cellar, and allow users to withdraw
-    //         // from the safety contract.
+    function testDepeggedCellarAsset() external {
+        // Scenario 4: Depegged asset is the cellars asset. Worst case
+        // scenario, rebalance out of position into some new stable position,
+        // set fees to zero, initiate a shutdown, and have users withdraw funds
+        // asap. Want to ensure that attackers can not join using the depegged
+        // asset. Emergency governance proposal to move funds into some new
+        // safety contract, shutdown old cellar, and allow users to withdraw
+        // from the safety contract.
 
-    //         priceRouter.supportAsset(USDT);
-    //         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, false, address(0), abi.encode(0));
-    //         cellar.addPosition(5, address(USDT));
-    //         priceRouter.setExchangeRate(USDT, USDC, 1e6);
-    //         priceRouter.setExchangeRate(USDC, USDT, 1e6);
+        priceRouter.supportAsset(USDT);
+        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT));
+        cellar.addPosition(5, usdtPosition);
+        priceRouter.setExchangeRate(USDT, USDC, 1e6);
+        priceRouter.setExchangeRate(USDC, USDT, 1e6);
 
-    //         deal(address(USDC), address(this), 100e6);
-    //         cellar.deposit(100e6, address(this));
+        deal(address(USDC), address(this), 100e6);
+        cellar.deposit(100e6, address(this));
 
-    //         // USDC depeggs to $0.90.
-    //         priceRouter.setExchangeRate(USDC, USDT, 0.9e6);
-    //         priceRouter.setExchangeRate(USDT, USDC, 1.111111e6);
+        // USDC depeggs to $0.90.
+        priceRouter.setExchangeRate(USDC, USDT, 0.9e6);
+        priceRouter.setExchangeRate(USDT, USDC, 1.111111e6);
 
-    //         assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
+        assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
 
-    //         // Governance rebalances to USDT, sets performance and platform fees to
-    //         // zero, initiates a shutdown, and has users withdraw their funds.
-    //         // Manually rebalance to USDT.
-    //         deal(address(USDC), address(cellar), 0);
-    //         deal(address(USDT), address(cellar), 90e6);
+        // Governance rebalances to USDT, sets performance and platform fees to
+        // zero, initiates a shutdown, and has users withdraw their funds.
+        // Manually rebalance to USDT.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(USDT), address(cellar), 90e6);
 
-    //         // Important to set fees to zero, else performance fees are minted as
-    //         // the cellars asset depeggs further.
-    //         cellar.setPlatformFee(0);
-    //         cellar.initiateShutdown();
+        // Important to set fees to zero, else performance fees are minted as
+        // the cellars asset depeggs further.
+        cellar.setPlatformFee(0);
+        cellar.initiateShutdown();
 
-    //         // Attacker tries to join with depegged asset.
-    //         address attacker = vm.addr(34534);
-    //         deal(address(USDC), attacker, 1);
-    //         vm.startPrank(attacker);
-    //         USDC.approve(address(cellar), 1);
-    //         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
-    //         cellar.deposit(1, attacker);
-    //         vm.stopPrank();
+        // Attacker tries to join with depegged asset.
+        address attacker = vm.addr(34534);
+        deal(address(USDC), attacker, 1);
+        vm.startPrank(attacker);
+        USDC.approve(address(cellar), 1);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractShutdown.selector)));
+        cellar.deposit(1, attacker);
+        vm.stopPrank();
 
-    //         cellar.redeem(50e18, address(this), address(this));
+        cellar.redeem(50e18, address(this), address(this));
 
-    //         // USDC depeggs to $0.10.
-    //         priceRouter.setExchangeRate(USDC, USDT, 0.1e6);
-    //         priceRouter.setExchangeRate(USDT, USDC, 10e6);
+        // USDC depeggs to $0.10.
+        priceRouter.setExchangeRate(USDC, USDT, 0.1e6);
+        priceRouter.setExchangeRate(USDT, USDC, 10e6);
 
-    //         cellar.redeem(50e18, address(this), address(this));
+        cellar.redeem(50e18, address(this), address(this));
 
-    //         // Eventhough USDC depegged further, cellar rebalanced out of USDC
-    //         // removing its exposure to it.  So users can expect to get the
-    //         // remaining value out of the cellar.
-    //         assertEq(
-    //             USDT.balanceOf(address(this)),
-    //             90e6,
-    //             "Withdraws should total the amount of USDT in the cellar after rebalance."
-    //         );
+        // Eventhough USDC depegged further, cellar rebalanced out of USDC
+        // removing its exposure to it.  So users can expect to get the
+        // remaining value out of the cellar.
+        assertEq(
+            USDT.balanceOf(address(this)),
+            90e6,
+            "Withdraws should total the amount of USDT in the cellar after rebalance."
+        );
 
-    //         // Governance can not distrust USDC, because it is the holding position,
-    //         // and changing the holding position is pointless because the asset of
-    //         // the new holding position must be USDC.  Therefore the cellar is lost,
-    //         // and should be exitted completely.
-    //     }
+        // Governance can not distrust USDC, because it is the holding position,
+        // and changing the holding position is pointless because the asset of
+        // the new holding position must be USDC.  Therefore the cellar is lost,
+        // and should be exitted completely.
+    }
 
     //     /**
     //      * Some notes about the above tests:
@@ -1229,341 +1187,327 @@ contract CellarTest is Test {
         ERC20(asset).transferFrom(msg.sender, cosmos, assets);
     }
 
-    //     // ========================================= MACRO FINDINGS =========================================
+    // ========================================= MACRO FINDINGS =========================================
 
-    //     // H-1 done.
+    // H-1 done.
 
-    //     // H-2 NA, cellars will not increase their TVL during rebalance calls.
-    //     // In future versions this will be fixed by having all yield converted into the cellar's accounting asset, then put into a vestedERC20 contract which gradually releases rewards to the cellar.
+    // H-2 NA, cellars will not increase their TVL during rebalance calls.
+    // In future versions this will be fixed by having all yield converted into the cellar's accounting asset, then put into a vestedERC20 contract which gradually releases rewards to the cellar.
 
-    //     // M-1
+    // M-1
 
-    //     // M5
-    //     function testReentrancyAttack() external {
-    //         // True means this cellar tries to re-enter caller on deposit calls.
-    //         ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", true);
+    // M5
+    function testReentrancyAttack() external {
+        // True means this cellar tries to re-enter caller on deposit calls.
+        ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", true);
 
-    //         cellar.trustPosition(address(maliciousCellar), Cellar.PositionType.ERC4626, false, address(0), abi.encode(0));
-    //         cellar.addPosition(5, address(maliciousCellar));
-    //         cellar.setHoldingPosition(address(maliciousCellar));
+        uint256 maliciousPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(maliciousCellar));
+        cellar.addPosition(5, maliciousPosition);
+        cellar.swapPositions(0, 5);
 
-    //         uint256 assets = 10000e6;
-    //         deal(address(USDC), address(this), assets);
-    //         USDC.approve(address(maliciousCellar), assets);
+        uint256 assets = 10000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(maliciousCellar), assets);
 
-    //         vm.expectRevert(bytes("ReentrancyGuard: reentrant call"));
-    //         cellar.deposit(assets, address(this));
-    //     }
+        vm.expectRevert(bytes("ReentrancyGuard: reentrant call"));
+        cellar.deposit(assets, address(this));
+    }
 
-    //     // L-4 handle via using a centralized contract storing valid positions(to reduce num of governance props), and rely on voters to see mismatched position and types.
-    //     //  Will not be added to this code.
+    // L-4 handle via using a centralized contract storing valid positions(to reduce num of governance props), and rely on voters to see mismatched position and types.
+    //  Will not be added to this code.
 
-    //     //M-6 handled offchain using a subgraph to verify no weird webs are happening
-    //     // difficult bc we can control downstream, but can't control upstream. IE
-    //     // Cellar A wants to add a position in Cellar B, but Cellar B already has a position in Cellar C. Cellar A could see this, but...
-    //     // If Cellar A takes a postion in Cellar B, then Cellar B takes a position in Cellar C, Cellar B would need to look upstream to see the nested postions which is unreasonable,
-    //     // and it means Cellar A can dictate what positions Cellar B takes which is not good.
+    //M-6 handled offchain using a subgraph to verify no weird webs are happening
+    // difficult bc we can control downstream, but can't control upstream. IE
+    // Cellar A wants to add a position in Cellar B, but Cellar B already has a position in Cellar C. Cellar A could see this, but...
+    // If Cellar A takes a postion in Cellar B, then Cellar B takes a position in Cellar C, Cellar B would need to look upstream to see the nested postions which is unreasonable,
+    // and it means Cellar A can dictate what positions Cellar B takes which is not good.
 
-    //     // M-4, change in mint function
-    //     function testAttackOnFirstMint() external {
-    //         // An attacker attacks as first minter
-    //         address attacker = vm.addr(1337);
+    // M-4, change in mint function
+    function testAttackOnFirstMint() external {
+        // An attacker attacks as first minter
+        address attacker = vm.addr(1337);
 
-    //         vm.startPrank(attacker);
+        vm.startPrank(attacker);
 
-    //         deal(address(USDC), address(attacker), 10000e6);
-    //         USDC.approve(address(cellar), 10000e6);
+        deal(address(USDC), address(attacker), 10000e6);
+        USDC.approve(address(cellar), 10000e6);
 
-    //         // Attacker mints shares < 1e12 on first mint
+        // Attacker mints shares < 1e12 on first mint
 
-    //         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
-    //         cellar.mint(9e11, attacker);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
+        cellar.mint(9e11, attacker);
 
-    //         vm.stopPrank();
-    //     }
+        vm.stopPrank();
+    }
 
-    //     // M-2, changes in trustPosition.
-    //     function testTrustPositionForUnsupportedAssetLocksAllFunds() external {
-    //         // USDT is not a supported PriceRouter asset.
+    // M-2, changes in trustPosition.
+    function testTrustPositionForUnsupportedAssetLocksAllFunds() external {
+        // USDT is not a supported PriceRouter asset.
 
-    //         uint256 assets = 10e18;
+        uint256 assets = 10e18;
 
-    //         deal(address(USDC), address(this), assets);
+        deal(address(USDC), address(this), assets);
 
-    //         // Deposit USDC
-    //         cellar.previewDeposit(assets);
-    //         cellar.deposit(assets, address(this));
-    //         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
+        // Deposit USDC
+        cellar.previewDeposit(assets);
+        cellar.deposit(assets, address(this));
+        assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
-    //         // USDT is added as a trusted Cellar position,
-    //         // but is not supported by the PriceRouter.
-    //         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionPricingNotSetUp.selector, address(USDT))));
-    //         cellar.trustPosition(address(USDT), Cellar.PositionType.ERC20, false, address(0), abi.encode(0));
-    //     }
+        // USDT is added as a trusted Cellar position,
+        // but is not supported by the PriceRouter.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Cellar__PositionPricingNotSetUp.selector, address(USDT)))
+        );
+        registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT));
+    }
 
-    //     //H-1
-    //     function testChainlinkPriceFeedUpdateSandwichAttack() external {
-    //         // Initialize test Cellar.
+    //H-1
+    function testChainlinkPriceFeedUpdateSandwichAttack() external {
+        // Initialize test Cellar.
 
-    //         // Create new cellar with WETH, and USDC positions.
-    //         address[] memory positions = new address[](2);
-    //         positions[0] = address(USDC);
-    //         positions[1] = address(WETH);
+        // Create new cellar with WETH, and USDC positions.
+        uint256[] memory positions = new uint256[](2);
+        positions[0] = usdcPosition;
+        positions[1] = wethPosition;
 
-    //         Cellar.PositionData[] memory positionData = new Cellar.PositionData[](2);
-    //         positionData[0] = Cellar.PositionData({
-    //             positionType: Cellar.PositionType.ERC20,
-    //             isDebt: false,
-    //             adaptor: address(0),
-    //             adaptorData: abi.encode(0)
-    //         });
-    //         positionData[1] = Cellar.PositionData({
-    //             positionType: Cellar.PositionType.ERC20,
-    //             isDebt: false,
-    //             adaptor: address(0),
-    //             adaptorData: abi.encode(0)
-    //         });
+        MockCellar cellarA = new MockCellar(
+            registry,
+            USDC,
+            positions,
+            "Asset Management Cellar LP Token",
+            "assetmanagement-CLR",
+            strategist
+        );
 
-    //         MockCellar cellarA = new MockCellar(
-    //             registry,
-    //             USDC,
-    //             positions,
-    //             positionData,
-    //             address(USDC),
-    //             "Asset Management Cellar LP Token",
-    //             "assetmanagement-CLR",
-    //             strategist
-    //         );
+        // Set up worst case scenario where
+        // Cellar has all of its funds in mispriced asset(WETH)
+        // Chainlink updates price because of max price deviation(1%)
 
-    //         // Set up worst case scenario where
-    //         // Cellar has all of its funds in mispriced asset(WETH)
-    //         // Chainlink updates price because of max price deviation(1%)
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellarA), assets);
+        cellarA.deposit(assets, address(this));
+        // Manually rebalance funds from USDC to WETH.
+        deal(address(USDC), address(cellarA), 0);
+        deal(address(WETH), address(cellarA), 5e18);
 
-    //         uint256 assets = 10_000e6;
-    //         deal(address(USDC), address(this), assets);
-    //         USDC.approve(address(cellarA), assets);
-    //         cellarA.deposit(assets, address(this));
-    //         // Manually rebalance funds from USDC to WETH.
-    //         deal(address(USDC), address(cellarA), 0);
-    //         deal(address(WETH), address(cellarA), 5e18);
+        // Attacker joins cellar right before price update.
+        address attacker = vm.addr(8349058);
+        deal(address(USDC), attacker, assets);
+        vm.startPrank(attacker);
+        USDC.approve(address(cellarA), assets);
+        cellarA.deposit(assets, attacker);
+        vm.stopPrank();
 
-    //         // Attacker joins cellar right before price update.
-    //         address attacker = vm.addr(8349058);
-    //         deal(address(USDC), attacker, assets);
-    //         vm.startPrank(attacker);
-    //         USDC.approve(address(cellarA), assets);
-    //         cellarA.deposit(assets, attacker);
-    //         vm.stopPrank();
+        // Price updates
+        priceRouter.setExchangeRate(USDC, WETH, 0.000495e18);
+        priceRouter.setExchangeRate(WETH, USDC, 2020e6);
 
-    //         // Price updates
-    //         priceRouter.setExchangeRate(USDC, WETH, 0.000495e18);
-    //         priceRouter.setExchangeRate(WETH, USDC, 2020e6);
+        // Confirm attackers maxWithdraw is zero while shares are locked.
+        assertEq(cellarA.maxWithdraw(attacker), 0, "Attackers maxWithdraw should be zero while shares are locked.");
 
-    //         // Confirm attackers maxWithdraw is zero while shares are locked.
-    //         assertEq(cellarA.maxWithdraw(attacker), 0, "Attackers maxWithdraw should be zero while shares are locked.");
+        vm.startPrank(attacker);
+        uint256 shares = cellarA.balanceOf(attacker);
+        // Attacker tries to redeem their shares.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellarA.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellarA.redeem(shares, attacker, attacker);
 
-    //         vm.startPrank(attacker);
-    //         uint256 shares = cellarA.balanceOf(attacker);
-    //         // Attacker tries to redeem their shares.
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellarA.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellarA.redeem(shares, attacker, attacker);
+        // Attacker tries to transfer shares to another address.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellarA.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellarA.transfer(address(this), shares);
+        vm.stopPrank();
 
-    //         // Attacker tries to transfer shares to another address.
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellarA.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellarA.transfer(address(this), shares);
-    //         vm.stopPrank();
+        vm.roll(block.number + cellarA.shareLockPeriod());
 
-    //         vm.roll(block.number + cellarA.shareLockPeriod());
+        // Confirm attackers shares are worth more once shares are unlocked.
+        assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more than deposit.");
 
-    //         // Confirm attackers shares are worth more once shares are unlocked.
-    //         assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more than deposit.");
+        // Note the attacker was able to arbitrage the price feed update, but must wait the share lock period in order to capture profit.
+    }
 
-    //         // Note the attacker was able to arbitrage the price feed update, but must wait the share lock period in order to capture profit.
-    //     }
+    function testShareLockUpPeriod() external {
+        // Try to set lock period to illogical value.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidShareLockPeriod.selector)));
+        cellar.setShareLockPeriod(type(uint32).max);
 
-    //     function testShareLockUpPeriod() external {
-    //         // Try to set lock period to illogical value.
-    //         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidShareLockPeriod.selector)));
-    //         cellar.setShareLockPeriod(type(uint32).max);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidShareLockPeriod.selector)));
+        cellar.setShareLockPeriod(0);
 
-    //         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidShareLockPeriod.selector)));
-    //         cellar.setShareLockPeriod(0);
+        // Set lock period to reasonable value.
+        uint256 newLock = 8;
+        cellar.setShareLockPeriod(newLock);
+        assertEq(cellar.shareLockPeriod(), newLock, "Cellar share lock should equal newLock.");
 
-    //         // Set lock period to reasonable value.
-    //         uint256 newLock = 8;
-    //         cellar.setShareLockPeriod(newLock);
-    //         assertEq(cellar.shareLockPeriod(), newLock, "Cellar share lock should equal newLock.");
+        // Make sure user's who join with mint or deposit can not transfer, withdraw, or redeem for the shareLockPeriod.
+        uint256 assets = 100e6;
+        uint256 shares = 100e18;
+        address depositUser = vm.addr(7777);
+        address mintUser = vm.addr(77777);
+        vm.startPrank(depositUser);
+        deal(address(USDC), depositUser, assets);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, depositUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.withdraw(assets, depositUser, depositUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.redeem(shares, depositUser, depositUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.transfer(address(this), shares);
+        vm.stopPrank();
 
-    //         // Make sure user's who join with mint or deposit can not transfer, withdraw, or redeem for the shareLockPeriod.
-    //         uint256 assets = 100e6;
-    //         uint256 shares = 100e18;
-    //         address depositUser = vm.addr(7777);
-    //         address mintUser = vm.addr(77777);
-    //         vm.startPrank(depositUser);
-    //         deal(address(USDC), depositUser, assets);
-    //         USDC.approve(address(cellar), assets);
-    //         cellar.deposit(assets, depositUser);
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellar.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellar.withdraw(assets, depositUser, depositUser);
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellar.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellar.redeem(shares, depositUser, depositUser);
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellar.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellar.transfer(address(this), shares);
-    //         vm.stopPrank();
+        vm.startPrank(mintUser);
+        deal(address(USDC), mintUser, assets);
+        USDC.approve(address(cellar), assets);
+        cellar.mint(shares, mintUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.withdraw(assets, mintUser, mintUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.redeem(shares, mintUser, mintUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.transfer(address(this), shares);
+        vm.stopPrank();
 
-    //         vm.startPrank(mintUser);
-    //         deal(address(USDC), mintUser, assets);
-    //         USDC.approve(address(cellar), assets);
-    //         cellar.mint(shares, mintUser);
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellar.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellar.withdraw(assets, mintUser, mintUser);
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellar.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellar.redeem(shares, mintUser, mintUser);
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellar.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellar.transfer(address(this), shares);
-    //         vm.stopPrank();
+        // Advance block number to end of share lock period.
+        vm.roll(block.number + cellar.shareLockPeriod());
 
-    //         // Advance block number to end of share lock period.
-    //         vm.roll(block.number + cellar.shareLockPeriod());
+        // Users can withdraw.
+        vm.prank(depositUser);
+        cellar.withdraw(assets, depositUser, depositUser);
 
-    //         // Users can withdraw.
-    //         vm.prank(depositUser);
-    //         cellar.withdraw(assets, depositUser, depositUser);
+        // Users can transfer.
+        vm.prank(mintUser);
+        cellar.transfer(depositUser, shares);
 
-    //         // Users can transfer.
-    //         vm.prank(mintUser);
-    //         cellar.transfer(depositUser, shares);
+        // Users can redeem.
+        vm.prank(depositUser);
+        cellar.redeem(shares, depositUser, depositUser);
 
-    //         // Users can redeem.
-    //         vm.prank(depositUser);
-    //         cellar.redeem(shares, depositUser, depositUser);
+        // Check that if a user has waited the lock period but then decides to deposit again, they must wait for the new lock period to end.
+        vm.startPrank(depositUser);
+        deal(address(USDC), depositUser, assets);
+        USDC.approve(address(cellar), 2 * assets);
+        cellar.deposit(assets, depositUser);
+        // Advance block number to end of share lock period.
+        vm.roll(block.number + cellar.shareLockPeriod());
 
-    //         // Check that if a user has waited the lock period but then decides to deposit again, they must wait for the new lock period to end.
-    //         vm.startPrank(depositUser);
-    //         deal(address(USDC), depositUser, assets);
-    //         USDC.approve(address(cellar), 2 * assets);
-    //         cellar.deposit(assets, depositUser);
-    //         // Advance block number to end of share lock period.
-    //         vm.roll(block.number + cellar.shareLockPeriod());
+        // If user joins again, they must wait the lock period again, even if withdrawing previous amount.
+        deal(address(USDC), depositUser, assets);
+        cellar.deposit(assets, depositUser);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.withdraw(assets, depositUser, depositUser);
+        vm.stopPrank();
+    }
 
-    //         // If user joins again, they must wait the lock period again, even if withdrawing previous amount.
-    //         deal(address(USDC), depositUser, assets);
-    //         cellar.deposit(assets, depositUser);
-    //         vm.expectRevert(
-    //             bytes(
-    //                 abi.encodeWithSelector(
-    //                     Cellar.Cellar__SharesAreLocked.selector,
-    //                     block.number + cellar.shareLockPeriod(),
-    //                     block.number
-    //                 )
-    //             )
-    //         );
-    //         cellar.withdraw(assets, depositUser, depositUser);
-    //         vm.stopPrank();
-    //     }
+    function testDepositOnBehalf() external {
+        address user = vm.addr(1111);
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__NotApprovedToDepositOnBehalf.selector, address(this)))
+        );
+        cellar.deposit(assets, user);
 
-    //     function testDepositOnBehalf() external {
-    //         address user = vm.addr(1111);
-    //         uint256 assets = 100e6;
-    //         deal(address(USDC), address(this), assets);
-    //         vm.expectRevert(
-    //             bytes(abi.encodeWithSelector(Cellar.Cellar__NotApprovedToDepositOnBehalf.selector, address(this)))
-    //         );
-    //         cellar.deposit(assets, user);
+        // Add this address as an approved depositor.
+        registry.setApprovedForDepositOnBehalf(address(this), true);
+        // Deposits are now allowed.
+        cellar.deposit(assets, user);
+    }
 
-    //         // Add this address as an approved depositor.
-    //         registry.setApprovedForDepositOnBehalf(address(this), true);
-    //         // Deposits are now allowed.
-    //         cellar.deposit(assets, user);
-    //     }
+    // Crowd Audit Tests
+    //M-1 Accepted
+    //M-2
+    function testCellarDNOSPerformanceFeesWithZeroShares() external {
+        //Attacker deposits 1 USDC into Cellar.
+        uint256 assets = 1e6;
+        address attacker = vm.addr(101);
+        deal(address(USDC), attacker, assets);
+        vm.prank(attacker);
+        USDC.transfer(address(cellar), assets);
 
-    //     // Crowd Audit Tests
-    //     //M-1 Accepted
-    //     //M-2
-    //     function testCellarDNOSPerformanceFeesWithZeroShares() external {
-    //         //Attacker deposits 1 USDC into Cellar.
-    //         uint256 assets = 1e6;
-    //         address attacker = vm.addr(101);
-    //         deal(address(USDC), attacker, assets);
-    //         vm.prank(attacker);
-    //         USDC.transfer(address(cellar), assets);
+        address user = vm.addr(10101);
+        deal(address(USDC), user, assets);
 
-    //         address user = vm.addr(10101);
-    //         deal(address(USDC), user, assets);
+        vm.startPrank(user);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        vm.stopPrank();
 
-    //         vm.startPrank(user);
-    //         USDC.approve(address(cellar), assets);
-    //         cellar.deposit(assets, user);
-    //         vm.stopPrank();
-
-    //         assertEq(
-    //             cellar.maxWithdraw(user),
-    //             assets.mulWadDown(1.9e18),
-    //             "User should be able to withdraw their assets and the attackers(minus performance fees)."
-    //         );
-    //     }
+        assertEq(
+            cellar.maxWithdraw(user),
+            assets.mulWadDown(2e18),
+            "User should be able to withdraw their assets and the attackers."
+        );
+    }
 }
