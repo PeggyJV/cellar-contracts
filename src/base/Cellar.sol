@@ -1118,7 +1118,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      * @dev EIP4626 states totalAssets needs to be inclusive of fees.
      * Since performance fees mint shares, total assets remains unchanged,
      * so this implementation is inclusive of fees even though it does not explicitly show it.
-     * @dev EIP4626 states totalAssets  must not revert, but it is possible for `totalAssets` to revert
+     * @dev EIP4626 states totalAssets must not revert, but it is possible for `totalAssets` to revert
      * so it does NOT conform to ERC4626 standards.
      */
     function totalAssets() public view override returns (uint256 assets) {
@@ -1218,6 +1218,12 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         assets = _convertToAssets(shares, _totalAssets - feeInAssets);
     }
 
+    /**
+     * @notice Finds the max amount of value an `owner` can remove from the cellar.
+     * @param owner address of the user to find max value.
+     * @param inShares if false, then returns value in terms of assets
+     *                 if true then returns value in terms of shares
+     */
     function _findMax(address owner, bool inShares) internal view returns (uint256 maxOut) {
         // Check if owner shares are locked, return 0 if so.
         uint256 lockBlock = userShareLockStartBlock[owner];
@@ -1256,6 +1262,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
 
     /**
      * @notice Returns the max amount withdrawable by a user inclusive of performance fees
+     * @dev EIP4626 states maxWithdraw must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
      * @param owner address to check maxWithdraw of.
      * @return the max amount of assets withdrawable by `owner`.
      */
@@ -1265,6 +1273,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
 
     /**
      * @notice Returns the max amount shares redeemable by a user
+     * @dev EIP4626 states maxRedeem must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
      * @param owner address to check maxRedeem of.
      * @return the max amount of shares redeemable by `owner`.
      */
@@ -1465,6 +1475,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      * @dev This function does not take into account performance fees.
      *      Performance fees would reduce `receiver`s `ownedAssets`,
      *      making the `assets` value returned lower than actual
+     * @dev EIP4626 states maxDeposit must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
      * @param receiver address of account that would receive the shares
      * @return assets maximum amount of assets that can be deposited
      */
@@ -1492,6 +1504,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      * @dev This function does not take into account performance fees.
      *      Performance fees would reduce `receiver`s `ownedAssets`,
      *      making the `shares` value returned lower than actual
+     * @dev EIP4626 states maxMint must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
      * @param receiver address of account that would receive the shares
      * @return shares maximum amount of shares that can be minted
      */
