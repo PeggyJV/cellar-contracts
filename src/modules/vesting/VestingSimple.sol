@@ -5,8 +5,12 @@ import { ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
+import { Test, console } from "@forge-std/Test.sol";
+
 // TODO:
-// - Tests
+// - Finish written tests
+// - Test view functions
+// - Change requires to custom errors
 
 /**
  * @title Cellar Vesting Timelock
@@ -39,6 +43,8 @@ contract VestingSimple {
     ERC20 public immutable asset;
     /// @notice The vesting period for the contract, in seconds.
     uint256 public immutable vestingPeriod;
+    /// @notice Used to preclude rounding errors. Should be equal to 0.0001 tokens of asset.
+    uint256 public immutable minimumDeposit;
 
    /// @notice All vesting schedules for a user
     mapping(address => mapping(uint256 => VestingSchedule)) public vests;
@@ -63,10 +69,16 @@ contract VestingSimple {
      */
     constructor(
         ERC20 _asset,
-        uint256 _vestingPeriod
+        uint256 _vestingPeriod,
+        uint256 _minimumDeposit
     ) {
+        require(address(_asset) != address(0), "Zero asset");
+        require(_vestingPeriod > 0, "Zero vesting period");
+        require(_minimumDeposit >= _vestingPeriod, "Minimum too small");
+
         asset = _asset;
         vestingPeriod = _vestingPeriod;
+        minimumDeposit = _minimumDeposit;
     }
 
     // ====================================== DEPOSIT/WITHDRAWAL =======================================
@@ -85,7 +97,7 @@ contract VestingSimple {
     function deposit(uint256 assets, address receiver) public returns (uint256 shares) {
         // Check for rounding error since we round down in previewDeposit.
         require(assets > 0, "Deposit amount 0");
-        require(assets / vestingPeriod > 0, "Reward rate 0");
+        require(assets >= minimumDeposit, "Deposit too small");
 
         // Used for compatibility
         shares = assets;
@@ -129,6 +141,7 @@ contract VestingSimple {
         VestingSchedule storage s = vests[msg.sender][depositId];
         uint256 newlyVested = _vestDeposit(msg.sender, depositId);
 
+        require(newlyVested > 0 || s.vested > 0, "Deposit fully vested");
         require(s.vested >= assets, "Not enough available");
 
         // Update accounting
@@ -138,6 +151,7 @@ contract VestingSimple {
 
         // Remove deposit if needed
         if (s.vested == 0 && block.timestamp >= s.until) {
+            console.log("REMOVING");
             allUserDepositIds[msg.sender].remove(depositId);
         }
 
@@ -261,12 +275,34 @@ contract VestingSimple {
     /**
      * @notice Returns all deposit IDs in an array. Only contains active deposits.
      *
-     * @param user                          The user whose balance should be reported.
+     * @param user                          The user whose IDs should be reported.
      *
      * @return ids                          An array of the user's active deposit IDs.
      */
     function userDepositIds(address user) public view returns (uint256[] memory) {
         return allUserDepositIds[user].values();
+    }
+
+    /**
+     * @notice Returns the vesting info for a given sdeposit.
+     *
+     * @param user                          The user whose vesting info should be reported.
+     * @param depositId                     The deposit to report.
+     *
+     * @return amountPerSecond              The amount of tokens released per second.
+     * @return until                        The timestamp at which all coins will be released.
+     * @return lastClaimed                  The last time vesting occurred.
+     * @return amountPerSecond              The amount of tokens released per second.
+     */
+    function userVestingInfo(address user, uint256 depositId) public view returns (uint256, uint128, uint128, uint256) {
+        VestingSchedule memory s = vests[user][depositId];
+
+        return (
+            s.amountPerSecond,
+            s.until,
+            s.lastClaimed,
+            s.vested
+        );
     }
 
     // ===================================== INTERNAL FUNCTIONS =======================================
@@ -285,7 +321,9 @@ contract VestingSimple {
         VestingSchedule storage s = vests[user][depositId];
 
         require(s.amountPerSecond > 0, "No such deposit");
-        require(s.lastClaimed < s.until, "Deposit fully vested");
+
+        // No new vesting
+        if (s.lastClaimed >= s.until) return 0;
 
         uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
         uint256 timeElapsed = lastTimestamp - s.lastClaimed;
