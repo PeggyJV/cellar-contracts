@@ -14,19 +14,18 @@ import { console } from "@forge-std/Test.sol";
  * @author crispymangoes
  */
 
-contract CellarAdaptor is BaseAdaptor {
+contract ERC20Adaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
 
     /*
-        adaptorData = abi.encode(Cellar cellar)
+        adaptorData = abi.encode(ERC20 token)
     */
 
     //============================================ Global Functions ===========================================
 
     //============================================ Implement Base Functions ===========================================
     function deposit(uint256 assets, bytes memory adaptorData) public override {
-        Cellar cellar = abi.decode(adaptorData, (Cellar));
-        depositToCellar(cellar, assets);
+        // Nothing to deposit since caller is already holding the ERC20.
     }
 
     function withdraw(
@@ -36,36 +35,26 @@ contract CellarAdaptor is BaseAdaptor {
     ) public override {
         if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
             revert("External receivers are not allowed.");
-        Cellar cellar = abi.decode(adaptorData, (Cellar));
-        cellar.withdraw(assets, receiver, address(this));
+        ERC20 token = abi.decode(adaptorData, (ERC20));
+        token.safeTransfer(receiver, assets);
     }
 
     function withdrawableFrom(bytes memory adaptorData) public view override returns (uint256) {
-        Cellar cellar = abi.decode(adaptorData, (Cellar));
-        return cellar.maxWithdraw(msg.sender);
+        ERC20 token = abi.decode(adaptorData, (ERC20));
+        return token.balanceOf(msg.sender);
     }
 
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        Cellar cellar = abi.decode(adaptorData, (Cellar));
-        return cellar.maxWithdraw(msg.sender);
+        ERC20 token = abi.decode(adaptorData, (ERC20));
+        return token.balanceOf(msg.sender);
     }
 
-    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        Cellar cellar = abi.decode(adaptorData, (Cellar));
-        return cellar.asset();
+    function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
+        ERC20 token = abi.decode(adaptorData, (ERC20));
+        return token;
     }
 
     //============================================ Override Hooks ===========================================
 
     //============================================ High Level Callable Functions ============================================
-
-    function depositToCellar(Cellar cellar, uint256 assets) public {
-        assets = _maxAvailable(cellar.asset(), assets);
-        cellar.asset().safeApprove(address(cellar), assets);
-        cellar.deposit(assets, address(this));
-    }
-
-    function withdrawFromCellar(Cellar cellar, uint256 assets) public {
-        cellar.withdraw(assets, address(this), address(this));
-    }
 }

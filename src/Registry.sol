@@ -147,8 +147,8 @@ contract Registry is Ownable {
         address adaptor,
         bool isDebt,
         bytes memory adaptorData
-    ) external onlyOwner {
-        uint256 positionId = uint256(keccak256(abi.encode(adaptor, isDebt, adaptorData)));
+    ) external onlyOwner returns (uint256 positionId) {
+        positionId = uint256(keccak256(abi.encode(adaptor, isDebt, adaptorData)));
 
         require(adaptor != address(0), "Adaptor can not be zero address");
         require(getPositionData[positionId].adaptor == address(0), "Position already exists.");

@@ -13,7 +13,6 @@ contract MockCellar is Cellar, Test {
         Registry _registry,
         ERC20 _asset,
         uint256[] memory _positions,
-        uint256 _holdingPosition,
         string memory _name,
         string memory _symbol,
         address _strategistPayout
@@ -47,17 +46,4 @@ contract MockCellar is Cellar, Test {
 
         _depositTo(position, amount);
     }
-
-    // function getData()
-    //     public
-    //     view
-    //     returns (
-    //         uint256 _totalAssets,
-    //         address[] memory _positions,
-    //         ERC20[] memory positionAssets,
-    //         uint256[] memory positionBalances
-    //     )
-    // {
-    //     (_totalAssets, _positions, positionAssets, positionBalances) = _getData();
-    // }
 }

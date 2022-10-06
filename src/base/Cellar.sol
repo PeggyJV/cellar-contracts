@@ -19,6 +19,8 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { console } from "@forge-std/Test.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+// import { Owned } from "@solmate/auth/Owned.sol";
+
 // import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol"; This implementation is slightly less size wise
 
 /**
@@ -73,14 +75,14 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @notice Attempted to add a position that is already being used.
      * @param position address of the position
      */
-    error Cellar__PositionAlreadyUsed(address position);
+    error Cellar__PositionAlreadyUsed(uint256 position);
 
     /**
      * @notice Attempted an action on a position that is required to be empty before the action can be performed.
      * @param position address of the non-empty position
      * @param sharesRemaining amount of shares remaining in the position
      */
-    error Cellar__PositionNotEmpty(address position, uint256 sharesRemaining);
+    error Cellar__PositionNotEmpty(uint256 position, uint256 sharesRemaining);
 
     /**
      * @notice Attempted an operation with an asset that was different then the one expected.
@@ -137,11 +139,12 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @param index index at which to insert the position
      * @param positionId address of position to add
      */
+    //TODO add checks if overwriting holding position that the assets match up
     function addPosition(uint256 index, uint256 positionId) external onlyOwner whenNotShutdown {
         if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
 
         // Check if position is already being used.
-        // if (isPositionUsed[positionId]) revert Cellar__PositionAlreadyUsed(positionId);
+        if (isPositionUsed[positionId]) revert Cellar__PositionAlreadyUsed(positionId);
 
         // Copy position data from registry to here.
         (address adaptor, bool isDebt, bytes memory adaptorData) = registry.getPositionData(positionId);
@@ -165,13 +168,14 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @notice Remove the position at a given index from the list of positions used by the cellar.
      * @param index index at which to remove the position
      */
+    //TODO add checks that if removing position 0, then new position 0 is a valid holding position.
     function removePosition(uint256 index) external onlyOwner {
         // Get position being removed.
         uint256 positionId = positions[index];
 
         // Only remove position if it is empty, and if it is not the holding position.
         uint256 positionBalance = _balanceOf(positionId);
-        // if (positionBalance > 0) revert Cellar__PositionNotEmpty(position, positionBalance);
+        if (positionBalance > 0) revert Cellar__PositionNotEmpty(positionId, positionBalance);
 
         // Remove position at the given index.
         positions.remove(index);
@@ -1167,7 +1171,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     //TODO for _depositTo and _withdrawFrom, adaptor data should contain values to validate minimums.
     // ^^^^ might be better to enforce this using withdrawableFrom?
     //Weird cuz if an aUSDC position says you can withdraw this much USDC from me, but then a debt position says you can borrow this much more, the two answers are dependent on eachother, but each position doesn't know that.
-
+    //TODO need to pass in adaptor data that the strategist can set for their cellar
     /**
      * @dev Deposit into a position according to its position type and update related state.
      * @param position address to deposit funds into
