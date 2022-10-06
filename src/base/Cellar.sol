@@ -1218,7 +1218,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
     /**
      * @notice Returns the max amount withdrawable by a user inclusive of performance fees
-     * @param owner address to check maxWithdraw  of.
+     * @param owner address to check maxWithdraw of.
      * @return the max amount of assets withdrawable by `owner`.
      */
     function maxWithdraw(address owner) public view override returns (uint256) {
@@ -1254,6 +1254,21 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
                     ? assets
                     : (_totalAssets - feeInAssets).mulDivDown(smallestPercentWithdrawable, 1e18);
         }
+    }
+
+    /**
+     * @notice Returns the max amount shares redeemable by a user
+     * @param owner address to check maxRedeem of.
+     * @return the max amount of shares redeemable by `owner`.
+     */
+    function maxRedeem(address owner) public view override returns (uint256) {
+        // Check if owner shares are locked, return 0 if so.
+        uint256 lockBlock = userShareLockStartBlock[owner];
+        if (lockBlock != 0) {
+            uint256 blockSharesAreUnlocked = lockBlock + shareLockPeriod;
+            if (blockSharesAreUnlocked > block.number) return 0;
+        }
+        return balanceOf(owner);
     }
 
     /**
