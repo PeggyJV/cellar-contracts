@@ -11,14 +11,16 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+// import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import { Owned } from "@solmate/auth/Owned.sol";
+import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
  * @author Brian Le
  */
-contract Cellar is ERC4626, Ownable, ReentrancyGuard {
+contract Cellar is ERC4626, Owned, ReentrancyGuard {
     using AddressArray for address[];
     using AddressArray for ERC20[];
     using SafeERC20 for ERC20;
@@ -644,7 +646,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         string memory _name,
         string memory _symbol,
         address _strategistPayout
-    ) ERC4626(_asset, _name, _symbol) Ownable() {
+    ) ERC4626(_asset, _name, _symbol) Owned(_registry.getAddress(0)) {
         registry = _registry;
 
         // Initialize positions.
@@ -683,8 +685,8 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         feeData.strategistPayoutAddress = _strategistPayout;
 
         // Transfer ownership to the Gravity Bridge.
-        address gravityBridge = _registry.getAddress(0);
-        transferOwnership(gravityBridge);
+        // address gravityBridge = _registry.getAddress(0);
+        // transferOwnership(gravityBridge);
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -1216,12 +1218,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         assets = _convertToAssets(shares, _totalAssets - feeInAssets);
     }
 
-    /**
-     * @notice Returns the max amount withdrawable by a user inclusive of performance fees
-     * @param owner address to check maxWithdraw of.
-     * @return the max amount of assets withdrawable by `owner`.
-     */
-    function maxWithdraw(address owner) public view override returns (uint256) {
+    function _findMax(address owner, bool inShares) internal view returns (uint256 maxOut) {
         // Check if owner shares are locked, return 0 if so.
         uint256 lockBlock = userShareLockStartBlock[owner];
         if (lockBlock != 0) {
@@ -1235,7 +1232,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
         if (withdrawType == WithdrawType.ORDERLY) {
             uint256 withdrawable = totalAssetsWithdrawable();
-            return assets <= withdrawable ? assets : withdrawable;
+            maxOut = assets <= withdrawable ? assets : withdrawable;
         } else {
             (, , , uint256[] memory positionBalances, uint256[] memory withdrawableBalances) = _getData();
             uint256 totalShares = totalSupply();
@@ -1249,11 +1246,21 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
                     smallestPercentWithdrawable = percentWithdrawable;
             }
             uint256 userOwnershipPercent = shares.mulDivDown(1e18, totalShares);
-            return
-                userOwnershipPercent <= smallestPercentWithdrawable
-                    ? assets
-                    : (_totalAssets - feeInAssets).mulDivDown(smallestPercentWithdrawable, 1e18);
+            maxOut = userOwnershipPercent <= smallestPercentWithdrawable
+                ? assets
+                : (_totalAssets - feeInAssets).mulDivDown(smallestPercentWithdrawable, 1e18);
         }
+        if (inShares) maxOut = _convertToShares(maxOut, _totalAssets - feeInAssets);
+        // else leave maxOut in terms of assets.
+    }
+
+    /**
+     * @notice Returns the max amount withdrawable by a user inclusive of performance fees
+     * @param owner address to check maxWithdraw of.
+     * @return the max amount of assets withdrawable by `owner`.
+     */
+    function maxWithdraw(address owner) public view override returns (uint256) {
+        return _findMax(owner, false);
     }
 
     /**
@@ -1262,13 +1269,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @return the max amount of shares redeemable by `owner`.
      */
     function maxRedeem(address owner) public view override returns (uint256) {
-        // Check if owner shares are locked, return 0 if so.
-        uint256 lockBlock = userShareLockStartBlock[owner];
-        if (lockBlock != 0) {
-            uint256 blockSharesAreUnlocked = lockBlock + shareLockPeriod;
-            if (blockSharesAreUnlocked > block.number) return 0;
-        }
-        return balanceOf(owner);
+        return _findMax(owner, true);
     }
 
     /**
@@ -1495,22 +1496,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @return shares maximum amount of shares that can be minted
      */
     function maxMint(address receiver) public view override returns (uint256 shares) {
-        if (isShutdown) return 0;
-
-        uint256 asssetDepositLimit = depositLimit;
-        uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
-            return type(uint256).max;
-
-        // Get data efficiently.
-        uint256 _totalAssets = totalAssets();
-        uint256 ownedAssets = _convertToAssets(balanceOf(receiver), _totalAssets);
-
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(ownedAssets);
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(_totalAssets);
-
-        // Only return the more relevant of the two.
-        shares = _convertToShares(Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit), _totalAssets);
+        shares = convertToShares(maxDeposit(receiver));
     }
 
     // ========================================= FEES LOGIC =========================================

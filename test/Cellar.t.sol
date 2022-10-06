@@ -3767,7 +3767,7 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), assets);
         USDC.approve(address(maliciousCellar), assets);
 
-        vm.expectRevert(bytes("ReentrancyGuard: reentrant call"));
+        vm.expectRevert(bytes("REENTRANCY"));
         cellar.deposit(assets, address(this));
     }
 
