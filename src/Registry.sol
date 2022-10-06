@@ -110,8 +110,8 @@ contract Registry is Ownable {
 
     //TODO add natspec
     struct PositionData {
-        bool isDebt;
         address adaptor;
+        bool isDebt;
         bytes adaptorData;
     }
 
@@ -134,33 +134,28 @@ contract Registry is Ownable {
     uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
 
     /**
-     * @notice Tell whether a position is trusted.
-     */
-    mapping(address => bool) public isTrusted;
-
-    /**
      * @notice Get the type related to a position.
      */
-    mapping(address => PositionData) public getPositionData;
+    // mapping(address => PositionData) public getPositionData;
+
+    mapping(uint256 => PositionData) public getPositionData;
 
     /**
      * @notice Trust a position to be used by the cellar.
-     * @param position address of position to trust
      */
     function trustPosition(
-        address position,
-        bool isDebt,
         address adaptor,
+        bool isDebt,
         bytes memory adaptorData
     ) external onlyOwner {
-        // Trust position.
-        isTrusted[position] = true;
+        uint256 positionId = uint256(keccak256(abi.encode(adaptor, isDebt, adaptorData)));
 
-        // Set position debt.
-        getPositionData[position].isDebt = isDebt;
+        require(adaptor != address(0), "Adaptor can not be zero address");
+        require(getPositionData[positionId].adaptor == address(0), "Position already exists.");
         require(isAdaptorTrusted[adaptor], "Invalid Adaptor");
-        getPositionData[position].adaptor = adaptor;
-        getPositionData[position].adaptorData = adaptorData;
+
+        // Set position data.
+        getPositionData[positionId] = PositionData({ adaptor: adaptor, isDebt: isDebt, adaptorData: adaptorData });
 
         // Check that asset of position is supported for pricing operations.
         //TODO could also check that withdrawable and balanceOf?
@@ -168,7 +163,7 @@ contract Registry is Ownable {
         if (!PriceRouter(getAddress[PRICE_ROUTER_REGISTRY_SLOT]).isSupported(positionAsset))
             revert Cellar__PositionPricingNotSetUp(address(positionAsset));
 
-        emit TrustChanged(position, true);
+        // emit TrustChanged(position, true);
     }
 
     mapping(address => bool) public isAdaptorTrusted;

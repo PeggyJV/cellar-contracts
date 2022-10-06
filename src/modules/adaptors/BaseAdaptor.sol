@@ -23,6 +23,9 @@ contract BaseAdaptor {
     using SafeERC20 for ERC20;
     using Math for uint256;
 
+    /**
+     * @notice deposit and withdraw functions should use adaptor data to validate operations, like putting a floor on the loan health when withdrawing
+     */
     function deposit(uint256 assets, bytes memory adaptorData) public virtual {}
 
     function withdraw(
@@ -38,14 +41,6 @@ contract BaseAdaptor {
     }
 
     function assetOf(bytes memory adaptorData) public view virtual returns (ERC20) {}
-
-    function beforeHook(bytes memory) public view virtual returns (bool) {
-        return true;
-    }
-
-    function afterHook(bytes memory) public view virtual returns (bool) {
-        return true;
-    }
 
     function _maxAvailable(ERC20 token, uint256 amount) internal view virtual returns (uint256) {
         if (amount == type(uint256).max) return token.balanceOf(address(this));
