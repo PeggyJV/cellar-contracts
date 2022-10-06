@@ -991,6 +991,52 @@ contract CellarTest is Test {
         );
     }
 
+    function testFindMax() external {
+        uint256 deposit = 1e6;
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), type(uint256).max);
+
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
+
+        // No yield has been earned.
+        assertEq(cellar.maxWithdraw(address(this)), deposit, "Max withdraw should equal deposit.");
+        uint256 expectedShares = 1e18;
+        assertEq(cellar.maxRedeem(address(this)), expectedShares, "Max Redeem should be 1 share.");
+
+        // Simulate yield.
+        deal(address(USDC), address(cellar), 10e6);
+
+        uint256 expectedAssets = 9.1e6; // initial $1 deposit + $9 of yield - 10% performance fees.
+        assertEq(
+            cellar.maxWithdraw(address(this)),
+            expectedAssets,
+            "Max withdraw should equal deposit + yield - fees."
+        );
+        assertEq(cellar.maxRedeem(address(this)), expectedShares, "Max Redeem should be 1 share.");
+
+        // Strategist moves half of funds into an illiquid position.
+        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 1e18); // 100% of funds are locked.
+        cellar.trustPosition(address(lockedUSDC), Cellar.PositionType.ERC4626);
+        cellar.pushPosition(address(lockedUSDC));
+
+        // Strategist rebalances into illiquid cellar.
+        _rebalance(cellar, USDC, lockedUSDC, 5e6);
+
+        assertEq(cellar.totalAssets(), 10e6, "Total assets should not have changed.");
+
+        expectedAssets = 5e6; // Half the assets are locked, so maxWithdraw should be half of deposit + yield.
+        expectedShares = cellar.previewWithdraw(expectedAssets);
+        assertEq(cellar.maxWithdraw(address(this)), expectedAssets, "Max withdraw should equal expectedAssets.");
+        assertApproxEqAbs(
+            cellar.maxRedeem(address(this)),
+            expectedShares,
+            1,
+            "Max Redeem should equal previewRedeem(maxWithdraw(user))."
+        );
+    }
+
     function testPerformanceFeesWithPositivePerformance(uint256 deposit, uint256 yield) external {
         deposit = bound(deposit, 100e6, 1_000_000e6);
         yield = bound(yield, 10e6, 10_000e6);
@@ -4124,10 +4170,10 @@ contract CellarTest is Test {
             shares = assetManagementCellar.maxRedeem(sam);
             if (shares > 0) _userAction(assetManagementCellar, sam, Action.REDEEM, 0, shares);
 
-            assertEq(assetManagementCellar.balanceOf(alice), 0, "alice should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(bob), 0, "bob should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(mary), 0, "mary should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(sam), 0, "sam should have no more shares.");
+            assertLe(assetManagementCellar.balanceOf(alice), 1, "alice should have no more shares.");
+            assertLe(assetManagementCellar.balanceOf(bob), 1, "bob should have no more shares.");
+            assertLe(assetManagementCellar.balanceOf(sam), 1, "sam should have no more shares.");
+            assertLe(assetManagementCellar.balanceOf(mary), 1, "mary should have no more shares.");
         }
     }
 

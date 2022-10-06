@@ -1496,6 +1496,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      * @return shares maximum amount of shares that can be minted
      */
     function maxMint(address receiver) public view override returns (uint256 shares) {
+        if (depositLimit == type(uint256).max && liquidityLimit == type(uint256).max) return type(uint256).max;
         shares = convertToShares(maxDeposit(receiver));
     }
 
