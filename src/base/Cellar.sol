@@ -147,8 +147,11 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         if (isPositionUsed[positionId]) revert Cellar__PositionAlreadyUsed(positionId);
 
         // Copy position data from registry to here.
-        (address adaptor, bool isDebt, bytes memory adaptorData) = registry.getPositionData(positionId);
-        require(adaptor != address(0), "Position does not exist.");
+        (address adaptor, bool isDebt, bytes memory adaptorData) = registry.cellarAddPosition(
+            positionId,
+            assetRiskTolerance,
+            protocolRiskTolerance
+        );
         getPositionData[positionId] = Registry.PositionData({
             adaptor: adaptor,
             isDebt: isDebt,
@@ -395,6 +398,11 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      */
     Registry public immutable registry;
 
+    // Below values determine what positions and adaptors this cellar can use.
+    uint256 public immutable assetRiskTolerance; // 0 safest -> uint256 max no restrictions
+
+    uint256 public immutable protocolRiskTolerance; // 0 safest -> uint256 max no restrictions
+
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
      *      module to the cellars.
@@ -413,9 +421,13 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         uint256[] memory _positions,
         string memory _name,
         string memory _symbol,
-        address _strategistPayout
+        address _strategistPayout,
+        uint256 _assetRiskTolerance,
+        uint256 _protocolRiskTolerance
     ) ERC4626(_asset, _name, _symbol) Ownable() {
         registry = _registry;
+        assetRiskTolerance = _assetRiskTolerance;
+        protocolRiskTolerance = _protocolRiskTolerance;
 
         // Initialize positions.
         positions = _positions;
@@ -1007,7 +1019,8 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     mapping(address => bool) public isAdaptorSetup; // Map adaptor address to bool
 
     function setupAdaptor(address _adaptor) external onlyOwner {
-        require(registry.isAdaptorTrusted(_adaptor), "Adaptor is not trusted by registry.");
+        // Following call reverts if adaptor does not exist, or if it does not meet cellars risk appetite.
+        registry.cellarSetupAdaptor(_adaptor, assetRiskTolerance, protocolRiskTolerance);
         isAdaptorSetup[_adaptor] = true;
     }
 

@@ -14,6 +14,7 @@ import { Registry, PriceRouter, SwapRouter, IGravity } from "src/base/Cellar.sol
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SigUtils } from "src/utils/SigUtils.sol";
+import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -42,6 +43,13 @@ contract CellarRouterTest is Test {
     ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private constant WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
 
+    ERC20Adaptor private erc20Adaptor;
+
+    uint256 private usdcPosition;
+    uint256 private daiPosition;
+    uint256 private wethPosition;
+    uint256 private wbtcPosition;
+
     function setUp() public {
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
@@ -58,50 +66,32 @@ contract CellarRouterTest is Test {
 
         registry.setApprovedForDepositOnBehalf(address(router), true);
 
+        erc20Adaptor = new ERC20Adaptor();
+
         // Set up exchange rates:
         priceRouter.addAsset(USDC, 0, 0, false, 0);
         priceRouter.addAsset(DAI, 0, 0, false, 0);
         priceRouter.addAsset(WETH, 0, 0, false, 0);
         priceRouter.addAsset(WBTC, 0, 0, false, 0);
 
-        address[] memory positions = new address[](4);
-        positions[0] = address(USDC);
-        positions[1] = address(DAI);
-        positions[2] = address(WETH);
-        positions[3] = address(WBTC);
+        // Add adaptors and positions to the registry.
+        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
-        Cellar.PositionData[] memory positionData = new Cellar.PositionData[](4);
-        positionData[0] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[1] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[2] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[3] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
+        daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
+        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
+        wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
+
+        uint256[] memory positions = new uint256[](4);
+        positions[0] = usdcPosition;
+        positions[1] = daiPosition;
+        positions[2] = wethPosition;
+        positions[3] = wbtcPosition;
 
         cellar = new MockCellar(
             registry,
             USDC,
             positions,
-            positionData,
-            address(USDC),
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             address(0)
@@ -160,23 +150,13 @@ contract CellarRouterTest is Test {
         path[1] = address(WETH);
 
         // Create a WETH Cellar.
-        address[] memory positions = new address[](1);
-        positions[0] = address(WETH);
-
-        Cellar.PositionData[] memory positionData = new Cellar.PositionData[](1);
-        positionData[0] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
+        uint256[] memory positions = new uint256[](1);
+        positions[0] = wethPosition;
 
         MockCellar wethCellar = new MockCellar(
             registry,
             WETH,
             positions,
-            positionData,
-            address(WETH),
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             address(0)

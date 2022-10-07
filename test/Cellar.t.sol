@@ -108,14 +108,14 @@ contract CellarTest is Test {
         uint256[] memory positions = new uint256[](5);
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(cellarAdaptor));
-        registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(cellarAdaptor), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC));
-        usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(usdcCLR));
-        wethCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethCLR));
-        wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wbtcCLR));
-        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH));
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
+        usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(usdcCLR), 0, 0);
+        wethCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethCLR), 0, 0);
+        wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wbtcCLR), 0, 0);
+        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
 
         positions[0] = usdcPosition;
         positions[1] = usdcCLRPosition;
@@ -312,7 +312,7 @@ contract CellarTest is Test {
         MockERC4626 wethVault = new MockERC4626(WETH, "WETH Vault LP Token", "WETH-VLT", 18);
 
         priceRouter.supportAsset(WETH);
-        uint256 newWETHPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethVault));
+        uint256 newWETHPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethVault), 0, 0);
         cellar.addPosition(5, newWETHPosition);
 
         cellar.depositIntoPosition(wethCLRPosition, 1e18); // $2000
@@ -695,7 +695,7 @@ contract CellarTest is Test {
         for (uint256 i = 1; i < 32; i++) {
             position = new MockERC20("Howdy", 18);
             priceRouter.supportAsset(position);
-            uint256 id = registry.trustPosition(address(erc20Adaptor), false, abi.encode(position));
+            uint256 id = registry.trustPosition(address(erc20Adaptor), false, abi.encode(position), 0, 0);
             multiPositionCellar.addPosition(multiPositionCellar.getPositions().length, id);
         }
 
@@ -907,8 +907,8 @@ contract CellarTest is Test {
     }
 
     function testDebtTokensInCellars() external {
-        uint256 debtWethPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WETH));
-        uint256 debtWbtcPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WBTC));
+        uint256 debtWethPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WETH), 0, 0);
+        uint256 debtWbtcPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WBTC), 0, 0);
 
         // Setup Cellar with debt positions:
         uint256[] memory positions = new uint256[](2);
@@ -968,7 +968,7 @@ contract CellarTest is Test {
 
         stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
 
-        uint256 cellarBPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(cellarB));
+        uint256 cellarBPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(cellarB), 0, 0);
         positions[0] = cellarBPosition;
 
         cellarA = new MockCellar(registry, USDC, positions, "Stablecoin cellar", "SC-CLR", strategist);
@@ -995,7 +995,7 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         priceRouter.supportAsset(USDT);
-        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT));
+        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
         cellar.addPosition(5, usdtPosition);
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1018,7 +1018,7 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         priceRouter.supportAsset(USDT);
-        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT));
+        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
         cellar.addPosition(5, usdtPosition);
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1092,7 +1092,7 @@ contract CellarTest is Test {
         // from the safety contract.
 
         priceRouter.supportAsset(USDT);
-        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT));
+        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
         cellar.addPosition(5, usdtPosition);
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1201,7 +1201,13 @@ contract CellarTest is Test {
         // True means this cellar tries to re-enter caller on deposit calls.
         ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", true);
 
-        uint256 maliciousPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(maliciousCellar));
+        uint256 maliciousPosition = registry.trustPosition(
+            address(cellarAdaptor),
+            false,
+            abi.encode(maliciousCellar),
+            0,
+            0
+        );
         cellar.addPosition(5, maliciousPosition);
         cellar.swapPositions(0, 5);
 
@@ -1258,7 +1264,7 @@ contract CellarTest is Test {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Cellar__PositionPricingNotSetUp.selector, address(USDT)))
         );
-        registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT));
+        registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
     }
 
     //H-1

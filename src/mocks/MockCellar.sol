@@ -16,7 +16,7 @@ contract MockCellar is Cellar, Test {
         string memory _name,
         string memory _symbol,
         address _strategistPayout
-    ) Cellar(_registry, _asset, _positions, _name, _symbol, _strategistPayout) {}
+    ) Cellar(_registry, _asset, _positions, _name, _symbol, _strategistPayout, type(uint256).max, type(uint256).max) {}
 
     function depositIntoPosition(
         uint256 position,

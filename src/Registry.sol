@@ -115,6 +115,11 @@ contract Registry is Ownable {
         bytes adaptorData;
     }
 
+    struct RiskData {
+        uint256 assetRisk;
+        uint256 protocolRisk;
+    }
+
     /**
      * @notice Emitted when trust for a position is changed.
      * @param position address of position that trust was changed for
@@ -140,13 +145,28 @@ contract Registry is Ownable {
 
     mapping(uint256 => PositionData) public getPositionData;
 
+    mapping(uint256 => RiskData) public getRiskData;
+
+    mapping(address => RiskData) public getAdaptorRiskData;
+
+    //TODO positions and Cellrs can have risk Ids associated with them.
+    /**
+     * 0: No restrictions
+     * 1: Stable Positions only
+     * Could also be a number from 0 -> BIG Number that represents risk tolerance,
+     * 0 means no risk tolerance so only hold stable positions
+     * 10 could mean low risk tolerance holding blue chip voltatile assets but no DeFi positions
+     */
+
     /**
      * @notice Trust a position to be used by the cellar.
      */
     function trustPosition(
         address adaptor,
         bool isDebt,
-        bytes memory adaptorData
+        bytes memory adaptorData,
+        uint256 assetRisk,
+        uint256 protocolRisk
     ) external onlyOwner returns (uint256 positionId) {
         positionId = uint256(keccak256(abi.encode(adaptor, isDebt, adaptorData)));
 
@@ -156,6 +176,8 @@ contract Registry is Ownable {
 
         // Set position data.
         getPositionData[positionId] = PositionData({ adaptor: adaptor, isDebt: isDebt, adaptorData: adaptorData });
+
+        getRiskData[positionId] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
 
         // Check that asset of position is supported for pricing operations.
         //TODO could also check that withdrawable and balanceOf?
@@ -168,7 +190,44 @@ contract Registry is Ownable {
 
     mapping(address => bool) public isAdaptorTrusted;
 
-    function trustAdaptor(address adaptor) external onlyOwner {
+    function trustAdaptor(
+        address adaptor,
+        uint256 assetRisk,
+        uint256 protocolRisk
+    ) external onlyOwner {
         isAdaptorTrusted[adaptor] = true;
+        getAdaptorRiskData[adaptor] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
+    }
+
+    function cellarAddPosition(
+        uint256 _positionId,
+        uint256 _assetRiskTolerance,
+        uint256 _protocolRiskTolerance
+    )
+        external
+        view
+        returns (
+            address adaptor,
+            bool isDebt,
+            bytes memory adaptorData
+        )
+    {
+        RiskData memory data = getRiskData[_positionId];
+        require(_assetRiskTolerance >= data.assetRisk, "Caller does not meet asset risk max.");
+        require(_protocolRiskTolerance >= data.protocolRisk, "Caller does not meet protocol risk max.");
+        PositionData memory positionData = getPositionData[_positionId];
+        require(positionData.adaptor != address(0), "Position does not exist.");
+        return (positionData.adaptor, positionData.isDebt, positionData.adaptorData);
+    }
+
+    function cellarSetupAdaptor(
+        address _adaptor,
+        uint256 _assetRiskTolerance,
+        uint256 _protocolRiskTolerance
+    ) external view {
+        RiskData memory data = getAdaptorRiskData[_adaptor];
+        require(_assetRiskTolerance >= data.assetRisk, "Caller does not meet asset risk max.");
+        require(_protocolRiskTolerance >= data.protocolRisk, "Caller does not meet protocol risk max.");
+        require(isAdaptorTrusted[_adaptor], "Adaptor is not trusted by registry.");
     }
 }

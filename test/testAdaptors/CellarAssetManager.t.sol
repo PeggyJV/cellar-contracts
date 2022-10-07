@@ -13,6 +13,7 @@ import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
+import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -50,6 +51,13 @@ contract CellarAssetManagerTest is Test {
     address private immutable cosmos = vm.addr(0xCAAA);
 
     CellarAdaptor private cellarAdaptor;
+    ERC20Adaptor private erc20Adaptor;
+
+    uint256 private usdcPosition;
+    uint256 private wethPosition;
+    uint256 private usdcCLRPosition;
+    uint256 private wethCLRPosition;
+    uint256 private wbtcCLRPosition;
 
     function setUp() external {
         usdcCLR = new MockERC4626(USDC, "USDC Cellar LP Token", "USDC-CLR", 6);
@@ -67,6 +75,7 @@ contract CellarAssetManagerTest is Test {
         swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
         gravity = new MockGravity();
         cellarAdaptor = new CellarAdaptor();
+        erc20Adaptor = new ERC20Adaptor();
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -98,52 +107,29 @@ contract CellarAssetManagerTest is Test {
         priceRouter.supportAsset(WETH);
         priceRouter.supportAsset(WBTC);
 
-        // Setup Cellar:
-        address[] memory positions = new address[](5);
-        positions[0] = address(USDC);
-        positions[1] = address(usdcCLR);
-        positions[2] = address(wethCLR);
-        positions[3] = address(wbtcCLR);
-        positions[4] = address(WETH);
+        // Cellar positions array.
+        uint256[] memory positions = new uint256[](5);
 
-        Cellar.PositionData[] memory positionData = new Cellar.PositionData[](5);
-        positionData[0] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[1] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC4626,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[2] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC4626,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[3] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC4626,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[4] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
+        // Add adaptors and positions to the registry.
+        registry.trustAdaptor(address(cellarAdaptor), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
+
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
+        usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(usdcCLR), 0, 0);
+        wethCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethCLR), 0, 0);
+        wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wbtcCLR), 0, 0);
+        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
+
+        positions[0] = usdcPosition;
+        positions[1] = usdcCLRPosition;
+        positions[2] = wethCLRPosition;
+        positions[3] = wbtcCLRPosition;
+        positions[4] = wethPosition;
 
         cellar = new MockCellar(
             registry,
             USDC,
             positions,
-            positionData,
-            address(USDC),
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             strategist
@@ -176,12 +162,11 @@ contract CellarAssetManagerTest is Test {
         // Update allowed rebalance deviation to work with mock swap router.
         cellar.setRebalanceDeviation(0.051e18);
 
-        cellar.depositIntoPosition(address(usdcCLR), assets);
+        cellar.depositIntoPosition(usdcCLRPosition, assets);
 
         // Make call to adaptor to remove funds from usdcCLR into wethCLR position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](3);
-        bool[] memory isRevertOkay = new bool[](3);
 
         // First withdraw from the usdcCLR.
         adaptorCalls[0] = abi.encodeWithSelector(CellarAdaptor.withdrawFromCellar.selector, usdcCLR, assets);
@@ -203,11 +188,7 @@ contract CellarAssetManagerTest is Test {
         // Deposit new WETH assets into wethCLR.
         adaptorCalls[2] = abi.encodeWithSelector(CellarAdaptor.depositToCellar.selector, wethCLR, type(uint256).max);
 
-        data[0] = Cellar.AdaptorCall({
-            adaptor: address(cellarAdaptor),
-            callData: adaptorCalls,
-            isRevertOkay: isRevertOkay
-        });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertEq(usdcCLR.balanceOf(address(cellar)), 0, "Should have rebalanced from position.");
@@ -232,7 +213,6 @@ contract CellarAssetManagerTest is Test {
         // Make call to adaptor to move funds from USDC into WETH position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        bool[] memory isRevertOkay = new bool[](1);
 
         // Swap withdrawn assets into WETH.
         address[] memory path = new address[](2);
@@ -248,11 +228,7 @@ contract CellarAssetManagerTest is Test {
             swapParams
         );
 
-        data[0] = Cellar.AdaptorCall({
-            adaptor: address(cellarAdaptor),
-            callData: adaptorCalls,
-            isRevertOkay: isRevertOkay
-        });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         //assertEq(assetsTo, exchange.quote(assets, path), "Should received expected assets from swap.");
@@ -271,7 +247,6 @@ contract CellarAssetManagerTest is Test {
         // Make call to adaptor to move funds from USDC into WETH position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        bool[] memory isRevertOkay = new bool[](1);
 
         // Swap withdrawn assets into WETH.
         address[] memory path = new address[](2);
@@ -287,11 +262,7 @@ contract CellarAssetManagerTest is Test {
             swapParams
         );
 
-        data[0] = Cellar.AdaptorCall({
-            adaptor: address(cellarAdaptor),
-            callData: adaptorCalls,
-            isRevertOkay: isRevertOkay
-        });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(
             bytes(
@@ -324,9 +295,9 @@ contract CellarAssetManagerTest is Test {
 
         assertEq(totalAssets, 0, "Cellar total assets should be zero.");
 
-        cellar.depositIntoPosition(address(usdcCLR), usdcCLRAmount);
-        cellar.depositIntoPosition(address(wethCLR), wethCLRAmount);
-        cellar.depositIntoPosition(address(wbtcCLR), wbtcCLRAmount);
+        cellar.depositIntoPosition(usdcCLRPosition, usdcCLRAmount);
+        cellar.depositIntoPosition(wethCLRPosition, wethCLRAmount);
+        cellar.depositIntoPosition(wbtcCLRPosition, wbtcCLRAmount);
         deal(address(WETH), address(cellar), wethAmount);
         deal(address(USDC), address(cellar), usdcAmount);
 
@@ -342,8 +313,6 @@ contract CellarAssetManagerTest is Test {
             1,
             "`totalAssets` should equal all asset values summed together."
         );
-        (uint256 getDataTotalAssets, , , , ) = cellar.getData();
-        assertEq(getDataTotalAssets, totalAssets, "`getData` total assets should be the same as cellar `totalAssets`.");
     }
 
     function testRebalanceDeviation() external {
@@ -358,7 +327,6 @@ contract CellarAssetManagerTest is Test {
         // Make call to adaptor to move funds from USDC into WETH position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        bool[] memory isRevertOkay = new bool[](1);
 
         // Swap withdrawn assets into WETH.
         address[] memory path = new address[](2);
@@ -374,11 +342,7 @@ contract CellarAssetManagerTest is Test {
             swapParams
         );
 
-        data[0] = Cellar.AdaptorCall({
-            adaptor: address(cellarAdaptor),
-            callData: adaptorCalls,
-            isRevertOkay: isRevertOkay
-        });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(
             bytes(
@@ -810,7 +774,6 @@ contract CellarAssetManagerTest is Test {
         // Make call to adaptor to move funds from `from` into `to` positions.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        bool[] memory isRevertOkay = new bool[](1);
 
         // Swap withdrawn assets into WETH.
         address[] memory path = new address[](2);
@@ -826,11 +789,7 @@ contract CellarAssetManagerTest is Test {
             swapParams
         );
 
-        data[0] = Cellar.AdaptorCall({
-            adaptor: address(cellarAdaptor),
-            callData: adaptorCalls,
-            isRevertOkay: isRevertOkay
-        });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
         uint256 toBalance = to.balanceOf(address(target));
         target.callOnAdaptor(data);
         assetsTo = to.balanceOf(address(target)) - toBalance;
@@ -843,17 +802,15 @@ contract CellarAssetManagerTest is Test {
      * @param to Token to buy.
      * @param amount The amount of `from` token to sell.
      */
-    //TODO return value is incorrect
     function _rebalanceWithERC4626Positions(
         Cellar target,
         ERC20 from,
         ERC20 to,
         uint256 amount
-    ) internal returns (uint256 assetsTo) {
+    ) internal returns (uint256) {
         // Make call to adaptor to move funds from `from` into `to` positions.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        bool[] memory isRevertOkay = new bool[](1);
 
         // See if `from` is an ERC4626 or an ERC20
         Cellar fromPosition = Cellar(address(from));
@@ -866,14 +823,10 @@ contract CellarAssetManagerTest is Test {
             adaptorCalls[0] = abi.encodeWithSelector(CellarAdaptor.depositToCellar.selector, toPosition, amount);
         }
 
-        data[0] = Cellar.AdaptorCall({
-            adaptor: address(cellarAdaptor),
-            callData: adaptorCalls,
-            isRevertOkay: isRevertOkay
-        });
-        //uint256 toBalance = to.balanceOf(address(target));
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
+
         target.callOnAdaptor(data);
-        //assetsTo = to.balanceOf(address(target)) - toBalance;
+        return amount;
     }
 
     /**
@@ -984,38 +937,19 @@ contract CellarAssetManagerTest is Test {
         // Initialize test Cellar.
         MockCellar assetManagementCellar;
         {
-            // Create new cellar with WETH, USDC, and WBTC positions.
-            address[] memory positions = new address[](3);
-            positions[0] = address(USDC);
-            positions[1] = address(WETH);
-            positions[2] = address(WBTC);
+            // Add wBTC position to registry.
+            uint256 wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
 
-            Cellar.PositionData[] memory positionData = new Cellar.PositionData[](3);
-            positionData[0] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC20,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
-            positionData[1] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC20,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
-            positionData[2] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC20,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
+            // Create new cellar with WETH, USDC, and WBTC positions.
+            uint256[] memory positions = new uint256[](3);
+            positions[0] = usdcPosition;
+            positions[1] = wethPosition;
+            positions[2] = wbtcPosition;
 
             assetManagementCellar = new MockCellar(
                 registry,
                 USDC,
                 positions,
-                positionData,
-                address(USDC),
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
                 strategist
@@ -1113,11 +1047,6 @@ contract CellarAssetManagerTest is Test {
 
             // Mary joins cellar using deposit.
             (assets, shares) = _userAction(assetManagementCellar, mary, Action.DEPOSIT, amount, 0);
-
-            assertTrue(
-                assetManagementCellar.balanceOf(address(assetManagementCellar)) > 0,
-                "Cellar should have been minted performance fees."
-            );
         }
         _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, WETH);
         _checkSendFees(assetManagementCellar, 7 days);
@@ -1155,7 +1084,6 @@ contract CellarAssetManagerTest is Test {
         {
             // Bob enters cellar via `mint`.
             uint256 shares = _mutate(salt) * 1e18;
-            uint256 totalAssets = assetManagementCellar.totalAssets();
 
             deal(address(USDC), bob, type(uint256).max);
             (, shares) = _userAction(assetManagementCellar, bob, Action.MINT, 0, shares);
@@ -1240,11 +1168,6 @@ contract CellarAssetManagerTest is Test {
             assertEq(WBTC.balanceOf(alice), 0, "Alice should not have gotten WBTC.");
             uint256 WETHworth = priceRouter.getValue(WETH, WETH.balanceOf(alice), USDC);
             assertApproxEqAbs(USDC.balanceOf(alice) + WETHworth, assets, 1, "Value of assets out should equal assets.");
-
-            assertTrue(
-                assetManagementCellar.balanceOf(address(assetManagementCellar)) == 0,
-                "Cellar should have zero performance fees minted."
-            );
         }
 
         _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, WETH);
@@ -1283,14 +1206,9 @@ contract CellarAssetManagerTest is Test {
             // Strategists trusts LINK, and then adds it as a position.
             // No need to set LINK price since its assets will always be zero.
             priceRouter.supportAsset(LINK);
-            assetManagementCellar.trustPosition(
-                address(LINK),
-                Cellar.PositionType.ERC20,
-                false,
-                address(0),
-                abi.encode(0)
-            );
-            assetManagementCellar.addPosition(3, address(LINK));
+            uint256 linkPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(LINK), 0, 0);
+
+            assetManagementCellar.addPosition(3, linkPosition);
 
             // Swap LINK position with USDC position.
             assetManagementCellar.swapPositions(3, 0);
@@ -1388,9 +1306,6 @@ contract CellarAssetManagerTest is Test {
         // Set WETH balance in cellar to equal 45% of the cellars total assets.
         deal(address(WETH), address(assetManagementCellar), ((2 * assetsNeeded * 45) / 100000).changeDecimals(6, 18));
 
-        /*// Change to withdraw in proportion
-        assetManagementCellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
-
         // Have Sam exit using withdraw.
         _userAction(assetManagementCellar, sam, Action.WITHDRAW, assetsNeeded, 0);
 
@@ -1431,13 +1346,13 @@ contract CellarAssetManagerTest is Test {
             assertApproxEqAbs(bobUSDCBalance, expectedValue, 0, "Bob's USDC worth should equal expectedValue.");
         }
 
-        //Sam should have USDC, WETH, and WBTC.
+        //Sam should have WETH, and WBTC.
         {
             uint256 samUSDCBalance = USDC.balanceOf(sam);
             uint256 samWETHBalance = WETH.balanceOf(sam);
             uint256 samWBTCBalance = WBTC.balanceOf(sam);
 
-            assertTrue(samUSDCBalance > 0, "Sam should have some USDC.");
+            assertEq(samUSDCBalance, 0, "Sam should have zero USDC.");
             assertTrue(samWETHBalance > 0, "Sam should have some WETH.");
             assertTrue(samWBTCBalance > 0, "Sam should have some WBTC.");
             assertEq(LINK.balanceOf(sam), 0, "Sam should have zero LINK.");
@@ -1452,14 +1367,14 @@ contract CellarAssetManagerTest is Test {
             );
         }
 
-        //Mary should have USDC, WETH, and WBTC.
+        //Mary should have USDC, and WBTC.
         {
             uint256 maryUSDCBalance = USDC.balanceOf(mary);
             uint256 maryWETHBalance = WETH.balanceOf(mary);
             uint256 maryWBTCBalance = WBTC.balanceOf(mary);
 
             assertTrue(maryUSDCBalance > 0, "Mary should have some USDC.");
-            assertTrue(maryWETHBalance > 0, "Mary should have some WETH.");
+            assertEq(maryWETHBalance, 0, "Mary should have zero WETH.");
             assertTrue(maryWBTCBalance > 0, "Mary should have some WBTC.");
             assertEq(LINK.balanceOf(mary), 0, "Mary should have zero LINK.");
 
@@ -1471,10 +1386,9 @@ contract CellarAssetManagerTest is Test {
                 0,
                 "Mary's USDC, WETH, and WBTC worth should equal expectedValue."
             );
-        }*/
+        }
     }
 
-    /*
     function testWETHAsCellarAsset(uint8 salt) external {
         // Initialize users.
         address alice = vm.addr(1);
@@ -1488,39 +1402,19 @@ contract CellarAssetManagerTest is Test {
         // Initialize test Cellar.
         MockCellar assetManagementCellar;
         {
-            // Create new cellar with WETH, USDC, and WBTC positions.
-            address[] memory positions = new address[](3);
-            positions[0] = address(WETH);
-            positions[1] = address(USDC);
-            positions[2] = address(WBTC);
+            // Add wBTC position to registry.
+            uint256 wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
 
-            Cellar.PositionData[] memory positionData = new Cellar.PositionData[](3);
-            positionData[0] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC20,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
-            positionData[1] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC20,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
-            positionData[2] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC20,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
+            // Create new cellar with WETH, USDC, and WBTC positions.
+            uint256[] memory positions = new uint256[](3);
+            positions[0] = wethPosition;
+            positions[1] = usdcPosition;
+            positions[2] = wbtcPosition;
 
             assetManagementCellar = new MockCellar(
                 registry,
                 WETH,
                 positions,
-                positionData,
-                address(WETH),
-                Cellar.WithdrawType.ORDERLY,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
                 strategist
@@ -1566,9 +1460,6 @@ contract CellarAssetManagerTest is Test {
             uint256 shares;
             uint256 assets;
 
-            // Expected high watermark after 3 users each join cellar with `amount` of assets.
-            uint256 expectedHighWatermark = amount * 3;
-
             // Alice joins cellar using deposit.
             (assets, shares) = _userAction(assetManagementCellar, alice, Action.DEPOSIT, amount, 0);
             assertEq(shares, assetManagementCellar.balanceOf(alice), "Alice should have got shares out from deposit.");
@@ -1586,16 +1477,6 @@ contract CellarAssetManagerTest is Test {
             (assets, shares) = _userAction(assetManagementCellar, sam, Action.DEPOSIT, amount, 0);
             (assets, shares) = _userAction(assetManagementCellar, sam, Action.WITHDRAW, amount / 2, 0);
             (assets, shares) = _userAction(assetManagementCellar, sam, Action.MINT, 0, shares);
-
-            // High Watermark should be equal to amount * 3 and it should equal total assets.
-            uint256 totalAssets = assetManagementCellar.totalAssets();
-            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            assertEq(highWatermark, expectedHighWatermark, "High Watermark should equal expectedHighWatermark.");
-            assertEq(
-                highWatermark,
-                totalAssets,
-                "High Watermark should equal totalAssets because no yield was earned."
-            );
         }
         {
             // Strategy providers swaps into USDC and WBTC using WETH, targeting a 20/40/40 split(WETH/USDC/WBTC).
@@ -1608,8 +1489,8 @@ contract CellarAssetManagerTest is Test {
             // Swap 40% of Cellars WETH for WBTC.
             _rebalance(assetManagementCellar, WETH, WBTC, wethToSell);
         }
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, USDC);
-        _checkSendFees(assetManagementCellar, 7 days, 0);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, USDC);
+        _checkSendFees(assetManagementCellar, 7 days);
 
         // WBTC price increases enough to create yield, Mary joins the cellar, and sendFees is called.
         {
@@ -1644,26 +1525,13 @@ contract CellarAssetManagerTest is Test {
             uint256 amount = (_mutate(salt) * 1e18) / 2000;
             uint256 shares;
             uint256 assets;
-            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
 
             // Mary joins cellar using deposit.
-            yieldEarned = assetManagementCellar.totalAssets() - highWatermark;
             (assets, shares) = _userAction(assetManagementCellar, mary, Action.DEPOSIT, amount, 0);
-            (highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            assertEq(
-                highWatermark,
-                assetManagementCellar.totalAssets(),
-                "High watermark should be equal to totalAssets."
-            );
-
-            assertTrue(
-                assetManagementCellar.balanceOf(address(assetManagementCellar)) > 0,
-                "Cellar should have been minted performance fees."
-            );
         }
 
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 0 days, yieldEarned, USDC);
-        _checkSendFees(assetManagementCellar, 7 days, yieldEarned);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 0 days, USDC);
+        _checkSendFees(assetManagementCellar, 7 days);
 
         // Adjust fee variables, lower WETH price but raise WBTC price enough to
         // create yield, rebalance all positions into WBTC, Bob and Sam join
@@ -1675,12 +1543,6 @@ contract CellarAssetManagerTest is Test {
             // Set strategist platform cut to 80%.
             assetManagementCellar.setStrategistPlatformCut(0.8e18);
 
-            // Set performance fee to 0%.
-            assetManagementCellar.setPerformanceFee(0.2e18);
-
-            // Set strategist performance cut to 85%.
-            assetManagementCellar.setStrategistPerformanceCut(0.85e18);
-
             // Strategist rebalances all positions to only WBTC
             uint256 assetBalanceToRemove = USDC.balanceOf(address(assetManagementCellar));
             _rebalance(assetManagementCellar, USDC, WBTC, assetBalanceToRemove);
@@ -1690,7 +1552,6 @@ contract CellarAssetManagerTest is Test {
 
             // WETH price goes down. WBTC price goes up enough to create yield.
             {
-                uint256 totalAssets = assetManagementCellar.totalAssets();
                 ERC20[] memory assetsToAdjust = new ERC20[](3);
                 uint256[] memory prices = new uint256[](3);
                 assetsToAdjust[0] = USDC;
@@ -1700,37 +1561,28 @@ contract CellarAssetManagerTest is Test {
                 prices[1] = 1_500e8;
                 prices[2] = 50_000e8;
                 _changeMarketPrices(assetsToAdjust, prices);
-                totalAssets = assetManagementCellar.totalAssets();
             }
         }
 
         {
             // Bob enters cellar via `mint`.
             uint256 shares = (_mutate(salt) * 1e18) / 2000;
-            uint256 totalAssets = assetManagementCellar.totalAssets();
-            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            yieldEarned = totalAssets - highWatermark;
 
             deal(address(WETH), bob, type(uint256).max);
             (, shares) = _userAction(assetManagementCellar, bob, Action.MINT, 0, shares);
             deal(address(WETH), bob, 0);
-            uint256 feeSharesInCellar = assetManagementCellar.balanceOf(address(assetManagementCellar));
+            assetManagementCellar.balanceOf(address(assetManagementCellar));
             deal(address(WETH), sam, type(uint256).max);
             (, shares) = _userAction(assetManagementCellar, sam, Action.MINT, 0, shares);
             deal(address(WETH), sam, 0);
-            assertEq(
-                feeSharesInCellar,
-                assetManagementCellar.balanceOf(address(assetManagementCellar)),
-                "Performance Fees should not have been minted."
-            );
 
-            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, yieldEarned, WBTC);
-            _checkSendFees(assetManagementCellar, 21 days, yieldEarned);
+            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, WBTC);
+            _checkSendFees(assetManagementCellar, 21 days);
         }
 
         // No yield was earned, and 28 days pass.
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, 0, WBTC);
-        _checkSendFees(assetManagementCellar, 28 days, 0);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, WBTC);
+        _checkSendFees(assetManagementCellar, 28 days);
 
         // WBTC price decreases, rebalance cellar so that WETH in Cellar can not
         // cover Alice's redeem. Alice redeems shares, and call sendFees.
@@ -1805,15 +1657,10 @@ contract CellarAssetManagerTest is Test {
                 0.00000001e18,
                 "Value of assets out should approximately equal assets."
             );
-
-            assertTrue(
-                assetManagementCellar.balanceOf(address(assetManagementCellar)) == 0,
-                "Cellar should have zero performance fees minted."
-            );
         }
 
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, WBTC);
-        _checkSendFees(assetManagementCellar, 7 days, 0);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, WBTC);
+        _checkSendFees(assetManagementCellar, 7 days);
 
         // Alice rejoins cellar, call sendFees.
         {
@@ -1823,22 +1670,13 @@ contract CellarAssetManagerTest is Test {
             _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToMint);
         }
 
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, 0, WBTC);
-        _checkSendFees(assetManagementCellar, 1 days, 0);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, WBTC);
+        _checkSendFees(assetManagementCellar, 1 days);
 
         // Rebalance cellar to move assets from WETH to WBTC.
         _rebalance(assetManagementCellar, WBTC, USDC, WBTC.balanceOf(address(assetManagementCellar)) / 2);
 
-        // Reset high watermark.
         {
-            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            uint256 totalAssets = assetManagementCellar.totalAssets();
-            // Cellar High Watermark is currently above totalAssets, so reset it.
-            assertTrue(highWatermark > totalAssets, "High watermark should be greater than total assets in cellar.");
-            assetManagementCellar.resetHighWatermark();
-            (highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            assertEq(highWatermark, totalAssets, "Should have reset high watermark to totalAssets.");
-
             // WBTC goes up a little, USDC depeggs to 1.05.
 
             ERC20[] memory assetsToAdjust = new ERC20[](3);
@@ -1851,12 +1689,8 @@ contract CellarAssetManagerTest is Test {
             prices[2] = 45_000e8;
             _changeMarketPrices(assetsToAdjust, prices);
 
-            totalAssets = assetManagementCellar.totalAssets();
-            assertTrue(totalAssets > highWatermark, "Total Assets should be greater than high watermark.");
-            yieldEarned = totalAssets - highWatermark;
-
-            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 14 days, yieldEarned, WBTC);
-            _checkSendFees(assetManagementCellar, 14 days, yieldEarned);
+            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 14 days, WBTC);
+            _checkSendFees(assetManagementCellar, 14 days);
         }
     }
 
@@ -1878,45 +1712,16 @@ contract CellarAssetManagerTest is Test {
         LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 1e18); // 100% of funds are locked
         {
             // Create new cellar with WETH, USDC, and WBTC positions.
-            address[] memory positions = new address[](4);
-            positions[0] = address(USDC);
-            positions[1] = address(lockedWETH);
-            positions[2] = address(WETH);
-            positions[3] = address(lockedUSDC);
-
-            Cellar.PositionData[] memory positionData = new Cellar.PositionData[](4);
-            positionData[0] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC20,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
-            positionData[1] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC4626,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
-            positionData[2] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC20,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
-            positionData[3] = Cellar.PositionData({
-                positionType: Cellar.PositionType.ERC4626,
-                isDebt: false,
-                adaptor: address(0),
-                adaptorData: abi.encode(0)
-            });
+            uint256[] memory positions = new uint256[](4);
+            positions[0] = wethPosition;
+            positions[1] = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedWETH), 0, 0);
+            positions[2] = usdcPosition;
+            positions[3] = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedUSDC), 0, 0);
 
             assetManagementCellar = new MockCellar(
                 registry,
                 WETH,
                 positions,
-                positionData,
-                address(WETH),
-                Cellar.WithdrawType.ORDERLY,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
                 strategist
@@ -1961,9 +1766,6 @@ contract CellarAssetManagerTest is Test {
             uint256 shares;
             uint256 assets;
 
-            // Expected high watermark after 3 users each join cellar with `amount` of assets.
-            uint256 expectedHighWatermark = amount * 3;
-
             // Alice joins cellar using deposit.
             (assets, shares) = _userAction(assetManagementCellar, alice, Action.DEPOSIT, amount, 0);
             assertEq(shares, assetManagementCellar.balanceOf(alice), "Alice should have got shares out from deposit.");
@@ -1981,16 +1783,6 @@ contract CellarAssetManagerTest is Test {
             (assets, shares) = _userAction(assetManagementCellar, sam, Action.DEPOSIT, amount, 0);
             (assets, shares) = _userAction(assetManagementCellar, sam, Action.WITHDRAW, amount / 2, 0);
             (assets, shares) = _userAction(assetManagementCellar, sam, Action.MINT, 0, shares);
-
-            // High Watermark should be equal to amount * 3 and it should equal total assets.
-            uint256 totalAssets = assetManagementCellar.totalAssets();
-            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            assertEq(highWatermark, expectedHighWatermark, "High Watermark should equal expectedHighWatermark.");
-            assertEq(
-                highWatermark,
-                totalAssets,
-                "High Watermark should equal totalAssets because no yield was earned."
-            );
         }
         {
             // Strategy providers swaps into USDC and WBTC using WETH, targeting a 20/40/40 split(WETH/USDC/WBTC).
@@ -2013,8 +1805,8 @@ contract CellarAssetManagerTest is Test {
                 usdcBal.mulDivDown(4, 5)
             );
         }
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, USDC);
-        _checkSendFees(assetManagementCellar, 7 days, 0);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, USDC);
+        _checkSendFees(assetManagementCellar, 7 days);
 
         // WETH price decreases enough to create yield, Mary joins the cellar, and sendFees is called.
         {
@@ -2042,28 +1834,13 @@ contract CellarAssetManagerTest is Test {
         }
         {
             uint256 amount = (_mutate(salt) * 1e18) / 2000;
-            uint256 shares;
-            uint256 assets;
-            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
 
             // Mary joins cellar using deposit.
-            yieldEarned = assetManagementCellar.totalAssets() - highWatermark;
-            (assets, shares) = _userAction(assetManagementCellar, mary, Action.DEPOSIT, amount, 0);
-            (highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            assertEq(
-                highWatermark,
-                assetManagementCellar.totalAssets(),
-                "High watermark should be equal to totalAssets."
-            );
-
-            assertTrue(
-                assetManagementCellar.balanceOf(address(assetManagementCellar)) > 0,
-                "Cellar should have been minted performance fees."
-            );
+            _userAction(assetManagementCellar, mary, Action.DEPOSIT, amount, 0);
         }
 
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 0 days, yieldEarned, USDC);
-        _checkSendFees(assetManagementCellar, 7 days, yieldEarned);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 0 days, USDC);
+        _checkSendFees(assetManagementCellar, 7 days);
 
         // Adjust fee variables, lower WETH price but raise WBTC price enough to
         // create yield, Bob and Sam join
@@ -2074,12 +1851,6 @@ contract CellarAssetManagerTest is Test {
 
             // Set strategist platform cut to 80%.
             assetManagementCellar.setStrategistPlatformCut(0.8e18);
-
-            // Set performance fee to 0%.
-            assetManagementCellar.setPerformanceFee(0.2e18);
-
-            // Set strategist performance cut to 85%.
-            assetManagementCellar.setStrategistPerformanceCut(0.85e18);
 
             // WETH price goes down. USDC price goes down.
             {
@@ -2098,30 +1869,22 @@ contract CellarAssetManagerTest is Test {
         {
             // Bob enters cellar via `mint`.
             uint256 shares = (_mutate(salt) * 1e18) / 2000;
-            uint256 totalAssets = assetManagementCellar.totalAssets();
-            (uint256 highWatermark, , , , , , ) = assetManagementCellar.feeData();
-            yieldEarned = totalAssets - highWatermark;
 
             deal(address(WETH), bob, type(uint256).max);
             (, shares) = _userAction(assetManagementCellar, bob, Action.MINT, 0, shares);
             deal(address(WETH), bob, 0);
-            uint256 feeSharesInCellar = assetManagementCellar.balanceOf(address(assetManagementCellar));
+            assetManagementCellar.balanceOf(address(assetManagementCellar));
             deal(address(WETH), sam, type(uint256).max);
             (, shares) = _userAction(assetManagementCellar, sam, Action.MINT, 0, shares);
             deal(address(WETH), sam, 0);
-            assertEq(
-                feeSharesInCellar,
-                assetManagementCellar.balanceOf(address(assetManagementCellar)),
-                "Performance Fees should not have been minted."
-            );
 
-            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, yieldEarned, USDC);
-            _checkSendFees(assetManagementCellar, 21 days, yieldEarned);
+            _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, USDC);
+            _checkSendFees(assetManagementCellar, 21 days);
         }
 
         // No yield was earned, and 28 days pass.
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, 0, USDC);
-        _checkSendFees(assetManagementCellar, 28 days, 0);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, USDC);
+        _checkSendFees(assetManagementCellar, 28 days);
 
         // Alice redeems shares, and call sendFees.
         {
@@ -2134,24 +1897,18 @@ contract CellarAssetManagerTest is Test {
             deal(address(USDC), alice, 0);
             // Alice redeems her shares.
             _userAction(assetManagementCellar, alice, Action.WITHDRAW, assets, 0);
-            assertTrue(USDC.balanceOf(alice) > 0, "Alice should have gotten USDC.");
+            assertEq(USDC.balanceOf(alice), 0, "Alice should not have gotten USDC.");
             assertTrue(WETH.balanceOf(alice) > 0, "Alice should have gotten WETH.");
-            uint256 USDCworth = priceRouter.getValue(USDC, USDC.balanceOf(alice), WETH);
             assertApproxEqRel(
-                WETH.balanceOf(alice) + USDCworth,
+                WETH.balanceOf(alice),
                 assets,
                 0.00000001e18,
                 "Value of assets out should approximately equal assets."
             );
-
-            assertTrue(
-                assetManagementCellar.balanceOf(address(assetManagementCellar)) == 0,
-                "Cellar should have zero performance fees minted."
-            );
         }
 
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, 0, USDC);
-        _checkSendFees(assetManagementCellar, 7 days, 0);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, USDC);
+        _checkSendFees(assetManagementCellar, 7 days);
 
         // Alice rejoins cellar, call sendFees.
         {
@@ -2161,8 +1918,8 @@ contract CellarAssetManagerTest is Test {
             _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToMint);
         }
 
-        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, 0, USDC);
-        _checkSendFees(assetManagementCellar, 1 days, 0);
+        _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, USDC);
+        _checkSendFees(assetManagementCellar, 1 days);
         {
             // Everyone leaves  the cellar. Strategist must rebalance into liquid positions.
             uint256 assets = assetManagementCellar.maxWithdraw(bob);
@@ -2210,7 +1967,7 @@ contract CellarAssetManagerTest is Test {
             assertEq(assetManagementCellar.balanceOf(sam), 0, "sam should have no more shares.");
         }
     }
-*/
+
     // ========================================= GRAVITY FUNCTIONS =========================================
 
     // Since this contract is set as the Gravity Bridge, this will be called by
