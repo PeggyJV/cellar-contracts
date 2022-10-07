@@ -6,15 +6,12 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
-import { AddressArray } from "src/utils/AddressArray.sol";
 import { Uint256Array } from "src/utils/Uint256Array.sol";
 import { Math } from "../utils/Math.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 import { console } from "@forge-std/Test.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -29,12 +26,8 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
  * @author Brian Le, crispymangoes
  */
 
-//TODO remove trust positio/adaptor logic and put it in Registry
-//TODO figure out some method to store revert messages else where.
 contract Cellar is ERC4626, Ownable, ReentrancyGuard {
-    using AddressArray for address[];
     using Uint256Array for uint256[];
-    using AddressArray for ERC20[];
     using SafeERC20 for ERC20;
     using SafeCast for uint256;
     using Math for uint256;
@@ -140,6 +133,8 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @param positionId address of position to add
      */
     //TODO add checks if overwriting holding position that the assets match up
+    //TODO I think the strategist needs to be able to store arbritrary configuration information for each position
+    // Things like min health factor, and whether the position should calculate a withdrawable or just return 0
     function addPosition(uint256 index, uint256 positionId) external onlyOwner whenNotShutdown {
         if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
 

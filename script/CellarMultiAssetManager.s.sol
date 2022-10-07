@@ -10,6 +10,7 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 
 contract CellarMultiAssetManagerScript is Script {
     address private uniswapV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -25,11 +26,22 @@ contract CellarMultiAssetManagerScript is Script {
     SwapRouter swapRouter;
     Registry registry;
 
+    ERC20Adaptor erc20Adaptor;
+
+    uint256 usdcPosition;
+    uint256 wethPosition;
+    uint256 wbtcPosition;
+
     function run() external {
         vm.startBroadcast();
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniswapV2Router), IUniswapV3Router(uniswapV3Router));
         registry = new Registry(mockGravityBridge, address(swapRouter), address(priceRouter));
+
+        erc20Adaptor = new ERC20Adaptor();
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
+        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
+        wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
 
         priceRouter.addAsset(WETH, 0, 0, false, 0);
         priceRouter.addAsset(WBTC, 0, 0, false, 0);
@@ -45,40 +57,20 @@ contract CellarMultiAssetManagerScript is Script {
 
     function createMultiAssetCellar() internal {
         // Setup Cellar:
-        address[] memory positions = new address[](3);
-        positions[0] = address(USDC);
-        positions[1] = address(WETH);
-        positions[2] = address(WBTC);
-
-        Cellar.PositionData[] memory positionData = new Cellar.PositionData[](3);
-        positionData[0] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[1] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
-        positionData[2] = Cellar.PositionData({
-            positionType: Cellar.PositionType.ERC20,
-            isDebt: false,
-            adaptor: address(0),
-            adaptorData: abi.encode(0)
-        });
+        uint256[] memory positions = new uint256[](3);
+        positions[0] = usdcPosition;
+        positions[1] = wethPosition;
+        positions[2] = wbtcPosition;
 
         new Cellar(
             registry,
             USDC,
             positions,
-            positionData,
-            address(USDC),
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            mockGravityBridge
+            mockGravityBridge,
+            type(uint256).max,
+            type(uint256).max
         );
     }
 }
