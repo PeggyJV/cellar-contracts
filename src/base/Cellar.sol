@@ -25,7 +25,9 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
  * @author Brian Le, crispymangoes
  */
-
+//TODO contract should use variable packing
+//TODO look for public functions that can be made external.
+//TODO use solmate Reentrancy, Ownable, and maybe ERC20 to cut down on size.
 contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     using Uint256Array for uint256[];
     using SafeERC20 for ERC20;
@@ -100,6 +102,8 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     /**
      * @notice Array of uint256s made up of cellars positions Ids.
      */
+    //TODO I could probs get away with a fixed size array that uses 64 bit or maybe even 32 bit position ids
+    // Think it makes the contract larger, but reads and writes should be more efficient
     uint256[] public positions;
 
     //TODO add natspec
@@ -125,7 +129,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     /**
      * @notice Maximum amount of positions a cellar can use at once.
      */
-    uint8 public constant MAX_POSITIONS = 32;
+    uint256 public constant MAX_POSITIONS = 32;
 
     /**
      * @notice Insert a trusted position to the list of positions used by the cellar at a given index.
@@ -206,6 +210,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @notice Timestamp of when the last accrual occurred.
      * @dev Used for determining the amount of platform fees that can be taken during an accrual period.
      */
+    //TODO probs makes sense to put this in feeData for some struct packing
     uint64 public lastAccrual;
 
     // =============================================== FEES CONFIG ===============================================
@@ -630,6 +635,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @param receiver address to receive the shares.
      * @return shares amount of shares given for deposit.
      */
+    //TODO mint and Deposit can probs be consolidated
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
 
@@ -808,6 +814,9 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @dev EIP4626 states totalAssets  must not revert, but it is possible for `totalAssets` to revert
      * so it does NOT conform to ERC4626 standards.
      */
+    //TODO take this logic and make generalized internal function to replace this and withdrawable amount
+    //TODO bonus now internal function could be used in place of totalAssets if it is cheaper.
+    //TODO use multicall to reduxe external calls to adaptors, and possibly batch multiple positions calls together if they sequentioally use the same adaptor.
     function totalAssets() public view override returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
         ERC20[] memory positionAssets = new ERC20[](numOfPositions - numberOfDebtPositions);
@@ -921,6 +930,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @return the max amount of assets withdrawable by `owner`.
      */
     //TODO how will this work with Aave collateral?
+    //TODO copy over audit changes where maxRedeem and maxWithdraw share a lot of the same code
     function maxWithdraw(address owner) public view override returns (uint256) {
         // Check if owner shares are locked, return 0 if so.
         uint256 lockBlock = userShareLockStartBlock[owner];

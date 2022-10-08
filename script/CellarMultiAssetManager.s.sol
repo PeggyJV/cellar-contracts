@@ -22,15 +22,15 @@ contract CellarMultiAssetManagerScript is Script {
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
 
-    PriceRouter priceRouter;
-    SwapRouter swapRouter;
-    Registry registry;
+    PriceRouter private priceRouter;
+    SwapRouter private swapRouter;
+    Registry private registry;
 
-    ERC20Adaptor erc20Adaptor;
+    ERC20Adaptor private erc20Adaptor;
 
-    uint256 usdcPosition;
-    uint256 wethPosition;
-    uint256 wbtcPosition;
+    uint256 private usdcPosition;
+    uint256 private wethPosition;
+    uint256 private wbtcPosition;
 
     function run() external {
         vm.startBroadcast();

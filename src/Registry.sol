@@ -109,12 +109,14 @@ contract Registry is Ownable {
     // ============================================ TRUST CONFIG ============================================
 
     //TODO add natspec
+    //TODO can I make the bytes into a bytes32 then do a bit more work in the adpators? So that read operations are cheaper
     struct PositionData {
         address adaptor;
         bool isDebt;
         bytes adaptorData;
     }
 
+    //TODO could variable pack this in Cellar and here with 2 128's
     struct RiskData {
         uint256 assetRisk;
         uint256 protocolRisk;

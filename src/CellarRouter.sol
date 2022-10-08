@@ -153,6 +153,7 @@ contract CellarRouter is ICellarRouter {
      * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
      */
+    //TODO so if a cellar has multiple positions that share the same asset does this break?
     function withdrawAndSwap(
         Cellar cellar,
         SwapRouter.Exchange[] calldata exchanges,

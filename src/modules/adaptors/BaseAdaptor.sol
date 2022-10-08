@@ -17,7 +17,7 @@ import { Math } from "src/utils/Math.sol";
  * Block where USDC in == aUSDC out 15174148
  * Block where USDC-1 in == aUSDC out 15000000
  */
-
+//TODO make this multicall
 contract BaseAdaptor {
     Registry public registry;
     using SafeERC20 for ERC20;
@@ -34,6 +34,7 @@ contract BaseAdaptor {
         bytes memory adaptorData
     ) public virtual {}
 
+    //TODO Making these view function externals might help with gas usage, so that bytes valueis copied as callData
     function balanceOf(bytes memory adaptorData) public view virtual returns (uint256) {}
 
     function withdrawableFrom(bytes memory) public view virtual returns (uint256) {
