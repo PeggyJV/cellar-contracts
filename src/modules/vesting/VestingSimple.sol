@@ -7,15 +7,10 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 import { ERC20 } from "src/base/ERC4626.sol";
 import { Math } from "src/utils/Math.sol";
 
-
-import { Test, console } from "@forge-std/Test.sol";
-
-// TODO:
-// - Finish totalBalanceOf
-
 /**
  * @title Cellar Vesting Timelock
- * @notice A contract sed as a position in a Sommelier cellar, with an adapter,
+ * @author Kevin Kennis
+ * @notice A contract set as a position in a Sommelier cellar, with an adapter,
  *         that linearly releases deposited tokens in order to smooth
  *         out sudden TVL increases.
  */
@@ -315,15 +310,12 @@ contract VestingSimple {
             VestingSchedule storage s = vests[user][depositIds[i]];
 
             if (s.amountPerSecond > 0 && (s.vested > 0 || s.lastClaimed < s.until)) {
-                // Get total amount for the schedule
-                uint256 totalAmount = s.amountPerSecond * vestingPeriod / ONE;
                 uint256 startTime = s.until - vestingPeriod;
+                uint256 timeElapsedBeforeClaim = s.lastClaimed - startTime;
 
-                uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
-                uint256 timeElapsed = lastTimestamp - startTime;
-
-                uint256 earned = timeElapsed.mulDivDown(s.amountPerSecond, ONE);
-                uint256 claimed = earned - s.vested;
+                uint256 totalAmount = s.amountPerSecond * vestingPeriod / ONE;
+                uint256 previouslyVested = timeElapsedBeforeClaim.mulDivDown(s.amountPerSecond, ONE);
+                uint256 claimed = previouslyVested - s.vested;
 
                 balance += (totalAmount - claimed);
             }

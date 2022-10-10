@@ -298,9 +298,7 @@ contract VestingTest is Test {
         assertEq(vesting.currentId(user), 1, "User currentId should be 1");
         assertApproxEqAbs(vesting.vestedBalanceOf(user), amountToClaim, 1, "User vested balance should be accurate");
         assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountToClaim, 1, "User vested balance of deposit should be accurate");
-
-        // TODO: Fix totalBalanceOf
-        // assertApproxEqRel(vesting.totalBalanceOf(user), totalDeposited, 1e15, "User total balance should be nonzero");
+        assertApproxEqAbs(vesting.totalBalanceOf(user), amount - amountVested, 1, "User total balance should be accrate");
 
         _checkWithdrawReverts(1, amountToClaim);
 
@@ -378,9 +376,7 @@ contract VestingTest is Test {
             assertApproxEqAbs(vesting.vestedBalanceOf(user), amountSecondVest + amountVested2, 1, "User vested balance should be accurate");
             assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountSecondVest, 1, "User vested balance of deposit should be accurate");
             assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 2), amountVested2, 1, "User vested balance of deposit should be accurate");
-
-            // TODO: Fix totalBalanceOf
-            // assertApproxEqRel(vesting.totalBalanceOf(user), totalDeposited, 1e15, "User total balance should be nonzero");
+            assertApproxEqAbs(vesting.totalBalanceOf(user), amount2 + amount - amountVested, 1, "User total balance should be accurate");
 
             _checkWithdrawReverts(1, amountSecondVest);
             _checkWithdrawReverts(2, amountVested2);
@@ -480,9 +476,7 @@ contract VestingTest is Test {
             assertApproxEqAbs(vesting.vestedBalanceOf(user2), amountVested2, 1, "User vested balance should be accurate");
             assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountSecondVest, 1, "User vested balance of deposit should be accurate");
             assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user2, 1), amountVested2, 1, "User vested balance of deposit should be accurate");
-
-            // TODO: Fix totalBalanceOf
-            // assertApproxEqRel(vesting.totalBalanceOf(user), totalDeposited, 1e15, "User total balance should be nonzero");
+            assertApproxEqAbs(vesting.totalBalanceOf(user2), amount2, 1, "User total balance should be nonzero");
 
             _checkWithdrawReverts(1, amountSecondVest);
 
@@ -579,9 +573,7 @@ contract VestingTest is Test {
         assertEq(vesting.currentId(user), 1, "User currentId should be 1");
         assertEq(vesting.vestedBalanceOf(user), vested, "User vested balance should be 0");
         assertEq(vesting.vestedBalanceOfDeposit(user, 1), vested, "User vested balance of deposit should be 0");
-
-        // TODO: Fix totalBalanceOf
-        // assertApproxEqRel(vesting.totalBalanceOf(user), totalDeposited, 1e15, "User total balance should be nonzero");
+        assertApproxEqAbs(vesting.totalBalanceOf(user), totalDeposited, 1, "User total balance should be accurate");
     }
 
     function _checkWithdrawReverts(uint256 depositId, uint256 available) internal {
