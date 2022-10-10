@@ -182,7 +182,6 @@ contract VestingSimple {
                 shares += s.vested;
                 s.vested = 0;
 
-                totalDeposits -= s.vested;
                 unvestedDeposits -= newlyVested;
 
                 // Remove deposit if needed
@@ -195,6 +194,7 @@ contract VestingSimple {
             }
         }
 
+        totalDeposits -= shares;
         asset.safeTransfer(msg.sender, shares);
     }
 
