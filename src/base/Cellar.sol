@@ -429,7 +429,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
             highWatermark: 0,
             strategistPerformanceCut: 0.75e18,
             strategistPlatformCut: 0.75e18,
-            platformFee: 0.01e18,
+            platformFee: 0.02e18,
             performanceFee: 0.1e18,
             feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55", // 20 bytes, so need 12 bytes of zero
             strategistPayoutAddress: address(0)
