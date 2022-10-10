@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "src/base/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
+import { ERC20 } from "src/base/ERC4626.sol";
+import { Math } from "src/utils/Math.sol";
+
 
 import { Test, console } from "@forge-std/Test.sol";
 
@@ -21,6 +24,7 @@ import { Test, console } from "@forge-std/Test.sol";
 contract VestingSimple {
     using SafeTransferLib for ERC20;
     using EnumerableSet for EnumerableSet.UintSet;
+    using Math for uint256;
 
     event Deposit(address indexed user, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed depositId, uint256 amount);
@@ -107,7 +111,7 @@ contract VestingSimple {
         allUserDepositIds[receiver].add(newDepositId);
         VestingSchedule storage s = vests[receiver][newDepositId];
 
-        s.amountPerSecond = assets * ONE / vestingPeriod;
+        s.amountPerSecond = assets.mulDivDown(ONE, vestingPeriod);
         s.until = uint128(block.timestamp + vestingPeriod);
         s.lastClaimed = uint128(block.timestamp);
 
@@ -149,9 +153,8 @@ contract VestingSimple {
         totalDeposits -= assets;
         unvestedDeposits -= newlyVested;
 
-        // Remove deposit if needed
-        if (s.vested == 0 && block.timestamp >= s.until) {
-            console.log("REMOVING");
+        // Remove deposit if needed, including 1-wei deposits (rounding)
+        if (s.vested <= 1 && block.timestamp >= s.until) {
             allUserDepositIds[msg.sender].remove(depositId);
         }
 
@@ -214,7 +217,7 @@ contract VestingSimple {
             if (s.amountPerSecond > 0 && (s.vested > 0 || s.lastClaimed < s.until)) {
                 uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
                 uint256 timeElapsed = lastTimestamp - s.lastClaimed;
-                uint256 newlyVested = timeElapsed * s.amountPerSecond / ONE;
+                uint256 newlyVested = timeElapsed.mulDivDown(s.amountPerSecond, ONE);
 
                 balance += (s.vested + newlyVested);
             }
@@ -236,7 +239,7 @@ contract VestingSimple {
 
         uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
         uint256 timeElapsed = lastTimestamp - s.lastClaimed;
-        uint256 newlyVested = timeElapsed * s.amountPerSecond / ONE;
+        uint256 newlyVested = timeElapsed.mulDivDown(s.amountPerSecond, ONE);
 
         balance = (s.vested + newlyVested);
     }
@@ -264,7 +267,7 @@ contract VestingSimple {
                 uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
                 uint256 timeElapsed = lastTimestamp - startTime;
 
-                uint256 earned = timeElapsed * s.amountPerSecond / ONE;
+                uint256 earned = timeElapsed.mulDivDown(s.amountPerSecond, ONE);
                 uint256 claimed = earned - s.vested;
 
                 balance += (totalAmount - claimed);
@@ -327,7 +330,14 @@ contract VestingSimple {
 
         uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
         uint256 timeElapsed = lastTimestamp - s.lastClaimed;
-        newlyVested = timeElapsed * s.amountPerSecond / ONE;
+
+        // In case there were rounding errors due to accrual times,
+        // round up on the last vest to collect anything lost.
+        if (lastTimestamp == s.until) {
+            newlyVested = timeElapsed.mulDivUp(s.amountPerSecond, ONE);
+        } else {
+            newlyVested = timeElapsed.mulDivDown(s.amountPerSecond, ONE);
+        }
 
         s.vested += newlyVested;
         s.lastClaimed = uint128(lastTimestamp);

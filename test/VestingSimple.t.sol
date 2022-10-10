@@ -8,6 +8,8 @@ import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract VestingTest is Test {
+    using Math for uint256;
+
     VestingSimple internal vesting;
     ERC20 internal token;
 
@@ -66,8 +68,8 @@ contract VestingTest is Test {
         skip(time);
 
         // Check state of vesting
-        uint256 pctElapsed = time * ONE / vestingPeriod;
-        uint256 amountVested = pctElapsed * amount / ONE;
+        uint256 pctElapsed = time.mulDivDown(ONE, vestingPeriod);
+        uint256 amountVested = pctElapsed.mulDivDown(amount, ONE);
         _checkState(amount, amountVested);
 
         _checkWithdrawReverts(1, amountVested);
@@ -148,7 +150,7 @@ contract VestingTest is Test {
             uint256 vested
         ) = vesting.userVestingInfo(user, 1);
 
-        assertEq(amountPerSecond, amount * ONE / vestingPeriod, "Amount per second should be accurate");
+        assertEq(amountPerSecond, amount.mulDivDown(ONE, vestingPeriod), "Amount per second should be accurate");
         assertEq(until, depositTimestamp + vestingPeriod, "Release time should be accurate");
         assertEq(lastClaimed, claimTimestamp, "Last claim timestamp should be accurate");
         assertEq(vested, amount - amountToClaim, "Vested tokens should be accounted for");
@@ -183,8 +185,8 @@ contract VestingTest is Test {
         vm.assume(amount >= minimumDeposit && amount <= balance);
         vm.assume(time > 0 && time < vestingPeriod);
 
-        uint256 pctElapsed = time * ONE / vestingPeriod;
-        uint256 amountVested = pctElapsed * amount / ONE;
+        uint256 pctElapsed = time.mulDivDown(ONE, vestingPeriod);
+        uint256 amountVested = pctElapsed.mulDivDown(amount, ONE);
 
         vm.assume(amountToClaim > 0 && amountToClaim < amountVested);
 
@@ -219,7 +221,7 @@ contract VestingTest is Test {
             uint256 vested
         ) = vesting.userVestingInfo(user, 1);
 
-        assertEq(amountPerSecond, amount * ONE / vestingPeriod, "Amount per second should be accurate");
+        assertEq(amountPerSecond, amount.mulDivDown(ONE, vestingPeriod), "Amount per second should be accurate");
         assertEq(until, depositTimestamp + vestingPeriod, "Release time should be accurate");
         assertEq(lastClaimed, claimTimestamp, "Last claim timestamp should be accurate");
         assertEq(vested, amountVested - amountToClaim, "Vested tokens should be accounted for");
@@ -254,8 +256,9 @@ contract VestingTest is Test {
         vm.assume(amount >= minimumDeposit && amount <= balance);
         vm.assume(time > 0 && time < vestingPeriod);
 
-        uint256 pctElapsed = time * ONE / vestingPeriod;
-        uint256 amountVested = pctElapsed * amount / ONE;
+        uint256 pctElapsed = time.mulDivDown(ONE, vestingPeriod);
+        uint256 amountVested = pctElapsed.mulDivDown(amount, ONE);
+        // Aso subtract by one to round down
         uint256 amountToClaim = amount - amountVested;
 
         // Deposit, then move forward in time, then withdraw
@@ -287,16 +290,17 @@ contract VestingTest is Test {
         assertEq(vesting.unvestedDeposits(), amountToClaim, "Unvested deposits should be reduced");
 
         // Move to the end of the period and claim again
-        skip(depositTimestamp + vestingPeriod);
+        skip(depositTimestamp + vestingPeriod + 100);
 
         assertEq(vesting.currentId(user), 1, "User currentId should be 1");
-        assertEq(vesting.vestedBalanceOf(user), amountToClaim, "User vested balance should be accurate");
-        assertEq(vesting.vestedBalanceOfDeposit(user, 1), amountToClaim, "User vested balance of deposit should be accurate");
+        assertApproxEqAbs(vesting.vestedBalanceOf(user), amountToClaim, 1, "User vested balance should be accurate");
+        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountToClaim, 1, "User vested balance of deposit should be accurate");
 
         // TODO: Fix totalBalanceOf
         // assertApproxEqRel(vesting.totalBalanceOf(user), totalDeposited, 1e15, "User total balance should be nonzero");
 
         _checkWithdrawReverts(1, amountToClaim);
+
         _doWithdrawal(1, amountToClaim);
 
         // Also make sure user has no deposits
@@ -342,7 +346,7 @@ contract VestingTest is Test {
     function _checkWithdrawReverts(uint256 depositId, uint256 available) internal {
         // Make sure we cannot withdraw more than vested
         vm.expectRevert(bytes("Not enough available"));
-        vesting.withdraw(depositId, available + 1);
+        vesting.withdraw(depositId, available + 100);
 
         // Make sure we cannot withdraw 0
         vm.expectRevert(bytes("Withdraw amount 0"));
