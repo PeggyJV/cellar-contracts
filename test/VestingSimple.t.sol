@@ -10,15 +10,6 @@ import { Math } from "src/utils/Math.sol";
 contract VestingTest is Test {
     using Math for uint256;
 
-    error Vesting_ZeroAsset();
-    error Vesting_ZeroVestingPeriod();
-    error Vesting_MinimumTooSmall(uint256 lowestMinimum);
-    error Vesting_ZeroDeposit();
-    error Vesting_DepositTooSmall(uint256 minimumDeposit);
-    error Vesting_ZeroWithdraw();
-    error Vesting_DepositFullyVested(uint256 depositId);
-    error Vesting_DepositNotEnoughAvailable(uint256 depositId, uint256 available);
-    error Vesting_NoDeposit(uint256 depositId);
 
     VestingSimple internal vesting;
     ERC20 internal token;

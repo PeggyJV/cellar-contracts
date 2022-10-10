@@ -11,8 +11,6 @@ import { Math } from "src/utils/Math.sol";
 import { Test, console } from "@forge-std/Test.sol";
 
 // TODO:
-// - Change requires to custom errors
-// - Document events, structs, and custom errors
 // - Finish totalBalanceOf
 
 /**
@@ -26,26 +24,71 @@ contract VestingSimple {
     using EnumerableSet for EnumerableSet.UintSet;
     using Math for uint256;
 
+    /// @notice Emitted when tokens are deosited for vesting.
+    ///
+    /// @param user The user receiving the deposit.
+    /// @param amount The amount of tokens deposited.
     event Deposit(address indexed user, uint256 amount);
+
+    /// @notice Emitted when vested tokens are withdrawn.
+    ///
+    /// @param user The user receiving the deposit.
+    /// @param depositId The ID of the deposit specified.
+    /// @param amount The amount of tokens deposited.
     event Withdraw(address indexed user, uint256 indexed depositId, uint256 amount);
 
+    // ============================================= ERRORS =============================================
+
+    /// @notice Contract was deployed with no asset.
     error Vesting_ZeroAsset();
+
+    /// @notice Contract was deployed with no vesting period.
     error Vesting_ZeroVestingPeriod();
+
+    /// @notice Contract was deployed with a minimum deposit lower
+    ///         then the vesting period.
+    ///
+    /// @param lowestMinimum The lowest minimum deposit possible,
+    ///                      based on the vesting period.
     error Vesting_MinimumTooSmall(uint256 lowestMinimum);
+
+    /// @notice User attempted to deposit 0 tokens.
     error Vesting_ZeroDeposit();
+
+    /// @notice User attempted to deposit an amount of tokens
+    ///         under the minimum.
+    ///
+    /// @param minimumDeposit The minimum deposit amount.
     error Vesting_DepositTooSmall(uint256 minimumDeposit);
+
+    /// @notice User attempted to withdraw 0 tokens.
     error Vesting_ZeroWithdraw();
+
+    /// @notice User attempted to withdraw from a fully-vested deposit.
+    ///
+    /// @param depositId The deposit ID specified.
     error Vesting_DepositFullyVested(uint256 depositId);
+
+    /// @notice User attempted to withdraw more than the amount vested.
+    ///
+    /// @param depositId The deposit ID specified.
+    /// @param available The amount of token available for withdrawal.
     error Vesting_DepositNotEnoughAvailable(uint256 depositId, uint256 available);
+
+    /// @notice User specified a deposit that does not exist.
+    ///
+    /// @param depositId The deposit ID specified.
     error Vesting_NoDeposit(uint256 depositId);
 
     // ============================================= TYPES =============================================
 
+    /// @notice Contains all information needed to vest
+    ///         tokens for each deposited.
     struct VestingSchedule {
-        uint256 amountPerSecond;
-        uint128 until;
-        uint128 lastClaimed;
-        uint256 vested;
+        uint256 amountPerSecond;        // The amount of tokens vested per second.
+        uint128 until;                  // The time vesting will finish.
+        uint128 lastClaimed;            // The last time vesting accrued.
+        uint256 vested;                 // The amount of vested tokens still not withdrawn.
     }
 
     // ============================================= STATE =============================================
@@ -79,7 +122,9 @@ contract VestingSimple {
     /**
      * @notice Instantiate the contract with a vesting period.
      *
+     * @param _asset                        The token the vesting contract will hold.
      * @param _vestingPeriod                The length of time, in seconds, that tokens should vest over.
+     * @param _minimumDeposit               The minimum amount of tokens that can be deposited for vesting.
      */
     constructor(
         ERC20 _asset,
@@ -240,9 +285,9 @@ contract VestingSimple {
      * @param user                          The user whose balance should be reported.
      * @param depositId                     The depositId to report.
      *
-     * @return balance                      The user's vested total balance.
+     * @return balance                      The user's vested balance for the specified deposit.
      */
-    function vestedBalanceOfDeposit(address user, uint256 depositId) public view returns (uint256 balance) {
+    function vestedBalanceOfDeposit(address user, uint256 depositId) public view returns (uint256) {
         VestingSchedule storage s = vests[user][depositId];
 
         if (s.amountPerSecond == 0) revert Vesting_NoDeposit(depositId);
@@ -251,7 +296,7 @@ contract VestingSimple {
         uint256 timeElapsed = lastTimestamp - s.lastClaimed;
         uint256 newlyVested = timeElapsed.mulDivDown(s.amountPerSecond, ONE);
 
-        balance = (s.vested + newlyVested);
+        return s.vested + newlyVested;
     }
 
     /**
