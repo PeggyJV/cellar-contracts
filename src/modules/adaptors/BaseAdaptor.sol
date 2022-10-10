@@ -8,6 +8,9 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { Math } from "src/utils/Math.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Base Adaptor
@@ -17,7 +20,8 @@ import { Math } from "src/utils/Math.sol";
  * Block where USDC in == aUSDC out 15174148
  * Block where USDC-1 in == aUSDC out 15000000
  */
-//TODO make this multicall
+//TODO I think adaptors can work with bytes32 data instead of bytes. This reduces the amount of data passed back and forth between the cellar and the adaptor and should result in less gas costs for users.
+//TODO to make adaptor calls more efficient during rebalances, if I could set something up where it loops through an array of internal functions and runs through them
 contract BaseAdaptor {
     Registry public registry;
     using SafeERC20 for ERC20;
@@ -26,18 +30,23 @@ contract BaseAdaptor {
     /**
      * @notice deposit and withdraw functions should use adaptor data to validate operations, like putting a floor on the loan health when withdrawing
      */
-    function deposit(uint256 assets, bytes memory adaptorData) public virtual {}
+    function deposit(
+        uint256 assets,
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public virtual {}
 
     function withdraw(
         uint256 assets,
         address receiver,
-        bytes memory adaptorData
+        bytes memory adaptorData,
+        bytes memory configurationData
     ) public virtual {}
 
     //TODO Making these view function externals might help with gas usage, so that bytes valueis copied as callData
     function balanceOf(bytes memory adaptorData) public view virtual returns (uint256) {}
 
-    function withdrawableFrom(bytes memory) public view virtual returns (uint256) {
+    function withdrawableFrom(bytes memory, bytes memory) public view virtual returns (uint256) {
         return 0;
     }
 
@@ -70,5 +79,13 @@ contract BaseAdaptor {
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
         // specified a different amount of assets to swap then `amountIn`.
         require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
+    }
+
+    function multicall(bytes[] calldata data) external view returns (bytes[] memory results) {
+        results = new bytes[](data.length);
+        for (uint256 i = 0; i < data.length; i++) {
+            results[i] = Address.functionStaticCall(address(this), data[i]);
+        }
+        return results;
     }
 }

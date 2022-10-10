@@ -114,12 +114,12 @@ contract Registry is Ownable {
         address adaptor;
         bool isDebt;
         bytes adaptorData;
+        bytes configurationData;
     }
 
-    //TODO could variable pack this in Cellar and here with 2 128's
     struct RiskData {
-        uint256 assetRisk;
-        uint256 protocolRisk;
+        uint128 assetRisk;
+        uint128 protocolRisk;
     }
 
     /**
@@ -151,15 +151,6 @@ contract Registry is Ownable {
 
     mapping(address => RiskData) public getAdaptorRiskData;
 
-    //TODO positions and Cellrs can have risk Ids associated with them.
-    /**
-     * 0: No restrictions
-     * 1: Stable Positions only
-     * Could also be a number from 0 -> BIG Number that represents risk tolerance,
-     * 0 means no risk tolerance so only hold stable positions
-     * 10 could mean low risk tolerance holding blue chip voltatile assets but no DeFi positions
-     */
-
     /**
      * @notice Trust a position to be used by the cellar.
      */
@@ -167,8 +158,8 @@ contract Registry is Ownable {
         address adaptor,
         bool isDebt,
         bytes memory adaptorData,
-        uint256 assetRisk,
-        uint256 protocolRisk
+        uint128 assetRisk,
+        uint128 protocolRisk
     ) external onlyOwner returns (uint256 positionId) {
         positionId = uint256(keccak256(abi.encode(adaptor, isDebt, adaptorData)));
 
@@ -177,12 +168,16 @@ contract Registry is Ownable {
         require(isAdaptorTrusted[adaptor], "Invalid Adaptor");
 
         // Set position data.
-        getPositionData[positionId] = PositionData({ adaptor: adaptor, isDebt: isDebt, adaptorData: adaptorData });
+        getPositionData[positionId] = PositionData({
+            adaptor: adaptor,
+            isDebt: isDebt,
+            adaptorData: adaptorData,
+            configurationData: abi.encode(0)
+        });
 
         getRiskData[positionId] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
 
         // Check that asset of position is supported for pricing operations.
-        //TODO could also check that withdrawable and balanceOf?
         ERC20 positionAsset = BaseAdaptor(adaptor).assetOf(adaptorData);
         if (!PriceRouter(getAddress[PRICE_ROUTER_REGISTRY_SLOT]).isSupported(positionAsset))
             revert Cellar__PositionPricingNotSetUp(address(positionAsset));
@@ -194,8 +189,8 @@ contract Registry is Ownable {
 
     function trustAdaptor(
         address adaptor,
-        uint256 assetRisk,
-        uint256 protocolRisk
+        uint128 assetRisk,
+        uint128 protocolRisk
     ) external onlyOwner {
         isAdaptorTrusted[adaptor] = true;
         getAdaptorRiskData[adaptor] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
@@ -203,8 +198,8 @@ contract Registry is Ownable {
 
     function cellarAddPosition(
         uint256 _positionId,
-        uint256 _assetRiskTolerance,
-        uint256 _protocolRiskTolerance
+        uint128 _assetRiskTolerance,
+        uint128 _protocolRiskTolerance
     )
         external
         view
@@ -224,8 +219,8 @@ contract Registry is Ownable {
 
     function cellarSetupAdaptor(
         address _adaptor,
-        uint256 _assetRiskTolerance,
-        uint256 _protocolRiskTolerance
+        uint128 _assetRiskTolerance,
+        uint128 _protocolRiskTolerance
     ) external view {
         RiskData memory data = getAdaptorRiskData[_adaptor];
         require(_assetRiskTolerance >= data.assetRisk, "Caller does not meet asset risk max.");

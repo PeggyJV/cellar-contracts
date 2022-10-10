@@ -127,10 +127,13 @@ contract CellarAssetManagerTest is Test {
         positions[3] = wbtcCLRPosition;
         positions[4] = wethPosition;
 
+        bytes[] memory positionConfigs = new bytes[](5);
+
         cellar = new MockCellar(
             registry,
             USDC,
             positions,
+            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             strategist
@@ -369,7 +372,7 @@ contract CellarAssetManagerTest is Test {
             0,
             0
         );
-        cellar.addPosition(5, maliciousPosition);
+        cellar.addPosition(5, maliciousPosition, abi.encode(0));
 
         uint256 assets = 10000e6;
         deal(address(USDC), address(this), assets);
@@ -406,10 +409,13 @@ contract CellarAssetManagerTest is Test {
         positions[0] = usdcPosition;
         positions[1] = wethPosition;
 
+        bytes[] memory positionConfigs = new bytes[](2);
+
         Cellar badCellar = new MockCellar(
             registry,
             USDC,
             positions,
+            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             strategist
@@ -463,7 +469,7 @@ contract CellarAssetManagerTest is Test {
             0,
             0
         );
-        cellar.addPosition(5, maliciousPosition);
+        cellar.addPosition(5, maliciousPosition, abi.encode(0));
 
         // Deposit into cellar.
         uint256 assets = 10000e6;
@@ -520,10 +526,13 @@ contract CellarAssetManagerTest is Test {
         );
         positions[3] = wethPosition;
 
+        bytes[] memory positionConfigs = new bytes[](4);
+
         MockCellar cellarWithLockedFunds = new MockCellar(
             registry,
             USDC,
             positions,
+            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             strategist
@@ -777,7 +786,7 @@ contract CellarAssetManagerTest is Test {
     function _checkSendFees(Cellar target, uint256 amountOfTimeToPass) internal {
         skip(amountOfTimeToPass);
 
-        (, uint64 platformFee, , address strategistPayoutAddress) = target.feeData();
+        (, uint64 platformFee, , , address strategistPayoutAddress) = target.feeData();
 
         uint256 cellarTotalAssets = target.totalAssets();
         uint256 feesInAssetsSentToCosmos;
@@ -804,7 +813,7 @@ contract CellarAssetManagerTest is Test {
             "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
         );
 
-        (uint64 strategistPlatformCut, , , ) = target.feeData();
+        (uint64 strategistPlatformCut, , , , ) = target.feeData();
 
         assertApproxEqRel(
             feesInAssetsSentToStrategist,
@@ -828,7 +837,7 @@ contract CellarAssetManagerTest is Test {
         view
         returns (uint256 assetReq)
     {
-        (uint64 strategistPlatformCut, uint64 platformFee, , ) = target.feeData();
+        (uint64 strategistPlatformCut, uint64 platformFee, , , ) = target.feeData();
 
         uint256 expectedPlatformFeeInAssets;
         uint256 cellarTotalAssets = target.totalAssets();
@@ -885,10 +894,13 @@ contract CellarAssetManagerTest is Test {
             positions[1] = wethPosition;
             positions[2] = wbtcPosition;
 
+            bytes[] memory positionConfigs = new bytes[](3);
+
             assetManagementCellar = new MockCellar(
                 registry,
                 USDC,
                 positions,
+                positionConfigs,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
                 strategist
@@ -1147,10 +1159,10 @@ contract CellarAssetManagerTest is Test {
             priceRouter.supportAsset(LINK);
             uint256 linkPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(LINK), 0, 0);
 
-            assetManagementCellar.addPosition(3, linkPosition);
+            assetManagementCellar.addPosition(3, linkPosition, abi.encode(0));
 
-            // Swap LINK position with USDC position.
-            assetManagementCellar.swapPositions(3, 0);
+            // Swap LINK position with WETH position.
+            assetManagementCellar.swapPositions(3, 1);
 
             // Adjust asset prices such that the cellar's TVL drops below the high watermark.
 
@@ -1260,7 +1272,7 @@ contract CellarAssetManagerTest is Test {
             uint256 aliceWETHBalance = WETH.balanceOf(alice);
 
             assertTrue(aliceUSDCBalance > 0, "Alice should have some USDC.");
-            assertTrue(aliceWETHBalance > 0, "Alice should have some WETH.");
+            assertEq(aliceWETHBalance, 0, "Alice should have zero WETH.");
             assertEq(WBTC.balanceOf(alice), 0, "Alice should have zero WBTC.");
             assertEq(LINK.balanceOf(alice), 0, "Alice should have zero LINK.");
 
@@ -1291,8 +1303,8 @@ contract CellarAssetManagerTest is Test {
             uint256 samWETHBalance = WETH.balanceOf(sam);
             uint256 samWBTCBalance = WBTC.balanceOf(sam);
 
-            assertEq(samUSDCBalance, 0, "Sam should have zero USDC.");
-            assertTrue(samWETHBalance > 0, "Sam should have some WETH.");
+            assertTrue(samUSDCBalance > 0, "Sam should have some USDC.");
+            assertEq(samWETHBalance, 0, "Sam should have some WETH.");
             assertTrue(samWBTCBalance > 0, "Sam should have some WBTC.");
             assertEq(LINK.balanceOf(sam), 0, "Sam should have zero LINK.");
 
@@ -1312,8 +1324,8 @@ contract CellarAssetManagerTest is Test {
             uint256 maryWETHBalance = WETH.balanceOf(mary);
             uint256 maryWBTCBalance = WBTC.balanceOf(mary);
 
-            assertTrue(maryUSDCBalance > 0, "Mary should have some USDC.");
-            assertEq(maryWETHBalance, 0, "Mary should have zero WETH.");
+            assertEq(maryUSDCBalance, 0, "Mary should have zero USDC.");
+            assertTrue(maryWETHBalance > 0, "Mary should have some WETH.");
             assertTrue(maryWBTCBalance > 0, "Mary should have some WBTC.");
             assertEq(LINK.balanceOf(mary), 0, "Mary should have zero LINK.");
 
@@ -1350,10 +1362,13 @@ contract CellarAssetManagerTest is Test {
             positions[1] = usdcPosition;
             positions[2] = wbtcPosition;
 
+            bytes[] memory positionConfigs = new bytes[](3);
+
             assetManagementCellar = new MockCellar(
                 registry,
                 WETH,
                 positions,
+                positionConfigs,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
                 strategist
@@ -1657,10 +1672,13 @@ contract CellarAssetManagerTest is Test {
             positions[2] = usdcPosition;
             positions[3] = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedUSDC), 0, 0);
 
+            bytes[] memory positionConfigs = new bytes[](4);
+
             assetManagementCellar = new MockCellar(
                 registry,
                 WETH,
                 positions,
+                positionConfigs,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
                 strategist
@@ -1900,10 +1918,10 @@ contract CellarAssetManagerTest is Test {
             shares = assetManagementCellar.maxRedeem(sam);
             if (shares > 0) _userAction(assetManagementCellar, sam, Action.REDEEM, 0, shares);
 
-            assertEq(assetManagementCellar.balanceOf(alice), 0, "alice should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(bob), 0, "bob should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(mary), 0, "mary should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(sam), 0, "sam should have no more shares.");
+            assertLt(assetManagementCellar.balanceOf(alice), 2, "alice should have no more shares.");
+            assertLt(assetManagementCellar.balanceOf(bob), 2, "bob should have no more shares.");
+            assertLt(assetManagementCellar.balanceOf(mary), 2, "mary should have no more shares.");
+            assertLt(assetManagementCellar.balanceOf(sam), 2, "sam should have no more shares.");
         }
     }
 

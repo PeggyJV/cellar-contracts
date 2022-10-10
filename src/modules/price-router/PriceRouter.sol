@@ -10,6 +10,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 /**
  * @title Sommelier Price Router
@@ -23,6 +24,14 @@ contract PriceRouter is Ownable {
     using Math for uint256;
 
     event AddAsset(address indexed asset);
+
+    function multicall(bytes[] calldata data) external view returns (bytes[] memory results) {
+        results = new bytes[](data.length);
+        for (uint256 i = 0; i < data.length; i++) {
+            results[i] = Address.functionStaticCall(address(this), data[i]);
+        }
+        return results;
+    }
 
     // =========================================== ASSETS CONFIG ===========================================
 

@@ -62,15 +62,18 @@ contract CellarMultiAssetManagerScript is Script {
         positions[1] = wethPosition;
         positions[2] = wbtcPosition;
 
+        bytes[] memory positionConfigs = new bytes[](3);
+
         new Cellar(
             registry,
             USDC,
             positions,
+            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             mockGravityBridge,
-            type(uint256).max,
-            type(uint256).max
+            type(uint128).max,
+            type(uint128).max
         );
     }
 }

@@ -88,10 +88,13 @@ contract CellarRouterTest is Test {
         positions[2] = wethPosition;
         positions[3] = wbtcPosition;
 
+        bytes[] memory positionConfigs = new bytes[](4);
+
         cellar = new MockCellar(
             registry,
             USDC,
             positions,
+            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             address(0)
@@ -153,10 +156,13 @@ contract CellarRouterTest is Test {
         uint256[] memory positions = new uint256[](1);
         positions[0] = wethPosition;
 
+        bytes[] memory positionConfigs = new bytes[](1);
+
         MockCellar wethCellar = new MockCellar(
             registry,
             WETH,
             positions,
+            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
             address(0)

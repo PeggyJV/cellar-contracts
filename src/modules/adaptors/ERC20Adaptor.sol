@@ -24,14 +24,19 @@ contract ERC20Adaptor is BaseAdaptor {
     //============================================ Global Functions ===========================================
 
     //============================================ Implement Base Functions ===========================================
-    function deposit(uint256 assets, bytes memory adaptorData) public override {
+    function deposit(
+        uint256,
+        bytes memory,
+        bytes memory
+    ) public override {
         // Nothing to deposit since caller is already holding the ERC20.
     }
 
     function withdraw(
         uint256 assets,
         address receiver,
-        bytes memory adaptorData
+        bytes memory adaptorData,
+        bytes memory
     ) public override {
         if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
             revert("External receivers are not allowed.");
@@ -39,7 +44,7 @@ contract ERC20Adaptor is BaseAdaptor {
         token.safeTransfer(receiver, assets);
     }
 
-    function withdrawableFrom(bytes memory adaptorData) public view override returns (uint256) {
+    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         ERC20 token = abi.decode(adaptorData, (ERC20));
         return token.balanceOf(msg.sender);
     }

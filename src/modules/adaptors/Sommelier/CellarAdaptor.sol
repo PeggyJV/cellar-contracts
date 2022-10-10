@@ -24,7 +24,11 @@ contract CellarAdaptor is BaseAdaptor {
     //============================================ Global Functions ===========================================
 
     //============================================ Implement Base Functions ===========================================
-    function deposit(uint256 assets, bytes memory adaptorData) public override {
+    function deposit(
+        uint256 assets,
+        bytes memory adaptorData,
+        bytes memory
+    ) public override {
         Cellar cellar = abi.decode(adaptorData, (Cellar));
         depositToCellar(cellar, assets);
     }
@@ -32,7 +36,8 @@ contract CellarAdaptor is BaseAdaptor {
     function withdraw(
         uint256 assets,
         address receiver,
-        bytes memory adaptorData
+        bytes memory adaptorData,
+        bytes memory
     ) public override {
         if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
             revert("External receivers are not allowed.");
@@ -40,7 +45,7 @@ contract CellarAdaptor is BaseAdaptor {
         cellar.withdraw(assets, receiver, address(this));
     }
 
-    function withdrawableFrom(bytes memory adaptorData) public view override returns (uint256) {
+    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         Cellar cellar = abi.decode(adaptorData, (Cellar));
         return cellar.maxWithdraw(msg.sender);
     }
@@ -65,7 +70,8 @@ contract CellarAdaptor is BaseAdaptor {
         cellar.deposit(assets, address(this));
     }
 
-    function withdrawFromCellar(Cellar cellar, uint256 assets) public {
+    function withdrawFromCellar(Cellar cellar, uint256 assets) public returns (uint256) {
         cellar.withdraw(assets, address(this), address(this));
+        return 0;
     }
 }
