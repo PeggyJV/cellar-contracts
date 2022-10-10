@@ -407,13 +407,163 @@ contract VestingTest is Test {
         assertEq(vesting.unvestedDeposits(), amount2 - amountVested2, "Unvested deposits should be leftover");
     }
 
-    // function testMultipleUsers() external {
+    function testMultipleUsers(uint256 amount, uint256 time) external {
+        vm.assume(amount >= minimumDeposit && amount <= balance / 10);
+        vm.assume(time > 0 && time < vestingPeriod);
 
-    // }
+        deal(address(token), user2, balance);
+        changePrank(user2);
+        token.approve(address(vesting), balance);
+        changePrank(user);
 
-    // function testDepositOnBehalf() external {
+        uint256 amount2 = amount * 2;
 
-    // }
+        uint256 pctElapsed = time.mulDivDown(ONE, vestingPeriod);
+        uint256 amountVested = pctElapsed.mulDivDown(amount, ONE);
+        uint256 amountSecondVest = amount - amountVested;
+
+        // Deposit, then move forward in time, then withdraw
+        vesting.deposit(amount, user);
+        uint256 depositTimestamp = block.timestamp;
+
+        _checkState(amount, 0);
+
+        skip(time);
+
+        // Check state of vesting
+        _checkState(amount, amountVested);
+
+        _checkWithdrawReverts(1, amountVested);
+
+        // Withdraw
+        _doWithdrawal(1, amountVested);
+
+        // Deposit as a second user
+        changePrank(user2);
+        vesting.deposit(amount2, user2);
+        uint256 deposit2Timestamp = block.timestamp;
+        changePrank(user);
+
+        // Also make sure user still has a deposit
+        assertEq(vesting.userDepositIds(user).length, 1, "User 1 should only have 1 deposit");
+        assertEq(vesting.userDepositIds(user2).length, 1, "User 2 should only have 1 deposit");
+
+        (,, uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
+
+        assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
+        assertEq(vested, 0, "Vested tokens should be accounted for");
+
+        (,, lastClaimed, vested) = vesting.userVestingInfo(user2, 1);
+
+        assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
+        assertEq(vested, 0, "Vested tokens should be accounted for");
+
+        // Check global state
+        assertEq(vesting.totalDeposits(), amountSecondVest + amount2, "Total deposits should be reduced");
+        assertEq(vesting.unvestedDeposits(), amountSecondVest + amount2, "Unvested deposits should be reduced");
+
+        uint256 endTimestamp = depositTimestamp + vestingPeriod;
+        vm.warp(endTimestamp);
+
+        uint256 pctElapsed2 = (block.timestamp - deposit2Timestamp).mulDivDown(ONE, vestingPeriod);
+        uint256 amountVested2 = pctElapsed2.mulDivDown(amount2, ONE);
+
+        // Move to the end of the period and claim again
+        {
+            assertEq(vesting.currentId(user), 1, "User currentId should be 1");
+            assertEq(vesting.currentId(user2), 1, "User 2 currentId should be 1");
+            assertApproxEqAbs(vesting.vestedBalanceOf(user), amountSecondVest, 1, "User vested balance should be accurate");
+            assertApproxEqAbs(vesting.vestedBalanceOf(user2), amountVested2, 1, "User vested balance should be accurate");
+            assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountSecondVest, 1, "User vested balance of deposit should be accurate");
+            assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user2, 1), amountVested2, 1, "User vested balance of deposit should be accurate");
+
+            // TODO: Fix totalBalanceOf
+            // assertApproxEqRel(vesting.totalBalanceOf(user), totalDeposited, 1e15, "User total balance should be nonzero");
+
+            _checkWithdrawReverts(1, amountSecondVest);
+
+            changePrank(user2);
+            _checkWithdrawReverts(1, amountVested2);
+            changePrank(user);
+
+            uint256 amtBefore = token.balanceOf(user);
+            uint256 amtBefore2 = token.balanceOf(user2);
+            vesting.withdrawAll();
+
+            changePrank(user2);
+            vesting.withdrawAll();
+            changePrank(user);
+
+            assertEq(token.balanceOf(user) - amtBefore, amountSecondVest, "User should have received vested tokens");
+            assertEq(token.balanceOf(user2) - amtBefore2, amountVested2, "User 2 should have received vested tokens");
+        }
+
+        // Also make sure user has 1 deposit removed, 1 remaining
+        assertEq(vesting.userDepositIds(user).length, 0, "User should have no deposit left");
+        assertEq(vesting.userDepositIds(user2).length, 1, "User should have 1 deposit left");
+
+        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), 0, 1, "User vested balance of deposit should be accurate");
+        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user2, 1), 0, 1, "User vested balance of deposit should be accurate");
+
+        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 1);
+
+        assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
+        assertEq(vested, 0, "Vested tokens should be accounted for");
+
+        (,, lastClaimed, vested) = vesting.userVestingInfo(user2, 1);
+
+        assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
+        assertEq(vested, 0, "Vested tokens should be accounted for");
+
+        // // Check global state
+        assertEq(vesting.totalDeposits(), amount2 - amountVested2, "Total deposits should be leftover");
+        assertEq(vesting.unvestedDeposits(), amount2 - amountVested2, "Unvested deposits should be leftover");
+    }
+
+    function testDepositOnBehalf(uint256 amount, uint256 time) external {
+        vm.assume(amount >= minimumDeposit && amount <= balance);
+        vm.assume(time > 0 && time < vestingPeriod);
+
+        // Deposit, then move forward in time, then withdraw
+        vesting.deposit(amount, user2);
+
+        assertEq(vesting.totalDeposits(), amount, "Total deposits should be nonzero");
+        assertEq(vesting.unvestedDeposits(), amount, "Unvested deposits should be nonzero");
+
+        assertEq(vesting.currentId(user2), 1, "User currentId should be 1");
+        assertEq(vesting.vestedBalanceOf(user2), 0, "User vested balance should be 0");
+        assertEq(vesting.vestedBalanceOfDeposit(user2, 1), 0, "User vested balance of deposit should be 0");
+
+        skip(time);
+
+        // Check state of vesting
+        uint256 pctElapsed = time.mulDivDown(ONE, vestingPeriod);
+        uint256 amountVested = pctElapsed.mulDivDown(amount, ONE);
+
+        assertEq(vesting.totalDeposits(), amount, "Total deposits should be nonzero");
+        assertEq(vesting.unvestedDeposits(), amount, "Unvested deposits should be nonzero");
+
+        assertEq(vesting.currentId(user2), 1, "User currentId should be 1");
+        assertEq(vesting.vestedBalanceOf(user2), amountVested, "User vested balance should be 0");
+        assertEq(vesting.vestedBalanceOfDeposit(user2, 1), amountVested, "User vested balance of deposit should be 0");
+
+        // Withdraw
+        uint256 amtBefore = token.balanceOf(user2);
+
+        changePrank(user2);
+        _checkWithdrawReverts(1, amountVested);
+        vesting.withdraw(1, amountVested);
+        changePrank(user);
+
+        assertEq(token.balanceOf(user2) - amtBefore, amountVested, "User 2 should have received vested tokens");
+
+        // Also make sure user still has a deposit
+        assertEq(vesting.userDepositIds(user2).length, 1, "User deposit should still be active");
+
+        // Check global state
+        assertEq(vesting.totalDeposits(), amount - amountVested, "Total deposits should be reduced");
+        assertEq(vesting.unvestedDeposits(), amount - amountVested, "Unvested deposits should be reduced");
+    }
 
 
     // ================================================= HELPERS ===============================================

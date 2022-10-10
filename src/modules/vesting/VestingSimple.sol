@@ -12,8 +12,8 @@ import { Test, console } from "@forge-std/Test.sol";
 
 // TODO:
 // - Finish written tests
-// - Test view functions
 // - Change requires to custom errors
+// - Finish totalBalanceOf
 
 /**
  * @title Cellar Vesting Timelock
