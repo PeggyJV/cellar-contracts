@@ -11,8 +11,8 @@ import { Math } from "src/utils/Math.sol";
 import { Test, console } from "@forge-std/Test.sol";
 
 // TODO:
-// - Finish written tests
 // - Change requires to custom errors
+// - Document events, structs, and custom errors
 // - Finish totalBalanceOf
 
 /**
@@ -28,6 +28,16 @@ contract VestingSimple {
 
     event Deposit(address indexed user, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed depositId, uint256 amount);
+
+    error Vesting_ZeroAsset();
+    error Vesting_ZeroVestingPeriod();
+    error Vesting_MinimumTooSmall(uint256 lowestMinimum);
+    error Vesting_ZeroDeposit();
+    error Vesting_DepositTooSmall(uint256 minimumDeposit);
+    error Vesting_ZeroWithdraw();
+    error Vesting_DepositFullyVested(uint256 depositId);
+    error Vesting_DepositNotEnoughAvailable(uint256 depositId, uint256 available);
+    error Vesting_NoDeposit(uint256 depositId);
 
     // ============================================= TYPES =============================================
 
@@ -76,9 +86,9 @@ contract VestingSimple {
         uint256 _vestingPeriod,
         uint256 _minimumDeposit
     ) {
-        require(address(_asset) != address(0), "Zero asset");
-        require(_vestingPeriod > 0, "Zero vesting period");
-        require(_minimumDeposit >= _vestingPeriod, "Minimum too small");
+        if (address(_asset) == address(0)) revert Vesting_ZeroDeposit();
+        if (_vestingPeriod == 0) revert Vesting_ZeroVestingPeriod();
+        if (_minimumDeposit < _vestingPeriod) revert Vesting_MinimumTooSmall(_vestingPeriod);
 
         asset = _asset;
         vestingPeriod = _vestingPeriod;
@@ -100,8 +110,8 @@ contract VestingSimple {
      */
     function deposit(uint256 assets, address receiver) public returns (uint256 shares) {
         // Check for rounding error since we round down in previewDeposit.
-        require(assets > 0, "Deposit amount 0");
-        require(assets >= minimumDeposit, "Deposit too small");
+        if (assets == 0) revert Vesting_ZeroDeposit();
+        if (assets < minimumDeposit) revert Vesting_DepositTooSmall(minimumDeposit);
 
         // Used for compatibility
         shares = assets;
@@ -137,7 +147,7 @@ contract VestingSimple {
      */
     function withdraw(uint256 depositId, uint256 assets) public returns (uint256 shares) {
         // Check for rounding error since we round down in previewDeposit.
-        require(assets > 0, "Withdraw amount 0");
+        if (assets == 0) revert Vesting_ZeroWithdraw();
 
         // Used for compatibility
         shares = assets;
@@ -145,8 +155,8 @@ contract VestingSimple {
         VestingSchedule storage s = vests[msg.sender][depositId];
         uint256 newlyVested = _vestDeposit(msg.sender, depositId);
 
-        require(newlyVested > 0 || s.vested > 0, "Deposit fully vested");
-        require(s.vested >= assets, "Not enough available");
+        if (newlyVested == 0 && s.vested == 0) revert Vesting_DepositFullyVested(depositId);
+        if (assets > s.vested) revert Vesting_DepositNotEnoughAvailable(depositId, s.vested);
 
         // Update accounting
         s.vested -= assets;
@@ -235,7 +245,7 @@ contract VestingSimple {
     function vestedBalanceOfDeposit(address user, uint256 depositId) public view returns (uint256 balance) {
         VestingSchedule storage s = vests[user][depositId];
 
-        require(s.amountPerSecond > 0, "No such deposit");
+        if (s.amountPerSecond == 0) revert Vesting_NoDeposit(depositId);
 
         uint256 lastTimestamp = block.timestamp <= s.until ? block.timestamp : s.until;
         uint256 timeElapsed = lastTimestamp - s.lastClaimed;
@@ -323,7 +333,7 @@ contract VestingSimple {
         // Add deposit info
         VestingSchedule storage s = vests[user][depositId];
 
-        require(s.amountPerSecond > 0, "No such deposit");
+        if (s.amountPerSecond == 0) revert Vesting_NoDeposit(depositId);
 
         // No new vesting
         if (s.lastClaimed >= s.until) return 0;

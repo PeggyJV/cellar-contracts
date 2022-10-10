@@ -10,6 +10,16 @@ import { Math } from "src/utils/Math.sol";
 contract VestingTest is Test {
     using Math for uint256;
 
+    error Vesting_ZeroAsset();
+    error Vesting_ZeroVestingPeriod();
+    error Vesting_MinimumTooSmall(uint256 lowestMinimum);
+    error Vesting_ZeroDeposit();
+    error Vesting_DepositTooSmall(uint256 minimumDeposit);
+    error Vesting_ZeroWithdraw();
+    error Vesting_DepositFullyVested(uint256 depositId);
+    error Vesting_DepositNotEnoughAvailable(uint256 depositId, uint256 available);
+    error Vesting_NoDeposit(uint256 depositId);
+
     VestingSimple internal vesting;
     ERC20 internal token;
 
@@ -104,7 +114,10 @@ contract VestingTest is Test {
         _doWithdrawal(1, amount);
 
         // Try to withdraw again, should get error that deposit is fully vested
-        vm.expectRevert(bytes("Deposit fully vested"));
+        vm.expectRevert(bytes(abi.encodeWithSelector(
+            VestingSimple.Vesting_DepositFullyVested.selector,
+            1
+        )));
         vesting.withdraw(1, 1);
 
         // Also make sure user has no deposits
@@ -582,15 +595,22 @@ contract VestingTest is Test {
 
     function _checkWithdrawReverts(uint256 depositId, uint256 available) internal {
         // Make sure we cannot withdraw more than vested
-        vm.expectRevert(bytes("Not enough available"));
+        vm.expectRevert(bytes(abi.encodeWithSelector(
+            VestingSimple.Vesting_DepositNotEnoughAvailable.selector,
+            depositId,
+            available
+        )));
         vesting.withdraw(depositId, available + 100);
 
         // Make sure we cannot withdraw 0
-        vm.expectRevert(bytes("Withdraw amount 0"));
+        vm.expectRevert(bytes(abi.encodeWithSelector(VestingSimple.Vesting_ZeroWithdraw.selector)));
         vesting.withdraw(depositId, 0);
 
         // Make sure we cannot withdraw invalid deposit
-        vm.expectRevert(bytes("No such deposit"));
+        vm.expectRevert(bytes(abi.encodeWithSelector(
+            VestingSimple.Vesting_NoDeposit.selector,
+            100
+        )));
         vesting.withdraw(100, available);
     }
 
