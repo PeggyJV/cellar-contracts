@@ -26,14 +26,12 @@ contract CellarMultiAssetManagerScript is Script {
     PriceRouter private priceRouter;
     SwapRouter private swapRouter;
     Registry private registry;
-    CellarRouter private router;
 
     function run() external {
         vm.startBroadcast();
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniswapV2Router), IUniswapV3Router(uniswapV3Router));
         registry = new Registry(gravityBridge, address(swapRouter), address(priceRouter));
-        router = new CellarRouter(registry);
 
         priceRouter.addAsset(WETH, 0, 0, false, 0);
         priceRouter.addAsset(WBTC, 0, 0, false, 0);

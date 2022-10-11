@@ -683,10 +683,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         lastAccrual = uint64(block.timestamp);
 
         feeData.strategistPayoutAddress = _strategistPayout;
-
-        // Transfer ownership to the Gravity Bridge.
-        // address gravityBridge = _registry.getAddress(0);
-        // transferOwnership(gravityBridge);
     }
 
     // =========================================== CORE LOGIC ===========================================
