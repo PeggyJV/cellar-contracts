@@ -1,13 +1,12 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity =0.7.6;
-pragma abicoder v2;
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity 0.8.16;
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "../libraries/TransferHelper.sol";
-import "../interfaces/INonfungiblePositionManager.sol";
-import "../base/LiquidityManagement.sol";
+import "@uniswapV3/interfaces/INonfungiblePositionManager.sol";
+import "@uniswapV3/base/LiquidityManagement.sol";
 
 contract UniswapV3LiquidityManager is IERC721Receiver {
     address public constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
