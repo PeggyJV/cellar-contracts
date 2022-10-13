@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
+import "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
+import "@uniswapV3C/libraries/TickMath.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import "../libraries/TransferHelper.sol";
-import "@uniswapV3/interfaces/INonfungiblePositionManager.sol";
-import "@uniswapV3/base/LiquidityManagement.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
+import "@uniswapV3P/base/LiquidityManagement.sol";
 
 contract UniswapV3LiquidityManager is IERC721Receiver {
     address public constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
@@ -76,12 +76,12 @@ contract UniswapV3LiquidityManager is IERC721Receiver {
         uint256 amount1ToMint = 1000;
 
         // transfer tokens to contract
-        TransferHelper.safeTransferFrom(DAI, msg.sender, address(this), amount0ToMint);
-        TransferHelper.safeTransferFrom(USDC, msg.sender, address(this), amount1ToMint);
+        SafeERC20.safeTransferFrom(DAI, msg.sender, address(this), amount0ToMint);
+        SafeERC20.safeTransferFrom(USDC, msg.sender, address(this), amount1ToMint);
 
         // Approve the position manager
-        TransferHelper.safeApprove(DAI, address(nonfungiblePositionManager), amount0ToMint);
-        TransferHelper.safeApprove(USDC, address(nonfungiblePositionManager), amount1ToMint);
+        SafeERC20.safeApprove(DAI, address(nonfungiblePositionManager), amount0ToMint);
+        SafeERC20.safeApprove(USDC, address(nonfungiblePositionManager), amount1ToMint);
 
         INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
             token0: DAI,
@@ -105,15 +105,15 @@ contract UniswapV3LiquidityManager is IERC721Receiver {
 
         // Remove allowance and refund in both assets.
         if (amount0 < amount0ToMint) {
-            TransferHelper.safeApprove(DAI, address(nonfungiblePositionManager), 0);
+            SafeERC20.safeApprove(DAI, address(nonfungiblePositionManager), 0);
             uint256 refund0 = amount0ToMint - amount0;
-            TransferHelper.safeTransfer(DAI, msg.sender, refund0);
+            SafeERC20.safeTransfer(DAI, msg.sender, refund0);
         }
 
         if (amount1 < amount1ToMint) {
-            TransferHelper.safeApprove(USDC, address(nonfungiblePositionManager), 0);
+            SafeERC20.safeApprove(USDC, address(nonfungiblePositionManager), 0);
             uint256 refund1 = amount1ToMint - amount1;
-            TransferHelper.safeTransfer(USDC, msg.sender, refund1);
+            SafeERC20.safeTransfer(USDC, msg.sender, refund1);
         }
     }
 
@@ -185,11 +185,11 @@ contract UniswapV3LiquidityManager is IERC721Receiver {
             uint256 amount1
         )
     {
-        TransferHelper.safeTransferFrom(deposits[tokenId].token0, msg.sender, address(this), amountAdd0);
-        TransferHelper.safeTransferFrom(deposits[tokenId].token1, msg.sender, address(this), amountAdd1);
+        SafeERC20.safeTransferFrom(deposits[tokenId].token0, msg.sender, address(this), amountAdd0);
+        SafeERC20.safeTransferFrom(deposits[tokenId].token1, msg.sender, address(this), amountAdd1);
 
-        TransferHelper.safeApprove(deposits[tokenId].token0, address(nonfungiblePositionManager), amountAdd0);
-        TransferHelper.safeApprove(deposits[tokenId].token1, address(nonfungiblePositionManager), amountAdd1);
+        SafeERC20.safeApprove(deposits[tokenId].token0, address(nonfungiblePositionManager), amountAdd0);
+        SafeERC20.safeApprove(deposits[tokenId].token1, address(nonfungiblePositionManager), amountAdd1);
 
         INonfungiblePositionManager.IncreaseLiquidityParams memory params = INonfungiblePositionManager
             .IncreaseLiquidityParams({
@@ -219,8 +219,8 @@ contract UniswapV3LiquidityManager is IERC721Receiver {
         address token0 = deposits[tokenId].token0;
         address token1 = deposits[tokenId].token1;
         // send collected fees to owner
-        TransferHelper.safeTransfer(token0, owner, amount0);
-        TransferHelper.safeTransfer(token1, owner, amount1);
+        SafeERC20.safeTransfer(token0, owner, amount0);
+        SafeERC20.safeTransfer(token1, owner, amount1);
     }
 
     /// @notice Transfers the NFT to the owner
