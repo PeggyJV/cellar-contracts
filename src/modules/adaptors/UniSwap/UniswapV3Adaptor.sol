@@ -25,7 +25,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
 
     /*
-        adaptorData = abi.encode(ERC20 token)
+        adaptorData = abi.encode(token0, token1)
+        adaptorStroage(written in registry) = abi.encode(uint256[] tokenIds)
     */
 
     //============================================ Global Functions ===========================================
@@ -36,7 +37,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         bytes memory,
         bytes memory
     ) public override {
-        // Nothing to deposit since caller is already holding the ERC20.
+        revert("User Deposits not allowed");
     }
 
     function withdraw(
@@ -45,28 +46,48 @@ contract UniswapV3Adaptor is BaseAdaptor {
         bytes memory adaptorData,
         bytes memory
     ) public override {
-        if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
-            revert("External receivers are not allowed.");
-        ERC20 token = abi.decode(adaptorData, (ERC20));
-        token.safeTransfer(receiver, assets);
+        revert("User Withdraws not allowed");
     }
 
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        ERC20 token = abi.decode(adaptorData, (ERC20));
-        return token.balanceOf(msg.sender);
+        return 0;
     }
 
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        ERC20 token = abi.decode(adaptorData, (ERC20));
-        return token.balanceOf(msg.sender);
+        // Makes a call to registry to get tokenId array from adaptor storage.
+        // Does a ton of math to determine the underlying value of all LP tokens it owns
+        // This could also get away with making 1 call to the price router to get the exchange rate between the two tokens?
+        return 0;
     }
 
+    // Grabs token0 in adaptor data.
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         ERC20 token = abi.decode(adaptorData, (ERC20));
         return token;
     }
 
-    //============================================ Override Hooks ===========================================
-
     //============================================ High Level Callable Functions ============================================
+    // Positions are arbitrary UniV3 positions that could be range orders, limit orders, or normal LP positions.
+    function openPosition(uint256 amount0, uint256 amount1) public {
+        // Creates a new NFT position and stores the NFT in the token Id array in adaptor storage
+    }
+
+    function closePosition(uint256 positionId) public {
+        // Grabs array of token Ids from registry, finds corresponding token Id, then removes it from array, and closes position.
+    }
+
+    function addToPosition(
+        uint256 amount0,
+        uint256 amount1,
+        uint256 positionId
+    ) public {}
+
+    function takeFromPosition(
+        uint256 amount0,
+        uint256 amount1,
+        uint256 positionId
+    ) public {}
+
+    //Collects fees from all positions or maybe can specify from which ones?
+    function collectFees() public {}
 }
