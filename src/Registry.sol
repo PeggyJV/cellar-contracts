@@ -230,5 +230,10 @@ contract Registry is Ownable {
 
     // ============================================ ADAPTOR STORAGE CONFIG ============================================
     mapping(address => mapping(bytes32 => bytes)) public adaptorStorage;
+
     //Where ^^Cellar      ->   ^^keccak256(adaptor, adaptorData) -> ^^^ arbritrary storage.
+
+    function getAdaptorStorage(address cellar, bytes32 dataHash) external view returns (bytes memory) {
+        return adaptorStorage[cellar][dataHash];
+    }
 }
