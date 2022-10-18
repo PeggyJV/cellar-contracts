@@ -71,12 +71,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Get exchnage rate between token0 and token1
 
         (ERC20 token0, ERC20 token1) = abi.decode(adaptorData, (ERC20, ERC20));
-        uint256 price0 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token0);
-        uint256 price1 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token1);
-        console.log("Price0", price0);
-        console.log("Price1", price1);
+        // uint256 price0 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token0);
+        // uint256 price1 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token1);
+        uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getExchangeRate(token1, token0);
+        console.log("Price", price);
+        console.log("other", 10**token0.decimals());
 
-        uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(price0, price1));
+        uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(10**token0.decimals(), price));
 
         int24 tick = getTick(sqrtPriceX96);
 
@@ -135,10 +136,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         console.log("DAI", amount0);
         console.log("USDC", amount1);
 
-        return amount0.mulDivDown(price0, 1e8) + amount1.mulDivDown(price1, 1e8);
-
-        // Does a ton of math to determine the underlying value of all LP tokens it owns
-        // This could also get away with making 1 call to the price router to get the exchange rate between the two tokens?
+        return amount0 + amount1.mulDivDown(price, 10**token1.decimals());
     }
 
     // Grabs token0 in adaptor data.
@@ -176,9 +174,6 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 tokenId;
         uint128 liquidity;
         (tokenId, liquidity, amount0, amount1) = positionManager().mint(params);
-
-        console.log("DAI!", token0.balanceOf(address(this)));
-        console.log("USDC!", token1.balanceOf(address(this)));
     }
 
     function closePosition(uint256 positionId) public {
