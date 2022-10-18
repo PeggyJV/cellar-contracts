@@ -64,6 +64,12 @@ contract VestingSimple {
     /// @param depositId The deposit ID specified.
     error Vesting_DepositFullyVested(uint256 depositId);
 
+    /// @notice User attempted to withdraw more than the amount vested,
+    ///         from any deposit.
+    ///
+    /// @param available The amount of token available for withdrawal.
+    error Vesting_NotEnoughAvailable(uint256 available);
+
     /// @notice User attempted to withdraw more than the amount vested.
     ///
     /// @param depositId The deposit ID specified.
@@ -183,7 +189,7 @@ contract VestingSimple {
      * @param depositId                     The deposit ID to withdraw from.
      * @param assets                        The amount of assets to withdraw.
      *
-     * @return shares                       The amount of tokens withdraw (for compatibility).
+     * @return shares                       The amount of tokens withdrawn (for compatibility).
      */
     function withdraw(uint256 depositId, uint256 assets) public returns (uint256 shares) {
         // Check for rounding error since we round down in previewDeposit.
@@ -201,7 +207,6 @@ contract VestingSimple {
         // Update accounting
         s.vested -= assets;
         totalDeposits -= assets;
-        unvestedDeposits -= newlyVested;
 
         // Remove deposit if needed, including 1-wei deposits (rounding)
         if (s.vested <= 1 && block.timestamp >= s.until) {
@@ -217,7 +222,7 @@ contract VestingSimple {
      * @notice Withdraw all tokens across all deposits that have vested.
      *         Winds the vesting clock to release newly earned tokens since the last claim.
      *
-     * @return shares                       The amount of tokens withdraw (for compatibility).
+     * @return shares                       The amount of tokens withdrawn (for compatibility).
      */
     function withdrawAll() public returns (uint256 shares) {
         uint256[] memory depositIds = allUserDepositIds[msg.sender].values();
@@ -227,12 +232,10 @@ contract VestingSimple {
             VestingSchedule storage s = vests[msg.sender][depositIds[i]];
 
             if (s.amountPerSecond > 0 && (s.vested > 0 || s.lastClaimed < s.until)) {
-                uint256 newlyVested = _vestDeposit(msg.sender, depositIds[i]);
+                _vestDeposit(msg.sender, depositIds[i]);
 
                 shares += s.vested;
                 s.vested = 0;
-
-                unvestedDeposits -= newlyVested;
 
                 // Remove deposit if needed
                 // Will not affect loop logic because values are pre-defined
@@ -246,6 +249,57 @@ contract VestingSimple {
 
         totalDeposits -= shares;
         asset.safeTransfer(msg.sender, shares);
+    }
+
+    /**
+     * @notice Withdraw a specified amount of tokens, sending them to the specified
+     *         receiver. Withdraws from all deposits in order until the current amount
+     *         is met.
+     *
+     * @param assets                        The amount of assets to withdraw.
+     * @param receiver                      The address that will receive the assets.
+     *
+     * @return shares                       The amount of tokens withdrawn (for compatibility).
+     */
+    function withdrawAnyFor(uint256 assets, address receiver) public returns (uint256 shares) {
+        uint256[] memory depositIds = allUserDepositIds[msg.sender].values();
+        uint256 numDeposits = depositIds.length;
+
+        shares = assets;
+
+        for (uint256 i = 0; assets > 0 && i < numDeposits; i++) {
+            VestingSchedule storage s = vests[msg.sender][depositIds[i]];
+
+            if (s.amountPerSecond > 0 && (s.vested > 0 || s.lastClaimed < s.until)) {
+                _vestDeposit(msg.sender, depositIds[i]);
+
+                uint256 payout = s.vested >= assets ? assets : s.vested;
+
+                if (payout == assets) {
+                    // Can end here - only withdraw the amount we need
+                    s.vested -= payout;
+                    assets = 0;
+                } else {
+                    // Withdraw full deposit and go to next one
+                    assets -= payout;
+                    s.vested = 0;
+                }
+
+                emit Withdraw(msg.sender, depositIds[i], payout);
+
+                // Remove deposit if needed
+                // Will not affect loop logic because values are pre-defined
+                if (s.vested == 0 && block.timestamp >= s.until) {
+                    allUserDepositIds[msg.sender].remove(depositIds[i]);
+                }
+            }
+        }
+
+        // Could not collect enough
+        if (assets > 0) revert Vesting_NotEnoughAvailable(shares - assets);
+
+        totalDeposits -= shares;
+        asset.safeTransfer(receiver, shares);
     }
 
     // ======================================= VIEW FUNCTIONS =========================================
@@ -388,5 +442,7 @@ contract VestingSimple {
 
         s.vested += newlyVested;
         s.lastClaimed = uint128(lastTimestamp);
+
+        unvestedDeposits -= newlyVested;
     }
 }
