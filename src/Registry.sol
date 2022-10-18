@@ -227,13 +227,4 @@ contract Registry is Ownable {
         require(_protocolRiskTolerance >= data.protocolRisk, "Caller does not meet protocol risk max.");
         require(isAdaptorTrusted[_adaptor], "Adaptor is not trusted by registry.");
     }
-
-    // ============================================ ADAPTOR STORAGE CONFIG ============================================
-    mapping(address => mapping(bytes32 => bytes)) public adaptorStorage;
-
-    //Where ^^Cellar      ->   ^^keccak256(adaptor, adaptorData) -> ^^^ arbritrary storage.
-
-    function getAdaptorStorage(address cellar, bytes32 dataHash) external view returns (bytes memory) {
-        return adaptorStorage[cellar][dataHash];
-    }
 }
