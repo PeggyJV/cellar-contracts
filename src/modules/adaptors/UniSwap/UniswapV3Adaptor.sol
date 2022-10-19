@@ -136,7 +136,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         console.log("DAI", amount0);
         console.log("USDC", amount1);
 
-        return amount0 + amount1.mulDivDown(price, 10**token1.decimals());
+        // Amounts are in 12 decimals, convert them back to underlying.
+        return amount0.changeDecimals(12, token0.decimals()) + amount1.mulDivDown(price, 1e12);
     }
 
     // Grabs token0 in adaptor data.

@@ -144,6 +144,8 @@ contract CellarAssetManagerTest is Test {
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        console.log("Total Assets", cellar.totalAssets());
     }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
