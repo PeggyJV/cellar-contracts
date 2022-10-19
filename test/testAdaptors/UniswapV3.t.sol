@@ -14,6 +14,7 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { TickMath } from "src/interfaces/external/TickMath.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -58,6 +59,7 @@ contract CellarAssetManagerTest is Test {
     uint256 private wethPosition;
     uint256 private daiPosition;
     uint256 private usdcDaiPosition;
+    uint256 private usdcWethPosition;
 
     function setUp() external {
         // Setup Registry and modules:
@@ -75,16 +77,12 @@ contract CellarAssetManagerTest is Test {
             address(priceRouter)
         );
 
-        // Setup exchange rates:
-        // USDC Simulated Price: $1
-        // WETH Simulated Price: $2000
-        // WBTC Simulated Price: $30,000
-
         priceRouter.addAsset(USDC, 0, 0, false, 0);
         priceRouter.addAsset(DAI, 0, 0, false, 0);
+        priceRouter.addAsset(WETH, 0, 0, false, 0);
 
         // Cellar positions array.
-        uint256[] memory positions = new uint256[](3);
+        uint256[] memory positions = new uint256[](5);
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(uniswapV3Adaptor), 0, 0);
@@ -92,13 +90,17 @@ contract CellarAssetManagerTest is Test {
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
         daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
+        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
         usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), false, abi.encode(DAI, USDC), 0, 0);
+        usdcWethPosition = registry.trustPosition(address(uniswapV3Adaptor), false, abi.encode(USDC, WETH), 0, 0);
 
         positions[0] = usdcPosition;
         positions[1] = daiPosition;
-        positions[2] = usdcDaiPosition;
+        positions[2] = wethPosition;
+        positions[3] = usdcDaiPosition;
+        positions[4] = usdcWethPosition;
 
-        bytes[] memory positionConfigs = new bytes[](3);
+        bytes[] memory positionConfigs = new bytes[](5);
 
         cellar = new MockCellar(
             registry,
@@ -125,22 +127,207 @@ contract CellarAssetManagerTest is Test {
     }
 
     // ========================================== REBALANCE TEST ==========================================
+    //TODO add tests for multiple positions with same underlying
+    function testRebalanceIntoUniswapV3PositionUSDC_DAI() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
 
-    function testRebalanceIntoUniswapV3Position() external {
-        deal(address(USDC), address(this), 100_000e6);
-        cellar.deposit(100_000e6, address(this));
-        // Manually rebalance into USDC and DAI positions.
-        deal(address(USDC), address(cellar), 50_000e6);
-        deal(address(DAI), address(cellar), 50_000e18);
-        console.log(cellar.totalAssets());
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(DAI);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 100;
+        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
+        bytes memory params = abi.encode(path, poolFees, 50_500e6, 0);
         adaptorCalls[0] = abi.encodeWithSelector(
+            BaseAdaptor.swap.selector,
+            USDC,
+            DAI,
+            50_500e6,
+            SwapRouter.Exchange.UNIV3,
+            params
+        );
+        adaptorCalls[1] = abi.encodeWithSelector(
             UniswapV3Adaptor.openPosition.selector,
             DAI,
             USDC,
+            uint24(100),
             50_000e18,
-            50_000e6
+            50_000e6,
+            0,
+            0,
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        console.log("Total Assets", cellar.totalAssets());
+    }
+
+    function testRebalanceIntoUniswapV3PositionUSDC_WETH() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+        int24 tick;
+        {
+            //Find current tick USDC WETH is trading at.
+            uint256 price = priceRouter.getExchangeRate(WETH, USDC);
+
+            uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
+
+            tick = getTick(sqrtPriceX96);
+            if (tick < 0) console.log("Oh BOYYYY");
+            console.log("Current Tick", uint24(-1 * tick));
+        }
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WETH);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 500;
+        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
+        bytes memory params = abi.encode(path, poolFees, 50_500e6, 0);
+        adaptorCalls[0] = abi.encodeWithSelector(
+            BaseAdaptor.swap.selector,
+            USDC,
+            WETH,
+            50_500e6,
+            SwapRouter.Exchange.UNIV3,
+            params
+        );
+        adaptorCalls[1] = abi.encodeWithSelector(
+            UniswapV3Adaptor.openPosition.selector,
+            USDC,
+            WETH,
+            uint24(100), //TODO changing this to 500 causes mint to fail
+            50_000e6,
+            45e18,
+            0,
+            0,
+            TickMath.MIN_TICK, // tick - 10, //TODO doing this causes mint to use half of available assets, seems to change the decimals returned in balanceOf, and the other half of assets are no longer in the cellar
+            TickMath.MAX_TICK // tick + 10
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }11
+
+    function testRebalanceIntoMultipleDifferentUniswapV3Position() external {
+        deal(address(USDC), address(this), 201_000e6);
+        cellar.deposit(201_000e6, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](4);
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WETH);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 500;
+        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
+        bytes memory params = abi.encode(path, poolFees, 50_500e6, 0);
+        adaptorCalls[0] = abi.encodeWithSelector(
+            BaseAdaptor.swap.selector,
+            USDC,
+            WETH,
+            50_500e6,
+            SwapRouter.Exchange.UNIV3,
+            params
+        );
+        path[0] = address(USDC);
+        path[1] = address(DAI);
+        poolFees = new uint24[](1);
+        poolFees[0] = 100;
+        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
+        params = abi.encode(path, poolFees, 50_500e6, 0);
+        adaptorCalls[1] = abi.encodeWithSelector(
+            BaseAdaptor.swap.selector,
+            USDC,
+            DAI,
+            50_500e6,
+            SwapRouter.Exchange.UNIV3,
+            params
+        );
+        adaptorCalls[2] = abi.encodeWithSelector(
+            UniswapV3Adaptor.openPosition.selector,
+            USDC,
+            WETH,
+            uint24(100), // 0.3%
+            50_000e6,
+            45e18,
+            0,
+            0,
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
+        );
+        adaptorCalls[3] = abi.encodeWithSelector(
+            UniswapV3Adaptor.openPosition.selector,
+            DAI,
+            USDC,
+            uint24(100), // 0.01%
+            50_000e18,
+            50_000e6,
+            0,
+            0,
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        console.log("Total Assets", cellar.totalAssets());
+    }
+
+    function testMultipleUniV3PositionsWithSameUnderlying() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](3);
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(DAI);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 100;
+        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
+        bytes memory params = abi.encode(path, poolFees, 50_500e6, 0);
+        adaptorCalls[0] = abi.encodeWithSelector(
+            BaseAdaptor.swap.selector,
+            USDC,
+            DAI,
+            50_500e6,
+            SwapRouter.Exchange.UNIV3,
+            params
+        );
+        adaptorCalls[1] = abi.encodeWithSelector(
+            UniswapV3Adaptor.openPosition.selector,
+            DAI,
+            USDC,
+            uint24(100),
+            25_000e18,
+            25_000e6,
+            0,
+            0,
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
+        );
+        adaptorCalls[2] = abi.encodeWithSelector(
+            UniswapV3Adaptor.openPosition.selector,
+            DAI,
+            USDC,
+            uint24(100),
+            25_000e18,
+            25_000e6,
+            0,
+            0,
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -158,5 +345,24 @@ contract CellarAssetManagerTest is Test {
         uint256 assets
     ) external {
         ERC20(asset).transferFrom(msg.sender, cosmos, assets);
+    }
+
+    //Helper functions
+    function _sqrt(uint256 _x) internal pure returns (uint256 y) {
+        uint256 z = (_x + 1) / 2;
+        y = _x;
+        while (z < y) {
+            y = z;
+            z = (_x / z + z) / 2;
+        }
+    }
+
+    function getSqrtPriceX96(uint256 priceA, uint256 priceB) internal pure returns (uint256) {
+        uint256 ratioX192 = (priceA << 192) / (priceB);
+        return _sqrt(ratioX192);
+    }
+
+    function getTick(uint160 sqrtPriceX96) internal pure returns (int24 tick) {
+        tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
     }
 }

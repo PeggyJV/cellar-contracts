@@ -74,8 +74,6 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // uint256 price0 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token0);
         // uint256 price1 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token1);
         uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getExchangeRate(token1, token0);
-        console.log("Price", price);
-        console.log("other", 10**token0.decimals());
 
         uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(10**token0.decimals(), price));
 
@@ -133,9 +131,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
             amount0 += amountA;
             amount1 += amountB;
         }
-        console.log("DAI", amount0);
-        console.log("USDC", amount1);
-
+        console.log("token0", amount0);
+        console.log("token1", amount1);
+        console.log("0 Bal", token0.balanceOf(address(this)));
+        console.log("1 Bal", token1.balanceOf(address(this)));
         // Amounts are in 12 decimals, convert them back to underlying.
         return amount0.changeDecimals(12, token0.decimals()) + amount1.mulDivDown(price, 1e12);
     }
@@ -151,50 +150,115 @@ contract UniswapV3Adaptor is BaseAdaptor {
     function openPosition(
         ERC20 token0,
         ERC20 token1,
+        uint24 poolFee,
         uint256 amount0,
-        uint256 amount1
+        uint256 amount1,
+        uint256 min0,
+        uint256 min1,
+        int24 tickLower,
+        int24 tickUpper
     ) public {
         // Creates a new NFT position and stores the NFT in the token Id array in adaptor storage
         token0.safeApprove(address(positionManager()), amount0);
         token1.safeApprove(address(positionManager()), amount1);
-
-        uint24 poolFee = 100;
         INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
             token0: address(token0),
             token1: address(token1),
             fee: poolFee,
-            tickLower: TickMath.MIN_TICK,
-            tickUpper: TickMath.MAX_TICK,
+            tickLower: tickLower,
+            tickUpper: tickUpper,
             amount0Desired: amount0,
             amount1Desired: amount1,
-            amount0Min: 0,
-            amount1Min: 0,
+            amount0Min: min0,
+            amount1Min: min1,
             recipient: address(this),
             deadline: block.timestamp
         });
-        uint256 tokenId;
-        uint128 liquidity;
-        (tokenId, liquidity, amount0, amount1) = positionManager().mint(params);
+        (, , uint256 amount0Act, uint256 amount1Act) = positionManager().mint(params);
+        // Zero out approvals.
+        if (amount0Act < amount0) token0.safeApprove(address(positionManager()), 0);
+        if (amount1Act < amount1) token1.safeApprove(address(positionManager()), 0);
     }
 
-    function closePosition(uint256 positionId) public {
-        // Grabs array of token Ids from registry, finds corresponding token Id, then removes it from array, and closes position.
+    function closePosition(
+        uint256 positionId,
+        uint256 min0,
+        uint256 min1
+    ) public {
+        require(address(this) == positionManager().ownerOf(positionId), "Cellar does not own this token.");
+        (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(positionId);
+        INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
+            .DecreaseLiquidityParams({
+                tokenId: positionId,
+                liquidity: liquidity,
+                amount0Min: min0,
+                amount1Min: min1,
+                deadline: block.timestamp
+            });
+        positionManager().decreaseLiquidity(params);
+
+        // Position now has no more liquidity, so transfer NFT to dead address.
+        // Transfer token to a dead address.
+        positionManager().transferFrom(address(this), address(1), positionId);
     }
 
     function addToPosition(
         uint256 amount0,
         uint256 amount1,
+        uint256 min0,
+        uint256 min1,
         uint256 positionId
-    ) public {}
+    ) public {
+        require(address(this) == positionManager().ownerOf(positionId), "Cellar does not own this token.");
+        (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
+        ERC20(t0).safeApprove(address(positionManager()), amount0);
+        ERC20(t1).safeApprove(address(positionManager()), amount1);
+
+        INonfungiblePositionManager.IncreaseLiquidityParams memory params = INonfungiblePositionManager
+            .IncreaseLiquidityParams({
+                tokenId: positionId,
+                amount0Desired: amount0,
+                amount1Desired: amount1,
+                amount0Min: min0,
+                amount1Min: min1,
+                deadline: block.timestamp
+            });
+
+        positionManager().increaseLiquidity(params);
+    }
 
     function takeFromPosition(
-        uint256 amount0,
-        uint256 amount1,
+        uint128 liquidity,
+        uint256 min0,
+        uint256 min1,
         uint256 positionId
-    ) public {}
+    ) public {
+        require(address(this) == positionManager().ownerOf(positionId), "Cellar does not own this token.");
+        (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager().positions(positionId);
+        require(positionLiquidity > liquidity, "Call closePosition.");
+        INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
+            .DecreaseLiquidityParams({
+                tokenId: positionId,
+                liquidity: liquidity,
+                amount0Min: min0,
+                amount1Min: min1,
+                deadline: block.timestamp
+            });
+        positionManager().decreaseLiquidity(params);
+    }
 
     //Collects fees from all positions or maybe can specify from which ones?
-    function collectFees() public {}
+    function collectFees(uint256 tokenId) public {
+        require(address(this) == positionManager().ownerOf(tokenId), "Cellar does not own this token.");
+        INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
+            tokenId: tokenId,
+            recipient: address(this),
+            amount0Max: type(uint128).max,
+            amount1Max: type(uint128).max
+        });
+
+        positionManager().collect(params);
+    }
 
     //============================================ Internal Functions ============================================
 
