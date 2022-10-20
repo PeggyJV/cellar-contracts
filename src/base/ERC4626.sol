@@ -30,7 +30,7 @@ abstract contract ERC4626 is ERC20, ERC20Permit {
                                IMMUTABLES
     //////////////////////////////////////////////////////////////*/
 
-    ERC20 public asset;
+    ERC20 public immutable asset;
 
     constructor(
         ERC20 _asset,

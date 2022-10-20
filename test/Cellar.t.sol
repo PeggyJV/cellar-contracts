@@ -991,6 +991,60 @@ contract CellarTest is Test {
         );
     }
 
+    function testFindMax() external {
+        uint256 deposit = 1e6;
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), type(uint256).max);
+
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
+
+        // No yield has been earned.
+        assertEq(cellar.maxWithdraw(address(this)), deposit, "Max withdraw should equal deposit.");
+        uint256 expectedShares = 1e18;
+        assertEq(cellar.maxRedeem(address(this)), expectedShares, "Max Redeem should be 1 share.");
+
+        // Simulate yield.
+        deal(address(USDC), address(cellar), 10e6);
+
+        uint256 expectedAssets = 9.1e6; // initial $1 deposit + $9 of yield - 10% performance fees.
+        assertEq(
+            cellar.maxWithdraw(address(this)),
+            expectedAssets,
+            "Max withdraw should equal deposit + yield - fees."
+        );
+        assertEq(cellar.maxRedeem(address(this)), expectedShares, "Max Redeem should be 1 share.");
+
+        // Strategist moves half of funds into an illiquid position.
+        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 1e18); // 100% of funds are locked.
+        cellar.trustPosition(address(lockedUSDC), Cellar.PositionType.ERC4626);
+        cellar.pushPosition(address(lockedUSDC));
+
+        // Strategist rebalances into illiquid cellar.
+        _rebalance(cellar, USDC, lockedUSDC, 5e6);
+
+        assertEq(cellar.totalAssets(), 10e6, "Total assets should not have changed.");
+
+        expectedAssets = 5e6; // Half the assets are locked, so maxWithdraw should be half of deposit + yield.
+        expectedShares = cellar.previewWithdraw(expectedAssets);
+        assertEq(cellar.maxWithdraw(address(this)), expectedAssets, "Max withdraw should equal expectedAssets.");
+        assertApproxEqAbs(
+            cellar.maxRedeem(address(this)),
+            expectedShares,
+            1,
+            "Max Redeem should equal previewRedeem(maxWithdraw(user))."
+        );
+
+        // Strategist changes withdraw type to proportional.
+        cellar.setWithdrawType(Cellar.WithdrawType.PROPORTIONAL);
+
+        expectedAssets = 0; // 1 position is completely illiquid, so no funds can be taken from the cellar.
+        expectedShares = 0;
+        assertEq(cellar.maxWithdraw(address(this)), expectedAssets, "Max withdraw should equal 0.");
+        assertApproxEqAbs(cellar.maxRedeem(address(this)), expectedShares, 1, "Max Redeem should equal 0.");
+    }
+
     function testPerformanceFeesWithPositivePerformance(uint256 deposit, uint256 yield) external {
         deposit = bound(deposit, 100e6, 1_000_000e6);
         yield = bound(yield, 10e6, 10_000e6);
@@ -3700,6 +3754,7 @@ contract CellarTest is Test {
             abi.encode(0)
         );
 
+        assertEq(testCellar.maxWithdraw(address(this)), assets / 10, "maxWithdraw should equal assets / 10.");
         // Now withdraws up to the next locked position can be performed.
         testCellar.withdraw(assets / 10, address(this), address(this));
 
@@ -3767,7 +3822,7 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), assets);
         USDC.approve(address(maliciousCellar), assets);
 
-        vm.expectRevert(bytes("ReentrancyGuard: reentrant call"));
+        vm.expectRevert(bytes("REENTRANCY"));
         cellar.deposit(assets, address(this));
     }
 
@@ -4101,18 +4156,19 @@ contract CellarTest is Test {
             assets = assetManagementCellar.maxWithdraw(alice);
             _userAction(assetManagementCellar, alice, Action.WITHDRAW, assets, 0);
 
-            assets = assetManagementCellar.maxWithdraw(mary);
-            _userAction(assetManagementCellar, mary, Action.WITHDRAW, assets, 0);
+            // Mary and Sam leave the cellar using maxRedeem
+            uint256 shares = assetManagementCellar.maxRedeem(mary);
+            _userAction(assetManagementCellar, mary, Action.REDEEM, 0, shares);
 
-            assets = assetManagementCellar.maxWithdraw(sam);
-            _userAction(assetManagementCellar, sam, Action.WITHDRAW, assets, 0);
+            shares = assetManagementCellar.maxRedeem(sam);
+            _userAction(assetManagementCellar, sam, Action.REDEEM, 0, shares);
 
             // Strategist rebalances into liquid positions.
             _rebalance(assetManagementCellar, ERC20(address(lockedWETH)), WETH, WETH.balanceOf(address(lockedWETH)));
             _rebalance(assetManagementCellar, ERC20(address(lockedUSDC)), USDC, USDC.balanceOf(address(lockedUSDC)));
 
             // Have everyone completely exit the cellar.
-            uint256 shares = assetManagementCellar.maxRedeem(bob);
+            shares = assetManagementCellar.maxRedeem(bob);
             if (shares > 0) _userAction(assetManagementCellar, bob, Action.REDEEM, 0, shares);
 
             shares = assetManagementCellar.maxRedeem(alice);
@@ -4124,10 +4180,10 @@ contract CellarTest is Test {
             shares = assetManagementCellar.maxRedeem(sam);
             if (shares > 0) _userAction(assetManagementCellar, sam, Action.REDEEM, 0, shares);
 
-            assertEq(assetManagementCellar.balanceOf(alice), 0, "alice should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(bob), 0, "bob should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(mary), 0, "mary should have no more shares.");
-            assertEq(assetManagementCellar.balanceOf(sam), 0, "sam should have no more shares.");
+            assertLe(assetManagementCellar.balanceOf(alice), 1, "alice should have no more shares.");
+            assertLe(assetManagementCellar.balanceOf(bob), 1, "bob should have no more shares.");
+            assertLe(assetManagementCellar.balanceOf(sam), 1, "sam should have no more shares.");
+            assertLe(assetManagementCellar.balanceOf(mary), 1, "mary should have no more shares.");
         }
     }
 
@@ -4183,6 +4239,9 @@ contract CellarTest is Test {
         // Confirm attackers maxWithdraw is zero while shares are locked.
         assertEq(cellarA.maxWithdraw(attacker), 0, "Attackers maxWithdraw should be zero while shares are locked.");
 
+        // Confirm attackers maxRedeem is zero while shares are locked.
+        assertEq(cellarA.maxRedeem(attacker), 0, "Attackers maxRedeem should be zero while shares are locked.");
+
         vm.startPrank(attacker);
         uint256 shares = cellarA.balanceOf(attacker);
         // Attacker tries to redeem their shares.
@@ -4210,7 +4269,7 @@ contract CellarTest is Test {
         cellarA.transfer(address(this), shares);
         vm.stopPrank();
 
-        vm.roll(block.number + 10);
+        vm.roll(block.number + cellarA.shareLockPeriod());
 
         // Confirm attackers shares are worth more once shares are unlocked.
         assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more than deposit.");

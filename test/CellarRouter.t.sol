@@ -100,38 +100,6 @@ contract CellarRouterTest is Test {
 
     // ======================================= DEPOSIT TESTS =======================================
 
-    function testDepositWithPermit() external {
-        MockERC20 usdcPermit = MockERC20(address(USDC));
-        SigUtils sigUtils = new SigUtils(usdcPermit.DOMAIN_SEPARATOR());
-        uint256 ownerPrivateKey = 0xA11CE;
-        address pOwner = vm.addr(ownerPrivateKey);
-        uint256 assets = 100e6;
-        deal(address(USDC), pOwner, assets);
-
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: pOwner,
-            spender: address(router),
-            value: assets,
-            nonce: 0,
-            deadline: 1000000 days
-        });
-
-        bytes32 digest = sigUtils.getTypedDataHash(permit);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-
-        bytes memory sig = abi.encodePacked(r, s, v);
-
-        // Deposit into cellar with permit.
-        vm.prank(pOwner);
-        uint256 shares = router.depositWithPermit(cellar, assets, 1000000 days, sig);
-        assertEq(shares, assets.changeDecimals(6, 18), "pOwner should have received their shares.");
-
-        // Check that permit sigs with incorrect length revert.
-        vm.expectRevert(abi.encodeWithSelector(CellarRouter.CellarRouter__InvalidSignature.selector, 32, 65));
-        router.depositWithPermit(cellar, assets, 1000000 days, abi.encode(0));
-    }
-
     function testDepositAndSwapWithPermit(uint256 assets) external {
         assets = bound(assets, 1e6, type(uint112).max);
 

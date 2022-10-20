@@ -11,14 +11,15 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { AddressArray } from "src/utils/AddressArray.sol";
 import { Math } from "../utils/Math.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import { Owned } from "@solmate/auth/Owned.sol";
+import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
  * @author Brian Le
  */
-contract Cellar is ERC4626, Ownable, ReentrancyGuard {
+contract Cellar is ERC4626, Owned, ReentrancyGuard {
     using AddressArray for address[];
     using AddressArray for ERC20[];
     using SafeERC20 for ERC20;
@@ -427,7 +428,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
             highWatermark: 0,
             strategistPerformanceCut: 0.75e18,
             strategistPlatformCut: 0.75e18,
-            platformFee: 0.01e18,
+            platformFee: 0.02e18,
             performanceFee: 0.1e18,
             feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55", // 20 bytes, so need 12 bytes of zero
             strategistPayoutAddress: address(0)
@@ -644,7 +645,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         string memory _name,
         string memory _symbol,
         address _strategistPayout
-    ) ERC4626(_asset, _name, _symbol) Ownable() {
+    ) ERC4626(_asset, _name, _symbol) Owned(_registry.getAddress(0)) {
         registry = _registry;
 
         // Initialize positions.
@@ -681,10 +682,6 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
         lastAccrual = uint64(block.timestamp);
 
         feeData.strategistPayoutAddress = _strategistPayout;
-
-        // Transfer ownership to the Gravity Bridge.
-        address gravityBridge = _registry.getAddress(0);
-        transferOwnership(gravityBridge);
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -748,14 +745,14 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     uint256 public constant MINIMUM_SHARE_LOCK_PERIOD = 8;
 
     /**
-     * @notice Shares can be locked for at most 256 blocks after minting.
+     * @notice Shares can be locked for at most 7200 blocks after minting.
      */
     uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 7200;
 
     /**
      * @notice After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
      */
-    uint256 public shareLockPeriod = 10;
+    uint256 public shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
 
     /**
      * @notice mapping that stores every users last block they minted shares.
@@ -1116,7 +1113,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @dev EIP4626 states totalAssets needs to be inclusive of fees.
      * Since performance fees mint shares, total assets remains unchanged,
      * so this implementation is inclusive of fees even though it does not explicitly show it.
-     * @dev EIP4626 states totalAssets  must not revert, but it is possible for `totalAssets` to revert
+     * @dev EIP4626 states totalAssets must not revert, but it is possible for `totalAssets` to revert
      * so it does NOT conform to ERC4626 standards.
      */
     function totalAssets() public view override returns (uint256 assets) {
@@ -1217,11 +1214,12 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Returns the max amount withdrawable by a user inclusive of performance fees
-     * @param owner address to check maxWithdraw  of.
-     * @return the max amount of assets withdrawable by `owner`.
+     * @notice Finds the max amount of value an `owner` can remove from the cellar.
+     * @param owner address of the user to find max value.
+     * @param inShares if false, then returns value in terms of assets
+     *                 if true then returns value in terms of shares
      */
-    function maxWithdraw(address owner) public view override returns (uint256) {
+    function _findMax(address owner, bool inShares) internal view returns (uint256 maxOut) {
         // Check if owner shares are locked, return 0 if so.
         uint256 lockBlock = userShareLockStartBlock[owner];
         if (lockBlock != 0) {
@@ -1235,7 +1233,7 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
 
         if (withdrawType == WithdrawType.ORDERLY) {
             uint256 withdrawable = totalAssetsWithdrawable();
-            return assets <= withdrawable ? assets : withdrawable;
+            maxOut = assets <= withdrawable ? assets : withdrawable;
         } else {
             (, , , uint256[] memory positionBalances, uint256[] memory withdrawableBalances) = _getData();
             uint256 totalShares = totalSupply();
@@ -1249,11 +1247,34 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
                     smallestPercentWithdrawable = percentWithdrawable;
             }
             uint256 userOwnershipPercent = shares.mulDivDown(1e18, totalShares);
-            return
-                userOwnershipPercent <= smallestPercentWithdrawable
-                    ? assets
-                    : _totalAssets.mulDivDown(smallestPercentWithdrawable, 1e18);
+            maxOut = userOwnershipPercent <= smallestPercentWithdrawable
+                ? assets
+                : (_totalAssets - feeInAssets).mulDivDown(smallestPercentWithdrawable, 1e18);
         }
+        if (inShares) maxOut = _convertToShares(maxOut, _totalAssets - feeInAssets);
+        // else leave maxOut in terms of assets.
+    }
+
+    /**
+     * @notice Returns the max amount withdrawable by a user inclusive of performance fees
+     * @dev EIP4626 states maxWithdraw must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
+     * @param owner address to check maxWithdraw of.
+     * @return the max amount of assets withdrawable by `owner`.
+     */
+    function maxWithdraw(address owner) public view override returns (uint256) {
+        return _findMax(owner, false);
+    }
+
+    /**
+     * @notice Returns the max amount shares redeemable by a user
+     * @dev EIP4626 states maxRedeem must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
+     * @param owner address to check maxRedeem of.
+     * @return the max amount of shares redeemable by `owner`.
+     */
+    function maxRedeem(address owner) public view override returns (uint256) {
+        return _findMax(owner, true);
     }
 
     /**
@@ -1449,6 +1470,8 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @dev This function does not take into account performance fees.
      *      Performance fees would reduce `receiver`s `ownedAssets`,
      *      making the `assets` value returned lower than actual
+     * @dev EIP4626 states maxDeposit must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
      * @param receiver address of account that would receive the shares
      * @return assets maximum amount of assets that can be deposited
      */
@@ -1476,26 +1499,14 @@ contract Cellar is ERC4626, Ownable, ReentrancyGuard {
      * @dev This function does not take into account performance fees.
      *      Performance fees would reduce `receiver`s `ownedAssets`,
      *      making the `shares` value returned lower than actual
+     * @dev EIP4626 states maxMint must not revert, but it is possible for `totalAssets` to revert
+     * so it does NOT conform to ERC4626 standards.
      * @param receiver address of account that would receive the shares
      * @return shares maximum amount of shares that can be minted
      */
-    function maxMint(address receiver) public view override returns (uint256 shares) {
-        if (isShutdown) return 0;
-
-        uint256 asssetDepositLimit = depositLimit;
-        uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
-            return type(uint256).max;
-
-        // Get data efficiently.
-        uint256 _totalAssets = totalAssets();
-        uint256 ownedAssets = _convertToAssets(balanceOf(receiver), _totalAssets);
-
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(ownedAssets);
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(_totalAssets);
-
-        // Only return the more relevant of the two.
-        shares = _convertToShares(Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit), _totalAssets);
+    function maxMint(address receiver) public view override returns (uint256) {
+        uint256 amount = maxDeposit(receiver);
+        return amount == type(uint256).max ? amount : convertToShares(amount);
     }
 
     // ========================================= FEES LOGIC =========================================
