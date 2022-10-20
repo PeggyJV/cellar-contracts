@@ -133,8 +133,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
         }
         console.log("token0", amount0);
         console.log("token1", amount1);
-        console.log("0 Bal", token0.balanceOf(address(this)));
-        console.log("1 Bal", token1.balanceOf(address(this)));
+        console.log("0 Bal", token0.balanceOf(msg.sender));
+        console.log("1 Bal", token1.balanceOf(msg.sender));
+        console.log("0 Name", token0.name());
+        console.log("1 Name", token1.name());
         // Amounts are in 12 decimals, convert them back to underlying.
         return amount0.changeDecimals(12, token0.decimals()) + amount1.mulDivDown(price, 1e12);
     }
@@ -310,7 +312,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
     ) internal pure returns (uint256 amount1) {
         if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
 
-        return uint256(liquidity).mulDivDown(sqrtRatioBX96 - sqrtRatioAX96, FixedPoint96.Q96);
+        return mulDiv(liquidity, sqrtRatioBX96 - sqrtRatioAX96, FixedPoint96.Q96);
     }
 
     /// @notice Computes the token0 and token1 value for a given amount of liquidity, the current

@@ -123,6 +123,8 @@ contract CellarAssetManagerTest is Test {
         // Manipulate  test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
 
+        cellar.setRebalanceDeviation(0.01e18);
+
         // console.log("What", registry.getAddress(2));
     }
 
@@ -179,8 +181,9 @@ contract CellarAssetManagerTest is Test {
             uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
 
             tick = getTick(sqrtPriceX96);
-            if (tick < 0) console.log("Oh BOYYYY");
-            console.log("Current Tick", uint24(-1 * tick));
+            if (tick < 0) {
+                console.log("Current Tick (-)", uint24(-1 * tick));
+            } else console.log("Current Tick", uint24(tick));
         }
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
@@ -210,12 +213,12 @@ contract CellarAssetManagerTest is Test {
             45e18,
             0,
             0,
-            TickMath.MIN_TICK, // tick - 10, //TODO doing this causes mint to use half of available assets, seems to change the decimals returned in balanceOf, and the other half of assets are no longer in the cellar
-            TickMath.MAX_TICK // tick + 10
+            TickMath.MIN_TICK + 700_000, // tick - 10, //TODO doing this causes mint to use half of available assets, seems to change the decimals returned in balanceOf, and the other half of assets are no longer in the cellar
+            TickMath.MAX_TICK - 700_000 // tick + 10
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-    }11
+    }
 
     function testRebalanceIntoMultipleDifferentUniswapV3Position() external {
         deal(address(USDC), address(this), 201_000e6);
