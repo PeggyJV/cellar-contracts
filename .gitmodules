@@ -13,3 +13,5 @@
 [submodule "lib/v3-periphery.git"]
 	path = lib/v3-periphery.git
 	url = https://github.com/Uniswap/v3-periphery.git
+[submodule "/Users/crispymangoes/Documents/Solidity/cellar-contracts/lib/v3-periphery.git"]
+	branch = 0.8
