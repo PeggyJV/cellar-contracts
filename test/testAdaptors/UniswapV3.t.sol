@@ -15,6 +15,8 @@ import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -123,7 +125,7 @@ contract CellarAssetManagerTest is Test {
         // Manipulate  test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
 
-        cellar.setRebalanceDeviation(0.01e18);
+        cellar.setRebalanceDeviation(0.1e18);
 
         // console.log("What", registry.getAddress(2));
     }
@@ -133,6 +135,33 @@ contract CellarAssetManagerTest is Test {
     function testRebalanceIntoUniswapV3PositionUSDC_DAI() external {
         deal(address(USDC), address(this), 101_000e6);
         cellar.deposit(101_000e6, address(this));
+
+        int24 tick;
+        {
+            //Find current tick USDC WETH is trading at.
+            uint256 price = priceRouter.getExchangeRate(USDC, DAI);
+
+            // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
+            uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) << 96);
+
+            tick = getTick(sqrtPriceX96);
+            if (tick < 0) {
+                console.log("Current Tick (-)", uint24(-1 * tick));
+            } else console.log("Current Tick", uint24(tick));
+        }
+
+        {
+            //Find current tick USDC WETH is trading at.
+            uint256 price = priceRouter.getExchangeRate(DAI, USDC);
+
+            // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
+            uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) << 96);
+
+            tick = getTick(sqrtPriceX96);
+            if (tick < 0) {
+                console.log("Current Tick (-)", uint24(-1 * tick));
+            } else console.log("Current Tick", uint24(tick));
+        }
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -170,6 +199,30 @@ contract CellarAssetManagerTest is Test {
         console.log("Total Assets", cellar.totalAssets());
     }
 
+    function testHunch() external {
+        // PoolAddress.PoolKey memory poolKey = PoolAddress.PoolKey({
+        // token0: address(DAI),
+        // token1: address(USDC),
+        // fee: 100
+        // });
+        // address factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
+        // address pool = (PoolAddress.computeAddress(factory, poolKey));
+        // console.log("Pool", pool);
+        deal(address(DAI), address(uniswapV3Adaptor), 101_000e18);
+        deal(address(USDC), address(uniswapV3Adaptor), 101_000e6);
+        uniswapV3Adaptor.openPosition(
+            DAI,
+            USDC,
+            uint24(500),
+            5_000e18,
+            5_000e6,
+            0,
+            0,
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
+        );
+    }
+
     function testRebalanceIntoUniswapV3PositionUSDC_WETH() external {
         deal(address(USDC), address(this), 101_000e6);
         cellar.deposit(101_000e6, address(this));
@@ -178,7 +231,8 @@ contract CellarAssetManagerTest is Test {
             //Find current tick USDC WETH is trading at.
             uint256 price = priceRouter.getExchangeRate(WETH, USDC);
 
-            uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
+            // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
+            uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) << 96);
 
             tick = getTick(sqrtPriceX96);
             if (tick < 0) {
@@ -213,8 +267,8 @@ contract CellarAssetManagerTest is Test {
             45e18,
             0,
             0,
-            TickMath.MIN_TICK, // tick - 10, //TODO doing this causes mint to use half of available assets, seems to change the decimals returned in balanceOf, and the other half of assets are no longer in the cellar
-            TickMath.MAX_TICK // tick + 10
+            204669, // TickMath.MIN_TICK + 500_000, // tick - 10, //TODO doing this causes mint to use half of available assets, seems to change the decimals returned in balanceOf, and the other half of assets are no longer in the cellar
+            204679 // TickMath.MAX_TICK - 500_000 // tick + 10
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

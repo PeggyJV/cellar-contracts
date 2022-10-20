@@ -75,13 +75,21 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // uint256 price0 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token0);
         // uint256 price1 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token1);
         uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getExchangeRate(token1, token0);
+        // price = price.changeDecimals(token0.decimals(), token1.decimals());
 
-        uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) * (2**96));
+        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
+        uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
+        // uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) * (2**96));
+        // uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) << 96);
 
         // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(10**token0.decimals(), price));
 
-        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-
+        {
+            int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+            if (tick < 0) {
+                console.log("Current Tick (-)", uint24(-1 * tick));
+            } else console.log("Current Tick", uint24(tick));
+        }
         // Grab cellars balance of UniV3 NFTs.
         uint256 bal = positionManager().balanceOf(msg.sender);
 
@@ -99,12 +107,15 @@ contract UniswapV3Adaptor is BaseAdaptor {
             (bytes[])
         );
 
+        // Decode array of token ids.
+        uint256[] memory ids = new uint256[](bal);
+        for (uint256 i = 0; i < bal; i++) {
+            ids[i] = abi.decode(positionDataRequest[i], (uint256));
+        }
+
         // Grab array of positions using previous token id array
         for (uint256 i = 0; i < bal; i++) {
-            positionDataRequest[i] = abi.encodeWithSignature(
-                "positions(uint256)",
-                (abi.decode(positionDataRequest[i], (uint256)))
-            );
+            positionDataRequest[i] = abi.encodeWithSignature("positions(uint256)", ids[i]);
         }
         positionDataRequest = abi.decode(
             address(positionManager()).functionStaticCall(
@@ -126,7 +137,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
             if (t0 != address(token0) || t1 != address(token1)) continue;
 
             (uint256 amountA, uint256 amountB) = LiquidityAmounts.getAmountsForLiquidity(
-                TickMath.getSqrtRatioAtTick(tick),
+                sqrtPriceX96, // TickMath.getSqrtRatioAtTick(tick),
                 TickMath.getSqrtRatioAtTick(tickLower),
                 TickMath.getSqrtRatioAtTick(tickUpper),
                 liquidity
@@ -134,13 +145,21 @@ contract UniswapV3Adaptor is BaseAdaptor {
             amount0 += amountA;
             amount1 += amountB;
         }
-        console.log("token0", amount0);
-        console.log("token1", amount1);
-        console.log("0 Bal", token0.balanceOf(msg.sender));
-        console.log("1 Bal", token1.balanceOf(msg.sender));
-        console.log("0 Name", token0.name());
-        console.log("1 Name", token1.name());
-        // Amounts are in 12 decimals, convert them back to underlying.
+        if (amount0 > 0 || amount1 > 0) {
+            console.log("----------------------------------------");
+            console.log("Underlying Token 0:", amount0);
+            console.log("Underlying Token 1:", amount1);
+            console.log("Cellar Balance 0:", token0.balanceOf(msg.sender));
+            console.log("Cellar Balance 1:", token1.balanceOf(msg.sender));
+            console.log("Name 0:", token0.name());
+            console.log("Name 1:", token1.name());
+            console.log("----------------------------------------");
+        }
+        // uint256 ratio = 1e18 * (sqrtPriceX96 >> 96)**2;
+        // console.log("Ratio", ratio);
+        // if (token1.decimals() < token0.decimals()) ratio = ratio * 10**(token0.decimals() - token1.decimals());
+        // else if (token1.decimals() > token0.decimals()) ratio = ratio / (10**(token1.decimals() - token0.decimals()));
+        // console.log("Ratio", ratio);
         return amount0 + amount1.mulDivDown(price, 10**token1.decimals());
     }
 
