@@ -29,8 +29,6 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 //TODO look for public functions that can be made external.
 //TODO use solmate Reentrancy, Ownable, and maybe ERC20 to cut down on size.
 contract Cellar is ERC4626, Owned, ReentrancyGuard {
-    using AddressArray for address[];
-    using AddressArray for ERC20[];
     using Uint256Array for uint256[];
     using SafeERC20 for ERC20;
     using SafeCast for uint256;

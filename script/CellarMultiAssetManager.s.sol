@@ -72,7 +72,7 @@ contract CellarMultiAssetManagerScript is Script {
             positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            mockGravityBridge,
+            gravityBridge,
             type(uint128).max,
             type(uint128).max
         );
