@@ -200,14 +200,14 @@ contract CellarAssetManagerTest is Test {
     }
 
     function testHunch() external {
-        // PoolAddress.PoolKey memory poolKey = PoolAddress.PoolKey({
-        // token0: address(DAI),
-        // token1: address(USDC),
-        // fee: 100
-        // });
-        // address factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
-        // address pool = (PoolAddress.computeAddress(factory, poolKey));
-        // console.log("Pool", pool);
+        PoolAddress.PoolKey memory poolKey = PoolAddress.PoolKey({
+            token0: address(DAI),
+            token1: address(USDC),
+            fee: 100
+        });
+        address factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
+        address pool = (PoolAddress.computeAddress(factory, poolKey));
+        console.log("Pool", pool);
         deal(address(DAI), address(uniswapV3Adaptor), 101_000e18);
         deal(address(USDC), address(uniswapV3Adaptor), 101_000e6);
         uniswapV3Adaptor.openPosition(
@@ -262,7 +262,7 @@ contract CellarAssetManagerTest is Test {
             UniswapV3Adaptor.openPosition.selector,
             USDC,
             WETH,
-            uint24(100), //TODO changing this to 500 causes mint to fail
+            uint24(500), //TODO changing this to 500 causes mint to fail
             50_000e6,
             45e18,
             0,

@@ -15,7 +15,7 @@ import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-
+import { Owned } from "@solmate/auth/Owned.sol";
 
 // import { Owned } from "@solmate/auth/Owned.sol";
 
@@ -30,7 +30,7 @@ import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721H
 //TODO look for public functions that can be made external.
 //TODO use solmate Reentrancy, Ownable, and maybe ERC20 to cut down on size.
 //TODO add multicall to adaptors so that we can use staticcall and multicall to batch view function calls together
-contract Cellar is ERC4626, Ownable, ReentrancyGuard, ERC721Holder {
+contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     using Uint256Array for uint256[];
     using SafeERC20 for ERC20;
     using SafeCast for uint256;
