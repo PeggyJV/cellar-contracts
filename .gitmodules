@@ -18,3 +18,5 @@
 [submodule "lib/v3-core.git"]
 	path = lib/v3-core.git
 	url = https://github.com/Uniswap/v3-core.git
+[submodule "/Users/crispymangoes/Documents/Solidity/cellar-contracts/lib/v3-core.git"]
+	branch = 0.8

@@ -14,7 +14,7 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
-import { TickMath } from "src/interfaces/external/TickMath.sol";
+import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -213,8 +213,8 @@ contract CellarAssetManagerTest is Test {
             45e18,
             0,
             0,
-            TickMath.MIN_TICK + 700_000, // tick - 10, //TODO doing this causes mint to use half of available assets, seems to change the decimals returned in balanceOf, and the other half of assets are no longer in the cellar
-            TickMath.MAX_TICK - 700_000 // tick + 10
+            TickMath.MIN_TICK, // tick - 10, //TODO doing this causes mint to use half of available assets, seems to change the decimals returned in balanceOf, and the other half of assets are no longer in the cellar
+            TickMath.MAX_TICK // tick + 10
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);

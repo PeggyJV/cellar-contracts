@@ -6,10 +6,11 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Cellar, Registry, PriceRouter } from "src/base/Cellar.sol";
 import { SafeMath } from "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import { console } from "@forge-std/Test.sol";
-import { INonfungiblePositionManager } from "src/interfaces/external/INonfungiblePositionManager.sol";
-// import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
-import { TickMath } from "src/interfaces/external/TickMath.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
+import { PositionValue } from "@uniswapV3P/libraries/PositionValue.sol";
+import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
+import { LiquidityAmounts } from "@uniswapV3P/libraries/LiquidityAmounts.sol";
 import { Math } from "src/utils/Math.sol";
 import { FixedPoint96 } from "@uniswapV3C/libraries/FixedPoint96.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
@@ -75,9 +76,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // uint256 price1 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token1);
         uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getExchangeRate(token1, token0);
 
-        uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(10**token0.decimals(), price));
+        uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) * (2**96));
 
-        int24 tick = getTick(sqrtPriceX96);
+        // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(10**token0.decimals(), price));
+
+        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
         // Grab cellars balance of UniV3 NFTs.
         uint256 bal = positionManager().balanceOf(msg.sender);
@@ -122,7 +125,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
             // Skip LP tokens that are not for this position.
             if (t0 != address(token0) || t1 != address(token1)) continue;
 
-            (uint256 amountA, uint256 amountB) = getAmountsForLiquidity(
+            (uint256 amountA, uint256 amountB) = LiquidityAmounts.getAmountsForLiquidity(
                 TickMath.getSqrtRatioAtTick(tick),
                 TickMath.getSqrtRatioAtTick(tickLower),
                 TickMath.getSqrtRatioAtTick(tickUpper),
@@ -138,7 +141,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         console.log("0 Name", token0.name());
         console.log("1 Name", token1.name());
         // Amounts are in 12 decimals, convert them back to underlying.
-        return amount0.changeDecimals(12, token0.decimals()) + amount1.mulDivDown(price, 1e12);
+        return amount0 + amount1.mulDivDown(price, 10**token1.decimals());
     }
 
     // Grabs token0 in adaptor data.
@@ -280,165 +283,5 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
     function getTick(uint160 sqrtPriceX96) internal pure returns (int24 tick) {
         tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-    }
-
-    // Taken from LiquidityAmounts Lib
-    /// @notice Computes the amount of token0 for a given amount of liquidity and a price range
-    /// @param sqrtRatioAX96 A sqrt price representing the first tick boundary
-    /// @param sqrtRatioBX96 A sqrt price representing the second tick boundary
-    /// @param liquidity The liquidity being valued
-    /// @return amount0 The amount of token0
-    function getAmount0ForLiquidity(
-        uint160 sqrtRatioAX96,
-        uint160 sqrtRatioBX96,
-        uint128 liquidity
-    ) internal pure returns (uint256 amount0) {
-        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
-
-        return
-            mulDiv(uint256(liquidity) << FixedPoint96.RESOLUTION, sqrtRatioBX96 - sqrtRatioAX96, sqrtRatioBX96) /
-            sqrtRatioAX96;
-    }
-
-    /// @notice Computes the amount of token1 for a given amount of liquidity and a price range
-    /// @param sqrtRatioAX96 A sqrt price representing the first tick boundary
-    /// @param sqrtRatioBX96 A sqrt price representing the second tick boundary
-    /// @param liquidity The liquidity being valued
-    /// @return amount1 The amount of token1
-    function getAmount1ForLiquidity(
-        uint160 sqrtRatioAX96,
-        uint160 sqrtRatioBX96,
-        uint128 liquidity
-    ) internal pure returns (uint256 amount1) {
-        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
-
-        return mulDiv(liquidity, sqrtRatioBX96 - sqrtRatioAX96, FixedPoint96.Q96);
-    }
-
-    /// @notice Computes the token0 and token1 value for a given amount of liquidity, the current
-    /// pool prices and the prices at the tick boundaries
-    /// @param sqrtRatioX96 A sqrt price representing the current pool prices
-    /// @param sqrtRatioAX96 A sqrt price representing the first tick boundary
-    /// @param sqrtRatioBX96 A sqrt price representing the second tick boundary
-    /// @param liquidity The liquidity being valued
-    /// @return amount0 The amount of token0
-    /// @return amount1 The amount of token1
-    function getAmountsForLiquidity(
-        uint160 sqrtRatioX96,
-        uint160 sqrtRatioAX96,
-        uint160 sqrtRatioBX96,
-        uint128 liquidity
-    ) internal pure returns (uint256 amount0, uint256 amount1) {
-        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
-        if (sqrtRatioX96 <= sqrtRatioAX96) {
-            amount0 = getAmount0ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity);
-        } else if (sqrtRatioX96 < sqrtRatioBX96) {
-            amount0 = getAmount0ForLiquidity(sqrtRatioX96, sqrtRatioBX96, liquidity);
-            amount1 = getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioX96, liquidity);
-        } else {
-            amount1 = getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity);
-        }
-    }
-
-    /// @notice Calculates floor(a×b÷denominator) with full precision. Throws if result overflows a uint256 or denominator == 0
-    /// @param a The multiplicand
-    /// @param b The multiplier
-    /// @param denominator The divisor
-    /// @return result The 256-bit result
-    /// @dev Credit to Remco Bloemen under MIT license https://xn--2-umb.com/21/muldiv
-    function mulDiv(
-        uint256 a,
-        uint256 b,
-        uint256 denominator
-    ) internal pure returns (uint256 result) {
-        // 512-bit multiply [prod1 prod0] = a * b
-        // Compute the product mod 2**256 and mod 2**256 - 1
-        // then use the Chinese Remainder Theorem to reconstruct
-        // the 512 bit result. The result is stored in two 256
-        // variables such that product = prod1 * 2**256 + prod0
-        uint256 prod0; // Least significant 256 bits of the product
-        uint256 prod1; // Most significant 256 bits of the product
-        assembly {
-            let mm := mulmod(a, b, not(0))
-            prod0 := mul(a, b)
-            prod1 := sub(sub(mm, prod0), lt(mm, prod0))
-        }
-
-        // Handle non-overflow cases, 256 by 256 division
-        if (prod1 == 0) {
-            require(denominator > 0);
-            assembly {
-                result := div(prod0, denominator)
-            }
-            return result;
-        }
-
-        // Make sure the result is less than 2**256.
-        // Also prevents denominator == 0
-        require(denominator > prod1);
-
-        ///////////////////////////////////////////////
-        // 512 by 256 division.
-        ///////////////////////////////////////////////
-
-        // Make division exact by subtracting the remainder from [prod1 prod0]
-        // Compute remainder using mulmod
-        uint256 remainder;
-        assembly {
-            remainder := mulmod(a, b, denominator)
-        }
-        // Subtract 256 bit number from 512 bit number
-        assembly {
-            prod1 := sub(prod1, gt(remainder, prod0))
-            prod0 := sub(prod0, remainder)
-        }
-
-        // Factor powers of two out of denominator
-        // Compute largest power of two divisor of denominator.
-        // Always >= 1.
-        uint256 tmp = 1 << 255;
-
-        uint256 twos = (tmp | denominator) & denominator;
-        // Divide denominator by power of two
-        assembly {
-            denominator := div(denominator, twos)
-        }
-
-        // Divide [prod1 prod0] by the factors of two
-        assembly {
-            prod0 := div(prod0, twos)
-        }
-        // Shift in bits from prod1 into prod0. For this we need
-        // to flip `twos` such that it is 2**256 / twos.
-        // If twos is zero, then it becomes one
-        assembly {
-            twos := add(div(sub(0, twos), twos), 1)
-        }
-        prod0 |= prod1 * twos;
-
-        // Invert denominator mod 2**256
-        // Now that denominator is an odd number, it has an inverse
-        // modulo 2**256 such that denominator * inv = 1 mod 2**256.
-        // Compute the inverse by starting with a seed that is correct
-        // correct for four bits. That is, denominator * inv = 1 mod 2**4
-        uint256 inv = (3 * denominator) ^ 2;
-        // Now use Newton-Raphson iteration to improve the precision.
-        // Thanks to Hensel's lifting lemma, this also works in modular
-        // arithmetic, doubling the correct bits in each step.
-        inv *= 2 - denominator * inv; // inverse mod 2**8
-        inv *= 2 - denominator * inv; // inverse mod 2**16
-        inv *= 2 - denominator * inv; // inverse mod 2**32
-        inv *= 2 - denominator * inv; // inverse mod 2**64
-        inv *= 2 - denominator * inv; // inverse mod 2**128
-        inv *= 2 - denominator * inv; // inverse mod 2**256
-
-        // Because the division is now exact we can divide by multiplying
-        // with the modular inverse of denominator. This will give us the
-        // correct result modulo 2**256. Since the precoditions guarantee
-        // that the outcome is less than 2**256, this is the final result.
-        // We don't need to compute the high bits of the result and prod1
-        // is no longer required.
-        result = prod0 * inv;
-        return result;
     }
 }
