@@ -12,10 +12,8 @@ contract MockCellar is Cellar, Test {
     constructor(
         Registry _registry,
         ERC20 _asset,
-        address[] memory _positions,
-        PositionType[] memory _positionTypes,
-        address _holdingPosition,
-        WithdrawType _withdrawType,
+        uint256[] memory _positions,
+        bytes[] memory _configurationData,
         string memory _name,
         string memory _symbol,
         address _strategistPayout
@@ -24,17 +22,17 @@ contract MockCellar is Cellar, Test {
             _registry,
             _asset,
             _positions,
-            _positionTypes,
-            _holdingPosition,
-            _withdrawType,
+            _configurationData,
             _name,
             _symbol,
-            _strategistPayout
+            _strategistPayout,
+            type(uint128).max,
+            type(uint128).max
         )
     {}
 
     function depositIntoPosition(
-        address position,
+        uint256 position,
         uint256 amount,
         address mintSharesTo
     ) external returns (uint256 shares) {
@@ -43,14 +41,14 @@ contract MockCellar is Cellar, Test {
         _mint(mintSharesTo, shares);
     }
 
-    function depositIntoPosition(address position, uint256 amount) external returns (uint256 shares) {
+    function depositIntoPosition(uint256 position, uint256 amount) external returns (uint256 shares) {
         shares = _depositIntoPosition(position, amount);
 
         // Increase totalSupply by shares amount.
         stdstore.target(address(this)).sig(this.totalSupply.selector).checked_write(totalSupply() + shares);
     }
 
-    function _depositIntoPosition(address position, uint256 amount) internal returns (uint256 shares) {
+    function _depositIntoPosition(uint256 position, uint256 amount) internal returns (uint256 shares) {
         ERC20 positionAsset = _assetOf(position);
 
         PriceRouter priceRouter = PriceRouter(registry.getAddress(2));
@@ -60,20 +58,5 @@ contract MockCellar is Cellar, Test {
         deal(address(positionAsset), address(this), amount);
 
         _depositTo(position, amount);
-        feeData.highWatermark += amountInAssets;
-    }
-
-    function getData()
-        public
-        view
-        returns (
-            uint256 _totalAssets,
-            address[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances,
-            uint256[] memory withdrawableBalances
-        )
-    {
-        (_totalAssets, _positions, positionAssets, positionBalances, withdrawableBalances) = _getData();
     }
 }

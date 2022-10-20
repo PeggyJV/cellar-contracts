@@ -153,6 +153,7 @@ contract CellarRouter is ICellarRouter {
      * @param receiver the address swapped tokens are sent to
      * @return shares amount of shares burned
      */
+    //TODO so if a cellar has multiple positions that share the same asset does this break?
     function withdrawAndSwap(
         Cellar cellar,
         SwapRouter.Exchange[] calldata exchanges,
@@ -167,7 +168,7 @@ contract CellarRouter is ICellarRouter {
         SwapRouter swapRouter = SwapRouter(registry.getAddress(SWAP_ROUTER_REGISTRY_SLOT));
 
         // Get all the assets that could potentially have been received.
-        ERC20[] memory positionAssets = _getPositionAssets(cellar);
+        ERC20[] memory positionAssets = cellar.getPositionAssets();
 
         if (swapDatas.length != 0) {
             // Encode data used to perform swap.
@@ -272,24 +273,6 @@ contract CellarRouter is ICellarRouter {
 
             // Place final byte on the stack at v.
             v := byte(0, mload(add(signature, 96)))
-        }
-    }
-
-    /**
-     * @notice Find what assets a cellar's positions uses.
-     * @param cellar address of the cellar
-     * @return assets array of assets that make up cellar's positions
-     */
-    function _getPositionAssets(Cellar cellar) internal view returns (ERC20[] memory assets) {
-        address[] memory positions = cellar.getPositions();
-
-        assets = new ERC20[](positions.length);
-
-        for (uint256 i; i < positions.length; i++) {
-            address position = positions[i];
-            Cellar.PositionType positionType = cellar.getPositionType(position);
-
-            assets[i] = positionType == Cellar.PositionType.ERC20 ? ERC20(position) : ERC4626(position).asset();
         }
     }
 }

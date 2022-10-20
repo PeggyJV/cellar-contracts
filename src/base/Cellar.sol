@@ -6,25 +6,36 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
-import { AddressArray } from "src/utils/AddressArray.sol";
+import { Uint256Array } from "src/utils/Uint256Array.sol";
 import { Math } from "../utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
+import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+
+
+// import { Owned } from "@solmate/auth/Owned.sol";
+
+// import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol"; This implementation is slightly less size wise
 
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
- * @author Brian Le
+ * @author Brian Le, crispymangoes
  */
+//TODO contract should use variable packing
+//TODO look for public functions that can be made external.
+//TODO use solmate Reentrancy, Ownable, and maybe ERC20 to cut down on size.
 contract Cellar is ERC4626, Owned, ReentrancyGuard {
     using AddressArray for address[];
     using AddressArray for ERC20[];
+    using Uint256Array for uint256[];
     using SafeERC20 for ERC20;
     using SafeCast for uint256;
     using Math for uint256;
+    using Address for address;
 
     // ========================================= POSITIONS CONFIG =========================================
 
@@ -61,14 +72,14 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      * @notice Attempted to add a position that is already being used.
      * @param position address of the position
      */
-    error Cellar__PositionAlreadyUsed(address position);
+    error Cellar__PositionAlreadyUsed(uint256 position);
 
     /**
      * @notice Attempted an action on a position that is required to be empty before the action can be performed.
      * @param position address of the non-empty position
      * @param sharesRemaining amount of shares remaining in the position
      */
-    error Cellar__PositionNotEmpty(address position, uint256 sharesRemaining);
+    error Cellar__PositionNotEmpty(uint256 position, uint256 sharesRemaining);
 
     /**
      * @notice Attempted an operation with an asset that was different then the one expected.
@@ -85,92 +96,79 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     error Cellar__InvalidPosition(address position);
 
     /**
-     * @notice Attempted to remove holding position.
-     */
-    error Cellar__RemoveHoldingPosition();
-
-    /**
      * @notice Attempted to add a position when the position array is full.
      * @param maxPositions maximum number of positions that can be used
      */
     error Cellar__PositionArrayFull(uint256 maxPositions);
 
     /**
-     * @notice Value specifying the interface a position uses.
-     * @param ERC20 an ERC20 token
-     * @param ERC4626 an ERC4626 vault
-     * @param Cellar a cellar
+     * @notice Array of uint256s made up of cellars positions Ids.
      */
-    enum PositionType {
-        ERC20,
-        ERC4626,
-        Cellar
-    }
+    //TODO I could probs get away with a fixed size array that uses 64 bit or maybe even 32 bit position ids
+    // Think it makes the contract larger, but reads and writes should be more efficient
+    uint256[] public positions;
 
-    /**
-     * @notice Addresses of the positions currently used by the cellar.
-     */
-    address[] public positions;
+    //TODO add natspec
+    uint256 public numberOfDebtPositions;
 
     /**
      * @notice Tell whether a position is currently used.
      */
-    mapping(address => bool) public isPositionUsed;
+    mapping(uint256 => bool) public isPositionUsed;
 
     /**
-     * @notice Get the type related to a position.
+     * @notice Get position data given position id.
      */
-    mapping(address => PositionType) public getPositionType;
+    mapping(uint256 => Registry.PositionData) public getPositionData;
 
     /**
      * @notice Get the addresses of the positions current used by the cellar.
      */
-    function getPositions() external view returns (address[] memory) {
+    function getPositions() external view returns (uint256[] memory) {
         return positions;
     }
 
     /**
      * @notice Maximum amount of positions a cellar can use at once.
      */
-    uint8 public constant MAX_POSITIONS = 32;
+    uint256 public constant MAX_POSITIONS = 32;
 
     /**
      * @notice Insert a trusted position to the list of positions used by the cellar at a given index.
      * @param index index at which to insert the position
-     * @param position address of position to add
+     * @param positionId address of position to add
      */
-    function addPosition(uint256 index, address position) external onlyOwner whenNotShutdown {
+    function addPosition(
+        uint256 index,
+        uint256 positionId,
+        bytes memory configurationData
+    ) external onlyOwner whenNotShutdown {
         if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
-        if (!isTrusted[position]) revert Cellar__UntrustedPosition(position);
 
         // Check if position is already being used.
-        if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
+        if (isPositionUsed[positionId]) revert Cellar__PositionAlreadyUsed(positionId);
+
+        // Copy position data from registry to here.
+        (address adaptor, bool isDebt, bytes memory adaptorData) = registry.cellarAddPosition(
+            positionId,
+            assetRiskTolerance,
+            protocolRiskTolerance
+        );
+        getPositionData[positionId] = Registry.PositionData({
+            adaptor: adaptor,
+            isDebt: isDebt,
+            adaptorData: adaptorData,
+            configurationData: configurationData
+        });
+
+        if (index == 0 && _assetOf(positionId) != asset) revert("Holding position asset mismatch.");
 
         // Add new position at a specified index.
-        positions.add(index, position);
-        isPositionUsed[position] = true;
+        positions.add(index, positionId);
+        isPositionUsed[positionId] = true;
+        if (isDebt) numberOfDebtPositions++;
 
-        emit PositionAdded(position, index);
-    }
-
-    /**
-     * @notice Push a trusted position to the end of the list of positions used by the cellar.
-     * @dev If you know you are going to add a position to the end of the array, this is more
-     *      efficient then `addPosition`.
-     * @param position address of position to add
-     */
-    function pushPosition(address position) external onlyOwner whenNotShutdown {
-        if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
-        if (!isTrusted[position]) revert Cellar__UntrustedPosition(position);
-
-        // Check if position is already being used.
-        if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
-
-        // Add new position to the end of the positions.
-        positions.push(position);
-        isPositionUsed[position] = true;
-
-        emit PositionAdded(position, positions.length - 1);
+        // emit PositionAdded(position, index);
     }
 
     /**
@@ -179,18 +177,22 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      */
     function removePosition(uint256 index) external onlyOwner {
         // Get position being removed.
-        address position = positions[index];
+        uint256 positionId = positions[index];
 
         // Only remove position if it is empty, and if it is not the holding position.
-        uint256 positionBalance = _balanceOf(position);
-        if (positionBalance > 0) revert Cellar__PositionNotEmpty(position, positionBalance);
-        if (position == holdingPosition) revert Cellar__RemoveHoldingPosition();
+        uint256 positionBalance = _balanceOf(positionId);
+        if (positionBalance > 0) revert Cellar__PositionNotEmpty(positionId, positionBalance);
+
+        // If removing the holding position, make sure new holding position is valid.
+        if (index == 0 && _assetOf(positions[1]) != asset) revert("Holding position asset mismatch.");
 
         // Remove position at the given index.
         positions.remove(index);
-        isPositionUsed[position] = false;
+        isPositionUsed[positionId] = false;
+        if (getPositionData[positionId].isDebt) numberOfDebtPositions--;
+        delete getPositionData[positionId];
 
-        emit PositionRemoved(position, index);
+        // emit PositionRemoved(position, index);
     }
 
     /**
@@ -200,141 +202,17 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      */
     function swapPositions(uint256 index1, uint256 index2) external onlyOwner {
         // Get the new positions that will be at each index.
-        address newPosition1 = positions[index2];
-        address newPosition2 = positions[index1];
+        uint256 newPosition1 = positions[index2];
+        uint256 newPosition2 = positions[index1];
 
         // Swap positions.
         (positions[index1], positions[index2]) = (newPosition1, newPosition2);
 
-        emit PositionSwapped(newPosition1, newPosition2, index1, index2);
+        // If we swapped with the holding position make sure new holding position works.
+        if ((index1 == 0 || index2 == 0) && _assetOf(positions[0]) != asset) revert("Holding position asset mismatch.");
+
+        // emit PositionSwapped(newPosition1, newPosition2, index1, index2);
     }
-
-    // ============================================ TRUST CONFIG ============================================
-
-    /**
-     * @notice Emitted when trust for a position is changed.
-     * @param position address of position that trust was changed for
-     * @param isTrusted whether the position is trusted
-     */
-    event TrustChanged(address indexed position, bool isTrusted);
-
-    /**
-     * @notice Attempted to trust a position not being used.
-     * @param position address of the invalid position
-     */
-    error Cellar__PositionPricingNotSetUp(address position);
-
-    /**
-     * @notice Addresses of the positions currently used by the cellar.
-     */
-    uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
-
-    /**
-     * @notice Tell whether a position is trusted.
-     */
-    mapping(address => bool) public isTrusted;
-
-    /**
-     * @notice Trust a position to be used by the cellar.
-     * @param position address of position to trust
-     * @param positionType value specifying the interface the position uses
-     */
-    function trustPosition(address position, PositionType positionType) external onlyOwner {
-        // Trust position.
-        isTrusted[position] = true;
-
-        // Set position type.
-        getPositionType[position] = positionType;
-
-        // Now that position type is set up, check that asset of position is supported for pricing operations.
-        ERC20 positionAsset = _assetOf(position);
-        if (!PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT)).isSupported(positionAsset))
-            revert Cellar__PositionPricingNotSetUp(address(positionAsset));
-
-        emit TrustChanged(position, true);
-    }
-
-    // ============================================ WITHDRAW CONFIG ============================================
-
-    /**
-     * @notice Emitted when withdraw type configuration is changed.
-     * @param oldType previous withdraw type
-     * @param newType new withdraw type
-     */
-    event WithdrawTypeChanged(WithdrawType oldType, WithdrawType newType);
-
-    /**
-     * @notice The withdraw type to use for the cellar.
-     * @param ORDERLY use `positions` in specify the order in which assets are withdrawn (eg.
-     *                `positions[0]` is withdrawn from first); least impactful positions (position
-     *                that will have its core positions impacted the least by having funds removed)
-     *                should be withdrawn from first and most impactful position should be last
-     * @param PROPORTIONAL pull assets from each position proportionally when withdrawing, used if
-     *                     trying to maintain a specific ratio
-     */
-    enum WithdrawType {
-        ORDERLY,
-        PROPORTIONAL
-    }
-
-    /**
-     * @notice The withdraw type to used by the cellar.
-     */
-    WithdrawType public withdrawType;
-
-    /**
-     * @notice Set the withdraw type used by the cellar.
-     * @param newWithdrawType value of the new withdraw type to use
-     */
-    function setWithdrawType(WithdrawType newWithdrawType) external onlyOwner {
-        emit WithdrawTypeChanged(withdrawType, newWithdrawType);
-
-        withdrawType = newWithdrawType;
-    }
-
-    // ============================================ HOLDINGS CONFIG ============================================
-
-    /**
-     * @notice Emitted when the holdings position is changed.
-     * @param oldPosition address of the old holdings position
-     * @param newPosition address of the new holdings position
-     */
-    event HoldingPositionChanged(address indexed oldPosition, address indexed newPosition);
-
-    /**
-     * @notice The "default" position which uses the same asset as the cellar. It is the position
-     *         deposited assets will automatically go into (perhaps while waiting to be rebalanced
-     *         to other positions) and commonly the first position withdrawn assets will be pulled
-     *         from if using orderly withdraws.
-     * @dev MUST accept the same asset as the cellar's `asset`. MUST be a position present in
-     *      `positions`. Should be a static (eg. just holding) or lossless (eg. lending on Aave)
-     *      position. Should not be expensive to move assets in or out of as this will occur
-     *      frequently. It is highly recommended to choose a "simple" holding position.
-     */
-    address public holdingPosition;
-
-    /**
-     * @notice Set the holding position used by the cellar.
-     * @param newHoldingPosition address of the new holding position to use
-     */
-    function setHoldingPosition(address newHoldingPosition) external onlyOwner {
-        if (!isPositionUsed[newHoldingPosition]) revert Cellar__InvalidPosition(newHoldingPosition);
-
-        ERC20 holdingPositionAsset = _assetOf(newHoldingPosition);
-        if (holdingPositionAsset != asset) revert Cellar__AssetMismatch(address(holdingPositionAsset), address(asset));
-
-        emit HoldingPositionChanged(holdingPosition, newHoldingPosition);
-
-        holdingPosition = newHoldingPosition;
-    }
-
-    // ============================================ ACCRUAL STORAGE ============================================
-
-    /**
-     * @notice Timestamp of when the last accrual occurred.
-     * @dev Used for determining the amount of platform fees that can be taken during an accrual period.
-     */
-    uint64 public lastAccrual;
 
     // =============================================== FEES CONFIG ===============================================
 
@@ -346,25 +224,11 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     event PlatformFeeChanged(uint64 oldPlatformFee, uint64 newPlatformFee);
 
     /**
-     * @notice Emitted when performance fees is changed.
-     * @param oldPerformanceFee value performance fee was changed from
-     * @param newPerformanceFee value performance fee was changed to
-     */
-    event PerformanceFeeChanged(uint64 oldPerformanceFee, uint64 newPerformanceFee);
-
-    /**
      * @notice Emitted when fees distributor is changed.
      * @param oldFeesDistributor address of fee distributor was changed from
      * @param newFeesDistributor address of fee distributor was changed to
      */
     event FeesDistributorChanged(bytes32 oldFeesDistributor, bytes32 newFeesDistributor);
-
-    /**
-     * @notice Emitted when strategist performance fee cut is changed.
-     * @param oldPerformanceCut value strategist performance fee cut was changed from
-     * @param newPerformanceCut value strategist performance fee cut was changed to
-     */
-    event StrategistPerformanceCutChanged(uint64 oldPerformanceCut, uint64 newPerformanceCut);
 
     /**
      * @notice Emitted when strategist platform fee cut is changed.
@@ -391,31 +255,24 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     error Cellar__InvalidFeeCut();
 
     /**
-     * @notice Attempted to change performance/platform fee with invalid value.
+     * @notice Attempted to change platform fee with invalid value.
      */
     error Cellar__InvalidFee();
 
     /**
      * @notice Data related to fees.
-     * @param highWatermark Stores the share price to be used as a High Watermark to calculate performance fees.
-     * @param strategistPerformanceCut Determines how much performance fees go to strategist.
-     *                                 This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
      * @param strategistPlatformCut Determines how much platform fees go to strategist.
      *                              This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
      * @param platformFee The percentage of total assets accrued as platform fees over a year.
                           This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
-     * @param performanceFee The percentage of total assets accrued as platform fees over a year.
-     *                       This should be a value out of 1e18 (ie. 1e18 represents 100%, 0 represents 0%).
      * @param feesDistributor Cosmos address of module that distributes fees, specified as a hex value.
      *                        The Gravity contract expects a 32-byte value formatted in a specific way.
      * @param strategistPayoutAddress Address to send the strategists fee shares.
      */
     struct FeeData {
-        uint256 highWatermark;
-        uint64 strategistPerformanceCut;
         uint64 strategistPlatformCut;
         uint64 platformFee;
-        uint64 performanceFee;
+        uint64 lastAccrual;
         bytes32 feesDistributor;
         address strategistPayoutAddress;
     }
@@ -425,16 +282,13 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      */
     FeeData public feeData =
         FeeData({
-            highWatermark: 0,
-            strategistPerformanceCut: 0.75e18,
             strategistPlatformCut: 0.75e18,
             platformFee: 0.01e18,
-            performanceFee: 0.1e18,
+            lastAccrual: 0,
             feesDistributor: hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55", // 20 bytes, so need 12 bytes of zero
             strategistPayoutAddress: address(0)
         });
 
-    uint64 public constant MAX_PERFORMANCE_FEE = 0.5e18;
     uint64 public constant MAX_PLATFORM_FEE = 0.2e18;
     uint64 public constant MAX_FEE_CUT = 1e18;
 
@@ -450,17 +304,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     }
 
     /**
-     * @notice Set the percentage of performance fees accrued from yield.
-     * @param newPerformanceFee value out of 1e18 that represents new performance fee percentage
-     */
-    function setPerformanceFee(uint64 newPerformanceFee) external onlyOwner {
-        if (newPerformanceFee > MAX_PERFORMANCE_FEE) revert Cellar__InvalidFee();
-        emit PerformanceFeeChanged(feeData.performanceFee, newPerformanceFee);
-
-        feeData.performanceFee = newPerformanceFee;
-    }
-
-    /**
      * @notice Set the address of the fee distributor on the Sommelier chain.
      * @dev IMPORTANT: Ensure that the address is formatted in the specific way that the Gravity contract
      *      expects it to be.
@@ -471,17 +314,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         emit FeesDistributorChanged(feeData.feesDistributor, newFeesDistributor);
 
         feeData.feesDistributor = newFeesDistributor;
-    }
-
-    /**
-     * @notice Sets the Strategists cut of performance fees
-     * @param cut the performance cut for the strategist
-     */
-    function setStrategistPerformanceCut(uint64 cut) external onlyOwner {
-        if (cut > MAX_FEE_CUT) revert Cellar__InvalidFeeCut();
-        emit StrategistPerformanceCutChanged(feeData.strategistPerformanceCut, cut);
-
-        feeData.strategistPerformanceCut = cut;
     }
 
     /**
@@ -503,62 +335,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         emit StrategistPayoutAddressChanged(feeData.strategistPayoutAddress, payout);
 
         feeData.strategistPayoutAddress = payout;
-    }
-
-    // ============================================= LIMITS CONFIG =============================================
-
-    /**
-     * @notice Emitted when the liquidity limit is changed.
-     * @param oldLimit amount the limit was changed from
-     * @param newLimit amount the limit was changed to
-     */
-    event LiquidityLimitChanged(uint256 oldLimit, uint256 newLimit);
-
-    /**
-     * @notice Emitted when the deposit limit is changed.
-     * @param oldLimit amount the limit was changed from
-     * @param newLimit amount the limit was changed to
-     */
-    event DepositLimitChanged(uint256 oldLimit, uint256 newLimit);
-
-    /**
-     * @notice Attempted deposit more than the max deposit.
-     * @param assets the assets user attempted to deposit
-     * @param maxDeposit the max assets that can be deposited
-     */
-    error Cellar__DepositRestricted(uint256 assets, uint256 maxDeposit);
-
-    /**
-     * @notice Maximum amount of assets that can be managed by the cellar. Denominated in the same decimals
-     *         as the current asset.
-     * @dev Set to `type(uint256).max` to have no limit.
-     */
-    uint256 public liquidityLimit = type(uint256).max;
-
-    /**
-     * @notice Maximum amount of assets per wallet. Denominated in the same decimals as the current asset.
-     * @dev Set to `type(uint256).max` to have no limit.
-     */
-    uint256 public depositLimit = type(uint256).max;
-
-    /**
-     * @notice Set the maximum liquidity that cellar can manage. Uses the same decimals as the current asset.
-     * @param newLimit amount of assets to set as the new limit
-     */
-    function setLiquidityLimit(uint256 newLimit) external onlyOwner {
-        emit LiquidityLimitChanged(liquidityLimit, newLimit);
-
-        liquidityLimit = newLimit;
-    }
-
-    /**
-     * @notice Set the per-wallet deposit limit. Uses the same decimals as the current asset.
-     * @param newLimit amount of assets to set as the new limit
-     */
-    function setDepositLimit(uint256 newLimit) external onlyOwner {
-        emit DepositLimitChanged(depositLimit, newLimit);
-
-        depositLimit = newLimit;
     }
 
     // =========================================== EMERGENCY LOGIC ===========================================
@@ -616,9 +392,19 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     // =========================================== CONSTRUCTOR ===========================================
 
     /**
+     * @notice Addresses of the positions currently used by the cellar.
+     */
+    uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
+
+    /**
      * @notice Address of the platform's registry contract. Used to get the latest address of modules.
      */
     Registry public immutable registry;
+
+    // Below values determine what positions and adaptors this cellar can use.
+    uint128 public immutable assetRiskTolerance; // 0 safest -> uint128 max no restrictions
+
+    uint128 public immutable protocolRiskTolerance; // 0 safest -> uint256 max no restrictions
 
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
@@ -628,9 +414,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      * @param _registry address of the platform's registry contract
      * @param _asset address of underlying token used for the for accounting, depositing, and withdrawing
      * @param _positions addresses of the positions to initialize the cellar with
-     * @param _positionTypes types of each positions used
-     * @param _holdingPosition address of the position to use as the holding position
-     * @param _withdrawType withdraw type to use for the cellar
      * @param _name name of this cellar's share token
      * @param _name symbol of this cellar's share token
      * @param _strategistPayout The address to send the strategists fee shares.
@@ -638,48 +421,48 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     constructor(
         Registry _registry,
         ERC20 _asset,
-        address[] memory _positions,
-        PositionType[] memory _positionTypes,
-        address _holdingPosition,
-        WithdrawType _withdrawType,
+        uint256[] memory _positions,
+        bytes[] memory _configurationData,
         string memory _name,
         string memory _symbol,
-        address _strategistPayout
+        address _strategistPayout,
+        uint128 _assetRiskTolerance,
+        uint128 _protocolRiskTolerance
     ) ERC4626(_asset, _name, _symbol) Owned(_registry.getAddress(0)) {
         registry = _registry;
+        assetRiskTolerance = _assetRiskTolerance;
+        protocolRiskTolerance = _protocolRiskTolerance;
 
         // Initialize positions.
         positions = _positions;
-        ERC20 positionAsset;
         for (uint256 i; i < _positions.length; i++) {
-            address position = _positions[i];
+            uint256 position = _positions[i];
 
-            if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
+            // if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
 
-            isTrusted[position] = true;
+            (address adaptor, bool isDebt, bytes memory adaptorData, ) = registry.getPositionData(position);
+
+            require(adaptor != address(0), "Position does not exist.");
+
             isPositionUsed[position] = true;
-            getPositionType[position] = _positionTypes[i];
-
-            positionAsset = _assetOf(position);
-            if (!PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT)).isSupported(positionAsset))
-                revert Cellar__PositionPricingNotSetUp(address(positionAsset));
+            getPositionData[position] = Registry.PositionData({
+                adaptor: adaptor,
+                isDebt: isDebt,
+                adaptorData: adaptorData,
+                configurationData: _configurationData[i]
+            });
+            if (isDebt) numberOfDebtPositions++;
         }
 
         // Initialize holding position.
-        if (!isPositionUsed[_holdingPosition]) revert Cellar__InvalidPosition(_holdingPosition);
-
-        ERC20 holdingPositionAsset = _assetOf(_holdingPosition);
+        // Holding position is the zero position.
+        ERC20 holdingPositionAsset = _assetOf(_positions[0]);
         if (holdingPositionAsset != _asset)
             revert Cellar__AssetMismatch(address(holdingPositionAsset), address(_asset));
 
-        holdingPosition = _holdingPosition;
-
-        // Initialize withdraw type.
-        withdrawType = _withdrawType;
-
         // Initialize last accrual timestamp to time that cellar was created, otherwise the first
         // `accrue` will take platform fees from 1970 to the time it is called.
-        lastAccrual = uint64(block.timestamp);
+        feeData.lastAccrual = uint64(block.timestamp);
 
         feeData.strategistPayoutAddress = _strategistPayout;
     }
@@ -797,6 +580,13 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     }
 
     /**
+     * @notice Attempted deposit more than the max deposit.
+     * @param assets the assets user attempted to deposit
+     * @param maxDeposit the max assets that can be deposited
+     */
+    error Cellar__DepositRestricted(uint256 assets, uint256 maxDeposit);
+
+    /**
      * @notice called at the beginning of deposit.
      * @param assets amount of assets deposited by user.
      * @param receiver address receiving the shares.
@@ -805,14 +595,13 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         uint256 assets,
         uint256,
         address receiver
-    ) internal override whenNotShutdown {
+    ) internal view override whenNotShutdown {
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
                 revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
         }
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) revert Cellar__DepositRestricted(assets, maxAssets);
-        feeData.highWatermark += assets;
     }
 
     /**
@@ -824,29 +613,38 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         uint256,
         address receiver
     ) internal override {
-        _depositTo(holdingPosition, assets);
+        _depositTo(positions[0], assets);
         userShareLockStartBlock[receiver] = block.number;
     }
 
     /**
      * @notice called at the beginning of withdraw.
-     * @param assets amount of assets withdrawn by user.
      */
     function beforeWithdraw(
-        uint256 assets,
+        uint256,
         uint256,
         address,
         address owner
-    ) internal override {
+    ) internal view override {
         // Make sure users shares are not locked.
         _checkIfSharesLocked(owner);
+    }
 
-        // Need to check if assets is greater than the high watermark
-        // because if the performanceFee is set to zero, and all cellar shares are redeemed,
-        // if the cellar has earned any yield, assets will be greater than the high watermark.
-        // Becuase the high watermark is only updated when performance fees are minted.
-        uint256 highWatermark = feeData.highWatermark;
-        feeData.highWatermark = assets > highWatermark ? 0 : highWatermark - assets;
+    function _enter(
+        uint256 assets,
+        uint256 shares,
+        address receiver
+    ) internal {
+        beforeDeposit(assets, shares, receiver);
+
+        // Need to transfer before minting or ERC777s could reenter.
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
+
+        afterDeposit(assets, shares, receiver);
     }
 
     /**
@@ -858,21 +656,10 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
 
-        _takePerformanceFees(_totalAssets);
-
         // Check for rounding error since we round down in previewDeposit.
         if ((shares = _convertToShares(assets, _totalAssets)) == 0) revert Cellar__ZeroShares();
 
-        beforeDeposit(assets, shares, receiver);
-
-        // Need to transfer before minting or ERC777s could reenter.
-        asset.safeTransferFrom(msg.sender, address(this), assets);
-
-        _mint(receiver, shares);
-
-        emit Deposit(msg.sender, receiver, assets, shares);
-
-        afterDeposit(assets, shares, receiver);
+        _enter(assets, shares, receiver);
     }
 
     /**
@@ -884,31 +671,31 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
     function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
 
-        _takePerformanceFees(_totalAssets);
-
         // previewMintRoundsUp, but iniital mint could return zero assets, so check for rounding error.
         if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets(); // No need to check for rounding error, previewMint rounds up.
 
-        beforeDeposit(assets, shares, receiver);
-
-        // Need to transfer before minting or ERC777s could reenter.
-        asset.safeTransferFrom(msg.sender, address(this), assets);
-
-        _mint(receiver, shares);
-
-        emit Deposit(msg.sender, receiver, assets, shares);
-
-        afterDeposit(assets, shares, receiver);
+        _enter(assets, shares, receiver);
     }
 
-    /**
-     * @notice helper function that checks if msg.sender has the allowance to spend owner's shares.
-     * @dev reverts if msg.sender != owner, and msg.sender does not have enough allowance.
-     */
-    function _checkAllowance(address owner, uint256 shares) internal {
+    function _exit(
+        uint256 assets,
+        uint256 shares,
+        address receiver,
+        address owner
+    ) internal {
+        beforeWithdraw(assets, shares, receiver, owner);
+
         if (msg.sender != owner) {
             _spendAllowance(owner, msg.sender, shares);
         }
+
+        _burn(owner, shares);
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        _withdrawInOrder(assets, receiver);
+
+        /// @notice `afterWithdraw` is currently not used.
+        // afterWithdraw(assets, shares, receiver, owner);
     }
 
     /**
@@ -930,34 +717,12 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         address owner
     ) public override nonReentrant returns (uint256 shares) {
         // Get data efficiently.
-        (
-            uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
-            address[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances,
-            uint256[] memory withdrawableBalances
-        ) = _getData();
-
-        _takePerformanceFees(_totalAssets);
+        uint256 _totalAssets = totalAssets(); // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
 
         // No need to check for rounding error, `previewWithdraw` rounds up.
         shares = _previewWithdraw(assets, _totalAssets);
 
-        beforeWithdraw(assets, shares, receiver, owner);
-
-        _checkAllowance(owner, shares);
-
-        uint256 totalShares = totalSupply();
-
-        _burn(owner, shares);
-
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
-
-        withdrawType == WithdrawType.ORDERLY
-            ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances, withdrawableBalances)
-            : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances, withdrawableBalances);
-
-        afterWithdraw(assets, shares, receiver, owner);
+        _exit(assets, shares, receiver, owner);
     }
 
     /**
@@ -979,34 +744,12 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         address owner
     ) public override nonReentrant returns (uint256 assets) {
         // Get data efficiently.
-        (
-            uint256 _totalAssets, // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
-            address[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances,
-            uint256[] memory withdrawableBalances
-        ) = _getData();
-
-        _takePerformanceFees(_totalAssets);
-
-        _checkAllowance(owner, shares);
+        uint256 _totalAssets = totalAssets();
 
         // Check for rounding error since we round down in previewRedeem.
         if ((assets = _convertToAssets(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
 
-        beforeWithdraw(assets, shares, receiver, owner);
-
-        uint256 totalShares = totalSupply();
-
-        _burn(owner, shares);
-
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
-
-        withdrawType == WithdrawType.ORDERLY
-            ? _withdrawInOrder(assets, receiver, _positions, positionAssets, positionBalances, withdrawableBalances)
-            : _withdrawInProportion(shares, totalShares, receiver, _positions, positionBalances, withdrawableBalances);
-
-        afterWithdraw(assets, shares, receiver, owner);
+        _exit(assets, shares, receiver, owner);
     }
 
     /**
@@ -1014,33 +757,23 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      *      is `ORDERLY`.
      * @param assets the amount of assets to withdraw from cellar
      * @param receiver the address to sent withdrawn assets to
-     * @param _positions positions to withdraw from
-     * @param positionAssets underlying asset for each position
-     * @param positionBalances underlying balances for each position
      */
-    function _withdrawInOrder(
-        uint256 assets,
-        address receiver,
-        address[] memory _positions,
-        ERC20[] memory positionAssets,
-        uint256[] memory positionBalances,
-        uint256[] memory withdrawableBalances
-    ) internal {
+    function _withdrawInOrder(uint256 assets, address receiver) internal {
         // Get the price router.
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
 
-        for (uint256 i; i < _positions.length; i++) {
+        for (uint256 i; i < positions.length; i++) {
             // Move on to next position if this one is empty.
-            if (positionBalances[i] == 0) continue;
+            uint256 position = positions[i];
+            if (_balanceOf(position) == 0) continue;
+            ERC20 positionAsset = _assetOf(position);
 
-            uint256 onePositionAsset = 10**positionAssets[i].decimals();
-            uint256 exchangeRate = priceRouter.getExchangeRate(positionAssets[i], asset);
+            uint256 onePositionAsset = 10**positionAsset.decimals();
+            uint256 exchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
 
             // Denominate withdrawable position balance in cellar's asset.
-            uint256 totalWithdrawableBalanceInAssets = withdrawableBalances[i].mulDivDown(
-                exchangeRate,
-                onePositionAsset
-            );
+            uint256 withdrawableBalance = _withdrawableFrom(position);
+            uint256 totalWithdrawableBalanceInAssets = withdrawableBalance.mulDivDown(exchangeRate, onePositionAsset);
 
             // We want to pull as much as we can from this position, but no more than needed.
             uint256 amount;
@@ -1049,61 +782,20 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
                 amount = assets.mulDivDown(onePositionAsset, exchangeRate);
                 assets = 0;
             } else {
-                amount = withdrawableBalances[i];
+                amount = withdrawableBalance;
                 assets = assets - totalWithdrawableBalanceInAssets;
             }
 
             // Withdraw from position.
-            _withdrawFrom(_positions[i], amount, receiver);
+            _withdrawFrom(position, amount, receiver);
 
-            emit PulledFromPosition(_positions[i], amount);
+            // emit PulledFromPosition(position, amount);
 
             // Stop if no more assets to withdraw.
             if (assets == 0) break;
         }
         // If withdraw did not remove all assets owed, revert.
         if (assets > 0) revert Cellar__IncompleteWithdraw(assets);
-    }
-
-    /**
-     * @dev Withdraw from each position proportional to that of shares redeemed. Used if the
-     *      withdraw type is `PROPORTIONAL`.
-     * @dev It is possible that the `amount` calculated to withdraw is zero. This is only a problem
-     *      for a low percision ERC20, which we have no plans to support.
-     * @param shares the user is burning to withdraw
-     * @param totalShares the total amount of oustanding shares
-     * @param receiver the address to sent withdrawn assets to
-     * @param _positions positions to withdraw from
-     * @param positionBalances underlying balances for each position
-     */
-    function _withdrawInProportion(
-        uint256 shares,
-        uint256 totalShares,
-        address receiver,
-        address[] memory _positions,
-        uint256[] memory positionBalances,
-        uint256[] memory withdrawableBalances
-    ) internal {
-        // Withdraw assets from positions in proportion to shares redeemed.
-        for (uint256 i; i < _positions.length; i++) {
-            address position = _positions[i];
-            uint256 positionBalance = positionBalances[i];
-
-            // Move on to next position if this one is empty.
-            if (positionBalance == 0) continue;
-
-            // Get the amount of assets to withdraw from this position based on proportion to shares redeemed.
-            uint256 amount = positionBalance.mulDivDown(shares, totalShares);
-
-            // If straetgist locks the enirety of a positions funds, then all withdraw calls revert.
-            // If this happens,  goverance should vote out malicious strategist, then change withdraw type to in oder, and move bad position to back of queue.
-            if (amount > withdrawableBalances[i]) revert Cellar__IlliquidWithdraw(position);
-
-            // Withdraw from position to receiver.
-            _withdrawFrom(position, amount, receiver);
-
-            emit PulledFromPosition(position, amount);
-        }
     }
 
     // ========================================= ACCOUNTING LOGIC =========================================
@@ -1116,19 +808,40 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      * @dev EIP4626 states totalAssets must not revert, but it is possible for `totalAssets` to revert
      * so it does NOT conform to ERC4626 standards.
      */
+    //TODO take this logic and make generalized internal function to replace this and withdrawable amount
+    //TODO bonus now internal function could be used in place of totalAssets if it is cheaper.
+    //TODO use multicall to reduxe external calls to adaptors, and possibly batch multiple positions calls together if they sequentioally use the same adaptor.
     function totalAssets() public view override returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
-        ERC20[] memory positionAssets = new ERC20[](numOfPositions);
-        uint256[] memory balances = new uint256[](numOfPositions);
+        ERC20[] memory positionAssets = new ERC20[](numOfPositions - numberOfDebtPositions);
+        uint256[] memory balances = new uint256[](numOfPositions - numberOfDebtPositions);
+        ERC20[] memory debtPositionAssets = new ERC20[](numberOfDebtPositions);
+        uint256[] memory debtBalances = new uint256[](numberOfDebtPositions);
+        uint256 collateralIndex;
+        uint256 debtIndex;
 
         for (uint256 i; i < numOfPositions; i++) {
-            address position = positions[i];
-            positionAssets[i] = _assetOf(position);
-            balances[i] = _balanceOf(position);
+            uint256 position = positions[i];
+            if (getPositionData[position].isDebt) {
+                debtPositionAssets[debtIndex] = _assetOf(position);
+                debtBalances[debtIndex] = _balanceOf(position);
+                debtIndex++;
+            } else {
+                positionAssets[collateralIndex] = _assetOf(position);
+                balances[collateralIndex] = _balanceOf(position);
+                collateralIndex++;
+            }
         }
 
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-        assets = priceRouter.getValues(positionAssets, balances, asset);
+        bytes[] memory calls = new bytes[](2);
+        calls[0] = abi.encodeWithSelector(PriceRouter.getValues.selector, positionAssets, balances, asset);
+        calls[1] = abi.encodeWithSelector(PriceRouter.getValues.selector, debtPositionAssets, debtBalances, asset);
+        bytes[] memory results = priceRouter.multicall(calls);
+        assets = abi.decode(results[0], (uint256)) - abi.decode(results[1], (uint256));
+        // assets =
+        // priceRouter.getValues(positionAssets, balances, asset) -
+        // priceRouter.getValues(debtPositionAssets, debtBalances, asset);
     }
 
     /**
@@ -1141,7 +854,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         uint256[] memory balances = new uint256[](numOfPositions);
 
         for (uint256 i; i < numOfPositions; i++) {
-            address position = positions[i];
+            uint256 position = positions[i];
             positionAssets[i] = _assetOf(position);
             balances[i] = _withdrawableFrom(position);
         }
@@ -1152,7 +865,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
 
     /**
      * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
-     * @notice is NOT inclusive of performance fees.
      * @param shares amount of shares to convert
      * @return assets the shares can be exchanged for
      */
@@ -1176,8 +888,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        assets = _previewMint(shares, _totalAssets - feeInAssets);
+        assets = _previewMint(shares, _totalAssets);
     }
 
     /**
@@ -1187,8 +898,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        shares = _previewWithdraw(assets, _totalAssets - feeInAssets);
+        shares = _previewWithdraw(assets, _totalAssets);
     }
 
     /**
@@ -1198,8 +908,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      */
     function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        shares = _convertToShares(assets, _totalAssets - feeInAssets);
+        shares = _convertToShares(assets, _totalAssets);
     }
 
     /**
@@ -1209,8 +918,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      */
     function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        assets = _convertToAssets(shares, _totalAssets - feeInAssets);
+        assets = _convertToAssets(shares, _totalAssets);
     }
 
     /**
@@ -1226,32 +934,14 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
             uint256 blockSharesAreUnlocked = lockBlock + shareLockPeriod;
             if (blockSharesAreUnlocked > block.number) return 0;
         }
-        // Get amount of assets to withdraw with fees accounted for.
+        // Get amount of assets to withdraw.
         uint256 _totalAssets = totalAssets();
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        uint256 assets = _convertToAssets(balanceOf(owner), _totalAssets - feeInAssets);
+        uint256 assets = _convertToAssets(balanceOf(owner), _totalAssets);
 
-        if (withdrawType == WithdrawType.ORDERLY) {
-            uint256 withdrawable = totalAssetsWithdrawable();
-            maxOut = assets <= withdrawable ? assets : withdrawable;
-        } else {
-            (, , , uint256[] memory positionBalances, uint256[] memory withdrawableBalances) = _getData();
-            uint256 totalShares = totalSupply();
-            uint256 shares = balanceOf(owner);
-            uint256 smallestPercentWithdrawable = 1e18;
-            for (uint256 i = 0; i < withdrawableBalances.length; i++) {
-                if (positionBalances[i] == 0) continue;
-                if (withdrawableBalances[i] == 0) return 0;
-                uint256 percentWithdrawable = withdrawableBalances[i].mulDivDown(1e18, positionBalances[i]);
-                if (percentWithdrawable < smallestPercentWithdrawable)
-                    smallestPercentWithdrawable = percentWithdrawable;
-            }
-            uint256 userOwnershipPercent = shares.mulDivDown(1e18, totalShares);
-            maxOut = userOwnershipPercent <= smallestPercentWithdrawable
-                ? assets
-                : (_totalAssets - feeInAssets).mulDivDown(smallestPercentWithdrawable, 1e18);
-        }
-        if (inShares) maxOut = _convertToShares(maxOut, _totalAssets - feeInAssets);
+        uint256 withdrawable = totalAssetsWithdrawable();
+        maxOut = assets <= withdrawable ? assets : withdrawable;
+
+        if (inShares) maxOut = _convertToShares(maxOut, _totalAssets);
         // else leave maxOut in terms of assets.
     }
 
@@ -1321,52 +1011,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
             : assets.mulDivUp(totalShares, _totalAssets);
     }
 
-    /**
-     * @dev Used to efficiently get and store accounting information to avoid having to expensively
-     *      recompute it.
-     */
-    function _getData()
-        internal
-        view
-        returns (
-            uint256 _totalAssets,
-            address[] memory _positions,
-            ERC20[] memory positionAssets,
-            uint256[] memory positionBalances,
-            uint256[] memory withdrawableBalances
-        )
-    {
-        uint256 len = positions.length;
-
-        _positions = new address[](len);
-        positionAssets = new ERC20[](len);
-        positionBalances = new uint256[](len);
-        positionBalances = new uint256[](len);
-        withdrawableBalances = new uint256[](len);
-
-        for (uint256 i; i < len; i++) {
-            address position = positions[i];
-
-            _positions[i] = position;
-            positionAssets[i] = _assetOf(position);
-            positionBalances[i] = _balanceOf(position);
-            withdrawableBalances[i] = _withdrawableFrom(position);
-        }
-
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-        _totalAssets = priceRouter.getValues(positionAssets, positionBalances, asset);
-    }
-
-    // =========================================== POSITION LOGIC ===========================================
-
-    /**
-     * @notice Emitted on rebalancing positions.
-     * @param fromPosition the address of the position rebalanced from
-     * @param toPosition the address of the position rebalanced to
-     * @param assetsFrom the amount of assets withdrawn from the position rebalanced from
-     * @param assetsTo the amount of assets desposited to the position rebalanced to
-     */
-    event Rebalance(address indexed fromPosition, address indexed toPosition, uint256 assetsFrom, uint256 assetsTo);
+    // =========================================== ADAPTOR LOGIC ===========================================
 
     /**
      * @notice Emitted on when the rebalance deviation is changed.
@@ -1397,6 +1042,14 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      */
     error Cellar__InvalidRebalanceDeviation(uint256 requested, uint256 max);
 
+    mapping(address => bool) public isAdaptorSetup; // Map adaptor address to bool
+
+    function setupAdaptor(address _adaptor) external onlyOwner {
+        // Following call reverts if adaptor does not exist, or if it does not meet cellars risk appetite.
+        registry.cellarSetupAdaptor(_adaptor, assetRiskTolerance, protocolRiskTolerance);
+        isAdaptorSetup[_adaptor] = true;
+    }
+
     uint64 public constant MAX_REBALANCE_DEVIATION = 0.1e18;
 
     /**
@@ -1418,154 +1071,75 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
         emit RebalanceDeviationChanged(oldDeviation, newDeviation);
     }
 
-    /**
-     * @notice Move assets between positions. To move assets from/to this cellar's holdings, specify
-     *         the address of this cellar as the `fromPosition`/`toPosition`.
-     * @param fromPosition address of the position to move assets from
-     * @param toPosition address of the position to move assets to
-     * @param assetsFrom amount of assets to move from the from position
-     */
-    function rebalance(
-        address fromPosition,
-        address toPosition,
-        uint256 assetsFrom,
-        SwapRouter.Exchange exchange,
-        bytes calldata params
-    ) external onlyOwner whenNotShutdown nonReentrant returns (uint256 assetsTo) {
-        // Check that position being rebalanced to is currently being used.
-        if (!isPositionUsed[toPosition]) revert Cellar__InvalidPosition(address(toPosition));
+    // Set to true before any adaptor calls are made.
+    bool public blockExternalReceiver;
 
-        // Before making any external calls save the current `totalAssets` and `totalSupply`.
-        uint256 assets = totalAssets();
-        uint256 totalShares = totalSupply();
+    struct AdaptorCall {
+        address adaptor;
+        bytes[] callData;
+    }
 
-        // Withdraw from position.
-        _withdrawFrom(fromPosition, assetsFrom, address(this));
+    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner whenNotShutdown nonReentrant {
+        blockExternalReceiver = true;
 
-        // Swap to the asset of the other position if necessary.
-        ERC20 fromAsset = _assetOf(fromPosition);
-        ERC20 toAsset = _assetOf(toPosition);
-        assetsTo = fromAsset != toAsset
-            ? _swap(fromAsset, toAsset, assetsFrom, exchange, params, address(this))
-            : assetsFrom;
+        uint256 minimumAllowedAssets;
+        uint256 maximumAllowedAssets;
+        uint256 totalShares;
+        {
+            //record totalAssets
+            uint256 assetsBeforeAdaptorCall = totalAssets();
+            minimumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
+            maximumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
+            totalShares = totalSupply();
+        }
 
-        // Deposit into position.
-        _depositTo(toPosition, assetsTo);
+        //run all adaptor functions
+        for (uint8 i = 0; i < data.length; i++) {
+            address adaptor = data[i].adaptor;
+            require(isAdaptorSetup[adaptor], "Adaptor not set up to be used with Cellar.");
+            for (uint8 j = 0; j < data[i].callData.length; j++) {
+                adaptor.functionDelegateCall(data[i].callData[j]);
+            }
+        }
 
         // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
-        uint256 minimumAllowedAssets = assets.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
-        uint256 maximumAllowedAssets = assets.mulDivDown((1e18 + allowedRebalanceDeviation), 1e18);
-        assets = totalAssets();
-        if (assets > maximumAllowedAssets || assets < minimumAllowedAssets)
+        uint256 assets = totalAssets();
+        if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
+        }
         if (totalShares != totalSupply()) revert Cellar__TotalSharesMustRemainConstant(totalSupply(), totalShares);
 
-        emit Rebalance(fromPosition, toPosition, assetsFrom, assetsTo);
+        blockExternalReceiver = false;
     }
 
     // ============================================ LIMITS LOGIC ============================================
 
     /**
      * @notice Total amount of assets that can be deposited for a user.
-     * @dev This function does not take into account performance fees.
-     *      Performance fees would reduce `receiver`s `ownedAssets`,
-     *      making the `assets` value returned lower than actual
-     * @dev EIP4626 states maxDeposit must not revert, but it is possible for `totalAssets` to revert
-     * so it does NOT conform to ERC4626 standards.
-     * @param receiver address of account that would receive the shares
      * @return assets maximum amount of assets that can be deposited
      */
-    function maxDeposit(address receiver) public view override returns (uint256 assets) {
+    function maxDeposit(address) public view override returns (uint256) {
         if (isShutdown) return 0;
 
-        uint256 asssetDepositLimit = depositLimit;
-        uint256 asssetLiquidityLimit = liquidityLimit;
-        if (asssetDepositLimit == type(uint256).max && asssetLiquidityLimit == type(uint256).max)
-            return type(uint256).max;
-
-        // Get data efficiently.
-        uint256 _totalAssets = totalAssets();
-        uint256 ownedAssets = _convertToAssets(balanceOf(receiver), _totalAssets);
-
-        uint256 leftUntilDepositLimit = asssetDepositLimit.subMinZero(ownedAssets);
-        uint256 leftUntilLiquidityLimit = asssetLiquidityLimit.subMinZero(_totalAssets);
-
-        // Only return the more relevant of the two.
-        assets = Math.min(leftUntilDepositLimit, leftUntilLiquidityLimit);
+        return type(uint256).max;
     }
 
     /**
      * @notice Total amount of shares that can be minted for a user.
-     * @dev This function does not take into account performance fees.
-     *      Performance fees would reduce `receiver`s `ownedAssets`,
-     *      making the `shares` value returned lower than actual
-     * @dev EIP4626 states maxMint must not revert, but it is possible for `totalAssets` to revert
-     * so it does NOT conform to ERC4626 standards.
-     * @param receiver address of account that would receive the shares
      * @return shares maximum amount of shares that can be minted
      */
-    function maxMint(address receiver) public view override returns (uint256) {
-        uint256 amount = maxDeposit(receiver);
-        return amount == type(uint256).max ? amount : convertToShares(amount);
+    function maxMint(address) public view override returns (uint256) {
+        if (isShutdown) return 0;
+
+        return type(uint256).max;
     }
 
     // ========================================= FEES LOGIC =========================================
 
     /**
-     * @notice Emitted when High Watermark is reset.
-     * @param newHighWatermark new high watermark
-     */
-    event HighWatermarkReset(uint256 newHighWatermark);
-
-    /**
      * @notice Attempted to send fee shares to strategist payout address, when address is not set.
      */
     error Cellar__PayoutNotSet();
-
-    /**
-     * @notice Resets High Watermark to equal current total assets.
-     * @notice This function can be abused by Strategists, so it should only be callable by governance.
-     */
-    function resetHighWatermark() external onlyOwner {
-        uint256 _totalAssets = totalAssets();
-        feeData.highWatermark = _totalAssets;
-
-        emit HighWatermarkReset(_totalAssets);
-    }
-
-    /**
-     * @notice Calculates how many assets Strategist would earn performance fees
-     * @param _totalAssets uint256 value of the total assets in the cellar
-     * @return feeInAssets amount of assets to take as fees
-     */
-    function _previewPerformanceFees(uint256 _totalAssets) internal view returns (uint256 feeInAssets) {
-        uint64 performanceFee = feeData.performanceFee;
-        if (performanceFee == 0 || _totalAssets == 0) return 0;
-
-        uint256 highWatermark = feeData.highWatermark;
-
-        if (_totalAssets > highWatermark) {
-            uint256 yield = _totalAssets - highWatermark;
-            feeInAssets = yield.mulWadDown(performanceFee);
-        }
-    }
-
-    /**
-     * @notice Mints cellar performance fee shares if current share price is above high watermark
-     * @dev If performance fees are minted, the resulting HWM will be greater than the current share price
-     *      since performance fees dilute share value.
-     * @param _totalAssets uint256 value of the total assets in the cellar
-     */
-    function _takePerformanceFees(uint256 _totalAssets) internal {
-        uint256 feeInAssets = _previewPerformanceFees(_totalAssets);
-        if (feeInAssets > 0) {
-            uint256 platformFeesInShares = _convertToFees(_convertToShares(feeInAssets, _totalAssets));
-            if (platformFeesInShares > 0) {
-                feeData.highWatermark = _totalAssets;
-                _mint(address(this), platformFeesInShares);
-            }
-        }
-    }
 
     /**
      * @dev Calculate the amount of fees to mint such that value of fees after minting is not diluted.
@@ -1602,37 +1176,26 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
 
         uint256 _totalAssets = totalAssets();
 
-        // Since this action mints shares, calculate outstanding performance fees due.
-        _takePerformanceFees(_totalAssets);
-
-        uint256 totalFees = balanceOf(address(this));
-
-        uint256 strategistFeeSharesDue = totalFees.mulWadDown(feeData.strategistPerformanceCut);
-
         // Calculate platform fees earned.
-        uint256 elapsedTime = block.timestamp - lastAccrual;
+        uint256 elapsedTime = block.timestamp - feeData.lastAccrual;
         uint256 platformFeeInAssets = (_totalAssets * elapsedTime * feeData.platformFee) / 1e18 / 365 days;
         uint256 platformFees = _convertToFees(_convertToShares(platformFeeInAssets, _totalAssets));
         _mint(address(this), platformFees);
-        totalFees += platformFees;
 
-        strategistFeeSharesDue += platformFees.mulWadDown(feeData.strategistPlatformCut);
+        uint256 strategistFeeSharesDue = platformFees.mulWadDown(feeData.strategistPlatformCut);
         if (strategistFeeSharesDue > 0) {
             //transfer shares to strategist
             _transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
 
-            totalFees -= strategistFeeSharesDue;
+            platformFees -= strategistFeeSharesDue;
         }
 
-        lastAccrual = uint32(block.timestamp);
+        feeData.lastAccrual = uint32(block.timestamp);
 
         // Redeem our fee shares for assets to send to the fee distributor module.
-        uint256 assets = _convertToAssets(totalFees, _totalAssets);
+        uint256 assets = _convertToAssets(platformFees, _totalAssets);
         if (assets > 0) {
-            // Without this, assets paid out as fees would be counted as a loss.
-            feeData.highWatermark -= assets;
-
-            _burn(address(this), totalFees);
+            _burn(address(this), platformFees);
 
             // Transfer assets to a fee distributor on the Sommelier chain.
             IGravity gravityBridge = IGravity(registry.getAddress(0));
@@ -1640,24 +1203,31 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
             gravityBridge.sendToCosmos(address(asset), feeData.feesDistributor, assets);
         }
 
-        emit SendFees(totalFees, assets);
+        emit SendFees(platformFees, assets);
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================
-
+    //TODO for _depositTo and _withdrawFrom, adaptor data should contain values to validate minimums.
+    // ^^^^ might be better to enforce this using withdrawableFrom?
+    //Weird cuz if an aUSDC position says you can withdraw this much USDC from me, but then a debt position says you can borrow this much more, the two answers are dependent on eachother, but each position doesn't know that.
+    //TODO need to pass in adaptor data that the strategist can set for their cellar
     /**
      * @dev Deposit into a position according to its position type and update related state.
      * @param position address to deposit funds into
      * @param assets the amount of assets to deposit into the position
      */
-    function _depositTo(address position, uint256 assets) internal {
-        PositionType positionType = getPositionType[position];
-
-        // Deposit into position.
-        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            ERC4626(position).asset().safeApprove(position, assets);
-            ERC4626(position).deposit(assets, address(this));
-        }
+    //TODO this is ONLY used in the afterDeposit function
+    function _depositTo(uint256 position, uint256 assets) internal {
+        //TODO adaptor should be a non zero address
+        address adaptor = getPositionData[position].adaptor;
+        adaptor.functionDelegateCall(
+            abi.encodeWithSelector(
+                BaseAdaptor.deposit.selector,
+                assets,
+                getPositionData[position].adaptorData,
+                getPositionData[position].configurationData
+            )
+        );
     }
 
     /**
@@ -1666,33 +1236,37 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      * @param assets the amount of assets to withdraw from the position
      * @param receiver the address to sent withdrawn assets to
      */
+    //TODO this is only used in the _withdrawInOrder function
     function _withdrawFrom(
-        address position,
+        uint256 position,
         uint256 assets,
         address receiver
     ) internal {
-        PositionType positionType = getPositionType[position];
-
-        // Withdraw from position.
-        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            ERC4626(position).withdraw(assets, receiver, address(this));
-        } else {
-            if (receiver != address(this)) ERC20(position).safeTransfer(receiver, assets);
-        }
+        address adaptor = getPositionData[position].adaptor;
+        adaptor.functionDelegateCall(
+            abi.encodeWithSelector(
+                BaseAdaptor.withdraw.selector,
+                assets,
+                receiver,
+                getPositionData[position].adaptorData,
+                getPositionData[position].configurationData
+            )
+        );
     }
 
     /**
      * @dev Get the withdrawable balance of a position according to its position type.
      * @param position position to get the withdrawable balance of
      */
-    function _withdrawableFrom(address position) internal view returns (uint256) {
-        PositionType positionType = getPositionType[position];
-
-        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            return ERC4626(position).maxWithdraw(address(this));
-        } else {
-            return ERC20(position).balanceOf(address(this));
-        }
+    //TODO maybe these view functions should use staticcall
+    function _withdrawableFrom(uint256 position) internal view returns (uint256) {
+        // Debt positions always return 0 for their withdrawable.
+        if (getPositionData[position].isDebt) return 0;
+        return
+            BaseAdaptor(getPositionData[position].adaptor).withdrawableFrom(
+                getPositionData[position].adaptorData,
+                getPositionData[position].configurationData
+            );
     }
 
     /**
@@ -1701,66 +1275,24 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard {
      *      to `convertToAssets` so that balanceOf ERC4626 positions includes fees taken on withdraw.
      * @param position position to get the balance of
      */
-    function _balanceOf(address position) internal view returns (uint256) {
-        PositionType positionType = getPositionType[position];
-
-        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            return ERC4626(position).previewRedeem(ERC4626(position).balanceOf(address(this)));
-        } else {
-            return ERC20(position).balanceOf(address(this));
-        }
+    function _balanceOf(uint256 position) internal view returns (uint256) {
+        address adaptor = getPositionData[position].adaptor;
+        return BaseAdaptor(adaptor).balanceOf(getPositionData[position].adaptorData);
     }
 
     /**
      * @dev Get the asset of a position according to its position type.
      * @param position to get the asset of
      */
-    function _assetOf(address position) internal view returns (ERC20) {
-        PositionType positionType = getPositionType[position];
-
-        if (positionType == PositionType.ERC4626 || positionType == PositionType.Cellar) {
-            return ERC4626(position).asset();
-        } else {
-            return ERC20(position);
-        }
+    function _assetOf(uint256 position) internal view returns (ERC20) {
+        address adaptor = getPositionData[position].adaptor;
+        return BaseAdaptor(adaptor).assetOf(getPositionData[position].adaptorData);
     }
 
-    /**
-     * @notice Attempted to swap with bad parameters.
-     */
-    error Cellar__WrongSwapParams();
-
-    /**
-     * @dev Perform a swap using the swap router and check that it behaves as expected.
-     * @param assetIn the asset to sell
-     * @param amountIn the amount of `assetIn` to sell
-     * @param exchange the exchange to sell `assetIn` on
-     * @param params Abi encoded swap parameters dependent on the `exchange` selected.
-     *               Refer to SwapRouter.sol for `params` makeup
-     * @param receiver the address to send the swapped assets to
-     */
-    function _swap(
-        ERC20 assetIn,
-        ERC20 assetOut,
-        uint256 amountIn,
-        SwapRouter.Exchange exchange,
-        bytes calldata params,
-        address receiver
-    ) internal returns (uint256 amountOut) {
-        // Store the expected amount of the asset in that we expect to have after the swap.
-        uint256 expectedAssetsInAfter = assetIn.balanceOf(address(this)) - amountIn;
-
-        // Get the address of the latest swap router.
-        SwapRouter swapRouter = SwapRouter(registry.getAddress(1));
-
-        // Approve swap router to swap assets.
-        assetIn.safeApprove(address(swapRouter), amountIn);
-
-        // Perform swap.
-        amountOut = swapRouter.swap(exchange, params, receiver, assetIn, assetOut);
-
-        // Check that the amount of assets swapped is what is expected. Will revert if the `params`
-        // specified a different amount of assets to swap then `amountIn`.
-        if (assetIn.balanceOf(address(this)) != expectedAssetsInAfter) revert Cellar__WrongSwapParams();
+    function getPositionAssets() external view returns (ERC20[] memory assets) {
+        assets = new ERC20[](positions.length);
+        for (uint256 i = 0; i < positions.length; i++) {
+            assets[i] = _assetOf(positions[i]);
+        }
     }
 }
