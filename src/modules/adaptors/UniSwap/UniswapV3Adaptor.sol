@@ -197,7 +197,7 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
         uint256 min1
     ) public {
         require(address(this) == positionManager().ownerOf(positionId), "Cellar does not own this token.");
-        (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(positionId);
+        (, , address t0, address t1, , , , uint128 liquidity, , , , ) = positionManager().positions(positionId);
         INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
             .DecreaseLiquidityParams({
                 tokenId: positionId,
@@ -206,8 +206,17 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
                 amount1Min: min1,
                 deadline: block.timestamp
             });
-        positionManager().decreaseLiquidity(params);
+        console.log("Cellar Balance 0:", ERC20(t0).balanceOf(address(this)));
+        console.log("Cellar Balance 1:", ERC20(t1).balanceOf(address(this)));
+        (uint256 amount0, uint256 amount1) = positionManager().decreaseLiquidity(params);
+        console.log("Amount 0", amount0);
+        console.log("Amount 1", amount1);
+        console.log("Cellar Balance 0:", ERC20(t0).balanceOf(address(this)));
+        console.log("Cellar Balance 1:", ERC20(t1).balanceOf(address(this)));
 
+        collectFees(positionId);
+        console.log("Cellar Balance 0:", ERC20(t0).balanceOf(address(this)));
+        console.log("Cellar Balance 1:", ERC20(t1).balanceOf(address(this)));
         // Position now has no more liquidity, so transfer NFT to dead address.
         // Transfer token to a dead address.
         positionManager().transferFrom(address(this), address(1), positionId);

@@ -19,6 +19,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
 import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol";
 import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
+import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -41,6 +42,8 @@ contract CellarAssetManagerTest is Test {
     address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
+    INonfungiblePositionManager internal positionManager =
+        INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 
@@ -142,7 +145,7 @@ contract CellarAssetManagerTest is Test {
         bytes[] memory adaptorCalls = new bytes[](2);
         adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
 
-        adaptorCalls[1] = _createBytesDataForLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -157,7 +160,7 @@ contract CellarAssetManagerTest is Test {
         bytes[] memory adaptorCalls = new bytes[](2);
         uint24 fee = 500;
         adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, fee, 50_500e6);
-        adaptorCalls[1] = _createBytesDataForLP(USDC, WETH, fee, 50_000e6, 36e18, 222);
+        adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, fee, 50_000e6, 36e18, 222);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -172,8 +175,8 @@ contract CellarAssetManagerTest is Test {
 
         adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, 50_500e6);
         adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
-        adaptorCalls[2] = _createBytesDataForLP(USDC, WETH, 3000, 50_000e6, 36e18, 20);
-        adaptorCalls[3] = _createBytesDataForLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
+        adaptorCalls[2] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 20);
+        adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -188,9 +191,29 @@ contract CellarAssetManagerTest is Test {
         bytes[] memory adaptorCalls = new bytes[](3);
 
         adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
-        adaptorCalls[1] = _createBytesDataForLP(DAI, USDC, 100, 25_000e18, 25_000e6, 30);
-        adaptorCalls[2] = _createBytesDataForLP(DAI, USDC, 100, 25_000e18, 25_000e6, 40);
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 30);
+        adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 40);
 
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
+    function testOpeningAndClosingUniV3Position() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -274,7 +297,7 @@ contract CellarAssetManagerTest is Test {
             abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
     }
 
-    function _createBytesDataForLP(
+    function _createBytesDataToOpenLP(
         ERC20 token0,
         ERC20 token1,
         uint24 poolFee,
@@ -296,5 +319,10 @@ contract CellarAssetManagerTest is Test {
                 lower,
                 upper
             );
+    }
+
+    function _createBytesDataToCloseLP(address owner, uint256 index) internal returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        return abi.encodeWithSelector(UniswapV3Adaptor.closePosition.selector, tokenId, 0, 0);
     }
 }
