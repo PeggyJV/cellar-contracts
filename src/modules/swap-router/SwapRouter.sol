@@ -6,6 +6,7 @@ import { Multicall } from "src/base/Multicall.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Swap Router
@@ -193,6 +194,7 @@ contract SwapRouter is Multicall {
         for (uint256 i = 1; i < path.length; i++)
             encodePackedPath = abi.encodePacked(encodePackedPath, poolFees[i - 1], path[i]);
 
+        uint256 bal = assetIn.balanceOf(address(this));
         // Execute the swap.
         amountOut = uniswapV3Router.exactInput(
             IUniswapV3Router.ExactInputParams({
@@ -203,5 +205,9 @@ contract SwapRouter is Multicall {
                 amountOutMinimum: amountOutMin
             })
         );
+        console.log("Before", bal);
+        console.log("Requested", amount);
+        console.log("After", assetIn.balanceOf(address(this)));
+        console.log("Approval Left", assetIn.allowance(address(this), address(uniswapV3Router)));
     }
 }

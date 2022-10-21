@@ -25,7 +25,7 @@ import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test
 import { Math } from "src/utils/Math.sol";
 
 // Will test the swapping and cellar position management using adaptors
-contract CellarAssetManagerTest is Test {
+contract UniswapV3AdaptorTest is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
@@ -258,7 +258,6 @@ contract CellarAssetManagerTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    //TODO test collecting fees.
     function testTakingFees() external {
         deal(address(USDC), address(this), 101_000e6);
         cellar.deposit(101_000e6, address(this));
@@ -277,14 +276,12 @@ contract CellarAssetManagerTest is Test {
         cellar.setRebalanceDeviation(0.1e18);
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
-        for (uint256 i = 0; i < 10; i++) {
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 1_000e6);
-            adaptorCalls[0] = _createBytesDataForSwap(DAI, USDC, 3000, 1_000e18);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-            cellar.callOnAdaptor(data);
-        }
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 100_000e6);
+        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 100_000e18);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
-        // Check that cellar dis receive some fees.
+        // Check that cellar did receive some fees.
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
         adaptorCalls = new bytes[](1);
