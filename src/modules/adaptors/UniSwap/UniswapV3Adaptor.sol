@@ -214,10 +214,11 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
         console.log("Cellar Balance 0:", ERC20(t0).balanceOf(address(this)));
         console.log("Cellar Balance 1:", ERC20(t1).balanceOf(address(this)));
 
-        collectFees(positionId);
+        // Collect principal and fees before "burning" NFT.
+        collectFees(positionId, type(uint128).max, type(uint128).max);
         console.log("Cellar Balance 0:", ERC20(t0).balanceOf(address(this)));
         console.log("Cellar Balance 1:", ERC20(t1).balanceOf(address(this)));
-        // Position now has no more liquidity, so transfer NFT to dead address.
+        // Position now has no more liquidity, so transfer NFT to dead address to save on `balanceOf` gas usage.
         // Transfer token to a dead address.
         positionManager().transferFrom(address(this), address(1), positionId);
     }
@@ -264,17 +265,23 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
                 amount1Min: min1,
                 deadline: block.timestamp
             });
-        positionManager().decreaseLiquidity(params);
+        (uint256 amount0, uint256 amount1) = positionManager().decreaseLiquidity(params);
+        collectFees(positionId, uint128(amount0), uint128(amount1)); //TODO use safeCast
+        //TODO So maybe the way to get the principle out of the position, and no fees is to call collect fees, but instead of doing the max, use the amounts you get from decrease liquidity.
     }
 
     //Collects fees from all positions or maybe can specify from which ones?
-    function collectFees(uint256 tokenId) public {
+    function collectFees(
+        uint256 tokenId,
+        uint128 amount0,
+        uint128 amount1
+    ) public {
         require(address(this) == positionManager().ownerOf(tokenId), "Cellar does not own this token.");
         INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId,
             recipient: address(this),
-            amount0Max: type(uint128).max,
-            amount1Max: type(uint128).max
+            amount0Max: amount0,
+            amount1Max: amount1
         });
 
         positionManager().collect(params);

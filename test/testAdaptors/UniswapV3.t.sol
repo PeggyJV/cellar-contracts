@@ -132,7 +132,7 @@ contract CellarAssetManagerTest is Test {
         // Manipulate  test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
 
-        cellar.setRebalanceDeviation(0.1e18);
+        cellar.setRebalanceDeviation(0.005e18);
     }
 
     // ========================================== REBALANCE TEST ==========================================
@@ -217,6 +217,10 @@ contract CellarAssetManagerTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
+
+    //TODO test adding to a position
+    //TODO test taking from a position
+    //TODO test collecting fees.
 
     // ========================================= GRAVITY FUNCTIONS =========================================
 
