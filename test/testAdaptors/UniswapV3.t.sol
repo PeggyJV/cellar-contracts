@@ -17,6 +17,8 @@ import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
+import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol";
+import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -37,6 +39,8 @@ contract CellarAssetManagerTest is Test {
 
     address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+
+    IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 
@@ -126,150 +130,34 @@ contract CellarAssetManagerTest is Test {
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
 
         cellar.setRebalanceDeviation(0.1e18);
-
-        // console.log("What", registry.getAddress(2));
     }
 
     // ========================================== REBALANCE TEST ==========================================
-    //TODO add tests for multiple positions with same underlying
     function testRebalanceIntoUniswapV3PositionUSDC_DAI() external {
         deal(address(USDC), address(this), 101_000e6);
         cellar.deposit(101_000e6, address(this));
 
-        int24 tick;
-        {
-            //Find current tick USDC WETH is trading at.
-            uint256 price = priceRouter.getExchangeRate(USDC, DAI);
-
-            // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
-            uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) << 96);
-
-            tick = getTick(sqrtPriceX96);
-            if (tick < 0) {
-                console.log("Current Tick (-)", uint24(-1 * tick));
-            } else console.log("Current Tick", uint24(tick));
-        }
-
-        {
-            //Find current tick USDC WETH is trading at.
-            uint256 price = priceRouter.getExchangeRate(DAI, USDC);
-
-            // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
-            uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) << 96);
-
-            tick = getTick(sqrtPriceX96);
-            if (tick < 0) {
-                console.log("Current Tick (-)", uint24(-1 * tick));
-            } else console.log("Current Tick", uint24(tick));
-        }
-
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](2);
-        address[] memory path = new address[](2);
-        path[0] = address(USDC);
-        path[1] = address(DAI);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = 100;
-        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
-        bytes memory params = abi.encode(path, poolFees, 50_500e6, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            DAI,
-            50_500e6,
-            SwapRouter.Exchange.UNIV3,
-            params
-        );
-        adaptorCalls[1] = abi.encodeWithSelector(
-            UniswapV3Adaptor.openPosition.selector,
-            DAI,
-            USDC,
-            uint24(100),
-            50_000e18,
-            50_000e6,
-            0,
-            0,
-            TickMath.MIN_TICK,
-            TickMath.MAX_TICK
-        );
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+
+        adaptorCalls[1] = _createBytesDataForLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-
-        console.log("Total Assets", cellar.totalAssets());
-    }
-
-    function testHunch() external {
-        PoolAddress.PoolKey memory poolKey = PoolAddress.PoolKey({
-            token0: address(DAI),
-            token1: address(USDC),
-            fee: 100
-        });
-        address factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
-        address pool = (PoolAddress.computeAddress(factory, poolKey));
-        console.log("Pool", pool);
-        deal(address(DAI), address(uniswapV3Adaptor), 101_000e18);
-        deal(address(USDC), address(uniswapV3Adaptor), 101_000e6);
-        uniswapV3Adaptor.openPosition(
-            DAI,
-            USDC,
-            uint24(500),
-            5_000e18,
-            5_000e6,
-            0,
-            0,
-            TickMath.MIN_TICK,
-            TickMath.MAX_TICK
-        );
     }
 
     function testRebalanceIntoUniswapV3PositionUSDC_WETH() external {
         deal(address(USDC), address(this), 101_000e6);
         cellar.deposit(101_000e6, address(this));
-        int24 tick;
-        {
-            //Find current tick USDC WETH is trading at.
-            uint256 price = priceRouter.getExchangeRate(WETH, USDC);
-
-            // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(1e6, price));
-            uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) << 96);
-
-            tick = getTick(sqrtPriceX96);
-            if (tick < 0) {
-                console.log("Current Tick (-)", uint24(-1 * tick));
-            } else console.log("Current Tick", uint24(tick));
-        }
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](2);
-        address[] memory path = new address[](2);
-        path[0] = address(USDC);
-        path[1] = address(WETH);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = 500;
-        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
-        bytes memory params = abi.encode(path, poolFees, 50_500e6, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            WETH,
-            50_500e6,
-            SwapRouter.Exchange.UNIV3,
-            params
-        );
-        adaptorCalls[1] = abi.encodeWithSelector(
-            UniswapV3Adaptor.openPosition.selector,
-            USDC,
-            WETH,
-            uint24(500), //TODO changing this to 500 causes mint to fail
-            50_000e6,
-            45e18,
-            0,
-            0,
-            204669, // TickMath.MIN_TICK + 500_000, // tick - 10, //TODO doing this causes mint to use half of available assets, seems to change the decimals returned in balanceOf, and the other half of assets are no longer in the cellar
-            204679 // TickMath.MAX_TICK - 500_000 // tick + 10
-        );
+        uint24 fee = 500;
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, fee, 50_500e6);
+        adaptorCalls[1] = _createBytesDataForLP(USDC, WETH, fee, 50_000e6, 36e18, 222);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -281,63 +169,14 @@ contract CellarAssetManagerTest is Test {
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](4);
-        address[] memory path = new address[](2);
-        path[0] = address(USDC);
-        path[1] = address(WETH);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = 500;
-        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
-        bytes memory params = abi.encode(path, poolFees, 50_500e6, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            WETH,
-            50_500e6,
-            SwapRouter.Exchange.UNIV3,
-            params
-        );
-        path[0] = address(USDC);
-        path[1] = address(DAI);
-        poolFees = new uint24[](1);
-        poolFees[0] = 100;
-        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
-        params = abi.encode(path, poolFees, 50_500e6, 0);
-        adaptorCalls[1] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            DAI,
-            50_500e6,
-            SwapRouter.Exchange.UNIV3,
-            params
-        );
-        adaptorCalls[2] = abi.encodeWithSelector(
-            UniswapV3Adaptor.openPosition.selector,
-            USDC,
-            WETH,
-            uint24(100), // 0.3%
-            50_000e6,
-            45e18,
-            0,
-            0,
-            TickMath.MIN_TICK,
-            TickMath.MAX_TICK
-        );
-        adaptorCalls[3] = abi.encodeWithSelector(
-            UniswapV3Adaptor.openPosition.selector,
-            DAI,
-            USDC,
-            uint24(100), // 0.01%
-            50_000e18,
-            50_000e6,
-            0,
-            0,
-            TickMath.MIN_TICK,
-            TickMath.MAX_TICK
-        );
+
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, 50_500e6);
+        adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        adaptorCalls[2] = _createBytesDataForLP(USDC, WETH, 3000, 50_000e6, 36e18, 20);
+        adaptorCalls[3] = _createBytesDataForLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
+
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-
-        console.log("Total Assets", cellar.totalAssets());
     }
 
     function testMultipleUniV3PositionsWithSameUnderlying() external {
@@ -347,49 +186,13 @@ contract CellarAssetManagerTest is Test {
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](3);
-        address[] memory path = new address[](2);
-        path[0] = address(USDC);
-        path[1] = address(DAI);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = 100;
-        // Swap 50,500 USDC to insure we have atleast 50k USDC and 50k DAI.
-        bytes memory params = abi.encode(path, poolFees, 50_500e6, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            DAI,
-            50_500e6,
-            SwapRouter.Exchange.UNIV3,
-            params
-        );
-        adaptorCalls[1] = abi.encodeWithSelector(
-            UniswapV3Adaptor.openPosition.selector,
-            DAI,
-            USDC,
-            uint24(100),
-            25_000e18,
-            25_000e6,
-            0,
-            0,
-            TickMath.MIN_TICK,
-            TickMath.MAX_TICK
-        );
-        adaptorCalls[2] = abi.encodeWithSelector(
-            UniswapV3Adaptor.openPosition.selector,
-            DAI,
-            USDC,
-            uint24(100),
-            25_000e18,
-            25_000e6,
-            0,
-            0,
-            TickMath.MIN_TICK,
-            TickMath.MAX_TICK
-        );
+
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        adaptorCalls[1] = _createBytesDataForLP(DAI, USDC, 100, 25_000e18, 25_000e6, 30);
+        adaptorCalls[2] = _createBytesDataForLP(DAI, USDC, 100, 25_000e18, 25_000e6, 40);
+
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-
-        console.log("Total Assets", cellar.totalAssets());
     }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
@@ -404,7 +207,7 @@ contract CellarAssetManagerTest is Test {
         ERC20(asset).transferFrom(msg.sender, cosmos, assets);
     }
 
-    //Helper functions
+    // ========================================= HELPER FUNCTIONS =========================================
     function _sqrt(uint256 _x) internal pure returns (uint256 y) {
         uint256 z = (_x + 1) / 2;
         y = _x;
@@ -414,12 +217,84 @@ contract CellarAssetManagerTest is Test {
         }
     }
 
-    function getSqrtPriceX96(uint256 priceA, uint256 priceB) internal pure returns (uint256) {
-        uint256 ratioX192 = (priceA << 192) / (priceB);
-        return _sqrt(ratioX192);
+    // function testHunch() external {
+    // ERC20 token0 = USDC;
+    // ERC20 token1 = WETH;
+    // uint256 amount0 = 100_000e6;
+    // uint256 amount1 = 100e18;
+    // uint24 fee = 3000;
+    // deal(address(token0), address(uniswapV3Adaptor), amount0);
+    // deal(address(token1), address(uniswapV3Adaptor), amount1);
+    // (int24 lower, int24 upper) = _getUpperAndLowerTick(token0, token1, fee, 100);
+    // uniswapV3Adaptor.openPosition(token0, token1, fee, amount0, amount1, 0, 0, lower, upper);
+    // }
+
+    function _getTick(ERC20 token0, ERC20 token1) internal returns (int24 tick) {
+        uint256 price = priceRouter.getExchangeRate(token1, token0);
+        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
+        uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
+        tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+        if (tick < 0) console.log("Current Tick (-)", uint24(-1 * tick));
+        else console.log("Current Tick", uint24(tick));
     }
 
-    function getTick(uint160 sqrtPriceX96) internal pure returns (int24 tick) {
-        tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+    //TODO I think size needs to be an even number
+    function _getUpperAndLowerTick(
+        ERC20 token0,
+        ERC20 token1,
+        uint24 fee,
+        int24 size
+    ) internal returns (int24 lower, int24 upper) {
+        // size determines how many tick spaces to supply liquidity across.
+        uint256 price = priceRouter.getExchangeRate(token1, token0);
+        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
+        uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
+        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+
+        IUniswapV3Pool pool = IUniswapV3Pool(factory.getPool(address(token0), address(token1), fee));
+        int24 spacing = pool.tickSpacing();
+        lower = tick - (tick % spacing);
+        lower = lower - ((spacing * size) / 2);
+        upper = lower + spacing * size;
+    }
+
+    function _createBytesDataForSwap(
+        ERC20 from,
+        ERC20 to,
+        uint24 poolFee,
+        uint256 fromAmount
+    ) internal returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = poolFee;
+        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
+        return
+            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+    }
+
+    function _createBytesDataForLP(
+        ERC20 token0,
+        ERC20 token1,
+        uint24 poolFee,
+        uint256 amount0,
+        uint256 amount1,
+        int24 size
+    ) internal returns (bytes memory) {
+        (int24 lower, int24 upper) = _getUpperAndLowerTick(token0, token1, poolFee, size);
+        return
+            abi.encodeWithSelector(
+                UniswapV3Adaptor.openPosition.selector,
+                token0,
+                token1,
+                poolFee,
+                amount0,
+                amount1,
+                0,
+                0,
+                lower,
+                upper
+            );
     }
 }

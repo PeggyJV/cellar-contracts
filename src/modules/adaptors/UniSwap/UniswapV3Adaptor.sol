@@ -15,6 +15,7 @@ import { Math } from "src/utils/Math.sol";
 import { FixedPoint96 } from "@uniswapV3C/libraries/FixedPoint96.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { console } from "@forge-std/Test.sol";
+import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 /**
  * @title Uniswap V3 Adaptor
@@ -30,7 +31,7 @@ to liquidity
 This contract would need to track the cellars balanceOf and assets of, and do the conversion from NFT to underlying. I guess each cellar will need to pass in their position ID, then this contract would go okay, they have this NFT related to this position and then break down the underlying tokens and return the balance
  */
 //balanceOf inspired by https://github.com/0xparashar/UniV3NFTOracle/blob/master/contracts/UniV3NFTOracle.sol
-contract UniswapV3Adaptor is BaseAdaptor {
+contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
     using SafeERC20 for ERC20;
     using Math for uint256;
     using Address for address;
@@ -70,26 +71,12 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         // Get exchnage rate between token0 and token1
-
         (ERC20 token0, ERC20 token1) = abi.decode(adaptorData, (ERC20, ERC20));
-        // uint256 price0 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token0);
-        // uint256 price1 = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getValueInUSD(token1);
         uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getExchangeRate(token1, token0);
-        // price = price.changeDecimals(token0.decimals(), token1.decimals());
 
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
         uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
-        // uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) * (2**96));
-        // uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(price) << 96);
 
-        // uint160 sqrtPriceX96 = uint160(getSqrtPriceX96(10**token0.decimals(), price));
-
-        {
-            int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-            if (tick < 0) {
-                console.log("Current Tick (-)", uint24(-1 * tick));
-            } else console.log("Current Tick", uint24(tick));
-        }
         // Grab cellars balance of UniV3 NFTs.
         uint256 bal = positionManager().balanceOf(msg.sender);
 
@@ -145,16 +132,16 @@ contract UniswapV3Adaptor is BaseAdaptor {
             amount0 += amountA;
             amount1 += amountB;
         }
-        if (amount0 > 0 || amount1 > 0) {
-            console.log("----------------------------------------");
-            console.log("Underlying Token 0:", amount0);
-            console.log("Underlying Token 1:", amount1);
-            console.log("Cellar Balance 0:", token0.balanceOf(msg.sender));
-            console.log("Cellar Balance 1:", token1.balanceOf(msg.sender));
-            console.log("Name 0:", token0.name());
-            console.log("Name 1:", token1.name());
-            console.log("----------------------------------------");
-        }
+        // if (amount0 > 0 || amount1 > 0) {
+        //     console.log("----------------------------------------");
+        //     console.log("Underlying Token 0:", amount0);
+        //     console.log("Underlying Token 1:", amount1);
+        //     console.log("Cellar Balance 0:", token0.balanceOf(msg.sender));
+        //     console.log("Cellar Balance 1:", token1.balanceOf(msg.sender));
+        //     console.log("Name 0:", token0.name());
+        //     console.log("Name 1:", token1.name());
+        //     console.log("----------------------------------------");
+        // }
         // uint256 ratio = 1e18 * (sqrtPriceX96 >> 96)**2;
         // console.log("Ratio", ratio);
         // if (token1.decimals() < token0.decimals()) ratio = ratio * 10**(token0.decimals() - token1.decimals());
