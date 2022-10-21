@@ -218,9 +218,88 @@ contract CellarAssetManagerTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    //TODO test adding to a position
-    //TODO test taking from a position
+    function testAddingToExistingPosition() external {
+        deal(address(USDC), address(this), 201_000e6);
+        cellar.deposit(201_000e6, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 100_500e6);
+
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
+    function testTakingFromExistingPosition() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
     //TODO test collecting fees.
+    function testTakingFees() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+
+        // Add liquidity to low liquidity DAI/USDC 0.3% fee pool.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 3000, 50_000e18, 50_000e6, 100);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Have Cellar make several terrible swaps
+        cellar.setRebalanceDeviation(0.1e18);
+        deal(address(USDC), address(cellar), 1_000_000e6);
+        deal(address(DAI), address(cellar), 1_000_000e18);
+        for (uint256 i = 0; i < 10; i++) {
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 1_000e6);
+            adaptorCalls[0] = _createBytesDataForSwap(DAI, USDC, 3000, 1_000e18);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Check that cellar dis receive some fees.
+        deal(address(USDC), address(cellar), 1_000_000e6);
+        deal(address(DAI), address(cellar), 1_000_000e18);
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        console.log("Cellar USDC", USDC.balanceOf(address(cellar)));
+        console.log("Cellar DAI", DAI.balanceOf(address(cellar)));
+
+        assertTrue(USDC.balanceOf(address(cellar)) > 1_000_000e6, "Cellar should have earned USDC fees.");
+        assertTrue(DAI.balanceOf(address(cellar)) > 1_000_000e18, "Cellar should have earned DAI fees.");
+    }
+
+    //TODO test range orders.
 
     // ========================================= GRAVITY FUNCTIONS =========================================
 
@@ -256,7 +335,7 @@ contract CellarAssetManagerTest is Test {
     // uniswapV3Adaptor.openPosition(token0, token1, fee, amount0, amount1, 0, 0, lower, upper);
     // }
 
-    function _getTick(ERC20 token0, ERC20 token1) internal returns (int24 tick) {
+    function _getTick(ERC20 token0, ERC20 token1) internal view returns (int24 tick) {
         uint256 price = priceRouter.getExchangeRate(token1, token0);
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
         uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
@@ -271,7 +350,7 @@ contract CellarAssetManagerTest is Test {
         ERC20 token1,
         uint24 fee,
         int24 size
-    ) internal returns (int24 lower, int24 upper) {
+    ) internal view returns (int24 lower, int24 upper) {
         // size determines how many tick spaces to supply liquidity across.
         uint256 price = priceRouter.getExchangeRate(token1, token0);
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
@@ -290,7 +369,7 @@ contract CellarAssetManagerTest is Test {
         ERC20 to,
         uint24 poolFee,
         uint256 fromAmount
-    ) internal returns (bytes memory) {
+    ) internal pure returns (bytes memory) {
         address[] memory path = new address[](2);
         path[0] = address(from);
         path[1] = address(to);
@@ -308,7 +387,7 @@ contract CellarAssetManagerTest is Test {
         uint256 amount0,
         uint256 amount1,
         int24 size
-    ) internal returns (bytes memory) {
+    ) internal view returns (bytes memory) {
         (int24 lower, int24 upper) = _getUpperAndLowerTick(token0, token1, poolFee, size);
         return
             abi.encodeWithSelector(
@@ -325,8 +404,39 @@ contract CellarAssetManagerTest is Test {
             );
     }
 
-    function _createBytesDataToCloseLP(address owner, uint256 index) internal returns (bytes memory) {
+    function _createBytesDataToCloseLP(address owner, uint256 index) internal view returns (bytes memory) {
         uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
         return abi.encodeWithSelector(UniswapV3Adaptor.closePosition.selector, tokenId, 0, 0);
+    }
+
+    function _createBytesDataToAddLP(
+        address owner,
+        uint256 index,
+        uint256 amount0,
+        uint256 amount1
+    ) internal view returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        return abi.encodeWithSelector(UniswapV3Adaptor.addToPosition.selector, tokenId, amount0, amount1, 0, 0);
+    }
+
+    function _createBytesDataToTakeLP(
+        address owner,
+        uint256 index,
+        uint256 liquidityPer
+    ) internal view returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager.positions(tokenId);
+        uint128 liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
+        return abi.encodeWithSelector(UniswapV3Adaptor.takeFromPosition.selector, tokenId, liquidity, 0, 0);
+    }
+
+    function _createBytesDataToCollectFees(
+        address owner,
+        uint256 index,
+        uint128 amount0,
+        uint128 amount1
+    ) internal view returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        return abi.encodeWithSelector(UniswapV3Adaptor.collectFees.selector, tokenId, amount0, amount1);
     }
 }

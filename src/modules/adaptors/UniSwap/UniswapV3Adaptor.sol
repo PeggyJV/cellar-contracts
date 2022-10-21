@@ -206,29 +206,22 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
                 amount1Min: min1,
                 deadline: block.timestamp
             });
-        console.log("Cellar Balance 0:", ERC20(t0).balanceOf(address(this)));
-        console.log("Cellar Balance 1:", ERC20(t1).balanceOf(address(this)));
         (uint256 amount0, uint256 amount1) = positionManager().decreaseLiquidity(params);
-        console.log("Amount 0", amount0);
-        console.log("Amount 1", amount1);
-        console.log("Cellar Balance 0:", ERC20(t0).balanceOf(address(this)));
-        console.log("Cellar Balance 1:", ERC20(t1).balanceOf(address(this)));
 
         // Collect principal and fees before "burning" NFT.
         collectFees(positionId, type(uint128).max, type(uint128).max);
-        console.log("Cellar Balance 0:", ERC20(t0).balanceOf(address(this)));
-        console.log("Cellar Balance 1:", ERC20(t1).balanceOf(address(this)));
+
         // Position now has no more liquidity, so transfer NFT to dead address to save on `balanceOf` gas usage.
         // Transfer token to a dead address.
         positionManager().transferFrom(address(this), address(1), positionId);
     }
 
     function addToPosition(
+        uint256 positionId,
         uint256 amount0,
         uint256 amount1,
         uint256 min0,
-        uint256 min1,
-        uint256 positionId
+        uint256 min1
     ) public {
         require(address(this) == positionManager().ownerOf(positionId), "Cellar does not own this token.");
         (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
@@ -249,10 +242,10 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
     }
 
     function takeFromPosition(
+        uint256 positionId,
         uint128 liquidity,
         uint256 min0,
-        uint256 min1,
-        uint256 positionId
+        uint256 min1
     ) public {
         require(address(this) == positionManager().ownerOf(positionId), "Cellar does not own this token.");
         (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager().positions(positionId);

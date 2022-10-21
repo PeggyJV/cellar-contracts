@@ -20,8 +20,8 @@ import { console } from "@forge-std/Test.sol";
  * Block where USDC in == aUSDC out 15174148
  * Block where USDC-1 in == aUSDC out 15000000
  */
-//TODO I think adaptors can work with bytes32 data instead of bytes. This reduces the amount of data passed back and forth between the cellar and the adaptor and should result in less gas costs for users.
 //TODO to make adaptor calls more efficient during rebalances, if I could set something up where it loops through an array of internal functions and runs through them
+//TODO when taking on DEBT positions, Cellar.isPositionUsed must be true.
 contract BaseAdaptor {
     Registry public registry;
     using SafeERC20 for ERC20;
