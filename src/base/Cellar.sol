@@ -8,7 +8,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
-import { Uint256Array } from "src/utils/Uint256Array.sol";
+import { Uint32Array } from "src/utils/Uint32Array.sol";
 import { Math } from "../utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
@@ -16,6 +16,8 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
+
+import { console } from "@forge-std/Test.sol"; //TODO remove this
 
 // import { Owned } from "@solmate/auth/Owned.sol";
 
@@ -31,7 +33,7 @@ import { Owned } from "@solmate/auth/Owned.sol";
 //TODO use solmate Reentrancy, Ownable, and maybe ERC20 to cut down on size.
 //TODO add multicall to adaptors so that we can use staticcall and multicall to batch view function calls together
 contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
-    using Uint256Array for uint256[];
+    using Uint32Array for uint32[];
     using SafeERC20 for ERC20;
     using SafeCast for uint256;
     using Math for uint256;
@@ -102,14 +104,13 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     error Cellar__PositionArrayFull(uint256 maxPositions);
 
     /**
-     * @notice Array of uint256s made up of cellars positions Ids.
+     * @notice Array of uint32s made up of cellars positions Ids.
      */
-    //TODO I could probs get away with a fixed size array that uses 64 bit or maybe even 32 bit position ids
-    // Think it makes the contract larger, but reads and writes should be more efficient
-    uint256[] public positions;
+    //TODO I could probs get away with a fixed size array.
+    uint32[] public positions;
 
     //TODO add natspec
-    uint256 public numberOfDebtPositions;
+    uint32 public numberOfDebtPositions;
 
     /**
      * @notice Tell whether a position is currently used.
@@ -119,12 +120,12 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     /**
      * @notice Get position data given position id.
      */
-    mapping(uint256 => Registry.PositionData) public getPositionData;
+    mapping(uint32 => Registry.PositionData) public getPositionData;
 
     /**
      * @notice Get the addresses of the positions current used by the cellar.
      */
-    function getPositions() external view returns (uint256[] memory) {
+    function getPositions() external view returns (uint32[] memory) {
         return positions;
     }
 
@@ -139,8 +140,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @param positionId address of position to add
      */
     function addPosition(
-        uint256 index,
-        uint256 positionId,
+        uint32 index,
+        uint32 positionId,
         bytes memory configurationData
     ) external onlyOwner whenNotShutdown {
         if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
@@ -175,9 +176,9 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @notice Remove the position at a given index from the list of positions used by the cellar.
      * @param index index at which to remove the position
      */
-    function removePosition(uint256 index) external onlyOwner {
+    function removePosition(uint32 index) external onlyOwner {
         // Get position being removed.
-        uint256 positionId = positions[index];
+        uint32 positionId = positions[index];
 
         // Only remove position if it is empty, and if it is not the holding position.
         uint256 positionBalance = _balanceOf(positionId);
@@ -200,10 +201,10 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @param index1 index of first position to swap
      * @param index2 index of second position to swap
      */
-    function swapPositions(uint256 index1, uint256 index2) external onlyOwner {
+    function swapPositions(uint32 index1, uint32 index2) external onlyOwner {
         // Get the new positions that will be at each index.
-        uint256 newPosition1 = positions[index2];
-        uint256 newPosition2 = positions[index1];
+        uint32 newPosition1 = positions[index2];
+        uint32 newPosition2 = positions[index1];
 
         // Swap positions.
         (positions[index1], positions[index2]) = (newPosition1, newPosition2);
@@ -421,7 +422,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     constructor(
         Registry _registry,
         ERC20 _asset,
-        uint256[] memory _positions,
+        uint32[] memory _positions,
         bytes[] memory _configurationData,
         string memory _name,
         string memory _symbol,
@@ -436,11 +437,15 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         // Initialize positions.
         positions = _positions;
         for (uint256 i; i < _positions.length; i++) {
-            uint256 position = _positions[i];
+            uint32 position = _positions[i];
 
             // if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
 
-            (address adaptor, bool isDebt, bytes memory adaptorData, ) = registry.getPositionData(position);
+            (address adaptor, bool isDebt, bytes memory adaptorData) = registry.cellarAddPosition(
+                position,
+                _assetRiskTolerance,
+                _protocolRiskTolerance
+            );
 
             require(adaptor != address(0), "Position does not exist.");
 
@@ -764,7 +769,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
 
         for (uint256 i; i < positions.length; i++) {
             // Move on to next position if this one is empty.
-            uint256 position = positions[i];
+            uint32 position = positions[i];
             if (_balanceOf(position) == 0) continue;
             ERC20 positionAsset = _assetOf(position);
 
@@ -821,7 +826,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         uint256 debtIndex;
 
         for (uint256 i; i < numOfPositions; i++) {
-            uint256 position = positions[i];
+            uint32 position = positions[i];
             if (getPositionData[position].isDebt) {
                 debtPositionAssets[debtIndex] = _assetOf(position);
                 debtBalances[debtIndex] = _balanceOf(position);
@@ -854,7 +859,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         uint256[] memory balances = new uint256[](numOfPositions);
 
         for (uint256 i; i < numOfPositions; i++) {
-            uint256 position = positions[i];
+            uint32 position = positions[i];
             positionAssets[i] = _assetOf(position);
             balances[i] = _withdrawableFrom(position);
         }
@@ -1098,7 +1103,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             address adaptor = data[i].adaptor;
             require(isAdaptorSetup[adaptor], "Adaptor not set up to be used with Cellar.");
             for (uint8 j = 0; j < data[i].callData.length; j++) {
-                adaptor.functionDelegateCall(data[i].callData[j]);
+                adaptor.functionDelegateCall(data[i].callData[j]); //TODO is there someway to append data to this, so we can append the adaptor address?
             }
         }
 
@@ -1217,7 +1222,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @param assets the amount of assets to deposit into the position
      */
     //TODO this is ONLY used in the afterDeposit function
-    function _depositTo(uint256 position, uint256 assets) internal {
+    function _depositTo(uint32 position, uint256 assets) internal {
         //TODO adaptor should be a non zero address
         address adaptor = getPositionData[position].adaptor;
         adaptor.functionDelegateCall(
@@ -1238,7 +1243,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      */
     //TODO this is only used in the _withdrawInOrder function
     function _withdrawFrom(
-        uint256 position,
+        uint32 position,
         uint256 assets,
         address receiver
     ) internal {
@@ -1259,7 +1264,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @param position position to get the withdrawable balance of
      */
     //TODO maybe these view functions should use staticcall
-    function _withdrawableFrom(uint256 position) internal view returns (uint256) {
+    function _withdrawableFrom(uint32 position) internal view returns (uint256) {
         // Debt positions always return 0 for their withdrawable.
         if (getPositionData[position].isDebt) return 0;
         return
@@ -1275,7 +1280,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      *      to `convertToAssets` so that balanceOf ERC4626 positions includes fees taken on withdraw.
      * @param position position to get the balance of
      */
-    function _balanceOf(uint256 position) internal view returns (uint256) {
+    function _balanceOf(uint32 position) internal view returns (uint256) {
         address adaptor = getPositionData[position].adaptor;
         return BaseAdaptor(adaptor).balanceOf(getPositionData[position].adaptorData);
     }
@@ -1284,7 +1289,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @dev Get the asset of a position according to its position type.
      * @param position to get the asset of
      */
-    function _assetOf(uint256 position) internal view returns (ERC20) {
+    function _assetOf(uint32 position) internal view returns (ERC20) {
         address adaptor = getPositionData[position].adaptor;
         return BaseAdaptor(adaptor).assetOf(getPositionData[position].adaptorData);
     }

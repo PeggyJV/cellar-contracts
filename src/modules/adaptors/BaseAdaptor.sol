@@ -28,6 +28,16 @@ contract BaseAdaptor {
     using Math for uint256;
 
     /**
+     * @dev Identifier unique to this adaptor for a shared registry.
+     * Normally the identifier would just be the address of this contract, but this
+     * Identifier is needed during Cellar Delegate Call Operations, so getting the address
+     * of this contract is trickier.
+     */
+    function identifier() public pure virtual returns (bytes32) {
+        return keccak256(abi.encode("Base Adaptor V 0.0"));
+    }
+
+    /**
      * @notice deposit and withdraw functions should use adaptor data to validate operations, like putting a floor on the loan health when withdrawing
      */
     function deposit(

@@ -4,7 +4,7 @@ pragma solidity 0.8.16;
 /**
  * @notice A library to extend the address array data type.
  */
-library Uint256Array {
+library Uint32Array {
     // =========================================== ADDRESS STORAGE ===========================================
 
     /**
@@ -14,9 +14,9 @@ library Uint256Array {
      * @param value address to add to the array
      */
     function add(
-        uint256[] storage array,
-        uint256 index,
-        uint256 value
+        uint32[] storage array,
+        uint32 index,
+        uint32 value
     ) internal {
         uint256 len = array.length;
 
@@ -36,7 +36,7 @@ library Uint256Array {
      * @param array uint256 array to remove the uint256 from
      * @param index index to remove the uint256 at
      */
-    function remove(uint256[] storage array, uint256 index) internal {
+    function remove(uint32[] storage array, uint32 index) internal {
         uint256 len = array.length;
 
         require(index < len, "Index out of bounds");
@@ -51,7 +51,7 @@ library Uint256Array {
      * @param array uint256 array to check
      * @param value uint256 to check for
      */
-    function contains(uint256[] storage array, uint256 value) internal view returns (bool) {
+    function contains(uint32[] storage array, uint32 value) internal view returns (bool) {
         for (uint256 i; i < array.length; i++) if (value == array[i]) return true;
 
         return false;

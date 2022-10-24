@@ -23,6 +23,10 @@ contract CellarAdaptor is BaseAdaptor {
 
     //============================================ Global Functions ===========================================
 
+    function identifier() public pure override returns (bytes32) {
+        return keccak256(abi.encode("Sommelier Cellar Adaptor V 0.0"));
+    }
+
     //============================================ Implement Base Functions ===========================================
     function deposit(
         uint256 assets,

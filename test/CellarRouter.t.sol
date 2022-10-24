@@ -45,10 +45,10 @@ contract CellarRouterTest is Test {
 
     ERC20Adaptor private erc20Adaptor;
 
-    uint256 private usdcPosition;
-    uint256 private daiPosition;
-    uint256 private wethPosition;
-    uint256 private wbtcPosition;
+    uint32 private usdcPosition;
+    uint32 private daiPosition;
+    uint32 private wethPosition;
+    uint32 private wbtcPosition;
 
     function setUp() public {
         priceRouter = new PriceRouter();
@@ -82,7 +82,7 @@ contract CellarRouterTest is Test {
         wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
         wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
 
-        uint256[] memory positions = new uint256[](4);
+        uint32[] memory positions = new uint32[](4);
         positions[0] = usdcPosition;
         positions[1] = daiPosition;
         positions[2] = wethPosition;
@@ -121,7 +121,7 @@ contract CellarRouterTest is Test {
         path[1] = address(WETH);
 
         // Create a WETH Cellar.
-        uint256[] memory positions = new uint256[](1);
+        uint32[] memory positions = new uint32[](1);
         positions[0] = wethPosition;
 
         bytes[] memory positionConfigs = new bytes[](1);

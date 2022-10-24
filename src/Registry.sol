@@ -145,11 +145,18 @@ contract Registry is Ownable {
      */
     // mapping(address => PositionData) public getPositionData;
 
-    mapping(uint256 => PositionData) public getPositionData;
+    // mapping(uint256 => PositionData) public getPositionData;
 
-    mapping(uint256 => RiskData) public getRiskData;
+    mapping(uint32 => RiskData) public getRiskData;
 
     mapping(address => RiskData) public getAdaptorRiskData;
+
+    uint32 public positionCount;
+
+    mapping(bytes32 => uint32) public getPositionHashToPositionId;
+    mapping(uint32 => PositionData) public getPositionIdToPositionData;
+
+    // mapping(uint32 => bytes32) public getPositionIdToPositionHash;
 
     /**
      * @notice Trust a position to be used by the cellar.
@@ -160,15 +167,17 @@ contract Registry is Ownable {
         bytes memory adaptorData,
         uint128 assetRisk,
         uint128 protocolRisk
-    ) external onlyOwner returns (uint256 positionId) {
-        positionId = uint256(keccak256(abi.encode(adaptor, isDebt, adaptorData)));
+    ) external onlyOwner returns (uint32 positionId) {
+        bytes32 identifier = BaseAdaptor(adaptor).identifier();
+        bytes32 positionHash = keccak256(abi.encode(identifier, isDebt, adaptorData));
+        positionId = positionCount + 1; // Plus 1 so that we do not use Id 0.
 
         require(adaptor != address(0), "Adaptor can not be zero address");
-        require(getPositionData[positionId].adaptor == address(0), "Position already exists.");
+        require(getPositionHashToPositionId[positionHash] == 0, "Position already exists.");
         require(isAdaptorTrusted[adaptor], "Invalid Adaptor");
 
         // Set position data.
-        getPositionData[positionId] = PositionData({
+        getPositionIdToPositionData[positionId] = PositionData({
             adaptor: adaptor,
             isDebt: isDebt,
             adaptorData: adaptorData,
@@ -182,22 +191,29 @@ contract Registry is Ownable {
         if (!PriceRouter(getAddress[PRICE_ROUTER_REGISTRY_SLOT]).isSupported(positionAsset))
             revert Cellar__PositionPricingNotSetUp(address(positionAsset));
 
+        positionCount++;
+
         // emit TrustChanged(position, true);
     }
 
     mapping(address => bool) public isAdaptorTrusted;
+
+    mapping(bytes32 => bool) public isIdentifierUsed;
 
     function trustAdaptor(
         address adaptor,
         uint128 assetRisk,
         uint128 protocolRisk
     ) external onlyOwner {
+        bytes32 identifier = BaseAdaptor(adaptor).identifier();
+        require(!isIdentifierUsed[identifier], "Adaptors must have unique identifiers.");
         isAdaptorTrusted[adaptor] = true;
+        isIdentifierUsed[identifier] = true;
         getAdaptorRiskData[adaptor] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
     }
 
     function cellarAddPosition(
-        uint256 _positionId,
+        uint32 _positionId,
         uint128 _assetRiskTolerance,
         uint128 _protocolRiskTolerance
     )
@@ -212,7 +228,7 @@ contract Registry is Ownable {
         RiskData memory data = getRiskData[_positionId];
         require(_assetRiskTolerance >= data.assetRisk, "Caller does not meet asset risk max.");
         require(_protocolRiskTolerance >= data.protocolRisk, "Caller does not meet protocol risk max.");
-        PositionData memory positionData = getPositionData[_positionId];
+        PositionData memory positionData = getPositionIdToPositionData[_positionId];
         require(positionData.adaptor != address(0), "Position does not exist.");
         return (positionData.adaptor, positionData.isDebt, positionData.adaptorData);
     }

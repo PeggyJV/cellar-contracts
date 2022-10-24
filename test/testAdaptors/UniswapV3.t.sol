@@ -64,11 +64,11 @@ contract UniswapV3AdaptorTest is Test {
     UniswapV3Adaptor private uniswapV3Adaptor;
     ERC20Adaptor private erc20Adaptor;
 
-    uint256 private usdcPosition;
-    uint256 private wethPosition;
-    uint256 private daiPosition;
-    uint256 private usdcDaiPosition;
-    uint256 private usdcWethPosition;
+    uint32 private usdcPosition;
+    uint32 private wethPosition;
+    uint32 private daiPosition;
+    uint32 private usdcDaiPosition;
+    uint32 private usdcWethPosition;
 
     function setUp() external {
         // Setup Registry and modules:
@@ -91,7 +91,7 @@ contract UniswapV3AdaptorTest is Test {
         priceRouter.addAsset(WETH, 0, 0, false, 0);
 
         // Cellar positions array.
-        uint256[] memory positions = new uint256[](5);
+        uint32[] memory positions = new uint32[](5);
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(uniswapV3Adaptor), 0, 0);
@@ -289,14 +289,25 @@ contract UniswapV3AdaptorTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        console.log("Cellar USDC", USDC.balanceOf(address(cellar)));
-        console.log("Cellar DAI", DAI.balanceOf(address(cellar)));
-
         assertTrue(USDC.balanceOf(address(cellar)) > 1_000_000e6, "Cellar should have earned USDC fees.");
         assertTrue(DAI.balanceOf(address(cellar)) > 1_000_000e18, "Cellar should have earned DAI fees.");
     }
 
-    //TODO test range orders.
+    function testRangeOrders() external {
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenRangeOrder(DAI, USDC, 100, 0, assets);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertEq(USDC.balanceOf(address(cellar)), 0, "Cellar should have put all USDC in a UniV3 range order.");
+    }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
 
@@ -320,18 +331,6 @@ contract UniswapV3AdaptorTest is Test {
         }
     }
 
-    // function testHunch() external {
-    // ERC20 token0 = USDC;
-    // ERC20 token1 = WETH;
-    // uint256 amount0 = 100_000e6;
-    // uint256 amount1 = 100e18;
-    // uint24 fee = 3000;
-    // deal(address(token0), address(uniswapV3Adaptor), amount0);
-    // deal(address(token1), address(uniswapV3Adaptor), amount1);
-    // (int24 lower, int24 upper) = _getUpperAndLowerTick(token0, token1, fee, 100);
-    // uniswapV3Adaptor.openPosition(token0, token1, fee, amount0, amount1, 0, 0, lower, upper);
-    // }
-
     function _getTick(ERC20 token0, ERC20 token1) internal view returns (int24 tick) {
         uint256 price = priceRouter.getExchangeRate(token1, token0);
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
@@ -346,13 +345,15 @@ contract UniswapV3AdaptorTest is Test {
         ERC20 token0,
         ERC20 token1,
         uint24 fee,
-        int24 size
+        int24 size,
+        int24 shift
     ) internal view returns (int24 lower, int24 upper) {
         // size determines how many tick spaces to supply liquidity across.
         uint256 price = priceRouter.getExchangeRate(token1, token0);
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
         uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
         int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+        tick = tick + shift;
 
         IUniswapV3Pool pool = IUniswapV3Pool(factory.getPool(address(token0), address(token1), fee));
         int24 spacing = pool.tickSpacing();
@@ -385,7 +386,7 @@ contract UniswapV3AdaptorTest is Test {
         uint256 amount1,
         int24 size
     ) internal view returns (bytes memory) {
-        (int24 lower, int24 upper) = _getUpperAndLowerTick(token0, token1, poolFee, size);
+        (int24 lower, int24 upper) = _getUpperAndLowerTick(token0, token1, poolFee, size, 0);
         return
             abi.encodeWithSelector(
                 UniswapV3Adaptor.openPosition.selector,
@@ -435,5 +436,35 @@ contract UniswapV3AdaptorTest is Test {
     ) internal view returns (bytes memory) {
         uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
         return abi.encodeWithSelector(UniswapV3Adaptor.collectFees.selector, tokenId, amount0, amount1);
+    }
+
+    function _createBytesDataToOpenRangeOrder(
+        ERC20 token0,
+        ERC20 token1,
+        uint24 poolFee,
+        uint256 amount0,
+        uint256 amount1
+    ) internal view returns (bytes memory) {
+        int24 lower;
+        int24 upper;
+        if (amount0 > 0) {
+            (lower, upper) = _getUpperAndLowerTick(token0, token1, poolFee, 2, 100);
+        } else {
+            (lower, upper) = _getUpperAndLowerTick(token0, token1, poolFee, 2, -100);
+        }
+
+        return
+            abi.encodeWithSelector(
+                UniswapV3Adaptor.openPosition.selector,
+                token0,
+                token1,
+                poolFee,
+                amount0,
+                amount1,
+                0,
+                0,
+                lower,
+                upper
+            );
     }
 }

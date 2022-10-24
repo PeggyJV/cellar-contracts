@@ -51,11 +51,11 @@ contract CellarTest is Test {
     CellarAdaptor private cellarAdaptor;
     ERC20Adaptor private erc20Adaptor;
 
-    uint256 private usdcPosition;
-    uint256 private wethPosition;
-    uint256 private usdcCLRPosition;
-    uint256 private wethCLRPosition;
-    uint256 private wbtcCLRPosition;
+    uint32 private usdcPosition;
+    uint32 private wethPosition;
+    uint32 private usdcCLRPosition;
+    uint32 private wethCLRPosition;
+    uint32 private wbtcCLRPosition;
 
     function setUp() external {
         usdcCLR = new MockERC4626(USDC, "USDC Cellar LP Token", "USDC-CLR", 6);
@@ -106,7 +106,7 @@ contract CellarTest is Test {
         priceRouter.supportAsset(WBTC);
 
         // Cellar positions array.
-        uint256[] memory positions = new uint256[](5);
+        uint32[] memory positions = new uint32[](5);
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(cellarAdaptor), 0, 0);
@@ -160,7 +160,7 @@ contract CellarTest is Test {
     function testInitialization() external {
         assertEq(address(cellar.registry()), address(registry), "Should initialize registry to test registry.");
 
-        uint256[] memory expectedPositions = new uint256[](5);
+        uint32[] memory expectedPositions = new uint32[](5);
         expectedPositions[0] = usdcPosition;
         expectedPositions[1] = usdcCLRPosition;
         expectedPositions[2] = wethCLRPosition;
@@ -181,13 +181,13 @@ contract CellarTest is Test {
         expectedAdaptorData[3] = abi.encode(wbtcCLR);
         expectedAdaptorData[4] = abi.encode(WETH);
 
-        uint256[] memory positions = cellar.getPositions();
+        uint32[] memory positions = cellar.getPositions();
 
         assertEq(cellar.getPositions().length, 5, "Position length should be 5.");
 
         for (uint256 i = 0; i < 5; i++) {
             assertEq(positions[i], expectedPositions[i], "Positions should have been written to Cellar.");
-            uint256 position = positions[i];
+            uint32 position = positions[i];
             (address adaptor, bool isDebt, bytes memory adaptorData, ) = cellar.getPositionData(position);
             assertEq(adaptor, expectedAdaptor[i], "Position adaptor not initialized properly.");
             assertEq(isDebt, false, "There should be no debt positions.");
@@ -319,7 +319,7 @@ contract CellarTest is Test {
         MockERC4626 wethVault = new MockERC4626(WETH, "WETH Vault LP Token", "WETH-VLT", 18);
 
         priceRouter.supportAsset(WETH);
-        uint256 newWETHPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethVault), 0, 0);
+        uint32 newWETHPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethVault), 0, 0);
         cellar.addPosition(5, newWETHPosition, abi.encode(0));
 
         cellar.depositIntoPosition(wethCLRPosition, 1e18); // $2000
@@ -733,10 +733,10 @@ contract CellarTest is Test {
     function testMaliciousStrategistWithUnboundForLoop() external {
         // Initialize test Cellar.
         MockCellar multiPositionCellar;
-        uint256[] memory positions;
+        uint32[] memory positions;
         {
             // Create new cellar with USDC position.
-            positions = new uint256[](1);
+            positions = new uint32[](1);
             positions[0] = usdcPosition;
             bytes[] memory positionConfigs = new bytes[](1);
 
@@ -759,11 +759,11 @@ contract CellarTest is Test {
         for (uint256 i = 1; i < 32; i++) {
             position = new MockERC20("Howdy", 18);
             priceRouter.supportAsset(position);
-            uint256 id = registry.trustPosition(address(erc20Adaptor), false, abi.encode(position), 0, 0);
-            multiPositionCellar.addPosition(multiPositionCellar.getPositions().length, id, abi.encode(0));
+            uint32 id = registry.trustPosition(address(erc20Adaptor), false, abi.encode(position), 0, 0);
+            multiPositionCellar.addPosition(uint32(multiPositionCellar.getPositions().length), id, abi.encode(0));
         }
 
-        assertEq(multiPositionCellar.getPositions().length, 32, "Cellar should have 32 positions.");
+        assertEq(uint32(multiPositionCellar.getPositions().length), 32, "Cellar should have 32 positions.");
 
         // Adding one more position should revert.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(32))));
@@ -971,11 +971,11 @@ contract CellarTest is Test {
     }
 
     function testDebtTokensInCellars() external {
-        uint256 debtWethPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WETH), 0, 0);
-        uint256 debtWbtcPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WBTC), 0, 0);
+        uint32 debtWethPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WETH), 0, 0);
+        uint32 debtWbtcPosition = registry.trustPosition(address(erc20Adaptor), true, abi.encode(WBTC), 0, 0);
 
         // Setup Cellar with debt positions:
-        uint256[] memory positions = new uint256[](2);
+        uint32[] memory positions = new uint32[](2);
         positions[0] = usdcPosition;
         positions[1] = debtWethPosition; // not a real debt position, but for test will be treated as such
 
@@ -1028,7 +1028,7 @@ contract CellarTest is Test {
         MockCellar cellarA;
         MockCellar cellarB;
 
-        uint256[] memory positions = new uint256[](1);
+        uint32[] memory positions = new uint32[](1);
         positions[0] = usdcPosition;
 
         bytes[] memory positionConfigs = new bytes[](1);
@@ -1045,7 +1045,7 @@ contract CellarTest is Test {
 
         stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
 
-        uint256 cellarBPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(cellarB), 0, 0);
+        uint32 cellarBPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(cellarB), 0, 0);
         positions[0] = cellarBPosition;
 
         cellarA = new MockCellar(registry, USDC, positions, positionConfigs, "Stablecoin cellar", "SC-CLR", strategist);
@@ -1072,7 +1072,7 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         priceRouter.supportAsset(USDT);
-        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
+        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
         cellar.addPosition(5, usdtPosition, abi.encode(0));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1095,7 +1095,7 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         priceRouter.supportAsset(USDT);
-        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
+        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
         cellar.addPosition(5, usdtPosition, abi.encode(0));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1169,7 +1169,7 @@ contract CellarTest is Test {
         // from the safety contract.
 
         priceRouter.supportAsset(USDT);
-        uint256 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
+        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
         cellar.addPosition(5, usdtPosition, abi.encode(0));
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1893,7 +1893,7 @@ contract CellarTest is Test {
         // Initialize test Cellar.
 
         // Create new cellar with WETH, and USDC positions.
-        uint256[] memory positions = new uint256[](2);
+        uint32[] memory positions = new uint32[](2);
         positions[0] = usdcPosition;
         positions[1] = wethPosition;
 

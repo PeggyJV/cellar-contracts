@@ -194,7 +194,6 @@ contract SwapRouter is Multicall {
         for (uint256 i = 1; i < path.length; i++)
             encodePackedPath = abi.encodePacked(encodePackedPath, poolFees[i - 1], path[i]);
 
-        uint256 bal = assetIn.balanceOf(address(this));
         // Execute the swap.
         amountOut = uniswapV3Router.exactInput(
             IUniswapV3Router.ExactInputParams({
@@ -205,9 +204,5 @@ contract SwapRouter is Multicall {
                 amountOutMinimum: amountOutMin
             })
         );
-        console.log("Before", bal);
-        console.log("Requested", amount);
-        console.log("After", assetIn.balanceOf(address(this)));
-        console.log("Approval Left", assetIn.allowance(address(this), address(uniswapV3Router)));
     }
 }

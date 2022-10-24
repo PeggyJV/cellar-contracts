@@ -43,6 +43,10 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
 
     //============================================ Global Functions ===========================================
 
+    function identifier() public pure override returns (bytes32) {
+        return keccak256(abi.encode("Uniswap V3 Adaptor V 0.0"));
+    }
+
     function positionManager() internal pure returns (INonfungiblePositionManager) {
         return INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
     }
@@ -197,7 +201,7 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
         uint256 min1
     ) public {
         require(address(this) == positionManager().ownerOf(positionId), "Cellar does not own this token.");
-        (, , address t0, address t1, , , , uint128 liquidity, , , , ) = positionManager().positions(positionId);
+        (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(positionId);
         INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
             .DecreaseLiquidityParams({
                 tokenId: positionId,
@@ -206,7 +210,7 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
                 amount1Min: min1,
                 deadline: block.timestamp
             });
-        (uint256 amount0, uint256 amount1) = positionManager().decreaseLiquidity(params);
+        positionManager().decreaseLiquidity(params);
 
         // Collect principal and fees before "burning" NFT.
         collectFees(positionId, type(uint128).max, type(uint128).max);
