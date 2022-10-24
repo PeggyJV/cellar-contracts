@@ -31,7 +31,6 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
 
     /*
         adaptorData = abi.encode(token0, token1)
-        adaptorStroage(written in registry) = abi.encode(uint256[] tokenIds)
     */
 
     //============================================ Global Functions ===========================================
@@ -45,27 +44,41 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
     }
 
     //============================================ Implement Base Functions ===========================================
+    error UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed();
+
+    /**
+     * @notice User deposits are not allowed.
+     */
     function deposit(
         uint256,
         bytes memory,
         bytes memory
     ) public pure override {
-        revert("User Deposits not allowed");
+        revert UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed();
     }
 
+    /**
+     * @notice User withdraws are not allowed.
+     */
     function withdraw(
         uint256,
         address,
         bytes memory,
         bytes memory
     ) public pure override {
-        revert("User Withdraws not allowed");
+        revert UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed();
     }
 
+    /**
+     * @notice User withdraws are not allowed so this position must return 0 for withdrawableFrom.
+     */
     function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
+    /**
+     * Gets all token Id caller owns, then sums up amounts for UniV3 positions that match `adaptorData` arguments.
+     */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         // Get exchnage rate between token0 and token1
         (ERC20 token0, ERC20 token1) = abi.decode(adaptorData, (ERC20, ERC20));
@@ -77,6 +90,7 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
         // Grab cellars balance of UniV3 NFTs.
         uint256 bal = positionManager().balanceOf(msg.sender);
 
+        // If cellar does not own any UniV3 positions it has no assets in UniV3.
         if (bal == 0) return 0;
 
         // Grab cellars array of token ids with multicall.
@@ -91,15 +105,13 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
             (bytes[])
         );
 
-        // Decode array of token ids.
-        uint256[] memory ids = new uint256[](bal);
-        for (uint256 i = 0; i < bal; i++) {
-            ids[i] = abi.decode(positionDataRequest[i], (uint256));
-        }
-
         // Grab array of positions using previous token id array
+        // `positionDataRequest` currently holds abi encoded token ids that caller owns.
         for (uint256 i = 0; i < bal; i++) {
-            positionDataRequest[i] = abi.encodeWithSignature("positions(uint256)", ids[i]);
+            positionDataRequest[i] = abi.encodeWithSignature(
+                "positions(uint256)",
+                abi.decode(positionDataRequest[i], (uint256))
+            );
         }
         positionDataRequest = abi.decode(
             address(positionManager()).functionStaticCall(
@@ -129,21 +141,7 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
             amount0 += amountA;
             amount1 += amountB;
         }
-        // if (amount0 > 0 || amount1 > 0) {
-        //     console.log("----------------------------------------");
-        //     console.log("Underlying Token 0:", amount0);
-        //     console.log("Underlying Token 1:", amount1);
-        //     console.log("Cellar Balance 0:", token0.balanceOf(msg.sender));
-        //     console.log("Cellar Balance 1:", token1.balanceOf(msg.sender));
-        //     console.log("Name 0:", token0.name());
-        //     console.log("Name 1:", token1.name());
-        //     console.log("----------------------------------------");
-        // }
-        // uint256 ratio = 1e18 * (sqrtPriceX96 >> 96)**2;
-        // console.log("Ratio", ratio);
-        // if (token1.decimals() < token0.decimals()) ratio = ratio * 10**(token0.decimals() - token1.decimals());
-        // else if (token1.decimals() > token0.decimals()) ratio = ratio / (10**(token1.decimals() - token0.decimals()));
-        // console.log("Ratio", ratio);
+
         return amount0 + amount1.mulDivDown(price, 10**token1.decimals());
     }
 
@@ -155,6 +153,10 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
 
     //============================================ High Level Callable Functions ============================================
     // Positions are arbitrary UniV3 positions that could be range orders, limit orders, or normal LP positions.
+    /**
+     * @notice Allows strategist to open up arbritray Uniswap V3 positions.
+     * @notice If strategist specifies token0 and token1 for a position not properly set up this call will revert.
+     */
     function openPosition(
         ERC20 token0,
         ERC20 token1,

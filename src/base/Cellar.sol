@@ -1209,10 +1209,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================
-    //TODO for _depositTo and _withdrawFrom, adaptor data should contain values to validate minimums.
-    // ^^^^ might be better to enforce this using withdrawableFrom?
-    //Weird cuz if an aUSDC position says you can withdraw this much USDC from me, but then a debt position says you can borrow this much more, the two answers are dependent on eachother, but each position doesn't know that.
-    //TODO need to pass in adaptor data that the strategist can set for their cellar
     /**
      * @dev Deposit into a position according to its position type and update related state.
      * @param position address to deposit funds into

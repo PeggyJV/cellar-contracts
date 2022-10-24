@@ -129,14 +129,12 @@ contract UniswapV3AdaptorTest is Test {
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
 
-        // Manipulate  test contracts storage so that minimum shareLockPeriod is zero blocks.
+        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
-
-        cellar.setRebalanceDeviation(0.005e18);
     }
 
-    // ========================================== REBALANCE TEST ==========================================
-    function testRebalanceIntoUniswapV3PositionUSDC_DAI() external {
+    // ========================================== POSITION MANAGEMENT TEST ==========================================
+    function testOpenUSDC_DAIPosition() external {
         deal(address(USDC), address(this), 101_000e6);
         cellar.deposit(101_000e6, address(this));
 
@@ -151,7 +149,7 @@ contract UniswapV3AdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testRebalanceIntoUniswapV3PositionUSDC_WETH() external {
+    function testOpenUSDC_WETHPosition() external {
         deal(address(USDC), address(this), 101_000e6);
         cellar.deposit(101_000e6, address(this));
 
@@ -161,39 +159,6 @@ contract UniswapV3AdaptorTest is Test {
         uint24 fee = 500;
         adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, fee, 50_500e6);
         adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, fee, 50_000e6, 36e18, 222);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-    }
-
-    function testRebalanceIntoMultipleDifferentUniswapV3Position() external {
-        deal(address(USDC), address(this), 201_000e6);
-        cellar.deposit(201_000e6, address(this));
-
-        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](4);
-
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, 50_500e6);
-        adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
-        adaptorCalls[2] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 20);
-        adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-    }
-
-    function testMultipleUniV3PositionsWithSameUnderlying() external {
-        deal(address(USDC), address(this), 101_000e6);
-        cellar.deposit(101_000e6, address(this));
-
-        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](3);
-
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 30);
-        adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 40);
-
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -309,6 +274,80 @@ contract UniswapV3AdaptorTest is Test {
         assertEq(USDC.balanceOf(address(cellar)), 0, "Cellar should have put all USDC in a UniV3 range order.");
     }
 
+    function testCellarWithSmorgasbordOfUniV3Positions() external {
+        uint256 assets = 1_000_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use `callOnAdaptor` to swap and enter 6 different UniV3 positions.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](8);
+
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, assets / 4);
+        adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
+
+        adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
+        adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 40);
+        adaptorCalls[4] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 100);
+
+        adaptorCalls[5] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 20);
+        adaptorCalls[6] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 18);
+        adaptorCalls[7] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 200);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
+    // ========================================== REVERT TEST ==========================================
+    function testUsingUntrackedLPPosition() external {
+        // Remove USDC WETH LP position from cellar.
+        cellar.removePosition(4);
+
+        // Strategist tries to move funds into USDC WETH LP position.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use `callOnAdaptor` to enter a range order worth `assets` USDC.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        uint24 fee = 500;
+        adaptorCalls[0] = _createBytesDataToOpenRangeOrder(USDC, WETH, fee, assets, 0);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        uint256 deviation = cellar.allowedRebalanceDeviation();
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector,
+                    0,
+                    assets.mulWadDown(1e18 - deviation),
+                    assets.mulWadDown(1e18 + deviation)
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+    }
+
+    function testUserDepositAndWithdrawRevert() external {
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(UniswapV3Adaptor.UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed.selector))
+        );
+        uniswapV3Adaptor.deposit(0, abi.encode(0), abi.encode(0));
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(UniswapV3Adaptor.UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed.selector))
+        );
+        uniswapV3Adaptor.withdraw(0, address(0), abi.encode(0), abi.encode(0));
+    }
+
+    function testWithdrawableFromReturnsZero() external {
+        assertEq(
+            uniswapV3Adaptor.withdrawableFrom(abi.encode(0), abi.encode(0)),
+            0,
+            "`withdrawableFrom` should return 0."
+        );
+    }
+
     // ========================================= GRAVITY FUNCTIONS =========================================
 
     // Since this contract is set as the Gravity Bridge, this will be called by
@@ -331,16 +370,16 @@ contract UniswapV3AdaptorTest is Test {
         }
     }
 
-    function _getTick(ERC20 token0, ERC20 token1) internal view returns (int24 tick) {
-        uint256 price = priceRouter.getExchangeRate(token1, token0);
-        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
-        uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
-        tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-        if (tick < 0) console.log("Current Tick (-)", uint24(-1 * tick));
-        else console.log("Current Tick", uint24(tick));
-    }
-
-    //TODO I think size needs to be an even number
+    /**
+     * @notice Get the upper and lower tick around token0, token1.
+     * @param token0 The 0th Token in the UniV3 Pair
+     * @param token1 The 1st Token in the UniV3 Pair
+     * @param fee The desired fee pool
+     * @param size Dictates the amount of ticks liquidity will cover
+     *             @dev Must be an even number
+     * @param shift Allows the upper and lower tick to be moved up or down relative
+     *              to current price. Useful for range orders.
+     */
     function _getUpperAndLowerTick(
         ERC20 token0,
         ERC20 token1,
@@ -348,7 +387,6 @@ contract UniswapV3AdaptorTest is Test {
         int24 size,
         int24 shift
     ) internal view returns (int24 lower, int24 upper) {
-        // size determines how many tick spaces to supply liquidity across.
         uint256 price = priceRouter.getExchangeRate(token1, token0);
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
         uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
