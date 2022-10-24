@@ -616,6 +616,48 @@ contract CellarAssetManagerTest is Test {
         assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected..");
     }
 
+    function testFindMax() external {
+        uint256 deposit = 1e6;
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), type(uint256).max);
+
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
+
+        // No yield has been earned.
+        assertEq(cellar.maxWithdraw(address(this)), deposit, "Max withdraw should equal deposit.");
+        uint256 expectedShares = 1e18;
+        assertEq(cellar.maxRedeem(address(this)), expectedShares, "Max Redeem should be 1 share.");
+
+        // Simulate yield.
+        deal(address(USDC), address(cellar), 10e6);
+
+        uint256 expectedAssets = 10e6; // initial $1 deposit + $9 of yield - 10% performance fees.
+        assertEq(cellar.maxWithdraw(address(this)), expectedAssets, "Max withdraw should equal deposit + yield.");
+        assertEq(cellar.maxRedeem(address(this)), expectedShares, "Max Redeem should be 1 share.");
+
+        // Strategist moves half of funds into an illiquid position.
+        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 1e18); // 100% of funds are locked.
+        uint32 lockedUSDCPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedUSDC), 0, 0);
+        cellar.addPosition(5, lockedUSDCPosition, abi.encode(0));
+
+        // Strategist rebalances into illiquid cellar.
+        _rebalanceWithERC4626Positions(cellar, USDC, ERC20(address(lockedUSDC)), 5e6);
+
+        assertEq(cellar.totalAssets(), 10e6, "Total assets should not have changed.");
+
+        expectedAssets = 5e6; // Half the assets are locked, so maxWithdraw should be half of deposit + yield.
+        expectedShares = cellar.previewWithdraw(expectedAssets);
+        assertEq(cellar.maxWithdraw(address(this)), expectedAssets, "Max withdraw should equal expectedAssets.");
+        assertApproxEqAbs(
+            cellar.maxRedeem(address(this)),
+            expectedShares,
+            1,
+            "Max Redeem should equal previewRedeem(maxWithdraw(user))."
+        );
+    }
+
     // ======================================== INTEGRATION TESTS ========================================
 
     uint256 public saltIndex;

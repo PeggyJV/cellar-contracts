@@ -815,7 +815,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      */
     //TODO take this logic and make generalized internal function to replace this and withdrawable amount
     //TODO bonus now internal function could be used in place of totalAssets if it is cheaper.
-    //TODO use multicall to reduxe external calls to adaptors, and possibly batch multiple positions calls together if they sequentioally use the same adaptor.
+    //TODO use multicall to reduce external calls to adaptors, and possibly batch multiple positions calls together if they sequentioally use the same adaptor.
     function totalAssets() public view override returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
         ERC20[] memory positionAssets = new ERC20[](numOfPositions - numberOfDebtPositions);
@@ -844,9 +844,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         calls[1] = abi.encodeWithSelector(PriceRouter.getValues.selector, debtPositionAssets, debtBalances, asset);
         bytes[] memory results = priceRouter.multicall(calls);
         assets = abi.decode(results[0], (uint256)) - abi.decode(results[1], (uint256));
-        // assets =
-        // priceRouter.getValues(positionAssets, balances, asset) -
-        // priceRouter.getValues(debtPositionAssets, debtBalances, asset);
     }
 
     /**

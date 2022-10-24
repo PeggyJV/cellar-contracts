@@ -23,13 +23,6 @@ import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721H
  * @author crispymangoes
  */
 
-//TODO
-/**
-So I am thinking the best way to do this is to create a custom external contract that allows cellars to create UniV3 LP positions.
-The adaptor data would have some ID or hash(maybe of the address of the two tokens they want to LP). then on adaptor calls SPs can call a function in this contract to send some of their tokens to be added
-to liquidity 
-This contract would need to track the cellars balanceOf and assets of, and do the conversion from NFT to underlying. I guess each cellar will need to pass in their position ID, then this contract would go okay, they have this NFT related to this position and then break down the underlying tokens and return the balance
- */
 //balanceOf inspired by https://github.com/0xparashar/UniV3NFTOracle/blob/master/contracts/UniV3NFTOracle.sol
 contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
     using SafeERC20 for ERC20;
