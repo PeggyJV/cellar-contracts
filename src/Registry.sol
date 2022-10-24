@@ -108,8 +108,13 @@ contract Registry is Ownable {
 
     // ============================================ TRUST CONFIG ============================================
 
-    //TODO add natspec
-    //TODO can I make the bytes into a bytes32 then do a bit more work in the adpators? So that read operations are cheaper
+    /**
+     * @notice stores data related to Cellar positions.
+     * @param adaptors address of the adaptor to use for this position
+     * @param isDebt bool indicating whether this position takes on debt or not
+     * @param adaptorData arbitrary data needed to correclty set up a position
+     * @param configurationData arbitrary data settable by strategist to change cellar <-> adaptor interaction
+     */
     struct PositionData {
         address adaptor;
         bool isDebt;
@@ -117,6 +122,15 @@ contract Registry is Ownable {
         bytes configurationData;
     }
 
+    /**
+     * @notice stores data to help cellars manage their risk.
+     * @param assetRisk number 0 -> type(uint128).max indicating how risky a cellars assets can be
+     *                  0: Safest
+     *                  1: Riskiest
+     * @param protocolRisk number 0 -> type(uint128).max indicating how risky a cellars position protocol can be
+     *                     0: Safest
+     *                     1: Riskiest
+     */
     struct RiskData {
         uint128 assetRisk;
         uint128 protocolRisk;
@@ -140,13 +154,7 @@ contract Registry is Ownable {
      */
     uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
 
-    /**
-     * @notice Get the type related to a position.
-     */
-    // mapping(address => PositionData) public getPositionData;
-
-    // mapping(uint256 => PositionData) public getPositionData;
-
+    //TODO add natspec
     mapping(uint32 => RiskData) public getRiskData;
 
     mapping(address => RiskData) public getAdaptorRiskData;
@@ -155,8 +163,6 @@ contract Registry is Ownable {
 
     mapping(bytes32 => uint32) public getPositionHashToPositionId;
     mapping(uint32 => PositionData) public getPositionIdToPositionData;
-
-    // mapping(uint32 => bytes32) public getPositionIdToPositionHash;
 
     /**
      * @notice Trust a position to be used by the cellar.

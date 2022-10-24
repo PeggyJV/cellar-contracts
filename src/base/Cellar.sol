@@ -3,7 +3,6 @@ pragma solidity 0.8.16;
 
 import { ERC4626, SafeERC20 } from "./ERC4626.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -17,12 +16,6 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 
-import { console } from "@forge-std/Test.sol"; //TODO remove this
-
-// import { Owned } from "@solmate/auth/Owned.sol";
-
-// import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol"; This implementation is slightly less size wise
-
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
@@ -30,7 +23,6 @@ import { console } from "@forge-std/Test.sol"; //TODO remove this
  */
 //TODO contract should use variable packing
 //TODO look for public functions that can be made external.
-//TODO use solmate Reentrancy, Ownable, and maybe ERC20 to cut down on size.
 //TODO add multicall to adaptors so that we can use staticcall and multicall to batch view function calls together
 contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     using Uint32Array for uint32[];
@@ -109,7 +101,9 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     //TODO I could probs get away with a fixed size array.
     uint32[] public positions;
 
-    //TODO add natspec
+    /**
+     * @notice stores the number of debt positions the cellar currently uses.
+     */
     uint32 public numberOfDebtPositions;
 
     /**
@@ -847,8 +841,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     }
 
     /**
-     * @notice The total amount of assets in the cellar.
-     * @dev Excludes locked yield that hasn't been distributed.
+     * @notice The total amount of withdrawable assets in the cellar.
+     * @dev Debt positions always have zero assets withdrawable.
      */
     function totalAssetsWithdrawable() public view returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
