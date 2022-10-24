@@ -5,6 +5,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Cellar, ERC20 } from "src/base/Cellar.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
+import { console } from "@forge-std/Test.sol"; //TODO remove this
 
 contract Registry is Ownable {
     // ============================================= ADDRESS CONFIG =============================================
@@ -191,6 +192,8 @@ contract Registry is Ownable {
         });
 
         getRiskData[positionId] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
+
+        getPositionHashToPositionId[positionHash] = positionId;
 
         // Check that asset of position is supported for pricing operations.
         ERC20 positionAsset = BaseAdaptor(adaptor).assetOf(adaptorData);

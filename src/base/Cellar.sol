@@ -16,6 +16,8 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 
+import { console } from "@forge-std/Test.sol"; //TODO remove this
+
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
@@ -1106,6 +1108,43 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         if (totalShares != totalSupply()) revert Cellar__TotalSharesMustRemainConstant(totalSupply(), totalShares);
 
         blockExternalReceiver = false;
+    }
+
+    // ========================================= Aave Flash Loan Support =========================================
+
+    address public constant aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
+
+    function executeOperation(
+        address[] calldata assets,
+        uint256[] calldata amounts,
+        uint256[] calldata premiums,
+        address initiator,
+        bytes calldata params
+    ) external returns (bool) {
+        require(initiator == address(this), "External Initiators Not Allowed!"); //important so that attackers cant send a flash loan to this contract and get it to run any adaptor logic
+        require(msg.sender == aavePool, "Only Aave Pool can call this");
+
+        ///@dev so I am thinking that params will contain AdaptorCall[] data
+        ///@dev one of the last actions should include approving the aave pool to transfer the amount + premium to it
+        AdaptorCall[] memory data = abi.decode(params, (AdaptorCall[]));
+
+        ///@dev I don't think any of the other values will be used? SP should do all that calculation off chain, and just instruct the cellar what to do
+        //run all adaptor functions
+        //run all adaptor functions
+        for (uint8 i = 0; i < data.length; i++) {
+            address adaptor = data[i].adaptor;
+            require(isAdaptorSetup[adaptor], "Adaptor not set up to be used with Cellar.");
+            for (uint8 j = 0; j < data[i].callData.length; j++) {
+                adaptor.functionDelegateCall(data[i].callData[j]); //TODO is there someway to append data to this, so we can append the adaptor address?
+            }
+        }
+
+        //approve pool to repay all debt
+        for (uint256 i = 0; i < amounts.length; i++) {
+            ERC20(assets[i]).safeApprove(aavePool, (amounts[i] + premiums[i]));
+        }
+
+        return true;
     }
 
     // ============================================ LIMITS LOGIC ============================================
