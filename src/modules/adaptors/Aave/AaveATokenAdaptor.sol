@@ -52,6 +52,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         depositToAave(ERC20(token.UNDERLYING_ASSET_ADDRESS()), assets);
     }
 
+    //TODO I guess check the configured min HF and if zero, return 0.
     function withdraw(
         uint256 assets,
         address receiver,
@@ -65,13 +66,17 @@ contract AaveATokenAdaptor is BaseAdaptor {
 
         // Check that configured min health factor is met.
         uint256 minHealthFactor = abi.decode(configData, (uint256));
-        if (minHealthFactor > 0) {
-            (, , , , , uint256 healthFactor) = pool().getUserAccountData(msg.sender);
-            require(healthFactor > minHealthFactor, "Health Factor too low.");
+        if (minHealthFactor == 0) {
+            revert("User Withdraws not allowed");
         }
+        (, , , , , uint256 healthFactor) = pool().getUserAccountData(msg.sender);
+        require(healthFactor >= minHealthFactor, "Health Factor too low.");
         ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
     }
 
+    //TODO I wonder if I need to buffer this value a bit by adding 0.0001 to the min health factor?
+    // Just in case there are price difference between Aave oracles and ours?
+    // Could do something where if the current health factor is below (min health factor + 0.0002) then just return 0.
     function withdrawableFrom(bytes memory adaptorData, bytes memory configData)
         public
         view
@@ -83,22 +88,27 @@ contract AaveATokenAdaptor is BaseAdaptor {
         (
             uint256 totalCollateralETH,
             uint256 totalDebtETH,
-            uint256 availableBorrowsETH,
+            ,
             uint256 currentLiquidationThreshold,
-            uint256 ltv,
+            ,
             uint256 healthFactor
         ) = pool().getUserAccountData(msg.sender);
         uint256 maxBorrowableWithMin;
+        uint256 cushion = 0.01e18;
+        minHealthFactor += cushion; // Add cushion to min health factor to account for differences in Somm pricing vs Aave pricing.
         if (totalDebtETH == 0) return ERC20(address(token)).balanceOf(msg.sender);
-        if (minHealthFactor == 0) maxBorrowableWithMin = availableBorrowsETH;
+
+        // If minHealthFactor is not set, or if current health factor is less than the minHealthFactor + 2Xcushion, return 0.
+        if (minHealthFactor == cushion || healthFactor < (minHealthFactor + cushion)) return 0;
         else {
             maxBorrowableWithMin =
-                ((totalCollateralETH * currentLiquidationThreshold) / minHealthFactor) -
-                totalDebtETH;
+                totalCollateralETH -
+                (((minHealthFactor) * totalDebtETH) / (currentLiquidationThreshold * 1e14));
         }
-
+        ERC20 underlying = ERC20(token.UNDERLYING_ASSET_ADDRESS());
+        if (underlying == WETH()) return maxBorrowableWithMin;
         PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(2));
-        return priceRouter.getValue(WETH(), maxBorrowableWithMin, ERC20(token.UNDERLYING_ASSET_ADDRESS()));
+        return priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
     }
 
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
@@ -113,6 +123,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
 
     //============================================ High Level Callable Functions ============================================
     function depositToAave(ERC20 tokenToDeposit, uint256 amountToDeposit) public {
+        amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(pool()), amountToDeposit);
         pool().deposit(address(tokenToDeposit), amountToDeposit, address(this), 0);
     }

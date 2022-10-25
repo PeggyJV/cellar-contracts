@@ -767,13 +767,14 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             // Move on to next position if this one is empty.
             uint32 position = positions[i];
             if (_balanceOf(position) == 0) continue;
+            uint256 withdrawableBalance = _withdrawableFrom(position);
+            if (withdrawableBalance == 0) continue;
             ERC20 positionAsset = _assetOf(position);
 
             uint256 onePositionAsset = 10**positionAsset.decimals();
             uint256 exchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
 
             // Denominate withdrawable position balance in cellar's asset.
-            uint256 withdrawableBalance = _withdrawableFrom(position);
             uint256 totalWithdrawableBalanceInAssets = withdrawableBalance.mulDivDown(exchangeRate, onePositionAsset);
 
             // We want to pull as much as we can from this position, but no more than needed.
@@ -850,7 +851,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         uint256 numOfPositions = positions.length;
         ERC20[] memory positionAssets = new ERC20[](numOfPositions);
         uint256[] memory balances = new uint256[](numOfPositions);
-
         for (uint256 i; i < numOfPositions; i++) {
             uint32 position = positions[i];
             positionAssets[i] = _assetOf(position);

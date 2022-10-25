@@ -113,20 +113,20 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         repayAaveDebt(tokenToRepay, amountToRepay);
     }
 
-    //TODO make this the more complicated flash loan
-    //TODO need to add checks that if strategsits open up positions with this function, the new debt positions MUST be tracked.
-    function simpleFlashLoan(
-        ERC20 flashLoanToken,
-        uint256 loanAmount,
+    /**
+     * @notice allows strategist to have Cellars take out flash loans.
+     * @param loanToken address array of tokens to take out loans
+     * @param loanAmount uint256 array of loan amounts for each token
+     * @dev `modes` is always a zero array meaning that this flash loan can NOT take on new debt positions, it must be paid in full.
+     */
+    function flashLoan(
+        address[] memory loanToken,
+        uint256[] memory loanAmount,
         bytes memory params
     ) public {
-        address[] memory assets = new address[](1);
-        assets[0] = address(flashLoanToken);
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = loanAmount;
-        uint256[] memory modes = new uint256[](1);
-        modes[0] = 0;
-        pool().flashLoan(address(this), assets, amounts, modes, address(this), params, 0);
+        require(loanToken.length == loanAmount.length, "Input length mismatch.");
+        uint256[] memory modes = new uint256[](loanToken.length);
+        pool().flashLoan(address(this), loanToken, loanAmount, modes, address(this), params, 0);
     }
 
     //============================================ AAVE Logic ============================================
