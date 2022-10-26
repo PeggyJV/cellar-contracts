@@ -17,6 +17,21 @@ contract BaseAdaptor {
     using SafeERC20 for ERC20;
     using Math for uint256;
 
+    /**
+     * @notice Attempted to specify an external receiver during a Cellar `callOnAdaptor` call.
+     */
+    error BaseAdaptor__ExternalReceiverBlocked();
+
+    /**
+     @notice Attempted to deposit to a position where user deposits were not allowed.
+     */
+    error BaseAdaptor__UserDepositsNotAllowed();
+
+    /**
+     @notice Attempted to withdraw from a position where user withdraws were not allowed.
+     */
+    error BaseAdaptor__UserWithdrawsNotAllowed();
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -88,6 +103,8 @@ contract BaseAdaptor {
      */
     function assetOf(bytes memory adaptorData) public view virtual returns (ERC20) {}
 
+    //============================================ Strategist Functions ===========================================
+
     //============================================ Helper Functions ===========================================
     /**
      * @notice Helper function that allows adaptor calls to use the max available of an ERC20 asset
@@ -101,6 +118,17 @@ contract BaseAdaptor {
         else return amount;
     }
 
+    /**
+     * @notice Helper function that allows adaptors to make swaps using the Swap Router
+     * @param assetIn the asset to make a swap with
+     * @param assetOut the asset to get out of the swap
+     * @param amountIn the amount of `assetIn` to swap with
+     * @param exchange enum value that determines what exchange to make the swap on
+     *                 see SwapRouter.sol
+     * @param params swap params needed to perform the swap, dependent on which exchange is selected
+     *               see SwapRouter.sol
+     * @return amountOut the amount of `assetOut` received from the swap.
+     */
     function swap(
         ERC20 assetIn,
         ERC20 assetOut,
@@ -123,5 +151,13 @@ contract BaseAdaptor {
         // Check that the amount of assets swapped is what is expected. Will revert if the `params`
         // specified a different amount of assets to swap then `amountIn`.
         require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
+    }
+
+    /**
+     * @notice Helper function that validates external receivers are allowed.
+     */
+    function _externalReceiverCheck(address receiver) internal view {
+        if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
+            revert BaseAdaptor__ExternalReceiverBlocked();
     }
 }

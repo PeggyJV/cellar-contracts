@@ -1,78 +1,131 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
+import { BaseAdaptor, ERC20, SafeERC20, Cellar, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
-import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
-import { DataTypes } from "src/interfaces/external/DataTypes.sol";
-import { Cellar } from "src/base/Cellar.sol";
-import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-
-import { console } from "@forge-std/Test.sol";
 
 /**
- * @title Lending Adaptor
- * @notice Cellars make delegate call to this contract in order touse
- * @author crispymangoes, Brian Le
- * @dev while testing on forked mainnet, aave deposits would sometimes return 1 less aUSDC, and sometimes return the exact amount of USDC you put in
- * Block where USDC in == aUSDC out 15174148
- * Block where USDC-1 in == aUSDC out 15000000
+ * @title Aave aToken Adaptor
+ * @notice Allows Cellars to interact with Aave aToken positions.
+ * @author crispymangoes
  */
-
 contract AaveATokenAdaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
 
-    /*
-        adaptorData = abi.encode(aToken address)
-    */
+    //==================== Adaptor Data Specification ====================
+    // adaptorData = abi.encode(aToken address)
+    // Where:
+    // `aToken` is the aToken address position this adaptor is working with
+    //================= Configuration Data Specification =================
+    // configurationData = abi.encode(minimumHealthFactor uint256)
+    // Where:
+    // `minimumHealthFactor` dictates how much assets can be taken from this position
+    // If zero:
+    //      position returns ZERO for `withdrawableFrom`
+    // else:
+    //      position calculates `withdrawableFrom` based off minimum specified
+    //      position reverts if a user withdraw lowers health factor below minimum
+    //
+    // ******************** IMPORTANT ********************
+    // Cellars with multiple aToken positions MUST only specify minimum
+    // health factor on ONE of the positions. Failing to do so will result
+    // in user withdraws temporarily being blocked.
+    //====================================================================
+
+    /**
+     @notice Attempted withdraw would lower Cellar health factor too low.
+     */
+    error AaveATokenAdaptor__HealthFactorTooLow();
 
     //============================================ Global Functions ===========================================
+    /**
+     * @dev Identifier unique to this adaptor for a shared registry.
+     * Normally the identifier would just be the address of this contract, but this
+     * Identifier is needed during Cellar Delegate Call Operations, so getting the address
+     * of the adaptor is more difficult.
+     */
     function identifier() public pure override returns (bytes32) {
         return keccak256(abi.encode("Aave aToken Adaptor V 0.0"));
     }
 
+    /**
+     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
+     */
     function pool() internal pure returns (IPool) {
         return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
     }
 
+    /**
+     * @notice The WETH contract on Ethereum Mainnet.
+     */
     function WETH() internal pure returns (ERC20) {
         return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     }
 
     //============================================ Implement Base Functions ===========================================
-    // Config data is not used because depositing will only INCREASE health factor.
+    /**
+     * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
+     * @param assets the amount of assets to lend on Aave
+     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @dev configurationData is NOT used because this action will only increase the health factor
+     */
     function deposit(
         uint256 assets,
         bytes memory adaptorData,
         bytes memory
     ) public override {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        depositToAave(ERC20(token.UNDERLYING_ASSET_ADDRESS()), assets);
+        // Deposit assets to Aave.
+        IAaveToken aToken = IAaveToken(abi.decode(adaptorData, (address)));
+        ERC20 token = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
+        token.safeApprove(address(pool()), assets);
+        pool().deposit(address(token), assets, address(this), 0);
     }
 
+    /**
+     @notice Cellars must withdraw from Aave, check if a minimum health factor is specified
+     *       then transfer assets to receiver.
+     * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
+     * @param assets the amount of assets to withdraw from Aave
+     * @param receiver the address to send withdrawn assets to
+     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @param configData abi encoded minimum health factor, if zero user withdraws are not allowed.
+     */
     function withdraw(
         uint256 assets,
         address receiver,
         bytes memory adaptorData,
         bytes memory configData
     ) public override {
-        if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
-            revert("External receivers are not allowed.");
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        withdrawFromAave(ERC20(token.UNDERLYING_ASSET_ADDRESS()), assets);
+        // Run external receiver check.
+        _externalReceiverCheck(receiver);
 
-        // Check that configured min health factor is met.
+        // Withdraw assets from Aave.
+        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        pool().withdraw(token.UNDERLYING_ASSET_ADDRESS(), assets, address(this));
+
+        // Run minimum health factor checks.
         uint256 minHealthFactor = abi.decode(configData, (uint256));
         if (minHealthFactor == 0) {
-            revert("User Withdraws not allowed");
+            revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
         (, , , , , uint256 healthFactor) = pool().getUserAccountData(msg.sender);
-        require(healthFactor >= minHealthFactor, "Health Factor too low.");
+        if (healthFactor < minHealthFactor) revert AaveATokenAdaptor__HealthFactorTooLow();
+
+        // Transfer assets to receiver.
         ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
     }
 
+    /**
+     * @notice Uses configurartion data minimum health factor to calculate withdrawable assets from Aave.
+     * @dev Applies a `cushion` value to the health factor checks and calculation.
+     *      The goal of this is to minimize scenarios where users are withdrawing a very small amount of
+     *      assets from Aave. This function returns zero if
+     *      -minimum health factor is NOT set.
+     *      -the current health factor is less than the minimum health factor + 2x `cushion`
+     *      Otherwise this function calculates the withdrawable amount using
+     *      minimum health factor + `cushion` for its calcualtions.
+     */
     function withdrawableFrom(bytes memory adaptorData, bytes memory configData)
         public
         view
@@ -90,43 +143,69 @@ contract AaveATokenAdaptor is BaseAdaptor {
             uint256 healthFactor
         ) = pool().getUserAccountData(msg.sender);
         uint256 maxBorrowableWithMin;
+
+        // Choose 0.01 for cushion value. Value can be adjusted based off testing results.
         uint256 cushion = 0.01e18;
-        minHealthFactor += cushion; // Add cushion to min health factor to account for differences in Somm pricing vs Aave pricing.
+
+        // Add cushion to min health factor.
+        minHealthFactor += cushion;
+
+        // If Cellar has no Aave debt, then return the cellars balance of the aToken.
         if (totalDebtETH == 0) return ERC20(address(token)).balanceOf(msg.sender);
 
-        // If minHealthFactor is not set, or if current health factor is less than the minHealthFactor + 2Xcushion, return 0.
+        // If minHealthFactor is not set, or if current health factor is less than the minHealthFactor + 2X cushion, return 0.
         if (minHealthFactor == cushion || healthFactor < (minHealthFactor + cushion)) return 0;
+        // Calculate max amount withdrawable while preserving minimum health factor.
         else {
             maxBorrowableWithMin =
                 totalCollateralETH -
                 (((minHealthFactor) * totalDebtETH) / (currentLiquidationThreshold * 1e14));
         }
+
+        // If aToken underlying is WETH, then no Price Router conversion is needed.
         ERC20 underlying = ERC20(token.UNDERLYING_ASSET_ADDRESS());
         if (underlying == WETH()) return maxBorrowableWithMin;
+
+        // Else convert `maxBorrowableWithMin` from WETH to position underlying asset.
         PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(2));
         return priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
     }
 
+    /**
+     * @notice Returns teh cellars balance of the positions aToken.
+     */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address token = abi.decode(adaptorData, (address));
         return ERC20(token).balanceOf(msg.sender);
     }
 
+    /**
+     * @notice Returns the positions aToken underlying asset.
+     */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
     }
 
-    //============================================ High Level Callable Functions ============================================
+    //============================================ Strategist Functions ===========================================
+    /**
+     * @notice Allows strategists to lend assets on Aave.
+     * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
+     * @param tokenToDeposit the token to lend on Aave
+     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Aave.
+     */
     function depositToAave(ERC20 tokenToDeposit, uint256 amountToDeposit) public {
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(pool()), amountToDeposit);
         pool().deposit(address(tokenToDeposit), amountToDeposit, address(this), 0);
     }
 
+    /**
+     * @notice Allows strategists to withdraw assets from Aave.
+     * @param tokenToWithdraw the token to withdraw from Aave.
+     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
+     */
     function withdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
         pool().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
     }
-
-    //============================================ AAVE Logic ============================================
 }

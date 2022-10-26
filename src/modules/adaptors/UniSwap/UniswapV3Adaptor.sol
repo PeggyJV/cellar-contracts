@@ -14,7 +14,6 @@ import { Math } from "src/utils/Math.sol";
 import { FixedPoint96 } from "@uniswapV3C/libraries/FixedPoint96.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { console } from "@forge-std/Test.sol";
-import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 /**
  * @title Uniswap V3 Adaptor
@@ -23,7 +22,7 @@ import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721H
  */
 
 //balanceOf inspired by https://github.com/0xparashar/UniV3NFTOracle/blob/master/contracts/UniV3NFTOracle.sol
-contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
+contract UniswapV3Adaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
     using Math for uint256;
     using Address for address;
