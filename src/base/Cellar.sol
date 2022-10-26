@@ -1096,7 +1096,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             address adaptor = data[i].adaptor;
             require(isAdaptorSetup[adaptor], "Adaptor not set up to be used with Cellar.");
             for (uint8 j = 0; j < data[i].callData.length; j++) {
-                adaptor.functionDelegateCall(data[i].callData[j]); //TODO is there someway to append data to this, so we can append the adaptor address?
+                adaptor.functionDelegateCall(data[i].callData[j]);
             }
         }
 

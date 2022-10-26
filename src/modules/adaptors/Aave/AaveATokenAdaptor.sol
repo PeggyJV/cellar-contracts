@@ -52,7 +52,6 @@ contract AaveATokenAdaptor is BaseAdaptor {
         depositToAave(ERC20(token.UNDERLYING_ASSET_ADDRESS()), assets);
     }
 
-    //TODO I guess check the configured min HF and if zero, return 0.
     function withdraw(
         uint256 assets,
         address receiver,
@@ -74,9 +73,6 @@ contract AaveATokenAdaptor is BaseAdaptor {
         ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
     }
 
-    //TODO I wonder if I need to buffer this value a bit by adding 0.0001 to the min health factor?
-    // Just in case there are price difference between Aave oracles and ours?
-    // Could do something where if the current health factor is below (min health factor + 0.0002) then just return 0.
     function withdrawableFrom(bytes memory adaptorData, bytes memory configData)
         public
         view

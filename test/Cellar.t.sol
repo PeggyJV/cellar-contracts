@@ -1273,7 +1273,7 @@ contract CellarTest is Test {
         // USDT is added as a trusted Cellar position,
         // but is not supported by the PriceRouter.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(Registry.Cellar__PositionPricingNotSetUp.selector, address(USDT)))
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(USDT)))
         );
         registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
     }
