@@ -8,7 +8,6 @@ import { Cellar, Registry, PriceRouter } from "src/base/Cellar.sol";
 import { SafeMath } from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
-import { PositionValue } from "@uniswapV3P/libraries/PositionValue.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
 import { LiquidityAmounts } from "@uniswapV3P/libraries/LiquidityAmounts.sol";
 import { Math } from "src/utils/Math.sol";
