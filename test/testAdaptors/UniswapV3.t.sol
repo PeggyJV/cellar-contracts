@@ -329,14 +329,10 @@ contract UniswapV3AdaptorTest is Test {
     }
 
     function testUserDepositAndWithdrawRevert() external {
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(UniswapV3Adaptor.UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed.selector))
-        );
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserDepositsNotAllowed.selector)));
         uniswapV3Adaptor.deposit(0, abi.encode(0), abi.encode(0));
 
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(UniswapV3Adaptor.UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed.selector))
-        );
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
         uniswapV3Adaptor.withdraw(0, address(0), abi.encode(0), abi.encode(0));
     }
 

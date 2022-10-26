@@ -406,7 +406,7 @@ contract CellarTest is Test {
         cellar.removePosition(4);
 
         // Check that `addPosition` reverts if position is not trusted.
-        vm.expectRevert(bytes("Position does not exist."));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionDoesNotExist.selector)));
         cellar.addPosition(4, 0, abi.encode(0));
 
         // Set Cellar WETH balance to 0.

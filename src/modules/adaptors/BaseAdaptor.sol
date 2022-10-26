@@ -23,12 +23,12 @@ contract BaseAdaptor {
     error BaseAdaptor__ExternalReceiverBlocked();
 
     /**
-     @notice Attempted to deposit to a position where user deposits were not allowed.
+     * @notice Attempted to deposit to a position where user deposits were not allowed.
      */
     error BaseAdaptor__UserDepositsNotAllowed();
 
     /**
-     @notice Attempted to withdraw from a position where user withdraws were not allowed.
+     * @notice Attempted to withdraw from a position where user withdraws were not allowed.
      */
     error BaseAdaptor__UserWithdrawsNotAllowed();
 

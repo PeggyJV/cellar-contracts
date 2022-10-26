@@ -14,7 +14,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(aToken address)
+    // adaptorData = abi.encode(address aToken)
     // Where:
     // `aToken` is the aToken address position this adaptor is working with
     //================= Configuration Data Specification =================
@@ -27,7 +27,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
     //      position calculates `withdrawableFrom` based off minimum specified
     //      position reverts if a user withdraw lowers health factor below minimum
     //
-    // ******************** IMPORTANT ********************
+    // **************************** IMPORTANT ****************************
     // Cellars with multiple aToken positions MUST only specify minimum
     // health factor on ONE of the positions. Failing to do so will result
     // in user withdraws temporarily being blocked.

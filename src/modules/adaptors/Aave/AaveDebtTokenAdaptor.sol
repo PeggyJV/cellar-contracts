@@ -1,107 +1,139 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
+import { BaseAdaptor, ERC20, SafeERC20, Cellar, SwapRouter, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
-import { DataTypes } from "src/interfaces/external/DataTypes.sol";
-import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
-import { Registry } from "src/Registry.sol";
-import { Cellar } from "src/base/Cellar.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { console } from "@forge-std/Test.sol"; //TODO remove this
 
 /**
- * @title Lending Adaptor
- * @notice Cellars make delegate call to this contract in order touse
- * @author crispymangoes, Brian Le
- * @dev while testing on forked mainnet, aave deposits would sometimes return 1 less aUSDC, and sometimes return the exact amount of USDC you put in
- * Block where USDC in == aUSDC out 15174148
- * Block where USDC-1 in == aUSDC out 15000000
+ * @title Aave debtToken Adaptor
+ * @notice Allows Cellars to interact with Aave debtToken positions.
+ * @author crispymangoes
  */
-
 contract AaveDebtTokenAdaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
 
-    /*
-        adaptorData = abi.encode( debt token address)
-    */
+    //==================== Adaptor Data Specification ====================
+    // adaptorData = abi.encode(address debtToken)
+    // Where:
+    // `debtToken` is the debtToken address position this adaptor is working with
+    //================= Configuration Data Specification =================
+    // NOT USED
+    //====================================================================
 
     //============================================ Global Functions ===========================================
+    /**
+     * @dev Identifier unique to this adaptor for a shared registry.
+     * Normally the identifier would just be the address of this contract, but this
+     * Identifier is needed during Cellar Delegate Call Operations, so getting the address
+     * of the adaptor is more difficult.
+     */
     function identifier() public pure override returns (bytes32) {
         return keccak256(abi.encode("Aave debtToken Adaptor V 0.0"));
     }
 
+    /**
+     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
+     */
     function pool() internal pure returns (IPool) {
         return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
     }
 
     //============================================ Implement Base Functions ===========================================
 
-    error AaveDebtTokenAdaptor__UserWithdrawNotAllowed();
-
+    /**
+     * @notice User deposits are NOT allowed into this position.
+     */
     function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
+        uint256,
+        bytes memory,
         bytes memory
     ) public override {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        repayAaveDebt(ERC20(token.UNDERLYING_ASSET_ADDRESS()), assets);
+        revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
+    /**
+     * @notice User withdraws are NOT allowed from this position.
+     */
     function withdraw(
         uint256,
         address,
         bytes memory,
         bytes memory
     ) public pure override {
-        revert AaveDebtTokenAdaptor__UserWithdrawNotAllowed();
+        revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
     /**
-     * @notice User withdraws are not allowed so this position must return 0 for withdrawableFrom.
+     * @notice This position is a debt position, and user withdraws are not allowed so
+     *         this position must return 0 for withdrawableFrom.
      */
     function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
+    /**
+     * @notice Returns the cellars balance of the positions debtToken.
+     */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address token = abi.decode(adaptorData, (address));
         return ERC20(token).balanceOf(msg.sender);
     }
 
+    /**
+     * @notice Returns the positions debtToken underlying asset.
+     */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
     }
 
-    //============================================ High Level Callable Functions ============================================
-
+    //============================================ Strategist Functions ===========================================
+    /**
+     * @notice Strategist attempted to open an untracked Aave loan.
+     * @param untrackedDebtPosition the address of the untracked loan
+     */
     error AaveDebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
 
-    //TODO I think this function could accept the normal ERC20 asset(like USDC) and use pool().getReserveData(asset), but that reverted for me...
+    /**
+     * @notice Allows strategists to borrow assets from Aave.
+     * @notice `debtTokenToBorrow` must be the debtToken, NOT the underlying ERC20.
+     * @param debtTokenToBorrow the debtToken to borrow on Aave
+     * @param amountToBorrow the amount of `debtTokenToBorrow` to borrow on Aave.
+     */
     function borrowFromAave(ERC20 debtTokenToBorrow, uint256 amountToBorrow) public {
+        // Check that debt position is properly set up to be tracked in the Cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(address(debtTokenToBorrow))));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert AaveDebtTokenAdaptor__DebtPositionsMustBeTracked(address(debtTokenToBorrow));
 
+        // Open up new variable debt position on Aave.
         pool().borrow(
             IAaveToken(address(debtTokenToBorrow)).UNDERLYING_ASSET_ADDRESS(),
             amountToBorrow,
             2,
             0,
             address(this)
-        ); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
+        ); // 2 is the interest rate mode, either 1 for stable or 2 for variable
     }
 
+    /**
+     * @notice Allows strategists to repay loan debt on Aave.
+     * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
+     * @param tokenToRepay the underlying ERC20 token you want to repay, NOT the debtToken.
+     * @param amountToRepay the amount of `tokenToRepay` to repay with.
+     */
     function repayAaveDebt(ERC20 tokenToRepay, uint256 amountToRepay) public {
         amountToRepay = _maxAvailable(tokenToRepay, amountToRepay);
         tokenToRepay.safeApprove(address(pool()), amountToRepay);
         pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
     }
 
+    /**
+     * @notice Allows strategists to swap assets and repay loans in one call.
+     * @dev see `repayAaveDebt`, and BaseAdaptor.sol `swap`
+     */
     function swapAndRepay(
         ERC20 tokenIn,
         ERC20 tokenToRepay,
@@ -116,7 +148,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     /**
      * @notice allows strategist to have Cellars take out flash loans.
      * @param loanToken address array of tokens to take out loans
-     * @param loanAmount uint256 array of loan amounts for each token
+     * @param loanAmount uint256 array of loan amounts for each `loanToken`
      * @dev `modes` is always a zero array meaning that this flash loan can NOT take on new debt positions, it must be paid in full.
      */
     function flashLoan(
@@ -128,6 +160,4 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         uint256[] memory modes = new uint256[](loanToken.length);
         pool().flashLoan(address(this), loanToken, loanAmount, modes, address(this), params, 0);
     }
-
-    //============================================ AAVE Logic ============================================
 }

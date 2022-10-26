@@ -276,7 +276,7 @@ contract Registry is Ownable {
             bytes memory adaptorData
         )
     {
-        if (positionId > positionCount) revert Registry__PositionDoesNotExist();
+        if (positionId > positionCount || positionId == 0) revert Registry__PositionDoesNotExist();
         RiskData memory data = getRiskData[positionId];
         if (assetRiskTolerance < data.assetRisk) revert Registry__AssetTooRisky();
         if (protocolRiskTolerance < data.protocolRisk) revert Registry__ProtocolTooRisky();

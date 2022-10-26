@@ -1,31 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, SafeERC20 } from "./ERC4626.sol";
+import { ERC4626, SafeERC20, Math } from "./ERC4626.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { Uint32Array } from "src/utils/Uint32Array.sol";
-import { Math } from "../utils/Math.sol";
-import { Owned } from "@solmate/auth/Owned.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 
-import { console } from "@forge-std/Test.sol"; //TODO remove this
-
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
  * @author Brian Le, crispymangoes
  */
-//TODO contract should use variable packing
-//TODO look for public functions that can be made external.
-//TODO add multicall to adaptors so that we can use staticcall and multicall to batch view function calls together
 contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     using Uint32Array for uint32[];
     using SafeERC20 for ERC20;
