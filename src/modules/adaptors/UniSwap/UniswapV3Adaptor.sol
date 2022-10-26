@@ -81,7 +81,8 @@ contract UniswapV3Adaptor is BaseAdaptor, ERC721Holder {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         // Get exchnage rate between token0 and token1
         (ERC20 token0, ERC20 token1) = abi.decode(adaptorData, (ERC20, ERC20));
-        uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(2)).getExchangeRate(token1, token0);
+        uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT()))
+            .getExchangeRate(token1, token0);
 
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
         uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
