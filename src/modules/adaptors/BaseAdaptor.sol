@@ -52,6 +52,15 @@ contract BaseAdaptor {
     }
 
     //============================================ Implement Base Functions ===========================================
+    //==================== Base Function Specification ====================
+    // Base functions are functions designed to help the Cellar interact with
+    // an adaptor position, strategists are not intended to use these functions.
+    // Base functions MUST be implemented in adaptor contracts, even if that is just
+    // adding a revert statement to make them uncallable by normal user operations.
+    //
+    // All view Base functions will be called used normal staticcall.
+    // All mutative Base functions will be called using delegatecall.
+    //=====================================================================
     /**
      * @notice Function Cellars call to deposit users funds into holding position.
      * @param assets the amount of assets to deposit
@@ -104,6 +113,13 @@ contract BaseAdaptor {
     function assetOf(bytes memory adaptorData) public view virtual returns (ERC20) {}
 
     //============================================ Strategist Functions ===========================================
+    //==================== Strategist Function Specification ====================
+    // Strategist functions are only callable by strategists through the Cellars
+    // `callOnAdaptor` function. A cellar will never call any of these functions,
+    // when a normal user interacts with a cellar(depositing/withdrawing)
+    //
+    // All strategist functions will be called using delegatecall.
+    //===========================================================================
 
     //============================================ Helper Functions ===========================================
     /**

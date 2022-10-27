@@ -231,7 +231,7 @@ contract Registry is Ownable {
         if (adaptor == address(0) || getPositionHashToPositionId[positionHash] != 0)
             revert Registry__InvalidPositionInput();
 
-        if (!isAdaptorTrusted[adaptor]) revert Regsitry__AdaptorNotTrusted();
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted();
 
         // Set position data.
         getPositionIdToPositionData[positionId] = PositionData({
@@ -294,7 +294,7 @@ contract Registry is Ownable {
     /**
      * @notice Attempted to use an untrusted adaptor.
      */
-    error Regsitry__AdaptorNotTrusted();
+    error Registry__AdaptorNotTrusted();
 
     /**
      * @notice Maps an adaptor address to bool indicating whether it has been set up in the registry.
@@ -338,6 +338,6 @@ contract Registry is Ownable {
         RiskData memory data = getAdaptorRiskData[adaptor];
         if (assetRiskTolerance < data.assetRisk) revert Registry__AssetTooRisky();
         if (protocolRiskTolerance < data.protocolRisk) revert Registry__ProtocolTooRisky();
-        if (!isAdaptorTrusted[adaptor]) revert Regsitry__AdaptorNotTrusted();
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted();
     }
 }
