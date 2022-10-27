@@ -15,7 +15,7 @@ import { Owned } from "@solmate/auth/Owned.sol";
 
 /**
  * @title Sommelier Cellar
- * @notice A composable ERC4626 that can use arbritrart DeFi assets/positions using adaptors.
+ * @notice A composable ERC4626 that can use arbitrary DeFi assets/positions using adaptors.
  * @author crispymangoes
  */
 contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
