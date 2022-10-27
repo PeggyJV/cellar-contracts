@@ -5,7 +5,6 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Cellar, ERC20 } from "src/base/Cellar.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { console } from "@forge-std/Test.sol"; //TODO remove this
 
 contract Registry is Ownable {
     // ============================================= ADDRESS CONFIG =============================================
