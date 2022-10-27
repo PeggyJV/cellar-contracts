@@ -119,6 +119,12 @@ contract BaseAdaptor {
     // when a normal user interacts with a cellar(depositing/withdrawing)
     //
     // All strategist functions will be called using delegatecall.
+    // Strategist functions are intentionally "blind" to what positions the cellar
+    // is currently holding. This allows strategists to enter temporary positions
+    // while rebalancing.
+    // To mitigate strategist from abusing this and moving funds in untracked
+    // positions, the cellar will enforce a Total Value Locked check that
+    // insures TVL has not deviated too much from `callOnAdaptor`.
     //===========================================================================
 
     //============================================ Helper Functions ===========================================

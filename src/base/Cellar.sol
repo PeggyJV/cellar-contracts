@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, SafeERC20, Math } from "./ERC4626.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC4626, SafeERC20, Math, ERC20 } from "./ERC4626.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -16,8 +15,8 @@ import { Owned } from "@solmate/auth/Owned.sol";
 
 /**
  * @title Sommelier Cellar
- * @notice A composable ERC4626 that can use a set of other ERC4626 or ERC20 positions to earn yield.
- * @author Brian Le, crispymangoes
+ * @notice A composable ERC4626 that can use arbritrart DeFi assets/positions using adaptors.
+ * @author crispymangoes
  */
 contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     using Uint32Array for uint32[];
@@ -30,26 +29,26 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
 
     /**
      * @notice Emitted when a position is added.
-     * @param position address of position that was added
+     * @param position id of position that was added
      * @param index index that position was added at
      */
-    event PositionAdded(address indexed position, uint256 index);
+    event PositionAdded(uint32 position, uint256 index);
 
     /**
      * @notice Emitted when a position is removed.
-     * @param position address of position that was removed
+     * @param position id of position that was removed
      * @param index index that position was removed from
      */
-    event PositionRemoved(address indexed position, uint256 index);
+    event PositionRemoved(uint32 position, uint256 index);
 
     /**
      * @notice Emitted when the positions at two indexes are swapped.
-     * @param newPosition1 address of position (previously at index2) that replaced index1.
-     * @param newPosition2 address of position (previously at index1) that replaced index2.
+     * @param newPosition1 id of position (previously at index2) that replaced index1.
+     * @param newPosition2 id of position (previously at index1) that replaced index2.
      * @param index1 index of first position involved in the swap
      * @param index2 index of second position involved in the swap.
      */
-    event PositionSwapped(address indexed newPosition1, address indexed newPosition2, uint256 index1, uint256 index2);
+    event PositionSwapped(uint32 newPosition1, uint32 newPosition2, uint256 index1, uint256 index2);
 
     /**
      * @notice Attempted an operation on an untrusted position.
@@ -61,14 +60,14 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @notice Attempted to add a position that is already being used.
      * @param position address of the position
      */
-    error Cellar__PositionAlreadyUsed(uint256 position);
+    error Cellar__PositionAlreadyUsed(uint32 position);
 
     /**
      * @notice Attempted an action on a position that is required to be empty before the action can be performed.
      * @param position address of the non-empty position
      * @param sharesRemaining amount of shares remaining in the position
      */
-    error Cellar__PositionNotEmpty(uint256 position, uint256 sharesRemaining);
+    error Cellar__PositionNotEmpty(uint32 position, uint256 sharesRemaining);
 
     /**
      * @notice Attempted an operation with an asset that was different then the one expected.
@@ -93,7 +92,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     /**
      * @notice Array of uint32s made up of cellars positions Ids.
      */
-    //TODO I could probs get away with a fixed size array.
     uint32[] public positions;
 
     /**
@@ -112,7 +110,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     mapping(uint32 => Registry.PositionData) public getPositionData;
 
     /**
-     * @notice Get the addresses of the positions current used by the cellar.
+     * @notice Get the ids of the positions currently used by the cellar.
      */
     function getPositions() external view returns (uint32[] memory) {
         return positions;
@@ -126,7 +124,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     /**
      * @notice Insert a trusted position to the list of positions used by the cellar at a given index.
      * @param index index at which to insert the position
-     * @param positionId address of position to add
+     * @param positionId id of position to add
+     * @param configurationData data used to configure how the position behaves
      */
     function addPosition(
         uint32 index,
@@ -158,7 +157,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         isPositionUsed[positionId] = true;
         if (isDebt) numberOfDebtPositions++;
 
-        // emit PositionAdded(position, index);
+        emit PositionAdded(positionId, index);
     }
 
     /**
@@ -182,7 +181,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         if (getPositionData[positionId].isDebt) numberOfDebtPositions--;
         delete getPositionData[positionId];
 
-        // emit PositionRemoved(position, index);
+        emit PositionRemoved(positionId, index);
     }
 
     /**
@@ -201,7 +200,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         // If we swapped with the holding position make sure new holding position works.
         if ((index1 == 0 || index2 == 0) && _assetOf(positions[0]) != asset) revert("Holding position asset mismatch.");
 
-        // emit PositionSwapped(newPosition1, newPosition2, index1, index2);
+        emit PositionSwapped(newPosition1, newPosition2, index1, index2);
     }
 
     // =============================================== FEES CONFIG ===============================================
@@ -279,7 +278,14 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             strategistPayoutAddress: address(0)
         });
 
+    /**
+     * @notice Sets the max possible performance fee for this cellar.
+     */
     uint64 public constant MAX_PLATFORM_FEE = 0.2e18;
+
+    /**
+     * @notice Sets the max possible fee cut for this cellar.
+     */
     uint64 public constant MAX_FEE_CUT = 1e18;
 
     /**
@@ -391,10 +397,19 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      */
     Registry public immutable registry;
 
-    // Below values determine what positions and adaptors this cellar can use.
-    uint128 public immutable assetRiskTolerance; // 0 safest -> uint128 max no restrictions
+    /**
+     * @notice Determines this cellars risk tolerance in regards to assets it is exposed to.
+     * @dev 0: safest
+     *      type(uint128).max: no restrictions
+     */
+    uint128 public immutable assetRiskTolerance;
 
-    uint128 public immutable protocolRiskTolerance; // 0 safest -> uint256 max no restrictions
+    /**
+     * @notice Determines this cellars risk tolerance in regards to protocols it uses.
+     * @dev 0: safest
+     *      type(uint128).max: no restrictions
+     */
+    uint128 public immutable protocolRiskTolerance;
 
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
@@ -403,10 +418,13 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      *      https://github.com/cosmos/gravity-bridge/blob/main/solidity/contracts/Gravity.sol
      * @param _registry address of the platform's registry contract
      * @param _asset address of underlying token used for the for accounting, depositing, and withdrawing
-     * @param _positions addresses of the positions to initialize the cellar with
+     * @param _positions ids of the positions to initialize the cellar with
+     * @param _configurationData configuration data for each position
      * @param _name name of this cellar's share token
-     * @param _name symbol of this cellar's share token
-     * @param _strategistPayout The address to send the strategists fee shares.
+     * @param _symbol symbol of this cellar's share token
+     * @param _strategistPayout the address to send the strategists fee shares.
+     * @param _assetRiskTolerance this cellars risk tolerance for assets it is exposed to
+     * @param _protocolRiskTolerance this cellars risk tolerance for protocols it will use
      */
     constructor(
         Registry _registry,
@@ -428,15 +446,13 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         for (uint256 i; i < _positions.length; i++) {
             uint32 position = _positions[i];
 
-            // if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
+            if (isPositionUsed[position]) revert Cellar__PositionAlreadyUsed(position);
 
             (address adaptor, bool isDebt, bytes memory adaptorData) = registry.cellarAddPosition(
                 position,
                 _assetRiskTolerance,
                 _protocolRiskTolerance
             );
-
-            require(adaptor != address(0), "Position does not exist.");
 
             isPositionUsed[position] = true;
             getPositionData[position] = Registry.PositionData({
@@ -462,13 +478,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     }
 
     // =========================================== CORE LOGIC ===========================================
-
-    /**
-     * @notice Emitted when withdraws are made from a position.
-     * @param position the position assets were withdrawn from
-     * @param amount the amount of assets withdrawn
-     */
-    event PulledFromPosition(address indexed position, uint256 amount);
 
     /**
      * @notice Emitted when share locking period is changed.
@@ -665,8 +674,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
         uint256 _totalAssets = totalAssets();
 
-        // previewMintRoundsUp, but iniital mint could return zero assets, so check for rounding error.
-        if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets(); // No need to check for rounding error, previewMint rounds up.
+        // previewMint rounds up, but initial mint could return zero assets, so check for rounding error.
+        if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
 
         _enter(assets, shares, receiver);
     }
@@ -710,8 +719,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 shares) {
-        // Get data efficiently.
-        uint256 _totalAssets = totalAssets(); // Store totalHoldings and pass into _withdrawInOrder if no stack errors.
+        uint256 _totalAssets = totalAssets();
 
         // No need to check for rounding error, `previewWithdraw` rounds up.
         shares = _previewWithdraw(assets, _totalAssets);
@@ -737,7 +745,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 assets) {
-        // Get data efficiently.
         uint256 _totalAssets = totalAssets();
 
         // Check for rounding error since we round down in previewRedeem.
@@ -747,8 +754,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     }
 
     /**
-     * @dev Withdraw from positions in the order defined by `positions`. Used if the withdraw type
-     *      is `ORDERLY`.
+     * @dev Withdraw from positions in the order defined by `positions`.
      * @param assets the amount of assets to withdraw from cellar
      * @param receiver the address to sent withdrawn assets to
      */
@@ -784,8 +790,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             // Withdraw from position.
             _withdrawFrom(position, amount, receiver);
 
-            // emit PulledFromPosition(position, amount);
-
             // Stop if no more assets to withdraw.
             if (assets == 0) break;
         }
@@ -803,9 +807,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @dev EIP4626 states totalAssets must not revert, but it is possible for `totalAssets` to revert
      * so it does NOT conform to ERC4626 standards.
      */
-    //TODO take this logic and make generalized internal function to replace this and withdrawable amount
-    //TODO bonus now internal function could be used in place of totalAssets if it is cheaper.
-    //TODO use multicall to reduce external calls to adaptors, and possibly batch multiple positions calls together if they sequentioally use the same adaptor.
     function totalAssets() public view override returns (uint256 assets) {
         uint256 numOfPositions = positions.length;
         ERC20[] memory positionAssets = new ERC20[](numOfPositions - numberOfDebtPositions);
@@ -1033,24 +1034,40 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      */
     error Cellar__InvalidRebalanceDeviation(uint256 requested, uint256 max);
 
-    mapping(address => bool) public isAdaptorSetup; // Map adaptor address to bool
+    /**
+     * @notice Strategist attempted to use an adaptor that was not set up to be used with this cellar.
+     * @param adaptor the adaptor address that is not set up
+     */
+    error Cellar__AdaptorNotSetUp(address adaptor);
 
+    /**
+     * @notice Maps an address to a bool indicating whether or not an adaptor
+     *         has been set up to be used with this cellar.
+     */
+    mapping(address => bool) public isAdaptorSetup;
+
+    /**
+     * @notice Allows owner to add new adaptors for the cellar to use.
+     */
     function setupAdaptor(address _adaptor) external onlyOwner {
         // Following call reverts if adaptor does not exist, or if it does not meet cellars risk appetite.
         registry.cellarSetupAdaptor(_adaptor, assetRiskTolerance, protocolRiskTolerance);
         isAdaptorSetup[_adaptor] = true;
     }
 
+    /**
+     * @notice Stores the max possible rebalance deviation for this cellar.
+     */
     uint64 public constant MAX_REBALANCE_DEVIATION = 0.1e18;
 
     /**
-     * @notice The percent the total assets of a cellar may deviate during a rebalance call.
+     * @notice The percent the total assets of a cellar may deviate during a `callOnAdaptor`(rebalance) call.
      */
-    uint256 public allowedRebalanceDeviation = 0.003e18; // Currently set to 0.3%
+    uint256 public allowedRebalanceDeviation = 0.003e18;
 
     /**
      * @notice Allows governance to change this cellars rebalance deviation.
-     * @param newDeviation the new reabalance deviation value.
+     * @param newDeviation the new rebalance deviation value.
      */
     function setRebalanceDeviation(uint256 newDeviation) external onlyOwner {
         if (newDeviation > MAX_REBALANCE_DEVIATION)
@@ -1063,31 +1080,47 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     }
 
     // Set to true before any adaptor calls are made.
+    /**
+     * @notice This bool is used to stop strategists from abusing Base Adaptor functions(deposit/withdraw).
+     */
     bool public blockExternalReceiver;
 
+    /**
+     * @notice Struct used to make calls to adaptors.
+     * @param adaptor the address of the adaptor to make calls to
+     * @param the abi encoded function calls to make to the `adaptor`
+     */
     struct AdaptorCall {
         address adaptor;
         bytes[] callData;
     }
 
+    /**
+     * @notice Allows strategists to manage their Cellar using arbritrary logic calls to adaptors.
+     * @dev There are several safety checks in this function to prevernt strategists from abusing it.
+     *      - `blockExternalReceiver`
+     *      - `totalAssets` must not change by much
+     *      - `totalShares` must remain constant
+     *      - adaptors must be set up to be used with this cellar
+     */
     function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner whenNotShutdown nonReentrant {
         blockExternalReceiver = true;
 
+        // Record `totalAssets` and `totalShares` before making any external calls.
         uint256 minimumAllowedAssets;
         uint256 maximumAllowedAssets;
         uint256 totalShares;
         {
-            //record totalAssets
             uint256 assetsBeforeAdaptorCall = totalAssets();
             minimumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
             maximumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
             totalShares = totalSupply();
         }
 
-        //run all adaptor functions
+        // Run all adaptor calls.
         for (uint8 i = 0; i < data.length; i++) {
             address adaptor = data[i].adaptor;
-            require(isAdaptorSetup[adaptor], "Adaptor not set up to be used with Cellar.");
+            if (!isAdaptorSetup[adaptor]) revert Cellar__AdaptorNotSetUp(adaptor);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 adaptor.functionDelegateCall(data[i].callData[j]);
             }
@@ -1105,8 +1138,24 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
 
     // ========================================= Aave Flash Loan Support =========================================
 
+    /**
+     * @notice Extenal contract attempted to initiate a flash loan.
+     */
+    error Cellar__ExternalInitiator();
+
+    /**
+     * @notice executeOperation was not called by the Aave Pool.
+     */
+    error Cellar__CallerNotAavePool();
+
+    /**
+     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
+     */
     address public constant aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
 
+    /**
+     * @notice Allows strategist to utilize Aave V2 flashloans while rebalancing the cellar.
+     */
     function executeOperation(
         address[] calldata assets,
         uint256[] calldata amounts,
@@ -1114,25 +1163,21 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         address initiator,
         bytes calldata params
     ) external returns (bool) {
-        require(initiator == address(this), "External Initiators Not Allowed!"); //important so that attackers cant send a flash loan to this contract and get it to run any adaptor logic
-        require(msg.sender == aavePool, "Only Aave Pool can call this");
+        if (initiator != address(this)) revert Cellar__ExternalInitiator();
+        if (msg.sender != aavePool) revert Cellar__CallerNotAavePool();
 
-        ///@dev so I am thinking that params will contain AdaptorCall[] data
-        ///@dev one of the last actions should include approving the aave pool to transfer the amount + premium to it
         AdaptorCall[] memory data = abi.decode(params, (AdaptorCall[]));
 
-        ///@dev I don't think any of the other values will be used? SP should do all that calculation off chain, and just instruct the cellar what to do
-        //run all adaptor functions
-        //run all adaptor functions
+        // Run all adaptor calls.
         for (uint8 i = 0; i < data.length; i++) {
             address adaptor = data[i].adaptor;
-            require(isAdaptorSetup[adaptor], "Adaptor not set up to be used with Cellar.");
+            if (!isAdaptorSetup[adaptor]) revert Cellar__AdaptorNotSetUp(adaptor);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
-                adaptor.functionDelegateCall(data[i].callData[j]); //TODO is there someway to append data to this, so we can append the adaptor address?
+                adaptor.functionDelegateCall(data[i].callData[j]);
             }
         }
 
-        //approve pool to repay all debt
+        // Approve pool to repay all debt.
         for (uint256 i = 0; i < amounts.length; i++) {
             ERC20(assets[i]).safeApprove(aavePool, (amounts[i] + premiums[i]));
         }
@@ -1240,9 +1285,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @param position address to deposit funds into
      * @param assets the amount of assets to deposit into the position
      */
-    //TODO this is ONLY used in the afterDeposit function
     function _depositTo(uint32 position, uint256 assets) internal {
-        //TODO adaptor should be a non zero address
         address adaptor = getPositionData[position].adaptor;
         adaptor.functionDelegateCall(
             abi.encodeWithSelector(
@@ -1260,7 +1303,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @param assets the amount of assets to withdraw from the position
      * @param receiver the address to sent withdrawn assets to
      */
-    //TODO this is only used in the _withdrawInOrder function
     function _withdrawFrom(
         uint32 position,
         uint256 assets,
@@ -1282,7 +1324,6 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @dev Get the withdrawable balance of a position according to its position type.
      * @param position position to get the withdrawable balance of
      */
-    //TODO maybe these view functions should use staticcall
     function _withdrawableFrom(uint32 position) internal view returns (uint256) {
         // Debt positions always return 0 for their withdrawable.
         if (getPositionData[position].isDebt) return 0;
@@ -1313,6 +1354,9 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         return BaseAdaptor(adaptor).assetOf(getPositionData[position].adaptorData);
     }
 
+    /**
+     * @notice Get all the positions underlying assets.
+     */
     function getPositionAssets() external view returns (ERC20[] memory assets) {
         assets = new ERC20[](positions.length);
         for (uint256 i = 0; i < positions.length; i++) {

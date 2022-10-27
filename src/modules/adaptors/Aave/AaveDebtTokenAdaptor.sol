@@ -48,7 +48,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         uint256,
         bytes memory,
         bytes memory
-    ) public override {
+    ) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
