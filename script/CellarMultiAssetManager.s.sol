@@ -29,9 +29,9 @@ contract CellarMultiAssetManagerScript is Script {
 
     ERC20Adaptor private erc20Adaptor;
 
-    uint256 private usdcPosition;
-    uint256 private wethPosition;
-    uint256 private wbtcPosition;
+    uint32 private usdcPosition;
+    uint32 private wethPosition;
+    uint32 private wbtcPosition;
 
     function run() external {
         vm.startBroadcast();
@@ -58,7 +58,7 @@ contract CellarMultiAssetManagerScript is Script {
 
     function createMultiAssetCellars() internal {
         // Setup Cellar:
-        uint256[] memory positions = new uint256[](3);
+        uint32[] memory positions = new uint32[](3);
         positions[0] = usdcPosition;
         positions[1] = wethPosition;
         positions[2] = wbtcPosition;

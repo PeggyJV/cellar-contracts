@@ -6,6 +6,7 @@ import { Multicall } from "src/base/Multicall.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Swap Router

@@ -54,11 +54,11 @@ contract CellarAssetManagerTest is Test {
     CellarAdaptor private cellarAdaptor;
     ERC20Adaptor private erc20Adaptor;
 
-    uint256 private usdcPosition;
-    uint256 private wethPosition;
-    uint256 private usdcCLRPosition;
-    uint256 private wethCLRPosition;
-    uint256 private wbtcCLRPosition;
+    uint32 private usdcPosition;
+    uint32 private wethPosition;
+    uint32 private usdcCLRPosition;
+    uint32 private wethCLRPosition;
+    uint32 private wbtcCLRPosition;
 
     function setUp() external {
         usdcCLR = new MockERC4626(USDC, "USDC Cellar LP Token", "USDC-CLR", 6);
@@ -109,7 +109,7 @@ contract CellarAssetManagerTest is Test {
         priceRouter.supportAsset(WBTC);
 
         // Cellar positions array.
-        uint256[] memory positions = new uint256[](5);
+        uint32[] memory positions = new uint32[](5);
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(cellarAdaptor), 0, 0);
@@ -365,7 +365,7 @@ contract CellarAssetManagerTest is Test {
         // False specifies that this cellar tries to change the callers totalSupply on deposit calls.
         ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", false);
 
-        uint256 maliciousPosition = registry.trustPosition(
+        uint32 maliciousPosition = registry.trustPosition(
             address(cellarAdaptor),
             false,
             abi.encode(Cellar(address(maliciousCellar))),
@@ -405,7 +405,7 @@ contract CellarAssetManagerTest is Test {
     function testMaliciousRebalanceIntoUntrackedPosition() external {
         // Create a new Cellar with two positions USDC, and WETH.
         // Setup Cellar:
-        uint256[] memory positions = new uint256[](2);
+        uint32[] memory positions = new uint32[](2);
         positions[0] = usdcPosition;
         positions[1] = wethPosition;
 
@@ -462,7 +462,7 @@ contract CellarAssetManagerTest is Test {
     function testMaliciousStrategistFundsLocked() external {
         LockedERC4626 maliciousCellar = new LockedERC4626(USDC, "Bad Cellar", "BC", 1e18);
 
-        uint256 maliciousPosition = registry.trustPosition(
+        uint32 maliciousPosition = registry.trustPosition(
             address(cellarAdaptor),
             false,
             abi.encode(Cellar(address(maliciousCellar))),
@@ -508,7 +508,7 @@ contract CellarAssetManagerTest is Test {
         LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 1e18); // 100% of funds are locked
 
         // Setup Cellar:
-        uint256[] memory positions = new uint256[](4);
+        uint32[] memory positions = new uint32[](4);
         positions[0] = usdcPosition;
         positions[1] = registry.trustPosition(
             address(cellarAdaptor),
@@ -614,6 +614,48 @@ contract CellarAssetManagerTest is Test {
 
         expectedMaxWithdraw = assets.mulWadDown(0.775e18);
         assertEq(testCellar.maxWithdraw(address(this)), expectedMaxWithdraw, "Max withdraw should equal expected..");
+    }
+
+    function testFindMax() external {
+        uint256 deposit = 1e6;
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), type(uint256).max);
+
+        // Deposit into cellar.
+        cellar.deposit(deposit, address(this));
+
+        // No yield has been earned.
+        assertEq(cellar.maxWithdraw(address(this)), deposit, "Max withdraw should equal deposit.");
+        uint256 expectedShares = 1e18;
+        assertEq(cellar.maxRedeem(address(this)), expectedShares, "Max Redeem should be 1 share.");
+
+        // Simulate yield.
+        deal(address(USDC), address(cellar), 10e6);
+
+        uint256 expectedAssets = 10e6; // initial $1 deposit + $9 of yield - 10% performance fees.
+        assertEq(cellar.maxWithdraw(address(this)), expectedAssets, "Max withdraw should equal deposit + yield.");
+        assertEq(cellar.maxRedeem(address(this)), expectedShares, "Max Redeem should be 1 share.");
+
+        // Strategist moves half of funds into an illiquid position.
+        LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 1e18); // 100% of funds are locked.
+        uint32 lockedUSDCPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedUSDC), 0, 0);
+        cellar.addPosition(5, lockedUSDCPosition, abi.encode(0));
+
+        // Strategist rebalances into illiquid cellar.
+        _rebalanceWithERC4626Positions(cellar, USDC, ERC20(address(lockedUSDC)), 5e6);
+
+        assertEq(cellar.totalAssets(), 10e6, "Total assets should not have changed.");
+
+        expectedAssets = 5e6; // Half the assets are locked, so maxWithdraw should be half of deposit + yield.
+        expectedShares = cellar.previewWithdraw(expectedAssets);
+        assertEq(cellar.maxWithdraw(address(this)), expectedAssets, "Max withdraw should equal expectedAssets.");
+        assertApproxEqAbs(
+            cellar.maxRedeem(address(this)),
+            expectedShares,
+            1,
+            "Max Redeem should equal previewRedeem(maxWithdraw(user))."
+        );
     }
 
     // ======================================== INTEGRATION TESTS ========================================
@@ -886,10 +928,10 @@ contract CellarAssetManagerTest is Test {
         MockCellar assetManagementCellar;
         {
             // Add wBTC position to registry.
-            uint256 wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
+            uint32 wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
 
             // Create new cellar with WETH, USDC, and WBTC positions.
-            uint256[] memory positions = new uint256[](3);
+            uint32[] memory positions = new uint32[](3);
             positions[0] = usdcPosition;
             positions[1] = wethPosition;
             positions[2] = wbtcPosition;
@@ -1157,7 +1199,7 @@ contract CellarAssetManagerTest is Test {
             // Strategists trusts LINK, and then adds it as a position.
             // No need to set LINK price since its assets will always be zero.
             priceRouter.supportAsset(LINK);
-            uint256 linkPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(LINK), 0, 0);
+            uint32 linkPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(LINK), 0, 0);
 
             assetManagementCellar.addPosition(3, linkPosition, abi.encode(0));
 
@@ -1354,10 +1396,10 @@ contract CellarAssetManagerTest is Test {
         MockCellar assetManagementCellar;
         {
             // Add wBTC position to registry.
-            uint256 wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
+            uint32 wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
 
             // Create new cellar with WETH, USDC, and WBTC positions.
-            uint256[] memory positions = new uint256[](3);
+            uint32[] memory positions = new uint32[](3);
             positions[0] = wethPosition;
             positions[1] = usdcPosition;
             positions[2] = wbtcPosition;
@@ -1666,7 +1708,7 @@ contract CellarAssetManagerTest is Test {
         LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 1e18); // 100% of funds are locked
         {
             // Create new cellar with WETH, USDC, and WBTC positions.
-            uint256[] memory positions = new uint256[](4);
+            uint32[] memory positions = new uint32[](4);
             positions[0] = wethPosition;
             positions[1] = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedWETH), 0, 0);
             positions[2] = usdcPosition;

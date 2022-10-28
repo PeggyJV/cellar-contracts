@@ -45,10 +45,10 @@ contract CellarRouterTest is Test {
 
     ERC20Adaptor private erc20Adaptor;
 
-    uint256 private usdcPosition;
-    uint256 private daiPosition;
-    uint256 private wethPosition;
-    uint256 private wbtcPosition;
+    uint32 private usdcPosition;
+    uint32 private daiPosition;
+    uint32 private wethPosition;
+    uint32 private wbtcPosition;
 
     function setUp() public {
         priceRouter = new PriceRouter();
@@ -82,7 +82,7 @@ contract CellarRouterTest is Test {
         wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
         wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
 
-        uint256[] memory positions = new uint256[](4);
+        uint32[] memory positions = new uint32[](4);
         positions[0] = usdcPosition;
         positions[1] = daiPosition;
         positions[2] = wethPosition;
@@ -121,7 +121,7 @@ contract CellarRouterTest is Test {
         path[1] = address(WETH);
 
         // Create a WETH Cellar.
-        uint256[] memory positions = new uint256[](1);
+        uint32[] memory positions = new uint32[](1);
         positions[0] = wethPosition;
 
         bytes[] memory positionConfigs = new bytes[](1);
@@ -191,8 +191,8 @@ contract CellarRouterTest is Test {
         assertEq(USDC.balanceOf(pOwner), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapUsingUniswapV2(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint112).max);
+    function testDepositAndSwapUsingUniswapV2() external {
+        uint256 assets = 100e18;
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -224,8 +224,8 @@ contract CellarRouterTest is Test {
         assertEq(DAI.balanceOf(address(this)), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapUsingUniswapV3(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint112).max);
+    function testDepositAndSwapUsingUniswapV3() external {
+        uint256 assets = 100e18;
 
         // Specify the swap path.
         address[] memory path = new address[](3);
@@ -263,8 +263,8 @@ contract CellarRouterTest is Test {
         assertEq(DAI.balanceOf(address(this)), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapWithWrongSwapAmount(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint112).max);
+    function testDepositAndSwapWithWrongSwapAmount() external {
+        uint256 assets = 100e18;
 
         // Specify the swap path.
         address[] memory path = new address[](2);

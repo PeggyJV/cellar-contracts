@@ -6,3 +6,5 @@ ds-test/=lib/forge-std/lib/ds-test/src/
 @uniswap/v3-periphery/=lib/v3-periphery/
 @uniswap/v3-core/=lib/v3-core/
 @chainlink/=lib/chainlink/
+@uniswapV3P=lib/v3-periphery.git/contracts/
+@uniswapV3C=lib/v3-core.git/contracts/
