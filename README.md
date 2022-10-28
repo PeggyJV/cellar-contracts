@@ -8,51 +8,34 @@ Cellar contracts for the Sommelier Network.
 
 Before attempting to setup the repo, first make sure you have Foundry installed and updated, which can be done [here](https://github.com/foundry-rs/foundry#installation).
 
-```bash
-npm run setup
-```
-
 **Building**
 
-Install libraries with Foundry which work with Hardhat:
+Install Foundry dependencies and build the project.
 
 ```bash
-forge install rari-capital/solmate # Already in this repo, just an example.
+forge build
 ```
 
-Whenever you install new libraries using Foundry, make sure to update your `remappings.txt` file. This repo uses `hardhat-preprocessor` and the `remappings.txt` file to allow Hardhat to resolve libraries you install with Foundry.
+To install new libraries.
+
+```bash
+forge install <GITHUB_USER>/<REPO>
+```
+
+Example
+
+```bash
+forge install transmissions11/solmate
+```
+
+Whenever you install new libraries using Foundry, make sure to update your `remappings.txt` file.
 
 **Testing**
 
-Before running test, make sure to go to `foundry.toml` and set `eth_rpc_url` to your [Alchemy](https://www.alchemy.com/) HTTPS URL and `etherscan_api_key` to your [Etherscan](https://etherscan.io/) API key. This is required for tests that run against a fork of mainnet.
+Before running test, rename `sample.env` to `.env`, and add your mainnet RPC. If you want to deploy any contracts, you will need that networks RPC, a Private Key, and an Etherscan key(if you want foundry to verify the contracts).
 
-Run tests with either Hardhat or Foundry:
-
-```bash
-forge test
-# or
-npx hardhat test
-```
-
-Run tests on forked chains with Foundry:
+Run tests with Foundry:
 
 ```bash
-forge test --fork-url ALCHEMY_API_KEY
-```
-
-Run tests for both Hardhat and Foundry:
-
-```bash
-npm run test
-```
-
-**Tasks**
-
-Use Hardhat's task framework:
-
-```bash
-npx hardhat compile
-# Before running the next command, go to `hardhat.config.ts` and uncomment "./tasks" imports.
-# This is initially commented to fix initial compile errors with Hardhat.
-npx hardhat example
+npm run forkTest
 ```
