@@ -33,6 +33,7 @@ Whenever you install new libraries using Foundry, make sure to update your `rema
 **Testing**
 
 Before running test, rename `sample.env` to `.env`, and add your mainnet RPC. If you want to deploy any contracts, you will need that networks RPC, a Private Key, and an Etherscan key(if you want foundry to verify the contracts).
+Note in order to run tests against forked mainnet, your RPC must be an archive node. My favorite archive node is [Alchemy](https://www.alchemy.com).
 
 Run tests with Foundry:
 
