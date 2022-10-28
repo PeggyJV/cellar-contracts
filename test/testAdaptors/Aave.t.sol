@@ -3,8 +3,8 @@ pragma solidity 0.8.16;
 
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
-import { AaveATokenAdaptor } from "src/modules/adaptors/aave/AaveATokenAdaptor.sol";
-import { AaveDebtTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/aave/AaveDebtTokenAdaptor.sol";
+import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
+import { AaveDebtTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
