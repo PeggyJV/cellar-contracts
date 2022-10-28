@@ -191,8 +191,8 @@ contract CellarRouterTest is Test {
         assertEq(USDC.balanceOf(pOwner), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapUsingUniswapV2(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint112).max);
+    function testDepositAndSwapUsingUniswapV2() external {
+        uint256 assets = 100e18;
 
         // Specify the swap path.
         address[] memory path = new address[](2);
@@ -224,8 +224,8 @@ contract CellarRouterTest is Test {
         assertEq(DAI.balanceOf(address(this)), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapUsingUniswapV3(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint112).max);
+    function testDepositAndSwapUsingUniswapV3() external {
+        uint256 assets = 100e18;
 
         // Specify the swap path.
         address[] memory path = new address[](3);
@@ -263,8 +263,8 @@ contract CellarRouterTest is Test {
         assertEq(DAI.balanceOf(address(this)), 0, "Should have deposited assets from user.");
     }
 
-    function testDepositAndSwapWithWrongSwapAmount(uint256 assets) external {
-        assets = bound(assets, 1e18, type(uint112).max);
+    function testDepositAndSwapWithWrongSwapAmount() external {
+        uint256 assets = 100e18;
 
         // Specify the swap path.
         address[] memory path = new address[](2);
