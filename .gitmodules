@@ -17,3 +17,6 @@
 [submodule "lib/v3-periphery.git"]
 	path = lib/v3-periphery.git
 	url = https://github.com/crispymangoes/v3-periphery.git
+[submodule "lib/solmate"]
+	path = lib/solmate
+	url = https://github.com/transmissions11/solmate
