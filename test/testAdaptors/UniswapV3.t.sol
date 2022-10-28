@@ -287,12 +287,12 @@ contract UniswapV3AdaptorTest is Test {
         adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
 
         adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
-        adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 40);
+        adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 500, 50_000e18, 50_000e6, 40);
         adaptorCalls[4] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 100);
 
-        adaptorCalls[5] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 20);
+        adaptorCalls[5] = _createBytesDataToOpenLP(USDC, WETH, 500, 50_000e6, 36e18, 20);
         adaptorCalls[6] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 18);
-        adaptorCalls[7] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 200);
+        adaptorCalls[7] = _createBytesDataToOpenLP(USDC, WETH, 500, 50_000e6, 36e18, 200);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -329,14 +329,10 @@ contract UniswapV3AdaptorTest is Test {
     }
 
     function testUserDepositAndWithdrawRevert() external {
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(UniswapV3Adaptor.UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed.selector))
-        );
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserDepositsNotAllowed.selector)));
         uniswapV3Adaptor.deposit(0, abi.encode(0), abi.encode(0));
 
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(UniswapV3Adaptor.UniswapV3Adaptor__UserDepositAndWithdrawNotAllowed.selector))
-        );
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
         uniswapV3Adaptor.withdraw(0, address(0), abi.encode(0), abi.encode(0));
     }
 

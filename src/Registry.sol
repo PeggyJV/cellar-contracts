@@ -106,7 +106,7 @@ contract Registry is Ownable {
         nextId++;
     }
 
-    // ============================================ TRUST CONFIG ============================================
+    // ============================================ POSITION LOGIC ============================================
 
     /**
      * @notice stores data related to Cellar positions.
@@ -137,35 +137,81 @@ contract Registry is Ownable {
     }
 
     /**
-     * @notice Emitted when trust for a position is changed.
-     * @param position address of position that trust was changed for
-     * @param isTrusted whether the position is trusted
+     * @notice Emitted when a new position is added to the registry.
+     * @param id the positions id
+     * @param adaptor address of the adaptor this position uses
+     * @param isDebt bool indicating whether this position takes on debt or not
+     * @param adaptorData arbitrary bytes used to configure this position
      */
-    event TrustChanged(address indexed position, bool isTrusted);
+    event PositionAdded(uint32 id, address adaptor, bool isDebt, bytes adaptorData);
 
     /**
      * @notice Attempted to trust a position not being used.
      * @param position address of the invalid position
      */
-    error Cellar__PositionPricingNotSetUp(address position);
+    error Registry__PositionPricingNotSetUp(address position);
+
+    /**
+     * @notice Attempted to add a position with bad input values.
+     */
+    error Registry__InvalidPositionInput();
+
+    /**
+     * @notice Attempted to add a position with a risky asset.
+     */
+    error Registry__AssetTooRisky();
+
+    /**
+     * @notice Attempted to add a position with a risky protocol.
+     */
+    error Registry__ProtocolTooRisky();
+
+    /**
+     * @notice Attempted to add a position that does not exist.
+     */
+    error Registry__PositionDoesNotExist();
 
     /**
      * @notice Addresses of the positions currently used by the cellar.
      */
     uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
 
-    //TODO add natspec
+    /**
+     * @notice Maps a position Id to its risk data.
+     */
     mapping(uint32 => RiskData) public getRiskData;
 
+    /**
+     * @notice Maps an adaptor to its risk data.
+     */
     mapping(address => RiskData) public getAdaptorRiskData;
 
+    /**
+     * @notice Stores the number of positions that have been added to the registry.
+     *         Starts at 1.
+     */
     uint32 public positionCount;
 
+    /**
+     * @notice Maps a position hash to a position Id.
+     * @dev can be used by adaptors to verify that a certain position is open during Cellar `callOnAdaptor` calls.
+     */
     mapping(bytes32 => uint32) public getPositionHashToPositionId;
+
+    /**
+     * @notice Maps a position id to its position data.
+     * @dev used by Cellars when adding new positions.
+     */
     mapping(uint32 => PositionData) public getPositionIdToPositionData;
 
     /**
      * @notice Trust a position to be used by the cellar.
+     * @param adaptor the adaptor address this position uses
+     * @param isDebt bool indicating whether this position should be treated as debt
+     * @param adaptorData arbitrary bytes used to configure this position
+     * @param assetRisk the risk rating of this positions asset
+     * @param protocolRisk the risk rating of this positions underlying protocol
+     * @return positionId the position id of the newly added position
      */
     function trustPosition(
         address adaptor,
@@ -176,11 +222,15 @@ contract Registry is Ownable {
     ) external onlyOwner returns (uint32 positionId) {
         bytes32 identifier = BaseAdaptor(adaptor).identifier();
         bytes32 positionHash = keccak256(abi.encode(identifier, isDebt, adaptorData));
-        positionId = positionCount + 1; // Plus 1 so that we do not use Id 0.
+        positionId = positionCount + 1; //Add one so that we do not use Id 0.
 
-        require(adaptor != address(0), "Adaptor can not be zero address");
-        require(getPositionHashToPositionId[positionHash] == 0, "Position already exists.");
-        require(isAdaptorTrusted[adaptor], "Invalid Adaptor");
+        // Check that...
+        // `adaptor` is a non zero address
+        // position has not been already set up
+        if (adaptor == address(0) || getPositionHashToPositionId[positionHash] != 0)
+            revert Registry__InvalidPositionInput();
+
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted();
 
         // Set position data.
         getPositionIdToPositionData[positionId] = PositionData({
@@ -192,36 +242,30 @@ contract Registry is Ownable {
 
         getRiskData[positionId] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
 
+        getPositionHashToPositionId[positionHash] = positionId;
+
         // Check that asset of position is supported for pricing operations.
         ERC20 positionAsset = BaseAdaptor(adaptor).assetOf(adaptorData);
         if (!PriceRouter(getAddress[PRICE_ROUTER_REGISTRY_SLOT]).isSupported(positionAsset))
-            revert Cellar__PositionPricingNotSetUp(address(positionAsset));
+            revert Registry__PositionPricingNotSetUp(address(positionAsset));
 
-        positionCount++;
+        positionCount = positionId;
 
-        // emit TrustChanged(position, true);
+        emit PositionAdded(positionId, adaptor, isDebt, adaptorData);
     }
 
-    mapping(address => bool) public isAdaptorTrusted;
-
-    mapping(bytes32 => bool) public isIdentifierUsed;
-
-    function trustAdaptor(
-        address adaptor,
-        uint128 assetRisk,
-        uint128 protocolRisk
-    ) external onlyOwner {
-        bytes32 identifier = BaseAdaptor(adaptor).identifier();
-        require(!isIdentifierUsed[identifier], "Adaptors must have unique identifiers.");
-        isAdaptorTrusted[adaptor] = true;
-        isIdentifierUsed[identifier] = true;
-        getAdaptorRiskData[adaptor] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
-    }
-
+    /**
+     * @notice Called by Cellars to add a new position to themselves.
+     * @param positionId the id of the position the cellar wants to add
+     * @param assetRiskTolerance the cellars risk tolerance for assets
+     * @param protocolRiskTolerance the cellars risk tolerance for protocols
+     * @return adaptor the address of the adaptor, isDebt bool indicating whether position is
+     *         debt or not, and adaptorData needed to interact with position
+     */
     function cellarAddPosition(
-        uint32 _positionId,
-        uint128 _assetRiskTolerance,
-        uint128 _protocolRiskTolerance
+        uint32 positionId,
+        uint128 assetRiskTolerance,
+        uint128 protocolRiskTolerance
     )
         external
         view
@@ -231,22 +275,68 @@ contract Registry is Ownable {
             bytes memory adaptorData
         )
     {
-        RiskData memory data = getRiskData[_positionId];
-        require(_assetRiskTolerance >= data.assetRisk, "Caller does not meet asset risk max.");
-        require(_protocolRiskTolerance >= data.protocolRisk, "Caller does not meet protocol risk max.");
-        PositionData memory positionData = getPositionIdToPositionData[_positionId];
-        require(positionData.adaptor != address(0), "Position does not exist.");
+        if (positionId > positionCount || positionId == 0) revert Registry__PositionDoesNotExist();
+        RiskData memory data = getRiskData[positionId];
+        if (assetRiskTolerance < data.assetRisk) revert Registry__AssetTooRisky();
+        if (protocolRiskTolerance < data.protocolRisk) revert Registry__ProtocolTooRisky();
+        PositionData memory positionData = getPositionIdToPositionData[positionId];
         return (positionData.adaptor, positionData.isDebt, positionData.adaptorData);
     }
 
+    // ============================================ ADAPTOR LOGIC ============================================
+
+    /**
+     * @notice Attempted to trust an adaptor with non unique identifier.
+     */
+    error Registry__IdentifierNotUnique();
+
+    /**
+     * @notice Attempted to use an untrusted adaptor.
+     */
+    error Registry__AdaptorNotTrusted();
+
+    /**
+     * @notice Maps an adaptor address to bool indicating whether it has been set up in the registry.
+     */
+    mapping(address => bool) public isAdaptorTrusted;
+
+    /**
+     * @notice Maps an adaptors identier to bool, to track if the indentifier is unique wrt the registry.
+     */
+    mapping(bytes32 => bool) public isIdentifierUsed;
+
+    /**
+     * @notice Trust an adaptor to be used by cellars
+     * @param adaptor address of the adaptor to trust
+     * @param assetRisk the asset risk level associated with this adaptor
+     * @param protocolRisk the protocol risk level associated with this adaptor
+     */
+    function trustAdaptor(
+        address adaptor,
+        uint128 assetRisk,
+        uint128 protocolRisk
+    ) external onlyOwner {
+        bytes32 identifier = BaseAdaptor(adaptor).identifier();
+        if (isIdentifierUsed[identifier]) revert Registry__IdentifierNotUnique();
+        isAdaptorTrusted[adaptor] = true;
+        isIdentifierUsed[identifier] = true;
+        getAdaptorRiskData[adaptor] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
+    }
+
+    /**
+     * @notice Called by Cellars to allow them to use new adaptors.
+     * @param adaptor address of the adaptor to use
+     * @param assetRiskTolerance asset risk tolerance of the caller
+     * @param protocolRiskTolerance protocol risk tolerance of the cellar
+     */
     function cellarSetupAdaptor(
-        address _adaptor,
-        uint128 _assetRiskTolerance,
-        uint128 _protocolRiskTolerance
+        address adaptor,
+        uint128 assetRiskTolerance,
+        uint128 protocolRiskTolerance
     ) external view {
-        RiskData memory data = getAdaptorRiskData[_adaptor];
-        require(_assetRiskTolerance >= data.assetRisk, "Caller does not meet asset risk max.");
-        require(_protocolRiskTolerance >= data.protocolRisk, "Caller does not meet protocol risk max.");
-        require(isAdaptorTrusted[_adaptor], "Adaptor is not trusted by registry.");
+        RiskData memory data = getAdaptorRiskData[adaptor];
+        if (assetRiskTolerance < data.assetRisk) revert Registry__AssetTooRisky();
+        if (protocolRiskTolerance < data.protocolRisk) revert Registry__ProtocolTooRisky();
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted();
     }
 }
