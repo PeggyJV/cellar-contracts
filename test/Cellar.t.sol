@@ -15,6 +15,7 @@ import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { IAggregationRouterV4, SwapDescription } from "src/interfaces/external/IAggregationRouterV4.sol";
 
 import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -32,6 +33,8 @@ contract CellarTest is Test {
     SwapRouter private swapRouter;
 
     Registry private registry;
+
+    address internal constant zeroXExchangeProxy = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     MockERC4626 private usdcCLR;
@@ -70,7 +73,11 @@ contract CellarTest is Test {
         // Setup Registry and modules:
         priceRouter = new MockPriceRouter();
         exchange = new MockExchange(priceRouter);
-        swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
+        swapRouter = new SwapRouter(
+            IUniswapV2Router(address(exchange)),
+            IUniswapV3Router(address(exchange)),
+            zeroXExchangeProxy
+        );
         gravity = new MockGravity();
         cellarAdaptor = new CellarAdaptor();
         erc20Adaptor = new ERC20Adaptor();

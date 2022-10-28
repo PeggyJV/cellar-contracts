@@ -15,6 +15,7 @@ import { MockGravity } from "src/mocks/MockGravity.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SigUtils } from "src/utils/SigUtils.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { IAggregationRouterV4, SwapDescription } from "src/interfaces/external/IAggregationRouterV4.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -37,6 +38,7 @@ contract CellarRouterTest is Test {
     // Mainnet contracts:
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    address internal constant zeroXExchangeProxy = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
 
     ERC20 private constant DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private constant USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -52,7 +54,7 @@ contract CellarRouterTest is Test {
 
     function setUp() public {
         priceRouter = new PriceRouter();
-        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router), zeroXExchangeProxy);
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Multicall } from "src/base/Multicall.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
+import { IAggregationRouterV4, SwapDescription } from "src/interfaces/external/IAggregationRouterV4.sol";
+import { IAggregationExecutor } from "src/interfaces/external/IAggregationExecutor.sol";
 import { console } from "@forge-std/Test.sol";
 
 /**
@@ -24,7 +26,9 @@ contract SwapRouter is Multicall {
      */
     enum Exchange {
         UNIV2,
-        UNIV3
+        UNIV3,
+        ZRX,
+        N
     }
 
     /**
@@ -44,18 +48,28 @@ contract SwapRouter is Multicall {
      */
     IUniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
+    // IAggregationRouterV4 public immutable oneInchRouter; // 0x1111111254fb6c44bAC0beD2854e76F90643097d
+
+    address public immutable zeroXExchangeProxy;
+
     /**
      * @param _uniswapV2Router address of the Uniswap V2 swap router contract
      * @param _uniswapV3Router address of the Uniswap V3 swap router contract
      */
-    constructor(IUniswapV2Router _uniswapV2Router, IUniswapV3Router _uniswapV3Router) {
+    constructor(
+        IUniswapV2Router _uniswapV2Router,
+        IUniswapV3Router _uniswapV3Router,
+        address _zeroXExchangeProxy
+    ) {
         // Set up all exchanges.
         uniswapV2Router = _uniswapV2Router;
         uniswapV3Router = _uniswapV3Router;
+        zeroXExchangeProxy = _zeroXExchangeProxy;
 
         // Set up mapping between IDs and selectors.
-        getExchangeSelector[Exchange.UNIV2] = SwapRouter(this).swapWithUniV2.selector;
+        getExchangeSelector[Exchange.UNIV2] = SwapRouter(this).swapWith0x.selector;
         getExchangeSelector[Exchange.UNIV3] = SwapRouter(this).swapWithUniV3.selector;
+        getExchangeSelector[Exchange.ZRX] = SwapRouter(this).swapWith0x.selector;
     }
 
     // ======================================= SWAP OPERATIONS =======================================
@@ -155,6 +169,8 @@ contract SwapRouter is Multicall {
         );
 
         amountOut = amountsOut[amountsOut.length - 1];
+
+        _checkApprovalIsZero(assetIn, address(uniswapV2Router));
     }
 
     /**
@@ -204,5 +220,54 @@ contract SwapRouter is Multicall {
                 amountOutMinimum: amountOutMin
             })
         );
+
+        _checkApprovalIsZero(assetIn, address(uniswapV3Router));
+    }
+
+    /**
+     * @notice Perform a swap using Uniswap V3.
+     * @param swapData bytes variable storing the following swap information
+     *      address[] path: array of addresses dictating what swap path to follow
+     *      uint24[] poolFees: array of pool fees dictating what swap pools to use
+     *      uint256 amount: amount of the first asset in the path to swap
+     *      uint256 amountOutMin: the minimum amount of the last asset in the path to receive
+     * @param receiver address to send the received assets to
+     * @return amountOut amount of assets received from the swap
+     */
+    function swapWith0x(
+        bytes memory swapData,
+        address receiver,
+        ERC20 assetIn,
+        ERC20 assetOut
+    ) public returns (uint256 amountOut) {
+        (uint256 amount, address spender, address payable swapTarget, bytes memory swapCallData) = abi.decode(
+            swapData,
+            (uint256, address, address, bytes)
+        );
+
+        require(spender == swapTarget && swapTarget == zeroXExchangeProxy, "Bad target");
+
+        // Transfer assets to this contract to swap.
+        assetIn.safeTransferFrom(msg.sender, address(this), amount);
+        // Approve assets to be swapped through the router.
+        assetIn.safeApprove(spender, amount);
+
+        // Record assetOut starting balance and make the swap.
+        amountOut = assetOut.balanceOf(address(this));
+        (bool success, ) = swapTarget.call(swapCallData);
+        require(success, "SWAP_CALL_FAILED");
+
+        // Make sure swap used all the approval, and send bought tokens to caller.
+        _checkApprovalIsZero(assetIn, zeroXExchangeProxy);
+        amountOut = assetOut.balanceOf(address(this)) - amountOut;
+        assetOut.safeTransfer(msg.sender, amountOut);
+    }
+
+    function callBytes(address msgSender, bytes calldata data) external {
+        // Do nothing
+    }
+
+    function _checkApprovalIsZero(ERC20 asset, address spender) internal view {
+        if (asset.allowance(address(this), spender) != 0) revert("Unused approval");
     }
 }

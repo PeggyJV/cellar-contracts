@@ -13,6 +13,7 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { IAggregationRouterV4, SwapDescription } from "src/interfaces/external/IAggregationRouterV4.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -42,6 +43,7 @@ contract CellarAaveTest is Test {
     ERC20 private dCVX = ERC20(0x4Ae5E4409C6Dbc84A00f9f89e4ba096603fb7d50);
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    address internal constant zeroXExchangeProxy = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
@@ -55,7 +57,7 @@ contract CellarAaveTest is Test {
         erc20Adaptor = new ERC20Adaptor();
         priceRouter = new PriceRouter();
 
-        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router), zeroXExchangeProxy);
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 

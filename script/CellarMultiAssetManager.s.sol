@@ -11,10 +11,12 @@ import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { IAggregationRouterV4, SwapDescription } from "src/interfaces/external/IAggregationRouterV4.sol";
 
 contract CellarMultiAssetManagerScript is Script {
     address private uniswapV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     address private uniswapV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address internal constant zeroXExchangeProxy = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address private sommMultiSig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
     address private strategist = 0x13FBB7e817e5347ce4ae39c3dff1E6705746DCdC;
@@ -36,7 +38,11 @@ contract CellarMultiAssetManagerScript is Script {
     function run() external {
         vm.startBroadcast();
         priceRouter = new PriceRouter();
-        swapRouter = new SwapRouter(IUniswapV2Router(uniswapV2Router), IUniswapV3Router(uniswapV3Router));
+        swapRouter = new SwapRouter(
+            IUniswapV2Router(uniswapV2Router),
+            IUniswapV3Router(uniswapV3Router),
+            zeroXExchangeProxy
+        );
         registry = new Registry(gravityBridge, address(swapRouter), address(priceRouter));
 
         erc20Adaptor = new ERC20Adaptor();

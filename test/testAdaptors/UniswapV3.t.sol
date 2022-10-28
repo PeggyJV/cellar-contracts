@@ -20,6 +20,7 @@ import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
 import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol";
 import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
+import { IAggregationRouterV4, SwapDescription } from "src/interfaces/external/IAggregationRouterV4.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -40,6 +41,7 @@ contract UniswapV3AdaptorTest is Test {
 
     address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    address internal constant zeroXExchangeProxy = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
 
     IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
     INonfungiblePositionManager internal positionManager =
@@ -73,7 +75,7 @@ contract UniswapV3AdaptorTest is Test {
     function setUp() external {
         // Setup Registry and modules:
         priceRouter = new PriceRouter();
-        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router), zeroXExchangeProxy);
         gravity = new MockGravity();
         uniswapV3Adaptor = new UniswapV3Adaptor();
         erc20Adaptor = new ERC20Adaptor();
