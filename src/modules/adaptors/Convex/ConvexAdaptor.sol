@@ -122,10 +122,10 @@ contract ConvexAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-    function claim(bytes memory adaptorData) public pure returns (uint256) {
-        // TODO
-        return 0;
-    }
+    // function claim(bytes memory adaptorData) public pure returns (uint256) {
+    //     // TODO
+    //     return 0;
+    // }
 
 
     //============================================ Helper Functions ============================================
