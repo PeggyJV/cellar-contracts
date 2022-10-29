@@ -33,7 +33,6 @@ contract Curve3PoolTest is Test {
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
 
-
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
@@ -43,7 +42,6 @@ contract Curve3PoolTest is Test {
 
     uint32 private lp3crvPosition;
     uint32 private daiPosition;
-
 
     function setUp() external {
 
@@ -65,18 +63,15 @@ contract Curve3PoolTest is Test {
         registry.trustAdaptor(address(curve3PoolAdaptor), 0, 0);
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
-        // 
-        lp3crvPosition = registry.trustPosition(address(curve3PoolAdaptor), false, abi.encode(ICurvePool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7), address(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490)), 0, 0);
         daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
+        lp3crvPosition = registry.trustPosition(address(curve3PoolAdaptor), false, abi.encode(ICurvePool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7), address(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490)), 0, 0);
 
-        positions[0] = lp3crvPosition;
-        positions[1] = daiPosition;
+        positions[0] = daiPosition;
+        positions[1] = lp3crvPosition;
 
         bytes[] memory positionConfigs = new bytes[](2);
 
         cellar = new MockCellar(registry, DAI, positions, positionConfigs, "Convex Cellar", "CONVEX-CLR", strategist);
-
-        // vm.prank(address(cellar));
 
         vm.label(address(curve3Pool), "curve pool");
         vm.label(address(curve3PoolAdaptor), "curve3PoolAdaptor");
@@ -109,9 +104,6 @@ contract Curve3PoolTest is Test {
     }
 
     function testOpenPosition() external {
-        // deal(address(DAI), address(this), 100_000e18);
-        // cellar.deposit(100_000e18, address(this));
-
         deal(address(DAI), address(cellar), 100_000e18);
 
         // Use `callOnAdaptor` to deposit LP into curve pool
