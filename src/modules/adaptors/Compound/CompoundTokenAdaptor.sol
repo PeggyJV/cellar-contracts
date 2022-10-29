@@ -8,7 +8,7 @@ import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/I
 /**
  * @title Compound cToken Adaptor
  * @notice Allows Cellars to interact with Aave aToken positions.
- * @author mnm458 & 
+ * @author mnm458 & mrhouzlane
  */
 contract CompoundTokenAdapter is BaseAdaptor {
     using SafeERC20 for ERC20;
