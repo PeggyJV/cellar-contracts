@@ -68,9 +68,12 @@ contract Curve3PoolAdaptor is BaseAdaptor {
     /**
      * @notice User withdraws are not allowed so this position must return 0 for withdrawableFrom.
      */
-    function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
-        // TODO
-        return 0;
+    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
+        (ICurvePool pool, ERC20 lpToken) = abi.decode(adaptorData, (ICurvePool, ERC20));
+
+        // Calculates amount of token0 is recieved when burning all LP tokens.
+        uint256 lpBalance = lpToken.balanceOf(msg.sender);
+        return pool.calc_withdraw_one_coin(lpBalance, 0);
     }
 
     /**
