@@ -106,7 +106,7 @@ contract CompoundTokenAdapter is BaseAdaptor {
         bytes memory configurationData
     ) public override {
 
-        CToken cToken = IERC20Metadata(abi.decode(adaptorData, (address)));
+        IERC20Upgradeable cToken = IERC20Upgradeable(abi.decode(adaptorData, (address)));
         ERC20 token = assetOf(abi.encode(cToken)); 
         token.safeTransferFrom(msg.sender, address(this), assets); // pulls the underlying
 
