@@ -91,4 +91,16 @@ contract CompoundTokenAdapter is BaseAdaptor {
 
         
     }
+
+    function unWrapUnderlying(
+        uint256 assets,
+        bytes memory adaptorData,
+        bytes memory
+    ) public override {
+        //Withdraw from Compound market
+        
+        IERC20Metadata u = IERC20Metadata(underlying());
+        IERC20Metadata target = IERC20Metadata(adapterParams.target);
+        bool isCETH = _isCETH(address(target));
+    }
 }
