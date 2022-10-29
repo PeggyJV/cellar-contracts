@@ -80,10 +80,10 @@ contract Curve3PoolAdaptor is BaseAdaptor {
      * @notice Calculates this positions LP tokens underlying worth in terms of `token0`.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (cellar, ICurvePool pool, ERC20 lpToken) = abi.decode(adaptorData, (address, ICurvePool, ERC20));
+        (ICurvePool pool, ERC20 lpToken) = abi.decode(adaptorData, (ICurvePool, ERC20));
 
         // Calculates amount of token0 is recieved when burning all LP tokens.
-        uint256 lpBalance = lpToken.balanceOf(cellar);
+        uint256 lpBalance = lpToken.balanceOf(msg.sender);
         return pool.calc_withdraw_one_coin(lpBalance, 0);
     }
 
