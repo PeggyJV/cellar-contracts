@@ -88,7 +88,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns `coins(0)`
+     * @notice Returns `coins(0)` or token0
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         (ICurvePool pool, ) = abi.decode(adaptorData, (ICurvePool, ERC20));
@@ -110,15 +110,22 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         uint256 minimumMintAmount, 
         ICurvePool pool
     ) public returns (uint256) {
+        ERC20 token0 = ERC20(pool.coins(0));
+        ERC20 token1 = ERC20(pool.coins(1));
+        ERC20 token2 = ERC20(pool.coins(2));
+
+        token0.safeApprove(address(pool), amounts[0]);
+        token1.safeApprove(address(pool), amounts[1]);
+        token2.safeApprove(address(pool), amounts[2]);
+
         return pool.add_liquidity(amounts, minimumMintAmount);
     }
 
     function closePosition(
-        bytes memory adaptorData,
         uint256 amount,
-        uint256[3] memory minimumAmounts
+        uint256[3] memory minimumAmounts,
+        ICurvePool pool
     ) public returns (uint256[3] memory) {
-        (ICurvePool pool, ) = abi.decode(adaptorData, (ICurvePool, address));
         return pool.remove_liquidity(amount, minimumAmounts);
     }
 
