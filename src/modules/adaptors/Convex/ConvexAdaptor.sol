@@ -22,10 +22,11 @@ contract ConvexAdaptor is BaseAdaptor {
     using Address for address;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(uint256 pid, ERC20 lpToken)
+    // adaptorData = abi.encode(uint256 pid, ERC20 lpToken, ICurvePool pool)
     // Where:
     // - pid is the pool id of the convex pool
     // - lpToken is the lp token concerned by the pool
+    // - ICurvePool is the curve pool where the lp token was minted
     //====================================================================
 
     //============================================ Global Functions ===========================================
@@ -47,52 +48,33 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The Curve 3pool contract on Ethereum Mainnet.
-     */
-    function curvePool() internal pure returns (ICurvePool) {
-        return ICurvePool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7);
-    }
-
-    /**
      @notice Attempted to deposit into convex but failed
      */
     error ConvexAdaptor_DepositFailed();
 
     //============================================ Implement Base Functions ===========================================
+
     /**
      * @notice User deposits are NOT allowed into this position.
      */
     function deposit(
-        uint256 amount,
-        bytes memory adaptorData,
+        uint256,
+        bytes memory,
         bytes memory
-    ) public override {
-        (uint256 pid, ERC20 lpToken) = abi.decode(adaptorData, (uint256, ERC20));
-
-        lpToken.safeApprove(address(booster()), amount);
-
-        // always assume we are staking
-        if(!(booster()).deposit(pid, amount, true)) {
-            revert ConvexAdaptor_DepositFailed();
-        }
+    ) public pure override {
+        revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are NOT allowed from this position.
      */
     function withdraw(
-        uint256 amount,
-        address receiver,
-        bytes memory adaptorData,
+        uint256,
+        address,
+        bytes memory,
         bytes memory
-    ) public override {
-        // Run external receiver check.
-        _externalReceiverCheck(receiver);
-
-        (uint256 pid, ) = abi.decode(adaptorData, (uint256, ERC20));
-
-        // withdraw from this address to the receiver in parameter
-        (booster()).withdrawTo(pid, amount, receiver);    
+    ) public pure override {
+        revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
     /**
@@ -116,11 +98,37 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice Returns `coins(0)`
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        (, ERC20 lpToken) = abi.decode(adaptorData, (uint256, ERC20));
-        return ERC20((curvePool()).coins(0));
+        (, , ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
+        return ERC20(pool.coins(0));
     }
 
     //============================================ Strategist Functions ===========================================
+
+/**
+     * @notice Open a position in convex
+     */
+    function openPosition(
+        uint256 amount,
+        uint256 pid,
+        ERC20 lpToken
+    ) public {
+        lpToken.safeApprove(address(booster()), amount);
+
+        // always assume we are staking
+        if(!(booster()).deposit(pid, amount, true)) {
+            revert ConvexAdaptor_DepositFailed();
+        }
+    }
+
+    /**
+     * @notice Close position in convex
+     */
+    function closePosition(
+        uint256 pid,
+        uint256 amount
+    ) public {
+        (booster()).withdrawTo(pid, amount, msg.sender);    
+    }
 
     // function claim(bytes memory adaptorData) public pure returns (uint256) {
     //     // TODO

@@ -6,6 +6,8 @@ import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { ConvexAdaptor } from "src/modules/adaptors/Convex/ConvexAdaptor.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IBooster } from "src/interfaces/external/IBooster.sol";
+import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
+
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
@@ -39,6 +41,7 @@ contract CellarConvexTest is Test {
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
 
     IBooster private booster = IBooster(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
+    ICurvePool curve3Pool = ICurvePool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7);
 
     uint32 private lp3crvPosition;
 
@@ -61,7 +64,7 @@ contract CellarConvexTest is Test {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(convexAdaptor), 0, 0);
 
-        lp3crvPosition = registry.trustPosition(address(convexAdaptor), false, abi.encode(uint256(9), address(DAI)), 0, 0);
+        lp3crvPosition = registry.trustPosition(address(convexAdaptor), false, abi.encode(uint256(9), address(DAI), curve3Pool), 0, 0);
 
         positions[0] = lp3crvPosition;
 
