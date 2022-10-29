@@ -2,15 +2,13 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeERC20, Cellar, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IPool } from "src/interfaces/external/IPool.sol";
-import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 import { CTokenInterface } from "src/interfaces/external/CTokenInterfaces.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /**
  * @title Compound cToken Adaptor
  * @notice Allows Cellars to interact with Aave aToken positions.
- * @author crispymangoes
+ * @author mnm458 & 
  */
 contract CompoundTokenAdapter is BaseAdaptor {
     using SafeERC20 for ERC20;
