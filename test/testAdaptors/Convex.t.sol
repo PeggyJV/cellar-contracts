@@ -80,7 +80,7 @@ contract CellarConvexTest is Test {
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
 
-    function testDeposit() external {
+    function testFaucet() external {
         uint256 amount = 100e18;
         deal(address(DAI), address(this), amount);
         assertEq(
