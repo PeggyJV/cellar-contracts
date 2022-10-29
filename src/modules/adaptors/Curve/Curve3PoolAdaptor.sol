@@ -85,9 +85,9 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         // Calculates amount of token0 is recieved when burning all LP tokens.
         uint256 lpBalance = lpToken.balanceOf(msg.sender);
 
-        if(lpBalance == 0) {
-            return 0;
-        }
+        // return 0 if lp balance is null
+        if(lpBalance == 0) return 0;
+
         return pool.calc_withdraw_one_coin(lpBalance, 0);
     }
 

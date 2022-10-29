@@ -41,7 +41,7 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The Booster contract on Ethereum Mainnet.
+     * @notice The Booster contract on Ethereum Mainnet where all deposits happen in Convex
      */
     function booster() internal pure returns (IBooster) {
         return IBooster(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
@@ -81,7 +81,6 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice User withdraws are not allowed so this position must return 0 for withdrawableFrom.
      */
     function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
-        // TODO
         return 0;
     }
 
@@ -89,9 +88,16 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice Calculates this positions LP tokens underlying worth in terms of `token0`.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        // TODO
-        (, ERC20 lpToken) = abi.decode(adaptorData, (uint256, ERC20));
-        return lpToken.balanceOf(address(this));
+        (uint256 pid, ERC20 lpToken, ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
+
+        (,,,address rewardPool,,) = (booster()).poolInfo(pid);
+
+        uint256 stakedBalance = IRewardPool(rewardPool).balanceOf(msg.sender);
+
+        if(stakedBalance == 0) return 0;
+
+        // returns how much do we get if were to withdraw the whole position from convex and curve
+        return pool.calc_withdraw_one_coin(stakedBalance, 0);
     }
 
     /**
@@ -123,12 +129,23 @@ contract ConvexAdaptor is BaseAdaptor {
     /**
      * @notice Close position in convex
      */
-    function closePosition(
+    function takeFromPosition(
         uint256 pid,
         uint256 amount
     ) public {
         (booster()).withdrawTo(pid, amount, msg.sender);    
     }
+
+    /**
+     * @notice Close position in convex
+     */
+    function closePosition(
+        uint256 pid,
+        uint256 amount
+    ) public {
+        (booster()).withdrawAll(pid, amount, msg.sender);  
+    }
+
 
     // function claim(bytes memory adaptorData) public pure returns (uint256) {
     //     // TODO
@@ -136,16 +153,4 @@ contract ConvexAdaptor is BaseAdaptor {
     // }
 
 
-    //============================================ Helper Functions ============================================
-    /**
-     * @notice Calculates the square root of the input.
-     */
-    function _sqrt(uint256 _x) internal pure returns (uint256 y) {
-        uint256 z = (_x + 1) / 2;
-        y = _x;
-        while (z < y) {
-            y = z;
-            z = (_x / z + z) / 2;
-        }
-    }
 }
