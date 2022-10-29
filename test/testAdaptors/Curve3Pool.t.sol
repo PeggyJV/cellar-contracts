@@ -42,6 +42,8 @@ contract Curve3PoolTest is Test {
     ICurvePool curve3Pool = ICurvePool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7);
 
     uint32 private lp3crvPosition;
+    uint32 private daiPosition;
+
 
     function setUp() external {
 
@@ -57,20 +59,25 @@ contract Curve3PoolTest is Test {
 
         // Setup Cellar:
         // Cellar positions array.
-        uint32[] memory positions = new uint32[](1);
+        uint32[] memory positions = new uint32[](2);
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(curve3PoolAdaptor), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
         // 
         lp3crvPosition = registry.trustPosition(address(curve3PoolAdaptor), false, abi.encode(ICurvePool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7), address(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490)), 0, 0);
+        daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
 
         positions[0] = lp3crvPosition;
+        positions[1] = daiPosition;
 
-        bytes[] memory positionConfigs = new bytes[](1);
+        bytes[] memory positionConfigs = new bytes[](2);
 
         cellar = new MockCellar(registry, DAI, positions, positionConfigs, "Convex Cellar", "CONVEX-CLR", strategist);
         
+        // vm.prank(address(cellar));
+
         vm.label(address(curve3Pool), "curve pool");
         vm.label(address(this), "tester");
         vm.label(address(cellar), "cellar");
@@ -79,14 +86,11 @@ contract Curve3PoolTest is Test {
         vm.label(address(USDC), "usdc token");
         vm.label(address(USDT), "usdt token");
 
-
-
         cellar.setupAdaptor(address(curve3PoolAdaptor));
 
         DAI.safeApprove(address(cellar), type(uint256).max);
         USDC.safeApprove(address(cellar), type(uint128).max);
         USDT.safeApprove(address(cellar), type(uint128).max);
-
 
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
@@ -103,10 +107,10 @@ contract Curve3PoolTest is Test {
     }
 
     function testOpenPosition() external {
-        deal(address(DAI), address(this), 100e18);
-        cellar.deposit(100e18, address(this));
+        // deal(address(DAI), address(this), 100e18);
+        // cellar.deposit(100e18, address(this));
 
-        // deal(address(DAI), address(cellar), 10000000e18);
+        deal(address(DAI), address(cellar), 10000000e18);
         // deal(address(USDC), address(cellar), 10000000e18);
         // deal(address(USDT), address(cellar), 10000000e18);
 
@@ -125,6 +129,7 @@ contract Curve3PoolTest is Test {
         );
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+
         cellar.callOnAdaptor(data);
     }
 
