@@ -71,18 +71,32 @@ contract Curve3PoolTest is Test {
 
         cellar = new MockCellar(registry, DAI, positions, positionConfigs, "Convex Cellar", "CONVEX-CLR", strategist);
         
+        vm.label(address(curve3Pool), "curve pool");
+        vm.label(address(this), "tester");
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
+        vm.label(address(DAI), "dai token");
+        vm.label(address(USDC), "usdc token");
+        vm.label(address(USDT), "usdt token");
+
+
 
         cellar.setupAdaptor(address(curve3PoolAdaptor));
 
-        USDC.safeApprove(address(cellar), type(uint256).max);
         DAI.safeApprove(address(cellar), type(uint256).max);
-        USDT.safeApprove(address(cellar), type(uint256).max);
+        USDC.safeApprove(address(cellar), type(uint128).max);
+        USDT.safeApprove(address(cellar), type(uint128).max);
 
 
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+
+
+        console.log('This');
+        console.logAddress(address(this));
+        console.log('Cellar');
+        console.logAddress(address(cellar));
+
     }
 
     function testFaucet() external {
@@ -97,19 +111,20 @@ contract Curve3PoolTest is Test {
 
     function testOpenPosition() external {
         deal(address(DAI), address(cellar), 10000000e18);
-        // deal(address(USDT), address(this), 10000000e18);
-        // deal(address(USDT), address(this), 10000000e18);
+        deal(address(USDC), address(cellar), 10000000e18);
+        deal(address(USDT), address(cellar), 10000000e18);
 
-        // cellar.deposit(100e18, address(this));
-
+        console.log(DAI.balanceOf(address(cellar)));
+        console.log(USDC.balanceOf(address(cellar)));
+        console.log(USDT.balanceOf(address(cellar)));
 
         // Use `callOnAdaptor` to deposit LP into curve pool
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToOpenPosition(
             100e18, 
-            0, 
-            0,
+            100e6, 
+            100e6,
             0
         );
 
