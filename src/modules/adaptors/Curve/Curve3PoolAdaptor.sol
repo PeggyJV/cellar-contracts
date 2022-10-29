@@ -110,11 +110,10 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         ICurvePool pool
     ) public {
         for(uint256 i; i<amounts.length; ) {
-            if (amounts[i] == 0) continue;
-
-            ERC20 token = ERC20(pool.coins(i));
-            token.safeApprove(address(pool), amounts[i]);
-
+            if (amounts[i] != 0) {
+                ERC20 token = ERC20(pool.coins(i));
+                token.safeApprove(address(pool), amounts[i]);
+            }
             // overflow is unrealistic
             unchecked {
                 ++i;
@@ -173,10 +172,10 @@ contract Curve3PoolAdaptor is BaseAdaptor {
     ) public {
 
         for(uint256 i; i<amounts.length; ) {
-            if (amounts[i] == 0) continue;
-
-            ERC20 token = ERC20(pool.coins(i));
-            token.safeApprove(address(pool), amounts[i]);
+            if (amounts[i] != 0) {
+                ERC20 token = ERC20(pool.coins(i));
+                token.safeApprove(address(pool), amounts[i]);
+            }
 
             // overflow is unrealistic
             unchecked {
