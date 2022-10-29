@@ -90,13 +90,6 @@ contract Curve3PoolTest is Test {
 
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
-
-
-        console.log('This');
-        console.logAddress(address(this));
-        console.log('Cellar');
-        console.logAddress(address(cellar));
-
     }
 
     function testFaucet() external {
@@ -110,9 +103,12 @@ contract Curve3PoolTest is Test {
     }
 
     function testOpenPosition() external {
-        deal(address(DAI), address(cellar), 10000000e18);
-        deal(address(USDC), address(cellar), 10000000e18);
-        deal(address(USDT), address(cellar), 10000000e18);
+        deal(address(DAI), address(this), 100e18);
+        cellar.deposit(100e18, address(this));
+
+        // deal(address(DAI), address(cellar), 10000000e18);
+        // deal(address(USDC), address(cellar), 10000000e18);
+        // deal(address(USDT), address(cellar), 10000000e18);
 
         console.log(DAI.balanceOf(address(cellar)));
         console.log(USDC.balanceOf(address(cellar)));
@@ -123,9 +119,9 @@ contract Curve3PoolTest is Test {
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToOpenPosition(
             100e18, 
-            100e6, 
-            100e6,
-            0
+            0, 
+            0,
+            1e18
         );
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });

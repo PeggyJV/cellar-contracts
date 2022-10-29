@@ -52,7 +52,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         bytes memory,
         bytes memory
     ) public pure override {
-        revert BaseAdaptor__UserDepositsNotAllowed();
+        // revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
@@ -64,7 +64,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         bytes memory,
         bytes memory
     ) public pure override {
-        revert BaseAdaptor__UserWithdrawsNotAllowed();
+        // revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
 
@@ -109,7 +109,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         uint256[3] memory amounts, 
         uint256 minimumMintAmount, 
         ICurvePool pool
-    ) public returns (uint256) {
+    ) public {
         ERC20 token0 = ERC20(pool.coins(0));
         ERC20 token1 = ERC20(pool.coins(1));
         ERC20 token2 = ERC20(pool.coins(2));
@@ -118,15 +118,15 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         token1.safeApprove(address(pool), amounts[1]);
         token2.safeApprove(address(pool), amounts[2]);
 
-        return pool.add_liquidity(amounts, minimumMintAmount);
+        pool.add_liquidity(amounts, minimumMintAmount);
     }
 
     function closePosition(
         uint256 amount,
         uint256[3] memory minimumAmounts,
         ICurvePool pool
-    ) public returns (uint256[3] memory) {
-        return pool.remove_liquidity(amount, minimumAmounts);
+    ) public {
+        pool.remove_liquidity(amount, minimumAmounts);
     }
 
     function takeFromPosition(bytes memory adaptorData) public pure returns (uint256) {
