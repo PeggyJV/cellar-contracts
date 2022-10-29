@@ -109,7 +109,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         uint256[3] memory amounts, 
         uint256 minimumMintAmount, 
         ICurvePool pool
-    ) public returns (uint256){
+    ) public {
         ERC20 token0 = ERC20(pool.coins(0));
         ERC20 token1 = ERC20(pool.coins(1));
         ERC20 token2 = ERC20(pool.coins(2));
@@ -119,8 +119,6 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         token2.safeApprove(address(pool), amounts[2]);
 
         pool.add_liquidity(amounts, minimumMintAmount);
-
-        return 42;
     }
 
     function closePosition(
