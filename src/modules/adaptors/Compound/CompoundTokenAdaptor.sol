@@ -20,6 +20,13 @@ abstract contract CToken is IERC20Upgradeable {
     function exchangeRateStored() external view virtual returns (uint256);
 }
 
+contract CErc20Storage {
+    /**
+     * @notice Underlying asset for this CToken
+     */
+    address public underlying;
+}
+
 /**
  * @title Compound cToken Adaptor
  * @notice Allows Cellars to interact with Aave aToken positions.
@@ -87,18 +94,21 @@ contract CompoundTokenAdapter is BaseAdaptor {
      * @dev configurationData is NOT used because this action will only increase the health factor
      */
 
+    /// @notice Underlying token address getter that must be overriden by child contracts
+    function underlying() external view virtual returns (address) {
+        return 
+    }
+
+
     function deposit(
         uint256 assets,
         bytes memory adaptorData,
-        address receiver,
-        bytes memory
+        bytes memory configurationData
     ) public override {
-        // Deposit to Compound Market
 
-        IERC20Metadata _underlying = IERC20Metadata(underlying());
-        IERC20Metadata cToken = IERC20Metadata(abi.decode(adaptorData, (address)));
-
-        _underlying.safeTransferFrom(msg.sender, address(this), assets); // pulls the underlying
+        CToken cToken = IERC20Metadata(abi.decode(adaptorData, (address)));
+        ERC20 token = assetOf(abi.encode(cToken)); 
+        token.safeTransferFrom(msg.sender, address(this), assets); // pulls the underlying
 
         // --- WETH into ETH
         bool _isCETH = isCETH(address(cToken));
@@ -107,7 +117,7 @@ contract CompoundTokenAdapter is BaseAdaptor {
         }
 
         // mint cToken
-        uint256 before = cToken.balanceOf(address(this));
+        uint256 before = cToken.balanceOf(abi.decode(adaptorData, (uint256)));
         if (_isCETH) {
             CEther(cToken).mint{ value: assets }();
         } else {
@@ -144,4 +154,5 @@ contract CompoundTokenAdapter is BaseAdaptor {
         //Transfer assets to receiver
         ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
     }
+ed changes
 }
