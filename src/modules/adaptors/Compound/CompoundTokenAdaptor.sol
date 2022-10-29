@@ -10,6 +10,7 @@ import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/I
  * @notice Allows Cellars to interact with Aave aToken positions.
  * @author mnm458 & mrhouzlane
  */
+
 contract CompoundTokenAdapter is BaseAdaptor {
     using SafeERC20 for ERC20;
 
@@ -74,7 +75,7 @@ contract CompoundTokenAdapter is BaseAdaptor {
     function wrapUnderlying(
         uint256 assets,
         bytes memory adaptorData,
-        address receiver, 
+        address receiver,
         bytes memory
     ) public override {
         // Deposit to Compound Market
@@ -90,7 +91,11 @@ contract CompoundTokenAdapter is BaseAdaptor {
             IWETH(WETH).withdraw(assets);
         }
 
-        
+        // mint cToken
+        uint256 before = cToken.balanceOf(address(this));
+        if (_isCETH) {
+            CErc20Interface(cToken).mint{value: }
+        }
     }
 
     function unWrapUnderlying(
