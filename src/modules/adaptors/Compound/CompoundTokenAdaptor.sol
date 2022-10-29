@@ -168,7 +168,8 @@ contract CompoundTokenAdapter is BaseAdaptor {
 
         //Withdraw from Compound market
         IERC20Metadata cToken = IERC20Metadata(abi.decode(adaptorData, (address)));
-        uint256 result = cToken.redeemUnderlying(assets);
+        IERC20Metadata token = IERC20Metadata(underlying());
+        uint256 result = CTokenInterface(receiver).redeemUnderlying(assets);
         require (result == 0, "Error withdrawing the cTokens");
         cToken.safeTransfer(receiver, assets);
 
@@ -180,7 +181,8 @@ contract CompoundTokenAdapter is BaseAdaptor {
         if (healthFactor < minHealthFactor) revert CompooundTokenAdaptor__HealthFactorTooLow();
 
         //Transfer assets to receiver
-        ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
+        token.address().safeTransfer(receiver, assets);
+        // ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
     }
 
    /**
