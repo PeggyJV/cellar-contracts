@@ -219,16 +219,18 @@ contract Curve3PoolTest is Test {
         uint256 lpBalance = LP3CRV.balanceOf(address(cellar));
         uint256 daiBalanceBefore = DAI.balanceOf(address(cellar));
 
-        // assert balanceOf is bigger than 0.9
+        // assert balanceOf is bigger than 0
         vm.prank(address(cellar));
-        assertGe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 1e18-1e17);
+        assertGe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 0);
 
         // assert LP is bigger than 0
         assertGe(lpBalance, 0);
 
+        console.log(lpBalance)
+
         // Now, close the position
         adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToClosePosition(lpBalance, 0);
+        adaptorCalls[0] = _createBytesDataToClosePosition(0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -244,7 +246,6 @@ contract Curve3PoolTest is Test {
         vm.prank(address(cellar));
         assertEq(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 0);
     }
-
 
 
     function _createBytesDataToOpenPosition(
@@ -263,16 +264,28 @@ contract Curve3PoolTest is Test {
     }
 
     function _createBytesDataToClosePosition(
-        uint256 amount,
         uint256 minimumAmount
     ) internal view returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 Curve3PoolAdaptor.closePosition.selector,
+                minimumAmount, 
+                curve3Pool,
+                LP3CRV
+            );
+    }
+
+    function _createBytesDataToTakeFromPosition(
+        uint256 amount,
+        uint256 minimumAmount
+    ) internal view returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                Curve3PoolAdaptor.takeFromPosition.selector,
                 amount,
                 minimumAmount, 
                 curve3Pool
-            );
+        );
     }
 
 }
