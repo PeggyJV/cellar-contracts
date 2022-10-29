@@ -84,6 +84,10 @@ contract Curve3PoolAdaptor is BaseAdaptor {
 
         // Calculates amount of token0 is recieved when burning all LP tokens.
         uint256 lpBalance = lpToken.balanceOf(msg.sender);
+
+        if(lpBalance == 0) {
+            return 0;
+        }
         return pool.calc_withdraw_one_coin(lpBalance, 0);
     }
 
@@ -123,10 +127,10 @@ contract Curve3PoolAdaptor is BaseAdaptor {
 
     function closePosition(
         uint256 amount,
-        uint256[3] memory minimumAmounts,
+        uint256 minimumAmounts,
         ICurvePool pool
     ) public {
-        pool.remove_liquidity(amount, minimumAmounts);
+        pool.remove_liquidity_one_coin(amount, 0, minimumAmounts);
     }
 
     function takeFromPosition(bytes memory adaptorData) public pure returns (uint256) {

@@ -139,6 +139,114 @@ contract Curve3PoolTest is Test {
         assertGe(lpBalance, 0);
     }
 
+    function testOpenDAIPosition() external {
+        deal(address(DAI), address(cellar), 100_000e18);
+
+        // Use `callOnAdaptor` to deposit LP into curve pool
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenPosition(
+            1e18, 
+            0, 
+            0,
+            0
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+       
+        uint256 lpBalance = LP3CRV.balanceOf(address(cellar));
+
+        // Assert balanceOf is bigger than 0.9
+        vm.prank(address(cellar));
+        assertGe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 1e18-1e17);
+
+        // Assert LP is bigger than 0
+        assertGe(lpBalance, 0);
+    }
+
+
+    function testOpenDAIUSDCUSDTPosition() external {
+        deal(address(DAI), address(cellar), 100_000e18);
+        deal(address(USDC), address(cellar), 100_000e6);
+        deal(address(USDT), address(cellar), 100_000e6);
+
+        // Use `callOnAdaptor` to deposit LP into curve pool
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenPosition(
+            1e18, 
+            1e6, 
+            1e6,
+            0
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        uint256 lpBalance = LP3CRV.balanceOf(address(cellar));
+
+        // Assert balanceOf is bigger than 0.9
+        vm.prank(address(cellar));
+        assertGe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 1e18-1e17);
+
+        // Assert LP is bigger than 0
+        assertGe(lpBalance, 0);
+    }
+
+    function testOpeningAndClosingPosition() external {
+        deal(address(DAI), address(cellar), 100_000e18);
+        deal(address(USDC), address(cellar), 100_000e6);
+        deal(address(USDT), address(cellar), 100_000e6);
+
+        // Use `callOnAdaptor` to deposit LP into curve pool
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenPosition(
+            1e18, 
+            1e6, 
+            1e6,
+            0
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        uint256 lpBalance = LP3CRV.balanceOf(address(cellar));
+        uint256 daiBalanceBefore = DAI.balanceOf(address(cellar));
+
+        // assert balanceOf is bigger than 0.9
+        vm.prank(address(cellar));
+        assertGe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 1e18-1e17);
+
+        // assert LP is bigger than 0
+        assertGe(lpBalance, 0);
+
+        // Now, close the position
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToClosePosition(lpBalance, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+        
+        uint256 daiBalanceAfter = DAI.balanceOf(address(cellar));
+        uint256 lpBalanceAfter = LP3CRV.balanceOf(address(cellar));
+
+        assertEq(lpBalanceAfter, 0);
+
+        assertGe(daiBalanceAfter - daiBalanceBefore, 0);
+
+        // assert adaptor balanceOf is zero as well
+        vm.prank(address(cellar));
+        assertEq(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 0);
+    }
+
+
+
     function _createBytesDataToOpenPosition(
         uint256 amount0,
         uint256 amount1,
@@ -150,6 +258,19 @@ contract Curve3PoolTest is Test {
                 Curve3PoolAdaptor.openPosition.selector,
                 [amount0, amount1,amount2],
                 minimumMintAmount, 
+                curve3Pool
+            );
+    }
+
+    function _createBytesDataToClosePosition(
+        uint256 amount,
+        uint256 minimumAmount
+    ) internal view returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                Curve3PoolAdaptor.closePosition.selector,
+                amount,
+                minimumAmount, 
                 curve3Pool
             );
     }
