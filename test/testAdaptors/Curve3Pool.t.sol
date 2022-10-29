@@ -33,12 +33,12 @@ contract Curve3PoolTest is Test {
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
 
-    ERC20 private LP3CRV = ERC20(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490);
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
 
+    ERC20 private LP3CRV = ERC20(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490);
     ICurvePool curve3Pool = ICurvePool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7);
 
     uint32 private lp3crvPosition;
@@ -127,6 +127,14 @@ contract Curve3PoolTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
 
         cellar.callOnAdaptor(data);
+
+       
+        uint256 lpBalance = LP3CRV.balanceOf(address(cellar));
+
+        // Assert balanceOf is bigger than 0 and equal to actual lp balance
+        vm.prank(address(cellar));
+        assertGe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 1e18-1e17);
+
     }
 
     function _createBytesDataToOpenPosition(
