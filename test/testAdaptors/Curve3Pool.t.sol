@@ -131,10 +131,12 @@ contract Curve3PoolTest is Test {
        
         uint256 lpBalance = LP3CRV.balanceOf(address(cellar));
 
-        // Assert balanceOf is bigger than 0 and equal to actual lp balance
+        // Assert balanceOf is bigger than 0.9
         vm.prank(address(cellar));
         assertGe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 1e18-1e17);
 
+        // Assert LP is bigger than 0
+        assertGe(lpBalance, 0);
     }
 
     function _createBytesDataToOpenPosition(
