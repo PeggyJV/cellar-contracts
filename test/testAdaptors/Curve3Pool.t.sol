@@ -34,6 +34,8 @@ contract Curve3PoolTest is Test {
     ERC20 private CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
 
     ERC20 private LP3CRV = ERC20(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490);
+
+
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
@@ -73,6 +75,10 @@ contract Curve3PoolTest is Test {
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
 
+        DAI.approve(address(cellar), type(uint256).max);
+        USDT.approve(address(cellar), type(uint72).max);
+        USDC.approve(address(cellar), type(uint72).max);
+
         cellar.setupAdaptor(address(curve3PoolAdaptor));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
@@ -89,6 +95,41 @@ contract Curve3PoolTest is Test {
             amount,
             "Should be able to deal some tokens"
         );
+    }
+
+    function testOpenPosition() external {
+        deal(address(DAI), address(this), 100e18);
+        deal(address(USDT), address(this), 100e6);
+        deal(address(USDT), address(this), 100e6);
+
+        // Use `callOnAdaptor` to deposit LP into curve pool
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenPosition(
+            100e18, 
+            100e6, 
+            100e6,
+            0
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+    }
+
+    function _createBytesDataToOpenPosition(
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount2, 
+        uint256 minimumMintAmount
+    ) internal view returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                Curve3PoolAdaptor.openPosition.selector,
+                [amount0, amount1,amount2],
+                minimumMintAmount, 
+                curve3Pool
+            );
     }
 
 }

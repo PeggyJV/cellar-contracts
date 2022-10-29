@@ -89,7 +89,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
      * @notice Returns `coins(0)`
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        (ICurvePool pool, ERC20 lpToken) = abi.decode(adaptorData, (ICurvePool, ERC20));
+        (ICurvePool pool, ) = abi.decode(adaptorData, (ICurvePool, ERC20));
         return ERC20(pool.coins(0));
     }
 
@@ -103,14 +103,21 @@ contract Curve3PoolAdaptor is BaseAdaptor {
     /**
      * @notice Allows strategist to open up arbritray Curve positions.
      */
-    function openPosition(bytes memory adaptorData) public pure returns (uint256) {
-        // TODO
-        return 0;
+    function openPosition(
+        uint256[3] memory amounts, 
+        uint256 minimumMintAmount, 
+        ICurvePool pool
+    ) public returns (uint256) {
+        return pool.add_liquidity(amounts, minimumMintAmount);
     }
 
-    function closePosition(bytes memory adaptorData) public pure returns (uint256) {
-        // TODO
-        return 0;
+    function closePosition(
+        bytes memory adaptorData,
+        uint256 amount,
+        uint256[3] memory minimumAmounts
+    ) public returns (uint256[3] memory) {
+        (ICurvePool pool, ) = abi.decode(adaptorData, (ICurvePool, address));
+        return pool.remove_liquidity(amount, minimumAmounts);
     }
 
     function takeFromPosition(bytes memory adaptorData) public pure returns (uint256) {
