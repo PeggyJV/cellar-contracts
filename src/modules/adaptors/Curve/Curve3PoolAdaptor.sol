@@ -52,7 +52,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         bytes memory,
         bytes memory
     ) public pure override {
-        // revert BaseAdaptor__UserDepositsNotAllowed();
+        revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
@@ -64,7 +64,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         bytes memory,
         bytes memory
     ) public pure override {
-        // revert BaseAdaptor__UserWithdrawsNotAllowed();
+        revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
 
@@ -100,11 +100,6 @@ contract Curve3PoolAdaptor is BaseAdaptor {
     }
 
     //============================================ Strategist Functions ===========================================
-
-    function claim(bytes memory adaptorData) public pure returns (uint256) {
-        
-        return 0;
-    }
 
     /**
      * @notice Allows strategist to open up arbritray Curve positions.
@@ -143,16 +138,4 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         return 0;
     }
 
-    //============================================ Helper Functions ============================================
-    /**
-     * @notice Calculates the square root of the input.
-     */
-    function _sqrt(uint256 _x) internal pure returns (uint256 y) {
-        uint256 z = (_x + 1) / 2;
-        y = _x;
-        while (z < y) {
-            y = z;
-            z = (_x / z + z) / 2;
-        }
-    }
 }
