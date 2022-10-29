@@ -226,7 +226,7 @@ contract Curve3PoolTest is Test {
         // assert LP is bigger than 0
         assertGe(lpBalance, 0);
 
-        console.log(lpBalance)
+        console.log(lpBalance);
 
         // Now, close the position
         adaptorCalls = new bytes[](1);
@@ -245,6 +245,27 @@ contract Curve3PoolTest is Test {
         // assert adaptor balanceOf is zero as well
         vm.prank(address(cellar));
         assertEq(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 0);
+    }
+
+    function testwithdrawableFrom() external {
+        deal(address(DAI), address(cellar), 100_000e18);
+
+        // Use `callOnAdaptor` to deposit LP into curve pool
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenPosition(
+            1e18, 
+            0, 
+            0,
+            0
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+        
+        vm.prank(address(cellar));
+        assertGe(curve3PoolAdaptor.withdrawableFrom(abi.encode(curve3Pool, LP3CRV), ""), 1e18-1e17);
     }
 
 
