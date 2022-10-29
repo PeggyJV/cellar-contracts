@@ -5,6 +5,8 @@ import { BaseAdaptor, ERC20, SafeERC20, Cellar, PriceRouter } from "src/modules/
 import { CTokenInterface } from "src/interfaces/external/CTokenInterfaces.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import { ICompoundToken } from "src/interfaces/external/ICompoundToken.sol";
+
 
 abstract contract CToken is IERC20Upgradeable {
     function supplyRatePerBlock() external view virtual returns (uint256);
@@ -116,15 +118,30 @@ contract CompoundTokenAdapter is BaseAdaptor {
         return final;
     }
 
-    function unWrapUnderlying(
+    function withdraw(
         uint256 assets,
+        address receiver,
         bytes memory adaptorData,
-        bytes memory
+        bytes memory configData
     ) public override {
-        //Withdraw from Compound market
 
-        IERC20Metadata u = IERC20Metadata(underlying());
-        IERC20Metadata target = IERC20Metadata(adapterParams.target);
-        bool isCETH = _isCETH(address(target));
+        //Run the external receiver check
+        _externalReceiverCheck(receiver);
+
+        //Withdraw from Compound market
+        IERC20Metadata cToken = IERC20Metadata(abi.decode(adaptorData, (address)));
+        uint256 result = cToken.redeemUnderlying(assets);
+        require (result == 0, "Error withdrawing the cTokens");
+        cToken.safeTransfer(receiver, assets);
+
+        uint256 minHealthFactor = abi.decode(configData, (uint256));
+        if (minHealthFactor == 0) {
+            revert BaseAdaptor__UserWithdrawsNotAllowed();
+        }
+        (, , , , , uint256 healthFactor) = ;
+        if (healthFactor < minHealthFactor) revert CompooundTokenAdaptor__HealthFactorTooLow();
+
+        //Transfer assets to receiver
+        ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
     }
 }
