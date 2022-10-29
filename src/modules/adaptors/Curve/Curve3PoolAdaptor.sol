@@ -106,13 +106,17 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         uint256 minimumMintAmount, 
         ICurvePool pool
     ) public {
-        ERC20 token0 = ERC20(pool.coins(0));
-        ERC20 token1 = ERC20(pool.coins(1));
-        ERC20 token2 = ERC20(pool.coins(2));
+        for(uint256 i; i<amounts.length; ) {
+            if (amounts[i] == 0) continue;
 
-        token0.safeApprove(address(pool), amounts[0]);
-        token1.safeApprove(address(pool), amounts[1]);
-        token2.safeApprove(address(pool), amounts[2]);
+            ERC20 token = ERC20(pool.coins(i));
+            token.safeApprove(address(pool), amounts[i]);
+
+            // overflow is unrealistic
+            unchecked {
+                ++i;
+            }
+        }
 
         pool.add_liquidity(amounts, minimumMintAmount);
     }
@@ -152,16 +156,32 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         uint256 minimumAmount,
         ICurvePool pool,
         ERC20 lpToken
-    ) public returns (uint256) {
-        uint256 amountToWithdraw = lpToken.balanceOf(msg.sender);
+    ) public {
+        uint256 amountToWithdraw = lpToken.balanceOf(address(this));
 
         if(amountToWithdraw == 0) revert Curve3PoolAdaptor__PositionClosed();
         _takeFromPosition(amountToWithdraw, minimumAmount, pool);
     }
 
-    function addToPosition(bytes memory adaptorData) public pure returns (uint256) {
-        // TODO
-        return 0;
+    function addToPosition(        
+        uint256[3] memory amounts, 
+        uint256 minimumMintAmount, 
+        ICurvePool pool
+    ) public {
+
+        for(uint256 i; i<amounts.length; ) {
+            if (amounts[i] == 0) continue;
+
+            ERC20 token = ERC20(pool.coins(i));
+            token.safeApprove(address(pool), amounts[i]);
+
+            // overflow is unrealistic
+            unchecked {
+                ++i;
+            }
+        }
+
+        pool.add_liquidity(amounts, minimumMintAmount);
     }
 
 }

@@ -226,8 +226,6 @@ contract Curve3PoolTest is Test {
         // assert LP is bigger than 0
         assertGe(lpBalance, 0);
 
-        console.log(lpBalance)
-
         // Now, close the position
         adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToClosePosition(0);
@@ -276,6 +274,20 @@ contract Curve3PoolTest is Test {
     }
 
     function _createBytesDataToTakeFromPosition(
+        uint256 amount,
+        uint256 minimumAmount
+    ) internal view returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                Curve3PoolAdaptor.takeFromPosition.selector,
+                amount,
+                minimumAmount, 
+                curve3Pool
+        );
+    }
+
+
+    function _createBytesDataToAddToPosition(
         uint256 amount,
         uint256 minimumAmount
     ) internal view returns (bytes memory) {
