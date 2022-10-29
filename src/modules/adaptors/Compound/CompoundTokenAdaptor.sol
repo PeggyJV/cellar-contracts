@@ -54,7 +54,7 @@ contract CompoundTokenAdapter is BaseAdaptor {
     /**
      * @notice
      */
-    function _isCETH(address target) internal view returns (bool) {
+    function isCETH(address target) internal view returns (bool) {
         return keccak256(abi.encodePacked(IERC20Metadata(target).symbol())) == keccak256(abi.encodePacked("cETH"));
     }
 
@@ -69,7 +69,7 @@ contract CompoundTokenAdapter is BaseAdaptor {
     /**
      * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
      * @param assets the amount of assets to lend on Aave
-     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @param adaptorData adaptor data containining the abi encoded cToken
      * @dev configurationData is NOT used because this action will only increase the health factor
      */
 
@@ -77,5 +77,20 @@ contract CompoundTokenAdapter is BaseAdaptor {
         uint256 assets,
         bytes memory adaptorData,
         bytes memory
-    ) public override {}
+    ) public override {
+        // Deposit to Compound Market
+
+        IERC20Metadata assets = IERC20Metadata(underlying());
+        IERC20Metadata cToken = IERC20Metadata(abi.decode(adaptorData, (address)));
+
+        assets.safeTransferFrom(msg.sender, address(this), assets); // pulls the underlying
+
+        // --- WETH into ETH
+        bool _isCETH = isCETH(address(cToken));
+        if (_isCETH) {
+            IWETH(WETH).withdraw(assets);
+        }
+
+        
+    }
 }
