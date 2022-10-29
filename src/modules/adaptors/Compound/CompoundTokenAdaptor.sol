@@ -4,6 +4,19 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeERC20, Cellar, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
 import { CTokenInterface } from "src/interfaces/external/CTokenInterfaces.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+
+abstract contract CToken is IERC20Upgradeable {
+    function supplyRatePerBlock() external view virtual returns (uint256);
+
+    function mint(uint256 mintAmount) external virtual returns (uint256);
+
+    function redeemUnderlying(uint256 redeemAmount) external virtual returns (uint256);
+
+    function balanceOfUnderlying(address owner) external virtual returns (uint256);
+
+    function exchangeRateStored() external view virtual returns (uint256);
+}
 
 /**
  * @title Compound cToken Adaptor
@@ -72,7 +85,7 @@ contract CompoundTokenAdapter is BaseAdaptor {
      * @dev configurationData is NOT used because this action will only increase the health factor
      */
 
-    function wrapUnderlying(
+    function deposit(
         uint256 assets,
         bytes memory adaptorData,
         address receiver,
@@ -80,10 +93,10 @@ contract CompoundTokenAdapter is BaseAdaptor {
     ) public override {
         // Deposit to Compound Market
 
-        IERC20Metadata assets = IERC20Metadata(underlying());
+        IERC20Metadata _underlying = IERC20Metadata(underlying());
         IERC20Metadata cToken = IERC20Metadata(abi.decode(adaptorData, (address)));
 
-        assets.safeTransferFrom(msg.sender, address(this), assets); // pulls the underlying
+        _underlying.safeTransferFrom(msg.sender, address(this), assets); // pulls the underlying
 
         // --- WETH into ETH
         bool _isCETH = isCETH(address(cToken));
@@ -94,8 +107,13 @@ contract CompoundTokenAdapter is BaseAdaptor {
         // mint cToken
         uint256 before = cToken.balanceOf(address(this));
         if (_isCETH) {
-            CErc20Interface(cToken).mint{value: }
+            CEther(cToken).mint{ value: assets }();
+        } else {
+            require(CTokenInterface(cToken).mint(assets) == 0, "Error");
         }
+        uint256 final = cToken.balanceOf(address(this)) - before ;
+        cToken.safeTransfer(msg.sender, final);
+        return final;
     }
 
     function unWrapUnderlying(

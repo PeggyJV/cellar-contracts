@@ -19,13 +19,15 @@ contract CEther is CToken {
      * @param decimals_ ERC-20 decimal precision of this token
      * @param admin_ Address of the administrator of this token
      */
-    constructor(ComptrollerInterface comptroller_,
-                InterestRateModel interestRateModel_,
-                uint initialExchangeRateMantissa_,
-                string memory name_,
-                string memory symbol_,
-                uint8 decimals_,
-                address payable admin_) {
+    constructor(
+        ComptrollerInterface comptroller_,
+        InterestRateModel interestRateModel_,
+        uint256 initialExchangeRateMantissa_,
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        address payable admin_
+    ) {
         // Creator of the contract is admin during initialization
         admin = payable(msg.sender);
 
@@ -34,7 +36,6 @@ contract CEther is CToken {
         // Set the proper admin now that initialization is done
         admin = admin_;
     }
-
 
     /*** User Interface ***/
 
@@ -52,7 +53,7 @@ contract CEther is CToken {
      * @param redeemTokens The number of cTokens to redeem into underlying
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function redeem(uint redeemTokens) external returns (uint) {
+    function redeem(uint256 redeemTokens) external returns (uint256) {
         redeemInternal(redeemTokens);
         return NO_ERROR;
     }
@@ -63,17 +64,17 @@ contract CEther is CToken {
      * @param redeemAmount The amount of underlying to redeem
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function redeemUnderlying(uint redeemAmount) external returns (uint) {
+    function redeemUnderlying(uint256 redeemAmount) external returns (uint256) {
         redeemUnderlyingInternal(redeemAmount);
         return NO_ERROR;
     }
 
     /**
-      * @notice Sender borrows assets from the protocol to their own address
-      * @param borrowAmount The amount of the underlying asset to borrow
-      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-      */
-    function borrow(uint borrowAmount) external returns (uint) {
+     * @notice Sender borrows assets from the protocol to their own address
+     * @param borrowAmount The amount of the underlying asset to borrow
+     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     */
+    function borrow(uint256 borrowAmount) external returns (uint256) {
         borrowInternal(borrowAmount);
         return NO_ERROR;
     }
@@ -110,7 +111,7 @@ contract CEther is CToken {
      * @notice The sender adds to reserves.
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function _addReserves() external payable returns (uint) {
+    function _addReserves() external payable returns (uint256) {
         return _addReservesInternal(msg.value);
     }
 
@@ -128,7 +129,7 @@ contract CEther is CToken {
      * @dev This excludes the value of the current message, if any
      * @return The quantity of Ether owned by this contract
      */
-    function getCashPrior() override internal view returns (uint) {
+    function getCashPrior() internal view override returns (uint256) {
         return address(this).balance - msg.value;
     }
 
@@ -138,14 +139,14 @@ contract CEther is CToken {
      * @param amount Amount of Ether being sent
      * @return The actual amount of Ether transferred
      */
-    function doTransferIn(address from, uint amount) override internal returns (uint) {
+    function doTransferIn(address from, uint256 amount) internal override returns (uint256) {
         // Sanity checks
         require(msg.sender == from, "sender mismatch");
         require(msg.value == amount, "value mismatch");
         return amount;
     }
 
-    function doTransferOut(address payable to, uint amount) virtual override internal {
+    function doTransferOut(address payable to, uint256 amount) internal virtual override {
         /* Send the Ether, with minimal gas and revert on failure */
         to.transfer(amount);
     }
