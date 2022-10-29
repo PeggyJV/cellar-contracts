@@ -156,7 +156,6 @@ contract CompoundTokenAdapter is BaseAdaptor {
         cToken.safeTransfer(msg.sender, final);
         return final;
     }
-
     function withdraw(
         uint256 assets,
         address receiver,
@@ -182,5 +181,60 @@ contract CompoundTokenAdapter is BaseAdaptor {
 
         //Transfer assets to receiver
         ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
+    }
+
+   /**
+     * @notice Uses configurartion data minimum health factor to calculate withdrawable assets from Compound.
+     * @dev Applies a `cushion` value to the health factor checks and calculation.
+     *      The goal of this is to minimize scenarios where users are withdrawing a very small amount of
+     *      assets from Compound. This function returns zero if
+     *      -minimum health factor is NOT set.
+     *      -the current health factor is less than the minimum health factor + 2x `cushion`
+     *      Otherwise this function calculates the withdrawable amount using
+     *      minimum health factor + `cushion` for its calcualtions.
+     */
+    function withdrawableFrom(bytes memory adaptorData, bytes memory configData)
+        public
+        view
+        override
+        returns (uint256)
+    {
+        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        uint256 minHealthFactor = abi.decode(configData, (uint256));
+        (
+            uint256 totalCollateralETH,
+            uint256 totalDebtETH,
+            ,
+            uint256 currentLiquidationThreshold,
+            ,
+            uint256 healthFactor
+        ) = pool().getUserAccountData(msg.sender);
+        uint256 maxBorrowableWithMin;
+
+        // Choose 0.01 for cushion value. Value can be adjusted based off testing results.
+        uint256 cushion = 0.01e18;
+
+        // Add cushion to min health factor.
+        minHealthFactor += cushion;
+
+        // If Cellar has no Aave debt, then return the cellars balance of the aToken.
+        if (totalDebtETH == 0) return ERC20(address(token)).balanceOf(msg.sender);
+
+        // If minHealthFactor is not set, or if current health factor is less than the minHealthFactor + 2X cushion, return 0.
+        if (minHealthFactor == cushion || healthFactor < (minHealthFactor + cushion)) return 0;
+        // Calculate max amount withdrawable while preserving minimum health factor.
+        else {
+            maxBorrowableWithMin =
+                totalCollateralETH -
+                (((minHealthFactor) * totalDebtETH) / (currentLiquidationThreshold * 1e14));
+        }
+
+        // If aToken underlying is WETH, then no Price Router conversion is needed.
+        ERC20 underlying = ERC20(token.UNDERLYING_ASSET_ADDRESS());
+        if (underlying == WETH()) return maxBorrowableWithMin;
+
+        // Else convert `maxBorrowableWithMin` from WETH to position underlying asset.
+        PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(2));
+        return priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
     }
 }
