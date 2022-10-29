@@ -28,10 +28,10 @@ contract CTokenStorage {
     uint8 public decimals;
 
     // Maximum borrow rate that can ever be applied (.0005% / block)
-    uint internal constant borrowRateMaxMantissa = 0.0005e16;
+    uint256 internal constant borrowRateMaxMantissa = 0.0005e16;
 
     // Maximum fraction of interest that can be set aside for reserves
-    uint internal constant reserveFactorMaxMantissa = 1e18;
+    uint256 internal constant reserveFactorMaxMantissa = 1e18;
 
     /**
      * @notice Administrator for this contract
@@ -54,43 +54,43 @@ contract CTokenStorage {
     InterestRateModel public interestRateModel;
 
     // Initial exchange rate used when minting the first CTokens (used when totalSupply = 0)
-    uint internal initialExchangeRateMantissa;
+    uint256 internal initialExchangeRateMantissa;
 
     /**
      * @notice Fraction of interest currently set aside for reserves
      */
-    uint public reserveFactorMantissa;
+    uint256 public reserveFactorMantissa;
 
     /**
      * @notice Block number that interest was last accrued at
      */
-    uint public accrualBlockNumber;
+    uint256 public accrualBlockNumber;
 
     /**
      * @notice Accumulator of the total earned interest rate since the opening of the market
      */
-    uint public borrowIndex;
+    uint256 public borrowIndex;
 
     /**
      * @notice Total amount of outstanding borrows of the underlying in this market
      */
-    uint public totalBorrows;
+    uint256 public totalBorrows;
 
     /**
      * @notice Total amount of reserves of the underlying held in this market
      */
-    uint public totalReserves;
+    uint256 public totalReserves;
 
     /**
      * @notice Total number of tokens in circulation
      */
-    uint public totalSupply;
+    uint256 public totalSupply;
 
     // Official record of token balances for each account
-    mapping (address => uint) internal accountTokens;
+    mapping(address => uint256) internal accountTokens;
 
     // Approved token transfer amounts on behalf of others
-    mapping (address => mapping (address => uint)) internal transferAllowances;
+    mapping(address => mapping(address => uint256)) internal transferAllowances;
 
     /**
      * @notice Container for borrow balance information
@@ -98,8 +98,8 @@ contract CTokenStorage {
      * @member interestIndex Global borrowIndex as of the most recent balance-changing action
      */
     struct BorrowSnapshot {
-        uint principal;
-        uint interestIndex;
+        uint256 principal;
+        uint256 interestIndex;
     }
 
     // Mapping of account addresses to outstanding borrow balances
@@ -108,7 +108,7 @@ contract CTokenStorage {
     /**
      * @notice Share of seized collateral that is added to reserves
      */
-    uint public constant protocolSeizeShareMantissa = 2.8e16; //2.8%
+    uint256 public constant protocolSeizeShareMantissa = 2.8e16; //2.8%
 }
 
 abstract contract CTokenInterface is CTokenStorage {
@@ -117,39 +117,49 @@ abstract contract CTokenInterface is CTokenStorage {
      */
     bool public constant isCToken = true;
 
-
     /*** Market Events ***/
 
     /**
      * @notice Event emitted when interest is accrued
      */
-    event AccrueInterest(uint cashPrior, uint interestAccumulated, uint borrowIndex, uint totalBorrows);
+    event AccrueInterest(uint256 cashPrior, uint256 interestAccumulated, uint256 borrowIndex, uint256 totalBorrows);
 
     /**
      * @notice Event emitted when tokens are minted
      */
-    event Mint(address minter, uint mintAmount, uint mintTokens);
+    event Mint(address minter, uint256 mintAmount, uint256 mintTokens);
 
     /**
      * @notice Event emitted when tokens are redeemed
      */
-    event Redeem(address redeemer, uint redeemAmount, uint redeemTokens);
+    event Redeem(address redeemer, uint256 redeemAmount, uint256 redeemTokens);
 
     /**
      * @notice Event emitted when underlying is borrowed
      */
-    event Borrow(address borrower, uint borrowAmount, uint accountBorrows, uint totalBorrows);
+    event Borrow(address borrower, uint256 borrowAmount, uint256 accountBorrows, uint256 totalBorrows);
 
     /**
      * @notice Event emitted when a borrow is repaid
      */
-    event RepayBorrow(address payer, address borrower, uint repayAmount, uint accountBorrows, uint totalBorrows);
+    event RepayBorrow(
+        address payer,
+        address borrower,
+        uint256 repayAmount,
+        uint256 accountBorrows,
+        uint256 totalBorrows
+    );
 
     /**
      * @notice Event emitted when a borrow is liquidated
      */
-    event LiquidateBorrow(address liquidator, address borrower, uint repayAmount, address cTokenCollateral, uint seizeTokens);
-
+    event LiquidateBorrow(
+        address liquidator,
+        address borrower,
+        uint256 repayAmount,
+        address cTokenCollateral,
+        uint256 seizeTokens
+    );
 
     /*** Admin Events ***/
 
@@ -176,58 +186,94 @@ abstract contract CTokenInterface is CTokenStorage {
     /**
      * @notice Event emitted when the reserve factor is changed
      */
-    event NewReserveFactor(uint oldReserveFactorMantissa, uint newReserveFactorMantissa);
+    event NewReserveFactor(uint256 oldReserveFactorMantissa, uint256 newReserveFactorMantissa);
 
     /**
      * @notice Event emitted when the reserves are added
      */
-    event ReservesAdded(address benefactor, uint addAmount, uint newTotalReserves);
+    event ReservesAdded(address benefactor, uint256 addAmount, uint256 newTotalReserves);
 
     /**
      * @notice Event emitted when the reserves are reduced
      */
-    event ReservesReduced(address admin, uint reduceAmount, uint newTotalReserves);
+    event ReservesReduced(address admin, uint256 reduceAmount, uint256 newTotalReserves);
 
     /**
      * @notice EIP20 Transfer event
      */
-    event Transfer(address indexed from, address indexed to, uint amount);
+    event Transfer(address indexed from, address indexed to, uint256 amount);
 
     /**
      * @notice EIP20 Approval event
      */
-    event Approval(address indexed owner, address indexed spender, uint amount);
-
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     /*** User Interface ***/
 
-    function transfer(address dst, uint amount) virtual external returns (bool);
-    function transferFrom(address src, address dst, uint amount) virtual external returns (bool);
-    function approve(address spender, uint amount) virtual external returns (bool);
-    function allowance(address owner, address spender) virtual external view returns (uint);
-    function balanceOf(address owner) virtual external view returns (uint);
-    function balanceOfUnderlying(address owner) virtual external returns (uint);
-    function getAccountSnapshot(address account) virtual external view returns (uint, uint, uint, uint);
-    function borrowRatePerBlock() virtual external view returns (uint);
-    function supplyRatePerBlock() virtual external view returns (uint);
-    function totalBorrowsCurrent() virtual external returns (uint);
-    function borrowBalanceCurrent(address account) virtual external returns (uint);
-    function borrowBalanceStored(address account) virtual external view returns (uint);
-    function exchangeRateCurrent() virtual external returns (uint);
-    function exchangeRateStored() virtual external view returns (uint);
-    function getCash() virtual external view returns (uint);
-    function accrueInterest() virtual external returns (uint);
-    function seize(address liquidator, address borrower, uint seizeTokens) virtual external returns (uint);
+    function transfer(address dst, uint256 amount) external virtual returns (bool);
 
+    function transferFrom(
+        address src,
+        address dst,
+        uint256 amount
+    ) external virtual returns (bool);
+
+    function approve(address spender, uint256 amount) external virtual returns (bool);
+
+    function allowance(address owner, address spender) external view virtual returns (uint256);
+
+    function balanceOf(address owner) external view virtual returns (uint256);
+
+    function balanceOfUnderlying(address owner) external virtual returns (uint256);
+
+    function getAccountSnapshot(address account)
+        external
+        view
+        virtual
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        );
+
+    function borrowRatePerBlock() external view virtual returns (uint256);
+
+    function supplyRatePerBlock() external view virtual returns (uint256);
+
+    function totalBorrowsCurrent() external virtual returns (uint256);
+
+    function borrowBalanceCurrent(address account) external virtual returns (uint256);
+
+    function borrowBalanceStored(address account) external view virtual returns (uint256);
+
+    function exchangeRateCurrent() external virtual returns (uint256);
+
+    function exchangeRateStored() external view virtual returns (uint256);
+
+    function getCash() external view virtual returns (uint256);
+
+    function accrueInterest() external virtual returns (uint256);
+
+    function seize(
+        address liquidator,
+        address borrower,
+        uint256 seizeTokens
+    ) external virtual returns (uint256);
 
     /*** Admin Functions ***/
 
-    function _setPendingAdmin(address payable newPendingAdmin) virtual external returns (uint);
-    function _acceptAdmin() virtual external returns (uint);
-    function _setComptroller(ComptrollerInterface newComptroller) virtual external returns (uint);
-    function _setReserveFactor(uint newReserveFactorMantissa) virtual external returns (uint);
-    function _reduceReserves(uint reduceAmount) virtual external returns (uint);
-    function _setInterestRateModel(InterestRateModel newInterestRateModel) virtual external returns (uint);
+    function _setPendingAdmin(address payable newPendingAdmin) external virtual returns (uint256);
+
+    function _acceptAdmin() external virtual returns (uint256);
+
+    function _setComptroller(ComptrollerInterface newComptroller) external virtual returns (uint256);
+
+    function _setReserveFactor(uint256 newReserveFactorMantissa) external virtual returns (uint256);
+
+    function _reduceReserves(uint256 reduceAmount) external virtual returns (uint256);
+
+    function _setInterestRateModel(InterestRateModel newInterestRateModel) external virtual returns (uint256);
 }
 
 contract CErc20Storage {
@@ -238,22 +284,31 @@ contract CErc20Storage {
 }
 
 abstract contract CErc20Interface is CErc20Storage {
-
     /*** User Interface ***/
 
-    function mint(uint mintAmount) virtual external returns (uint);
-    function redeem(uint redeemTokens) virtual external returns (uint);
-    function redeemUnderlying(uint redeemAmount) virtual external returns (uint);
-    function borrow(uint borrowAmount) virtual external returns (uint);
-    function repayBorrow(uint repayAmount) virtual external returns (uint);
-    function repayBorrowBehalf(address borrower, uint repayAmount) virtual external returns (uint);
-    function liquidateBorrow(address borrower, uint repayAmount, CTokenInterface cTokenCollateral) virtual external returns (uint);
-    function sweepToken(EIP20NonStandardInterface token) virtual external;
+    function mint(uint256 mintAmount) external virtual returns (uint256);
 
+    function redeem(uint256 redeemTokens) external virtual returns (uint256);
+
+    function redeemUnderlying(uint256 redeemAmount) external virtual returns (uint256);
+
+    function borrow(uint256 borrowAmount) external virtual returns (uint256);
+
+    function repayBorrow(uint256 repayAmount) external virtual returns (uint256);
+
+    function repayBorrowBehalf(address borrower, uint256 repayAmount) external virtual returns (uint256);
+
+    function liquidateBorrow(
+        address borrower,
+        uint256 repayAmount,
+        CTokenInterface cTokenCollateral
+    ) external virtual returns (uint256);
+
+    function sweepToken(EIP20NonStandardInterface token) external virtual;
 
     /*** Admin Functions ***/
 
-    function _addReserves(uint addAmount) virtual external returns (uint);
+    function _addReserves(uint256 addAmount) external virtual returns (uint256);
 }
 
 contract CDelegationStorage {
@@ -275,7 +330,11 @@ abstract contract CDelegatorInterface is CDelegationStorage {
      * @param allowResign Flag to indicate whether to call _resignImplementation on the old implementation
      * @param becomeImplementationData The encoded bytes data to be passed to _becomeImplementation
      */
-    function _setImplementation(address implementation_, bool allowResign, bytes memory becomeImplementationData) virtual external;
+    function _setImplementation(
+        address implementation_,
+        bool allowResign,
+        bytes memory becomeImplementationData
+    ) external virtual;
 }
 
 abstract contract CDelegateInterface is CDelegationStorage {
@@ -284,10 +343,10 @@ abstract contract CDelegateInterface is CDelegationStorage {
      * @dev Should revert if any issues arise which make it unfit for delegation
      * @param data The encoded bytes data for any initialization
      */
-    function _becomeImplementation(bytes memory data) virtual external;
+    function _becomeImplementation(bytes memory data) external virtual;
 
     /**
      * @notice Called by the delegator on a delegate to forfeit its responsibility
      */
-    function _resignImplementation() virtual external;
+    function _resignImplementation() external virtual;
 }
