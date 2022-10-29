@@ -53,9 +53,9 @@ contract Curve3PoolTest is Test {
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
+        priceRouter.addAsset(DAI, 0, 0, false, 0);
         priceRouter.addAsset(USDC, 0, 0, false, 0);
         priceRouter.addAsset(USDT, 0, 0, false, 0);
-        priceRouter.addAsset(DAI, 0, 0, false, 0);
 
         // Setup Cellar:
         // Cellar positions array.
@@ -75,10 +75,12 @@ contract Curve3PoolTest is Test {
         bytes[] memory positionConfigs = new bytes[](2);
 
         cellar = new MockCellar(registry, DAI, positions, positionConfigs, "Convex Cellar", "CONVEX-CLR", strategist);
-        
+
         // vm.prank(address(cellar));
 
         vm.label(address(curve3Pool), "curve pool");
+        vm.label(address(curve3PoolAdaptor), "curve3PoolAdaptor");
+
         vm.label(address(this), "tester");
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
@@ -107,25 +109,19 @@ contract Curve3PoolTest is Test {
     }
 
     function testOpenPosition() external {
-        // deal(address(DAI), address(this), 100e18);
-        // cellar.deposit(100e18, address(this));
+        // deal(address(DAI), address(this), 100_000e18);
+        // cellar.deposit(100_000e18, address(this));
 
-        deal(address(DAI), address(cellar), 10000000e18);
-        // deal(address(USDC), address(cellar), 10000000e18);
-        // deal(address(USDT), address(cellar), 10000000e18);
-
-        console.log(DAI.balanceOf(address(cellar)));
-        console.log(USDC.balanceOf(address(cellar)));
-        console.log(USDT.balanceOf(address(cellar)));
+        deal(address(DAI), address(cellar), 100_000e18);
 
         // Use `callOnAdaptor` to deposit LP into curve pool
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToOpenPosition(
-            100e18, 
+            1e18, 
             0, 
             0,
-            1e18
+            0
         );
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
