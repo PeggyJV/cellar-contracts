@@ -161,7 +161,11 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         pool.remove_liquidity_one_coin(amount, 0, minimumAmount);
     }
 
+    /**
+     * @notice Strategist attempted to withdraw an already closed position
+     */
     error Curve3PoolAdaptor__PositionClosed();
+
     /**
      * @notice Strategist use `closePosition` to remove all of a positions liquidity.
      * @notice If receiving amount of token0 is less than minimumMintAmount function will revert.

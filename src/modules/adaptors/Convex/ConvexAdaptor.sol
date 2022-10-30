@@ -8,7 +8,6 @@ import { IBooster } from "src/interfaces/external/IBooster.sol";
 
 import { IRewardPool } from "src/interfaces/external/IRewardPool.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
-import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 
 
 /**
@@ -83,15 +82,14 @@ contract ConvexAdaptor is BaseAdaptor {
 
     /**
      * @notice Calculates this positions LP tokens underlying worth in terms of `token0`.
-     * @dev Takes into account
+     * @dev Takes into account Cellar LP balance and also staked LP balance
+     * @dev The unit is the token0 of the curve pool where the LP was minted. See `assetOf()`
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (uint256 pid, ERC20 lpToken, ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
 
         (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
-
-        uint256 stakedBalance = IRewardPool(rewardPool).balanceOf(msg.sender);
-
+        uint256 stakedLpBalance = IRewardPool(rewardPool).balanceOf(msg.sender);
         uint256 lpBalance = lpToken.balanceOf(msg.sender);
 
         uint256 lpValue;
@@ -99,9 +97,8 @@ contract ConvexAdaptor is BaseAdaptor {
             lpValue = pool.calc_withdraw_one_coin(lpBalance, 0);
         }
 
-        if(stakedBalance == 0) return lpValue;
-
-        uint256 stakedValue = pool.calc_withdraw_one_coin(stakedBalance, 0);
+        if(stakedLpBalance == 0) return lpValue;
+        uint256 stakedValue = pool.calc_withdraw_one_coin(stakedLpBalance, 0);
         
         return stakedValue + lpValue;
     }
