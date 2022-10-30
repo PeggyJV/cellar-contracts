@@ -201,7 +201,7 @@ contract CompoundTokenAdapter is BaseAdaptor {
         override
         returns (uint256)
     {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+       IERC20Metadata cToken = IERC20Metadata(abi.decode(adaptorData, (address)));
         uint256 minHealthFactor = abi.decode(configData, (uint256));
         (
             uint256 totalCollateralETH,
