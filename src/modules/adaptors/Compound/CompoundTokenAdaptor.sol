@@ -146,15 +146,15 @@ contract CompoundTokenAdapter is BaseAdaptor {
         }
 
         // mint cToken
-        uint256 before = cToken.balanceOf(abi.decode(adaptorData, (uint256)));
+        uint256 before = cToken.balanceOf(abi.decode(adaptorData, (address)));
         if (_isCETH) {
             CEther(cToken).mint{ value: assets }();
         } else {
             require(CTokenInterface(cToken).mint(assets) == 0, "Error");
         }
-        uint256 final = cToken.balanceOf(address(this)) - before ;
-        cToken.safeTransfer(msg.sender, final);
-        return final;
+        uint256 result = cToken.balanceOf(address(this)) - before ;
+        cToken.safeTransfer(msg.sender, result);
+        return result;
     }
     function withdraw(
         uint256 assets,
