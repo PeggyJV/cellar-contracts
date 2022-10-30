@@ -9,9 +9,9 @@ import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 
 
 /**
- * @title Curve 3 Pool Adaptor
- * @notice Allows Cellars to interact with Curve Positions.
- * @author 
+ * @title Curve 3Pool Adaptor
+ * @notice Allows Cellars to interact with 3Pool Curve Positions.
+ * @author cookiesanddudes, federava
  */
 contract Curve3PoolAdaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
@@ -125,10 +125,13 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         pool.add_liquidity(amounts, minimumMintAmount);
     }
 
-    error Curve3PoolAdaptor__CallClosePosition();
     /**
      * @notice Strategist attempted to remove all of a positions liquidity using `takeFromPosition`,
      *         but they need to use `closePosition`.
+     */
+    error Curve3PoolAdaptor__CallClosePosition();
+    
+    /**
      * @notice If receiving amount of token0 is less than minimumMintAmount function will revert.
      * @param amount lp token amount to be burned.
      * @param minimumAmount receiving at least this amount of token0.
