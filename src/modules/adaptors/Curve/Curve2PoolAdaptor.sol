@@ -122,7 +122,7 @@ contract Curve2PoolAdaptor is BaseAdaptor {
             }
         }
 
-        (uint256 mintAmount) = pool.add_liquidity(amounts, minimumMintAmount, address(this));
+        pool.add_liquidity(amounts, minimumMintAmount, address(this));
     }
 
     error Curve2PoolAdaptor__CallClosePosition();
@@ -158,7 +158,7 @@ contract Curve2PoolAdaptor is BaseAdaptor {
         uint256 minimumAmount,
         ICurvePool pool
     ) internal {
-        (uint256 mintAmount) = pool.remove_liquidity_one_coin(amount, 0, minimumAmount, address(this));
+        pool.remove_liquidity_one_coin(amount, 0, minimumAmount, address(this));
     }
 
     error Curve2PoolAdaptor__PositionClosed();
@@ -207,7 +207,7 @@ contract Curve2PoolAdaptor is BaseAdaptor {
             }
         }
 
-        (uint256 mintAmount) = pool.add_liquidity(amounts, minimumMintAmount, address(this));
+        pool.add_liquidity(amounts, minimumMintAmount, address(this));
     }
 
 }
