@@ -301,25 +301,12 @@ function testOpeningAddingAndTakingFromPosition() external {
         assertLe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 10e18);
     }
 
-    function testwithdrawableFrom() external {
-        deal(address(DAI), address(cellar), 100_000e18);
-
-        // Use `callOnAdaptor` to deposit LP into curve pool
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToOpenPosition(
-            1e18, 
-            0, 
+    function testWithdrawableFromReturnsZero() external {
+        assertEq(
+            curve3PoolAdaptor.withdrawableFrom(abi.encode(0), abi.encode(0)),
             0,
-            0
+            "`withdrawableFrom` should return 0."
         );
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
-
-        cellar.callOnAdaptor(data);
-        
-        vm.prank(address(cellar));
-        assertGe(curve3PoolAdaptor.withdrawableFrom(abi.encode(curve3Pool, LP3CRV), ""), 1e18-1e17);
     }
 
 
