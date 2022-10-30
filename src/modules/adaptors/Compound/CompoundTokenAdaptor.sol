@@ -8,6 +8,12 @@ import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20
 import { ICompoundToken } from "src/interfaces/external/ICompoundToken.sol";
 
 
+/**
+ * @title Compound cToken Adaptor
+ * @notice Allows Cellars to interact with Aave aToken positions.
+ * @author mnm458 & mrhouzlane
+ */
+
 abstract contract CToken is IERC20Upgradeable {
     function supplyRatePerBlock() external view virtual returns (uint256);
 
@@ -54,12 +60,6 @@ contract CErc20Storage {
      */
     address public underlying;
 }
-
-/**
- * @title Compound cToken Adaptor
- * @notice Allows Cellars to interact with Aave aToken positions.
- * @author mnm458 & mrhouzlane
- */
 
 contract CompoundTokenAdapter is BaseAdaptor {
     using SafeERC20 for ERC20;
