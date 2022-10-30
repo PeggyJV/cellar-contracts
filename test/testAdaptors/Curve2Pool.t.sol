@@ -12,7 +12,6 @@ import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 
-
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
@@ -33,10 +32,9 @@ contract Curve2PoolTest is Test {
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
 
-
     ERC20 private FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
     ERC20 private POOL3 = ERC20(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490);
-    
+
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
@@ -48,7 +46,6 @@ contract Curve2PoolTest is Test {
     uint32 private fraxPosition;
 
     function setUp() external {
-
         curve2PoolAdaptor = new Curve2PoolAdaptor();
         erc20Adaptor = new ERC20Adaptor();
         priceRouter = new PriceRouter();
@@ -69,8 +66,16 @@ contract Curve2PoolTest is Test {
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
         fraxPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(FRAX), 0, 0);
-        lp2crvPosition = registry.trustPosition(address(curve2PoolAdaptor), false, abi.encode(ICurvePool(0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B), address(0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B)), 0, 0);
-
+        lp2crvPosition = registry.trustPosition(
+            address(curve2PoolAdaptor),
+            false,
+            abi.encode(
+                ICurvePool(0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B),
+                address(0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B)
+            ),
+            0,
+            0
+        );
 
         positions[0] = fraxPosition;
         positions[1] = lp2crvPosition;
@@ -95,7 +100,7 @@ contract Curve2PoolTest is Test {
 
         FRAX.safeApprove(address(cellar), type(uint256).max);
         POOL3.safeApprove(address(cellar), type(uint256).max);
-        
+
         DAI.safeApprove(address(cellar), type(uint256).max);
         USDC.safeApprove(address(cellar), type(uint256).max);
         USDT.safeApprove(address(cellar), type(uint128).max);
@@ -111,22 +116,17 @@ contract Curve2PoolTest is Test {
         // Use `callOnAdaptor` to deposit LP into curve pool
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToOpenPosition(
-            1e18, 
-            0, 
-            0
-        );
+        adaptorCalls[0] = _createBytesDataToOpenPosition(1e18, 0, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve2PoolAdaptor), callData: adaptorCalls });
 
         cellar.callOnAdaptor(data);
 
-       
         uint256 lpBalance = LP2CRV.balanceOf(address(cellar));
 
         // Assert balanceOf is bigger than 0.9
         vm.prank(address(cellar));
-        assertGe(curve2PoolAdaptor.balanceOf(abi.encode(curve2Pool, LP2CRV)), 1e18-1e17);
+        assertGe(curve2PoolAdaptor.balanceOf(abi.encode(curve2Pool, LP2CRV)), 1e18 - 1e17);
 
         // Assert LP is bigger than 0
         assertGe(lpBalance, 0);
@@ -138,22 +138,17 @@ contract Curve2PoolTest is Test {
         // Use `callOnAdaptor` to deposit LP into curve pool
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToOpenPosition(
-            1e18, 
-            0,
-            0
-        );
+        adaptorCalls[0] = _createBytesDataToOpenPosition(1e18, 0, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve2PoolAdaptor), callData: adaptorCalls });
 
         cellar.callOnAdaptor(data);
 
-       
         uint256 lpBalance = LP2CRV.balanceOf(address(cellar));
 
         // Assert balanceOf is bigger than 0.9
         vm.prank(address(cellar));
-        assertGe(curve2PoolAdaptor.balanceOf(abi.encode(curve2Pool, LP2CRV)), 1e18-1e17);
+        assertGe(curve2PoolAdaptor.balanceOf(abi.encode(curve2Pool, LP2CRV)), 1e18 - 1e17);
 
         // Assert LP is bigger than 0
         assertGe(lpBalance, 0);
@@ -166,11 +161,7 @@ contract Curve2PoolTest is Test {
         // Use `callOnAdaptor` to deposit LP into curve pool
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToOpenPosition(
-            1e18, 
-            1e10,
-            0
-        );
+        adaptorCalls[0] = _createBytesDataToOpenPosition(1e18, 1e10, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve2PoolAdaptor), callData: adaptorCalls });
 
@@ -193,11 +184,7 @@ contract Curve2PoolTest is Test {
         // Use `callOnAdaptor` to deposit LP into curve pool
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToOpenPosition(
-            1e18, 
-            1e10,
-            0
-        );
+        adaptorCalls[0] = _createBytesDataToOpenPosition(1e18, 1e10, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve2PoolAdaptor), callData: adaptorCalls });
 
@@ -219,7 +206,7 @@ contract Curve2PoolTest is Test {
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve2PoolAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        
+
         uint256 fraxBalanceAfter = FRAX.balanceOf(address(cellar));
         uint256 lpBalanceAfter = LP2CRV.balanceOf(address(cellar));
 
@@ -239,11 +226,7 @@ contract Curve2PoolTest is Test {
         // Use `callOnAdaptor` to deposit LP into curve pool
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToOpenPosition(
-            1e18, 
-            1e6, 
-            0
-        );
+        adaptorCalls[0] = _createBytesDataToOpenPosition(1e18, 1e6, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve2PoolAdaptor), callData: adaptorCalls });
 
@@ -261,11 +244,7 @@ contract Curve2PoolTest is Test {
         // Now, add to the position
         adaptorCalls = new bytes[](1);
 
-        adaptorCalls[0] = _createBytesDataToAddToPosition(
-            10e18,
-            10e6,
-            0
-        );
+        adaptorCalls[0] = _createBytesDataToAddToPosition(10e18, 10e6, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve2PoolAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -273,16 +252,13 @@ contract Curve2PoolTest is Test {
         // check that amount has been added
         vm.prank(address(cellar));
         assertGe(curve2PoolAdaptor.balanceOf(abi.encode(curve2Pool, LP2CRV)), 10e18);
-        
+
         uint256 lpBalanceAfterAdd = LP2CRV.balanceOf(address(cellar));
 
         assertGe(lpBalanceAfterAdd, 10e18);
 
         // Now, remove from the position
-        adaptorCalls[0] = _createBytesDataToTakeFromPosition(
-            5e18,
-            0
-        );
+        adaptorCalls[0] = _createBytesDataToTakeFromPosition(5e18, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(curve2PoolAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -312,7 +288,7 @@ contract Curve2PoolTest is Test {
             abi.encodeWithSelector(
                 Curve2PoolAdaptor.openPosition.selector,
                 [amount0, amount1],
-                minimumMintAmount, 
+                minimumMintAmount,
                 curve2Pool
             );
     }
@@ -326,37 +302,27 @@ contract Curve2PoolTest is Test {
             abi.encodeWithSelector(
                 Curve2PoolAdaptor.addToPosition.selector,
                 [amount0, amount1],
-                minimumAmount, 
+                minimumAmount,
                 curve2Pool
-        );
-    }
-
-    function _createBytesDataToClosePosition(
-        uint256 minimumAmount
-    ) internal view returns (bytes memory) {
-        return
-            abi.encodeWithSelector(
-                Curve2PoolAdaptor.closePosition.selector,
-                minimumAmount, 
-                curve2Pool,
-                LP2CRV
             );
     }
 
-    function _createBytesDataToTakeFromPosition(
-        uint256 amount,
-        uint256 minimumAmount
-    ) internal view returns (bytes memory) {
+    function _createBytesDataToClosePosition(uint256 minimumAmount) internal view returns (bytes memory) {
+        return abi.encodeWithSelector(Curve2PoolAdaptor.closePosition.selector, minimumAmount, curve2Pool, LP2CRV);
+    }
+
+    function _createBytesDataToTakeFromPosition(uint256 amount, uint256 minimumAmount)
+        internal
+        view
+        returns (bytes memory)
+    {
         return
             abi.encodeWithSelector(
                 Curve2PoolAdaptor.takeFromPosition.selector,
                 amount,
-                minimumAmount, 
+                minimumAmount,
                 curve2Pool,
                 LP2CRV
-        );
+            );
     }
-
-
-
 }

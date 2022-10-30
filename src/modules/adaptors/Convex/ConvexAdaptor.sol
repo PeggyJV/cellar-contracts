@@ -8,7 +8,6 @@ import { IBooster } from "src/interfaces/external/IBooster.sol";
 import { IRewardPool } from "src/interfaces/external/IRewardPool.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 
-
 /**
  * @title Convex Adaptor
  * @notice Allows Cellars to interact with Convex Positions.
@@ -45,7 +44,6 @@ contract ConvexAdaptor is BaseAdaptor {
     function booster() internal pure returns (IBooster) {
         return IBooster(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
     }
-
 
     //============================================ Implement Base Functions ===========================================
 
@@ -88,7 +86,7 @@ contract ConvexAdaptor is BaseAdaptor {
         (uint256 pid, ERC20 lpToken, ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
 
         // get reward pool where the LP are staked
-        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
+        (, , , address rewardPool, , ) = (booster()).poolInfo(pid);
         uint256 stakedLpBalance = IRewardPool(rewardPool).balanceOf(msg.sender);
 
         // get amount of LP owned
@@ -96,14 +94,14 @@ contract ConvexAdaptor is BaseAdaptor {
 
         // calculate lp owned value
         uint256 lpValue;
-        if(lpBalance != 0) {
+        if (lpBalance != 0) {
             lpValue = pool.calc_withdraw_one_coin(lpBalance, 0);
         }
 
         // calculate stakedLp Value
-        if(stakedLpBalance == 0) return lpValue;
+        if (stakedLpBalance == 0) return lpValue;
         uint256 stakedValue = pool.calc_withdraw_one_coin(stakedLpBalance, 0);
-        
+
         return stakedValue + lpValue;
     }
 
@@ -158,7 +156,7 @@ contract ConvexAdaptor is BaseAdaptor {
         lpToken.safeApprove(address(booster()), amount);
 
         // always assume we are staking
-        if(!(booster()).deposit(pid, amount, true)) {
+        if (!(booster()).deposit(pid, amount, true)) {
             revert ConvexAdaptor_DepositFailed();
         }
     }
@@ -170,7 +168,7 @@ contract ConvexAdaptor is BaseAdaptor {
     error ConvexAdaptor__CallClosePosition();
 
     /**
-     * @notice Allows strategist to remove liquidity from a position 
+     * @notice Allows strategist to remove liquidity from a position
      * @param pid convex pool id
      * @param amount of LP to stake
      * @param claim true if rewards should be claimed when withdrawing
@@ -180,24 +178,20 @@ contract ConvexAdaptor is BaseAdaptor {
         uint256 amount,
         bool claim
     ) public {
-        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
+        (, , , address rewardPool, , ) = (booster()).poolInfo(pid);
 
-        if(IRewardPool(rewardPool).balanceOf(msg.sender) == amount) revert ConvexAdaptor__CallClosePosition();
+        if (IRewardPool(rewardPool).balanceOf(msg.sender) == amount) revert ConvexAdaptor__CallClosePosition();
 
-        IRewardPool(rewardPool).withdrawAndUnwrap(amount,claim);
+        IRewardPool(rewardPool).withdrawAndUnwrap(amount, claim);
     }
-
 
     /**
      * @notice Allows strategist to close a position
      * @param pid convex pool id
      * @param claim true if rewards should be claimed when withdrawing
      */
-    function closePosition(
-        uint256 pid,
-        bool claim
-    ) public {
-        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
+    function closePosition(uint256 pid, bool claim) public {
+        (, , , address rewardPool, , ) = (booster()).poolInfo(pid);
 
         IRewardPool(rewardPool).withdrawAllAndUnwrap(claim);
     }
@@ -213,11 +207,10 @@ contract ConvexAdaptor is BaseAdaptor {
      * TODO: distribute these rewards to timelockERC20 adaptor in feat/timelockERC20 branch (out of scope for the hackathon)
      */
     function claimRewards(uint256 pid) public {
-        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
+        (, , , address rewardPool, , ) = (booster()).poolInfo(pid);
 
-        if (!IRewardPool(rewardPool).getReward()){
+        if (!IRewardPool(rewardPool).getReward()) {
             revert ConvexAdaptor_CouldNotClaimRewards();
         }
     }
-
 }
