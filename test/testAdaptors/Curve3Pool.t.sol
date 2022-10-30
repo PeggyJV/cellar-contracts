@@ -347,7 +347,6 @@ contract Curve3PoolTest is Test {
         cellar.callOnAdaptor(data);
 
         uint256 lpBalance = LP3CRV.balanceOf(address(cellar));
-        uint256 daiBalanceBefore = DAI.balanceOf(address(cellar));
 
         // assert balanceOf is bigger than 0
         vm.prank(address(cellar));

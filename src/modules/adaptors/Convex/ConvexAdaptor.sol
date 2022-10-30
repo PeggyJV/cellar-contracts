@@ -83,6 +83,7 @@ contract ConvexAdaptor is BaseAdaptor {
 
     /**
      * @notice Calculates this positions LP tokens underlying worth in terms of `token0`.
+     * @dev Takes into account
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (uint256 pid, ERC20 lpToken, ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
@@ -98,24 +99,10 @@ contract ConvexAdaptor is BaseAdaptor {
             lpValue = pool.calc_withdraw_one_coin(lpBalance, 0);
         }
 
-        // console.log('lpValue');
-        // console.log(lpValue);
-
-        // console.log('lpBalance');
-        // console.log(lpBalance);
-
         if(stakedBalance == 0) return lpValue;
 
         uint256 stakedValue = pool.calc_withdraw_one_coin(stakedBalance, 0);
         
-        // console.log('stakedBalance');
-        // console.log(stakedBalance);
-
-        // console.log('stakedValue');
-        // console.log(stakedValue);
-
-        // returns how much do we get if were to withdraw the whole position from convex and curve
-        // plus lp balance
         return stakedValue + lpValue;
     }
 
