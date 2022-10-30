@@ -155,10 +155,76 @@ contract CellarConvexTest is Test {
 
         cellar.callOnAdaptor(data);
 
-        // assert we have deposited 5e18 tokens into convex reward pool
+        // assert we have deposited 5e18 tokens into convex reward
         assertEq(rewardPool.balanceOf(address(cellar)), 5e18);
         vm.prank(address(cellar));
         assertGe(convexAdaptor.balanceOf(abi.encode(PID_3CRV, LP3CRV, curve3Pool)), 0);
+    }
+
+
+    // opens position in curve and deposits LP into convex
+    function testOpeningAndClosingPosition() external {
+        // first, mint dai into the cellar
+        deal(address(DAI), address(cellar), 100_000e18);
+
+
+        // then, deposit dai into curve through Curve adaptor
+
+        // Use `callOnAdaptor` to deposit token into curve pool
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenCurvePosition(
+            10e18, 
+            0, 
+            0,
+            0
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        uint256 initialLPBalance = LP3CRV.balanceOf(address(cellar));
+        // console.log(LP3CRV.balanceOf(address(cellar)));
+
+        // vm.prank(address(cellar));
+        // convexAdaptor.balanceOf(abi.encode(PID_3CRV, LP3CRV, curve3Pool));
+
+        // last, open position on convex using the freshly minted LP
+        // Use `callOnAdaptor` to deposit LP into convex pool
+        data = new Cellar.AdaptorCall[](1);
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenPosition(
+            PID_3CRV, 
+            5e18, 
+            LP3CRV
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        // assert we have deposited 5e18 tokens into convex reward
+        assertEq(rewardPool.balanceOf(address(cellar)), 5e18);
+        assertLe(LP3CRV.balanceOf(address(cellar)), initialLPBalance);
+
+        // now, close the position
+        data = new Cellar.AdaptorCall[](1);
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToClosePosition(
+            PID_3CRV,
+            true
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        uint256 finalLPBalance = LP3CRV.balanceOf(address(cellar));
+
+        // check we recovered all of our initial LP
+        assertEq(initialLPBalance, finalLPBalance);
+        assertEq(rewardPool.balanceOf(address(cellar)), 0);
     }
 
     function _createBytesDataToOpenPosition(
@@ -190,12 +256,14 @@ contract CellarConvexTest is Test {
     }
 
     function _createBytesDataToClosePosition(
-        uint256 pid
+        uint256 pid,
+        bool claimRewards
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 ConvexAdaptor.closePosition.selector,
-                pid
+                pid,
+                claimRewards
             );
     }
 
@@ -226,3 +294,5 @@ contract CellarConvexTest is Test {
             );
     }
 }
+
+
