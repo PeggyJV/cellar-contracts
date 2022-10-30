@@ -9,6 +9,7 @@ interface IRewardPool is IERC20 {
     function getReward(address _account, bool _claimExtras) external returns(bool);
     function withdrawAllAndUnwrap(bool claim) external;
     function withdraw(uint256 amount, bool claim) external;
+    function withdrawAndUnwrap(uint256 amount, bool claim) external;
     function stake(uint256 _amount) external;
     function rewardPerToken() external view returns (uint256);
 }

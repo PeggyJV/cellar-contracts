@@ -157,20 +157,16 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Attempted to take from convex position but failed
-     */
-    error ConvexAdaptor_TakeFromPositionFailed();
-
-    /**
      * @notice Close position in convex
      */
     function takeFromPosition(
         uint256 pid,
-        uint256 amount
+        uint256 amount,
+        bool claim
     ) public {
-        if (!(booster()).withdraw(pid, amount)) {
-            revert ConvexAdaptor_TakeFromPositionFailed();
-        }
+        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
+
+        IRewardPool(rewardPool).withdrawAndUnwrap(amount,claim);
     }
 
 
