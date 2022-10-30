@@ -64,7 +64,6 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
-
     /**
      * @notice User withdraws are not allowed so this position must return 0 for withdrawableFrom.
      */
@@ -74,6 +73,8 @@ contract Curve3PoolAdaptor is BaseAdaptor {
 
     /**
      * @notice Calculates this positions LP tokens underlying worth in terms of `token0`.
+     * @notice Curve pools provide a calculation where the amount returned considers the swapping of token1 and token2
+     * for token0 considering fees.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (ICurvePool pool, ERC20 lpToken) = abi.decode(adaptorData, (ICurvePool, ERC20));
@@ -96,9 +97,14 @@ contract Curve3PoolAdaptor is BaseAdaptor {
     }
 
     //============================================ Strategist Functions ===========================================
-
     /**
      * @notice Allows strategist to open up arbritray Curve positions.
+     * @notice Allows to send any combination of token0, token1 and token2 which the pool will
+     * balance on deposit.
+     * @notice If minted lp tokens is less than minimumMintAmount function will revert.
+     * @param amounts token0, token1, and token2 amounts to be deposited.
+     * @param minimumMintAmount minting at least this amount of lp tokens.
+     * @param pool specifies the interface of the pool
      */
     function openPosition(
         uint256[3] memory amounts, 
@@ -118,13 +124,17 @@ contract Curve3PoolAdaptor is BaseAdaptor {
 
         pool.add_liquidity(amounts, minimumMintAmount);
     }
-    
+
+    error Curve3PoolAdaptor__CallClosePosition();
     /**
      * @notice Strategist attempted to remove all of a positions liquidity using `takeFromPosition`,
      *         but they need to use `closePosition`.
+     * @notice If receiving amount of token0 is less than minimumMintAmount function will revert.
+     * @param amount lp token amount to be burned.
+     * @param minimumAmount receiving at least this amount of token0.
+     * @param pool specifies the interface of the pool
+     * @param lpToken specifies the interface of the lp token
      */
-    error Curve3PoolAdaptor__CallClosePosition();
-
     function takeFromPosition(
         uint256 amount,
         uint256 minimumAmount,
@@ -136,6 +146,13 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         _takeFromPosition(amount, minimumAmount, pool);
     }
 
+    /**
+     * @notice Executes the removal of liquidity in one coin: token0.
+     * @notice If receiving amount of token0 is less than minimumMintAmount function will revert.
+     * @param amount lp token amount to be burned.
+     * @param minimumAmount receiving at least this amount of token0.
+     * @param pool specifies the interface of the pool
+     */
     function _takeFromPosition(
         uint256 amount,
         uint256 minimumAmount,
@@ -144,12 +161,14 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         pool.remove_liquidity_one_coin(amount, 0, minimumAmount);
     }
 
-    /**
-     * @notice Strategist attempted to remove all of a positions liquidity using `takeFromPosition`,
-     *         but they need to use `closePosition`.
-     */
     error Curve3PoolAdaptor__PositionClosed();
-
+    /**
+     * @notice Strategist use `closePosition` to remove all of a positions liquidity.
+     * @notice If receiving amount of token0 is less than minimumMintAmount function will revert.
+     * @param minimumAmount receiving at least this amount of token0.
+     * @param pool specifies the interface of the pool
+     * @param lpToken specifies the interface of the lp token
+     */
     function closePosition(
         uint256 minimumAmount,
         ICurvePool pool,
@@ -161,6 +180,15 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         _takeFromPosition(amountToWithdraw, minimumAmount, pool);
     }
 
+    /**
+     * @notice Allows strategist to add liquidity to a Curve position.
+     * @notice Allows to send any combination of token0, token1 and token2 which the pool will
+     * balance on deposit.
+     * @notice If minted lp tokens is less than minimumMintAmount function will revert.
+     * @param amounts token0, token1, and token2 amounts to be deposited.
+     * @param minimumMintAmount minting at least this amount of lp tokens.
+     * @param pool specifies the interface of the pool
+     */
     function addToPosition(        
         uint256[3] memory amounts, 
         uint256 minimumMintAmount, 

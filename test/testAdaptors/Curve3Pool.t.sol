@@ -93,16 +93,7 @@ contract Curve3PoolTest is Test {
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
 
-    function testFaucet() external {
-        uint256 amount = 100e18;
-        deal(address(DAI), address(this), amount);
-        assertEq(
-            DAI.balanceOf(address(this)),
-            amount,
-            "Should be able to deal some tokens"
-        );
-    }
-
+    // ========================================== POSITION MANAGEMENT TEST ==========================================
     function testOpenPosition() external {
         deal(address(DAI), address(cellar), 100_000e18);
 
@@ -237,7 +228,7 @@ contract Curve3PoolTest is Test {
         assertEq(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 0);
     }
 
-function testOpeningAddingAndTakingFromPosition() external {
+    function testOpeningAddingAndTakingFromPosition() external {
         deal(address(DAI), address(cellar), 100_000e18);
         deal(address(USDC), address(cellar), 100_000e6);
         deal(address(USDT), address(cellar), 100_000e6);
@@ -309,6 +300,78 @@ function testOpeningAddingAndTakingFromPosition() external {
         );
     }
 
+    // ========================================== REVERT TEST ==========================================
+    function testMinimalLPTokenMintUnreached() external {
+        deal(address(DAI), address(cellar), 100_000e18);
+
+        // Use `callOnAdaptor` to deposit LP into curve pool
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenPosition(
+            1e18, 
+            0, 
+            0,
+            100e18
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(
+                abi.encodePacked(
+                    "Slippage screwed you"
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+    }
+
+
+    function testMinimalToken0WithdrawMintUnreached() external {
+        deal(address(DAI), address(cellar), 100_000e18);
+        deal(address(USDC), address(cellar), 100_000e6);
+        deal(address(USDT), address(cellar), 100_000e6);
+
+        // Use `callOnAdaptor` to deposit LP into curve pool
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToOpenPosition(
+            1e18, 
+            1e6, 
+            1e6,
+            0
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        uint256 lpBalance = LP3CRV.balanceOf(address(cellar));
+        uint256 daiBalanceBefore = DAI.balanceOf(address(cellar));
+
+        // assert balanceOf is bigger than 0
+        vm.prank(address(cellar));
+        assertGe(curve3PoolAdaptor.balanceOf(abi.encode(curve3Pool, LP3CRV)), 0);
+
+        // assert LP is bigger than 0
+        assertGe(lpBalance, 0);
+
+        // Now, close the position
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToClosePosition(100e18);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curve3PoolAdaptor), callData: adaptorCalls });
+        vm.expectRevert(
+            bytes(
+                abi.encodePacked(
+                    "Not enough coins removed"
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+    }
+
+    // ======================================= AUXILIAR FUNCTIONS ======================================
 
     function _createBytesDataToOpenPosition(
         uint256 amount0,
