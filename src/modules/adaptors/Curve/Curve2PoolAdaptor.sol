@@ -9,9 +9,9 @@ import { ICurvePool } from "src/interfaces/external/ICurve2Pool.sol";
 
 
 /**
- * @title Curve 2 Pool Adaptor
- * @notice Allows Cellars to interact with Curve Positions.
- * @author 
+ * @title Curve 2Pool Adaptor
+ * @notice Allows Cellars to interact with 2Pool Curve Positions.
+ * @author cookiesanddudes, federava
  */
 contract Curve2PoolAdaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
