@@ -47,10 +47,6 @@ contract ConvexAdaptor is BaseAdaptor {
         return IBooster(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
     }
 
-    /**
-     @notice Attempted to deposit into convex but failed
-     */
-    error ConvexAdaptor_DepositFailed();
 
     //============================================ Implement Base Functions ===========================================
 
@@ -88,9 +84,9 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice Calculates this positions LP tokens underlying worth in terms of `token0`.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (uint256 pid, ERC20 lpToken, ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
+        (uint256 pid, , ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
 
-        (,,,address rewardPool,,) = (booster()).poolInfo(pid);
+        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
 
         uint256 stakedBalance = IRewardPool(rewardPool).balanceOf(msg.sender);
 
@@ -110,7 +106,12 @@ contract ConvexAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-/**
+    /**
+     @notice Attempted to deposit into convex but failed
+     */
+    error ConvexAdaptor_DepositFailed();
+
+    /**
      * @notice Open a position in convex
      */
     function openPosition(
@@ -118,6 +119,25 @@ contract ConvexAdaptor is BaseAdaptor {
         uint256 pid,
         ERC20 lpToken
     ) public {
+        _addToPosition(amount, pid, lpToken);
+    }
+
+    /**
+     * @notice Add to a position in convex
+     */
+    function addToPosition(
+        uint256 amount,
+        uint256 pid,
+        ERC20 lpToken
+    ) public {
+        _addToPosition(amount, pid, lpToken);
+    }
+
+    function _addToPosition(
+        uint256 amount,
+        uint256 pid,
+        ERC20 lpToken
+    ) internal {
         lpToken.safeApprove(address(booster()), amount);
 
         // always assume we are staking
@@ -127,30 +147,53 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
+     * @notice Attempted to take from convex position but failed
+     */
+    error ConvexAdaptor_TakeFromPositionFailed();
+
+    /**
      * @notice Close position in convex
      */
     function takeFromPosition(
         uint256 pid,
         uint256 amount
     ) public {
-        (booster()).withdrawTo(pid, amount, msg.sender);    
+        if (!(booster()).withdraw(pid, amount)) {
+            revert ConvexAdaptor_TakeFromPositionFailed();
+        }
     }
+
+
+    /**
+     * @notice Attempted to take from convex position but failed
+     */
+    error ConvexAdaptor_ClosePositionFailed();
 
     /**
      * @notice Close position in convex
      */
     function closePosition(
-        uint256 pid,
-        uint256 amount
+        uint256 pid
     ) public {
-        (booster()).withdrawAll(pid, amount, msg.sender);  
+        if (!booster().withdrawAll(pid)){
+            revert ConvexAdaptor_ClosePositionFailed();
+        } 
     }
 
+    /**
+     * @notice Attempted to take from convex position but failed
+     */
+    error ConvexAdaptor_CouldNotClaimRewards();
 
-    // function claim(bytes memory adaptorData) public pure returns (uint256) {
-    //     // TODO
-    //     return 0;
-    // }
+    /**
+     * @notice Claims rewards and extras from convex
+     */
+    function claimRewards(uint256 pid) public {
+        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
 
+        if (!IRewardPool(rewardPool).getReward()){
+            revert ConvexAdaptor_CouldNotClaimRewards();
+        }
+    }
 
 }
