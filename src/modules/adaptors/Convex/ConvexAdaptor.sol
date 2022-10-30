@@ -172,7 +172,6 @@ contract ConvexAdaptor is BaseAdaptor {
 
     /**
      * @notice Close position in convex
-     * @dev does NOT claim rewards
      */
     function closePosition(
         uint256 pid,
