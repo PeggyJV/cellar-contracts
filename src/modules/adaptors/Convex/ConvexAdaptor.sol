@@ -5,16 +5,14 @@ import { BaseAdaptor, ERC20, SafeERC20, Cellar, PriceRouter, Registry, Math } fr
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { IBooster } from "src/interfaces/external/IBooster.sol";
-
 import { IRewardPool } from "src/interfaces/external/IRewardPool.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
-import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 
 
 /**
  * @title Convex Adaptor
  * @notice Allows Cellars to interact with Convex Positions.
- * @author 
+ * @author cookiesanddudes, federava
  */
 contract ConvexAdaptor is BaseAdaptor {
     using SafeERC20 for ERC20;
@@ -83,25 +81,28 @@ contract ConvexAdaptor is BaseAdaptor {
 
     /**
      * @notice Calculates this positions LP tokens underlying worth in terms of `token0`.
-     * @dev Takes into account
+     * @dev Takes into account Cellar LP balance and also staked LP balance
+     * @dev The unit is the token0 of the curve pool where the LP was minted. See `assetOf()`
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (uint256 pid, ERC20 lpToken, ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
 
+        // get reward pool where the LP are staked
         (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
+        uint256 stakedLpBalance = IRewardPool(rewardPool).balanceOf(msg.sender);
 
-        uint256 stakedBalance = IRewardPool(rewardPool).balanceOf(msg.sender);
-
+        // get amount of LP owned
         uint256 lpBalance = lpToken.balanceOf(msg.sender);
 
+        // calculate lp owned value
         uint256 lpValue;
         if(lpBalance != 0) {
             lpValue = pool.calc_withdraw_one_coin(lpBalance, 0);
         }
 
-        if(stakedBalance == 0) return lpValue;
-
-        uint256 stakedValue = pool.calc_withdraw_one_coin(stakedBalance, 0);
+        // calculate stakedLp Value
+        if(stakedLpBalance == 0) return lpValue;
+        uint256 stakedValue = pool.calc_withdraw_one_coin(stakedLpBalance, 0);
         
         return stakedValue + lpValue;
     }
@@ -122,7 +123,10 @@ contract ConvexAdaptor is BaseAdaptor {
     error ConvexAdaptor_DepositFailed();
 
     /**
-     * @notice Open a position in convex
+     * @notice Allows strategist to open a Convex position.
+     * @param pid convex pool id
+     * @param amount of LP to stake
+     * @param lpToken the corresponding LP token
      */
     function openPosition(
         uint256 pid,
@@ -133,7 +137,10 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Add to a position in convex
+     * @notice Allows strategist to add liquidity to a Convex position.
+     * @param pid convex pool id
+     * @param amount of LP to stake
+     * @param lpToken the corresponding LP token
      */
     function addToPosition(
         uint256 pid,
@@ -157,37 +164,42 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Attempted to take from convex position but failed
+     * @notice Strategist attempted to remove all of a positions liquidity using `takeFromPosition`,
+     *         but they need to use `closePosition`.
      */
-    error ConvexAdaptor_TakeFromPositionFailed();
+    error ConvexAdaptor__CallClosePosition();
 
     /**
-     * @notice Close position in convex
+     * @notice Allows strategist to remove liquidity from a position 
+     * @param pid convex pool id
+     * @param amount of LP to stake
+     * @param claim true if rewards should be claimed when withdrawing
      */
     function takeFromPosition(
         uint256 pid,
-        uint256 amount
+        uint256 amount,
+        bool claim
     ) public {
-        if (!(booster()).withdraw(pid, amount)) {
-            revert ConvexAdaptor_TakeFromPositionFailed();
-        }
+        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
+
+        if(IRewardPool(rewardPool).balanceOf(msg.sender) == amount) revert ConvexAdaptor__CallClosePosition();
+
+        IRewardPool(rewardPool).withdrawAndUnwrap(amount,claim);
     }
 
 
     /**
-     * @notice Attempted to take from convex position but failed
-     */
-    error ConvexAdaptor_ClosePositionFailed();
-
-    /**
-     * @notice Close position in convex
+     * @notice Allows strategist to close a position
+     * @param pid convex pool id
+     * @param claim true if rewards should be claimed when withdrawing
      */
     function closePosition(
-        uint256 pid
+        uint256 pid,
+        bool claim
     ) public {
-        if (!booster().withdrawAll(pid)){
-            revert ConvexAdaptor_ClosePositionFailed();
-        } 
+        (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
+
+        IRewardPool(rewardPool).withdrawAllAndUnwrap(claim);
     }
 
     /**
@@ -196,7 +208,9 @@ contract ConvexAdaptor is BaseAdaptor {
     error ConvexAdaptor_CouldNotClaimRewards();
 
     /**
-     * @notice Claims rewards and extras from convex
+     * @notice Allows strategist to claim rewards and extras from convex
+     * @param pid convex pool id
+     * TODO: distribute these rewards to timelockERC20 adaptor in feat/timelockERC20 branch (out of scope for the hackathon)
      */
     function claimRewards(uint256 pid) public {
         (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
