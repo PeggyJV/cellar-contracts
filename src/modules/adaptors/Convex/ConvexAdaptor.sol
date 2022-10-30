@@ -8,6 +8,7 @@ import { IBooster } from "src/interfaces/external/IBooster.sol";
 
 import { IRewardPool } from "src/interfaces/external/IRewardPool.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
+import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 
 
 /**
@@ -84,16 +85,38 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice Calculates this positions LP tokens underlying worth in terms of `token0`.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (uint256 pid, , ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
+        (uint256 pid, ERC20 lpToken, ICurvePool pool) = abi.decode(adaptorData, (uint256, ERC20, ICurvePool));
 
         (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
 
         uint256 stakedBalance = IRewardPool(rewardPool).balanceOf(msg.sender);
 
-        if(stakedBalance == 0) return 0;
+        uint256 lpBalance = lpToken.balanceOf(msg.sender);
+
+        uint256 lpValue;
+        if(lpBalance != 0) {
+            lpValue = pool.calc_withdraw_one_coin(lpBalance, 0);
+        }
+
+        // console.log('lpValue');
+        // console.log(lpValue);
+
+        // console.log('lpBalance');
+        // console.log(lpBalance);
+
+        if(stakedBalance == 0) return lpValue;
+
+        uint256 stakedValue = pool.calc_withdraw_one_coin(stakedBalance, 0);
+        
+        // console.log('stakedBalance');
+        // console.log(stakedBalance);
+
+        // console.log('stakedValue');
+        // console.log(stakedValue);
 
         // returns how much do we get if were to withdraw the whole position from convex and curve
-        return pool.calc_withdraw_one_coin(stakedBalance, 0);
+        // plus lp balance
+        return stakedValue + lpValue;
     }
 
     /**
@@ -115,27 +138,27 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice Open a position in convex
      */
     function openPosition(
-        uint256 amount,
         uint256 pid,
+        uint256 amount,
         ERC20 lpToken
     ) public {
-        _addToPosition(amount, pid, lpToken);
+        _addToPosition(pid, amount, lpToken);
     }
 
     /**
      * @notice Add to a position in convex
      */
     function addToPosition(
-        uint256 amount,
         uint256 pid,
+        uint256 amount,
         ERC20 lpToken
     ) public {
-        _addToPosition(amount, pid, lpToken);
+        _addToPosition(pid, amount, lpToken);
     }
 
     function _addToPosition(
-        uint256 amount,
         uint256 pid,
+        uint256 amount,
         ERC20 lpToken
     ) internal {
         lpToken.safeApprove(address(booster()), amount);
