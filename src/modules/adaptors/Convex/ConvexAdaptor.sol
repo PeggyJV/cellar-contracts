@@ -5,7 +5,6 @@ import { BaseAdaptor, ERC20, SafeERC20, Cellar, PriceRouter, Registry, Math } fr
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { IBooster } from "src/interfaces/external/IBooster.sol";
-
 import { IRewardPool } from "src/interfaces/external/IRewardPool.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 
