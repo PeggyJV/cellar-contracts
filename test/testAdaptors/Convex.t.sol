@@ -40,6 +40,7 @@ contract CellarConvexTest is Test {
 
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
+    ERC20 private CRV = ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
 
     ERC20 private LP3CRV = ERC20(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490);
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -283,6 +284,14 @@ contract CellarConvexTest is Test {
         // check we recovered the 1e18 LP
         assertEq(intermediateLPBalance, finalLPBalance - 1e18);
 
+        // time travel to accumulate rewards
+        vm.warp(block.timestamp + 2000);
+        vm.roll(block.number + 5);
+
+        // Check that we are poor before claiming
+        assertEq(CRV.balanceOf(address(cellar)), 0);
+        assertEq(CVX.balanceOf(address(cellar)), 0);
+
         // now, add to the position
         data = new Cellar.AdaptorCall[](1);
         adaptorCalls = new bytes[](1);
@@ -304,6 +313,10 @@ contract CellarConvexTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexAdaptor), callData: adaptorCalls });
 
         cellar.callOnAdaptor(data);
+        
+        // Check that we got some juicy rewards
+        assertGe(CRV.balanceOf(address(cellar)), 0);
+        assertGe(CVX.balanceOf(address(cellar)), 0);
     }
 
     function _createBytesDataToClaimRewards(

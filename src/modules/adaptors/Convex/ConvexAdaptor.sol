@@ -190,6 +190,7 @@ contract ConvexAdaptor is BaseAdaptor {
 
     /**
      * @notice Claims rewards and extras from convex
+     * TODO: distribute these rewards to timelockERC20 adaptor in feat/timelockERC20 branch (out of scope for the hackathon)
      */
     function claimRewards(uint256 pid) public {
         (, , ,address rewardPool, ,) = (booster()).poolInfo(pid);
