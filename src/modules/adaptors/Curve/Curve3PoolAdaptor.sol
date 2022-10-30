@@ -124,18 +124,17 @@ contract Curve3PoolAdaptor is BaseAdaptor {
 
         pool.add_liquidity(amounts, minimumMintAmount);
     }
-    
+
+    error Curve3PoolAdaptor__CallClosePosition();
     /**
      * @notice Strategist attempted to remove all of a positions liquidity using `takeFromPosition`,
      *         but they need to use `closePosition`.
      * @notice If receiving amount of token0 is less than minimumMintAmount function will revert.
      * @param amount lp token amount to be burned.
-     * @param minimumMintAmount receiving at least this amount of token0.
+     * @param minimumAmount receiving at least this amount of token0.
      * @param pool specifies the interface of the pool
      * @param lpToken specifies the interface of the lp token
      */
-    error Curve3PoolAdaptor__CallClosePosition();
-
     function takeFromPosition(
         uint256 amount,
         uint256 minimumAmount,
@@ -151,7 +150,7 @@ contract Curve3PoolAdaptor is BaseAdaptor {
      * @notice Executes the removal of liquidity in one coin: token0.
      * @notice If receiving amount of token0 is less than minimumMintAmount function will revert.
      * @param amount lp token amount to be burned.
-     * @param minimumMintAmount receiving at least this amount of token0.
+     * @param minimumAmount receiving at least this amount of token0.
      * @param pool specifies the interface of the pool
      */
     function _takeFromPosition(
@@ -162,15 +161,14 @@ contract Curve3PoolAdaptor is BaseAdaptor {
         pool.remove_liquidity_one_coin(amount, 0, minimumAmount);
     }
 
+    error Curve3PoolAdaptor__PositionClosed();
     /**
      * @notice Strategist use `closePosition` to remove all of a positions liquidity.
      * @notice If receiving amount of token0 is less than minimumMintAmount function will revert.
-     * @param minimumMintAmount receiving at least this amount of token0.
+     * @param minimumAmount receiving at least this amount of token0.
      * @param pool specifies the interface of the pool
      * @param lpToken specifies the interface of the lp token
      */
-    error Curve3PoolAdaptor__PositionClosed();
-
     function closePosition(
         uint256 minimumAmount,
         ICurvePool pool,
