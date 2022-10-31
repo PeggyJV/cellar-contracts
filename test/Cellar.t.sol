@@ -6,7 +6,7 @@ import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
 import { Registry, PriceRouter, IGravity } from "src/base/Cellar.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { MockExchange } from "src/mocks/MockExchange.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
@@ -20,7 +20,7 @@ import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract CellarTest is Test {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
@@ -231,7 +231,7 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), assets);
 
         // Try depositing more assets than balance.
-        vm.expectRevert("ERC20: transfer amount exceeds balance");
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         cellar.deposit(assets + 1, address(this));
 
         // Test single deposit.
@@ -249,7 +249,7 @@ contract CellarTest is Test {
         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
         // Try withdrawing more assets than allowed.
-        vm.expectRevert("ERC20: burn amount exceeds balance");
+        vm.expectRevert(stdError.arithmeticError);
         cellar.withdraw(assets + 1, address(this), address(this));
 
         // Test single withdraw.
@@ -269,7 +269,7 @@ contract CellarTest is Test {
         deal(address(USDC), address(this), shares.changeDecimals(18, 6));
 
         // Try minting more assets than balance.
-        vm.expectRevert("ERC20: transfer amount exceeds balance");
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         cellar.mint(shares + 1e18, address(this));
 
         // Test single mint.
@@ -356,6 +356,82 @@ contract CellarTest is Test {
         deal(address(USDC), address(cellar), 1);
         cellar.withdraw(0, address(this), address(this));
         assertEq(USDC.balanceOf(address(this)), 0, "Cellar should not have sent any assets to this address.");
+    }
+
+    function testTransfer() external {
+        // Change cellar share lock period.
+        cellar.setShareLockPeriod(10);
+
+        // Deposit into cellar.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        uint256 shares = cellar.deposit(assets, address(this));
+
+        // Check that withdraw/redeem fails.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.withdraw(assets, address(this), address(this));
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.redeem(shares, address(this), address(this));
+
+        // Check that transfer and transferFrom fails.
+        address me = address(this);
+        address friend = vm.addr(55555);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.transfer(friend, shares);
+
+        cellar.approve(friend, shares / 2);
+        vm.startPrank(friend);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__SharesAreLocked.selector,
+                    block.number + cellar.shareLockPeriod(),
+                    block.number
+                )
+            )
+        );
+        cellar.transferFrom(me, friend, shares);
+        vm.stopPrank();
+
+        // Advance time so shares are unlocked.
+        vm.roll(block.number + cellar.shareLockPeriod());
+
+        // Check that transfer complies with ERC20 standards.
+        assertTrue(cellar.transfer(friend, shares / 2), "transfer should return true.");
+        assertEq(cellar.balanceOf(friend), shares / 2, "Friend should have received shares.");
+        assertEq(cellar.balanceOf(me), shares / 2, "I should have sent shares.");
+
+        // Check that transferFrom complies with ERC20 standards.
+        vm.prank(friend);
+        assertTrue(cellar.transferFrom(me, friend, shares / 2), "transferFrom should return true.");
+        assertEq(cellar.balanceOf(friend), shares, "Friend should have received shares.");
+        assertEq(cellar.balanceOf(me), 0, "I should have sent shares.");
+        assertEq(cellar.allowance(me, friend), 0, "Friend should have used all their allowance.");
     }
 
     // ========================================== POSITIONS TEST ==========================================

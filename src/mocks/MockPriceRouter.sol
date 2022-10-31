@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { MockExchange } from "src/mocks/MockExchange.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Math } from "src/utils/Math.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 

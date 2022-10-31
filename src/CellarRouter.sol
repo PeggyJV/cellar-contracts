@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, ERC20Permit, SafeERC20 } from "src/base/ERC4626.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC4626, ERC20, SafeTransferLib } from "src/base/ERC4626.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
@@ -17,7 +16,7 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
  * @author Brian Le
  */
 contract CellarRouter is ICellarRouter {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
 
     uint256 public constant SWAP_ROUTER_REGISTRY_SLOT = 1;
 
@@ -56,7 +55,7 @@ contract CellarRouter is ICellarRouter {
 
         // Approve the assets from the user to the router via permit.
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
-        ERC20Permit(address(asset)).permit(msg.sender, address(this), assets, deadline, v, r, s);
+        asset.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Transfer assets from the user to the router.
         asset.safeTransferFrom(msg.sender, address(this), assets);
@@ -132,7 +131,7 @@ contract CellarRouter is ICellarRouter {
     ) external returns (uint256 shares) {
         // Approve for router to burn user shares via permit.
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(signature);
-        ERC20Permit(address(assetIn)).permit(msg.sender, address(this), assets, deadline, v, r, s);
+        assetIn.permit(msg.sender, address(this), assets, deadline, v, r, s);
 
         // Deposit assets into the cellar using a swap if necessary.
         shares = depositAndSwap(cellar, exchange, swapData, assets, assetIn);

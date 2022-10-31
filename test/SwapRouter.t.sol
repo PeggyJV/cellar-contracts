@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
@@ -92,7 +92,7 @@ abstract contract SwapRouterTest is Test {
 
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets);
-        vm.expectRevert("Dai/insufficient-balance");
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         _doSwap(assets * 2);
     }
 
@@ -101,7 +101,7 @@ abstract contract SwapRouterTest is Test {
 
         deal(address(DAI), sender, assets, true);
         DAI.approve(address(swapRouter), assets / 2);
-        vm.expectRevert("Dai/insufficient-allowance");
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         _doSwap(assets);
     }
 

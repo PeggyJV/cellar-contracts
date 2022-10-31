@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeERC20, Cellar, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
@@ -11,7 +11,7 @@ import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
  * @author crispymangoes
  */
 contract AaveATokenAdaptor is BaseAdaptor {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(address aToken)

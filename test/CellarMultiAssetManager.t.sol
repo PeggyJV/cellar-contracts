@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 
 import { Test, console } from "@forge-std/Test.sol";

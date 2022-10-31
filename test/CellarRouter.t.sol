@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { CellarRouter } from "src/CellarRouter.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
@@ -312,7 +312,7 @@ contract CellarRouterTest is Test {
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
         bytes memory swapData = abi.encode(path, assets, 0);
-        vm.expectRevert("ERC20: transfer amount exceeds allowance");
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         // Specify USDC as assetIn when it should be DAI.
         router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, USDC);
     }
@@ -328,7 +328,7 @@ contract CellarRouterTest is Test {
         // Previously a user sent DAI to the router on accident.
         deal(address(DAI), address(router), assets);
         bytes memory swapData = abi.encode(path, assets, 0);
-        vm.expectRevert("Dai/insufficient-allowance");
+        vm.expectRevert("TRANSFER_FROM_FAILED");
         // Specify 0 for assets. Should revert since swap router is approved to spend 0 tokens from router.
         router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, 0, DAI);
 
