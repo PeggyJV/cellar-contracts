@@ -8,4 +8,3 @@ ds-test/=lib/forge-std/lib/ds-test/src/
 @chainlink/=lib/chainlink/
 @uniswapV3P=lib/v3-periphery.git/contracts/
 @uniswapV3C=lib/v3-core.git/contracts/
-@cellar-v1_5=lib/cellar-v1_5/src/
