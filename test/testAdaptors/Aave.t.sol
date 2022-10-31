@@ -487,9 +487,9 @@ contract CellarAaveTest is Test {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
+        bytes memory params = abi.encode(uint8(1), path, poolFees, fromAmount, 0);
         return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.BASIC, params);
     }
 
     function _createBytesDataToLend(ERC20 tokenToLend, uint256 amountToLend) internal pure returns (bytes memory) {
@@ -523,14 +523,14 @@ contract CellarAaveTest is Test {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = fee;
-        bytes memory params = abi.encode(path, poolFees, amount, 0);
+        bytes memory params = abi.encode(uint8(1), path, poolFees, amount, 0);
         return
             abi.encodeWithSelector(
                 AaveDebtTokenAdaptor.swapAndRepay.selector,
                 from,
                 to,
                 amount,
-                SwapRouter.Exchange.UNIV3,
+                SwapRouter.Exchange.BASIC,
                 params
             );
     }

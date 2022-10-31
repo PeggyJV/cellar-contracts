@@ -411,9 +411,9 @@ contract UniswapV3AdaptorTest is Test {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
+        bytes memory params = abi.encode(uint8(1), path, poolFees, fromAmount, 0);
         return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.BASIC, params);
     }
 
     function _createBytesDataToOpenLP(

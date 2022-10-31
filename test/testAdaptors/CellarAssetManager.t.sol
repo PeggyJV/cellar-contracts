@@ -186,13 +186,13 @@ contract CellarAssetManagerTest is Test {
         address[] memory path = new address[](2);
         path[0] = address(USDC);
         path[1] = address(WETH);
-        bytes memory swapParams = abi.encode(path, assets, 0);
+        bytes memory swapParams = abi.encode(uint8(0), path, assets, 0);
         adaptorCalls[1] = abi.encodeWithSelector(
             BaseAdaptor.swap.selector,
             USDC,
             WETH,
             assets,
-            SwapRouter.Exchange.UNIV2,
+            SwapRouter.Exchange.BASIC,
             swapParams
         );
 
@@ -229,13 +229,13 @@ contract CellarAssetManagerTest is Test {
         address[] memory path = new address[](2);
         path[0] = address(USDC);
         path[1] = address(WETH);
-        bytes memory swapParams = abi.encode(path, assets, 0);
+        bytes memory swapParams = abi.encode(uint8(0), path, assets, 0);
         adaptorCalls[0] = abi.encodeWithSelector(
             BaseAdaptor.swap.selector,
             USDC,
             WETH,
             assets,
-            SwapRouter.Exchange.UNIV2,
+            SwapRouter.Exchange.BASIC,
             swapParams
         );
 
@@ -263,13 +263,13 @@ contract CellarAssetManagerTest is Test {
         address[] memory path = new address[](2);
         path[0] = address(USDC);
         path[1] = address(WBTC); // WBTC is an untracked position.
-        bytes memory swapParams = abi.encode(path, assets, 0);
+        bytes memory swapParams = abi.encode(uint8(0), path, assets, 0);
         adaptorCalls[0] = abi.encodeWithSelector(
             BaseAdaptor.swap.selector,
             USDC,
             WBTC,
             assets,
-            SwapRouter.Exchange.UNIV2,
+            SwapRouter.Exchange.BASIC,
             swapParams
         );
 
@@ -343,13 +343,13 @@ contract CellarAssetManagerTest is Test {
         address[] memory path = new address[](2);
         path[0] = address(USDC);
         path[1] = address(WETH);
-        bytes memory swapParams = abi.encode(path, assets, 0);
+        bytes memory swapParams = abi.encode(uint8(0), path, assets, 0);
         adaptorCalls[0] = abi.encodeWithSelector(
             BaseAdaptor.swap.selector,
             USDC,
             WETH,
             assets,
-            SwapRouter.Exchange.UNIV2,
+            SwapRouter.Exchange.BASIC,
             swapParams
         );
 
@@ -446,13 +446,13 @@ contract CellarAssetManagerTest is Test {
         path[1] = address(WBTC);
         uint256 amount = 500_000e6;
 
-        bytes memory swapParams = abi.encode(path, amount, 0);
+        bytes memory swapParams = abi.encode(uint8(0), path, amount, 0);
         adaptorCalls[0] = abi.encodeWithSelector(
             BaseAdaptor.swap.selector,
             USDC,
             WETH,
             amount,
-            SwapRouter.Exchange.UNIV2,
+            SwapRouter.Exchange.BASIC,
             swapParams
         );
 
@@ -776,13 +776,13 @@ contract CellarAssetManagerTest is Test {
         address[] memory path = new address[](2);
         path[0] = address(from);
         path[1] = address(to);
-        bytes memory swapParams = abi.encode(path, amount, 0);
+        bytes memory swapParams = abi.encode(uint8(0), path, amount, 0);
         adaptorCalls[0] = abi.encodeWithSelector(
             BaseAdaptor.swap.selector,
             from,
             to,
             amount,
-            SwapRouter.Exchange.UNIV2,
+            SwapRouter.Exchange.BASIC,
             swapParams
         );
 

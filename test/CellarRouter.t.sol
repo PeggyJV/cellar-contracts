@@ -162,11 +162,11 @@ contract CellarRouterTest is Test {
         // Test deposit and swap.
         deal(address(USDC), pOwner, assets);
 
-        bytes memory swapData = abi.encode(path, assets, 0);
+        bytes memory swapData = abi.encode(uint8(0), path, assets, 0);
         vm.prank(pOwner);
         uint256 shares = router.depositAndSwapWithPermit(
             wethCellar,
-            SwapRouter.Exchange.UNIV2,
+            SwapRouter.Exchange.BASIC,
             swapData,
             assets,
             USDC,
@@ -204,8 +204,8 @@ contract CellarRouterTest is Test {
         // Test deposit and swap.
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
-        bytes memory swapData = abi.encode(path, assets, 0);
-        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
+        bytes memory swapData = abi.encode(uint8(0), path, assets, 0);
+        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, assets, DAI);
 
         // Assets received by the cellar will be equal to WETH currently in forked cellar because no
         // other deposits have been made.
@@ -243,8 +243,8 @@ contract CellarRouterTest is Test {
         // Test deposit and swap.
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
-        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV3, swapData, assets, DAI);
+        bytes memory swapData = abi.encode(uint8(1), path, poolFees, assets, 0);
+        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, assets, DAI);
 
         // Assets received by the cellar will be equal to WETH currently in forked cellar because no
         // other deposits have been made.
@@ -277,8 +277,8 @@ contract CellarRouterTest is Test {
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
         // Encode swap data to only use half the assets.
-        bytes memory swapData = abi.encode(path, assets / 2, 0);
-        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
+        bytes memory swapData = abi.encode(uint8(0), path, assets / 2, 0);
+        uint256 shares = router.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, assets, DAI);
 
         // Assets received by the cellar will be equal to WETH currently in forked cellar because no
         // other deposits have been made.
@@ -313,10 +313,10 @@ contract CellarRouterTest is Test {
         // Test deposit and swap.
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
-        bytes memory swapData = abi.encode(path, assets, 0);
+        bytes memory swapData = abi.encode(uint8(0), path, assets, 0);
         vm.expectRevert("ERC20: transfer amount exceeds allowance");
         // Specify USDC as assetIn when it should be DAI.
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, USDC);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, assets, USDC);
     }
 
     function testDepositWithAssetAmountMisMatch() external {
@@ -329,10 +329,10 @@ contract CellarRouterTest is Test {
 
         // Previously a user sent DAI to the router on accident.
         deal(address(DAI), address(router), assets);
-        bytes memory swapData = abi.encode(path, assets, 0);
+        bytes memory swapData = abi.encode(uint8(0), path, assets, 0);
         vm.expectRevert("Dai/insufficient-allowance");
         // Specify 0 for assets. Should revert since swap router is approved to spend 0 tokens from router.
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, 0, DAI);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, 0, DAI);
 
         // Reset routers DAI balance.
         deal(address(DAI), address(router), 0);
@@ -342,8 +342,8 @@ contract CellarRouterTest is Test {
         DAI.approve(address(router), assets);
 
         // User calls deposit and swap but specifies a lower amount in swapData then actual.
-        swapData = abi.encode(path, assets / 2, 0);
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
+        swapData = abi.encode(uint8(0), path, assets / 2, 0);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, assets, DAI);
 
         assertEq(DAI.balanceOf(address(this)), assets / 2, "Caller should have been sent back their remaining assets.");
     }
@@ -367,9 +367,9 @@ contract CellarRouterTest is Test {
         // Swap 1: 1.5 WETH -> WBTC on V3.
         // Swap 2: 0.3 WBTC -> USDC on V2.
         SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV3;
-        exchanges[2] = SwapRouter.Exchange.UNIV2;
+        exchanges[0] = SwapRouter.Exchange.BASIC;
+        exchanges[1] = SwapRouter.Exchange.BASIC;
+        exchanges[2] = SwapRouter.Exchange.BASIC;
 
         address[][] memory paths = new address[][](3);
         paths[0] = new address[](2);
@@ -387,9 +387,9 @@ contract CellarRouterTest is Test {
         paths[2][1] = address(USDC);
 
         bytes[] memory swapData = new bytes[](3);
-        swapData[0] = abi.encode(paths[0], 1.5e18, 0);
-        swapData[1] = abi.encode(paths[1], poolFees, 1.5e18, 0);
-        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+        swapData[0] = abi.encode(uint8(0), paths[0], 1.5e18, 0);
+        swapData[1] = abi.encode(uint8(1), paths[1], poolFees, 1.5e18, 0);
+        swapData[2] = abi.encode(uint8(0), paths[2], 0.3e8, 0);
 
         cellar.approve(address(router), type(uint256).max);
         router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(this));
@@ -428,9 +428,9 @@ contract CellarRouterTest is Test {
         // Swap 1: 1.5 WETH -> WBTC on V3.
         // Swap 2: 0.3 WBTC -> USDC on V2.
         SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV3;
-        exchanges[2] = SwapRouter.Exchange.UNIV2;
+        exchanges[0] = SwapRouter.Exchange.BASIC;
+        exchanges[1] = SwapRouter.Exchange.BASIC;
+        exchanges[2] = SwapRouter.Exchange.BASIC;
 
         address[][] memory paths = new address[][](3);
         paths[0] = new address[](2);
@@ -448,9 +448,9 @@ contract CellarRouterTest is Test {
         paths[2][1] = address(USDC);
 
         bytes[] memory swapData = new bytes[](3);
-        swapData[0] = abi.encode(paths[0], 1.5e18, 0);
-        swapData[1] = abi.encode(paths[1], poolFees, 1.5e18, 0);
-        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+        swapData[0] = abi.encode(uint8(0), paths[0], 1.5e18, 0);
+        swapData[1] = abi.encode(uint8(1), paths[1], poolFees, 1.5e18, 0);
+        swapData[2] = abi.encode(uint8(0), paths[2], 0.3e8, 0);
 
         // Create permit sig.
         bytes memory sig;
@@ -526,9 +526,9 @@ contract CellarRouterTest is Test {
 
         // Encode swaps with an invalid swap path
         SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV3;
-        exchanges[2] = SwapRouter.Exchange.UNIV2;
+        exchanges[0] = SwapRouter.Exchange.BASIC;
+        exchanges[1] = SwapRouter.Exchange.BASIC;
+        exchanges[2] = SwapRouter.Exchange.BASIC;
 
         address[][] memory paths = new address[][](3);
         paths[0] = new address[](2);
@@ -546,9 +546,9 @@ contract CellarRouterTest is Test {
         paths[2][1] = address(USDC);
 
         bytes[] memory swapData = new bytes[](3);
-        swapData[0] = abi.encode(paths[0], 1.5e18, 0);
-        swapData[1] = abi.encode(paths[1], poolFees, 1.5e18, 0);
-        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+        swapData[0] = abi.encode(uint8(0), paths[0], 1.5e18, 0);
+        swapData[1] = abi.encode(uint8(1), paths[1], poolFees, 1.5e18, 0);
+        swapData[2] = abi.encode(uint8(0), paths[2], 0.3e8, 0);
 
         cellar.approve(address(router), type(uint256).max);
         router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(this));
@@ -568,9 +568,9 @@ contract CellarRouterTest is Test {
 
         // Encode swaps with an invalid swap path
         SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV3;
-        exchanges[2] = SwapRouter.Exchange.UNIV2;
+        exchanges[0] = SwapRouter.Exchange.BASIC;
+        exchanges[1] = SwapRouter.Exchange.BASIC;
+        exchanges[2] = SwapRouter.Exchange.BASIC;
 
         address[][] memory paths = new address[][](3);
         paths[0] = new address[](2);
@@ -588,10 +588,10 @@ contract CellarRouterTest is Test {
         paths[2][1] = address(USDC);
 
         bytes[] memory swapData = new bytes[](3);
-        swapData[0] = abi.encode(paths[0], 1.5e18, 0);
+        swapData[0] = abi.encode(uint8(0), paths[0], 1.5e18, 0);
         // Do not encode the poolFees argument.
-        swapData[1] = abi.encode(paths[1], 1.5e18, 0);
-        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+        swapData[1] = abi.encode(uint8(1), paths[1], 1.5e18, 0);
+        swapData[2] = abi.encode(uint8(0), paths[2], 0.3e8, 0);
 
         cellar.approve(address(router), type(uint256).max);
         router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(this));
@@ -611,9 +611,9 @@ contract CellarRouterTest is Test {
 
         // Encode swaps with an invalid swap path
         SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV3;
-        exchanges[2] = SwapRouter.Exchange.UNIV2;
+        exchanges[0] = SwapRouter.Exchange.BASIC;
+        exchanges[1] = SwapRouter.Exchange.BASIC;
+        exchanges[2] = SwapRouter.Exchange.BASIC;
 
         address[][] memory paths = new address[][](3);
         paths[0] = new address[](2);
@@ -632,9 +632,9 @@ contract CellarRouterTest is Test {
 
         bytes[] memory swapData = new bytes[](3);
         // Encode an invalid min amount out.
-        swapData[0] = abi.encode(paths[0], 1.5e18, type(uint256).max);
-        swapData[1] = abi.encode(paths[1], poolFees, 1.5e18, 0);
-        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+        swapData[0] = abi.encode(uint8(0), paths[0], 1.5e18, type(uint256).max);
+        swapData[1] = abi.encode(uint8(1), paths[1], poolFees, 1.5e18, 0);
+        swapData[2] = abi.encode(uint8(0), paths[2], 0.3e8, 0);
 
         cellar.approve(address(router), type(uint256).max);
         router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(this));
@@ -654,9 +654,9 @@ contract CellarRouterTest is Test {
 
         // Encode swaps with an invalid swap path
         SwapRouter.Exchange[] memory exchanges = new SwapRouter.Exchange[](3);
-        exchanges[0] = SwapRouter.Exchange.UNIV2;
-        exchanges[1] = SwapRouter.Exchange.UNIV3;
-        exchanges[2] = SwapRouter.Exchange.UNIV2;
+        exchanges[0] = SwapRouter.Exchange.BASIC;
+        exchanges[1] = SwapRouter.Exchange.BASIC;
+        exchanges[2] = SwapRouter.Exchange.BASIC;
 
         address[][] memory paths = new address[][](3);
         paths[0] = new address[](2);
@@ -675,9 +675,9 @@ contract CellarRouterTest is Test {
 
         bytes[] memory swapData = new bytes[](3);
         // Encode an invalid min amount out.
-        swapData[0] = abi.encode(paths[0], 1.5e18, 0);
-        swapData[1] = abi.encode(paths[1], poolFees, 1.5e18, 0);
-        swapData[2] = abi.encode(paths[2], 0.3e8, 0);
+        swapData[0] = abi.encode(uint8(0), paths[0], 1.5e18, 0);
+        swapData[1] = abi.encode(uint8(1), paths[1], poolFees, 1.5e18, 0);
+        swapData[2] = abi.encode(uint8(0), paths[2], 0.3e8, 0);
 
         cellar.approve(address(router), type(uint256).max);
         router.withdrawAndSwap(cellar, exchanges, swapData, cellar.totalAssets(), address(0));
@@ -697,11 +697,11 @@ contract CellarRouterTest is Test {
         // Test deposit and swap.
         deal(address(DAI), address(this), assets);
         DAI.approve(address(router), assets);
-        bytes memory swapData = abi.encode(path, assets, 0);
+        bytes memory swapData = abi.encode(uint8(0), path, assets, 0);
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Cellar.Cellar__NotApprovedToDepositOnBehalf.selector, address(router)))
         );
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, assets, DAI);
 
         // Grant depositor privilege.
         registry.setApprovedForDepositOnBehalf(address(router), true);
@@ -709,7 +709,7 @@ contract CellarRouterTest is Test {
         // Require shares are held for 8 blocks.
         cellar.setShareLockPeriod(8);
 
-        router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
+        router.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, assets, DAI);
         // Receiver should not be able to redeem, withdraw, or transfer shares for locking period.
         uint256 shares = cellar.balanceOf(address(this));
         vm.expectRevert(

@@ -25,10 +25,8 @@ contract SwapRouter is Multicall {
      * @param UNIV3 Uniswap V3
      */
     enum Exchange {
-        UNIV2,
-        UNIV3,
-        ZRX,
-        N
+        BASIC,
+        AGGREGATOR
     }
 
     /**
@@ -67,9 +65,8 @@ contract SwapRouter is Multicall {
         zeroXExchangeProxy = _zeroXExchangeProxy;
 
         // Set up mapping between IDs and selectors.
-        getExchangeSelector[Exchange.UNIV2] = SwapRouter(this).swapWith0x.selector;
-        getExchangeSelector[Exchange.UNIV3] = SwapRouter(this).swapWithUniV3.selector;
-        getExchangeSelector[Exchange.ZRX] = SwapRouter(this).swapWith0x.selector;
+        getExchangeSelector[Exchange.BASIC] = SwapRouter(this).swapWithUniswap.selector;
+        getExchangeSelector[Exchange.AGGREGATOR] = SwapRouter(this).swapWith0x.selector;
     }
 
     // ======================================= SWAP OPERATIONS =======================================
@@ -126,6 +123,72 @@ contract SwapRouter is Multicall {
         }
 
         amountOut = abi.decode(result, (uint256));
+    }
+
+    function swapWithUniswap(
+        bytes memory swapData,
+        address receiver,
+        ERC20 assetIn,
+        ERC20 assetOut
+    ) public returns (uint256 amountOut) {
+        // bool swapType;
+        address[] memory path;
+        uint256 amount;
+        uint256 amountOutMin;
+        uint24[] memory poolFees;
+        uint8 swapType = abi.decode(swapData, (uint8));
+        if (swapType == 0) {
+            (, path, amount, amountOutMin) = abi.decode(swapData, (uint8, address[], uint256, uint256));
+        } else {
+            (, path, poolFees, amount, amountOutMin) = abi.decode(
+                swapData,
+                (uint8, address[], uint24[], uint256, uint256)
+            );
+        }
+
+        // Check that path matches assetIn and assetOut.
+        if (assetIn != ERC20(path[0])) revert SwapRouter__AssetInMisMatch(path[0], address(assetIn));
+        if (assetOut != ERC20(path[path.length - 1]))
+            revert SwapRouter__AssetOutMisMatch(path[path.length - 1], address(assetOut));
+
+        // Transfer assets to this contract to swap.
+        assetIn.safeTransferFrom(msg.sender, address(this), amount);
+
+        // Approve assets to be swapped through the router.
+        assetIn.safeApprove(address(uniswapV2Router), amount);
+
+        if (swapType == 0) {
+            // Execute the swap.
+            uint256[] memory amountsOut = uniswapV2Router.swapExactTokensForTokens(
+                amount,
+                amountOutMin,
+                path,
+                receiver,
+                block.timestamp + 60
+            );
+
+            amountOut = amountsOut[amountsOut.length - 1];
+
+            _checkApprovalIsZero(assetIn, address(uniswapV2Router));
+        } else if (swapType == 1) {
+            // Encode swap parameters.
+            bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
+            for (uint256 i = 1; i < path.length; i++)
+                encodePackedPath = abi.encodePacked(encodePackedPath, poolFees[i - 1], path[i]);
+
+            // Execute the swap.
+            amountOut = uniswapV3Router.exactInput(
+                IUniswapV3Router.ExactInputParams({
+                    path: encodePackedPath,
+                    recipient: receiver,
+                    deadline: block.timestamp + 60,
+                    amountIn: amount,
+                    amountOutMinimum: amountOutMin
+                })
+            );
+
+            _checkApprovalIsZero(assetIn, address(uniswapV3Router));
+        }
     }
 
     /**

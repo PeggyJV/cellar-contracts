@@ -109,7 +109,7 @@ abstract contract SwapRouterTest is Test {
 
     function testInvalidSwapData() external {
         vm.expectRevert(SwapRouter.SwapRouter__SwapReverted.selector);
-        swapRouter.swap(SwapRouter.Exchange.UNIV2, abi.encode(0), receiver, ERC20(address(0)), ERC20(address(0)));
+        swapRouter.swap(SwapRouter.Exchange.BASIC, abi.encode(0), receiver, ERC20(address(0)), ERC20(address(0)));
     }
 
     function testInvalidAssetIn() external {
@@ -121,11 +121,11 @@ abstract contract SwapRouterTest is Test {
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = 3000; // 0.3%
 
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        bytes memory swapData = abi.encode(uint8(1), path, poolFees, assets, 0);
         vm.expectRevert(
             bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__AssetInMisMatch.selector, path[0], address(USDC)))
         );
-        swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, USDC, WETH);
+        swapRouter.swap(SwapRouter.Exchange.BASIC, swapData, receiver, USDC, WETH);
     }
 
     function testInvalidAssetOut() external {
@@ -137,11 +137,11 @@ abstract contract SwapRouterTest is Test {
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = 3000; // 0.3%
 
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        bytes memory swapData = abi.encode(uint8(1), path, poolFees, assets, 0);
         vm.expectRevert(
             bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__AssetOutMisMatch.selector, path[1], address(USDC)))
         );
-        swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, USDC);
+        swapRouter.swap(SwapRouter.Exchange.BASIC, swapData, receiver, DAI, USDC);
     }
 
     function test0xSwap() external {
@@ -152,7 +152,7 @@ abstract contract SwapRouterTest is Test {
             memory data = hex"415565b00000000000000000000000006b175474e89094c44da98b954eedeac495271d0f000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4800000000000000000000000000000000000000000000d3c21bcecceda1000000000000000000000000000000000000000000000000000000000000e680992c0000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000380000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000002e0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006b175474e89094c44da98b954eedeac495271d0f000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000002a000000000000000000000000000000000000000000000000000000000000002a0000000000000000000000000000000000000000000000000000000000000026000000000000000000000000000000000000000000000d3c21bcecceda1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002a000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000104d616b657250736d000000000000000000000000000000000000000000000000000000000000d3c21bcecceda1000000000000000000000000000000000000000000000000000000000000e680992c000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000004000000000000000000000000089b78cfa322f6c5de0abceecab66aee45393cc5a000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000020000000000000000000000006b175474e89094c44da98b954eedeac495271d0f000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000000000000000000000000000000000000000000000000000000869584cd0000000000000000000000001000000000000000000000000000000000000011000000000000000000000000000000000000000000000026f658f417635c0f73";
         address allowanceTarget = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
         bytes memory swapData = abi.encode(assets, allowanceTarget, allowanceTarget, data);
-        swapRouter.swap(SwapRouter.Exchange.ZRX, swapData, receiver, DAI, USDC);
+        swapRouter.swap(SwapRouter.Exchange.AGGREGATOR, swapData, receiver, DAI, USDC);
         assertTrue(USDC.balanceOf(sender) > 0, "Sender should have received USDC from the swap.");
     }
 }
@@ -163,8 +163,8 @@ contract UniswapV2SwapRouterTest is SwapRouterTest {
         path[0] = address(DAI);
         path[1] = address(WETH);
 
-        bytes memory swapData = abi.encode(path, assets, 0);
-        received = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver, DAI, WETH);
+        bytes memory swapData = abi.encode(uint8(0), path, assets, 0);
+        received = swapRouter.swap(SwapRouter.Exchange.BASIC, swapData, receiver, DAI, WETH);
     }
 
     function _doMultiSwap(uint256 assets) internal override returns (uint256 received) {
@@ -173,8 +173,8 @@ contract UniswapV2SwapRouterTest is SwapRouterTest {
         path[1] = address(USDC);
         path[2] = address(WETH);
 
-        bytes memory swapData = abi.encode(path, assets, 0);
-        received = swapRouter.swap(SwapRouter.Exchange.UNIV2, swapData, receiver, DAI, WETH);
+        bytes memory swapData = abi.encode(uint8(0), path, assets, 0);
+        received = swapRouter.swap(SwapRouter.Exchange.BASIC, swapData, receiver, DAI, WETH);
     }
 }
 
@@ -187,8 +187,8 @@ contract UniswapV3SwapRouterTest is SwapRouterTest {
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = 3000; // 0.3%
 
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
-        received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, WETH);
+        bytes memory swapData = abi.encode(uint8(1), path, poolFees, assets, 0);
+        received = swapRouter.swap(SwapRouter.Exchange.BASIC, swapData, receiver, DAI, WETH);
     }
 
     function _doMultiSwap(uint256 assets) internal override returns (uint256 received) {
@@ -201,7 +201,7 @@ contract UniswapV3SwapRouterTest is SwapRouterTest {
         poolFees[0] = 100; // 0.01%
         poolFees[1] = 3000; // 0.3%
 
-        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
-        received = swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, WETH);
+        bytes memory swapData = abi.encode(uint8(1), path, poolFees, assets, 0);
+        received = swapRouter.swap(SwapRouter.Exchange.BASIC, swapData, receiver, DAI, WETH);
     }
 }
