@@ -50,6 +50,8 @@ contract SwapRouter is Multicall {
 
     address public immutable zeroXExchangeProxy;
 
+    //TODO does this change?
+
     /**
      * @param _uniswapV2Router address of the Uniswap V2 swap router contract
      * @param _uniswapV3Router address of the Uniswap V3 swap router contract
@@ -125,6 +127,17 @@ contract SwapRouter is Multicall {
         amountOut = abi.decode(result, (uint256));
     }
 
+    /**
+     * @notice Perform a basic swap using Uniswap V2/V3.
+     * @param swapData bytes variable storing the following swap information
+     *      uint8 swapType: 0 for V2, 1 for V3.
+     *      address[] path: array of addresses dictating what swap path to follow
+     *      uint24[] poolFees(if swapType == 1): array of pool fees dictating what swap pools to use
+     *      uint256 amount: amount of the first asset in the path to swap
+     *      uint256 amountOutMin: the minimum amount of the last asset in the path to receive
+     * @param receiver address to send the received assets to
+     * @return amountOut amount of assets received from the swap
+     */
     function swapWithUniswap(
         bytes memory swapData,
         address receiver,
@@ -154,10 +167,10 @@ contract SwapRouter is Multicall {
         // Transfer assets to this contract to swap.
         assetIn.safeTransferFrom(msg.sender, address(this), amount);
 
-        // Approve assets to be swapped through the router.
-        assetIn.safeApprove(address(uniswapV2Router), amount);
-
         if (swapType == 0) {
+            // Approve assets to be swapped through the router.
+            assetIn.safeApprove(address(uniswapV2Router), amount);
+
             // Execute the swap.
             uint256[] memory amountsOut = uniswapV2Router.swapExactTokensForTokens(
                 amount,
@@ -171,6 +184,9 @@ contract SwapRouter is Multicall {
 
             _checkApprovalIsZero(assetIn, address(uniswapV2Router));
         } else if (swapType == 1) {
+            // Approve assets to be swapped through the router.
+            assetIn.safeApprove(address(uniswapV3Router), amount);
+
             // Encode swap parameters.
             bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
             for (uint256 i = 1; i < path.length; i++)
@@ -192,114 +208,17 @@ contract SwapRouter is Multicall {
     }
 
     /**
-     * @notice Perform a swap using Uniswap V2.
-     * @param swapData bytes variable storing the following swap information:
-     *      address[] path: array of addresses dictating what swap path to follow
-     *      uint256 amount: amount of the first asset in the path to swap
-     *      uint256 amountOutMin: the minimum amount of the last asset in the path to receive
-     * @param receiver address to send the received assets to
-     * @return amountOut amount of assets received from the swap
-     */
-    function swapWithUniV2(
-        bytes memory swapData,
-        address receiver,
-        ERC20 assetIn,
-        ERC20 assetOut
-    ) public returns (uint256 amountOut) {
-        (address[] memory path, uint256 amount, uint256 amountOutMin) = abi.decode(
-            swapData,
-            (address[], uint256, uint256)
-        );
-
-        // Check that path matches assetIn and assetOut.
-        if (assetIn != ERC20(path[0])) revert SwapRouter__AssetInMisMatch(path[0], address(assetIn));
-        if (assetOut != ERC20(path[path.length - 1]))
-            revert SwapRouter__AssetOutMisMatch(path[path.length - 1], address(assetOut));
-
-        // Transfer assets to this contract to swap.
-        assetIn.safeTransferFrom(msg.sender, address(this), amount);
-
-        // Approve assets to be swapped through the router.
-        assetIn.safeApprove(address(uniswapV2Router), amount);
-
-        // Execute the swap.
-        uint256[] memory amountsOut = uniswapV2Router.swapExactTokensForTokens(
-            amount,
-            amountOutMin,
-            path,
-            receiver,
-            block.timestamp + 60
-        );
-
-        amountOut = amountsOut[amountsOut.length - 1];
-
-        _checkApprovalIsZero(assetIn, address(uniswapV2Router));
-    }
-
-    /**
-     * @notice Perform a swap using Uniswap V3.
+     * @notice Perform a swap using 0x.
      * @param swapData bytes variable storing the following swap information
-     *      address[] path: array of addresses dictating what swap path to follow
-     *      uint24[] poolFees: array of pool fees dictating what swap pools to use
      *      uint256 amount: amount of the first asset in the path to swap
-     *      uint256 amountOutMin: the minimum amount of the last asset in the path to receive
-     * @param receiver address to send the received assets to
-     * @return amountOut amount of assets received from the swap
-     */
-    function swapWithUniV3(
-        bytes memory swapData,
-        address receiver,
-        ERC20 assetIn,
-        ERC20 assetOut
-    ) public returns (uint256 amountOut) {
-        (address[] memory path, uint24[] memory poolFees, uint256 amount, uint256 amountOutMin) = abi.decode(
-            swapData,
-            (address[], uint24[], uint256, uint256)
-        );
-
-        // Check that path matches assetIn and assetOut.
-        if (assetIn != ERC20(path[0])) revert SwapRouter__AssetInMisMatch(path[0], address(assetIn));
-        if (assetOut != ERC20(path[path.length - 1]))
-            revert SwapRouter__AssetOutMisMatch(path[path.length - 1], address(assetOut));
-
-        // Transfer assets to this contract to swap.
-        assetIn.safeTransferFrom(msg.sender, address(this), amount);
-
-        // Approve assets to be swapped through the router.
-        assetIn.safeApprove(address(uniswapV3Router), amount);
-
-        // Encode swap parameters.
-        bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
-        for (uint256 i = 1; i < path.length; i++)
-            encodePackedPath = abi.encodePacked(encodePackedPath, poolFees[i - 1], path[i]);
-
-        // Execute the swap.
-        amountOut = uniswapV3Router.exactInput(
-            IUniswapV3Router.ExactInputParams({
-                path: encodePackedPath,
-                recipient: receiver,
-                deadline: block.timestamp + 60,
-                amountIn: amount,
-                amountOutMinimum: amountOutMin
-            })
-        );
-
-        _checkApprovalIsZero(assetIn, address(uniswapV3Router));
-    }
-
-    /**
-     * @notice Perform a swap using Uniswap V3.
-     * @param swapData bytes variable storing the following swap information
-     *      address[] path: array of addresses dictating what swap path to follow
-     *      uint24[] poolFees: array of pool fees dictating what swap pools to use
-     *      uint256 amount: amount of the first asset in the path to swap
-     *      uint256 amountOutMin: the minimum amount of the last asset in the path to receive
-     * @param receiver address to send the received assets to
+     *      address spender: address spending assetIn
+     *      address swapTarget: address swapCallData is made on
+     *      bytes swapCallData: call data to perform arbritrary 0x actions.
      * @return amountOut amount of assets received from the swap
      */
     function swapWith0x(
         bytes memory swapData,
-        address receiver,
+        address,
         ERC20 assetIn,
         ERC20 assetOut
     ) public returns (uint256 amountOut) {
@@ -324,10 +243,6 @@ contract SwapRouter is Multicall {
         _checkApprovalIsZero(assetIn, zeroXExchangeProxy);
         amountOut = assetOut.balanceOf(address(this)) - amountOut;
         assetOut.safeTransfer(msg.sender, amountOut);
-    }
-
-    function callBytes(address msgSender, bytes calldata data) external {
-        // Do nothing
     }
 
     function _checkApprovalIsZero(ERC20 asset, address spender) internal view {

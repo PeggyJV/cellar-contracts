@@ -2,10 +2,10 @@
 pragma solidity 0.8.16;
 
 import { Registry } from "src/Registry.sol";
-import { Cellar } from "src//base/Cellar.sol";
+import { ICellarV1_5 as Cellar } from "src/interfaces/ICellarV1_5.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
-import { CellarRouter } from "src/CellarRouter.sol";
+import { ICellarRouterV1_5 as CellarRouter } from "src/interfaces/ICellarRouterV1_5.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -56,76 +56,80 @@ contract SwapRouterIntegrationTest is Test {
     }
 
     function _testCellar(Cellar cellar) internal {
-        // uint256 userAssets = 10_000e6;
-        // //  Have user deposit into Cellar
-        // uint256 currentTotalAssets = cellar.totalAssets();
-        // deal(address(USDC), address(this), userAssets);
-        // USDC.approve(address(cellar), userAssets);
-        // cellar.deposit(userAssets, address(this));
-        // assertEq(cellar.totalAssets(), currentTotalAssets + userAssets, "Total assets should equal 100,000 USDC.");
-        // // Have a different user use the Cellar Router to Deposit and Swap into the cellar.
-        // userAssets = 10_000e18;
-        // currentTotalAssets = cellar.totalAssets();
-        // deal(address(DAI), address(this), userAssets);
-        // DAI.approve(address(cellarRouter), userAssets);
-        // address[] memory path = new address[](2);
-        // path[0] = address(DAI);
-        // path[1] = address(USDC);
-        // uint24[] memory poolFees = new uint24[](1);
-        // poolFees[0] = 100; // 0.01%
-        // bytes memory swapData = abi.encode(uint8(1), path, poolFees, userAssets, 0);
-        // cellarRouter.depositAndSwap(cellar, SwapRouter.Exchange.BASIC, swapData, userAssets, DAI);
-        // // Strategist swaps 10,000 USDC for wBTC on UniV3.
-        // vm.startPrank(gravityBridge);
-        // address[] memory path = new address[](2);
-        // path[0] = address(USDC);
-        // path[1] = address(WBTC);
-        // uint24[] memory poolFees = new uint24[](1);
-        // poolFees[0] = 3000; // 0.3% fee
-        // uint256 amount = 10_000e6;
-        // bytes memory params = abi.encode(path, poolFees, amount, 0);
-        // cellar.rebalance(address(USDC), address(WBTC), amount, SwapRouter.Exchange.UNIV3, params);
-        // vm.stopPrank();
-        // // Strategist swaps 10,000 USDC for wBTC on UniV2.
-        // vm.startPrank(gravityBridge);
-        // path = new address[](3);
-        // path[0] = address(USDC);
-        // path[1] = address(WETH);
-        // path[2] = address(WBTC);
-        // amount = 10_000e6;
-        // params = abi.encode(path, amount, 0);
-        // ICellarV15(address(cellar)).rebalance(address(USDC), address(WBTC), amount, SwapRouter.Exchange.UNIV2, params);
-        // vm.stopPrank();
-        // assertApproxEqRel(
-        //     cellar.totalAssets(),
-        //     tvl + 100_000e6,
-        //     0.005e18,
-        //     "Total assets should approximately be equal to 100,000 USDC."
-        // );
-        // Mint cellar some USDC to simulate gains.
-        // deal(address(USDC), address(cellar), 100_000e6);
-        // // Fast forward time by 0.25 days
-        // skip(21600);
-        // // Strategist changes fee share payout address.
-        // vm.startPrank(gravityBridge);
-        // address newPayout = vm.addr(7);
-        // cellar.setStrategistPayoutAddress(newPayout);
-        // vm.stopPrank();
-        // // Call `sendFees` to mint performance/platform fees.
-        // cellar.sendFees();
-        // assertTrue(cellar.balanceOf(newPayout) > 0, "Strategist should have been minted shares for fees.");
-        // vm.roll(block.number + cellar.shareLockPeriod());
-        // // Have cellar rebalance using 0x.
-        // console.log("USDC Balance", USDC.balanceOf(address(cellar)));
-        // address allowanceTarget = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
-        // uint256 assets = 10_000e6;
-        // bytes
-        //     memory data = hex"6af479b2000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000002540be4000000000000000000000000000000000000000000000000000000000002dafc4c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f42260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000000000000000000000869584cd000000000000000000000000100000000000000000000000000000000000001100000000000000000000000000000000000000000000007153fbe76e635c1cd8";
-        // bytes memory swapData = abi.encode(assets, allowanceTarget, allowanceTarget, data);
-        // vm.startPrank(gravityBridge);
-        // console.log("WBTC Cellar Balance", WBTC.balanceOf(address(cellar)));
-        // cellar.rebalance(address(USDC), address(WBTC), assets, SwapRouter.Exchange.UNIV2, swapData);
-        // console.log("WBTC Cellar Balance!", WBTC.balanceOf(address(cellar)));
-        // vm.stopPrank();
+        uint256 userAssets = 10_000e6;
+        //  Have user deposit into Cellar
+        uint256 currentTotalAssets = cellar.totalAssets();
+        deal(address(USDC), address(this), userAssets);
+        USDC.approve(address(cellar), userAssets);
+        cellar.deposit(userAssets, address(this));
+        assertEq(cellar.totalAssets(), currentTotalAssets + userAssets, "Total assets should equal 100,000 USDC.");
+        // Use the Cellar Router to Deposit and Swap into the cellar.
+        userAssets = 10_000e18;
+        currentTotalAssets = cellar.totalAssets();
+        deal(address(DAI), address(this), userAssets);
+        DAI.approve(address(cellarRouter), userAssets);
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(USDC);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 100; // 0.01%
+        bytes memory swapData = abi.encode(uint8(1), path, poolFees, userAssets, 0);
+        cellarRouter.depositAndSwap(
+            address(cellar),
+            uint8(SwapRouter.Exchange.BASIC),
+            swapData,
+            userAssets,
+            address(DAI)
+        );
+        currentTotalAssets = cellar.totalAssets();
+
+        // Strategist swaps 10,000 USDC for wBTC on UniV3.
+        vm.startPrank(gravityBridge);
+        path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WBTC);
+        poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3% fee
+        uint256 amount = 10_000e6;
+        bytes memory params = abi.encode(uint8(1), path, poolFees, amount, 0);
+        cellar.rebalance(address(USDC), address(WBTC), amount, uint8(0), params);
+        vm.stopPrank();
+
+        // Strategist swaps 10,000 USDC for wBTC on UniV2.
+        vm.startPrank(gravityBridge);
+        path = new address[](3);
+        path[0] = address(USDC);
+        path[1] = address(WETH);
+        path[2] = address(WBTC);
+        amount = 10_000e6;
+        params = abi.encode(uint8(0), path, amount, 0);
+        cellar.rebalance(address(USDC), address(WBTC), amount, uint8(0), params);
+        vm.stopPrank();
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            currentTotalAssets,
+            0.005e18,
+            "Total assets should approximately be equal to 100,000 USDC."
+        );
+
+        // Have cellar rebalance using 0x.
+        // API Query to get most recent data.
+        //https://api.0x.org/swap/v1/quote?buyToken=WBTC&sellToken=USDC&sellAmount=10000000000
+        address allowanceTarget = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+        uint256 assets = 10_000e6;
+        bytes
+            memory data = hex"6af479b2000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000002540be4000000000000000000000000000000000000000000000000000000000002e4067200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000042a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f4c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f42260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000000000000000000000000000000000000000869584cd00000000000000000000000010000000000000000000000000000000000000110000000000000000000000000000000000000000000000fd53a464b263601c69";
+        swapData = abi.encode(assets, allowanceTarget, allowanceTarget, data);
+        vm.startPrank(gravityBridge);
+        cellar.rebalance(address(USDC), address(WBTC), assets, uint8(1), swapData);
+        vm.stopPrank();
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            currentTotalAssets,
+            0.005e18,
+            "Total assets should approximately be equal to 100,000 USDC."
+        );
     }
 }
