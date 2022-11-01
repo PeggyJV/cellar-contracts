@@ -16,8 +16,6 @@ jobs:
           version: nightly
 
       - name: Install Dependencies
-        run: npm install
-      - name: Update Modules
-        run: npm run update
-      - name: Run linter
-        run: npm run lint
+        run: yarn install
+      - name: Install Forge Dependencies
+        run: forge install
