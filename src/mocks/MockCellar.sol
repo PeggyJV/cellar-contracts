@@ -45,7 +45,7 @@ contract MockCellar is Cellar, Test {
         shares = _depositIntoPosition(position, amount);
 
         // Increase totalSupply by shares amount.
-        stdstore.target(address(this)).sig(this.totalSupply.selector).checked_write(totalSupply() + shares);
+        stdstore.target(address(this)).sig(this.totalSupply.selector).checked_write(totalSupply + shares);
     }
 
     function _depositIntoPosition(uint32 position, uint256 amount) internal returns (uint256 shares) {

@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { ERC4626 } from "src/base/ERC4626.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Math } from "../utils/Math.sol";
 import { Test, console } from "@forge-std/Test.sol";
 
@@ -16,7 +16,7 @@ contract LockedERC4626 is ERC4626, Test {
         string memory _name,
         string memory _symbol,
         uint256 _percentLocked
-    ) ERC4626(_asset, _name, _symbol) {
+    ) ERC4626(_asset, _name, _symbol, 18) {
         percentLocked = _percentLocked;
     }
 

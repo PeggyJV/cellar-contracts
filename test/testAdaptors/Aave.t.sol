@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
 import { AaveDebtTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
@@ -18,7 +18,7 @@ import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test
 import { Math } from "src/utils/Math.sol";
 
 contract CellarAaveTest is Test {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20, SafeERC20, Math } from "src/base/ERC4626.sol";
+import { ERC20, SafeTransferLib, Math } from "src/base/ERC4626.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
@@ -14,7 +14,7 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
  * @author crispymangoes
  */
 contract BaseAdaptor {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
     using Math for uint256;
 
     /**

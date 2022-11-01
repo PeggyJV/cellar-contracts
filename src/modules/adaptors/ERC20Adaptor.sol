@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeERC20 } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
 
 /**
  * @title ERC20 Adaptor
@@ -9,7 +9,7 @@ import { BaseAdaptor, ERC20, SafeERC20 } from "src/modules/adaptors/BaseAdaptor.
  * @author crispymangoes
  */
 contract ERC20Adaptor is BaseAdaptor {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(ERC20 token)

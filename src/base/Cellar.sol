@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, SafeERC20, Math, ERC20 } from "./ERC4626.sol";
+import { ERC4626, SafeTransferLib, Math, ERC20 } from "./ERC4626.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -20,7 +20,7 @@ import { Owned } from "@solmate/auth/Owned.sol";
  */
 contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     using Uint32Array for uint32[];
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
     using SafeCast for uint256;
     using Math for uint256;
     using Address for address;
@@ -436,7 +436,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         address _strategistPayout,
         uint128 _assetRiskTolerance,
         uint128 _protocolRiskTolerance
-    ) ERC4626(_asset, _name, _symbol) Owned(_registry.getAddress(0)) {
+    ) ERC4626(_asset, _name, _symbol, 18) Owned(_registry.getAddress(0)) {
         registry = _registry;
         assetRiskTolerance = _assetRiskTolerance;
         protocolRiskTolerance = _protocolRiskTolerance;
@@ -571,15 +571,23 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     }
 
     /**
-     * @notice modifies before transfer hook to check that shares are not locked
-     * @param from the address transferring shares
+     * @notice Override `transfer` to add share lock check.
      */
-    function _beforeTokenTransfer(
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        _checkIfSharesLocked(msg.sender);
+        return super.transfer(to, amount);
+    }
+
+    /**
+     * @notice Override `transferFrom` to add share lock check.
+     */
+    function transferFrom(
         address from,
-        address,
-        uint256
-    ) internal view override {
+        address to,
+        uint256 amount
+    ) public override returns (bool) {
         _checkIfSharesLocked(from);
+        return super.transferFrom(from, to, amount);
     }
 
     /**
@@ -689,7 +697,9 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         beforeWithdraw(assets, shares, receiver, owner);
 
         if (msg.sender != owner) {
-            _spendAllowance(owner, msg.sender, shares);
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
 
         _burn(owner, shares);
@@ -928,7 +938,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         }
         // Get amount of assets to withdraw.
         uint256 _totalAssets = totalAssets();
-        uint256 assets = _convertToAssets(balanceOf(owner), _totalAssets);
+        uint256 assets = _convertToAssets(balanceOf[owner], _totalAssets);
 
         uint256 withdrawable = totalAssetsWithdrawable();
         maxOut = assets <= withdrawable ? assets : withdrawable;
@@ -963,7 +973,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @dev Used to more efficiently convert amount of shares to assets using a stored `totalAssets` value.
      */
     function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply();
+        uint256 totalShares = totalSupply;
 
         assets = totalShares == 0
             ? shares.changeDecimals(18, asset.decimals())
@@ -974,7 +984,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @dev Used to more efficiently convert amount of assets to shares using a stored `totalAssets` value.
      */
     function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply();
+        uint256 totalShares = totalSupply;
 
         shares = totalShares == 0
             ? assets.changeDecimals(asset.decimals(), 18)
@@ -985,7 +995,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @dev Used to more efficiently simulate minting shares using a stored `totalAssets` value.
      */
     function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply();
+        uint256 totalShares = totalSupply;
 
         assets = totalShares == 0
             ? shares.changeDecimals(18, asset.decimals())
@@ -996,7 +1006,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @dev Used to more efficiently simulate withdrawing assets using a stored `totalAssets` value.
      */
     function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply();
+        uint256 totalShares = totalSupply;
 
         shares = totalShares == 0
             ? assets.changeDecimals(asset.decimals(), 18)
@@ -1114,7 +1124,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             uint256 assetsBeforeAdaptorCall = totalAssets();
             minimumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
             maximumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
-            totalShares = totalSupply();
+            totalShares = totalSupply;
         }
 
         // Run all adaptor calls.
@@ -1131,7 +1141,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
         }
-        if (totalShares != totalSupply()) revert Cellar__TotalSharesMustRemainConstant(totalSupply(), totalShares);
+        if (totalShares != totalSupply) revert Cellar__TotalSharesMustRemainConstant(totalSupply, totalShares);
 
         blockExternalReceiver = false;
     }
@@ -1219,7 +1229,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      */
     function _convertToFees(uint256 feesInShares) internal view returns (uint256 fees) {
         // Saves an SLOAD.
-        uint256 totalShares = totalSupply();
+        uint256 totalShares = totalSupply;
 
         // Get the amount of fees to mint. Without this, the value of fees minted would be slightly
         // diluted because total shares increased while total assets did not. This counteracts that.
@@ -1258,7 +1268,19 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         uint256 strategistFeeSharesDue = platformFees.mulWadDown(feeData.strategistPlatformCut);
         if (strategistFeeSharesDue > 0) {
             //transfer shares to strategist
-            _transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
+            // Take from Solmate ERC20.sol
+            {
+                balanceOf[address(this)] -= strategistFeeSharesDue;
+
+                // Cannot overflow because the sum of all user
+                // balances can't exceed the max uint256 value.
+                unchecked {
+                    balanceOf[strategistPayoutAddress] += strategistFeeSharesDue;
+                }
+
+                emit Transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
+            }
+            // _transfer(address(this), strategistPayoutAddress, strategistFeeSharesDue);
 
             platformFees -= strategistFeeSharesDue;
         }

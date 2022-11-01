@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeERC20, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
@@ -15,7 +15,7 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
  * @author crispymangoes
  */
 contract UniswapV3Adaptor is BaseAdaptor {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
     using Math for uint256;
     using SafeCast for uint256;
     using Address for address;

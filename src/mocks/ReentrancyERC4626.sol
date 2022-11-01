@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, SafeERC20 } from "src/base/ERC4626.sol";
+import { ERC4626, SafeTransferLib } from "src/base/ERC4626.sol";
 import { MockCellar } from "src/mocks/MockCellar.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 
 contract ReentrancyERC4626 is ERC4626, Test {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
     using stdStorage for StdStorage;
 
     // True tries reentrancy, False manipulates callers totalSupply
@@ -18,7 +18,7 @@ contract ReentrancyERC4626 is ERC4626, Test {
         string memory _name,
         string memory _symbol,
         bool _style
-    ) ERC4626(_asset, _name, _symbol) {
+    ) ERC4626(_asset, _name, _symbol, 18) {
         style = _style;
     }
 
