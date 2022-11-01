@@ -21,8 +21,8 @@ contract SwapRouter is Multicall {
     using SafeERC20 for ERC20;
 
     /**
-     * @param UNIV2 Uniswap V2
-     * @param UNIV3 Uniswap V3
+     * @param BASIC Uniswap V2, or Uniswap V3
+     * @param Aggregator 0x
      */
     enum Exchange {
         BASIC,
@@ -138,6 +138,7 @@ contract SwapRouter is Multicall {
      * @param receiver address to send the received assets to
      * @return amountOut amount of assets received from the swap
      */
+    //TODO doing it this way with the swapType being the first value breaks compatibility with the router...
     function swapWithUniswap(
         bytes memory swapData,
         address receiver,
@@ -208,17 +209,28 @@ contract SwapRouter is Multicall {
     }
 
     /**
+     * @notice Emitted when a 0x swap call fails.
+     */
+    error SwapRouter__0xCallFailed();
+
+    /**
+     * @notice Attempted to make swap call to the wrong address.
+     */
+    error SwapRouter__0xCallBadTarget();
+
+    /**
      * @notice Perform a swap using 0x.
      * @param swapData bytes variable storing the following swap information
      *      uint256 amount: amount of the first asset in the path to swap
      *      address spender: address spending assetIn
      *      address swapTarget: address swapCallData is made on
      *      bytes swapCallData: call data to perform arbritrary 0x actions.
+     * @param receiver address to send the received assets to
      * @return amountOut amount of assets received from the swap
      */
     function swapWith0x(
         bytes memory swapData,
-        address,
+        address receiver,
         ERC20 assetIn,
         ERC20 assetOut
     ) public returns (uint256 amountOut) {
@@ -227,7 +239,7 @@ contract SwapRouter is Multicall {
             (uint256, address, address, bytes)
         );
 
-        require(spender == swapTarget && swapTarget == zeroXExchangeProxy, "Bad target");
+        if (spender != zeroXExchangeProxy || swapTarget != zeroXExchangeProxy) revert SwapRouter__0xCallBadTarget();
 
         // Transfer assets to this contract to swap.
         assetIn.safeTransferFrom(msg.sender, address(this), amount);
@@ -237,15 +249,23 @@ contract SwapRouter is Multicall {
         // Record assetOut starting balance and make the swap.
         amountOut = assetOut.balanceOf(address(this));
         (bool success, ) = swapTarget.call(swapCallData);
-        require(success, "SWAP_CALL_FAILED");
+        if (!success) revert SwapRouter__0xCallFailed();
 
         // Make sure swap used all the approval, and send bought tokens to caller.
         _checkApprovalIsZero(assetIn, zeroXExchangeProxy);
         amountOut = assetOut.balanceOf(address(this)) - amountOut;
-        assetOut.safeTransfer(msg.sender, amountOut);
+        assetOut.safeTransfer(receiver, amountOut);
     }
 
+    /**
+     * @notice Emitted when a swap does not use all the assets swap router approved.
+     */
+    error SwapRouter__UnusedApproval();
+
+    /**
+     * @notice Helper function that reverts if the Swap Router has unused approval after a swap is made.
+     */
     function _checkApprovalIsZero(ERC20 asset, address spender) internal view {
-        if (asset.allowance(address(this), spender) != 0) revert("Unused approval");
+        if (asset.allowance(address(this), spender) != 0) revert SwapRouter__UnusedApproval();
     }
 }

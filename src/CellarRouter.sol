@@ -182,23 +182,23 @@ contract CellarRouter is ICellarRouter {
                 );
             }
 
-            // Approve swap router to swap each asset.
-            for (uint256 i; i < positionAssets.length; i++)
-                positionAssets[i].safeApprove(address(swapRouter), type(uint256).max);
+            //     // Approve swap router to swap each asset.
+            //     for (uint256 i; i < positionAssets.length; i++)
+            //         positionAssets[i].safeApprove(address(swapRouter), type(uint256).max);
 
-            // Execute swap(s).
-            swapRouter.multicall(data);
-        }
+            //     // Execute swap(s).
+            //     swapRouter.multicall(data);
+            // }
 
-        for (uint256 i; i < positionAssets.length; i++) {
-            ERC20 asset = positionAssets[i];
+            // for (uint256 i; i < positionAssets.length; i++) {
+            //     ERC20 asset = positionAssets[i];
 
-            // Reset approvals.
-            asset.safeApprove(address(swapRouter), 0);
+            //     // Reset approvals.
+            //     asset.safeApprove(address(swapRouter), 0);
 
-            // Transfer remaining unswapped balances to receiver.
-            uint256 remainingBalance = asset.balanceOf(address(this));
-            if (remainingBalance != 0) asset.transfer(receiver, remainingBalance);
+            //     // Transfer remaining unswapped balances to receiver.
+            //     uint256 remainingBalance = asset.balanceOf(address(this));
+            //     if (remainingBalance != 0) asset.transfer(receiver, remainingBalance);
         }
     }
 
