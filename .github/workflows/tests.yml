@@ -27,30 +27,3 @@ jobs:
         run: |
           forge test -vvv --fork-url https://eth-mainnet.alchemyapi.io/v2/${{ secrets.ALCHEMY_API_KEY }} --etherscan-api-key ${{ secrets.ETHERSCAN_API_KEY }} --fork-block-number 15000000
         id: forge-test
-
-  hardhat:
-    strategy:
-      fail-fast: true
-
-    name: Hardhat project
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-
-      - name: Setup Node 16
-        uses: actions/setup-node@v3
-        with:
-          node-version: "16.x"
-          cache: "npm"
-
-      - name: Install Node dependencies
-        run: |
-          npm ci
-
-      - name: Run Hardhat tests
-        run: |
-          npx hardhat compile
-          npx hardhat test
-        id: hardhat-test
