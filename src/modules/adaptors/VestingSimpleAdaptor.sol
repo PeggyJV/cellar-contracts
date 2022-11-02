@@ -7,10 +7,9 @@ import { Cellar } from "src/base/Cellar.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 
 /**
- * @title Base Adaptor
- * @notice Base contract all adaptors must inherit from.
- * @dev Allows Cellars to interact with arbritrary DeFi assets and protocols.
- * @author crispymangoes
+ * @title VestingSimpleAdaptor
+ * @notice Allows cellars to linearly release earned rewards.
+ * @author Kevin Kennis
  */
 contract VestingSimpleAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
