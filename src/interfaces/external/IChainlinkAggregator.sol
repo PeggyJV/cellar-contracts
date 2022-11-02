@@ -7,4 +7,6 @@ interface IChainlinkAggregator is AggregatorV2V3Interface {
     function maxAnswer() external view returns (int192);
 
     function minAnswer() external view returns (int192);
+
+    function aggregator() external view returns (address);
 }
