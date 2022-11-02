@@ -31,10 +31,6 @@ contract SwapRouterIntegrationTest is Test {
     CellarRouter private cellarRouter;
 
     function setUp() external {
-        if (block.number < 15870000) {
-            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 15870000.");
-            return;
-        }
         cellarTrend = Cellar(0x6b7f87279982d919Bbf85182DDeAB179B366D8f2);
         cellarMomentum = Cellar(0x6E2dAc3b9E9ADc0CbbaE2D0B9Fd81952a8D33872);
         cellarRouter = CellarRouter(0x1D90366B0154fBcB5101c06a39c25D26cB48e889);
@@ -45,6 +41,10 @@ contract SwapRouterIntegrationTest is Test {
     }
 
     function testAttackVector() external {
+        if (block.number < 15870000) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 15870000.");
+            return;
+        }
         // Attacker performs a bad swap with low liquidity pool to stop cellars from rebalancing.
         SwapRouter oldRouter = SwapRouter(registry.getAddress(1));
         uint256 assets = 100e6;
@@ -87,6 +87,10 @@ contract SwapRouterIntegrationTest is Test {
     }
 
     function testAttackVectorIsMitigated() external {
+        if (block.number < 15870000) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 15870000.");
+            return;
+        }
         // Update registry with new Swap Router.
         vm.prank(sommMultiSig);
         registry.setAddress(1, address(swapRouter));
