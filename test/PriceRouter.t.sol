@@ -72,8 +72,9 @@ contract PriceRouterTest is Test {
     }
 
     // ======================================= ASSET TESTS =======================================
-
+    //TODO see if OG price router has this same issue with chainlink feeds taking a ton of gas for some reason
     function testAddAsset() external {
+        console.log("---------------------");
         uint256 bondChainlinkSettings = priceRouter.createSettingsForDerivative(
             BOND_ETH_FEED,
             CHAINLINK_DERIVATIVE,

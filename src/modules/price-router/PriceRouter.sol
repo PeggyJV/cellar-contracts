@@ -276,6 +276,7 @@ contract PriceRouter is Ownable {
                     ethBalance += amounts[i].mulDivDown(_getExchangeRate(baseAsset, true), 10**baseAsset.decimals()); // Get the base asset value in ETH.
                 } else revert("Asset not supported");
             }
+
             if (ethBalance > 0) {
                 usdBalance += usdETHExchangeRate > 0
                     ? ethBalance.mulDivDown(usdETHExchangeRate, 1e18)
@@ -292,12 +293,43 @@ contract PriceRouter is Ownable {
      * @return exchangeRate rate of exchange between the base asset and the quote asset
      */
     function getExchangeRate(ERC20 baseAsset, ERC20 quoteAsset) public view returns (uint256 exchangeRate) {
-        if (quoteAsset == WETH) {
-            exchangeRate = _getExchangeRate(baseAsset, true);
-        } else {
+        bool baseInETH = getAssetSettings[baseAsset][true] > 0;
+        if (quoteAsset == WETH && baseInETH) return _getExchangeRate(baseAsset, true);
+        bool baseInUSD = getAssetSettings[baseAsset][false] > 0;
+        if (!baseInETH && !baseInUSD) revert("unsupported base");
+
+        bool quoteInETH = getAssetSettings[quoteAsset][true] > 0;
+        bool quoteInUSD = getAssetSettings[quoteAsset][false] > 0;
+
+        if (!quoteInETH && !quoteInUSD) revert("unsupported quote");
+
+        if (baseInETH && quoteInETH) {
+            // Use ETH as intermediary
+            uint256 baseToETH = _getExchangeRate(baseAsset, true);
+            uint256 quoteToETH = _getExchangeRate(quoteAsset, true);
+            return exchangeRate = baseToETH.mulDivDown(10**quoteAsset.decimals(), quoteToETH);
+        }
+        if (baseInUSD && quoteInUSD) {
             uint256 baseToUSD = _getExchangeRate(baseAsset, false);
             uint256 quoteToUSD = _getExchangeRate(quoteAsset, false);
-            exchangeRate = baseToUSD.mulDivDown(10**quoteAsset.decimals(), quoteToUSD);
+            return exchangeRate = baseToUSD.mulDivDown(10**quoteAsset.decimals(), quoteToUSD);
+        }
+
+        // At this point, quote and base do not share a common quote.
+        if (baseInETH) {
+            // Means quote is in USD
+            uint256 quoteToUSD = _getExchangeRate(quoteAsset, false);
+            uint256 baseToETH = _getExchangeRate(baseAsset, true);
+            // uint256 quoteToUSD = _getExchangeRate(quoteAsset, false);
+            // Convert quote to ETH.
+            uint256 quoteToETH = quoteToUSD.mulDivDown(10**ETH_DECIMALS, _getExchangeRate(WETH, false));
+            return exchangeRate = baseToETH.mulDivDown(10**quoteAsset.decimals(), quoteToETH);
+        } else {
+            // Means base is USD and quote is ETH
+            uint256 quoteToETH = _getExchangeRate(quoteAsset, true);
+            uint256 baseToUSD = _getExchangeRate(baseAsset, false);
+            uint256 baseToETH = baseToUSD.mulDivDown(10**ETH_DECIMALS, _getExchangeRate(WETH, false));
+            return exchangeRate = baseToETH.mulDivDown(10**quoteAsset.decimals(), quoteToETH);
         }
     }
 
@@ -438,7 +470,9 @@ contract PriceRouter is Ownable {
         uint256 _storage
     ) internal view returns (uint256) {
         IChainlinkAggregator aggregator = IChainlinkAggregator(_source);
+        uint256 gas = gasleft();
         (, int256 _price, , uint256 _timestamp, ) = aggregator.latestRoundData();
+        console.log("Aggregator Gas", gas - gasleft());
         uint256 price = _price.toUint256();
         (uint144 max, uint88 min, uint24 heartbeat) = _readStorageForChainlinkDerivative(_storage);
         _checkPriceFeed(_asset, price, _timestamp, max, min, heartbeat);
