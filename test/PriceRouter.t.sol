@@ -84,15 +84,15 @@ contract PriceRouterTest is Test {
     function testAddAsset() external {
         ERC20[] memory baseAssets = new ERC20[](4);
         baseAssets[0] = USDC;
-        baseAssets[1] = WETH;
+        baseAssets[1] = BOND;
         baseAssets[2] = WBTC;
-        baseAssets[3] = BOND;
+        baseAssets[3] = WETH;
 
         uint256[] memory amounts = new uint256[](4);
         amounts[0] = 100e6;
-        amounts[1] = 2e18;
+        amounts[1] = 20e18;
         amounts[2] = 0.1e8;
-        amounts[3] = 20e18;
+        amounts[3] = 2e18;
         uint256 gas = gasleft();
         uint256 tvl = priceRouter.getValues(baseAssets, amounts, USDC);
         console.log("Gas Used", gas - gasleft());
