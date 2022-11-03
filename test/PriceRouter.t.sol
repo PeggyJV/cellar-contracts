@@ -32,46 +32,40 @@ contract PriceRouterTest is Test {
     IUniswapV2Router private constant uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
+    uint8 private constant CURVE_DERIVATIVE = 2;
+
+    address private TriCryptoPool = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
+    ERC20 private TriCryptoToken = ERC20(0xc4AD29ba4B3c580e6D59105FFf484999997675Ff);
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
     address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
-
+    address private USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
     address private BOND_ETH_FEED = 0xdd22A54e05410D8d1007c38b5c7A3eD74b855281;
 
     function setUp() external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        uint256 wethChainlinkSettings = priceRouter.createSettingsForDerivative(
-            WETH_USD_FEED,
-            CHAINLINK_DERIVATIVE,
-            true
-        );
-        priceRouter.addAsset(WETH, wethChainlinkSettings, 0, 1_500e8);
+        uint256 wethChainlinkSettings = priceRouter.createSettingsForDerivative(WETH_USD_FEED, CHAINLINK_DERIVATIVE);
+        priceRouter.addAsset(WETH, wethChainlinkSettings, abi.encode(0), 1_530e8);
 
-        uint256 usdcChainlinkSettings = priceRouter.createSettingsForDerivative(
-            USDC_USD_FEED,
-            CHAINLINK_DERIVATIVE,
-            true
-        );
-        priceRouter.addAsset(USDC, usdcChainlinkSettings, 0, 1e8);
+        uint256 usdcChainlinkSettings = priceRouter.createSettingsForDerivative(USDC_USD_FEED, CHAINLINK_DERIVATIVE);
+        priceRouter.addAsset(USDC, usdcChainlinkSettings, abi.encode(0), 1e8);
 
-        uint256 wbtcChainlinkSettings = priceRouter.createSettingsForDerivative(
-            WBTC_USD_FEED,
-            CHAINLINK_DERIVATIVE,
-            true
-        );
-        priceRouter.addAsset(WBTC, wbtcChainlinkSettings, 0, 20_000e8);
+        uint256 usdtChainlinkSettings = priceRouter.createSettingsForDerivative(USDT_USD_FEED, CHAINLINK_DERIVATIVE);
+        priceRouter.addAsset(USDT, usdtChainlinkSettings, abi.encode(0), 1e8);
 
-        uint256 bondChainlinkSettings = priceRouter.createSettingsForDerivative(
-            BOND_ETH_FEED,
-            CHAINLINK_DERIVATIVE,
-            true
-        );
+        uint256 wbtcChainlinkSettings = priceRouter.createSettingsForDerivative(WBTC_USD_FEED, CHAINLINK_DERIVATIVE);
+        priceRouter.addAsset(WBTC, wbtcChainlinkSettings, abi.encode(0), 20_210e8);
+
+        uint256 bondChainlinkSettings = priceRouter.createSettingsForDerivative(BOND_ETH_FEED, CHAINLINK_DERIVATIVE);
         uint256 bondChainlinkStorage = priceRouter.createStorageForChainlinkDerivative(0, 0, 0, true);
-        priceRouter.addAsset(BOND, bondChainlinkSettings, bondChainlinkStorage, 4.5763e8);
+        priceRouter.addAsset(BOND, bondChainlinkSettings, abi.encode(bondChainlinkStorage), 4.863e8);
+
+        uint256 triCryptoSettings = priceRouter.createSettingsForDerivative(TriCryptoPool, CURVE_DERIVATIVE);
+        priceRouter.addAsset(TriCryptoToken, triCryptoSettings, abi.encode(0), 1.0248e8);
         // priceRouter.addAsset(WETH, 0, 0, false, 0);
         // priceRouter.addAsset(WBTC, 0, 0, false, 0);
         // priceRouter.addAsset(USDC, 0, 0, false, 0);
@@ -97,6 +91,13 @@ contract PriceRouterTest is Test {
         uint256 tvl = priceRouter.getValues(baseAssets, amounts, USDC);
         console.log("Gas Used", gas - gasleft());
         console.log("TVL", tvl);
+    }
+
+    function testAddCurveAsset() external {
+        uint256 gas = gasleft();
+        uint256 price = priceRouter.getExchangeRate(TriCryptoToken, USDC);
+        console.log("Gas Used", gas - gasleft());
+        console.log("Tri Crypto Price", price);
     }
 
     // function testMinPriceGreaterThanMaxPrice() external {

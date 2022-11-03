@@ -54,18 +54,12 @@ contract PriceRouter is Ownable {
     /**
      * @notice Stores bare minimum settings all derivatives support like so.
      * 256 Bit
-     * uint80 Reserved for future use.
-     * uint8 Storage used.
+     * uint88 Reserved for future use.
      * uint160 Source address: Where does this contract look to handle pricing.
      * uint8 Derivative: Note 0 is an invalid Derivative.
      * 0 Bit
      */
     mapping(ERC20 => uint256) public getAssetSettings; // maps an asset -> settings
-
-    /**
-     * @notice Arbitrary storage that derivatives can use.
-     */
-    mapping(ERC20 => uint256) public getAssetStorage;
 
     uint24 public constant DEFAULT_HEART_BEAT = 1 days;
 
@@ -112,28 +106,14 @@ contract PriceRouter is Ownable {
      */
     error PriceRouter__MinPriceGreaterThanMaxPrice(uint256 min, uint256 max);
 
-    function readSettingsForDerivative(uint256 _settings)
-        public
-        pure
-        returns (
-            address source,
-            uint8 derivative,
-            bool usesStorage
-        )
-    {
-        usesStorage = uint8(_settings >> 168) == 1;
+    function readSettingsForDerivative(uint256 _settings) public pure returns (address source, uint8 derivative) {
         source = address(uint160(_settings >> 8));
         derivative = uint8(_settings);
     }
 
-    function createSettingsForDerivative(
-        address source,
-        uint8 derivative,
-        bool usesStorage
-    ) public pure returns (uint256 settings) {
+    function createSettingsForDerivative(address source, uint8 derivative) public pure returns (uint256 settings) {
         settings |= uint256(derivative);
         settings |= uint256(uint256(uint160(source)) << 8);
-        settings |= uint256(uint256(usesStorage ? 1 : 0) << 168);
     }
 
     uint256 public constant EXPECTED_ANSWER_DEVIATION = 0.02e18;
@@ -141,20 +121,19 @@ contract PriceRouter is Ownable {
     function addAsset(
         ERC20 _asset,
         uint256 _settings,
-        uint256 _storage,
+        bytes memory _storage,
         uint256 _expectedAnswer
     ) external onlyOwner {
         if (address(_asset) == address(0)) revert PriceRouter__InvalidAsset(address(_asset));
-        (address source, uint8 derivative, bool usesStorage) = readSettingsForDerivative(_settings);
+        (address source, uint8 derivative) = readSettingsForDerivative(_settings);
         if (derivative == 0) revert("Invalid Derivative");
         if (derivative == 1) {
-            _storage = _setupPriceForChainlinkDerivative(source, _storage);
+            _setupPriceForChainlinkDerivative(_asset, source, _storage);
         } else if (derivative == 2) {
-            _storage = _setupPriceForCurveDerivative(source, _storage);
+            _setupPriceForCurveDerivative(_asset, source, _storage);
         }
 
         getAssetSettings[_asset] = _settings;
-        getAssetStorage[_asset] = usesStorage ? _storage : 0;
 
         uint256 minAnswer = _expectedAnswer.mulWadDown((1e18 - EXPECTED_ANSWER_DEVIATION));
         uint256 maxAnswer = _expectedAnswer.mulWadDown((1e18 + EXPECTED_ANSWER_DEVIATION));
@@ -333,21 +312,24 @@ contract PriceRouter is Ownable {
         uint256 ethToUsd
     ) internal view returns (uint256, uint256) {
         if (asset == WETH && ethToUsd > 0) return (ethToUsd, ethToUsd);
-        (address source, uint8 derivative, bool usesStorage) = readSettingsForDerivative(settings);
+        (address source, uint8 derivative) = readSettingsForDerivative(settings);
         uint256 exchangeRate;
-        uint256 _storage;
-        if (usesStorage) _storage = getAssetStorage[asset];
 
         if (derivative == 1) {
-            (exchangeRate, ethToUsd) = _getPriceForChainlinkDerivative(address(asset), source, _storage, ethToUsd);
+            (exchangeRate, ethToUsd) = _getPriceForChainlinkDerivative(asset, source, ethToUsd);
         } else if (derivative == 2) {
-            (exchangeRate, ethToUsd) = _getPriceForCurveDerivative(address(asset), source, _storage, ethToUsd);
+            (exchangeRate, ethToUsd) = _getPriceForCurveDerivative(asset, source, ethToUsd);
         }
 
         return (exchangeRate, ethToUsd);
     }
 
     // =========================================== CHAINLINK PRICE DERIVATIVE ===========================================\
+    /**
+     * @notice Chainlink Derivative Storage
+     */
+    mapping(ERC20 => uint256) public getChainlinkDerivativeStorage;
+
     /**
      * @notice Chainlink Derivative Storage is as follows
      * 256 bit
@@ -384,8 +366,13 @@ contract PriceRouter is Ownable {
         _storage |= uint256(_inETH ? 1 : 0);
     }
 
-    function _setupPriceForChainlinkDerivative(address _source, uint256 _storage) internal view returns (uint256) {
-        (uint144 max, uint80 min, uint24 heartbeat, bool inETH) = _readStorageForChainlinkDerivative(_storage);
+    function _setupPriceForChainlinkDerivative(
+        ERC20 _asset,
+        address _source,
+        bytes memory _storage
+    ) internal {
+        uint256 parameters = abi.decode(_storage, (uint256));
+        (uint144 max, uint80 min, uint24 heartbeat, bool inETH) = _readStorageForChainlinkDerivative(parameters);
 
         // Use Chainlink to get the min and max of the asset.
         IChainlinkAggregator aggregator = IChainlinkAggregator(IChainlinkAggregator(_source).aggregator());
@@ -418,26 +405,26 @@ contract PriceRouter is Ownable {
 
         heartbeat = heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT;
 
-        return createStorageForChainlinkDerivative(max, min, heartbeat, inETH);
+        getChainlinkDerivativeStorage[_asset] = createStorageForChainlinkDerivative(max, min, heartbeat, inETH);
     }
 
     function _getPriceForChainlinkDerivative(
-        address _asset,
+        ERC20 _asset,
         address _source,
-        uint256 _storage,
         uint256 _ethToUsd
     ) internal view returns (uint256, uint256) {
+        uint256 _storage = getChainlinkDerivativeStorage[_asset];
         IChainlinkAggregator aggregator = IChainlinkAggregator(_source);
         (, int256 _price, , uint256 _timestamp, ) = aggregator.latestRoundData();
         uint256 price = _price.toUint256();
         (uint144 max, uint88 min, uint24 heartbeat, bool inETH) = _readStorageForChainlinkDerivative(_storage);
-        _checkPriceFeed(_asset, price, _timestamp, max, min, heartbeat);
+        _checkPriceFeed(address(_asset), price, _timestamp, max, min, heartbeat);
         if (inETH) {
             if (_ethToUsd == 0) {
                 (_ethToUsd, ) = _getPriceInUSD(WETH, getAssetSettings[WETH], 0);
             }
             price = price.mulWadDown(_ethToUsd);
-        } else if (_asset == address(WETH)) _ethToUsd = price;
+        } else if (_asset == WETH) _ethToUsd = price;
         return (price, _ethToUsd);
     }
 
@@ -491,21 +478,17 @@ contract PriceRouter is Ownable {
 
     // =========================================== CURVE PRICE DERIVATIVE ===========================================
     /**
-     * @notice Curve Derivative Storage is as follows
-     * 256 bit
-     * uint8 coins.length
-     * 0 bit
+     * @notice Curve Derivative Storage
      */
-    function _readStorageForCurveDerivative(uint256 _storage) internal pure returns (uint8 coinsLength) {
-        coinsLength = uint8(_storage);
-    }
-
-    function createStorageForCurveDerivative(uint8 coinsLength) public pure returns (uint256 _storage) {
-        _storage |= uint256(coinsLength);
-    }
+    mapping(ERC20 => address[]) public getCurveDerivativeStorage;
 
     // source is the pool
-    function _setupPriceForCurveDerivative(address _source, uint256 _storage) internal view returns (uint256) {
+    function _setupPriceForCurveDerivative(
+        ERC20 _asset,
+        address _source,
+        bytes memory
+    ) internal {
+        // Could use _storage and do a check?
         ICurvePool pool = ICurvePool(_source);
         uint8 coinsLength = 0;
         while (true) {
@@ -515,29 +498,27 @@ contract PriceRouter is Ownable {
                 break;
             }
         }
+        address[] memory coins = new address[](coinsLength);
+        for (uint256 i = 0; i < coinsLength; i++) {
+            coins[i] = pool.coins(i);
+        }
 
-        uint8 proposedLength = _readStorageForCurveDerivative(_storage);
-        if (proposedLength == 0) {
-            return createStorageForCurveDerivative(coinsLength);
-        } else if (coinsLength != proposedLength) revert("Length mismatch");
-
-        return _storage;
+        getCurveDerivativeStorage[_asset] = coins;
     }
 
     //TODO this assumes Curve pools NEVER add or remove tokens
     function _getPriceForCurveDerivative(
-        address asset,
+        ERC20 asset,
         address _source,
-        uint256 _storage,
         uint256 _ethToUsd
     ) internal view returns (uint256 price, uint256 ethToUsd) {
         ICurvePool pool = ICurvePool(_source);
 
-        uint8 coinsLength = _readStorageForCurveDerivative(_storage);
+        address[] memory coins = getCurveDerivativeStorage[asset];
 
         uint256 minPrice = type(uint256).max;
-        for (uint256 i = 0; i < coinsLength; i++) {
-            ERC20 poolAsset = ERC20(pool.coins(i));
+        for (uint256 i = 0; i < coins.length; i++) {
+            ERC20 poolAsset = ERC20(coins[i]);
             uint256 tokenPrice;
             (tokenPrice, _ethToUsd) = _getPriceInUSD(poolAsset, getAssetSettings[poolAsset], _ethToUsd);
             if (tokenPrice < minPrice) minPrice = tokenPrice;
