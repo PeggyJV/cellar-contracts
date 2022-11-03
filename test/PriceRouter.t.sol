@@ -36,6 +36,7 @@ contract PriceRouterTest is Test {
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
+    address private USDC_ETH_FEED = 0x986b5E1e1755e3C2440e960477f25201B0a8bbD4;
     address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
 
     address private BOND_ETH_FEED = 0xdd22A54e05410D8d1007c38b5c7A3eD74b855281;
@@ -49,21 +50,31 @@ contract PriceRouterTest is Test {
             CHAINLINK_DERIVATIVE,
             true
         );
-        priceRouter.addAsset(WETH, wethChainlinkSettings, 0, 1_500e8, false);
+        priceRouter.addAsset(WETH, wethChainlinkSettings, 0, 1_500e8, PriceRouter.Units.USD);
 
         uint256 usdcChainlinkSettings = priceRouter.createSettingsForDerivative(
             USDC_USD_FEED,
             CHAINLINK_DERIVATIVE,
             true
         );
-        priceRouter.addAsset(USDC, usdcChainlinkSettings, 0, 1e8, false);
+        priceRouter.addAsset(USDC, usdcChainlinkSettings, 0, 1e8, PriceRouter.Units.USD);
+
+        usdcChainlinkSettings = priceRouter.createSettingsForDerivative(USDC_ETH_FEED, CHAINLINK_DERIVATIVE, true);
+        priceRouter.addAsset(USDC, usdcChainlinkSettings, 0, 0.000666667e18, PriceRouter.Units.ETH);
 
         uint256 wbtcChainlinkSettings = priceRouter.createSettingsForDerivative(
             WBTC_USD_FEED,
             CHAINLINK_DERIVATIVE,
             true
         );
-        priceRouter.addAsset(WBTC, wbtcChainlinkSettings, 0, 20_000e8, false);
+        priceRouter.addAsset(WBTC, wbtcChainlinkSettings, 0, 20_000e8, PriceRouter.Units.USD);
+
+        uint256 bondChainlinkSettings = priceRouter.createSettingsForDerivative(
+            BOND_ETH_FEED,
+            CHAINLINK_DERIVATIVE,
+            true
+        );
+        priceRouter.addAsset(BOND, bondChainlinkSettings, 0, 0.00308449e18, PriceRouter.Units.ETH);
         // priceRouter.addAsset(WETH, 0, 0, false, 0);
         // priceRouter.addAsset(WBTC, 0, 0, false, 0);
         // priceRouter.addAsset(USDC, 0, 0, false, 0);
@@ -75,19 +86,13 @@ contract PriceRouterTest is Test {
     //TODO see if OG price router has this same issue with chainlink feeds taking a ton of gas for some reason
     function testAddAsset() external {
         console.log("---------------------");
-        uint256 bondChainlinkSettings = priceRouter.createSettingsForDerivative(
-            BOND_ETH_FEED,
-            CHAINLINK_DERIVATIVE,
-            true
-        );
-        priceRouter.addAsset(BOND, bondChainlinkSettings, 0, 0.00308449e18, true);
 
-        {
-            uint256 gas = gasleft();
-            uint256 exchangeRate = priceRouter.getExchangeRate(BOND, WETH);
-            console.log("Gas used for WETH Price", gas - gasleft());
-            console.log("BOND Price", exchangeRate);
-        }
+        // {
+        //     uint256 gas = gasleft();
+        //     uint256 exchangeRate = priceRouter.getExchangeRate(BOND, WETH);
+        //     console.log("Gas used for WETH Price", gas - gasleft());
+        //     console.log("BOND Price", exchangeRate);
+        // }
 
         {
             uint256 gas = gasleft();
