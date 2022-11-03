@@ -149,7 +149,7 @@ contract CellarVestingTest is Test {
         assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
     }
 
-    function testWithdrawMoreThanVested() external {
+    function testFailWithdrawMoreThanVested() external {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
 
@@ -171,7 +171,6 @@ contract CellarVestingTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
 
         // Not looking at specific payload because amount available may be slightly  off
-        vm.expectRevert();
         cellar.callOnAdaptor(data);
     }
 
