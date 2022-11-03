@@ -4,7 +4,8 @@ pragma solidity 0.8.16;
 import { MockCellar, Cellar, ERC20 } from "src/mocks/MockCellar.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
-import { Registry, PriceRouter, IGravity } from "src/base/Cellar.sol";
+import { Registry, IGravity } from "src/base/Cellar.sol";
+import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
@@ -20,7 +21,7 @@ contract CellarVestingTest is Test {
 
     MockCellar private cellar;
 
-    PriceRouter private priceRouter;
+    MockPriceRouter private priceRouter;
     SwapRouter private swapRouter;
     Registry private registry;
     VestingSimple private vesting;
@@ -41,7 +42,7 @@ contract CellarVestingTest is Test {
     uint256 private constant vestingPeriod = 1 days;
 
     function setUp() external {
-        priceRouter = new PriceRouter();
+        priceRouter = new MockPriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(
@@ -52,7 +53,8 @@ contract CellarVestingTest is Test {
             address(priceRouter)
         );
 
-        priceRouter.addAsset(USDC, 0, 0, false, 0);
+        priceRouter.supportAsset(USDC);
+        priceRouter.setExchangeRate(USDC, USDC, 1e6);
 
         erc20Adaptor = new ERC20Adaptor();
         vestingAdaptor = new VestingSimpleAdaptor();
@@ -156,7 +158,7 @@ contract CellarVestingTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
 
         // Check event emission
-        vm.expectEmit(true, false, false, false);
+        vm.expectEmit(true, false, false, true);
         _emitDeposit(totalDeposit / 20);
 
         cellar.callOnAdaptor(data);
@@ -195,13 +197,160 @@ contract CellarVestingTest is Test {
     }
 
     function testUserWithdrawFromVesting() external {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
 
+        // Deposit 5% of holdings, allowed under deviation
+        adaptorCalls[0] = _createBytesDataToDeposit(vesting, totalDeposit / 20);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Swap positions so vesting is first, and skip forward
+        skip(vestingPeriod + 1);
+        cellar.swapPositions(0, 1);
+
+        vm.expectEmit(true, true, false, false);
+        _emitWithdraw(totalDeposit / 20, 1);
+
+        // Withdraw vested positions
+        cellar.withdraw(
+            totalDeposit / 20,
+            address(this),
+            address(this)
+        );
+
+        // Check state - deposited tokens withdrawn
+        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report deposited funds");
+        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+
+        // Check tokens are in the right place
+        assertApproxEqAbs(USDC.balanceOf(address(cellar)), totalDeposit - totalDeposit / 20, 1, "Cellar should have 95% of tokens");
+        assertApproxEqAbs(USDC.balanceOf(address(this)), totalDeposit / 20, 1, "User should withdraw 5% of tokens");
+
+        // Swap positions back
+        cellar.swapPositions(0, 1);
     }
 
-    // test user withdrawal from vesting
-    // test strategist withdrawal from vesting deposit
-    // test strategist withdrawal from any vesting deposit
-    // test strategist withdrawAll
+    function testStrategistWithdrawFromVesting() external {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Deposit 5% of holdings, allowed under deviation
+        adaptorCalls[0] = _createBytesDataToDeposit(vesting, totalDeposit / 20);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // skip forward
+        skip(vestingPeriod + 1);
+
+        // Withdraw vested positions as part of strategy 0 - should be deposit 1
+        adaptorCalls[0] = _createBytesDataToWithdraw(vesting, 1, totalDeposit / 20);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+
+        // Not looking at specific payload because amount available may be slightly off
+        vm.expectEmit(true, true, false, false);
+        _emitWithdraw(totalDeposit / 20, 1);
+
+        cellar.callOnAdaptor(data);
+
+        // Check state - deposited tokens withdrawn
+        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report deposited funds");
+        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+
+        // Check cellar total assets is back to 100%
+        assertApproxEqAbs(cellar.totalAssets(), totalDeposit, 1, "Cellar totalAssets should return to original value");
+    }
+
+    function testStrategistWithdrawAnyFromVesting() external {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Deposit 5% of holdings, allowed under deviation
+        adaptorCalls[0] = _createBytesDataToDeposit(vesting, totalDeposit / 20);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // skip forward
+        skip(vestingPeriod + 1);
+
+        // Withdraw vested positions as part of strategy 0 - no deposit specified
+        adaptorCalls[0] = _createBytesDataToWithdrawAny(vesting, totalDeposit / 20);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+
+        // Not looking at specific payload because amount available may be slightly off
+        vm.expectEmit(true, true, false, false);
+        _emitWithdraw(totalDeposit / 20, 1);
+
+        cellar.callOnAdaptor(data);
+
+        // Check state - deposited tokens withdrawn
+        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report deposited funds");
+        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+
+        // Check cellar total assets is back to 100%
+        assertApproxEqAbs(cellar.totalAssets(), totalDeposit, 1, "Cellar totalAssets should return to original value");
+    }
+
+    function testStrategistWithdrawAllFromVesting() external {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Deposit 5% of holdings, allowed under deviation
+        adaptorCalls[0] = _createBytesDataToDeposit(vesting, totalDeposit / 20);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // skip forward, half of vesting period
+        skip(vestingPeriod / 2);
+
+        // Withdraw vested positions as part of strategy 0 - no deposit specified
+        adaptorCalls[0] = _createBytesDataToWithdrawAll(vesting);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+
+        // Not looking at specific payload because amount available may be slightly off
+        vm.expectEmit(true, true, false, false);
+        _emitWithdraw(totalDeposit / 40, 1);
+
+        cellar.callOnAdaptor(data);
+
+        // Check state - deposited tokens withdrawn
+        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), totalDeposit / 40, 1, "Vesting contract should report deposited funds");
+        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+
+        // Check cellar total assets is back to 97.5%
+        assertApproxEqAbs(cellar.totalAssets(), totalDeposit / 1000 * 975, 1, "Cellar totalAssets should regain half of deposit");
+    }
+
+    function testStrategistPartialWithdrawFromVesting() external {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Deposit 5% of holdings, allowed under deviation
+        adaptorCalls[0] = _createBytesDataToDeposit(vesting, totalDeposit / 20);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // skip forward entire vesting period
+        skip(vestingPeriod + 1);
+
+        // Withdraw vested positions as part of strategy 0 - no deposit specified
+        // Only withdraw half available
+        adaptorCalls[0] = _createBytesDataToWithdrawAny(vesting, totalDeposit / 40);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+
+        // Not looking at specific payload because amount available may be slightly off
+        vm.expectEmit(true, true, false, false);
+        _emitWithdraw(totalDeposit / 40, 1);
+
+        cellar.callOnAdaptor(data);
+
+        // Check state - deposited tokens withdrawn
+        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), totalDeposit / 40, 1, "Vesting contract should report deposited funds");
+        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), totalDeposit / 40, 1, "Vesting contract should report vested funds");
+
+        // Check cellar total assets is back to 100%
+        assertApproxEqAbs(cellar.totalAssets(), totalDeposit, 1, "Cellar totalAssets should return to original value");
+    }
 
     // ========================================= HELPER FUNCTIONS =========================================
 
@@ -211,6 +360,19 @@ contract CellarVestingTest is Test {
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(
             VestingSimpleAdaptor.depositToVesting.selector,
+            amount,
+            abi.encode(_vesting)
+        );
+    }
+
+    function _createBytesDataToWithdraw(
+        VestingSimple _vesting,
+        uint256 depositId,
+        uint256 amount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(
+            VestingSimpleAdaptor.withdrawFromVesting.selector,
+            depositId,
             amount,
             abi.encode(_vesting)
         );
@@ -247,7 +409,7 @@ contract CellarVestingTest is Test {
     /// @param user The user receiving the deposit.
     /// @param depositId The ID of the deposit specified.
     /// @param amount The amount of tokens deposited.
-    event Withdraw(address indexed user, uint256 indexed depositId, uint256 amount);
+    event Withdraw(address indexed user, uint256 depositId, uint256 amount);
 
     function _emitDeposit(uint256 amount) internal {
         emit Deposit(address(cellar), amount);

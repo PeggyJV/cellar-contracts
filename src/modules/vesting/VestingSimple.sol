@@ -30,7 +30,7 @@ contract VestingSimple {
     /// @param user The user receiving the deposit.
     /// @param depositId The ID of the deposit specified.
     /// @param amount The amount of tokens deposited.
-    event Withdraw(address indexed user, uint256 indexed depositId, uint256 amount);
+    event Withdraw(address indexed user, uint256 depositId, uint256 amount);
 
     // ============================================= ERRORS =============================================
 
