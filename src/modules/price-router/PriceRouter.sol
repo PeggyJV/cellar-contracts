@@ -420,6 +420,7 @@ contract PriceRouter is Ownable {
         uint256 _storage,
         uint256 _ethToUsd
     ) internal view returns (uint256, uint256) {
+        if (_asset == address(WETH) && _ethToUsd > 0) return (_ethToUsd, _ethToUsd);
         IChainlinkAggregator aggregator = IChainlinkAggregator(_source);
         (, int256 _price, , uint256 _timestamp, ) = aggregator.latestRoundData();
         uint256 price = _price.toUint256();
@@ -430,7 +431,7 @@ contract PriceRouter is Ownable {
                 (_ethToUsd, ) = _getPriceInUSD(WETH, getAssetSettings[WETH], 0);
             }
             price = price.mulWadDown(_ethToUsd);
-        }
+        } else if (_asset == address(WETH)) _ethToUsd = price;
         return (price, _ethToUsd);
     }
 

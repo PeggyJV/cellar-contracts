@@ -82,20 +82,21 @@ contract PriceRouterTest is Test {
     // ======================================= ASSET TESTS =======================================
     //TODO see if OG price router has this same issue with chainlink feeds taking a ton of gas for some reason
     function testAddAsset() external {
-        console.log("---------------------");
-        // {
-        //     uint256 gas = gasleft();
-        //     uint256 exchangeRate = priceRouter.getExchangeRate(BOND, WETH);
-        //     console.log("Gas used for WETH Price", gas - gasleft());
-        //     console.log("BOND Price", exchangeRate);
-        // }
+        ERC20[] memory baseAssets = new ERC20[](4);
+        baseAssets[0] = USDC;
+        baseAssets[1] = WETH;
+        baseAssets[2] = WBTC;
+        baseAssets[3] = BOND;
 
-        {
-            uint256 gas = gasleft();
-            uint256 exchangeRate = priceRouter.getExchangeRate(BOND, USDC);
-            console.log("Gas used for USDC Price", gas - gasleft());
-            console.log("BOND Price", exchangeRate);
-        }
+        uint256[] memory amounts = new uint256[](4);
+        amounts[0] = 100e6;
+        amounts[1] = 2e18;
+        amounts[2] = 0.1e8;
+        amounts[3] = 20e18;
+        uint256 gas = gasleft();
+        uint256 tvl = priceRouter.getValues(baseAssets, amounts, USDC);
+        console.log("Gas Used", gas - gasleft());
+        console.log("TVL", tvl);
     }
 
     // function testMinPriceGreaterThanMaxPrice() external {
