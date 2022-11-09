@@ -840,7 +840,11 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         }
 
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-        return priceRouter.getValueDiff(positionAssets, balances, debtPositionAssets, debtBalances, asset);
+        bytes[] memory calls = new bytes[](2);
+        calls[0] = abi.encodeWithSelector(PriceRouter.getValues.selector, positionAssets, balances, asset);
+        calls[1] = abi.encodeWithSelector(PriceRouter.getValues.selector, debtPositionAssets, debtBalances, asset);
+        bytes[] memory results = priceRouter.multicall(calls);
+        assets = abi.decode(results[0], (uint256)) - abi.decode(results[1], (uint256));
     }
 
     /**
@@ -858,7 +862,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         }
 
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-        return priceRouter.getValues(positionAssets, balances, asset);
+        assets = priceRouter.getValues(positionAssets, balances, asset);
     }
 
     /**
