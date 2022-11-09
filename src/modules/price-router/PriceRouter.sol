@@ -83,14 +83,6 @@ contract PriceRouter is Ownable {
      */
     error PriceRouter__InvalidAsset(address asset);
 
-    /**
-     * @notice Attempted to add an asset with a certain price range denomination, but actual denomination was different.
-     * @param expected price range denomination
-     * @param actual price range denomination
-     * @dev If an asset has price feeds in USD and ETH, the feed in USD is favored
-     */
-    error PriceRouter__PriceRangeDenominationMisMatch(bool expected, bool actual);
-
     error PriceRouter__BadAnswer(uint256 answer, uint256 expectedAnswer);
 
     /**
@@ -110,7 +102,7 @@ contract PriceRouter is Ownable {
 
     // The size of the price cache. A larger cache can hold more values, but incurs a larger gas cost overhead.
     // A smaller cache has a smaller gas overhead but caches less prices.
-    uint8 private constant PRICE_CACHE_SIZE = 1;
+    uint8 private constant PRICE_CACHE_SIZE = 8;
 
     function addAsset(
         ERC20 _asset,
@@ -249,6 +241,7 @@ contract PriceRouter is Ownable {
         exchangeRates = new uint256[](numOfAssets);
         for (uint256 i; i < numOfAssets; i++) {
             AssetSettings memory baseSettings = getAssetSettings[baseAssets[i]];
+            if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAssets[i]));
             exchangeRates[i] = _getExchangeRate(
                 baseAssets[i],
                 baseSettings,
@@ -517,12 +510,7 @@ contract PriceRouter is Ownable {
     /**
      * @notice Curve Derivative Storage
      */
-    mapping(ERC20 => address[]) public getCurveDerivativeStorage0;
-
-    /**
-     * @notice stores the function selector needed to be called if pricing curve lp and `isView` is false.
-     */
-    mapping(ERC20 => bytes4) public getCurveDerivativeStorage1;
+    mapping(ERC20 => address[]) public getCurveDerivativeStorage;
 
     // source is the pool
     function _setupPriceForCurveDerivative(
@@ -541,14 +529,11 @@ contract PriceRouter is Ownable {
             }
         }
         address[] memory coins = new address[](coinsLength);
-        bytes4 funcToCallToStopReentrancy;
         for (uint256 i = 0; i < coinsLength; i++) {
             coins[i] = pool.coins(i);
         }
 
-        getCurveDerivativeStorage0[_asset] = coins;
-        // If we need to stop re-entrnacy, then record the correct function selector.
-        if (uint32(funcToCallToStopReentrancy) > 0) getCurveDerivativeStorage1[_asset] = funcToCallToStopReentrancy;
+        getCurveDerivativeStorage[_asset] = coins;
     }
 
     //TODO this assumes Curve pools NEVER add or remove tokens
@@ -559,7 +544,7 @@ contract PriceRouter is Ownable {
     ) internal view returns (uint256 price) {
         ICurvePool pool = ICurvePool(_source);
 
-        address[] memory coins = getCurveDerivativeStorage0[asset];
+        address[] memory coins = getCurveDerivativeStorage[asset];
 
         uint256 minPrice = type(uint256).max;
         for (uint256 i = 0; i < coins.length; i++) {
