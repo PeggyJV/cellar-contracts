@@ -29,6 +29,7 @@ contract PriceRouter is Ownable {
 
     event AddAsset(address indexed asset);
 
+    //TODO could probs just replace this with a function that does two get values, and subtracts them.
     function multicall(bytes[] calldata data) external view returns (bytes[] memory results) {
         results = new bytes[](data.length);
         for (uint256 i = 0; i < data.length; i++) {
@@ -38,22 +39,6 @@ contract PriceRouter is Ownable {
     }
 
     // =========================================== ASSETS CONFIG ===========================================
-
-    /**
-     * @param minPrice minimum price in USD for the asset before reverting
-     * @param maxPrice maximum price in USD for the asset before reverting
-     * @param isPriceRangeInETH if true price range values are given in ETH, if false price range is given in USD
-     * @param heartbeat maximum allowed time that can pass with no update before price data is considered stale
-     * @param isSupported whether this asset is supported by the platform or not
-     */
-    // struct AssetConfig {
-    //     uint256 minPrice;
-    //     uint256 maxPrice;
-    //     bool isPriceRangeInETH;
-    //     uint96 heartbeat;
-    //     bool isSupported;
-    // }
-
     /**
      * @notice Stores bare minimum settings all derivatives support like so.
      * 256 Bit
@@ -62,7 +47,13 @@ contract PriceRouter is Ownable {
      * uint8 Derivative: Note 0 is an invalid Derivative.
      * 0 Bit
      */
-    mapping(ERC20 => uint256) public getAssetSettings; // maps an asset -> settings
+
+    struct AssetSettings {
+        uint8 derivative;
+        address source;
+    }
+
+    mapping(ERC20 => AssetSettings) public getAssetSettings; // maps an asset -> settings
 
     uint24 public constant DEFAULT_HEART_BEAT = 1 days;
 
@@ -109,31 +100,20 @@ contract PriceRouter is Ownable {
      */
     error PriceRouter__MinPriceGreaterThanMaxPrice(uint256 min, uint256 max);
 
-    function readSettingsForDerivative(uint256 _settings) public pure returns (address source, uint8 derivative) {
-        source = address(uint160(_settings >> 8));
-        derivative = uint8(_settings);
-    }
-
-    function createSettingsForDerivative(address source, uint8 derivative) public pure returns (uint256 settings) {
-        settings |= uint256(derivative);
-        settings |= uint256(uint256(uint160(source)) << 8);
-    }
-
     uint256 public constant EXPECTED_ANSWER_DEVIATION = 0.02e18;
 
     function addAsset(
         ERC20 _asset,
-        uint256 _settings,
+        AssetSettings memory _settings,
         bytes memory _storage,
         uint256 _expectedAnswer
     ) external onlyOwner {
         if (address(_asset) == address(0)) revert PriceRouter__InvalidAsset(address(_asset));
-        (address source, uint8 derivative) = readSettingsForDerivative(_settings);
-        if (derivative == 0) revert("Invalid Derivative");
-        if (derivative == 1) {
-            _setupPriceForChainlinkDerivative(_asset, source, _storage);
-        } else if (derivative == 2) {
-            _setupPriceForCurveDerivative(_asset, source, _storage);
+        if (_settings.derivative == 0) revert("Invalid Derivative");
+        if (_settings.derivative == 1) {
+            _setupPriceForChainlinkDerivative(_asset, _settings.source, _storage);
+        } else if (_settings.derivative == 2) {
+            _setupPriceForCurveDerivative(_asset, _settings.source, _storage);
         }
 
         getAssetSettings[_asset] = _settings;
@@ -155,10 +135,17 @@ contract PriceRouter is Ownable {
      *      is nonzero is sufficient to see if the asset is set up.
      */
     function isSupported(ERC20 asset) external view returns (bool) {
-        return getAssetSettings[asset] > 0;
+        return getAssetSettings[asset].derivative > 0;
     }
 
     // ======================================= PRICING OPERATIONS =======================================
+
+    struct PriceCache {
+        address asset;
+        uint96 price;
+    }
+
+    uint8 private constant PRICE_CACHE_SIZE = 8;
 
     /**
      * @notice Get the value of an asset in terms of another asset.
@@ -181,6 +168,7 @@ contract PriceRouter is Ownable {
      */
     error PriceRouter__LengthMismatch();
 
+    //TODO When arguments are read-only on external functions, the data location should be calldata
     /**
      * @notice Get the total value of multiple assets in terms of another asset.
      * @param baseAssets addresses of the assets to get the price of in terms of the quote asset
@@ -194,35 +182,20 @@ contract PriceRouter is Ownable {
         ERC20 quoteAsset,
         bool isView
     ) external returns (uint256) {
-        uint256 numOfAssets = baseAssets.length;
-        if (numOfAssets != amounts.length) revert PriceRouter__LengthMismatch();
+        return _getValues(baseAssets, amounts, quoteAsset, isView);
+    }
 
-        uint256 ethToUsd;
-        uint256 quoteSettings;
-        if ((quoteSettings = getAssetSettings[quoteAsset]) == 0)
-            revert PriceRouter__UnsupportedAsset(address(quoteAsset));
-
-        uint256 valueInUSD;
-        uint256 price;
-        uint256 quotePrice;
-
-        for (uint256 i = 0; i < numOfAssets; i++) {
-            // Skip zero amount values.
-            if (amounts[i] == 0) continue;
-            ERC20 baseAsset = baseAssets[i];
-            uint256 baseSettings;
-            if ((baseSettings = getAssetSettings[baseAsset]) == 0)
-                revert PriceRouter__UnsupportedAsset(address(baseAsset));
-            (price, ethToUsd) = _getPriceInUSD(baseAsset, baseSettings, ethToUsd, isView);
-            // Save the conversion if base == quote.
-            if (baseAsset == quoteAsset) quotePrice = price;
-            valueInUSD += amounts[i].mulDivDown(price, 10**baseAsset.decimals());
-        }
-
-        // Finally get quoteAsset price in USD.
-        if (quotePrice == 0) (quotePrice, ) = _getPriceInUSD(quoteAsset, quoteSettings, ethToUsd, isView);
-
-        return valueInUSD.mulDivDown(10**quoteAsset.decimals(), quotePrice);
+    function getValueDiff(
+        ERC20[] memory baseAssets0,
+        uint256[] memory amounts0,
+        ERC20[] memory baseAssets1,
+        uint256[] memory amounts1,
+        ERC20 quoteAsset,
+        bool isView
+    ) external returns (uint256) {
+        return
+            _getValues(baseAssets0, amounts0, quoteAsset, isView) -
+            _getValues(baseAssets1, amounts1, quoteAsset, isView);
     }
 
     /**
@@ -236,11 +209,10 @@ contract PriceRouter is Ownable {
         ERC20 quoteAsset,
         bool isView
     ) public returns (uint256 exchangeRate) {
-        uint256 baseSettings;
-        uint256 quoteSettings;
-        if ((baseSettings = getAssetSettings[baseAsset]) == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
-        if ((quoteSettings = getAssetSettings[quoteAsset]) == 0)
-            revert PriceRouter__UnsupportedAsset(address(quoteAsset));
+        AssetSettings memory baseSettings = getAssetSettings[baseAsset];
+        AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
+        if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
+        if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
         // Pass in zero for ethToUsd, since it has not been set yet.
         (exchangeRate, ) = _getExchangeRate(
             baseAsset,
@@ -266,14 +238,13 @@ contract PriceRouter is Ownable {
     ) external returns (uint256[] memory exchangeRates) {
         uint8 quoteAssetDecimals = quoteAsset.decimals();
         uint256 ethToUsd;
-        uint256 quoteSettings;
-        if ((quoteSettings = getAssetSettings[quoteAsset]) == 0)
-            revert PriceRouter__UnsupportedAsset(address(quoteAsset));
+        AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
+        if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
 
         uint256 numOfAssets = baseAssets.length;
         exchangeRates = new uint256[](numOfAssets);
         for (uint256 i; i < numOfAssets; i++) {
-            uint256 baseSettings = getAssetSettings[baseAssets[i]];
+            AssetSettings memory baseSettings = getAssetSettings[baseAssets[i]];
             (exchangeRates[i], ethToUsd) = _getExchangeRate(
                 baseAssets[i],
                 baseSettings,
@@ -304,9 +275,9 @@ contract PriceRouter is Ownable {
      */
     function _getExchangeRate(
         ERC20 baseAsset,
-        uint256 baseSettings,
+        AssetSettings memory baseSettings,
         ERC20 quoteAsset,
-        uint256 quoteSettings,
+        AssetSettings memory quoteSettings,
         uint8 quoteAssetDecimals,
         uint256 ethToUsd,
         bool isView
@@ -321,72 +292,75 @@ contract PriceRouter is Ownable {
 
     function _getPriceInUSD(
         ERC20 asset,
-        uint256 settings,
+        AssetSettings memory settings,
         uint256 ethToUsd,
         bool isView
     ) internal returns (uint256, uint256) {
         if (asset == WETH && ethToUsd > 0) return (ethToUsd, ethToUsd);
-        (address source, uint8 derivative) = readSettingsForDerivative(settings);
         uint256 exchangeRate;
 
-        if (derivative == 1) {
-            (exchangeRate, ethToUsd) = _getPriceForChainlinkDerivative(asset, source, ethToUsd, isView);
-        } else if (derivative == 2) {
-            (exchangeRate, ethToUsd) = _getPriceForCurveDerivative(asset, source, ethToUsd, isView);
+        if (settings.derivative == 1) {
+            (exchangeRate, ethToUsd) = _getPriceForChainlinkDerivative(asset, settings.source, ethToUsd, isView);
+        } else if (settings.derivative == 2) {
+            (exchangeRate, ethToUsd) = _getPriceForCurveDerivative(asset, settings.source, ethToUsd, isView);
         }
 
         return (exchangeRate, ethToUsd);
     }
 
+    function _getValues(
+        ERC20[] memory baseAssets,
+        uint256[] memory amounts,
+        ERC20 quoteAsset,
+        bool isView
+    ) internal returns (uint256) {
+        uint256 numOfAssets = baseAssets.length;
+        if (numOfAssets != amounts.length) revert PriceRouter__LengthMismatch();
+
+        uint256 ethToUsd;
+        AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
+        if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
+
+        uint256 valueInUSD;
+        uint256 price;
+        uint256 quotePrice;
+
+        for (uint256 i = 0; i < numOfAssets; i++) {
+            // Skip zero amount values.
+            if (amounts[i] == 0) continue;
+            ERC20 baseAsset = baseAssets[i];
+            AssetSettings memory baseSettings = getAssetSettings[baseAsset];
+            if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
+            (price, ethToUsd) = _getPriceInUSD(baseAsset, baseSettings, ethToUsd, isView);
+            // Save the conversion if base == quote.
+            if (baseAsset == quoteAsset) quotePrice = price;
+            valueInUSD += amounts[i].mulDivDown(price, 10**baseAsset.decimals());
+        }
+
+        // Finally get quoteAsset price in USD.
+        if (quotePrice == 0) (quotePrice, ) = _getPriceInUSD(quoteAsset, quoteSettings, ethToUsd, isView);
+
+        return valueInUSD.mulDivDown(10**quoteAsset.decimals(), quotePrice);
+    }
+
     // =========================================== CHAINLINK PRICE DERIVATIVE ===========================================\
+    struct ChainlinkDerivativeStorage {
+        uint144 max;
+        uint80 min;
+        uint24 heartbeat;
+        bool inETH;
+    }
     /**
      * @notice Chainlink Derivative Storage
      */
-    mapping(ERC20 => uint256) public getChainlinkDerivativeStorage;
-
-    /**
-     * @notice Chainlink Derivative Storage is as follows
-     * 256 bit
-     * uint144 max
-     * uint88 min
-     * uint24 heartbeat
-     * 0 bit
-     */
-    function _readStorageForChainlinkDerivative(uint256 _storage)
-        internal
-        pure
-        returns (
-            uint144 max,
-            uint80 min,
-            uint24 heartbeat,
-            bool inETH
-        )
-    {
-        max = uint144(_storage >> 112);
-        min = uint80(_storage >> 32);
-        heartbeat = uint24(_storage >> 8);
-        inETH = uint8(_storage) == 1;
-    }
-
-    function createStorageForChainlinkDerivative(
-        uint144 _max,
-        uint80 _min,
-        uint24 _heartbeat,
-        bool _inETH
-    ) public pure returns (uint256 _storage) {
-        _storage |= uint256(_max) << 112;
-        _storage |= uint256(_min) << 24;
-        _storage |= uint256(_heartbeat) << 8;
-        _storage |= uint256(_inETH ? 1 : 0);
-    }
+    mapping(ERC20 => ChainlinkDerivativeStorage) public getChainlinkDerivativeStorage;
 
     function _setupPriceForChainlinkDerivative(
         ERC20 _asset,
         address _source,
         bytes memory _storage
     ) internal {
-        uint256 parameters = abi.decode(_storage, (uint256));
-        (uint144 max, uint80 min, uint24 heartbeat, bool inETH) = _readStorageForChainlinkDerivative(parameters);
+        ChainlinkDerivativeStorage memory parameters = abi.decode(_storage, (ChainlinkDerivativeStorage));
 
         // Use Chainlink to get the min and max of the asset.
         IChainlinkAggregator aggregator = IChainlinkAggregator(IChainlinkAggregator(_source).aggregator());
@@ -398,28 +372,31 @@ contract PriceRouter is Ownable {
         uint256 bufferedMinPrice = (minFromChainklink * 1.1e18) / 1e18;
         uint256 bufferedMaxPrice = (maxFromChainlink * 0.9e18) / 1e18;
 
-        if (min == 0) {
+        if (parameters.min == 0) {
             // Revert if bufferedMinPrice overflows because uint80 is too small to hold the minimum price,
             // and lowering it to uint80 is not safe because the price feed can stop being updated before
             // it actually gets to that lower price.
             if (bufferedMinPrice > type(uint80).max) revert("Buffered Min Overflow");
-            min = uint80(bufferedMinPrice);
+            parameters.min = uint80(bufferedMinPrice);
         } else {
-            if (min < bufferedMinPrice) revert PriceRouter__InvalidMinPrice(min, bufferedMinPrice);
+            if (parameters.min < bufferedMinPrice)
+                revert PriceRouter__InvalidMinPrice(parameters.min, bufferedMinPrice);
         }
 
-        if (max == 0) {
+        if (parameters.max == 0) {
             //Do not revert even if bufferedMaxPrice is greater than uint144, because lowering it to uint144 max is more conservative.
-            max = bufferedMaxPrice > type(uint144).max ? type(uint144).max : uint144(bufferedMaxPrice);
+            parameters.max = bufferedMaxPrice > type(uint144).max ? type(uint144).max : uint144(bufferedMaxPrice);
         } else {
-            if (max > bufferedMaxPrice) revert PriceRouter__InvalidMaxPrice(max, bufferedMaxPrice);
+            if (parameters.max > bufferedMaxPrice)
+                revert PriceRouter__InvalidMaxPrice(parameters.max, bufferedMaxPrice);
         }
 
-        if (min >= max) revert PriceRouter__MinPriceGreaterThanMaxPrice(min, max);
+        if (parameters.min >= parameters.max)
+            revert PriceRouter__MinPriceGreaterThanMaxPrice(parameters.min, parameters.max);
 
-        heartbeat = heartbeat != 0 ? heartbeat : DEFAULT_HEART_BEAT;
+        parameters.heartbeat = parameters.heartbeat != 0 ? parameters.heartbeat : DEFAULT_HEART_BEAT;
 
-        getChainlinkDerivativeStorage[_asset] = createStorageForChainlinkDerivative(max, min, heartbeat, inETH);
+        getChainlinkDerivativeStorage[_asset] = parameters;
     }
 
     function _getPriceForChainlinkDerivative(
@@ -428,13 +405,12 @@ contract PriceRouter is Ownable {
         uint256 _ethToUsd,
         bool isView
     ) internal returns (uint256, uint256) {
-        uint256 _storage = getChainlinkDerivativeStorage[_asset];
+        ChainlinkDerivativeStorage memory parameters = getChainlinkDerivativeStorage[_asset];
         IChainlinkAggregator aggregator = IChainlinkAggregator(_source);
         (, int256 _price, , uint256 _timestamp, ) = aggregator.latestRoundData();
         uint256 price = _price.toUint256();
-        (uint144 max, uint88 min, uint24 heartbeat, bool inETH) = _readStorageForChainlinkDerivative(_storage);
-        _checkPriceFeed(address(_asset), price, _timestamp, max, min, heartbeat);
-        if (inETH) {
+        _checkPriceFeed(address(_asset), price, _timestamp, parameters.max, parameters.min, parameters.heartbeat);
+        if (parameters.inETH) {
             if (_ethToUsd == 0) {
                 (_ethToUsd, ) = _getPriceInUSD(WETH, getAssetSettings[WETH], 0, isView);
             }
@@ -512,9 +488,6 @@ contract PriceRouter is Ownable {
     mapping(ERC20 => bytes4) public getCurveDerivativeStorage1;
 
     // source is the pool
-    //TODO so should this function see if any of the tokens are WETH or ETH, and if so, then it sets a bool to true
-    // saying yes you need to call `claim_admin_fees` if `isView` is false.
-    // Guess this could also store the function selector to use? Either claim_admin_fees or withdraw_admin_fees
     function _setupPriceForCurveDerivative(
         ERC20 _asset,
         address _source,

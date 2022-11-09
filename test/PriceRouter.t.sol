@@ -48,24 +48,28 @@ contract PriceRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        uint256 wethChainlinkSettings = priceRouter.createSettingsForDerivative(WETH_USD_FEED, CHAINLINK_DERIVATIVE);
-        priceRouter.addAsset(WETH, wethChainlinkSettings, abi.encode(0), 1_530e8);
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
 
-        uint256 usdcChainlinkSettings = priceRouter.createSettingsForDerivative(USDC_USD_FEED, CHAINLINK_DERIVATIVE);
-        priceRouter.addAsset(USDC, usdcChainlinkSettings, abi.encode(0), 1e8);
+        PriceRouter.AssetSettings memory settings;
 
-        uint256 usdtChainlinkSettings = priceRouter.createSettingsForDerivative(USDT_USD_FEED, CHAINLINK_DERIVATIVE);
-        priceRouter.addAsset(USDT, usdtChainlinkSettings, abi.encode(0), 1e8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), 1_530e8);
 
-        uint256 wbtcChainlinkSettings = priceRouter.createSettingsForDerivative(WBTC_USD_FEED, CHAINLINK_DERIVATIVE);
-        priceRouter.addAsset(WBTC, wbtcChainlinkSettings, abi.encode(0), 20_210e8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
 
-        uint256 bondChainlinkSettings = priceRouter.createSettingsForDerivative(BOND_ETH_FEED, CHAINLINK_DERIVATIVE);
-        uint256 bondChainlinkStorage = priceRouter.createStorageForChainlinkDerivative(0, 0, 0, true);
-        priceRouter.addAsset(BOND, bondChainlinkSettings, abi.encode(bondChainlinkStorage), 4.863e8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
+        priceRouter.addAsset(USDT, settings, abi.encode(stor), 1e8);
 
-        uint256 triCryptoSettings = priceRouter.createSettingsForDerivative(TriCryptoPool, CURVE_DERIVATIVE);
-        priceRouter.addAsset(TriCryptoToken, triCryptoSettings, abi.encode(0), 1.0248e8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WBTC_USD_FEED);
+        priceRouter.addAsset(WBTC, settings, abi.encode(stor), 20_210e8);
+
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, TriCryptoPool);
+        priceRouter.addAsset(TriCryptoToken, settings, abi.encode(0), 1.0248e8);
+
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BOND_ETH_FEED);
+        stor.inETH = true;
+        priceRouter.addAsset(BOND, settings, abi.encode(stor), 4.863e8);
         // priceRouter.addAsset(WETH, 0, 0, false, 0);
         // priceRouter.addAsset(WBTC, 0, 0, false, 0);
         // priceRouter.addAsset(USDC, 0, 0, false, 0);
@@ -88,14 +92,14 @@ contract PriceRouterTest is Test {
         amounts[2] = 0.1e8;
         amounts[3] = 2e18;
         uint256 gas = gasleft();
-        uint256 tvl = priceRouter.getValues(baseAssets, amounts, USDC);
+        uint256 tvl = priceRouter.getValues(baseAssets, amounts, USDC, true);
         console.log("Gas Used", gas - gasleft());
         console.log("TVL", tvl);
     }
 
     function testAddCurveAsset() external {
         uint256 gas = gasleft();
-        uint256 price = priceRouter.getExchangeRate(TriCryptoToken, USDC);
+        uint256 price = priceRouter.getExchangeRate(TriCryptoToken, USDC, true);
         console.log("Gas Used", gas - gasleft());
         console.log("Tri Crypto Price", price);
     }

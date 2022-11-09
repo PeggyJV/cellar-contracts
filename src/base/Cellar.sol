@@ -840,19 +840,18 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         }
 
         address priceRouter = registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT);
-        bytes[] memory calls = new bytes[](2);
-        calls[0] = abi.encodeWithSelector(PriceRouter.getValues.selector, positionAssets, balances, asset, true);
-        calls[1] = abi.encodeWithSelector(
-            PriceRouter.getValues.selector,
+        bytes memory data = abi.encodeWithSelector(
+            PriceRouter.getValueDiff.selector,
+            positionAssets,
+            balances,
             debtPositionAssets,
             debtBalances,
             asset,
             true
         );
-        bytes[] memory results = priceRouter.functionStaticCall(
-            abi.encodeWithSelector(PriceRouter.multicall.selector, calls)
-        );
-        assets = abi.decode(results[0], (uint256)) - abi.decode(results[1], (uint256));
+
+        bytes memory results = priceRouter.functionStaticCall(data);
+        assets = abi.decode(results, (uint256));
     }
 
     function _totalAssetsMutative() internal returns (uint256 assets) {
@@ -907,11 +906,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
 
         address priceRouter = registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT);
         bytes memory result = priceRouter.functionStaticCall(
-            PriceRouter.getValues.selector,
-            positionAssets,
-            balances,
-            asset,
-            true
+            abi.encodeWithSelector(PriceRouter.getValues.selector, positionAssets, balances, asset, true)
         );
         asset = abi.decode(result, (uint256));
         // assets = priceRouter.getValues(positionAssets, balances, asset, true);
