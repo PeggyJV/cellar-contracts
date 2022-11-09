@@ -200,36 +200,15 @@ contract CellarRouterTest is Test {
         uint256 assetsReceived = WETH.balanceOf(address(wethCellar));
 
         // Run test.
-        assertApproxEqRel(shares, assetsReceived, 5e10, "Should have 1:1 exchange rate for initial deposit.");
-        assertApproxEqRel(
-            wethCellar.previewWithdraw(assetsReceived),
-            shares,
-            5e10,
-            "Withdrawing assets should burn shares given."
-        );
-        assertApproxEqRel(
-            wethCellar.previewDeposit(assetsReceived),
-            shares,
-            5e10,
-            "Depositing assets should mint shares given."
-        );
-        assertApproxEqRel(
-            wethCellar.totalSupply(),
-            shares,
-            5e10,
-            "Should have updated total supply with shares minted."
-        );
-        assertApproxEqRel(
-            wethCellar.totalAssets(),
-            assetsReceived,
-            5e10,
-            "Should have updated total assets with assets deposited."
-        );
-        assertApproxEqRel(wethCellar.balanceOf(pOwner), shares, 5e10, "Should have updated user's share balance.");
-        assertApproxEqRel(
+        assertEq(shares, assetsReceived, "Should have 1:1 exchange rate for initial deposit.");
+        assertEq(wethCellar.previewWithdraw(assetsReceived), shares, "Withdrawing assets should burn shares given.");
+        assertEq(wethCellar.previewDeposit(assetsReceived), shares, "Depositing assets should mint shares given.");
+        assertEq(wethCellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
+        assertEq(wethCellar.totalAssets(), assetsReceived, "Should have updated total assets with assets deposited.");
+        assertEq(wethCellar.balanceOf(pOwner), shares, "Should have updated user's share balance.");
+        assertEq(
             wethCellar.convertToAssets(wethCellar.balanceOf(pOwner)),
             assetsReceived,
-            5e10,
             "Should return all user's assets."
         );
         assertEq(USDC.balanceOf(pOwner), 0, "Should have deposited assets from user.");
@@ -256,30 +235,14 @@ contract CellarRouterTest is Test {
         // Run test.
         assertEq(shares, assetsReceived.changeDecimals(6, 18), "Should have 1:1 exchange rate for initial deposit.");
         // Preview withdraw rounds up, but the price router is rounding down
-        assertApproxEqRel(
-            cellar.previewWithdraw(assetsReceived),
-            shares,
-            5e10,
-            "Withdrawing assets should burn shares given."
-        );
-        assertApproxEqRel(
-            cellar.previewDeposit(assetsReceived),
-            shares,
-            5e10,
-            "Depositing assets should mint shares given."
-        );
-        assertApproxEqRel(cellar.totalSupply(), shares, 5e10, "Should have updated total supply with shares minted.");
-        assertApproxEqRel(
-            cellar.totalAssets(),
-            assetsReceived,
-            5e10,
-            "Should have updated total assets with assets deposited."
-        );
-        assertApproxEqRel(cellar.balanceOf(address(this)), shares, 5e10, "Should have updated user's share balance.");
-        assertApproxEqRel(
+        assertEq(cellar.previewWithdraw(assetsReceived), shares, "Withdrawing assets should burn shares given.");
+        assertEq(cellar.previewDeposit(assetsReceived), shares, "Depositing assets should mint shares given.");
+        assertEq(cellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
+        assertEq(cellar.totalAssets(), assetsReceived, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.balanceOf(address(this)), shares, "Should have updated user's share balance.");
+        assertEq(
             cellar.convertToAssets(cellar.balanceOf(address(this))),
             assetsReceived,
-            5e10,
             "Should return all user's assets."
         );
         assertEq(DAI.balanceOf(address(this)), 0, "Should have deposited assets from user.");
@@ -311,30 +274,14 @@ contract CellarRouterTest is Test {
 
         // Run test.
         assertEq(shares, assetsReceived.changeDecimals(6, 18), "Should have 1:1 exchange rate for initial deposit.");
-        assertApproxEqRel(
-            cellar.previewWithdraw(assetsReceived),
-            shares,
-            5e10,
-            "Withdrawing assets should burn shares given."
-        );
-        assertApproxEqRel(
-            cellar.previewDeposit(assetsReceived),
-            shares,
-            5e10,
-            "Depositing assets should mint shares given."
-        );
-        assertApproxEqRel(cellar.totalSupply(), shares, 5e10, "Should have updated total supply with shares minted.");
-        assertApproxEqRel(
-            cellar.totalAssets(),
-            assetsReceived,
-            5e10,
-            "Should have updated total assets with assets deposited."
-        );
-        assertApproxEqRel(cellar.balanceOf(address(this)), shares, 5e10, "Should have updated user's share balance.");
-        assertApproxEqRel(
+        assertEq(cellar.previewWithdraw(assetsReceived), shares, "Withdrawing assets should burn shares given.");
+        assertEq(cellar.previewDeposit(assetsReceived), shares, "Depositing assets should mint shares given.");
+        assertEq(cellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
+        assertEq(cellar.totalAssets(), assetsReceived, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.balanceOf(address(this)), shares, "Should have updated user's share balance.");
+        assertEq(
             cellar.convertToAssets(cellar.balanceOf(address(this))),
             assetsReceived,
-            5e10,
             "Should return all user's assets."
         );
         assertEq(DAI.balanceOf(address(this)), 0, "Should have deposited assets from user.");

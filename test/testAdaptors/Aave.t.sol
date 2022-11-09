@@ -128,7 +128,7 @@ contract CellarAaveTest is Test {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
-        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 2, "Assets should have been deposited into Aave.");
+        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 1, "Assets should have been deposited into Aave.");
     }
 
     function testWithdraw() external {
@@ -154,7 +154,7 @@ contract CellarAaveTest is Test {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
-        assertApproxEqAbs(cellar.totalAssets(), assets, 2, "Total assets should equal assets deposited.");
+        assertApproxEqAbs(cellar.totalAssets(), assets, 1, "Total assets should equal assets deposited.");
     }
 
     function testTakingOutLoans() external {
@@ -162,7 +162,7 @@ contract CellarAaveTest is Test {
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 2, "Cellar should have aUSDC worth of assets.");
+        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 1, "Cellar should have aUSDC worth of assets.");
 
         // Take out a USDC loan.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -341,7 +341,7 @@ contract CellarAaveTest is Test {
         });
         cellar.callOnAdaptor(data);
 
-        uint256 maxAssets = cellar.maxWithdraw(address(this)) - 1;
+        uint256 maxAssets = cellar.maxWithdraw(address(this));
         cellar.withdraw(maxAssets, address(this), address(this));
 
         assertEq(
@@ -400,10 +400,9 @@ contract CellarAaveTest is Test {
         );
 
         uint256 maxWithdraw = cellar.maxWithdraw(address(this));
-        assertApproxEqAbs(
+        assertEq(
             maxWithdraw,
             USDC.balanceOf(address(cellar)),
-            1,
             "Only assets withdrawable should be USDC sitting in the cellar."
         );
 

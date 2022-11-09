@@ -163,7 +163,7 @@ contract PriceRouter is Ownable {
      */
     error PriceRouter__LengthMismatch();
 
-    //TODO When arguments are read-only on external functions, the data location should be calldata
+    //TODO below code is based off the old price router.
     /**
      * @notice Get the total value of multiple assets in terms of another asset.
      * @param baseAssets addresses of the assets to get the price of in terms of the quote asset
@@ -175,11 +175,39 @@ contract PriceRouter is Ownable {
         ERC20[] calldata baseAssets,
         uint256[] calldata amounts,
         ERC20 quoteAsset
-    ) external view returns (uint256) {
+    ) external view returns (uint256 value) {
+        uint256 numOfAssets = baseAssets.length;
+        if (numOfAssets != amounts.length) revert PriceRouter__LengthMismatch();
+        AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
+        if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
+
+        uint8 quoteAssetDecimals = quoteAsset.decimals();
         // Create an empty Price Cache.
         PriceCache[PRICE_CACHE_SIZE] memory cache;
-        return _getValues(baseAssets, amounts, quoteAsset, cache);
+
+        for (uint256 i; i < numOfAssets; i++) {
+            ERC20 baseAsset = baseAssets[i];
+            AssetSettings memory baseSettings = getAssetSettings[baseAsset];
+            if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
+
+            value += amounts[i].mulDivDown(
+                _getExchangeRate(baseAsset, baseSettings, quoteAsset, quoteSettings, quoteAssetDecimals, cache),
+                10**baseAsset.decimals()
+            );
+        }
     }
+
+    //TODO below code that caused totalAssets to be rounded down 1 WEI.
+    // Below code is slightly more efficient using 3k less gas.
+    // function getValues(
+    //     ERC20[] calldata baseAssets,
+    //     uint256[] calldata amounts,
+    //     ERC20 quoteAsset
+    // ) external view returns (uint256) {
+    //     // Create an empty Price Cache.
+    //     PriceCache[PRICE_CACHE_SIZE] memory cache;
+    //     return _getValues(baseAssets, amounts, quoteAsset, cache);
+    // }
 
     function getValueDiff(
         ERC20[] calldata baseAssets0,

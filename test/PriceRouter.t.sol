@@ -103,6 +103,24 @@ contract PriceRouterTest is Test {
         priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(0), 1.0248e8);
     }
 
+    function testGetValues() external {
+        ERC20[] memory assets = new ERC20[](4);
+        uint256[] memory amounts = new uint256[](4);
+        assets[0] = USDC;
+        assets[1] = WETH;
+        assets[2] = WBTC;
+        assets[3] = DAI;
+
+        amounts[0] = 100e6;
+        amounts[1] = 2e18;
+        amounts[2] = 0.1e8;
+        amounts[3] = 100e18;
+
+        uint256 gas = gasleft();
+        priceRouter.getValues(assets, amounts, USDC);
+        console.log("Gas used for getValues", gas - gasleft());
+    }
+
     function testMinPriceGreaterThanMaxPrice() external {
         // Make sure adding an asset with an invalid price range fails.
         uint80 minPrice = 2e8;
