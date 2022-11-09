@@ -13,6 +13,7 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -32,6 +33,8 @@ contract CellarAaveTest is Test {
 
     address private immutable strategist = vm.addr(0xBEEF);
 
+    uint8 private constant CHAINLINK_DERIVATIVE = 1;
+
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private aWETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
@@ -44,6 +47,10 @@ contract CellarAaveTest is Test {
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+
+    // Chainlink PriceFeeds
+    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
 
     uint32 private usdcPosition;
     uint32 private aUSDCPosition;
@@ -59,8 +66,17 @@ contract CellarAaveTest is Test {
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
-        priceRouter.addAsset(USDC, 0, 0, false, 0);
-        priceRouter.addAsset(WETH, 0, 0, false, 0);
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+
+        PriceRouter.AssetSettings memory settings;
+
+        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
 
         // Setup Cellar:
         // Cellar positions array.
@@ -112,7 +128,7 @@ contract CellarAaveTest is Test {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
-        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 1, "Assets should have been deposited into Aave.");
+        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 2, "Assets should have been deposited into Aave.");
     }
 
     function testWithdraw() external {
@@ -138,7 +154,7 @@ contract CellarAaveTest is Test {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
-        assertApproxEqAbs(cellar.totalAssets(), assets, 1, "Total assets should equal assets deposited.");
+        assertApproxEqAbs(cellar.totalAssets(), assets, 2, "Total assets should equal assets deposited.");
     }
 
     function testTakingOutLoans() external {
@@ -146,7 +162,7 @@ contract CellarAaveTest is Test {
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 1, "Cellar should have aUSDC worth of assets.");
+        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 2, "Cellar should have aUSDC worth of assets.");
 
         // Take out a USDC loan.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -325,7 +341,7 @@ contract CellarAaveTest is Test {
         });
         cellar.callOnAdaptor(data);
 
-        uint256 maxAssets = cellar.maxWithdraw(address(this));
+        uint256 maxAssets = cellar.maxWithdraw(address(this)) - 1;
         cellar.withdraw(maxAssets, address(this), address(this));
 
         assertEq(
@@ -384,9 +400,10 @@ contract CellarAaveTest is Test {
         );
 
         uint256 maxWithdraw = cellar.maxWithdraw(address(this));
-        assertEq(
+        assertApproxEqAbs(
             maxWithdraw,
             USDC.balanceOf(address(cellar)),
+            1,
             "Only assets withdrawable should be USDC sitting in the cellar."
         );
 
