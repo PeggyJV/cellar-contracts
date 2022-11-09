@@ -53,7 +53,7 @@ contract PriceRouterTest is Test {
         PriceRouter.AssetSettings memory settings;
 
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
-        priceRouter.addAsset(WETH, settings, abi.encode(stor), 1_530e8);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), 1_171e8);
 
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
@@ -62,14 +62,14 @@ contract PriceRouterTest is Test {
         priceRouter.addAsset(USDT, settings, abi.encode(stor), 1e8);
 
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WBTC_USD_FEED);
-        priceRouter.addAsset(WBTC, settings, abi.encode(stor), 20_210e8);
+        priceRouter.addAsset(WBTC, settings, abi.encode(stor), 17_160e8);
 
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, TriCryptoPool);
         priceRouter.addAsset(TriCryptoToken, settings, abi.encode(0), 1.0248e8);
 
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BOND_ETH_FEED);
         stor.inETH = true;
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), 4.863e8);
+        priceRouter.addAsset(BOND, settings, abi.encode(stor), 3.74e8);
         // priceRouter.addAsset(WETH, 0, 0, false, 0);
         // priceRouter.addAsset(WBTC, 0, 0, false, 0);
         // priceRouter.addAsset(USDC, 0, 0, false, 0);
@@ -78,28 +78,36 @@ contract PriceRouterTest is Test {
     }
 
     // ======================================= ASSET TESTS =======================================
-    //TODO see if OG price router has this same issue with chainlink feeds taking a ton of gas for some reason
     function testAddAsset() external {
-        ERC20[] memory baseAssets = new ERC20[](4);
-        baseAssets[0] = USDC;
-        baseAssets[1] = BOND;
+        console.log("**************************START NOW**************************");
+        ERC20[] memory baseAssets = new ERC20[](5);
+        baseAssets[0] = BOND;
+        baseAssets[1] = USDC;
         baseAssets[2] = WBTC;
         baseAssets[3] = WETH;
+        baseAssets[4] = TriCryptoToken;
+        // baseAssets[5] = USDC;
+        // baseAssets[6] = USDC;
+        // baseAssets[7] = WETH;
 
-        uint256[] memory amounts = new uint256[](4);
-        amounts[0] = 100e6;
-        amounts[1] = 20e18;
+        uint256[] memory amounts = new uint256[](5);
+        amounts[0] = 20e18;
+        amounts[1] = 100e6;
         amounts[2] = 0.1e8;
         amounts[3] = 2e18;
+        amounts[4] = 10e18;
+        // amounts[5] = 100e6;
+        // amounts[6] = 100e6;
+        // amounts[7] = 2e18;
         uint256 gas = gasleft();
-        uint256 tvl = priceRouter.getValues(baseAssets, amounts, USDC, true);
+        uint256 tvl = priceRouter.getValues(baseAssets, amounts, USDC);
         console.log("Gas Used", gas - gasleft());
         console.log("TVL", tvl);
     }
 
     function testAddCurveAsset() external {
         uint256 gas = gasleft();
-        uint256 price = priceRouter.getExchangeRate(TriCryptoToken, USDC, true);
+        uint256 price = priceRouter.getExchangeRate(TriCryptoToken, USDC);
         console.log("Gas Used", gas - gasleft());
         console.log("Tri Crypto Price", price);
     }

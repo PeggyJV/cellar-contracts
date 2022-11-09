@@ -665,7 +665,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @return shares amount of shares given for deposit.
      */
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
-        uint256 _totalAssets = _totalAssetsMutative();
+        uint256 _totalAssets = totalAssets();
 
         // Check for rounding error since we round down in previewDeposit.
         if ((shares = _convertToShares(assets, _totalAssets)) == 0) revert Cellar__ZeroShares();
@@ -680,7 +680,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
      * @return assets amount of assets deposited into the cellar.
      */
     function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
-        uint256 _totalAssets = _totalAssetsMutative();
+        uint256 _totalAssets = totalAssets();
 
         // previewMint rounds up, but initial mint could return zero assets, so check for rounding error.
         if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
@@ -729,7 +729,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 shares) {
-        uint256 _totalAssets = _totalAssetsMutative();
+        uint256 _totalAssets = totalAssets();
 
         // No need to check for rounding error, `previewWithdraw` rounds up.
         shares = _previewWithdraw(assets, _totalAssets);
@@ -755,7 +755,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 assets) {
-        uint256 _totalAssets = _totalAssetsMutative();
+        uint256 _totalAssets = totalAssets();
 
         // Check for rounding error since we round down in previewRedeem.
         if ((assets = _convertToAssets(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
@@ -781,7 +781,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             ERC20 positionAsset = _assetOf(position);
 
             uint256 onePositionAsset = 10**positionAsset.decimals();
-            uint256 exchangeRate = priceRouter.getExchangeRate(positionAsset, asset, false);
+            uint256 exchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
 
             // Denominate withdrawable position balance in cellar's asset.
             uint256 totalWithdrawableBalanceInAssets = withdrawableBalance.mulDivDown(exchangeRate, onePositionAsset);
@@ -839,55 +839,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             }
         }
 
-        address priceRouter = registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT);
-        bytes memory data = abi.encodeWithSelector(
-            PriceRouter.getValueDiff.selector,
-            positionAssets,
-            balances,
-            debtPositionAssets,
-            debtBalances,
-            asset,
-            true
-        );
-
-        bytes memory results = priceRouter.functionStaticCall(data);
-        assets = abi.decode(results, (uint256));
-    }
-
-    function _totalAssetsMutative() internal returns (uint256 assets) {
-        uint256 numOfPositions = positions.length;
-        ERC20[] memory positionAssets = new ERC20[](numOfPositions - numberOfDebtPositions);
-        uint256[] memory balances = new uint256[](numOfPositions - numberOfDebtPositions);
-        ERC20[] memory debtPositionAssets = new ERC20[](numberOfDebtPositions);
-        uint256[] memory debtBalances = new uint256[](numberOfDebtPositions);
-        uint256 collateralIndex;
-        uint256 debtIndex;
-
-        for (uint256 i; i < numOfPositions; i++) {
-            uint32 position = positions[i];
-            if (getPositionData[position].isDebt) {
-                debtPositionAssets[debtIndex] = _assetOf(position);
-                debtBalances[debtIndex] = _balanceOf(position);
-                debtIndex++;
-            } else {
-                positionAssets[collateralIndex] = _assetOf(position);
-                balances[collateralIndex] = _balanceOf(position);
-                collateralIndex++;
-            }
-        }
-
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-        bytes[] memory calls = new bytes[](2);
-        calls[0] = abi.encodeWithSelector(PriceRouter.getValues.selector, positionAssets, balances, asset, false);
-        calls[1] = abi.encodeWithSelector(
-            PriceRouter.getValues.selector,
-            debtPositionAssets,
-            debtBalances,
-            asset,
-            false
-        );
-        bytes[] memory results = priceRouter.multicall(calls);
-        assets = abi.decode(results[0], (uint256)) - abi.decode(results[1], (uint256));
+        return priceRouter.getValueDiff(positionAssets, balances, debtPositionAssets, debtBalances, asset);
     }
 
     /**
@@ -904,12 +857,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             balances[i] = _withdrawableFrom(position);
         }
 
-        address priceRouter = registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT);
-        bytes memory result = priceRouter.functionStaticCall(
-            abi.encodeWithSelector(PriceRouter.getValues.selector, positionAssets, balances, asset, true)
-        );
-        asset = abi.decode(result, (uint256));
-        // assets = priceRouter.getValues(positionAssets, balances, asset, true);
+        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+        return priceRouter.getValues(positionAssets, balances, asset);
     }
 
     /**
@@ -1168,7 +1117,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         uint256 maximumAllowedAssets;
         uint256 totalShares;
         {
-            uint256 assetsBeforeAdaptorCall = _totalAssetsMutative();
+            uint256 assetsBeforeAdaptorCall = totalAssets();
             minimumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
             maximumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
             totalShares = totalSupply;
@@ -1184,7 +1133,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         }
 
         // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
-        uint256 assets = _totalAssetsMutative();
+        uint256 assets = totalAssets();
         if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
         }
@@ -1304,7 +1253,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         address strategistPayoutAddress = feeData.strategistPayoutAddress;
         if (strategistPayoutAddress == address(0)) revert Cellar__PayoutNotSet();
 
-        uint256 _totalAssets = _totalAssetsMutative();
+        uint256 _totalAssets = totalAssets();
 
         // Calculate platform fees earned.
         uint256 elapsedTime = block.timestamp - feeData.lastAccrual;
