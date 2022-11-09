@@ -102,7 +102,7 @@ contract PriceRouter is Ownable {
 
     // The size of the price cache. A larger cache can hold more values, but incurs a larger gas cost overhead.
     // A smaller cache has a smaller gas overhead but caches less prices.
-    uint8 private constant PRICE_CACHE_SIZE = 8;
+    uint8 private constant PRICE_CACHE_SIZE = 1;
 
     function addAsset(
         ERC20 _asset,

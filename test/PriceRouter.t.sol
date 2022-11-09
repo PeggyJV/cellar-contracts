@@ -3,7 +3,6 @@ pragma solidity 0.8.16;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { FeedRegistryInterface } from "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
@@ -23,6 +22,10 @@ contract PriceRouterTest is Test {
     address private immutable sender = vm.addr(0xABCD);
     address private immutable receiver = vm.addr(0xBEEF);
 
+    // Valid Derivatives
+    uint8 private constant CHAINLINK_DERIVATIVE = 1;
+    uint8 private constant CURVE_DERIVATIVE = 2;
+
     // Mainnet contracts:
     ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private constant DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
@@ -32,14 +35,8 @@ contract PriceRouterTest is Test {
     ERC20 private constant USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
     IUniswapV2Router private constant uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
-    FeedRegistryInterface private constant feedRegistry =
-        FeedRegistryInterface(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
-
-    uint8 private constant CHAINLINK_DERIVATIVE = 1;
-    uint8 private constant CURVE_DERIVATIVE = 2;
-
-    address private TriCryptoPool = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
-    ERC20 private TriCryptoToken = ERC20(0xc4AD29ba4B3c580e6D59105FFf484999997675Ff);
+    address private constant TriCryptoPool = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
+    ERC20 private constant CRV_3_CRYPTO = ERC20(0xc4AD29ba4B3c580e6D59105FFf484999997675Ff);
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -75,7 +72,7 @@ contract PriceRouterTest is Test {
         priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
 
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, TriCryptoPool);
-        priceRouter.addAsset(TriCryptoToken, settings, abi.encode(0), 1.0248e8);
+        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(0), 1.0248e8);
     }
 
     // ======================================= ASSET TESTS =======================================
@@ -103,7 +100,7 @@ contract PriceRouterTest is Test {
 
     function testAddCurveAsset() external {
         PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, TriCryptoPool);
-        priceRouter.addAsset(TriCryptoToken, settings, abi.encode(0), 1.0248e8);
+        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(0), 1.0248e8);
     }
 
     function testMinPriceGreaterThanMaxPrice() external {
@@ -164,8 +161,7 @@ contract PriceRouterTest is Test {
      */
     function testAssetBelowMinPrice() external {
         // Store price of USDC.
-        (, int256 iPrice, , , ) = feedRegistry.latestRoundData(address(USDC), Denominations.USD);
-        uint256 price = uint256(iPrice);
+        uint256 price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
 
         // Add USDC again, but set a bad minPrice.
         uint80 badMinPrice = 1.1e8;
@@ -194,8 +190,7 @@ contract PriceRouterTest is Test {
      */
     function testAssetAboveMaxPrice() external {
         // Store price of USDC.
-        (, int256 iPrice, , , ) = feedRegistry.latestRoundData(address(USDC), Denominations.USD);
-        uint256 price = uint256(iPrice);
+        uint256 price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
 
         // Add USDC again, but set a bad maxPrice.
         uint144 badMaxPrice = 0.9e8;
@@ -221,7 +216,7 @@ contract PriceRouterTest is Test {
 
     function testAssetStalePrice() external {
         // Store timestamp of USDC.
-        (, , , uint256 timestamp, ) = feedRegistry.latestRoundData(address(USDC), Denominations.USD);
+        uint256 timestamp = uint256(IChainlinkAggregator(USDC_USD_FEED).latestTimestamp());
         timestamp = block.timestamp - timestamp;
 
         // Advance time so that the price becomes stale.
@@ -258,7 +253,7 @@ contract PriceRouterTest is Test {
         stor = PriceRouter.ChainlinkDerivativeStorage(0, 0.0, 3600, false);
         priceRouter.addAsset(WETH, settings, abi.encode(stor), 1_112e8);
 
-        (, , , uint256 timestamp, ) = feedRegistry.latestRoundData(Denominations.ETH, Denominations.USD);
+        uint256 timestamp = uint256(IChainlinkAggregator(WETH_USD_FEED).latestTimestamp());
         timestamp = block.timestamp - timestamp;
 
         // Advance time forward such that the ETH USD price feed is stale, but the BOND ETH price feed is not.
@@ -301,6 +296,9 @@ contract PriceRouterTest is Test {
 
         exchangeRate = priceRouter.getExchangeRate(BOND, BOND); // Weird asset with an ETH price but no USD price.
         assertEq(exchangeRate, 1e18, "BOND -> BOND Exchange Rate Should be 1e18");
+
+        exchangeRate = priceRouter.getExchangeRate(CRV_3_CRYPTO, CRV_3_CRYPTO);
+        assertEq(exchangeRate, 1e18, "CRV_3_CRYPTO -> CRV_3_CRYPTO Exchange Rate Should be 1e18");
 
         // // Test exchange rates.
         address[] memory path = new address[](2);
@@ -349,6 +347,8 @@ contract PriceRouterTest is Test {
 
         assertEq(exchangeRates[3], 1e8, "WBTC -> WBTC Exchange Rate Should be 1e8");
     }
+
+    //TODO add more Curve value tests.
 
     function testGetValue(
         uint256 assets0,
