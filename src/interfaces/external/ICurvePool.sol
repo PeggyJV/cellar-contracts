@@ -9,4 +9,14 @@ interface ICurvePool {
     function claim_admin_fees() external; // For USDT/WETH/WBTC
 
     function withdraw_admin_fees() external;
+
+    function gamma() external view returns (uint256);
+
+    function A() external view returns (uint256);
+
+    function lp_price() external view returns (uint256);
+
+    function price_oracle() external view returns (uint256);
+
+    function price_oracle(uint256 i) external view returns (uint256);
 }

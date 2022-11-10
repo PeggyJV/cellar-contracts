@@ -6,6 +6,8 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+import { ICurveFi } from "src/interfaces/external/ICurveFi.sol";
+import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -25,6 +27,7 @@ contract PriceRouterTest is Test {
     // Valid Derivatives
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
     uint8 private constant CURVE_DERIVATIVE = 2;
+    uint8 private constant CURVEV2_DERIVATIVE = 3;
 
     // Mainnet contracts:
     ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -33,10 +36,18 @@ contract PriceRouterTest is Test {
     ERC20 private constant WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     ERC20 private constant BOND = ERC20(0x0391D2021f89DC339F60Fff84546EA23E337750f);
     ERC20 private constant USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    ERC20 private constant FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
     IUniswapV2Router private constant uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
+    // Curve Pools and Tokens.
     address private constant TriCryptoPool = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
     ERC20 private constant CRV_3_CRYPTO = ERC20(0xc4AD29ba4B3c580e6D59105FFf484999997675Ff);
+    address private constant daiUsdcUsdtPool = 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7;
+    ERC20 private constant CRV_DAI_USDC_USDT = ERC20(0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490);
+    address private constant frax3CrvPool = 0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B;
+    ERC20 private constant CRV_FRAX_3CRV = ERC20(0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B);
+    address private constant wethCrvPool = 0x8301AE4fc9c624d1D396cbDAa1ed877821D7C511;
+    ERC20 private constant CRV_WETH_CRV = ERC20(0xEd4064f376cB8d68F770FB1Ff088a3d0F3FF5c4d);
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -45,6 +56,7 @@ contract PriceRouterTest is Test {
     address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
     address private USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
     address private BOND_ETH_FEED = 0xdd22A54e05410D8d1007c38b5c7A3eD74b855281;
+    address private FRAX_USD_FEED = 0xB9E1E3A9feFf48998E45Fa90847ed4D467E8BcfD;
 
     function setUp() external {
         // Ignore if not on mainnet.
@@ -70,9 +82,6 @@ contract PriceRouterTest is Test {
         price = uint256(IChainlinkAggregator(WBTC_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WBTC_USD_FEED);
         priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
-
-        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, TriCryptoPool);
-        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(0), 1.0248e8);
 
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BOND_ETH_FEED);
         stor = PriceRouter.ChainlinkDerivativeStorage(0, 0, 0, true);
@@ -374,8 +383,6 @@ contract PriceRouterTest is Test {
         assertEq(exchangeRates[3], 1e8, "WBTC -> WBTC Exchange Rate Should be 1e8");
     }
 
-    //TODO add more Curve value tests.
-
     function testGetValue(
         uint256 assets0,
         uint256 assets1,
@@ -492,5 +499,166 @@ contract PriceRouterTest is Test {
             bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__UnsupportedAsset.selector, address(LINK)))
         );
         priceRouter.getExchangeRates(assets, LINK);
+    }
+
+    function testCRV3Crypto() external {
+        // Add 3Crypto to the price router
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, TriCryptoPool);
+        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(0), 883.56e8);
+
+        // Start by adding liquidity to 3CRVCrypto.
+        uint256 amount = 10e18;
+        deal(address(WETH), address(this), amount);
+        WETH.approve(TriCryptoPool, amount);
+        ICurveFi pool = ICurveFi(TriCryptoPool);
+        uint256[3] memory amounts = [0, 0, amount];
+        pool.add_liquidity(amounts, 0);
+        uint256 lpReceived = CRV_3_CRYPTO.balanceOf(address(this));
+        uint256 inputAmountWorth = priceRouter.getValue(WETH, amount, USDC);
+        uint256 outputAmountWorth = priceRouter.getValue(CRV_3_CRYPTO, lpReceived, USDC);
+        assertApproxEqRel(
+            outputAmountWorth,
+            inputAmountWorth,
+            0.01e18,
+            "TriCrypto LP tokens should be worth WETH input +- 1%"
+        );
+    }
+
+    function testCRV3Pool() external {
+        // Add 3Pool to price router.
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
+        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(0), 1.0224e8);
+
+        // Start by adding liquidity to 3Pool.
+        uint256 amount = 1_000e18;
+        deal(address(DAI), address(this), amount);
+        DAI.approve(daiUsdcUsdtPool, amount);
+        ICurveFi pool = ICurveFi(daiUsdcUsdtPool);
+        uint256[3] memory amounts = [amount, 0, 0];
+        pool.add_liquidity(amounts, 0);
+        uint256 lpReceived = CRV_DAI_USDC_USDT.balanceOf(address(this));
+        uint256 inputAmountWorth = priceRouter.getValue(DAI, amount, USDC);
+        uint256 outputAmountWorth = priceRouter.getValue(CRV_DAI_USDC_USDT, lpReceived, USDC);
+        assertApproxEqRel(
+            outputAmountWorth,
+            inputAmountWorth,
+            0.01e18,
+            "3CRV LP tokens should be worth DAI input +- 1%"
+        );
+    }
+
+    function testCRVFrax3Pool() external {
+        // Add 3Pool to price router.
+        PriceRouter.AssetSettings memory settings;
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
+        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(0), 1.0224e8);
+
+        // Add FRAX to price router.
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, FRAX_USD_FEED);
+        priceRouter.addAsset(FRAX, settings, abi.encode(stor), 1e8);
+
+        // Add FRAX3CRV to price router.
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, frax3CrvPool);
+        priceRouter.addAsset(CRV_FRAX_3CRV, settings, abi.encode(0), 1.0087e8);
+
+        // Start by adding liquidity to 3Pool.
+        uint256 amount = 1_000e18;
+        deal(address(DAI), address(this), amount);
+        DAI.approve(daiUsdcUsdtPool, amount);
+        ICurveFi pool = ICurveFi(daiUsdcUsdtPool);
+        uint256[3] memory amounts0 = [amount, 0, 0];
+        pool.add_liquidity(amounts0, 0);
+        uint256 lpReceived = CRV_DAI_USDC_USDT.balanceOf(address(this));
+
+        // Now use liquidity to add liquidity to Frax 3CRV Pool.
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, frax3CrvPool);
+        CRV_DAI_USDC_USDT.approve(frax3CrvPool, lpReceived);
+        pool = ICurveFi(frax3CrvPool);
+        uint256[2] memory amounts1 = [0, lpReceived];
+        pool.add_liquidity(amounts1, 0);
+        lpReceived = CRV_FRAX_3CRV.balanceOf(address(this));
+        uint256 inputAmountWorth = priceRouter.getValue(DAI, amount, USDC);
+        uint256 outputAmountWorth = priceRouter.getValue(CRV_FRAX_3CRV, lpReceived, USDC);
+        assertApproxEqRel(
+            outputAmountWorth,
+            inputAmountWorth,
+            0.01e18,
+            "Frax 3CRV LP tokens should be worth DAI input +- 1%"
+        );
+    }
+
+    function testCRVWETHCRVPool() external {
+        // Add WETH CRV Pool to the price router
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, wethCrvPool);
+        uint256 price = priceRouter.getValue(WETH, 0.051699e18, USDC);
+        priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(0), price.changeDecimals(6, 8));
+
+        // Start by adding liquidity to WETH CRV Pool.
+        uint256 amount = 10e18;
+        deal(address(WETH), address(this), amount);
+        WETH.approve(wethCrvPool, amount);
+        ICurveFi pool = ICurveFi(wethCrvPool);
+        console.log("virtual price", pool.get_virtual_price());
+        uint256[2] memory amounts = [amount, 0];
+        pool.add_liquidity(amounts, 0);
+        uint256 lpReceived = CRV_WETH_CRV.balanceOf(address(this));
+        uint256 inputAmountWorth = priceRouter.getValue(WETH, amount, USDC);
+        uint256 outputAmountWorth = priceRouter.getValue(CRV_WETH_CRV, lpReceived, USDC);
+        assertApproxEqRel(
+            outputAmountWorth,
+            inputAmountWorth,
+            0.01e18,
+            "WETH CRV LP tokens should be worth WETH input +- 1%"
+        );
+    }
+
+    function testCRVAttackVector() external {
+        address SiloFraxPool = 0x9a22CDB1CA1cdd2371cD5BB5199564C4E89465eb;
+        ERC20 SILO = ERC20(0x6f80310CA7F2C654691D1383149Fa1A57d8AB1f8);
+
+        uint256 amount = 10_000_000e18;
+        deal(address(FRAX), address(this), amount);
+        FRAX.approve(SiloFraxPool, amount);
+
+        ICurvePool pool = ICurvePool(SiloFraxPool);
+        uint256 virtualPriceBefore = pool.get_virtual_price();
+        uint256 lpPriceBefore = pool.lp_price();
+        uint256 priceOracleBefore = pool.price_oracle();
+        ICurveFi(SiloFraxPool).exchange(1, 0, amount, 0, false);
+        uint256 virtualPriceAfter = pool.get_virtual_price();
+        uint256 lpPriceAfter = pool.lp_price();
+        uint256 priceOracleAfter = pool.price_oracle();
+        console.log("Results from swapping 10M FRAX to SILO");
+        console.log("Virtual Price Before:", virtualPriceBefore);
+        console.log("Virtual Price After: ", virtualPriceAfter);
+        console.log("LP Price Before:     ", lpPriceBefore);
+        console.log("LP Price After:      ", lpPriceAfter);
+        console.log("Price Oracle Before: ", priceOracleBefore);
+        console.log("Price Oracle After:  ", priceOracleAfter);
+
+        virtualPriceBefore = pool.get_virtual_price();
+        lpPriceBefore = pool.lp_price();
+        priceOracleBefore = pool.price_oracle();
+        SILO.approve(SiloFraxPool, type(uint256).max);
+        uint256 siloBalance = SILO.balanceOf(address(this));
+        ICurveFi(SiloFraxPool).exchange(0, 1, siloBalance, 0, false);
+        virtualPriceAfter = pool.get_virtual_price();
+        lpPriceAfter = pool.lp_price();
+        priceOracleAfter = pool.price_oracle();
+        console.log("Results from swapping SILO balance to FRAX");
+        console.log("Virtual Price Before:", virtualPriceBefore);
+        console.log("Virtual Price After: ", virtualPriceAfter);
+        console.log("LP Price Before:     ", lpPriceBefore);
+        console.log("LP Price After:      ", lpPriceAfter);
+        console.log("Price Oracle Before: ", priceOracleBefore);
+        console.log("Price Oracle After:  ", priceOracleAfter);
+
+        console.log("FRAX Remaining:", FRAX.balanceOf(address(this)));
+        console.log("FRAX Lost: (-)", amount - FRAX.balanceOf(address(this)));
+        siloBalance = SILO.balanceOf(address(this));
     }
 }

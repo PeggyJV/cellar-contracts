@@ -55,12 +55,6 @@ contract PriceRouter is Ownable {
 
     mapping(ERC20 => AssetSettings) public getAssetSettings; // maps an asset -> settings
 
-    uint24 public constant DEFAULT_HEART_BEAT = 1 days;
-
-    uint8 public constant USD_DECIMALS = 8;
-
-    uint8 public constant ETH_DECIMALS = 18;
-
     // ======================================= ADAPTOR OPERATIONS =======================================
 
     /**
@@ -116,6 +110,8 @@ contract PriceRouter is Ownable {
             _setupPriceForChainlinkDerivative(_asset, _settings.source, _storage);
         } else if (_settings.derivative == 2) {
             _setupPriceForCurveDerivative(_asset, _settings.source, _storage);
+        } else if (_settings.derivative == 3) {
+            _setupPriceForCurveV2Derivative(_asset, _settings.source, _storage);
         }
 
         getAssetSettings[_asset] = _settings;
@@ -319,7 +315,9 @@ contract PriceRouter is Ownable {
             exchangeRate = _getPriceForChainlinkDerivative(asset, settings.source, cache);
         } else if (settings.derivative == 2) {
             exchangeRate = _getPriceForCurveDerivative(asset, settings.source, cache);
-        }
+        } else if (settings.derivative == 3) {
+            exchangeRate = _getPriceForCurveV2Derivative(asset, settings.source, cache);
+        } else revert("Unkown Derivative");
 
         // If there is room in the cache, the price fits in a uint96, then find the next spot available.
         if (lastIndex < PRICE_CACHE_SIZE && exchangeRate <= type(uint96).max) {
@@ -365,6 +363,8 @@ contract PriceRouter is Ownable {
      * @notice Chainlink Derivative Storage
      */
     mapping(ERC20 => ChainlinkDerivativeStorage) public getChainlinkDerivativeStorage;
+
+    uint24 public constant DEFAULT_HEART_BEAT = 1 days;
 
     function _setupPriceForChainlinkDerivative(
         ERC20 _asset,
@@ -478,15 +478,6 @@ contract PriceRouter is Ownable {
 
     // =========================================== CURVE PRICE DERIVATIVE ===========================================
     /**
-     * @notice Stores set of Curve Assets that are suseptible to reentrancy attacks.
-     */
-    mapping(address => bool) curveReentrancyAssets;
-
-    function addAssetToCurveReentrancySet(address asset) external onlyOwner {
-        curveReentrancyAssets[asset] = true;
-    }
-
-    /**
      * @notice Curve Derivative Storage
      */
     mapping(ERC20 => address[]) public getCurveDerivativeStorage;
@@ -537,5 +528,109 @@ contract PriceRouter is Ownable {
         // Virtual price is based off the Curve Token decimals.
         uint256 curveTokenDecimals = ERC20(asset).decimals();
         price = minPrice.mulDivDown(pool.get_virtual_price(), 10**curveTokenDecimals);
+    }
+
+    // =========================================== CURVEV2 PRICE DERIVATIVE ===========================================
+    /**
+     * @notice Curve Derivative Storage
+     */
+    mapping(ERC20 => address[]) public getCurveV2DerivativeStorage;
+
+    // source is the pool
+    function _setupPriceForCurveV2Derivative(
+        ERC20 _asset,
+        address _source,
+        bytes memory
+    ) internal {
+        // Could use _storage and do a check?
+        ICurvePool pool = ICurvePool(_source);
+        uint8 coinsLength = 0;
+        while (true) {
+            try pool.coins(coinsLength) {
+                coinsLength++;
+            } catch {
+                break;
+            }
+        }
+        address[] memory coins = new address[](coinsLength);
+        for (uint256 i = 0; i < coinsLength; i++) {
+            coins[i] = pool.coins(i);
+        }
+
+        getCurveDerivativeStorage[_asset] = coins;
+    }
+
+    uint256 private constant GAMMA0 = 28000000000000;
+    uint256 private constant A0 = 2 * 3**3 * 10000;
+    uint256 private constant DISCOUNT0 = 1087460000000000;
+
+    // x has 36 decimals
+    // result has 18 decimals.
+    function _cubicRoot(uint256 x) internal pure returns (uint256) {
+        uint256 D = x / 1e18;
+        for (uint8 i; i < 256; i++) {
+            uint256 diff;
+            uint256 D_prev = D;
+            D = (D * (2 * 1e18 + ((((x / D) * 1e18) / D) * 1e18) / D)) / (3 * 1e18);
+            if (D > D_prev) diff = D - D_prev;
+            else diff = D_prev - D;
+            if (diff <= 1 || diff * 10**18 < D) return D;
+        }
+        revert("Did not converge");
+    }
+
+    /**
+     * @dev so the price oracle in curve V2 pools is the price of coins 1, and 2, in terms of coins 0.
+     * Or coins 1 in terms of coins 0(for a 2 asset pool).
+     */
+    //TODO so I think Curve V2 pools with two tokens can be safely priced IF we check the virtual price to make sure it isn't fucked, then call `lp_price`.
+    // LP price for 2 asset curve pools
+    /**
+     * return 2 * self.virtual_price * self.sqrt_int(self.internal_price_oracle()) / 10**18
+     */
+    //TODO so I think we could check each token in coins, and if coins[0] is not supported, then we try coins[1], and convert the
+    // lp price to in terms of token 1 using the pools price oracle.
+    function _getPriceForCurveV2Derivative(
+        ERC20 asset,
+        address _source,
+        PriceCache[PRICE_CACHE_SIZE] memory cache
+    ) internal view returns (uint256) {
+        ICurvePool pool = ICurvePool(_source);
+
+        address[] memory coins = getCurveDerivativeStorage[asset];
+        ERC20 token0 = ERC20(coins[0]);
+        if (coins.length == 2) {
+            return pool.lp_price().mulDivDown(_getPriceInUSD(token0, getAssetSettings[token0], cache), 1e18);
+        } else if (coins.length == 3) {
+            //TODO, so I think the price of t1 and t2 needs to be in terms of t0, but not sure,
+            // Just using USD did yield a decent answer, but converting to USDT was a bit closer.
+            // uint256 t0Price = _getPriceInUSD(token0, getAssetSettings[token0], cache);
+            // ERC20 token1 = ERC20(coins[1]);
+            // uint256 t1Price = _getPriceInUSD(token1, getAssetSettings[token1], cache);
+            // ERC20 token2 = ERC20(coins[2]);
+            // uint256 t2Price = _getPriceInUSD(token2, getAssetSettings[token2], cache);
+            // // Convert t1 and t2 prices into t0.
+            // uint8 token0Decimals = token0.decimals();
+            // t1Price = (10**token0Decimals).mulDivDown(t1Price, t0Price).changeDecimals(token0Decimals, 18);
+            // t2Price = (10**token0Decimals).mulDivDown(t2Price, t0Price).changeDecimals(token0Decimals, 18);
+
+            uint256 t1Price = pool.price_oracle(0);
+            uint256 t2Price = pool.price_oracle(1);
+            uint256 virtualPrice = pool.get_virtual_price();
+            //TODO check virtual price is within bounds.
+
+            uint256 maxPrice = (3 * virtualPrice * _cubicRoot(t1Price * t2Price)) / 1e18;
+            {
+                uint256 g = pool.gamma().mulDivDown(1e18, GAMMA0);
+                uint256 a = pool.A().mulDivDown(1e18, A0);
+                //TODO wtf is someCurveNumber?
+                uint256 someCurveNumber = (g**2 / 1e18) * a;
+                uint256 discount = someCurveNumber > 1e34 ? someCurveNumber : 1e34;
+                discount = _cubicRoot(discount).mulDivDown(DISCOUNT0, 1e18);
+
+                maxPrice -= maxPrice.mulDivDown(discount, 1e18);
+            }
+            return maxPrice.mulDivDown(_getPriceInUSD(token0, getAssetSettings[token0], cache), 1e18);
+        } else revert("Unsupported Pool");
     }
 }
