@@ -8,6 +8,7 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ICurveFi } from "src/interfaces/external/ICurveFi.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
+import { IPool } from "src/interfaces/external/IPool.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -28,6 +29,7 @@ contract PriceRouterTest is Test {
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
     uint8 private constant CURVE_DERIVATIVE = 2;
     uint8 private constant CURVEV2_DERIVATIVE = 3;
+    uint8 private constant AAVE_DERIVATIVE = 4;
 
     // Mainnet contracts:
     ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -39,6 +41,11 @@ contract PriceRouterTest is Test {
     ERC20 private constant FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
     IUniswapV2Router private constant uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
+    // Aave assets.
+    ERC20 private constant aDAI = ERC20(0x028171bCA77440897B824Ca71D1c56caC55b68A3);
+    ERC20 private constant aUSDC = ERC20(0xBcca60bB61934080951369a648Fb03DF4F96263C);
+    ERC20 private constant aUSDT = ERC20(0x3Ed3B47Dd13EC9a98b44e6204A523E766B225811);
+
     // Curve Pools and Tokens.
     address private constant TriCryptoPool = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
     ERC20 private constant CRV_3_CRYPTO = ERC20(0xc4AD29ba4B3c580e6D59105FFf484999997675Ff);
@@ -48,6 +55,8 @@ contract PriceRouterTest is Test {
     ERC20 private constant CRV_FRAX_3CRV = ERC20(0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B);
     address private constant wethCrvPool = 0x8301AE4fc9c624d1D396cbDAa1ed877821D7C511;
     ERC20 private constant CRV_WETH_CRV = ERC20(0xEd4064f376cB8d68F770FB1Ff088a3d0F3FF5c4d);
+    address private constant aave3Pool = 0xDeBF20617708857ebe4F679508E7b7863a8A8EeE;
+    ERC20 private constant CRV_AAVE_3CRV = ERC20(0xFd2a8fA60Abd58Efe3EeE34dd494cD491dC14900);
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -614,6 +623,50 @@ contract PriceRouterTest is Test {
             0.01e18,
             "WETH CRV LP tokens should be worth WETH input +- 1%"
         );
+    }
+
+    function testCRVAave3Pool() external {
+        // Add aDAI to the price router.
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(AAVE_DERIVATIVE, address(aDAI));
+        priceRouter.addAsset(aDAI, settings, abi.encode(0), 1e8);
+
+        // Add aUSDC to the price router.
+        settings = PriceRouter.AssetSettings(AAVE_DERIVATIVE, address(aUSDC));
+        priceRouter.addAsset(aUSDC, settings, abi.encode(0), 1e8);
+
+        // Add aUSDT to the price router.
+        settings = PriceRouter.AssetSettings(AAVE_DERIVATIVE, address(aUSDT));
+        priceRouter.addAsset(aUSDT, settings, abi.encode(0), 1e8);
+
+        // Add Aave 3Pool.
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, aave3Pool);
+        priceRouter.addAsset(CRV_AAVE_3CRV, settings, abi.encode(0), 1.0983e8);
+
+        // Add liquidity to Aave 3 Pool.
+        uint256 amount = 1_000e18;
+        deal(address(DAI), address(this), amount);
+        IPool aavePool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+        DAI.approve(address(aavePool), amount);
+        aavePool.deposit(address(DAI), amount, address(this), 0);
+        amount = aDAI.balanceOf(address(this));
+        aDAI.approve(aave3Pool, amount);
+        ICurveFi pool = ICurveFi(aave3Pool);
+        uint256[3] memory amounts = [amount, 0, 0];
+        pool.add_liquidity(amounts, 0);
+        uint256 lpReceived = CRV_AAVE_3CRV.balanceOf(address(this));
+
+        // Check value in vs value out.
+        uint256 inputAmountWorth = priceRouter.getValue(aDAI, amount, USDC);
+        uint256 outputAmountWorth = priceRouter.getValue(CRV_AAVE_3CRV, lpReceived, USDC);
+        assertApproxEqRel(
+            outputAmountWorth,
+            inputAmountWorth,
+            0.01e18,
+            "Aave 3 Pool LP tokens should be worth aDAI input +- 1%"
+        );
+        console.log("Input worth", inputAmountWorth);
+        console.log("Output worth", outputAmountWorth);
     }
 
     function testCRVAttackVector() external {

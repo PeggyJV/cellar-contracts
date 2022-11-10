@@ -11,6 +11,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
+import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { console } from "@forge-std/Test.sol";
@@ -112,7 +113,9 @@ contract PriceRouter is Ownable {
             _setupPriceForCurveDerivative(_asset, _settings.source, _storage);
         } else if (_settings.derivative == 3) {
             _setupPriceForCurveV2Derivative(_asset, _settings.source, _storage);
-        }
+        } else if (_settings.derivative == 4) {
+            _setupPriceForAaveDerivative(_asset, _settings.source, _storage);
+        } else revert("Unkown Derivative");
 
         getAssetSettings[_asset] = _settings;
 
@@ -317,6 +320,8 @@ contract PriceRouter is Ownable {
             exchangeRate = _getPriceForCurveDerivative(asset, settings.source, cache);
         } else if (settings.derivative == 3) {
             exchangeRate = _getPriceForCurveV2Derivative(asset, settings.source, cache);
+        } else if (settings.derivative == 4) {
+            exchangeRate = _getPriceForAaveDerivative(asset, settings.source, cache);
         } else revert("Unkown Derivative");
 
         // If there is room in the cache, the price fits in a uint96, then find the next spot available.
@@ -633,4 +638,32 @@ contract PriceRouter is Ownable {
             return maxPrice.mulDivDown(_getPriceInUSD(token0, getAssetSettings[token0], cache), 1e18);
         } else revert("Unsupported Pool");
     }
+
+    // =========================================== AAVE PRICE DERIVATIVE ===========================================
+    /**
+     * @notice Aave Derivative Storage
+     */
+    mapping(ERC20 => ERC20) public getAaveDerivativeStorage;
+
+    // source is the aToken
+    function _setupPriceForAaveDerivative(
+        ERC20 _asset,
+        address _source,
+        bytes memory
+    ) internal {
+        IAaveToken aToken = IAaveToken(_source);
+        getAaveDerivativeStorage[_asset] = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
+    }
+
+    function _getPriceForAaveDerivative(
+        ERC20 asset,
+        address,
+        PriceCache[PRICE_CACHE_SIZE] memory cache
+    ) internal view returns (uint256) {
+        asset = getAaveDerivativeStorage[asset];
+        return _getPriceInUSD(asset, getAssetSettings[asset], cache);
+    }
+
+    // =========================================== COMPOUND PRICE DERIVATIVE ===========================================
+    // =========================================== YEARN PRICE DERIVATIVE ===========================================
 }
