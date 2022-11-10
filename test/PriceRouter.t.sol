@@ -73,6 +73,11 @@ contract PriceRouterTest is Test {
 
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, TriCryptoPool);
         priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(0), 1.0248e8);
+
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BOND_ETH_FEED);
+        stor = PriceRouter.ChainlinkDerivativeStorage(0, 0, 0, true);
+
+        priceRouter.addAsset(BOND, settings, abi.encode(stor), 2.673e8);
     }
 
     // ======================================= ASSET TESTS =======================================
@@ -104,12 +109,13 @@ contract PriceRouterTest is Test {
     }
 
     function testGetValues() external {
+        console.log("**************START******************");
         ERC20[] memory assets = new ERC20[](4);
         uint256[] memory amounts = new uint256[](4);
         assets[0] = USDC;
         assets[1] = WETH;
         assets[2] = WBTC;
-        assets[3] = DAI;
+        assets[3] = BOND;
 
         amounts[0] = 100e6;
         amounts[1] = 2e18;
@@ -119,6 +125,8 @@ contract PriceRouterTest is Test {
         uint256 gas = gasleft();
         priceRouter.getValues(assets, amounts, USDC);
         console.log("Gas used for getValues", gas - gasleft());
+
+        // console.log("Value", priceRouter.getValues(assets, amounts, USDC));
     }
 
     function testMinPriceGreaterThanMaxPrice() external {

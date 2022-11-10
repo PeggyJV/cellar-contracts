@@ -102,7 +102,7 @@ contract PriceRouter is Ownable {
 
     // The size of the price cache. A larger cache can hold more values, but incurs a larger gas cost overhead.
     // A smaller cache has a smaller gas overhead but caches less prices.
-    uint8 private constant PRICE_CACHE_SIZE = 1;
+    uint8 private constant PRICE_CACHE_SIZE = 8;
 
     function addAsset(
         ERC20 _asset,
@@ -163,7 +163,6 @@ contract PriceRouter is Ownable {
      */
     error PriceRouter__LengthMismatch();
 
-    //TODO below code is based off the old price router.
     /**
      * @notice Get the total value of multiple assets in terms of another asset.
      * @param baseAssets addresses of the assets to get the price of in terms of the quote asset
@@ -175,51 +174,35 @@ contract PriceRouter is Ownable {
         ERC20[] calldata baseAssets,
         uint256[] calldata amounts,
         ERC20 quoteAsset
-    ) external view returns (uint256 value) {
-        uint256 numOfAssets = baseAssets.length;
-        if (numOfAssets != amounts.length) revert PriceRouter__LengthMismatch();
-        AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
-        if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
-
-        uint8 quoteAssetDecimals = quoteAsset.decimals();
-        // Create an empty Price Cache.
-        PriceCache[PRICE_CACHE_SIZE] memory cache;
-
-        for (uint256 i; i < numOfAssets; i++) {
-            ERC20 baseAsset = baseAssets[i];
-            AssetSettings memory baseSettings = getAssetSettings[baseAsset];
-            if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
-
-            value += amounts[i].mulDivDown(
-                _getExchangeRate(baseAsset, baseSettings, quoteAsset, quoteSettings, quoteAssetDecimals, cache),
-                10**baseAsset.decimals()
-            );
-        }
-    }
-
-    //TODO below code that caused totalAssets to be rounded down 1 WEI.
-    // Below code is slightly more efficient using 3k less gas.
-    // function getValues(
-    //     ERC20[] calldata baseAssets,
-    //     uint256[] calldata amounts,
-    //     ERC20 quoteAsset
-    // ) external view returns (uint256) {
-    //     // Create an empty Price Cache.
-    //     PriceCache[PRICE_CACHE_SIZE] memory cache;
-    //     return _getValues(baseAssets, amounts, quoteAsset, cache);
-    // }
-
-    function getValueDiff(
-        ERC20[] calldata baseAssets0,
-        uint256[] calldata amounts0,
-        ERC20[] calldata baseAssets1,
-        uint256[] calldata amounts1,
-        ERC20 quoteAsset
     ) external view returns (uint256) {
         // Create an empty Price Cache.
         PriceCache[PRICE_CACHE_SIZE] memory cache;
-        return
-            _getValues(baseAssets0, amounts0, quoteAsset, cache) - _getValues(baseAssets1, amounts1, quoteAsset, cache);
+
+        if (baseAssets.length != amounts.length) revert PriceRouter__LengthMismatch();
+        uint256 quotePrice;
+        {
+            AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
+            if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
+            quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
+        }
+        uint256 valueInQuote;
+        uint256 price;
+        uint8 quoteDecimals = quoteAsset.decimals();
+
+        for (uint8 i = 0; i < baseAssets.length; i++) {
+            // Skip zero amount values.
+            if (amounts[i] == 0) continue;
+            ERC20 baseAsset = baseAssets[i];
+            if (baseAsset == quoteAsset) valueInQuote += amounts[i];
+            else {
+                AssetSettings memory baseSettings = getAssetSettings[baseAsset];
+                if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
+                price = _getPriceInUSD(baseAsset, baseSettings, cache);
+                uint256 valueInUSD = (amounts[i].mulDivDown(price, 10**baseAsset.decimals()));
+                valueInQuote += valueInUSD.mulDivDown(10**quoteDecimals, quotePrice);
+            }
+        }
+        return valueInQuote;
     }
 
     /**
@@ -369,38 +352,6 @@ contract PriceRouter is Ownable {
         // console.log("----------- END CACHE -----------");
 
         return exchangeRate;
-    }
-
-    function _getValues(
-        ERC20[] calldata baseAssets,
-        uint256[] calldata amounts,
-        ERC20 quoteAsset,
-        PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) internal view returns (uint256) {
-        uint256 numOfAssets = baseAssets.length;
-        if (numOfAssets != amounts.length) revert PriceRouter__LengthMismatch();
-
-        AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
-        if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
-
-        uint256 valueInUSD;
-        uint256 price;
-        uint256 quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
-
-        for (uint256 i = 0; i < numOfAssets; i++) {
-            // Skip zero amount values.
-            if (amounts[i] == 0) continue;
-            ERC20 baseAsset = baseAssets[i];
-            if (baseAsset == quoteAsset) valueInUSD += amounts[i].mulDivDown(quotePrice, 10**baseAsset.decimals());
-            else {
-                AssetSettings memory baseSettings = getAssetSettings[baseAsset];
-                if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
-                price = _getPriceInUSD(baseAsset, baseSettings, cache);
-                valueInUSD += amounts[i].mulDivDown(price, 10**baseAsset.decimals());
-            }
-        }
-
-        return valueInUSD.mulDivDown(10**quoteAsset.decimals(), quotePrice);
     }
 
     // =========================================== CHAINLINK PRICE DERIVATIVE ===========================================\
