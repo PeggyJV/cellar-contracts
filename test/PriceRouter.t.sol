@@ -341,9 +341,6 @@ contract PriceRouterTest is Test {
         exchangeRate = priceRouter.getExchangeRate(BOND, BOND); // Weird asset with an ETH price but no USD price.
         assertEq(exchangeRate, 1e18, "BOND -> BOND Exchange Rate Should be 1e18");
 
-        exchangeRate = priceRouter.getExchangeRate(CRV_3_CRYPTO, CRV_3_CRYPTO);
-        assertEq(exchangeRate, 1e18, "CRV_3_CRYPTO -> CRV_3_CRYPTO Exchange Rate Should be 1e18");
-
         // // Test exchange rates.
         address[] memory path = new address[](2);
         path[0] = address(DAI);
