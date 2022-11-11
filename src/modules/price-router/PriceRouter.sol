@@ -639,6 +639,39 @@ contract PriceRouter is Ownable {
         } else revert("Unsupported Pool");
     }
 
+    /**
+    a = upper/lower -1 = 1.1/1 - 1
+    b = current/lower -1 = 1.05/1 - 1
+    x = b/a = 0.05/0.1
+
+    a = upper/lower -1 = 1.3/1.25 - 1
+    b = current/lower -1 = 1.26/1.25 - 1
+    x = b/a = 0.008/0.04
+    where lower is set by keepers and stored here.
+    upper is lower * some multipler 1.02
+    current is the current pool.get_virtual_price();
+     */
+    uint256 public gasConstant = 200e9;
+
+    function getMaxGas(
+        uint256 lower,
+        uint256 upper,
+        uint256 current
+    ) public view returns (uint256) {
+        uint256 delta = (current.mulDivDown(1e18, lower) - 1e18).mulDivDown(
+            1e18,
+            (upper.mulDivDown(1e18, lower) - 1e18)
+        );
+        // delta has 18 decimals.
+        return gasConstant.mulDivDown(delta**3, 1e54); // 54 comes from 18 * 3.
+
+        // uint256 delta = ((current / lower) - 1) / ((upper / lower) - 1);
+        // maxGas = gasConstant * x**3;
+        // Where gasConstant is something like 200 gwei
+        // and x is the percent the current virtual price is compared to the lower and upper bound.
+        // ie if lower = 1 and upper = 1.1, if current virtual price is 1.05, then x = 0.5.
+    }
+
     // =========================================== AAVE PRICE DERIVATIVE ===========================================
     /**
      * @notice Aave Derivative Storage
@@ -665,5 +698,4 @@ contract PriceRouter is Ownable {
     }
 
     // =========================================== COMPOUND PRICE DERIVATIVE ===========================================
-    // =========================================== YEARN PRICE DERIVATIVE ===========================================
 }

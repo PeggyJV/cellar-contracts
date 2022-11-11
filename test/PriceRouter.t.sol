@@ -711,4 +711,12 @@ contract PriceRouterTest is Test {
         console.log("FRAX Lost: (-)", amount - FRAX.balanceOf(address(this)));
         siloBalance = SILO.balanceOf(address(this));
     }
+
+    function testMaxGas() external {
+        uint256 a = 1.25e18;
+        uint256 b = 1.3e18;
+        uint256 c = 1.26e18;
+        uint256 res = priceRouter.getMaxGas(a, b, c);
+        console.log(res);
+    }
 }
