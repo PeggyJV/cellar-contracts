@@ -9,6 +9,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { ICurveFi } from "src/interfaces/external/ICurveFi.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
+import { MockGasFeed } from "src/mocks/MockGasFeed.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -58,6 +59,8 @@ contract PriceRouterTest is Test {
     address private constant aave3Pool = 0xDeBF20617708857ebe4F679508E7b7863a8A8EeE;
     ERC20 private constant CRV_AAVE_3CRV = ERC20(0xFd2a8fA60Abd58Efe3EeE34dd494cD491dC14900);
 
+    address public automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
@@ -66,6 +69,7 @@ contract PriceRouterTest is Test {
     address private USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
     address private BOND_ETH_FEED = 0xdd22A54e05410D8d1007c38b5c7A3eD74b855281;
     address private FRAX_USD_FEED = 0xB9E1E3A9feFf48998E45Fa90847ed4D467E8BcfD;
+    address private ETH_FAST_GAS_FEED = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
 
     function setUp() external {
         // Ignore if not on mainnet.
@@ -122,8 +126,15 @@ contract PriceRouterTest is Test {
     }
 
     function testAddCurveAsset() external {
-        PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, TriCryptoPool);
-        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(0), 1.0248e8);
+        PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, TriCryptoPool);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(1.0248e8),
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0,
+            0
+        );
+        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(vpBound), 883.56e8);
     }
 
     function testGetValues() external {
@@ -511,7 +522,14 @@ contract PriceRouterTest is Test {
         // Add 3Crypto to the price router
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, TriCryptoPool);
-        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(0), 883.56e8);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(1.0248e8),
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0,
+            0
+        );
+        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(vpBound), 883.56e8);
 
         // Start by adding liquidity to 3CRVCrypto.
         uint256 amount = 10e18;
@@ -535,7 +553,14 @@ contract PriceRouterTest is Test {
         // Add 3Pool to price router.
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
-        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(0), 1.0224e8);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(1.0224e8),
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0,
+            0
+        );
+        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(vpBound), 1.0224e8);
 
         // Start by adding liquidity to 3Pool.
         uint256 amount = 1_000e18;
@@ -560,7 +585,14 @@ contract PriceRouterTest is Test {
         PriceRouter.AssetSettings memory settings;
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
-        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(0), 1.0224e8);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(1.0224e8),
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0,
+            0
+        );
+        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(vpBound), 1.0224e8);
 
         // Add FRAX to price router.
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, FRAX_USD_FEED);
@@ -568,7 +600,8 @@ contract PriceRouterTest is Test {
 
         // Add FRAX3CRV to price router.
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, frax3CrvPool);
-        priceRouter.addAsset(CRV_FRAX_3CRV, settings, abi.encode(0), 1.0087e8);
+        vpBound = PriceRouter.VirtualPriceBound(uint96(1.0087e8), uint32(1.01e8), uint32(0.99e8), 0, 0);
+        priceRouter.addAsset(CRV_FRAX_3CRV, settings, abi.encode(vpBound), 1.0087e8);
 
         // Start by adding liquidity to 3Pool.
         uint256 amount = 1_000e18;
@@ -601,7 +634,14 @@ contract PriceRouterTest is Test {
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, wethCrvPool);
         uint256 price = priceRouter.getValue(WETH, 0.051699e18, USDC);
-        priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(0), price.changeDecimals(6, 8));
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(1.0285e8),
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0,
+            0
+        );
+        priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(vpBound), price.changeDecimals(6, 8));
 
         // Start by adding liquidity to WETH CRV Pool.
         uint256 amount = 10e18;
@@ -638,7 +678,14 @@ contract PriceRouterTest is Test {
 
         // Add Aave 3Pool.
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, aave3Pool);
-        priceRouter.addAsset(CRV_AAVE_3CRV, settings, abi.encode(0), 1.0983e8);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(1.0985e8),
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0,
+            0
+        );
+        priceRouter.addAsset(CRV_AAVE_3CRV, settings, abi.encode(vpBound), 1.0983e8);
 
         // Add liquidity to Aave 3 Pool.
         uint256 amount = 1_000e18;
@@ -664,6 +711,62 @@ contract PriceRouterTest is Test {
         );
         console.log("Input worth", inputAmountWorth);
         console.log("Output worth", outputAmountWorth);
+    }
+
+    function testAutomationLogic() external {
+        // Set up price router to use mock gas feed.
+        MockGasFeed gasFeed = new MockGasFeed();
+        priceRouter.setGasFeed(address(gasFeed));
+
+        gasFeed.setAnswer(30e9);
+
+        // Add 3Pool to price router.
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
+        ICurvePool pool = ICurvePool(daiUsdcUsdtPool);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(pool.get_virtual_price().changeDecimals(18, 8)),
+            uint32(1.001e8),
+            uint32(0.999e8),
+            0,
+            0
+        );
+        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(vpBound), 1.0224e8);
+        (bool upkeepNeeded, bytes memory performData) = priceRouter.checkUpkeep(
+            abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0))
+        );
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed");
+        // Increase the virtual price by about 0.10101%
+        _adjustVirtualPrice(CRV_DAI_USDC_USDT, 0.999e18);
+        vm.warp(block.timestamp + 2 days);
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        assertTrue(upkeepNeeded, "Upkeep should be needed");
+
+        // Simulate gas price spike.
+        gasFeed.setAnswer(300e9);
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed");
+
+        // Gas recovers to a normal level.
+        gasFeed.setAnswer(30e9);
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        assertTrue(upkeepNeeded, "Upkeep should be needed");
+        vm.prank(automationRegistry);
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0)));
+
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed");
+
+        //TODO add more tests checking gas logic
+        // TODO add more tests where there are multiple Curve pools that need to be updated, and make sure they update in the proper order
+        //TODO add tests that make sure the upkeep only checks the range it is responsible for.
+    }
+
+    //TODO add tests where we check that the out of bounds checks are enforced.
+
+    function _adjustVirtualPrice(ERC20 token, uint256 multiplier) internal {
+        uint256 targetSupply = token.totalSupply().mulDivDown(multiplier, 1e18);
+        stdstore.target(address(token)).sig("totalSupply()").checked_write(targetSupply);
     }
 
     function testCRVAttackVector() external {
@@ -710,13 +813,5 @@ contract PriceRouterTest is Test {
         console.log("FRAX Remaining:", FRAX.balanceOf(address(this)));
         console.log("FRAX Lost: (-)", amount - FRAX.balanceOf(address(this)));
         siloBalance = SILO.balanceOf(address(this));
-    }
-
-    function testMaxGas() external {
-        uint256 a = 1.25e18;
-        uint256 b = 1.3e18;
-        uint256 c = 1.26e18;
-        uint256 res = priceRouter.getMaxGas(a, b, c);
-        console.log(res);
     }
 }

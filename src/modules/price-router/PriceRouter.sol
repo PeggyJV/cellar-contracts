@@ -5,6 +5,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { AggregatorV2V3Interface } from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
+import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
@@ -22,7 +23,7 @@ import { console } from "@forge-std/Test.sol";
  *         data from Chainlink.
  * @author crispymangoes, Brian Le
  */
-contract PriceRouter is Ownable {
+contract PriceRouter is Ownable, AutomationCompatibleInterface {
     using SafeTransferLib for ERC20;
     using SafeCast for int256;
     using Math for uint256;
@@ -139,6 +140,27 @@ contract PriceRouter is Ownable {
      */
     function isSupported(ERC20 asset) external view returns (bool) {
         return getAssetSettings[asset].derivative > 0;
+    }
+
+    // ======================================= CHAINLINK AUTOMATION =======================================
+    function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData) {
+        (uint8 derivative, bytes memory derivativeCheckData) = abi.decode(checkData, (uint8, bytes));
+
+        if (derivative == 2) {
+            (upkeepNeeded, performData) = _checkVirtualPriceBound(derivativeCheckData);
+        } else if (derivative == 3) {
+            (upkeepNeeded, performData) = _checkVirtualPriceBound(derivativeCheckData);
+        } else revert("Unkown Derivative");
+    }
+
+    function performUpkeep(bytes calldata performData) external {
+        (uint8 derivative, bytes memory derivativePerformData) = abi.decode(performData, (uint8, bytes));
+
+        if (derivative == 2) {
+            _updateVirtualPriceBound(derivativePerformData);
+        } else if (derivative == 3) {
+            _updateVirtualPriceBound(derivativePerformData);
+        } else revert("Unkown Derivative");
     }
 
     // ======================================= PRICING OPERATIONS =======================================
@@ -481,6 +503,163 @@ contract PriceRouter is Ownable {
             revert PriceRouter__StalePrice(address(asset), timeSinceLastUpdate, heartbeat);
     }
 
+    // ======================================== CURVE VIRTUAL PRICE BOUND ========================================
+    /**
+     * @notice Curve virtual price is susceptible to re-entrancy attacks, if the attacker adds/removes pool liquidity,
+     *         and re-enters into one of our contracts. To mitigate this, all curve pricing operations check
+     *         the current `pool.get_virtual_price()` against logical bounds.
+     * @notice These logical bounds are updated when `addAsset` is called, or Chainlink Automation detects that
+     *         the bounds need to be updated, and that the gas price is reasonable.
+     * @notice Once the on chain virtual price goes out of bounds, all pricing operations will revert for that Curve LP,
+     *         which means any Cellars using that Curve LP are effectively frozen until the virtual price bounds are updated
+     *         by Chainlink. If this is not happening in a timely manner( IE network is abnormally busy), the owner of this
+     *         contract can raise the `gasConstant` to a value that better reflects the floor gas price of the network.
+     *         Which will cause Chainlink nodes to update virtual price bounds faster.
+     */
+    address public ETH_FAST_GAS_FEED = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
+
+    function setGasFeed(address gasFeed) external onlyOwner {
+        ETH_FAST_GAS_FEED = gasFeed;
+    }
+
+    struct VirtualPriceBound {
+        uint96 datum; // the last saved virtual price
+        uint32 posDelta; // some multiplier > 1, used to find the upper bound, 8 decimals
+        uint32 negDelta; // some multiplier < 1, used to find the lower bound, 8 decimals
+        uint64 timeLastUpdated; // last time this value was updated, strictly enforced in performupkeep
+        uint32 rateLimit; // the minimum amount of times between updates.
+    }
+    address[] public curveAssets;
+
+    address public automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+
+    mapping(address => VirtualPriceBound) public getVirtualPriceBound;
+    uint32 public constant DEFAULT_RATE_LIMIT = 1 days;
+
+    /**
+     * @notice Dictates how aggressive keepers are with updating Curve pool virtual price values.
+     * @dev A larger `gasConstant` will raise the `gasPriceLimit`, while a smaller `gasConstant`
+     *      will lower the `gasPriceLimit`.
+     */
+    uint256 public gasConstant = 200e9;
+
+    function setGasConstant(uint256 newConstant) external onlyOwner {
+        gasConstant = newConstant;
+    }
+
+    //TODO look at this.
+    function updateVirtualPriceBound(
+        address _asset,
+        uint32 _posDelta,
+        uint32 _negDelta,
+        uint32 _rateLimit
+    ) external onlyOwner {
+        VirtualPriceBound storage vpBound = getVirtualPriceBound[_asset];
+        uint256 currentVirtualPrice = ICurvePool(getAssetSettings[ERC20(_asset)].source).get_virtual_price();
+        currentVirtualPrice = currentVirtualPrice.changeDecimals(18, 8);
+        uint256 upper = uint256(vpBound.datum).mulDivDown(_posDelta, 1e8);
+        uint256 lower = uint256(vpBound.datum).mulDivDown(_negDelta, 1e8);
+        _checkBounds(lower, upper, currentVirtualPrice);
+    }
+
+    function _checkVirtualPriceBound(bytes memory checkData)
+        internal
+        view
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        // checkData can store 2 numbers indicating the range to check for curveAssets.
+        (uint256 start, uint256 end) = abi.decode(checkData, (uint256, uint256));
+        if (end == 0) end = curveAssets.length;
+        // Loop through all curve assets, and find the asset with the largest delta(the one that needs to be updated the most).
+        uint256 maxDelta;
+        uint256 targetIndex;
+        for (uint256 i = start; i < end; i++) {
+            address asset = curveAssets[i];
+            VirtualPriceBound memory vpBound = getVirtualPriceBound[asset];
+            // Check to see if this virtual price was updated recently.
+            if ((block.timestamp - vpBound.timeLastUpdated) < vpBound.rateLimit) continue;
+            uint256 currentVirtualPrice = ICurvePool(getAssetSettings[ERC20(asset)].source).get_virtual_price();
+            currentVirtualPrice = currentVirtualPrice.changeDecimals(18, 8);
+            uint256 delta;
+            if (currentVirtualPrice > vpBound.datum) {
+                uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
+                delta = _getDelta(vpBound.datum, upper, currentVirtualPrice);
+            } else {
+                uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
+                delta = _getDelta(lower, vpBound.datum, currentVirtualPrice);
+                // Flip delta, so that we see how close current is to lower bound.
+                delta = 1e18 - delta;
+            }
+            if (delta > maxDelta) {
+                maxDelta = delta;
+                targetIndex = i;
+            }
+        }
+
+        // Run a gas check to determine if it makes sense to update the target curve asset.
+        uint256 gasPriceLimit = gasConstant.mulDivDown(maxDelta**3, 1e54); // 54 comes from 18 * 3.
+        uint256 currentGasPrice = uint256(IChainlinkAggregator(ETH_FAST_GAS_FEED).latestAnswer());
+        if (currentGasPrice <= gasPriceLimit) {
+            upkeepNeeded = true;
+            performData = abi.encode(targetIndex);
+        }
+    }
+
+    /**
+     * @notice Curve virtual price is susceptible to re-entrancy attacks, if the attacker adds/removes pool liquidity.
+     *         To stop this we check the virtual price against logical bounds.
+     * @dev Only the chainlink registry can call this function, so we know that Chainlink nodes will not be
+     *      re-entering into the Curve pool, so it is safe to use the current on chain virtual price.
+     * @notice Updating the virtual price is rate limited by `VirtualPriceBound.raetLimit` and can only be
+     *         updated at most to the lower or upper bound of the current datum.
+     *         This is intentional since curve pool price should not be volatile, and if they are, then
+     *         we WANT that Curve LP pools TX pricing to revert.
+     */
+    function _updateVirtualPriceBound(bytes memory performData) internal {
+        if (msg.sender != automationRegistry) revert("Only callable by registry.");
+        uint256 index = abi.decode(performData, (uint256));
+        address asset = curveAssets[index];
+        VirtualPriceBound storage vpBound = getVirtualPriceBound[asset];
+        if ((block.timestamp - vpBound.timeLastUpdated) < vpBound.rateLimit)
+            revert("Rate limit virtual price changes.");
+        uint256 currentVirtualPrice = ICurvePool(getAssetSettings[ERC20(asset)].source).get_virtual_price();
+        currentVirtualPrice = currentVirtualPrice.changeDecimals(18, 8);
+        if (currentVirtualPrice > vpBound.datum) {
+            uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
+            vpBound.datum = uint96(currentVirtualPrice > upper ? upper : currentVirtualPrice);
+        } else if (currentVirtualPrice < vpBound.datum) {
+            uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
+            vpBound.datum = uint96(currentVirtualPrice < lower ? lower : currentVirtualPrice);
+        } else {
+            revert("Not updating anything");
+        }
+    }
+
+    /**
+     * @notice Returns a percent delta representing where `current` is in reference to `lower` and `upper`.
+     * Example, if current == lower, this would return a 0.
+     * .        if current == upper, this would return a 1e18.
+     */
+    function _getDelta(
+        uint256 lower,
+        uint256 upper,
+        uint256 current
+    ) internal pure returns (uint256) {
+        return (current.mulDivDown(1e18, lower) - 1e18).mulDivDown(1e18, (upper.mulDivDown(1e18, lower) - 1e18));
+    }
+
+    error PriceRouter__CurrentBelowLowerBound(uint256 current, uint256 lower);
+    error PriceRouter__CurrentAboveUpperBound(uint256 current, uint256 upper);
+
+    function _checkBounds(
+        uint256 lower,
+        uint256 upper,
+        uint256 current
+    ) internal pure {
+        if (current < lower) revert PriceRouter__CurrentBelowLowerBound(current, lower);
+        if (current > upper) revert PriceRouter__CurrentAboveUpperBound(current, upper);
+    }
+
     // =========================================== CURVE PRICE DERIVATIVE ===========================================
     /**
      * @notice Curve Derivative Storage
@@ -491,7 +670,7 @@ contract PriceRouter is Ownable {
     function _setupPriceForCurveDerivative(
         ERC20 _asset,
         address _source,
-        bytes memory
+        bytes memory _storage
     ) internal {
         // Could use _storage and do a check?
         ICurvePool pool = ICurvePool(_source);
@@ -509,6 +688,17 @@ contract PriceRouter is Ownable {
         }
 
         getCurveDerivativeStorage[_asset] = coins;
+
+        curveAssets.push(address(_asset));
+        VirtualPriceBound memory vpBound = abi.decode(_storage, (VirtualPriceBound));
+        uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
+        upper = upper.changeDecimals(8, 18);
+        uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
+        lower = lower.changeDecimals(8, 18);
+        _checkBounds(lower, upper, pool.get_virtual_price());
+        if (vpBound.rateLimit == 0) vpBound.rateLimit = DEFAULT_RATE_LIMIT;
+        vpBound.timeLastUpdated = uint64(block.timestamp);
+        getVirtualPriceBound[address(_asset)] = vpBound;
     }
 
     //TODO this assumes Curve pools NEVER add or remove tokens
@@ -530,9 +720,18 @@ contract PriceRouter is Ownable {
 
         if (minPrice == type(uint256).max) revert("Min price not found.");
 
+        // Check that virtual price is within bounds.
+        uint256 virtualPrice = pool.get_virtual_price();
+        VirtualPriceBound memory vpBound = getVirtualPriceBound[address(asset)];
+        uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
+        upper = upper.changeDecimals(8, 18);
+        uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
+        lower = lower.changeDecimals(8, 18);
+        _checkBounds(lower, upper, virtualPrice);
+
         // Virtual price is based off the Curve Token decimals.
         uint256 curveTokenDecimals = ERC20(asset).decimals();
-        price = minPrice.mulDivDown(pool.get_virtual_price(), 10**curveTokenDecimals);
+        price = minPrice.mulDivDown(virtualPrice, 10**curveTokenDecimals);
     }
 
     // =========================================== CURVEV2 PRICE DERIVATIVE ===========================================
@@ -545,7 +744,7 @@ contract PriceRouter is Ownable {
     function _setupPriceForCurveV2Derivative(
         ERC20 _asset,
         address _source,
-        bytes memory
+        bytes memory _storage
     ) internal {
         // Could use _storage and do a check?
         ICurvePool pool = ICurvePool(_source);
@@ -563,6 +762,17 @@ contract PriceRouter is Ownable {
         }
 
         getCurveDerivativeStorage[_asset] = coins;
+
+        curveAssets.push(address(_asset));
+        VirtualPriceBound memory vpBound = abi.decode(_storage, (VirtualPriceBound));
+        uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
+        upper = upper.changeDecimals(8, 18);
+        uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
+        lower = lower.changeDecimals(8, 18);
+        _checkBounds(lower, upper, pool.get_virtual_price());
+        if (vpBound.rateLimit == 0) vpBound.rateLimit = DEFAULT_RATE_LIMIT;
+        vpBound.timeLastUpdated = uint64(block.timestamp);
+        getVirtualPriceBound[address(_asset)] = vpBound;
     }
 
     uint256 private constant GAMMA0 = 28000000000000;
@@ -622,7 +832,15 @@ contract PriceRouter is Ownable {
             uint256 t1Price = pool.price_oracle(0);
             uint256 t2Price = pool.price_oracle(1);
             uint256 virtualPrice = pool.get_virtual_price();
-            //TODO check virtual price is within bounds.
+            {
+                // Check that virtual price is within bounds.
+                VirtualPriceBound memory vpBound = getVirtualPriceBound[address(asset)];
+                uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
+                upper = upper.changeDecimals(8, 18);
+                uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
+                lower = lower.changeDecimals(8, 18);
+                _checkBounds(lower, upper, virtualPrice);
+            }
 
             uint256 maxPrice = (3 * virtualPrice * _cubicRoot(t1Price * t2Price)) / 1e18;
             {
@@ -637,39 +855,6 @@ contract PriceRouter is Ownable {
             }
             return maxPrice.mulDivDown(_getPriceInUSD(token0, getAssetSettings[token0], cache), 1e18);
         } else revert("Unsupported Pool");
-    }
-
-    /**
-    a = upper/lower -1 = 1.1/1 - 1
-    b = current/lower -1 = 1.05/1 - 1
-    x = b/a = 0.05/0.1
-
-    a = upper/lower -1 = 1.3/1.25 - 1
-    b = current/lower -1 = 1.26/1.25 - 1
-    x = b/a = 0.008/0.04
-    where lower is set by keepers and stored here.
-    upper is lower * some multipler 1.02
-    current is the current pool.get_virtual_price();
-     */
-    uint256 public gasConstant = 200e9;
-
-    function getMaxGas(
-        uint256 lower,
-        uint256 upper,
-        uint256 current
-    ) public view returns (uint256) {
-        uint256 delta = (current.mulDivDown(1e18, lower) - 1e18).mulDivDown(
-            1e18,
-            (upper.mulDivDown(1e18, lower) - 1e18)
-        );
-        // delta has 18 decimals.
-        return gasConstant.mulDivDown(delta**3, 1e54); // 54 comes from 18 * 3.
-
-        // uint256 delta = ((current / lower) - 1) / ((upper / lower) - 1);
-        // maxGas = gasConstant * x**3;
-        // Where gasConstant is something like 200 gwei
-        // and x is the percent the current virtual price is compared to the lower and upper bound.
-        // ie if lower = 1 and upper = 1.1, if current virtual price is 1.05, then x = 0.5.
     }
 
     // =========================================== AAVE PRICE DERIVATIVE ===========================================
