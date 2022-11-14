@@ -633,12 +633,14 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             uint256 delta;
             if (currentVirtualPrice > vpBound.datum) {
                 uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
-                delta = _getDelta(vpBound.datum, upper, currentVirtualPrice);
+                uint256 ceiling = upper - vpBound.datum;
+                uint256 current = currentVirtualPrice - vpBound.datum;
+                delta = _getDelta(ceiling, current);
             } else {
                 uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
-                delta = _getDelta(lower, vpBound.datum, currentVirtualPrice);
-                // Flip delta, so that we see how close current is to lower bound.
-                delta = 1e18 - delta;
+                uint256 ceiling = vpBound.datum - lower;
+                uint256 current = vpBound.datum - currentVirtualPrice;
+                delta = _getDelta(ceiling, current);
             }
             // Save the largest delta for the upkeep.
             if (delta > maxDelta) {
@@ -735,17 +737,13 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     /**
-     * @notice Returns a percent delta representing where `current` is in reference to `lower` and `upper`.
-     * Example, if current == lower, this would return a 0.
-     *          if current == upper, this would return a 1e18.
-     *          if current == lower + (upper - lower) / 2, this would return 0.5e18.
+     * @notice Returns a percent delta representing where `current` is in reference to `ceiling`.
+     * Example, if current == 0, this would return a 0.
+     *          if current == ceiling, this would return a 1e18.
+     *          if current == (ceiling) / 2, this would return 0.5e18.
      */
-    function _getDelta(
-        uint256 lower,
-        uint256 upper,
-        uint256 current
-    ) internal pure returns (uint256) {
-        return (current.mulDivDown(1e18, lower) - 1e18).mulDivDown(1e18, (upper.mulDivDown(1e18, lower) - 1e18));
+    function _getDelta(uint256 ceiling, uint256 current) internal pure returns (uint256) {
+        return current.mulDivDown(1e18, ceiling);
     }
 
     /**
@@ -937,6 +935,15 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     ) internal view returns (uint256) {
         ICurvePool pool = ICurvePool(_source);
 
+        // Check that virtual price is within bounds.
+        uint256 virtualPrice = pool.get_virtual_price();
+        VirtualPriceBound memory vpBound = getVirtualPriceBound[address(asset)];
+        uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
+        upper = upper.changeDecimals(8, 18);
+        uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
+        lower = lower.changeDecimals(8, 18);
+        _checkBounds(lower, upper, virtualPrice);
+
         address[] memory coins = getCurveDerivativeStorage[asset];
         ERC20 token0 = ERC20(coins[0]);
         if (coins.length == 2) {
@@ -956,16 +963,6 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
 
             uint256 t1Price = pool.price_oracle(0);
             uint256 t2Price = pool.price_oracle(1);
-            uint256 virtualPrice = pool.get_virtual_price();
-            {
-                // Check that virtual price is within bounds.
-                VirtualPriceBound memory vpBound = getVirtualPriceBound[address(asset)];
-                uint256 upper = uint256(vpBound.datum).mulDivDown(vpBound.posDelta, 1e8);
-                upper = upper.changeDecimals(8, 18);
-                uint256 lower = uint256(vpBound.datum).mulDivDown(vpBound.negDelta, 1e8);
-                lower = lower.changeDecimals(8, 18);
-                _checkBounds(lower, upper, virtualPrice);
-            }
 
             uint256 maxPrice = (3 * virtualPrice * _cubicRoot(t1Price * t2Price)) / 1e18;
             {

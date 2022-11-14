@@ -2,14 +2,12 @@
 pragma solidity 0.8.16;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
-import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ICurveFi } from "src/interfaces/external/ICurveFi.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { MockGasFeed } from "src/mocks/MockGasFeed.sol";
+import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -507,37 +505,7 @@ contract PriceRouterTest is Test {
         priceRouter.getExchangeRates(assets, LINK);
     }
 
-    function testCRV3Crypto() external {
-        // Add 3Crypto to the price router
-        PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, TriCryptoPool);
-        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
-            uint96(1.0248e8),
-            0,
-            uint32(1.01e8),
-            uint32(0.99e8),
-            0
-        );
-        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(vpBound), 883.56e8);
-
-        // Start by adding liquidity to 3CRVCrypto.
-        uint256 amount = 10e18;
-        deal(address(WETH), address(this), amount);
-        WETH.approve(TriCryptoPool, amount);
-        ICurveFi pool = ICurveFi(TriCryptoPool);
-        uint256[3] memory amounts = [0, 0, amount];
-        pool.add_liquidity(amounts, 0);
-        uint256 lpReceived = CRV_3_CRYPTO.balanceOf(address(this));
-        uint256 inputAmountWorth = priceRouter.getValue(WETH, amount, USDC);
-        uint256 outputAmountWorth = priceRouter.getValue(CRV_3_CRYPTO, lpReceived, USDC);
-        assertApproxEqRel(
-            outputAmountWorth,
-            inputAmountWorth,
-            0.01e18,
-            "TriCrypto LP tokens should be worth WETH input +- 1%"
-        );
-    }
-
+    // ======================================= CURVEv1 TESTS =======================================
     function testCRV3Pool() external {
         // Add 3Pool to price router.
         PriceRouter.AssetSettings memory settings;
@@ -614,39 +582,6 @@ contract PriceRouterTest is Test {
         );
     }
 
-    function testCRVWETHCRVPool() external {
-        // Add WETH CRV Pool to the price router
-        ICurveFi pool = ICurveFi(wethCrvPool);
-        PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, wethCrvPool);
-        uint256 price = priceRouter.getValue(WETH, 0.051699e18, USDC);
-        uint256 vp = pool.get_virtual_price().changeDecimals(18, 8);
-        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
-            uint96(vp),
-            0,
-            uint32(1.01e8),
-            uint32(0.99e8),
-            0
-        );
-        priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(vpBound), price.changeDecimals(6, 8));
-
-        // Start by adding liquidity to WETH CRV Pool.
-        uint256 amount = 10e18;
-        deal(address(WETH), address(this), amount);
-        WETH.approve(wethCrvPool, amount);
-        uint256[2] memory amounts = [amount, 0];
-        pool.add_liquidity(amounts, 0);
-        uint256 lpReceived = CRV_WETH_CRV.balanceOf(address(this));
-        uint256 inputAmountWorth = priceRouter.getValue(WETH, amount, USDC);
-        uint256 outputAmountWorth = priceRouter.getValue(CRV_WETH_CRV, lpReceived, USDC);
-        assertApproxEqRel(
-            outputAmountWorth,
-            inputAmountWorth,
-            0.01e18,
-            "WETH CRV LP tokens should be worth WETH input +- 1%"
-        );
-    }
-
     function testCRVAave3Pool() external {
         // Add aDAI to the price router.
         PriceRouter.AssetSettings memory settings;
@@ -697,8 +632,167 @@ contract PriceRouterTest is Test {
         );
     }
 
-    //TODO add tests where we check that the out of bounds checks are enforced.
-    function testCurveVirtualPriceBoundsCheck() external {}
+    function testCurveV1VirtualPriceBoundsCheck() external {
+        // Add 3Pool to price router.
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(1.0224e8),
+            0,
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0
+        );
+        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(vpBound), 1.0224e8);
+
+        // Change virtual price to move it above upper bound.
+        _adjustVirtualPrice(CRV_DAI_USDC_USDT, 0.90e18);
+        uint256 currentVirtualPrice = ICurvePool(daiUsdcUsdtPool).get_virtual_price();
+        (uint96 datum, , , , ) = priceRouter.getVirtualPriceBound(address(CRV_DAI_USDC_USDT));
+        uint256 upper = uint256(datum).mulDivDown(1.01e8, 1e8).changeDecimals(8, 18);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__CurrentAboveUpperBound.selector,
+                    currentVirtualPrice,
+                    upper
+                )
+            )
+        );
+        priceRouter.getValue(CRV_DAI_USDC_USDT, 1e18, USDC);
+
+        // Change virtual price to move it below lower bound.
+        _adjustVirtualPrice(CRV_DAI_USDC_USDT, 1.20e18);
+        currentVirtualPrice = ICurvePool(daiUsdcUsdtPool).get_virtual_price();
+        uint256 lower = uint256(datum).mulDivDown(0.99e8, 1e8).changeDecimals(8, 18);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__CurrentBelowLowerBound.selector,
+                    currentVirtualPrice,
+                    lower
+                )
+            )
+        );
+        priceRouter.getValue(CRV_DAI_USDC_USDT, 1e18, USDC);
+    }
+
+    // ======================================= CURVEv2 TESTS =======================================
+    function testCRV3Crypto() external {
+        // Add 3Crypto to the price router
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, TriCryptoPool);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(1.0248e8),
+            0,
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0
+        );
+        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(vpBound), 883.56e8);
+
+        // Start by adding liquidity to 3CRVCrypto.
+        uint256 amount = 10e18;
+        deal(address(WETH), address(this), amount);
+        WETH.approve(TriCryptoPool, amount);
+        ICurveFi pool = ICurveFi(TriCryptoPool);
+        uint256[3] memory amounts = [0, 0, amount];
+        pool.add_liquidity(amounts, 0);
+        uint256 lpReceived = CRV_3_CRYPTO.balanceOf(address(this));
+        uint256 inputAmountWorth = priceRouter.getValue(WETH, amount, USDC);
+        uint256 outputAmountWorth = priceRouter.getValue(CRV_3_CRYPTO, lpReceived, USDC);
+        assertApproxEqRel(
+            outputAmountWorth,
+            inputAmountWorth,
+            0.01e18,
+            "TriCrypto LP tokens should be worth WETH input +- 1%"
+        );
+    }
+
+    function testCRVWETHCRVPool() external {
+        // Add WETH CRV Pool to the price router
+        ICurveFi pool = ICurveFi(wethCrvPool);
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, wethCrvPool);
+        uint256 price = priceRouter.getValue(WETH, 0.051699e18, USDC);
+        uint256 vp = pool.get_virtual_price().changeDecimals(18, 8);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(vp),
+            0,
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0
+        );
+        priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(vpBound), price.changeDecimals(6, 8));
+
+        // Start by adding liquidity to WETH CRV Pool.
+        uint256 amount = 10e18;
+        deal(address(WETH), address(this), amount);
+        WETH.approve(wethCrvPool, amount);
+        uint256[2] memory amounts = [amount, 0];
+        pool.add_liquidity(amounts, 0);
+        uint256 lpReceived = CRV_WETH_CRV.balanceOf(address(this));
+        uint256 inputAmountWorth = priceRouter.getValue(WETH, amount, USDC);
+        uint256 outputAmountWorth = priceRouter.getValue(CRV_WETH_CRV, lpReceived, USDC);
+        assertApproxEqRel(
+            outputAmountWorth,
+            inputAmountWorth,
+            0.01e18,
+            "WETH CRV LP tokens should be worth WETH input +- 1%"
+        );
+    }
+
+    function testCurveV2VirtualPriceBoundsCheck() external {
+        // Add WETH CRV Pool to the price router
+        ICurveFi pool = ICurveFi(wethCrvPool);
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, wethCrvPool);
+        uint256 price = priceRouter.getValue(WETH, 0.051699e18, USDC);
+        uint256 vp = pool.get_virtual_price().changeDecimals(18, 8);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(vp),
+            0,
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0
+        );
+        priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(vpBound), price.changeDecimals(6, 8));
+
+        // Change virtual price to move it above upper bound.
+        _adjustVirtualPrice(CRV_WETH_CRV, 0.90e18);
+        uint256 currentVirtualPrice = ICurvePool(wethCrvPool).get_virtual_price();
+        (uint96 datum, , , , ) = priceRouter.getVirtualPriceBound(address(CRV_WETH_CRV));
+        uint256 upper = uint256(datum).mulDivDown(1.01e8, 1e8).changeDecimals(8, 18);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__CurrentAboveUpperBound.selector,
+                    currentVirtualPrice,
+                    upper
+                )
+            )
+        );
+        priceRouter.getValue(CRV_WETH_CRV, 1e18, USDC);
+
+        // Change virtual price to move it below lower bound.
+        _adjustVirtualPrice(CRV_WETH_CRV, 1.20e18);
+        currentVirtualPrice = ICurvePool(wethCrvPool).get_virtual_price();
+        uint256 lower = uint256(datum).mulDivDown(0.99e8, 1e8).changeDecimals(8, 18);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__CurrentBelowLowerBound.selector,
+                    currentVirtualPrice,
+                    lower
+                )
+            )
+        );
+        priceRouter.getValue(CRV_WETH_CRV, 1e18, USDC);
+    }
 
     // ======================================= AUTOMATION TESTS =======================================
     function testAutomationLogic() external {
@@ -761,13 +855,190 @@ contract PriceRouterTest is Test {
         (datum, timeLastUpdated, , , ) = priceRouter.getVirtualPriceBound(address(CRV_DAI_USDC_USDT));
         assertEq(datum, pool.get_virtual_price().changeDecimals(18, 8), "Datum should equal virtual price.");
         assertEq(timeLastUpdated, block.timestamp, "Time last updated should equal current timestamp.");
-
-        //TODO add more tests checking gas logic
-        // TODO add more tests where there are multiple Curve pools that need to be updated, and make sure they update in the proper order
-        //TODO add tests that make sure the upkeep only checks the range it is responsible for.
     }
 
-    // ======================================= INTEGARTION TESTS =======================================
+    function testUpkeepPriority() external {
+        // Add WETH CRV Pool to the price router
+        ICurveFi pool = ICurveFi(wethCrvPool);
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, wethCrvPool);
+        uint256 price = priceRouter.getValue(WETH, 0.051699e18, USDC);
+        uint256 vp = pool.get_virtual_price().changeDecimals(18, 8);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(vp),
+            0,
+            uint32(1.01e8),
+            uint32(0.99e8),
+            0
+        );
+        priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(vpBound), price.changeDecimals(6, 8));
+
+        // Add 3Crypto to the price router
+        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, TriCryptoPool);
+        vpBound = PriceRouter.VirtualPriceBound(uint96(1.0248e8), 0, uint32(1.01e8), uint32(0.99e8), 0);
+        priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(vpBound), 883.56e8);
+
+        // Add 3Pool to price router.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
+        pool = ICurveFi(daiUsdcUsdtPool);
+        vp = pool.get_virtual_price().changeDecimals(18, 8);
+        vpBound = PriceRouter.VirtualPriceBound(uint96(vp), 0, uint32(1.01e8), uint32(0.99e8), 0);
+        priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(vpBound), 1.0224e8);
+
+        // Add FRAX to price router.
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, FRAX_USD_FEED);
+        priceRouter.addAsset(FRAX, settings, abi.encode(stor), 1e8);
+
+        // Add FRAX3CRV to price router.
+        settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, frax3CrvPool);
+        pool = ICurveFi(frax3CrvPool);
+        vp = pool.get_virtual_price().changeDecimals(18, 8);
+        vpBound = PriceRouter.VirtualPriceBound(uint96(vp), 0, uint32(1.01e8), uint32(0.99e8), 0);
+        priceRouter.addAsset(CRV_FRAX_3CRV, settings, abi.encode(vpBound), 1.0087e8);
+
+        // Advance time to prevent rate limiting.
+        vm.warp(block.timestamp + 1 days);
+
+        // Adjust all Curve Assets virtual prices to make their deltas vary.
+        _adjustVirtualPrice(CRV_WETH_CRV, 0.95e18);
+        _adjustVirtualPrice(CRV_3_CRYPTO, 1.1e18);
+        _adjustVirtualPrice(CRV_DAI_USDC_USDT, 0.85e18);
+        _adjustVirtualPrice(CRV_FRAX_3CRV, 1.30e18);
+        // Upkeep should prioritize upkeeps in the following order.
+        // 1) CRV_FRAX_3CRV
+        // 2) CRV_DAI_USDC_USDT
+        // 3) CRV_3_CRYPTO
+        // 4) CRV_WETH_CRV
+        (bool upkeepNeeded, bytes memory performData) = priceRouter.checkUpkeep(
+            abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0))
+        );
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        assertEq(abi.decode(performData, (uint256)), 3, "Upkeep should target index 3.");
+        vm.prank(automationRegistry);
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
+
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        assertEq(abi.decode(performData, (uint256)), 2, "Upkeep should target index 2.");
+        vm.prank(automationRegistry);
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
+
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        assertEq(abi.decode(performData, (uint256)), 1, "Upkeep should target index 1.");
+        vm.prank(automationRegistry);
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
+
+        // Passing in a 5 for the end index should still work.
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 5)));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        assertEq(abi.decode(performData, (uint256)), 0, "Upkeep should target index 0.");
+        vm.prank(automationRegistry);
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
+
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed.");
+    }
+
+    function testRecoveringFromExtremeVirtualPriceMovements() external {
+        // Add WETH CRV Pool to the price router
+        ICurveFi pool = ICurveFi(wethCrvPool);
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, wethCrvPool);
+        uint256 price = priceRouter.getValue(WETH, 0.051699e18, USDC);
+        uint256 vp = pool.get_virtual_price().changeDecimals(18, 8);
+        PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
+            uint96(vp),
+            0,
+            uint32(1.01e8),
+            uint32(0.99e8),
+            1 days / 2
+        );
+        priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(vpBound), price.changeDecimals(6, 8));
+
+        vm.warp(block.timestamp + 1 days / 2);
+
+        // Virtual price grows suddenly.
+        _adjustVirtualPrice(CRV_WETH_CRV, 0.95e18);
+
+        // Pricing calls now revert.
+        uint256 currentVirtualPrice = ICurvePool(wethCrvPool).get_virtual_price();
+        (uint96 datum, , , , ) = priceRouter.getVirtualPriceBound(address(CRV_WETH_CRV));
+        uint256 upper = uint256(datum).mulDivDown(1.01e8, 1e8).changeDecimals(8, 18);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__CurrentAboveUpperBound.selector,
+                    currentVirtualPrice,
+                    upper
+                )
+            )
+        );
+        priceRouter.getValue(CRV_WETH_CRV, 1e18, WETH);
+
+        // Keepers adjust the virtual price, but pricing calls still revert.
+        (bool upkeepNeeded, bytes memory performData) = priceRouter.checkUpkeep(
+            abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0))
+        );
+        vm.prank(automationRegistry);
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
+        (datum, , , , ) = priceRouter.getVirtualPriceBound(address(CRV_WETH_CRV));
+        upper = uint256(datum).mulDivDown(1.01e8, 1e8).changeDecimals(8, 18);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__CurrentAboveUpperBound.selector,
+                    currentVirtualPrice,
+                    upper
+                )
+            )
+        );
+        priceRouter.getValue(CRV_WETH_CRV, 1e18, WETH);
+
+        // At this point it will still take several days(because of rate limiting), for pricing calls to not revert.
+        // The owner can do a couple different things.
+        // Update the rate limit value to something smaller so there is less time between upkeeps.
+        priceRouter.updateVirtualPriceBound(address(CRV_WETH_CRV), 1.01e8, 0.99e8, 1 days / 8);
+        // Update the posDelta,a nd negDelta values so the virtual price can be updated more in each upkeep.
+        // This method is discouraged because the wider the price range is the more susceptible this contract
+        // is to Curve re-entrancy attacks.
+        priceRouter.updateVirtualPriceBound(address(CRV_WETH_CRV), 1.02e8, 0.99e8, 1 days / 8);
+
+        vm.warp(block.timestamp + 1 days / 8);
+
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        vm.prank(automationRegistry);
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
+        (datum, , , , ) = priceRouter.getVirtualPriceBound(address(CRV_WETH_CRV));
+        upper = uint256(datum).mulDivDown(1.02e8, 1e8).changeDecimals(8, 18);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    PriceRouter.PriceRouter__CurrentAboveUpperBound.selector,
+                    currentVirtualPrice,
+                    upper
+                )
+            )
+        );
+        priceRouter.getValue(CRV_WETH_CRV, 1e18, WETH);
+
+        vm.warp(block.timestamp + 1 days / 8);
+
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        vm.prank(automationRegistry);
+        uint256 gas = gasleft();
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
+        console.log("Gas used", gas - gasleft());
+        // Virtual price is now back within logical bounds so pricing operations work as expected.
+        priceRouter.getValue(CRV_WETH_CRV, 1e18, WETH);
+        (datum, , , , ) = priceRouter.getVirtualPriceBound(address(CRV_WETH_CRV));
+        upper = uint256(datum).mulDivDown(1.02e8, 1e8).changeDecimals(8, 18);
+        console.log("VP", currentVirtualPrice);
+        console.log("Upper", upper);
+    }
+
+    // ======================================= INTEGRATION TESTS =======================================
     function testCRVAttackVector() external {
         address SiloFraxPool = 0x9a22CDB1CA1cdd2371cD5BB5199564C4E89465eb;
         ERC20 SILO = ERC20(0x6f80310CA7F2C654691D1383149Fa1A57d8AB1f8);
