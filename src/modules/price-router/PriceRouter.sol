@@ -947,6 +947,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         address[] memory coins = getCurveDerivativeStorage[asset];
         ERC20 token0 = ERC20(coins[0]);
         if (coins.length == 2) {
+            //TODO if price_oracle value is safe then we can price LP tokens with only 1 supported underlying.
             return pool.lp_price().mulDivDown(_getPriceInUSD(token0, getAssetSettings[token0], cache), 1e18);
         } else if (coins.length == 3) {
             //TODO, so I think the price of t1 and t2 needs to be in terms of t0, but not sure,
