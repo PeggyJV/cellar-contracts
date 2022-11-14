@@ -4,7 +4,7 @@ pragma solidity 0.8.16;
 contract MockGasFeed {
     int192 answer;
 
-    function latestAnswer() public returns (int192) {
+    function latestAnswer() public view returns (int192) {
         return answer;
     }
 

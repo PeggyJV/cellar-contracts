@@ -127,35 +127,24 @@ contract PriceRouterTest is Test {
 
     function testAddCurveAsset() external {
         PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, TriCryptoPool);
+        uint256 vp = ICurvePool(TriCryptoPool).get_virtual_price().changeDecimals(18, 8);
         PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
-            uint96(1.0248e8),
+            uint96(vp),
+            0,
             uint32(1.01e8),
             uint32(0.99e8),
-            0,
             0
         );
         priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(vpBound), 883.56e8);
-    }
 
-    function testGetValues() external {
-        console.log("**************START******************");
-        ERC20[] memory assets = new ERC20[](4);
-        uint256[] memory amounts = new uint256[](4);
-        assets[0] = USDC;
-        assets[1] = WETH;
-        assets[2] = WBTC;
-        assets[3] = BOND;
+        (uint96 datum, uint64 timeLastUpdated, uint32 posDelta, uint32 negDelta, uint32 rateLimit) = priceRouter
+            .getVirtualPriceBound(address(CRV_3_CRYPTO));
 
-        amounts[0] = 100e6;
-        amounts[1] = 2e18;
-        amounts[2] = 0.1e8;
-        amounts[3] = 100e18;
-
-        uint256 gas = gasleft();
-        priceRouter.getValues(assets, amounts, USDC);
-        console.log("Gas used for getValues", gas - gasleft());
-
-        // console.log("Value", priceRouter.getValues(assets, amounts, USDC));
+        assertEq(datum, vp, "`datum` should equal the virtual price.");
+        assertEq(timeLastUpdated, block.timestamp, "`timeLastUpdated` should equal current timestamp.");
+        assertEq(posDelta, 1.01e8, "`posDelta` should equal 1.01.");
+        assertEq(negDelta, 0.99e8, "`negDelta` should equal 0.99.");
+        assertEq(rateLimit, priceRouter.DEFAULT_RATE_LIMIT(), "`rateLimit` should have been set to default.");
     }
 
     function testMinPriceGreaterThanMaxPrice() external {
@@ -524,9 +513,9 @@ contract PriceRouterTest is Test {
         settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, TriCryptoPool);
         PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
             uint96(1.0248e8),
+            0,
             uint32(1.01e8),
             uint32(0.99e8),
-            0,
             0
         );
         priceRouter.addAsset(CRV_3_CRYPTO, settings, abi.encode(vpBound), 883.56e8);
@@ -555,9 +544,9 @@ contract PriceRouterTest is Test {
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
         PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
             uint96(1.0224e8),
+            0,
             uint32(1.01e8),
             uint32(0.99e8),
-            0,
             0
         );
         priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(vpBound), 1.0224e8);
@@ -585,11 +574,13 @@ contract PriceRouterTest is Test {
         PriceRouter.AssetSettings memory settings;
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
+        ICurveFi pool = ICurveFi(daiUsdcUsdtPool);
+        uint256 vp = pool.get_virtual_price().changeDecimals(18, 8);
         PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
-            uint96(1.0224e8),
+            uint96(vp),
+            0,
             uint32(1.01e8),
             uint32(0.99e8),
-            0,
             0
         );
         priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(vpBound), 1.0224e8);
@@ -600,45 +591,41 @@ contract PriceRouterTest is Test {
 
         // Add FRAX3CRV to price router.
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, frax3CrvPool);
-        vpBound = PriceRouter.VirtualPriceBound(uint96(1.0087e8), uint32(1.01e8), uint32(0.99e8), 0, 0);
+        pool = ICurveFi(frax3CrvPool);
+        vp = pool.get_virtual_price().changeDecimals(18, 8);
+        vpBound = PriceRouter.VirtualPriceBound(uint96(vp), 0, uint32(1.01e8), uint32(0.99e8), 0);
         priceRouter.addAsset(CRV_FRAX_3CRV, settings, abi.encode(vpBound), 1.0087e8);
 
-        // Start by adding liquidity to 3Pool.
+        // Add liquidity to Frax 3CRV Pool.
         uint256 amount = 1_000e18;
-        deal(address(DAI), address(this), amount);
-        DAI.approve(daiUsdcUsdtPool, amount);
-        ICurveFi pool = ICurveFi(daiUsdcUsdtPool);
-        uint256[3] memory amounts0 = [amount, 0, 0];
-        pool.add_liquidity(amounts0, 0);
-        uint256 lpReceived = CRV_DAI_USDC_USDT.balanceOf(address(this));
-
-        // Now use liquidity to add liquidity to Frax 3CRV Pool.
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, frax3CrvPool);
-        CRV_DAI_USDC_USDT.approve(frax3CrvPool, lpReceived);
-        pool = ICurveFi(frax3CrvPool);
-        uint256[2] memory amounts1 = [0, lpReceived];
-        pool.add_liquidity(amounts1, 0);
-        lpReceived = CRV_FRAX_3CRV.balanceOf(address(this));
-        uint256 inputAmountWorth = priceRouter.getValue(DAI, amount, USDC);
+        deal(address(FRAX), address(this), amount);
+        FRAX.approve(frax3CrvPool, amount);
+        uint256[2] memory amounts = [amount, 0];
+        pool.add_liquidity(amounts, 0);
+        uint256 lpReceived = CRV_FRAX_3CRV.balanceOf(address(this));
+        uint256 inputAmountWorth = priceRouter.getValue(FRAX, amount, USDC);
         uint256 outputAmountWorth = priceRouter.getValue(CRV_FRAX_3CRV, lpReceived, USDC);
         assertApproxEqRel(
             outputAmountWorth,
             inputAmountWorth,
             0.01e18,
-            "Frax 3CRV LP tokens should be worth DAI input +- 1%"
+            "Frax 3CRV LP tokens should be worth FRAX input +- 1%"
         );
     }
 
     function testCRVWETHCRVPool() external {
         // Add WETH CRV Pool to the price router
+        ICurveFi pool = ICurveFi(wethCrvPool);
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(CURVEV2_DERIVATIVE, wethCrvPool);
         uint256 price = priceRouter.getValue(WETH, 0.051699e18, USDC);
+        uint256 vp = pool.get_virtual_price().changeDecimals(18, 8);
         PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
-            uint96(1.0285e8),
+            uint96(vp),
+            0,
             uint32(1.01e8),
             uint32(0.99e8),
-            0,
             0
         );
         priceRouter.addAsset(CRV_WETH_CRV, settings, abi.encode(vpBound), price.changeDecimals(6, 8));
@@ -647,8 +634,6 @@ contract PriceRouterTest is Test {
         uint256 amount = 10e18;
         deal(address(WETH), address(this), amount);
         WETH.approve(wethCrvPool, amount);
-        ICurveFi pool = ICurveFi(wethCrvPool);
-        console.log("virtual price", pool.get_virtual_price());
         uint256[2] memory amounts = [amount, 0];
         pool.add_liquidity(amounts, 0);
         uint256 lpReceived = CRV_WETH_CRV.balanceOf(address(this));
@@ -678,11 +663,12 @@ contract PriceRouterTest is Test {
 
         // Add Aave 3Pool.
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, aave3Pool);
+        uint256 vp = ICurvePool(aave3Pool).get_virtual_price().changeDecimals(18, 8);
         PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
-            uint96(1.0985e8),
+            uint96(vp),
+            0,
             uint32(1.01e8),
             uint32(0.99e8),
-            0,
             0
         );
         priceRouter.addAsset(CRV_AAVE_3CRV, settings, abi.encode(vpBound), 1.0983e8);
@@ -709,10 +695,12 @@ contract PriceRouterTest is Test {
             0.01e18,
             "Aave 3 Pool LP tokens should be worth aDAI input +- 1%"
         );
-        console.log("Input worth", inputAmountWorth);
-        console.log("Output worth", outputAmountWorth);
     }
 
+    //TODO add tests where we check that the out of bounds checks are enforced.
+    function testCurveVirtualPriceBoundsCheck() external {}
+
+    // ======================================= AUTOMATION TESTS =======================================
     function testAutomationLogic() external {
         // Set up price router to use mock gas feed.
         MockGasFeed gasFeed = new MockGasFeed();
@@ -721,14 +709,15 @@ contract PriceRouterTest is Test {
         gasFeed.setAnswer(30e9);
 
         // Add 3Pool to price router.
+        ICurvePool pool = ICurvePool(daiUsdcUsdtPool);
+        uint256 oldVirtualPrice = pool.get_virtual_price().changeDecimals(18, 8);
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(CURVE_DERIVATIVE, daiUsdcUsdtPool);
-        ICurvePool pool = ICurvePool(daiUsdcUsdtPool);
         PriceRouter.VirtualPriceBound memory vpBound = PriceRouter.VirtualPriceBound(
-            uint96(pool.get_virtual_price().changeDecimals(18, 8)),
+            uint96(oldVirtualPrice),
+            0,
             uint32(1.001e8),
             uint32(0.999e8),
-            0,
             0
         );
         priceRouter.addAsset(CRV_DAI_USDC_USDT, settings, abi.encode(vpBound), 1.0224e8);
@@ -738,7 +727,7 @@ contract PriceRouterTest is Test {
         assertTrue(!upkeepNeeded, "Upkeep should not be needed");
         // Increase the virtual price by about 0.10101%
         _adjustVirtualPrice(CRV_DAI_USDC_USDT, 0.999e18);
-        vm.warp(block.timestamp + 2 days);
+        vm.warp(block.timestamp + 1 days);
         (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
         assertTrue(upkeepNeeded, "Upkeep should be needed");
 
@@ -753,22 +742,32 @@ contract PriceRouterTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed");
         vm.prank(automationRegistry);
         priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0)));
+        (uint96 datum, uint64 timeLastUpdated, , , ) = priceRouter.getVirtualPriceBound(address(CRV_DAI_USDC_USDT));
+        assertEq(datum, oldVirtualPrice.mulDivDown(1.001e8, 1e8), "Datum should equal old virtual price upper bound.");
+        assertEq(timeLastUpdated, block.timestamp, "Time last updated should equal current timestamp.");
 
         (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
         assertTrue(!upkeepNeeded, "Upkeep should not be needed");
+
+        // If enough time passes, and gas price becomes low enough, datum may be updated again.
+        vm.warp(block.timestamp + 1 days);
+        _adjustVirtualPrice(CRV_DAI_USDC_USDT, 0.9995e18);
+        // With adjusted virtual price new max gas limit should be just over 25 gwei.
+        gasFeed.setAnswer(25e9);
+        (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
+        assertTrue(upkeepNeeded, "Upkeep should be needed");
+        vm.prank(automationRegistry);
+        priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
+        (datum, timeLastUpdated, , , ) = priceRouter.getVirtualPriceBound(address(CRV_DAI_USDC_USDT));
+        assertEq(datum, pool.get_virtual_price().changeDecimals(18, 8), "Datum should equal virtual price.");
+        assertEq(timeLastUpdated, block.timestamp, "Time last updated should equal current timestamp.");
 
         //TODO add more tests checking gas logic
         // TODO add more tests where there are multiple Curve pools that need to be updated, and make sure they update in the proper order
         //TODO add tests that make sure the upkeep only checks the range it is responsible for.
     }
 
-    //TODO add tests where we check that the out of bounds checks are enforced.
-
-    function _adjustVirtualPrice(ERC20 token, uint256 multiplier) internal {
-        uint256 targetSupply = token.totalSupply().mulDivDown(multiplier, 1e18);
-        stdstore.target(address(token)).sig("totalSupply()").checked_write(targetSupply);
-    }
-
+    // ======================================= INTEGARTION TESTS =======================================
     function testCRVAttackVector() external {
         address SiloFraxPool = 0x9a22CDB1CA1cdd2371cD5BB5199564C4E89465eb;
         ERC20 SILO = ERC20(0x6f80310CA7F2C654691D1383149Fa1A57d8AB1f8);
@@ -785,13 +784,13 @@ contract PriceRouterTest is Test {
         uint256 virtualPriceAfter = pool.get_virtual_price();
         uint256 lpPriceAfter = pool.lp_price();
         uint256 priceOracleAfter = pool.price_oracle();
-        console.log("Results from swapping 10M FRAX to SILO");
-        console.log("Virtual Price Before:", virtualPriceBefore);
-        console.log("Virtual Price After: ", virtualPriceAfter);
-        console.log("LP Price Before:     ", lpPriceBefore);
-        console.log("LP Price After:      ", lpPriceAfter);
-        console.log("Price Oracle Before: ", priceOracleBefore);
-        console.log("Price Oracle After:  ", priceOracleAfter);
+        // console.log("Results from swapping 10M FRAX to SILO");
+        // console.log("Virtual Price Before:", virtualPriceBefore);
+        // console.log("Virtual Price After: ", virtualPriceAfter);
+        // console.log("LP Price Before:     ", lpPriceBefore);
+        // console.log("LP Price After:      ", lpPriceAfter);
+        // console.log("Price Oracle Before: ", priceOracleBefore);
+        // console.log("Price Oracle After:  ", priceOracleAfter);
 
         virtualPriceBefore = pool.get_virtual_price();
         lpPriceBefore = pool.lp_price();
@@ -802,16 +801,22 @@ contract PriceRouterTest is Test {
         virtualPriceAfter = pool.get_virtual_price();
         lpPriceAfter = pool.lp_price();
         priceOracleAfter = pool.price_oracle();
-        console.log("Results from swapping SILO balance to FRAX");
-        console.log("Virtual Price Before:", virtualPriceBefore);
-        console.log("Virtual Price After: ", virtualPriceAfter);
-        console.log("LP Price Before:     ", lpPriceBefore);
-        console.log("LP Price After:      ", lpPriceAfter);
-        console.log("Price Oracle Before: ", priceOracleBefore);
-        console.log("Price Oracle After:  ", priceOracleAfter);
+        // console.log("Results from swapping SILO balance to FRAX");
+        // console.log("Virtual Price Before:", virtualPriceBefore);
+        // console.log("Virtual Price After: ", virtualPriceAfter);
+        // console.log("LP Price Before:     ", lpPriceBefore);
+        // console.log("LP Price After:      ", lpPriceAfter);
+        // console.log("Price Oracle Before: ", priceOracleBefore);
+        // console.log("Price Oracle After:  ", priceOracleAfter);
 
-        console.log("FRAX Remaining:", FRAX.balanceOf(address(this)));
-        console.log("FRAX Lost: (-)", amount - FRAX.balanceOf(address(this)));
+        // console.log("FRAX Remaining:", FRAX.balanceOf(address(this)));
+        // console.log("FRAX Lost: (-)", amount - FRAX.balanceOf(address(this)));
         siloBalance = SILO.balanceOf(address(this));
+    }
+
+    // ======================================= HELPER FUNCTIONS =======================================
+    function _adjustVirtualPrice(ERC20 token, uint256 multiplier) internal {
+        uint256 targetSupply = token.totalSupply().mulDivDown(multiplier, 1e18);
+        stdstore.target(address(token)).sig("totalSupply()").checked_write(targetSupply);
     }
 }
