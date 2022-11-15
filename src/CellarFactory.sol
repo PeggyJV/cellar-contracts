@@ -11,6 +11,8 @@ contract CellarFactory is Owned {
 
     constructor() Owned(msg.sender) {}
 
+    event CellarDeployed(address cellar, address implementation);
+
     function deploy(
         address implementation,
         bytes calldata initializeCallData,
@@ -23,5 +25,6 @@ contract CellarFactory is Owned {
         asset.safeApprove(clone, initialDeposit);
         Cellar(clone).deposit(initialDeposit, address(this));
         //TODO I guess we could transfer the shares out? Or do we wanna "lock" them in here to always have liquidity in the cellars?
+        emit CellarDeployed(clone, implementation);
     }
 }

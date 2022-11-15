@@ -1161,7 +1161,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     /**
      * @notice The Aave V2 Pool contract on Ethereum Mainnet.
      */
-    address public constant aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
+    address public aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
 
     /**
      * @notice Allows strategist to utilize Aave V2 flashloans while rebalancing the cellar.

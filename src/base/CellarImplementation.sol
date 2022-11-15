@@ -30,6 +30,7 @@ contract CellarImplementation is Cellar, Initializable {
         owner = _registry.getAddress(0);
         shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
         allowedRebalanceDeviation = 0.003e18;
+        aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
 
         // Initialize last accrual timestamp to time that cellar was initialized, otherwise the first
         // `accrue` will take platform fees from 1970 to the time it is called.
