@@ -12,7 +12,7 @@ contract CellarFactory is Owned {
 
     mapping(address => bool) public isDeployer;
 
-    function adjustIsDeployter(address _deployer, bool _state) external onlyOwner {
+    function adjustIsDeployer(address _deployer, bool _state) external onlyOwner {
         isDeployer[_deployer] = _state;
     }
 

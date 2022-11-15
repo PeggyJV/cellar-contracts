@@ -116,7 +116,7 @@ contract CellarTest is Test {
         positions[4] = wethPosition;
         bytes[] memory positionConfigs = new bytes[](5);
         factory = new CellarFactory();
-        factory.adjustIsDeployter(address(this), true);
+        factory.adjustIsDeployer(address(this), true);
         implementation = new MockCellarImplementation(registry);
         bytes memory initializeCallData = abi.encodeWithSelector(
             CellarInitializable.initialize.selector,
