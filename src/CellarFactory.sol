@@ -3,7 +3,6 @@ pragma solidity 0.8.16;
 
 import { Cellar, Owned, ERC20, SafeTransferLib, Address } from "src/base/Cellar.sol";
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
-import { CREATE3 } from "@solmate/utils/CREATE3.sol";
 
 contract CellarFactory is Owned {
     using SafeTransferLib for ERC20;
@@ -32,10 +31,13 @@ contract CellarFactory is Owned {
         if (!isDeployer[msg.sender]) revert CellarFactory__NotADeployer();
         clone = implementation.cloneDeterministic(salt);
         clone.functionCall(initializeCallData);
-        asset.safeTransferFrom(msg.sender, address(this), initialDeposit);
-        asset.safeApprove(clone, initialDeposit);
-        // Cellar(clone).deposit(initialDeposit, address(this));
-        //TODO I guess we could transfer the shares out? Or do we wanna "lock" them in here to always have liquidity in the cellars?
+        // Deposit into cellar if need be.
+        if (initialDeposit > 0) {
+            asset.safeTransferFrom(msg.sender, address(this), initialDeposit);
+            asset.safeApprove(clone, initialDeposit);
+            Cellar(clone).deposit(initialDeposit, address(this));
+            //TODO I guess we could transfer the shares out? Or do we wanna "lock" them in here to always have liquidity in the cellars?
+        }
         emit CellarDeployed(clone, implementation, salt);
     }
 

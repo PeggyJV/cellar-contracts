@@ -130,15 +130,7 @@ contract CellarTest is Test {
             type(uint128).max,
             type(uint128).max
         );
-        deal(address(USDC), address(this), 1e6);
-        USDC.approve(address(factory), 1e6);
-        address clone = factory.deploy(
-            address(implementation),
-            initializeCallData,
-            USDC,
-            1e6,
-            keccak256(abi.encode(2))
-        );
+        address clone = factory.deploy(address(implementation), initializeCallData, USDC, 0, keccak256(abi.encode(2)));
         cellar = MockCellarImplementation(clone);
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
@@ -764,13 +756,11 @@ contract CellarTest is Test {
                 type(uint128).max,
                 type(uint128).max
             );
-            deal(address(USDC), address(this), 1e6);
-            USDC.approve(address(factory), 1e6);
             address clone = factory.deploy(
                 address(implementation),
                 initializeCallData,
                 USDC,
-                1e6,
+                0,
                 keccak256(abi.encode(0))
             );
             multiPositionCellar = MockCellarImplementation(clone);
@@ -1027,15 +1017,7 @@ contract CellarTest is Test {
             type(uint128).max,
             type(uint128).max
         );
-        deal(address(USDC), address(this), 1e6);
-        USDC.approve(address(factory), 1e6);
-        address clone = factory.deploy(
-            address(implementation),
-            initializeCallData,
-            USDC,
-            1e6,
-            keccak256(abi.encode(1))
-        );
+        address clone = factory.deploy(address(implementation), initializeCallData, USDC, 0, keccak256(abi.encode(1)));
         MockCellarImplementation debtCellar = MockCellarImplementation(clone);
 
         // MockCellar debtCellar = new MockCellar(
