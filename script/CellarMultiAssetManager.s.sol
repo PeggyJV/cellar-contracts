@@ -9,7 +9,7 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC20 } from "src/base/ERC20.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 
 contract CellarMultiAssetManagerScript is Script {

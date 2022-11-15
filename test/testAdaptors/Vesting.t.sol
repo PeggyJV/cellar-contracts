@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { MockCellar, Cellar, ERC20 } from "src/mocks/MockCellar.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { MockCellar, Cellar, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { Registry, IGravity } from "src/base/Cellar.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
@@ -115,9 +114,7 @@ contract CellarVestingTest is Test {
         vm.startPrank(user2);
         USDC.approve(address(cellar), type(uint256).max);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(
-            BaseAdaptor.BaseAdaptor__UserDepositsNotAllowed.selector
-        )));
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserDepositsNotAllowed.selector)));
 
         cellar.deposit(totalDeposit, user2);
 
@@ -145,8 +142,18 @@ contract CellarVestingTest is Test {
         assertEq(cellar.totalAssets(), totalDeposit - (totalDeposit / 20), "Cellar totalAssets should decrease by 5%");
 
         // Check state in vesting contract
-        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), totalDeposit / 20, 1, "Vesting contract should report deposited funds");
-        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+        assertApproxEqAbs(
+            vesting.totalBalanceOf(address(cellar)),
+            totalDeposit / 20,
+            1,
+            "Vesting contract should report deposited funds"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report vested funds"
+        );
     }
 
     function testFailWithdrawMoreThanVested() external {
@@ -187,8 +194,18 @@ contract CellarVestingTest is Test {
         cellar.callOnAdaptor(data);
 
         // Check state in vesting contract
-        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), totalDeposit / 20, 1, "Vesting contract should report deposited funds");
-        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+        assertApproxEqAbs(
+            vesting.totalBalanceOf(address(cellar)),
+            totalDeposit / 20,
+            1,
+            "Vesting contract should report deposited funds"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report vested funds"
+        );
 
         // Check tokens are in the right place
         assertEq(USDC.balanceOf(address(cellar)), totalDeposit - totalDeposit / 20);
@@ -212,18 +229,29 @@ contract CellarVestingTest is Test {
         _emitWithdraw(totalDeposit / 20, 1);
 
         // Withdraw vested positions
-        cellar.withdraw(
-            totalDeposit / 20,
-            address(this),
-            address(this)
-        );
+        cellar.withdraw(totalDeposit / 20, address(this), address(this));
 
         // Check state - deposited tokens withdrawn
-        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report deposited funds");
-        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+        assertApproxEqAbs(
+            vesting.totalBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report deposited funds"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report vested funds"
+        );
 
         // Check tokens are in the right place
-        assertApproxEqAbs(USDC.balanceOf(address(cellar)), totalDeposit - totalDeposit / 20, 1, "Cellar should have 95% of tokens");
+        assertApproxEqAbs(
+            USDC.balanceOf(address(cellar)),
+            totalDeposit - totalDeposit / 20,
+            1,
+            "Cellar should have 95% of tokens"
+        );
         assertApproxEqAbs(USDC.balanceOf(address(this)), totalDeposit / 20, 1, "User should withdraw 5% of tokens");
 
         // Swap positions back
@@ -253,8 +281,18 @@ contract CellarVestingTest is Test {
         cellar.callOnAdaptor(data);
 
         // Check state - deposited tokens withdrawn
-        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report deposited funds");
-        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+        assertApproxEqAbs(
+            vesting.totalBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report deposited funds"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report vested funds"
+        );
 
         // Check cellar total assets is back to 100%
         assertApproxEqAbs(cellar.totalAssets(), totalDeposit, 1, "Cellar totalAssets should return to original value");
@@ -283,8 +321,18 @@ contract CellarVestingTest is Test {
         cellar.callOnAdaptor(data);
 
         // Check state - deposited tokens withdrawn
-        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report deposited funds");
-        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+        assertApproxEqAbs(
+            vesting.totalBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report deposited funds"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report vested funds"
+        );
 
         // Check cellar total assets is back to 100%
         assertApproxEqAbs(cellar.totalAssets(), totalDeposit, 1, "Cellar totalAssets should return to original value");
@@ -313,11 +361,26 @@ contract CellarVestingTest is Test {
         cellar.callOnAdaptor(data);
 
         // Check state - deposited tokens withdrawn
-        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), totalDeposit / 40, 1, "Vesting contract should report deposited funds");
-        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), 0, 1, "Vesting contract should not report vested funds");
+        assertApproxEqAbs(
+            vesting.totalBalanceOf(address(cellar)),
+            totalDeposit / 40,
+            1,
+            "Vesting contract should report deposited funds"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOf(address(cellar)),
+            0,
+            1,
+            "Vesting contract should not report vested funds"
+        );
 
         // Check cellar total assets is back to 97.5%
-        assertApproxEqAbs(cellar.totalAssets(), totalDeposit / 1000 * 975, 1, "Cellar totalAssets should regain half of deposit");
+        assertApproxEqAbs(
+            cellar.totalAssets(),
+            (totalDeposit / 1000) * 975,
+            1,
+            "Cellar totalAssets should regain half of deposit"
+        );
     }
 
     function testStrategistPartialWithdrawFromVesting() external {
@@ -344,8 +407,18 @@ contract CellarVestingTest is Test {
         cellar.callOnAdaptor(data);
 
         // Check state - deposited tokens withdrawn
-        assertApproxEqAbs(vesting.totalBalanceOf(address(cellar)), totalDeposit / 40, 1, "Vesting contract should report deposited funds");
-        assertApproxEqAbs(vesting.vestedBalanceOf(address(cellar)), totalDeposit / 40, 1, "Vesting contract should report vested funds");
+        assertApproxEqAbs(
+            vesting.totalBalanceOf(address(cellar)),
+            totalDeposit / 40,
+            1,
+            "Vesting contract should report deposited funds"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOf(address(cellar)),
+            totalDeposit / 40,
+            1,
+            "Vesting contract should report vested funds"
+        );
 
         // Check cellar total assets is back to 100%
         assertApproxEqAbs(cellar.totalAssets(), totalDeposit, 1, "Cellar totalAssets should return to original value");
@@ -353,15 +426,8 @@ contract CellarVestingTest is Test {
 
     // ========================================= HELPER FUNCTIONS =========================================
 
-    function _createBytesDataToDeposit(
-        VestingSimple _vesting,
-        uint256 amount
-    ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(
-            VestingSimpleAdaptor.depositToVesting.selector,
-            amount,
-            abi.encode(_vesting)
-        );
+    function _createBytesDataToDeposit(VestingSimple _vesting, uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(VestingSimpleAdaptor.depositToVesting.selector, amount, abi.encode(_vesting));
     }
 
     function _createBytesDataToWithdraw(
@@ -369,32 +435,26 @@ contract CellarVestingTest is Test {
         uint256 depositId,
         uint256 amount
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(
-            VestingSimpleAdaptor.withdrawFromVesting.selector,
-            depositId,
-            amount,
-            abi.encode(_vesting)
-        );
+        return
+            abi.encodeWithSelector(
+                VestingSimpleAdaptor.withdrawFromVesting.selector,
+                depositId,
+                amount,
+                abi.encode(_vesting)
+            );
     }
 
-    function _createBytesDataToWithdrawAny(
-        VestingSimple _vesting,
-        uint256 amount
-    ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(
-            VestingSimpleAdaptor.withdrawAnyFromVesting.selector,
-            amount,
-            abi.encode(_vesting)
-        );
+    function _createBytesDataToWithdrawAny(VestingSimple _vesting, uint256 amount)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return
+            abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAnyFromVesting.selector, amount, abi.encode(_vesting));
     }
 
-    function _createBytesDataToWithdrawAll(
-        VestingSimple _vesting
-    ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(
-            VestingSimpleAdaptor.withdrawAllFromVesting.selector,
-            abi.encode(_vesting)
-        );
+    function _createBytesDataToWithdrawAll(VestingSimple _vesting) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAllFromVesting.selector, abi.encode(_vesting));
     }
 
     /// @notice Emitted when tokens are deosited for vesting.

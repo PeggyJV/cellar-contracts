@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { Cellar, Registry, PriceRouter, ERC4626, ERC20, SafeCast } from "src/base/Cellar.sol";
+import { Cellar, Registry, PriceRouter, ERC4626, ERC20, SafeCast, SafeTransferLib } from "src/base/Cellar.sol";
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 
 contract MockCellar is Cellar, Test {

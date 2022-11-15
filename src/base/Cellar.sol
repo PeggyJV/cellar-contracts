@@ -395,21 +395,21 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     /**
      * @notice Address of the platform's registry contract. Used to get the latest address of modules.
      */
-    Registry public immutable registry;
+    Registry public registry;
 
     /**
      * @notice Determines this cellars risk tolerance in regards to assets it is exposed to.
      * @dev 0: safest
      *      type(uint128).max: no restrictions
      */
-    uint128 public immutable assetRiskTolerance;
+    uint128 public assetRiskTolerance;
 
     /**
      * @notice Determines this cellars risk tolerance in regards to protocols it uses.
      * @dev 0: safest
      *      type(uint128).max: no restrictions
      */
-    uint128 public immutable protocolRiskTolerance;
+    uint128 public protocolRiskTolerance;
 
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
