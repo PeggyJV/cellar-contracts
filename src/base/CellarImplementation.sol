@@ -24,7 +24,7 @@ contract CellarImplementation is Cellar, Initializable {
         asset = _asset;
         name = _name;
         symbol = _symbol;
-
+        decimals = 18;
         assetRiskTolerance = _assetRiskTolerance;
         protocolRiskTolerance = _protocolRiskTolerance;
         owner = _registry.getAddress(0);
