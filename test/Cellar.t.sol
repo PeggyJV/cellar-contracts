@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { MockCellarImplementation, ERC4626, ERC20 } from "src/mocks/MockCellarImplementation.sol";
+import { MockCellar } from "src/mocks/MockCellar.sol";
+import { CellarInitializable } from "src/base/CellarInitializable.sol";
+import { CellarFactory, Cellar } from "src/CellarFactory.sol";
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
 import { Registry, PriceRouter, IGravity } from "src/base/Cellar.sol";
@@ -16,7 +19,7 @@ import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 
-import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
+import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 contract CellarTest is Test {
@@ -24,7 +27,9 @@ contract CellarTest is Test {
     using Math for uint256;
     using stdStorage for StdStorage;
 
-    MockCellar private cellar;
+    MockCellarImplementation private cellar;
+    CellarFactory private factory;
+    MockCellarImplementation private implementation;
     MockGravity private gravity;
 
     MockExchange private exchange;
@@ -60,13 +65,10 @@ contract CellarTest is Test {
     function setUp() external {
         usdcCLR = new MockERC4626(USDC, "USDC Cellar LP Token", "USDC-CLR", 6);
         vm.label(address(usdcCLR), "usdcCLR");
-
         wethCLR = new MockERC4626(WETH, "WETH Cellar LP Token", "WETH-CLR", 18);
         vm.label(address(wethCLR), "wethCLR");
-
         wbtcCLR = new MockERC4626(WBTC, "WBTC Cellar LP Token", "WBTC-CLR", 8);
         vm.label(address(wbtcCLR), "wbtcCLR");
-
         // Setup Registry and modules:
         priceRouter = new MockPriceRouter();
         exchange = new MockExchange(priceRouter);
@@ -74,7 +76,6 @@ contract CellarTest is Test {
         gravity = new MockGravity();
         cellarAdaptor = new CellarAdaptor();
         erc20Adaptor = new ERC20Adaptor();
-
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
             // given to the Gravity Bridge to this contract.
@@ -82,75 +83,75 @@ contract CellarTest is Test {
             address(swapRouter),
             address(priceRouter)
         );
-
         // Setup exchange rates:
         // USDC Simulated Price: $1
         // WETH Simulated Price: $2000
         // WBTC Simulated Price: $30,000
-
         priceRouter.setExchangeRate(USDC, USDC, 1e6);
         priceRouter.setExchangeRate(WETH, WETH, 1e18);
         priceRouter.setExchangeRate(WBTC, WBTC, 1e8);
-
         priceRouter.setExchangeRate(USDC, WETH, 0.0005e18);
         priceRouter.setExchangeRate(WETH, USDC, 2000e6);
-
         priceRouter.setExchangeRate(USDC, WBTC, 0.00003333e8);
         priceRouter.setExchangeRate(WBTC, USDC, 30_000e6);
-
         priceRouter.setExchangeRate(WETH, WBTC, 0.06666666e8);
         priceRouter.setExchangeRate(WBTC, WETH, 15e18);
-
         priceRouter.supportAsset(USDC);
         priceRouter.supportAsset(WETH);
         priceRouter.supportAsset(WBTC);
-
         // Cellar positions array.
         uint32[] memory positions = new uint32[](5);
-
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(cellarAdaptor), 0, 0);
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-
         usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
         usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(usdcCLR), 0, 0);
         wethCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethCLR), 0, 0);
         wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wbtcCLR), 0, 0);
         wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
-
         positions[0] = usdcPosition;
         positions[1] = usdcCLRPosition;
         positions[2] = wethCLRPosition;
         positions[3] = wbtcCLRPosition;
         positions[4] = wethPosition;
-
         bytes[] memory positionConfigs = new bytes[](5);
-
-        cellar = new MockCellar(
+        factory = new CellarFactory();
+        factory.adjustIsDeployter(address(this), true);
+        implementation = new MockCellarImplementation(registry);
+        bytes memory initializeCallData = abi.encodeWithSelector(
+            CellarInitializable.initialize.selector,
             registry,
             USDC,
             positions,
             positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            strategist
+            strategist,
+            type(uint128).max,
+            type(uint128).max
         );
+        deal(address(USDC), address(this), 1e6);
+        USDC.approve(address(factory), 1e6);
+        address clone = factory.deploy(
+            address(implementation),
+            initializeCallData,
+            USDC,
+            1e6,
+            keccak256(abi.encode(2))
+        );
+        cellar = MockCellarImplementation(clone);
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
-
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
         cellar.setupAdaptor(address(cellarAdaptor));
-
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(exchange), type(uint224).max);
         deal(address(WETH), address(exchange), type(uint224).max);
         deal(address(WBTC), address(exchange), type(uint224).max);
-
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
         WETH.approve(address(cellar), type(uint256).max);
         WBTC.approve(address(cellar), type(uint256).max);
-
         // Manipulate  test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
@@ -744,23 +745,45 @@ contract CellarTest is Test {
 
     function testMaliciousStrategistWithUnboundForLoop() external {
         // Initialize test Cellar.
-        MockCellar multiPositionCellar;
+        MockCellarImplementation multiPositionCellar;
         uint32[] memory positions;
         {
             // Create new cellar with USDC position.
             positions = new uint32[](1);
             positions[0] = usdcPosition;
             bytes[] memory positionConfigs = new bytes[](1);
-
-            multiPositionCellar = new MockCellar(
+            bytes memory initializeCallData = abi.encodeWithSelector(
+                CellarInitializable.initialize.selector,
                 registry,
                 USDC,
                 positions,
                 positionConfigs,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                strategist
+                strategist,
+                type(uint128).max,
+                type(uint128).max
             );
+            deal(address(USDC), address(this), 1e6);
+            USDC.approve(address(factory), 1e6);
+            address clone = factory.deploy(
+                address(implementation),
+                initializeCallData,
+                USDC,
+                1e6,
+                keccak256(abi.encode(0))
+            );
+            multiPositionCellar = MockCellarImplementation(clone);
+
+            // multiPositionCellar = new MockCellar(
+            //     registry,
+            //     USDC,
+            //     positions,
+            //     positionConfigs,
+            //     "Asset Management Cellar LP Token",
+            //     "assetmanagement-CLR",
+            //     strategist
+            // );
             stdstore
                 .target(address(multiPositionCellar))
                 .sig(multiPositionCellar.shareLockPeriod.selector)
@@ -992,16 +1015,38 @@ contract CellarTest is Test {
         positions[1] = debtWethPosition; // not a real debt position, but for test will be treated as such
 
         bytes[] memory positionConfigs = new bytes[](2);
-
-        MockCellar debtCellar = new MockCellar(
+        bytes memory initializeCallData = abi.encodeWithSelector(
+            CellarInitializable.initialize.selector,
             registry,
             USDC,
             positions,
             positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            strategist
+            strategist,
+            type(uint128).max,
+            type(uint128).max
         );
+        deal(address(USDC), address(this), 1e6);
+        USDC.approve(address(factory), 1e6);
+        address clone = factory.deploy(
+            address(implementation),
+            initializeCallData,
+            USDC,
+            1e6,
+            keccak256(abi.encode(1))
+        );
+        MockCellarImplementation debtCellar = MockCellarImplementation(clone);
+
+        // MockCellar debtCellar = new MockCellar(
+        //     registry,
+        //     USDC,
+        //     positions,
+        //     positionConfigs,
+        //     "Multiposition Cellar LP Token",
+        //     "multiposition-CLR",
+        //     strategist
+        // );
 
         //constructor should set isDebt
         (, bool isDebt, , ) = debtCellar.getPositionData(debtWethPosition);

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { MockCellar, Cellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
+import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
+import { Cellar } from "src/base/Cellar.sol";
 import { Registry, PriceRouter, IGravity } from "src/base/Cellar.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { MockExchange } from "src/mocks/MockExchange.sol";
