@@ -9,18 +9,44 @@ contract CellarFactory is Owned {
     using Clones for address;
     using Address for address;
 
+    /**
+     * @notice Keep track of what addresses can create Cellars using this factory.
+     */
     mapping(address => bool) public isDeployer;
 
+    /**
+     * @notice Allows owner to add/remove addresses from `isDeployer`.
+     */
     function adjustIsDeployer(address _deployer, bool _state) external onlyOwner {
         isDeployer[_deployer] = _state;
     }
 
+    /**
+     * @notice Call Owned constructor to properly set up ownership.
+     */
     constructor() Owned(msg.sender) {}
 
+    /**
+     * @notice Emitted when a Cellar is deployed.
+     * @param cellar the address of the deployed cellar
+     * @param implementation the address of the implementation used
+     * @param salt the salt used to deterministically deploy the cellar
+     */
     event CellarDeployed(address cellar, address implementation, bytes32 salt);
 
+    /**
+     * @notice Attempted to deploy a cellar from an account that is not a deployer.
+     */
     error CellarFactory__NotADeployer();
 
+    /**
+     * @notice Deterministically deploys cellars using OpenZepplin Clones.
+     * @param implementation the implementation address to mimic functionality of
+     * @param asset the ERC20 asset of the new cellar
+     * @param initialDeposit if non zero, then this function will make the initial deposit into the cellar
+     * @param salt salt used to deterministically deploy the cellar
+     * @return clone the address of the cellar clone
+     */
     function deploy(
         address implementation,
         bytes calldata initializeCallData,
