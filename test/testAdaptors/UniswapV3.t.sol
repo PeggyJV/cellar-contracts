@@ -182,7 +182,8 @@ contract UniswapV3AdaptorTest is Test {
         bytes[] memory adaptorCalls = new bytes[](2);
         uint24 fee = 500;
         adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, fee, 50_500e6);
-        adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, fee, 50_000e6, 36e18, 222);
+        uint256 wethOut = priceRouter.getValue(USDC, 50_000e6, WETH);
+        adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, fee, 50_000e6, wethOut, 222);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -265,8 +266,8 @@ contract UniswapV3AdaptorTest is Test {
         cellar.setRebalanceDeviation(0.1e18);
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 100_000e6);
-        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 100_000e18);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 10_000e6);
+        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 10_000e18);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
