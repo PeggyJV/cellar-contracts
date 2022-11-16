@@ -317,10 +317,8 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint8 quoteAssetDecimals,
         PriceCache[PRICE_CACHE_SIZE] memory cache
     ) internal view returns (uint256) {
-        uint256 basePrice;
-        uint256 quotePrice;
-        basePrice = _getPriceInUSD(baseAsset, baseSettings, cache);
-        quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
+        uint256 basePrice = _getPriceInUSD(baseAsset, baseSettings, cache);
+        uint256 quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
         uint256 exchangeRate = basePrice.mulDivDown(10**quoteAssetDecimals, quotePrice);
         return exchangeRate;
     }
@@ -918,16 +916,8 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     /**
-     * @dev so the price oracle in curve V2 pools is the price of coins 1, and 2, in terms of coins 0.
-     * Or coins 1 in terms of coins 0(for a 2 asset pool).
+     * Inspired by https://etherscan.io/address/0xE8b2989276E2Ca8FDEA2268E3551b2b4B2418950#code
      */
-    //TODO so I think Curve V2 pools with two tokens can be safely priced IF we check the virtual price to make sure it isn't fucked, then call `lp_price`.
-    // LP price for 2 asset curve pools
-    /**
-     * return 2 * self.virtual_price * self.sqrt_int(self.internal_price_oracle()) / 10**18
-     */
-    //TODO so I think we could check each token in coins, and if coins[0] is not supported, then we try coins[1], and convert the
-    // lp price to in terms of token 1 using the pools price oracle.
     function _getPriceForCurveV2Derivative(
         ERC20 asset,
         address _source,
@@ -947,21 +937,8 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         address[] memory coins = getCurveDerivativeStorage[asset];
         ERC20 token0 = ERC20(coins[0]);
         if (coins.length == 2) {
-            //TODO if price_oracle value is safe then we can price LP tokens with only 1 supported underlying.
             return pool.lp_price().mulDivDown(_getPriceInUSD(token0, getAssetSettings[token0], cache), 1e18);
         } else if (coins.length == 3) {
-            //TODO, so I think the price of t1 and t2 needs to be in terms of t0, but not sure,
-            // Just using USD did yield a decent answer, but converting to USDT was a bit closer.
-            // uint256 t0Price = _getPriceInUSD(token0, getAssetSettings[token0], cache);
-            // ERC20 token1 = ERC20(coins[1]);
-            // uint256 t1Price = _getPriceInUSD(token1, getAssetSettings[token1], cache);
-            // ERC20 token2 = ERC20(coins[2]);
-            // uint256 t2Price = _getPriceInUSD(token2, getAssetSettings[token2], cache);
-            // // Convert t1 and t2 prices into t0.
-            // uint8 token0Decimals = token0.decimals();
-            // t1Price = (10**token0Decimals).mulDivDown(t1Price, t0Price).changeDecimals(token0Decimals, 18);
-            // t2Price = (10**token0Decimals).mulDivDown(t2Price, t0Price).changeDecimals(token0Decimals, 18);
-
             uint256 t1Price = pool.price_oracle(0);
             uint256 t2Price = pool.price_oracle(1);
 
@@ -969,9 +946,8 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             {
                 uint256 g = pool.gamma().mulDivDown(1e18, GAMMA0);
                 uint256 a = pool.A().mulDivDown(1e18, A0);
-                //TODO wtf is someCurveNumber?
-                uint256 someCurveNumber = (g**2 / 1e18) * a;
-                uint256 discount = someCurveNumber > 1e34 ? someCurveNumber : 1e34;
+                uint256 coefficient = (g**2 / 1e18) * a;
+                uint256 discount = coefficient > 1e34 ? coefficient : 1e34;
                 discount = _cubicRoot(discount).mulDivDown(DISCOUNT0, 1e18);
 
                 maxPrice -= maxPrice.mulDivDown(discount, 1e18);
