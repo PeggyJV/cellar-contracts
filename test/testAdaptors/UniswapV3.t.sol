@@ -19,6 +19,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
 import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol";
 import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
@@ -37,6 +38,8 @@ contract UniswapV3AdaptorTest is Test {
     SwapRouter private swapRouter;
 
     Registry private registry;
+
+    uint8 private constant CHAINLINK_DERIVATIVE = 1;
 
     address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -64,6 +67,11 @@ contract UniswapV3AdaptorTest is Test {
     UniswapV3Adaptor private uniswapV3Adaptor;
     ERC20Adaptor private erc20Adaptor;
 
+    // Chainlink PriceFeeds
+    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
+    address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
+
     uint32 private usdcPosition;
     uint32 private wethPosition;
     uint32 private daiPosition;
@@ -86,9 +94,25 @@ contract UniswapV3AdaptorTest is Test {
             address(priceRouter)
         );
 
-        priceRouter.addAsset(USDC, 0, 0, false, 0);
-        priceRouter.addAsset(DAI, 0, 0, false, 0);
-        priceRouter.addAsset(WETH, 0, 0, false, 0);
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+
+        PriceRouter.AssetSettings memory settings;
+
+        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
+        priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
+
+        // priceRouter.addAsset(USDC, 0, 0, false, 0);
+        // priceRouter.addAsset(DAI, 0, 0, false, 0);
+        // priceRouter.addAsset(WETH, 0, 0, false, 0);
 
         // Cellar positions array.
         uint32[] memory positions = new uint32[](5);
