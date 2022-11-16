@@ -207,6 +207,53 @@ contract CellarAaveTest is Test {
         );
     }
 
+    function testMaliciousStrategistMovingFundsIntoUntrackedCompoundPosition() external {
+        // Remove cDAI as a position from Cellar.
+        cellar.removePosition(0);
+
+        // Add DAI to the Cellar.
+        uint256 assets = 100_000e18;
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        uint256 assetsBeforeAttack = cellar.totalAssets();
+
+        // Strategist malicously makes several `callOnAdaptor` calls to lower the Cellars Share Price.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        uint256 amountToLend = assets;
+        for (uint8 i; i < 10; i++) {
+            // Choose a value close to the Cellars rebalance deviation limit.
+            amountToLend = cellar.totalAssets().mulDivDown(0.003e18, 1e18);
+            adaptorCalls[0] = _createBytesDataToLend(cDAI, amountToLend);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+        uint256 assetsLost = assetsBeforeAttack - cellar.totalAssets();
+        assertApproxEqRel(
+            assetsLost,
+            assets.mulDivDown(0.03e18, 1e18),
+            0.02e18,
+            "Assets Lost should be about 3% of original TVL."
+        );
+
+        // Somm Governance sees suspicious rebalances, and temporarily shuts down the cellar.
+        cellar.initiateShutdown();
+
+        // Somm Governance revokes old strategists privilages and puts in new strategist.
+
+        // Shut down is lifted, and strategist rebalances cellar back to original value.
+        cellar.liftShutdown();
+        uint256 amountToWithdraw = assetsLost / 12;
+        for (uint8 i; i < 12; i++) {
+            adaptorCalls[0] = _createBytesDataToWithdraw(cDAI, amountToWithdraw);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        assertApproxEqRel(cellar.totalAssets(), assets, 0.001e18, "totalAssets should be equal to original assets.");
+    }
+
     // ========================================= HELPER FUNCTIONS =========================================
     function _createBytesDataForSwap(
         ERC20 from,

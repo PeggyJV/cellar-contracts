@@ -137,7 +137,7 @@ contract CTokenAdaptor is BaseAdaptor {
     function depositToCompound(CErc20 market, uint256 amountToDeposit) public {
         ERC20 tokenToDeposit = ERC20(market.underlying());
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
-        tokenToDeposit.safeApprove(address(comptroller()), amountToDeposit);
+        tokenToDeposit.safeApprove(address(market), amountToDeposit);
         market.mint(amountToDeposit);
     }
 
