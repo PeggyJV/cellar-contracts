@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math, SwapRouter } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Math, SwapRouter } from "src/modules/adaptors/BaseAdaptor.sol";
 import { CErc20 } from "@compound/CErc20.sol";
 import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
-import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Compound CToken Adaptor
@@ -20,25 +19,14 @@ contract CTokenAdaptor is BaseAdaptor {
     // Where:
     // `cToken` is the cToken address position this adaptor is working with
     //================= Configuration Data Specification =================
-    // configurationData = abi.encode(minimumHealthFactor uint256)
-    // Where:
-    // `minimumHealthFactor` dictates how much assets can be taken from this position
-    // If zero:
-    //      position returns ZERO for `withdrawableFrom`
-    // else:
-    //      position calculates `withdrawableFrom` based off minimum specified
-    //      position reverts if a user withdraw lowers health factor below minimum
-    //
+    // NOT USED
     // **************************** IMPORTANT ****************************
-    // Cellars with multiple aToken positions MUST only specify minimum
-    // health factor on ONE of the positions. Failing to do so will result
-    // in user withdraws temporarily being blocked.
+    // There is no way for a Cellar to take out loans on Compound, so there
+    // are NO health factor checks done for `withdraw` or `withdrawableFrom`
+    // In the future if a Compound debt adaptor is created, then this adaptor
+    // must be changed to include some health factor checks like the
+    // Aave aToken adaptor.
     //====================================================================
-
-    /**
-     @notice Attempted withdraw would lower Cellar health factor too low.
-     */
-    // error AaveATokenAdaptor__HealthFactorTooLow();
 
     //============================================ Global Functions ===========================================
     /**
@@ -59,7 +47,7 @@ contract CTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The WETH contract on Ethereum Mainnet.
+     * @notice The COMP contract on Ethereum Mainnet.
      */
     function COMP() internal pure returns (ERC20) {
         return ERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
@@ -67,10 +55,10 @@ contract CTokenAdaptor is BaseAdaptor {
 
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
+     * @notice Cellar must approve market to spend its assets, then call mint to lend its assets.
      * @param assets the amount of assets to lend on Compound
      * @param adaptorData adaptor data containining the abi encoded cToken
-     * @dev configurationData is NOT used because this action will only increase the health factor
+     * @dev configurationData is NOT used
      */
     function deposit(
         uint256 assets,
@@ -84,35 +72,38 @@ contract CTokenAdaptor is BaseAdaptor {
         cToken.mint(assets);
     }
 
+    /**
+     @notice Cellars must withdraw from Compound.
+     * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
+     * @param assets the amount of assets to withdraw from Compound
+     * @param receiver the address to send withdrawn assets to
+     * @param adaptorData adaptor data containining the abi encoded cToken
+     * @dev configurationData is NOT used
+     */
     function withdraw(
         uint256 assets,
         address receiver,
         bytes memory adaptorData,
-        bytes memory configData
+        bytes memory
     ) public override {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        // Withdraw assets from Aave.
+        // Withdraw assets from Compound.
         CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
         cToken.redeemUnderlying(assets);
-
-        //TODO need to do some health factor check.
 
         // Transfer assets to receiver.
         ERC20(cToken.underlying()).safeTransfer(receiver, assets);
     }
 
-    function withdrawableFrom(bytes memory adaptorData, bytes memory configData)
-        public
-        view
-        override
-        returns (uint256)
-    {
+    /**
+     * @notice Identical to `balanceOf`.
+     */
+    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
         uint256 cTokenBalance = cToken.balanceOf(msg.sender);
         return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
-        //TODO need to do some health factor check.
     }
 
     /**
@@ -164,17 +155,24 @@ contract CTokenAdaptor is BaseAdaptor {
      */
     function claimComp() public {
         comptroller().claimComp(address(this));
-        console.log("Comp claimed", COMP().balanceOf(address(this)));
     }
 
+    /**
+     * @notice Allows strategists to claim COMP and immediately swap it using oracleSwap.
+     * @param assetOut the ERC20 asset to get out of the swap
+     * @param exchange UniV2 or UniV3 exchange to make the swap on
+     * @param params swap params containing path and poolFees(if UniV3)
+     * @param slippage number less than 1e18, defining the max swap slippage
+     */
     function claimCompAndSwap(
         ERC20 assetOut,
         SwapRouter.Exchange exchange,
-        bytes memory params
+        bytes memory params,
+        uint64 slippage
     ) public {
         uint256 balance = COMP().balanceOf(address(this));
         claimComp();
         balance = COMP().balanceOf(address(this)) - balance;
-        swap(COMP(), assetOut, balance, exchange, params);
+        oracleSwap(COMP(), assetOut, balance, exchange, params, slippage);
     }
 }
