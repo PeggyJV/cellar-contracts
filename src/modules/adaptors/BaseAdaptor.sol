@@ -151,7 +151,6 @@ contract BaseAdaptor {
      *               see SwapRouter.sol
      * @return amountOut the amount of `assetOut` received from the swap.
      */
-    //TODO I think this can be muchhhhh simpler
     function swap(
         ERC20 assetIn,
         ERC20 assetOut,
@@ -159,9 +158,6 @@ contract BaseAdaptor {
         SwapRouter.Exchange exchange,
         bytes memory params
     ) public returns (uint256 amountOut) {
-        // Store the expected amount of the asset in that we expect to have after the swap.
-        uint256 expectedAssetsInAfter = assetIn.balanceOf(address(this)) - amountIn;
-
         // Get the address of the latest swap router.
         SwapRouter swapRouter = SwapRouter(Cellar(address(this)).registry().getAddress(SWAP_ROUTER_REGISTRY_SLOT()));
 
@@ -170,10 +166,6 @@ contract BaseAdaptor {
 
         // Perform swap.
         amountOut = swapRouter.swap(exchange, params, address(this), assetIn, assetOut);
-
-        // Check that the amount of assets swapped is what is expected. Will revert if the `params`
-        // specified a different amount of assets to swap then `amountIn`.
-        require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
     }
 
     /**
@@ -184,5 +176,44 @@ contract BaseAdaptor {
             revert BaseAdaptor__ExternalReceiverBlocked();
     }
 
-    //TODO add an oracle swap
+    //Slippage is a number close to 1e18.
+    function oracleSwap(
+        ERC20 assetIn,
+        ERC20 assetOut,
+        uint256 amountIn,
+        SwapRouter.Exchange exchange,
+        bytes memory params,
+        uint64 slippage
+    ) public returns (uint256 amountOut) {
+        if (exchange == SwapRouter.Exchange.UNIV2) {
+            (address[] memory path, uint256 amount, ) = abi.decode(params, (address[], uint256, uint256));
+            amount = amountIn;
+            params = abi.encode(path, amount, 0);
+        } else if (exchange == SwapRouter.Exchange.UNIV3) {
+            (address[] memory path, uint24[] memory poolFees, uint256 amount, ) = abi.decode(
+                params,
+                (address[], uint24[], uint256, uint256)
+            );
+            amount = amountIn;
+            params = abi.encode(path, poolFees, amount, 0);
+        } else revert("Unsupported Oracle Swap.");
+
+        // Get the address of the latest swap router.
+        SwapRouter swapRouter = SwapRouter(Cellar(address(this)).registry().getAddress(SWAP_ROUTER_REGISTRY_SLOT()));
+
+        // Get the address of the latest price router.
+        PriceRouter priceRouter = PriceRouter(
+            Cellar(address(this)).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
+        );
+
+        // Approve swap router to swap assets.
+        assetIn.safeApprove(address(swapRouter), amountIn);
+
+        // Perform swap.
+        amountOut = swapRouter.swap(exchange, params, address(this), assetIn, assetOut);
+
+        // Make sure amountIn vs amountOut is reasonable.
+        amountIn = priceRouter.getValue(assetIn, amountIn, assetOut);
+        if (amountOut >= amountIn.mulDivDown(slippage, 1e18)) revert("Oracle Swap Failed");
+    }
 }
