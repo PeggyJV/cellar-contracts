@@ -37,6 +37,20 @@ contract MockPriceRouter {
         for (uint256 i; i < baseAssets.length; i++) value += getValue(baseAssets[i], amounts[i], quoteAsset);
     }
 
+    function getValueDiff(
+        ERC20[] calldata baseAssets0,
+        uint256[] calldata amounts0,
+        ERC20[] calldata baseAssets1,
+        uint256[] calldata amounts1,
+        ERC20 quoteAsset
+    ) external view returns (uint256) {
+        uint256 value0;
+        for (uint256 i; i < baseAssets0.length; i++) value0 += getValue(baseAssets0[i], amounts0[i], quoteAsset);
+        uint256 value1;
+        for (uint256 i; i < baseAssets1.length; i++) value1 += getValue(baseAssets1[i], amounts1[i], quoteAsset);
+        return value0 - value1;
+    }
+
     function getValue(
         ERC20 baseAsset,
         uint256 amount,

@@ -7,6 +7,7 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -22,11 +23,18 @@ abstract contract SwapRouterTest is Test {
     address internal sender = vm.addr(privateKey0);
     address internal receiver = vm.addr(privateKey1);
 
+    uint8 private constant CHAINLINK_DERIVATIVE = 1;
+
     address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     ERC20 internal WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 internal DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 internal USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+
+    // Chainlink PriceFeeds
+    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
+    address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
 
     function setUp() public {
         /// @dev When adding a new exchange for the swap router to support, make
@@ -36,9 +44,21 @@ abstract contract SwapRouterTest is Test {
         // Used to estimate the amount that should be received from swaps.
         priceRouter = new PriceRouter();
 
-        priceRouter.addAsset(WETH, 0, 0, false, 0);
-        priceRouter.addAsset(USDC, 0, 0, false, 0);
-        priceRouter.addAsset(DAI, 0, 0, false, 0);
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+
+        PriceRouter.AssetSettings memory settings;
+
+        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
+        priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
         vm.startPrank(sender);
     }
@@ -139,6 +159,23 @@ abstract contract SwapRouterTest is Test {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__AssetOutMisMatch.selector, path[1], address(USDC)))
         );
+        swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, USDC);
+    }
+
+    function testSwapDoesNotUseFullApproval() external {
+        uint256 assets = 100_000e18;
+        deal(address(DAI), sender, assets);
+        DAI.approve(address(swapRouter), assets);
+
+        address[] memory path = new address[](2);
+        path[0] = address(DAI);
+        path[1] = address(USDC);
+
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = 3000; // 0.3%
+
+        bytes memory swapData = abi.encode(path, poolFees, assets, 0);
+        vm.expectRevert(bytes(abi.encodeWithSelector(SwapRouter.SwapRouter__UnusedApproval.selector)));
         swapRouter.swap(SwapRouter.Exchange.UNIV3, swapData, receiver, DAI, USDC);
     }
 }
