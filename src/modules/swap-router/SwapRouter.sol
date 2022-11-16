@@ -6,7 +6,6 @@ import { Multicall } from "src/base/Multicall.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
-import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Swap Router
@@ -155,6 +154,8 @@ contract SwapRouter is Multicall {
         );
 
         amountOut = amountsOut[amountsOut.length - 1];
+
+        _checkApprovalIsZero(assetIn, address(uniswapV2Router));
     }
 
     /**
@@ -204,5 +205,20 @@ contract SwapRouter is Multicall {
                 amountOutMinimum: amountOutMin
             })
         );
+
+        _checkApprovalIsZero(assetIn, address(uniswapV3Router));
+    }
+
+    // ======================================= HELPER FUNCTIONS =======================================
+    /**
+     * @notice Emitted when a swap does not use all the assets swap router approved.
+     */
+    error SwapRouter__UnusedApproval();
+
+    /**
+     * @notice Helper function that reverts if the Swap Router has unused approval after a swap is made.
+     */
+    function _checkApprovalIsZero(ERC20 asset, address spender) internal view {
+        if (asset.allowance(address(this), spender) != 0) revert SwapRouter__UnusedApproval();
     }
 }
