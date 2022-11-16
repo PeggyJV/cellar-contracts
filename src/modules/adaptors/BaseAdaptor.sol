@@ -111,7 +111,7 @@ contract BaseAdaptor {
      * @return the underlying ERC20 asset of a position
      */
     function assetOf(bytes memory adaptorData) public view virtual returns (ERC20) {}
-
+    
     //============================================ Strategist Functions ===========================================
     //==================== Strategist Function Specification ====================
     // Strategist functions are only callable by strategists through the Cellars
