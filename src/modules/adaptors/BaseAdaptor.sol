@@ -151,6 +151,7 @@ contract BaseAdaptor {
      *               see SwapRouter.sol
      * @return amountOut the amount of `assetOut` received from the swap.
      */
+    //TODO I think this can be muchhhhh simpler
     function swap(
         ERC20 assetIn,
         ERC20 assetOut,
@@ -182,4 +183,6 @@ contract BaseAdaptor {
         if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
             revert BaseAdaptor__ExternalReceiverBlocked();
     }
+
+    //TODO add an oracle swap
 }

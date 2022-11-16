@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IPool } from "src/interfaces/external/IPool.sol";
-import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math, SwapRouter } from "src/modules/adaptors/BaseAdaptor.sol";
+import { CErc20 } from "@compound/CErc20.sol";
+import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Compound CToken Adaptor
@@ -12,11 +13,12 @@ import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
  */
 contract CTokenAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
+    using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address aToken)
+    // adaptorData = abi.encode(address cToken)
     // Where:
-    // `aToken` is the aToken address position this adaptor is working with
+    // `cToken` is the cToken address position this adaptor is working with
     //================= Configuration Data Specification =================
     // configurationData = abi.encode(minimumHealthFactor uint256)
     // Where:
@@ -36,7 +38,7 @@ contract CTokenAdaptor is BaseAdaptor {
     /**
      @notice Attempted withdraw would lower Cellar health factor too low.
      */
-    error AaveATokenAdaptor__HealthFactorTooLow();
+    // error AaveATokenAdaptor__HealthFactorTooLow();
 
     //============================================ Global Functions ===========================================
     /**
@@ -46,28 +48,28 @@ contract CTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Aave aToken Adaptor V 0.0"));
+        return keccak256(abi.encode("Compound cToken Adaptor V 0.0"));
     }
 
     /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
+     * @notice The Compound V2 Comptroller contract on Ethereum Mainnet.
      */
-    function pool() internal pure returns (IPool) {
-        return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    function comptroller() internal pure returns (Comptroller) {
+        return Comptroller(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
     }
 
     /**
      * @notice The WETH contract on Ethereum Mainnet.
      */
-    function WETH() internal pure returns (ERC20) {
-        return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    function COMP() internal pure returns (ERC20) {
+        return ERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
     }
 
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
-     * @param assets the amount of assets to lend on Aave
-     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @param assets the amount of assets to lend on Compound
+     * @param adaptorData adaptor data containining the abi encoded cToken
      * @dev configurationData is NOT used because this action will only increase the health factor
      */
     function deposit(
@@ -76,21 +78,12 @@ contract CTokenAdaptor is BaseAdaptor {
         bytes memory
     ) public override {
         // Deposit assets to Aave.
-        IAaveToken aToken = IAaveToken(abi.decode(adaptorData, (address)));
-        ERC20 token = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
-        token.safeApprove(address(pool()), assets);
-        pool().deposit(address(token), assets, address(this), 0);
+        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        ERC20 token = ERC20(cToken.underlying());
+        token.safeApprove(address(cToken), assets);
+        cToken.mint(assets);
     }
 
-    /**
-     @notice Cellars must withdraw from Aave, check if a minimum health factor is specified
-     *       then transfer assets to receiver.
-     * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
-     * @param assets the amount of assets to withdraw from Aave
-     * @param receiver the address to send withdrawn assets to
-     * @param adaptorData adaptor data containining the abi encoded aToken
-     * @param configData abi encoded minimum health factor, if zero user withdraws are not allowed.
-     */
     function withdraw(
         uint256 assets,
         address receiver,
@@ -101,111 +94,87 @@ contract CTokenAdaptor is BaseAdaptor {
         _externalReceiverCheck(receiver);
 
         // Withdraw assets from Aave.
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        pool().withdraw(token.UNDERLYING_ASSET_ADDRESS(), assets, address(this));
+        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        cToken.redeemUnderlying(assets);
 
-        // Run minimum health factor checks.
-        uint256 minHealthFactor = abi.decode(configData, (uint256));
-        if (minHealthFactor == 0) {
-            revert BaseAdaptor__UserWithdrawsNotAllowed();
-        }
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(msg.sender);
-        if (healthFactor < minHealthFactor) revert AaveATokenAdaptor__HealthFactorTooLow();
+        //TODO need to do some health factor check.
 
         // Transfer assets to receiver.
-        ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
+        ERC20(cToken.underlying()).safeTransfer(receiver, assets);
     }
 
-    /**
-     * @notice Uses configurartion data minimum health factor to calculate withdrawable assets from Aave.
-     * @dev Applies a `cushion` value to the health factor checks and calculation.
-     *      The goal of this is to minimize scenarios where users are withdrawing a very small amount of
-     *      assets from Aave. This function returns zero if
-     *      -minimum health factor is NOT set.
-     *      -the current health factor is less than the minimum health factor + 2x `cushion`
-     *      Otherwise this function calculates the withdrawable amount using
-     *      minimum health factor + `cushion` for its calcualtions.
-     */
     function withdrawableFrom(bytes memory adaptorData, bytes memory configData)
         public
         view
         override
         returns (uint256)
     {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        uint256 minHealthFactor = abi.decode(configData, (uint256));
-        (
-            uint256 totalCollateralETH,
-            uint256 totalDebtETH,
-            ,
-            uint256 currentLiquidationThreshold,
-            ,
-            uint256 healthFactor
-        ) = pool().getUserAccountData(msg.sender);
-        uint256 maxBorrowableWithMin;
-
-        // Choose 0.01 for cushion value. Value can be adjusted based off testing results.
-        uint256 cushion = 0.01e18;
-
-        // Add cushion to min health factor.
-        minHealthFactor += cushion;
-
-        // If Cellar has no Aave debt, then return the cellars balance of the aToken.
-        if (totalDebtETH == 0) return ERC20(address(token)).balanceOf(msg.sender);
-
-        // If minHealthFactor is not set, or if current health factor is less than the minHealthFactor + 2X cushion, return 0.
-        if (minHealthFactor == cushion || healthFactor < (minHealthFactor + cushion)) return 0;
-        // Calculate max amount withdrawable while preserving minimum health factor.
-        else {
-            maxBorrowableWithMin =
-                totalCollateralETH -
-                (((minHealthFactor) * totalDebtETH) / (currentLiquidationThreshold * 1e14));
-        }
-
-        // If aToken underlying is WETH, then no Price Router conversion is needed.
-        ERC20 underlying = ERC20(token.UNDERLYING_ASSET_ADDRESS());
-        if (underlying == WETH()) return maxBorrowableWithMin;
-
-        // Else convert `maxBorrowableWithMin` from WETH to position underlying asset.
-        PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(2));
-        return priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
+        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        uint256 cTokenBalance = cToken.balanceOf(msg.sender);
+        return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
+        //TODO need to do some health factor check.
     }
 
     /**
-     * @notice Returns teh cellars balance of the positions aToken.
+     * @notice Returns the cellars balance of the positions cToken underlying.
+     * @dev Relies on `exchangeRateStored`, so if the stored exchange rate diverges
+     *      from the current exchange rate, an arbitrage oppurtunity is created for
+     *      people to enter the cellar right before the stored value is updated, then
+     *      leave immediately after
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        address token = abi.decode(adaptorData, (address));
-        return ERC20(token).balanceOf(msg.sender);
+        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        uint256 cTokenBalance = cToken.balanceOf(msg.sender);
+        return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
     }
 
     /**
-     * @notice Returns the positions aToken underlying asset.
+     * @notice Returns the positions cToken underlying asset.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        return ERC20(token.UNDERLYING_ASSET_ADDRESS());
+        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        return ERC20(cToken.underlying());
     }
 
     //============================================ Strategist Functions ===========================================
     /**
-     * @notice Allows strategists to lend assets on Aave.
+     * @notice Allows strategists to lend assets on Compound.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * @param tokenToDeposit the token to lend on Aave
-     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Aave.
+     * @param market the market to deposit to.
+     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Compound.
      */
-    function depositToAave(ERC20 tokenToDeposit, uint256 amountToDeposit) public {
+    function depositToCompound(CErc20 market, uint256 amountToDeposit) public {
+        ERC20 tokenToDeposit = ERC20(market.underlying());
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
-        tokenToDeposit.safeApprove(address(pool()), amountToDeposit);
-        pool().deposit(address(tokenToDeposit), amountToDeposit, address(this), 0);
+        tokenToDeposit.safeApprove(address(comptroller()), amountToDeposit);
+        market.mint(amountToDeposit);
     }
 
     /**
-     * @notice Allows strategists to withdraw assets from Aave.
-     * @param tokenToWithdraw the token to withdraw from Aave.
-     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
+     * @notice Allows strategists to withdraw assets from Compound.
+     * @param market the market to withdraw from.
+     * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
      */
-    function withdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
-        pool().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
+    function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
+        market.redeemUnderlying(amountToWithdraw);
+    }
+
+    /**
+     * @notice Allows strategists to claim COMP rewards.
+     */
+    function claimComp() public {
+        comptroller().claimComp(address(this));
+        console.log("Comp claimed", COMP().balanceOf(address(this)));
+    }
+
+    function claimCompAndSwap(
+        ERC20 assetOut,
+        SwapRouter.Exchange exchange,
+        bytes memory params
+    ) public {
+        uint256 balance = COMP().balanceOf(address(this));
+        claimComp();
+        balance = COMP().balanceOf(address(this)) - balance;
+        swap(COMP(), assetOut, balance, exchange, params);
     }
 }
