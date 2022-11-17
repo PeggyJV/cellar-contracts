@@ -15,6 +15,7 @@ import { CErc20 } from "@compound/CErc20.sol";
 import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -48,6 +49,12 @@ contract CellarAaveTest is Test {
 
     Comptroller private comptroller = Comptroller(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
+    uint8 private constant CHAINLINK_DERIVATIVE = 1;
+
+    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
+    address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
+    address private COMP_USD_FEED = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
+
     uint32 private daiPosition;
     uint32 private cDAIPosition;
     uint32 private usdcPosition;
@@ -62,9 +69,25 @@ contract CellarAaveTest is Test {
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
-        priceRouter.addAsset(DAI, 0, 0, false, 0);
-        priceRouter.addAsset(USDC, 0, 0, false, 0);
-        priceRouter.addAsset(COMP, 0, 0, false, 0);
+
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+
+        uint256 price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
+        priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(COMP_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, COMP_USD_FEED);
+        priceRouter.addAsset(COMP, settings, abi.encode(stor), price);
+
+        // priceRouter.addAsset(DAI, 0, 0, false, 0);
+        // priceRouter.addAsset(USDC, 0, 0, false, 0);
+        // priceRouter.addAsset(COMP, 0, 0, false, 0);
         // Setup Cellar:
         // Cellar positions array.
         uint32[] memory positions = new uint32[](5);
