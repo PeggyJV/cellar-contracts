@@ -13,7 +13,7 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
  * @dev Allows Cellars to interact with arbritrary DeFi assets and protocols.
  * @author crispymangoes
  */
-contract BaseAdaptor {
+abstract contract BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -72,7 +72,7 @@ contract BaseAdaptor {
         uint256 assets,
         bytes memory adaptorData,
         bytes memory configurationData
-    ) public virtual {}
+    ) public virtual;
 
     /**
      * @notice Function Cellars call to withdraw funds from positions to send to users.
@@ -86,14 +86,14 @@ contract BaseAdaptor {
         address receiver,
         bytes memory adaptorData,
         bytes memory configurationData
-    ) public virtual {}
+    ) public virtual;
 
     /**
      * @notice Function Cellars use to determine `assetOf` balance of an adaptor position.
      * @param adaptorData data needed to interact with the position
      * @return balance of the position in terms of `assetOf`
      */
-    function balanceOf(bytes memory adaptorData) public view virtual returns (uint256) {}
+    function balanceOf(bytes memory adaptorData) public view virtual returns (uint256);
 
     /**
      * @notice Functions Cellars use to determine the withdrawable balance from an adaptor position.
@@ -101,16 +101,14 @@ contract BaseAdaptor {
      * @notice accepts adaptorData and configurationData
      * @return withdrawable balance of the position in terms of `assetOf`
      */
-    function withdrawableFrom(bytes memory, bytes memory) public view virtual returns (uint256) {
-        return 0;
-    }
+    function withdrawableFrom(bytes memory, bytes memory) public view virtual returns (uint256);
 
     /**
      * @notice Function Cellars use to determine the underlying ERC20 asset of a position.
      * @param adaptorData data needed to withdraw from a position
      * @return the underlying ERC20 asset of a position
      */
-    function assetOf(bytes memory adaptorData) public view virtual returns (ERC20) {}
+    function assetOf(bytes memory adaptorData) public view virtual returns (ERC20);
 
     //============================================ Strategist Functions ===========================================
     //==================== Strategist Function Specification ====================
