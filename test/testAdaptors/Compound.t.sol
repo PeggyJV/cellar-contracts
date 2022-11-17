@@ -20,7 +20,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-contract CellarAaveTest is Test {
+contract CellarCompoundTest is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
@@ -85,9 +85,6 @@ contract CellarAaveTest is Test {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, COMP_USD_FEED);
         priceRouter.addAsset(COMP, settings, abi.encode(stor), price);
 
-        // priceRouter.addAsset(DAI, 0, 0, false, 0);
-        // priceRouter.addAsset(USDC, 0, 0, false, 0);
-        // priceRouter.addAsset(COMP, 0, 0, false, 0);
         // Setup Cellar:
         // Cellar positions array.
         uint32[] memory positions = new uint32[](5);
