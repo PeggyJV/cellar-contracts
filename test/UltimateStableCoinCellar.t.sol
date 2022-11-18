@@ -1,0 +1,564 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity 0.8.16;
+
+import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
+import { CellarInitializable } from "src/base/CellarInitializable.sol";
+import { CellarFactory } from "src/CellarFactory.sol";
+import { Registry, PriceRouter } from "src/base/Cellar.sol";
+import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
+import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
+
+// Import adaptors.
+import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
+import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { UniswapV3Adaptor } from "src/modules/adaptors/UniSwap/UniswapV3Adaptor.sol";
+import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
+import { AaveDebtTokenAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
+import { CTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
+import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.sol";
+
+// Import Compound helpers.
+import { CErc20 } from "@compound/CErc20.sol";
+import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
+
+// Import Aave helpers.
+import { IPool } from "src/interfaces/external/IPool.sol";
+
+// Import UniV3 helpers.
+import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
+import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol";
+import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
+import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
+
+// Import Chainlink helpers.
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+
+// Import test helpers
+import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
+import { Math } from "src/utils/Math.sol";
+
+contract UltimateStableCoinCellarTest is Test {
+    using SafeTransferLib for ERC20;
+    using Math for uint256;
+    using stdStorage for StdStorage;
+
+    CellarFactory private factory;
+    CellarInitializable private cellar;
+
+    PriceRouter private priceRouter;
+    SwapRouter private swapRouter;
+    VestingSimple private usdcVestor;
+
+    Registry private registry;
+
+    uint8 private constant CHAINLINK_DERIVATIVE = 1;
+
+    address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+
+    IUniswapV3Factory internal v3factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
+    INonfungiblePositionManager internal positionManager =
+        INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
+
+    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    ERC20 private COMP = ERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
+    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 private aUSDC = ERC20(0xBcca60bB61934080951369a648Fb03DF4F96263C);
+    ERC20 private dUSDC = ERC20(0x619beb58998eD2278e08620f97007e1116D5D25b);
+    ERC20 private aDAI = ERC20(0x028171bCA77440897B824Ca71D1c56caC55b68A3);
+    ERC20 private dDAI = ERC20(0x6C3c78838c761c6Ac7bE9F59fe808ea2A6E4379d);
+    ERC20 private aUSDT = ERC20(0x3Ed3B47Dd13EC9a98b44e6204A523E766B225811);
+    ERC20 private dUSDT = ERC20(0x531842cEbbdD378f8ee36D171d6cC9C4fcf475Ec);
+    ERC20 private cUSDC = ERC20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
+    ERC20 private cDAI = ERC20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);
+    ERC20 private cUSDT = ERC20(0xf650C3d88D12dB855b8bf7D11Be6C55A4e07dCC9);
+
+    address private immutable strategist = vm.addr(0xBEEF);
+
+    address private immutable cosmos = vm.addr(0xCAAA);
+
+    // Define Adaptors.
+    ERC20Adaptor private erc20Adaptor;
+    UniswapV3Adaptor private uniswapV3Adaptor;
+    AaveATokenAdaptor private aaveATokenAdaptor;
+    AaveDebtTokenAdaptor private aaveDebtTokenAdaptor;
+    CTokenAdaptor private cTokenAdaptor;
+    VestingSimpleAdaptor private vestingAdaptor;
+
+    // Chainlink PriceFeeds
+    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
+    address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
+    address private USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
+    address private COMP_USD_FEED = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
+    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+
+    // Base positions.
+    uint32 private usdcPosition;
+    uint32 private daiPosition;
+    uint32 private usdtPosition;
+
+    // Uniswap V3 positions.
+    uint32 private usdcDaiPosition;
+    uint32 private usdcUsdtPosition;
+
+    // Aave positions.
+    uint32 private aUSDCPosition;
+    uint32 private dUSDCPosition;
+    uint32 private aDAIPosition;
+    uint32 private dDAIPosition;
+    uint32 private aUSDTPosition;
+    uint32 private dUSDTPosition;
+
+    // Compound positions.
+    uint32 private cUSDCPosition;
+    uint32 private cDAIPosition;
+    uint32 private cUSDTPosition;
+
+    // Vesting positions.
+    uint32 private vUSDCPosition;
+
+    function setUp() external {
+        // Setup Registry, modules, and adaptors.
+        priceRouter = new PriceRouter();
+        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        factory = new CellarFactory();
+        registry = new Registry(
+            // Set this contract to the Gravity Bridge for testing to give the permissions usually
+            // given to the Gravity Bridge to this contract.
+            address(this),
+            address(swapRouter),
+            address(priceRouter)
+        );
+        usdcVestor = new VestingSimple(USDC, 1 days / 4, 1e6);
+        erc20Adaptor = new ERC20Adaptor();
+        uniswapV3Adaptor = new UniswapV3Adaptor();
+        aaveATokenAdaptor = new AaveATokenAdaptor();
+        aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
+        cTokenAdaptor = new CTokenAdaptor();
+        vestingAdaptor = new VestingSimpleAdaptor();
+
+        // Setup price feeds.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
+        priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDT_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
+        priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(COMP_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, COMP_USD_FEED);
+        priceRouter.addAsset(COMP, settings, abi.encode(stor), price);
+
+        // Cellar positions array.
+        uint32[] memory positions = new uint32[](15);
+
+        // Add adaptors and positions to the registry.
+        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
+        registry.trustAdaptor(address(uniswapV3Adaptor), 0, 0);
+        registry.trustAdaptor(address(aaveATokenAdaptor), 0, 0);
+        registry.trustAdaptor(address(aaveDebtTokenAdaptor), 0, 0);
+        registry.trustAdaptor(address(cTokenAdaptor), 0, 0);
+        registry.trustAdaptor(address(vestingAdaptor), 0, 0);
+
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
+        daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
+        usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
+        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), false, abi.encode(DAI, USDC), 0, 0);
+        usdcUsdtPosition = registry.trustPosition(address(uniswapV3Adaptor), false, abi.encode(USDC, USDT), 0, 0);
+        aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), false, abi.encode(address(aUSDC)), 0, 0);
+        dUSDCPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), true, abi.encode(address(dUSDC)), 0, 0);
+        aDAIPosition = registry.trustPosition(address(aaveATokenAdaptor), false, abi.encode(address(aDAI)), 0, 0);
+        dDAIPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), true, abi.encode(address(dDAI)), 0, 0);
+        aUSDTPosition = registry.trustPosition(address(aaveATokenAdaptor), false, abi.encode(address(aUSDT)), 0, 0);
+        dUSDTPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), true, abi.encode(address(dUSDT)), 0, 0);
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), false, abi.encode(address(cUSDC)), 0, 0);
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), false, abi.encode(address(cDAI)), 0, 0);
+        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), false, abi.encode(address(cUSDT)), 0, 0);
+        vUSDCPosition = registry.trustPosition(address(vestingAdaptor), false, abi.encode(usdcVestor), 0, 0);
+
+        positions[0] = usdcPosition;
+        positions[1] = daiPosition;
+        positions[2] = usdtPosition;
+        positions[3] = usdcDaiPosition;
+        positions[4] = usdcUsdtPosition;
+        positions[5] = aUSDCPosition;
+        positions[6] = dUSDCPosition;
+        positions[7] = aDAIPosition;
+        positions[8] = dDAIPosition;
+        positions[9] = aUSDTPosition;
+        positions[10] = dUSDTPosition;
+        positions[11] = cUSDCPosition;
+        positions[12] = cDAIPosition;
+        positions[13] = cUSDTPosition;
+        positions[14] = vUSDCPosition;
+
+        bytes[] memory positionConfigs = new bytes[](15);
+
+        uint256 minHealthFactor = 1.1e18;
+        positionConfigs[5] = abi.encode(minHealthFactor);
+
+        // Deploy cellar using factory.
+        factory.adjustIsDeployer(address(this), true);
+        address implementation = address(new CellarInitializable(registry));
+
+        bytes memory initializeCallData = abi.encode(
+            registry,
+            USDC,
+            positions,
+            positionConfigs,
+            "Ultimate Stable Coin Cellar",
+            "USCC-CLR",
+            strategist,
+            type(uint128).max,
+            type(uint128).max
+        );
+        factory.addImplementation(implementation, 2, 0);
+        address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
+        cellar = CellarInitializable(clone);
+
+        vm.label(address(cellar), "cellar");
+        vm.label(strategist, "strategist");
+
+        // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
+        cellar.setupAdaptor(address(uniswapV3Adaptor));
+        cellar.setupAdaptor(address(aaveATokenAdaptor));
+        cellar.setupAdaptor(address(aaveDebtTokenAdaptor));
+        cellar.setupAdaptor(address(cTokenAdaptor));
+        cellar.setupAdaptor(address(vestingAdaptor));
+
+        // Approve cellar to spend all assets.
+        USDC.approve(address(cellar), type(uint256).max);
+
+        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
+        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+    }
+
+    function testTotalAssetsEmpty() external {
+        uint256 gas = gasleft();
+        cellar.totalAssets();
+        console.log("Gas used for empty total assets", gas - gasleft());
+    }
+
+    function testTotalAssetsFull() external {
+        // Create UniV3 positions.
+        uint256 assets = 1_000_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use `callOnAdaptor` to swap and enter 2 different UniV3 positions.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](4);
+
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
+        adaptorCalls[1] = _createBytesDataForSwap(USDC, USDT, 100, assets / 4);
+
+        adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
+        adaptorCalls[3] = _createBytesDataToOpenLP(USDC, USDT, 100, 50_000e6, 50_000e6, 200);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Create positions on Aave.
+        data = new Cellar.AdaptorCall[](2);
+        bytes[] memory adaptorCalls0 = new bytes[](3);
+        adaptorCalls0[0] = _createBytesDataToLendOnAave(USDC, 10e6);
+        adaptorCalls0[1] = _createBytesDataToLendOnAave(DAI, 10e18);
+        adaptorCalls0[2] = _createBytesDataToLendOnAave(USDT, 10e6);
+        bytes[] memory adaptorCalls1 = new bytes[](3);
+        adaptorCalls1[0] = _createBytesDataToBorrow(dUSDC, 1e6);
+        adaptorCalls1[1] = _createBytesDataToBorrow(dDAI, 1e18);
+        adaptorCalls1[2] = _createBytesDataToBorrow(dUSDT, 1e6);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls0 });
+        data[1] = Cellar.AdaptorCall({ adaptor: address(aaveDebtTokenAdaptor), callData: adaptorCalls1 });
+        cellar.callOnAdaptor(data);
+
+        // Create positions on Compound.
+
+        uint256 gas = gasleft();
+        uint256 totalAssets = cellar.totalAssets();
+        console.log("Gas used for full total assets", gas - gasleft());
+        console.log("Assets", totalAssets);
+    }
+
+    // ========================================= HELPER FUNCTIONS =========================================
+    function _sqrt(uint256 _x) internal pure returns (uint256 y) {
+        uint256 z = (_x + 1) / 2;
+        y = _x;
+        while (z < y) {
+            y = z;
+            z = (_x / z + z) / 2;
+        }
+    }
+
+    /**
+     * @notice Get the upper and lower tick around token0, token1.
+     * @param token0 The 0th Token in the UniV3 Pair
+     * @param token1 The 1st Token in the UniV3 Pair
+     * @param fee The desired fee pool
+     * @param size Dictates the amount of ticks liquidity will cover
+     *             @dev Must be an even number
+     * @param shift Allows the upper and lower tick to be moved up or down relative
+     *              to current price. Useful for range orders.
+     */
+    function _getUpperAndLowerTick(
+        ERC20 token0,
+        ERC20 token1,
+        uint24 fee,
+        int24 size,
+        int24 shift
+    ) internal view returns (int24 lower, int24 upper) {
+        uint256 price = priceRouter.getExchangeRate(token1, token0);
+        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
+        uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
+        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+        tick = tick + shift;
+
+        IUniswapV3Pool pool = IUniswapV3Pool(v3factory.getPool(address(token0), address(token1), fee));
+        int24 spacing = pool.tickSpacing();
+        lower = tick - (tick % spacing);
+        lower = lower - ((spacing * size) / 2);
+        upper = lower + spacing * size;
+    }
+
+    function _createBytesDataForSwap(
+        ERC20 from,
+        ERC20 to,
+        uint24 poolFee,
+        uint256 fromAmount
+    ) internal pure returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = poolFee;
+        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
+        return
+            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+    }
+
+    function _createBytesDataToOpenLP(
+        ERC20 token0,
+        ERC20 token1,
+        uint24 poolFee,
+        uint256 amount0,
+        uint256 amount1,
+        int24 size
+    ) internal view returns (bytes memory) {
+        (int24 lower, int24 upper) = _getUpperAndLowerTick(token0, token1, poolFee, size, 0);
+        return
+            abi.encodeWithSelector(
+                UniswapV3Adaptor.openPosition.selector,
+                token0,
+                token1,
+                poolFee,
+                amount0,
+                amount1,
+                0,
+                0,
+                lower,
+                upper
+            );
+    }
+
+    function _createBytesDataToCloseLP(address owner, uint256 index) internal view returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        return abi.encodeWithSelector(UniswapV3Adaptor.closePosition.selector, tokenId, 0, 0);
+    }
+
+    function _createBytesDataToAddLP(
+        address owner,
+        uint256 index,
+        uint256 amount0,
+        uint256 amount1
+    ) internal view returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        return abi.encodeWithSelector(UniswapV3Adaptor.addToPosition.selector, tokenId, amount0, amount1, 0, 0);
+    }
+
+    function _createBytesDataToTakeLP(
+        address owner,
+        uint256 index,
+        uint256 liquidityPer
+    ) internal view returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager.positions(tokenId);
+        uint128 liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
+        return abi.encodeWithSelector(UniswapV3Adaptor.takeFromPosition.selector, tokenId, liquidity, 0, 0);
+    }
+
+    function _createBytesDataToCollectFees(
+        address owner,
+        uint256 index,
+        uint128 amount0,
+        uint128 amount1
+    ) internal view returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        return abi.encodeWithSelector(UniswapV3Adaptor.collectFees.selector, tokenId, amount0, amount1);
+    }
+
+    function _createBytesDataToOpenRangeOrder(
+        ERC20 token0,
+        ERC20 token1,
+        uint24 poolFee,
+        uint256 amount0,
+        uint256 amount1
+    ) internal view returns (bytes memory) {
+        int24 lower;
+        int24 upper;
+        if (amount0 > 0) {
+            (lower, upper) = _getUpperAndLowerTick(token0, token1, poolFee, 2, 100);
+        } else {
+            (lower, upper) = _getUpperAndLowerTick(token0, token1, poolFee, 2, -100);
+        }
+
+        return
+            abi.encodeWithSelector(
+                UniswapV3Adaptor.openPosition.selector,
+                token0,
+                token1,
+                poolFee,
+                amount0,
+                amount1,
+                0,
+                0,
+                lower,
+                upper
+            );
+    }
+
+    function _createBytesDataToLendOnAave(ERC20 tokenToLend, uint256 amountToLend)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(AaveATokenAdaptor.depositToAave.selector, tokenToLend, amountToLend);
+    }
+
+    function _createBytesDataToWithdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(AaveATokenAdaptor.withdrawFromAave.selector, tokenToWithdraw, amountToWithdraw);
+    }
+
+    function _createBytesDataToBorrow(ERC20 debtToken, uint256 amountToBorrow) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveDebtTokenAdaptor.borrowFromAave.selector, debtToken, amountToBorrow);
+    }
+
+    function _createBytesDataToRepay(ERC20 tokenToRepay, uint256 amountToRepay) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveDebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
+    }
+
+    function _createBytesDataToSwapAndRepay(
+        ERC20 from,
+        ERC20 to,
+        uint24 fee,
+        uint256 amount
+    ) internal pure returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = fee;
+        bytes memory params = abi.encode(path, poolFees, amount, 0);
+        return
+            abi.encodeWithSelector(
+                AaveDebtTokenAdaptor.swapAndRepay.selector,
+                from,
+                to,
+                amount,
+                SwapRouter.Exchange.UNIV3,
+                params
+            );
+    }
+
+    function _createBytesDataToFlashLoan(
+        address[] memory loanToken,
+        uint256[] memory loanAmount,
+        bytes memory params
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveDebtTokenAdaptor.flashLoan.selector, loanToken, loanAmount, params);
+    }
+
+    function _createBytesDataForOracleSwap(
+        ERC20 from,
+        ERC20 to,
+        uint24 poolFee,
+        uint256 fromAmount
+    ) internal pure returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = poolFee;
+        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
+        return
+            abi.encodeWithSelector(
+                BaseAdaptor.oracleSwap.selector,
+                from,
+                to,
+                type(uint256).max,
+                SwapRouter.Exchange.UNIV3,
+                params,
+                0.99e18
+            );
+    }
+
+    function _createBytesDataToLendOnCompound(CErc20 market, uint256 amountToLend)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(CTokenAdaptor.depositToCompound.selector, market, amountToLend);
+    }
+
+    function _createBytesDataToWithdrawFromCompound(CErc20 market, uint256 amountToWithdraw)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(CTokenAdaptor.withdrawFromCompound.selector, market, amountToWithdraw);
+    }
+
+    function _createBytesDataToClaimComp() internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CTokenAdaptor.claimComp.selector);
+    }
+
+    function _createBytesDataForClaimCompAndSwap(
+        ERC20 from,
+        ERC20 to,
+        uint24 poolFee
+    ) internal pure returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = poolFee;
+        bytes memory params = abi.encode(path, poolFees, 0, 0);
+        return
+            abi.encodeWithSelector(
+                CTokenAdaptor.claimCompAndSwap.selector,
+                to,
+                SwapRouter.Exchange.UNIV3,
+                params,
+                0.99e18
+            );
+    }
+}
