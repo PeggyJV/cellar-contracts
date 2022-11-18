@@ -79,6 +79,9 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param receiver the address to send withdrawn assets to
      * @param adaptorData adaptor data containining the abi encoded cToken
      * @dev configurationData is NOT used
+     * @dev There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
+     *      If cellars ever take on Compound Debt it is crucial these checks are added,
+     *      see "IMPORTANT" above.
      */
     function withdraw(
         uint256 assets,
@@ -99,6 +102,9 @@ contract CTokenAdaptor is BaseAdaptor {
 
     /**
      * @notice Identical to `balanceOf`.
+     * @dev There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
+     *      If cellars ever take on Compound Debt it is crucial these checks are added,
+     *      see "IMPORTANT" above.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
