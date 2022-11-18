@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import { Registry } from "src/Registry.sol";
 import { ICellarV1_5 as Cellar } from "src/interfaces/ICellarV1_5.sol";
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC20 } from "src/base/ERC20.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { ICellarRouterV1_5 as CellarRouter } from "src/interfaces/ICellarRouterV1_5.sol";
 

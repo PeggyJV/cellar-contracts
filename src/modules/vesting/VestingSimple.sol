@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-import { ERC20 } from "src/base/ERC4626.sol";
+import { ERC20, SafeTransferLib } from "src/base/ERC4626.sol";
 import { Math } from "src/utils/Math.sol";
 
 /**
@@ -86,10 +85,10 @@ contract VestingSimple {
     /// @notice Contains all information needed to vest
     ///         tokens for each deposited.
     struct VestingSchedule {
-        uint256 amountPerSecond;        // The amount of tokens vested per second.
-        uint128 until;                  // The time vesting will finish.
-        uint128 lastClaimed;            // The last time vesting accrued.
-        uint256 vested;                 // The amount of vested tokens still not withdrawn.
+        uint256 amountPerSecond; // The amount of tokens vested per second.
+        uint128 until; // The time vesting will finish.
+        uint128 lastClaimed; // The last time vesting accrued.
+        uint256 vested; // The amount of vested tokens still not withdrawn.
     }
 
     // ============================================= STATE =============================================
@@ -104,7 +103,7 @@ contract VestingSimple {
     /// @notice Used to preclude rounding errors. Should be equal to 0.0001 tokens of asset.
     uint256 public immutable minimumDeposit;
 
-   /// @notice All vesting schedules for a user
+    /// @notice All vesting schedules for a user
     mapping(address => mapping(uint256 => VestingSchedule)) public vests;
     /// @notice Enumeration of user deposit ID
     mapping(address => EnumerableSet.UintSet) private allUserDepositIds;
@@ -367,7 +366,7 @@ contract VestingSimple {
                 uint256 startTime = s.until - vestingPeriod;
                 uint256 timeElapsedBeforeClaim = s.lastClaimed - startTime;
 
-                uint256 totalAmount = s.amountPerSecond * vestingPeriod / ONE;
+                uint256 totalAmount = (s.amountPerSecond * vestingPeriod) / ONE;
                 uint256 previouslyVested = timeElapsedBeforeClaim.mulDivDown(s.amountPerSecond, ONE);
                 uint256 claimed = previouslyVested - s.vested;
 
@@ -398,15 +397,19 @@ contract VestingSimple {
      * @return lastClaimed                  The last time vesting occurred.
      * @return amountPerSecond              The amount of tokens released per second.
      */
-    function userVestingInfo(address user, uint256 depositId) public view returns (uint256, uint128, uint128, uint256) {
+    function userVestingInfo(address user, uint256 depositId)
+        public
+        view
+        returns (
+            uint256,
+            uint128,
+            uint128,
+            uint256
+        )
+    {
         VestingSchedule memory s = vests[user][depositId];
 
-        return (
-            s.amountPerSecond,
-            s.until,
-            s.lastClaimed,
-            s.vested
-        );
+        return (s.amountPerSecond, s.until, s.lastClaimed, s.vested);
     }
 
     // ===================================== INTERNAL FUNCTIONS =======================================

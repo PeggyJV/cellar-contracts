@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC20 } from "src/base/ERC20.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { Math } from "src/utils/Math.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
