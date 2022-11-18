@@ -13,7 +13,7 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
  * @dev Allows Cellars to interact with arbritrary DeFi assets and protocols.
  * @author crispymangoes
  */
-contract BaseAdaptor {
+abstract contract BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -72,7 +72,7 @@ contract BaseAdaptor {
         uint256 assets,
         bytes memory adaptorData,
         bytes memory configurationData
-    ) public virtual {}
+    ) public virtual;
 
     /**
      * @notice Function Cellars call to withdraw funds from positions to send to users.
@@ -86,14 +86,14 @@ contract BaseAdaptor {
         address receiver,
         bytes memory adaptorData,
         bytes memory configurationData
-    ) public virtual {}
+    ) public virtual;
 
     /**
      * @notice Function Cellars use to determine `assetOf` balance of an adaptor position.
      * @param adaptorData data needed to interact with the position
      * @return balance of the position in terms of `assetOf`
      */
-    function balanceOf(bytes memory adaptorData) public view virtual returns (uint256) {}
+    function balanceOf(bytes memory adaptorData) public view virtual returns (uint256);
 
     /**
      * @notice Functions Cellars use to determine the withdrawable balance from an adaptor position.
@@ -101,16 +101,14 @@ contract BaseAdaptor {
      * @notice accepts adaptorData and configurationData
      * @return withdrawable balance of the position in terms of `assetOf`
      */
-    function withdrawableFrom(bytes memory, bytes memory) public view virtual returns (uint256) {
-        return 0;
-    }
+    function withdrawableFrom(bytes memory, bytes memory) public view virtual returns (uint256);
 
     /**
      * @notice Function Cellars use to determine the underlying ERC20 asset of a position.
      * @param adaptorData data needed to withdraw from a position
      * @return the underlying ERC20 asset of a position
      */
-    function assetOf(bytes memory adaptorData) public view virtual returns (ERC20) {}
+    function assetOf(bytes memory adaptorData) public view virtual returns (ERC20);
 
     //============================================ Strategist Functions ===========================================
     //==================== Strategist Function Specification ====================
@@ -158,9 +156,6 @@ contract BaseAdaptor {
         SwapRouter.Exchange exchange,
         bytes memory params
     ) public returns (uint256 amountOut) {
-        // Store the expected amount of the asset in that we expect to have after the swap.
-        uint256 expectedAssetsInAfter = assetIn.balanceOf(address(this)) - amountIn;
-
         // Get the address of the latest swap router.
         SwapRouter swapRouter = SwapRouter(Cellar(address(this)).registry().getAddress(SWAP_ROUTER_REGISTRY_SLOT()));
 
@@ -169,10 +164,6 @@ contract BaseAdaptor {
 
         // Perform swap.
         amountOut = swapRouter.swap(exchange, params, address(this), assetIn, assetOut);
-
-        // Check that the amount of assets swapped is what is expected. Will revert if the `params`
-        // specified a different amount of assets to swap then `amountIn`.
-        require(assetIn.balanceOf(address(this)) == expectedAssetsInAfter, "INCORRECT_PARAMS_AMOUNT");
     }
 
     /**
@@ -181,5 +172,65 @@ contract BaseAdaptor {
     function _externalReceiverCheck(address receiver) internal view {
         if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
             revert BaseAdaptor__ExternalReceiverBlocked();
+    }
+
+    /**
+     * @notice Attempted oracle swap did not pass slippage check.
+     */
+    error BaseAdaptor__BadSlippage();
+
+    /**
+     * @notice Attempted to make an oracle swap on an unsupported exchange.
+     */
+    error BaseAdaptor__ExchangeNotSupported();
+
+    /**
+     * @notice Helper function to make safe "blind" Uniswap Swaps by comparing value in vs value out of the swap.
+     * @param assetIn the asset to make a swap with
+     * @param assetOut the asset to get out of the swap
+     * @param amountIn the amount of `assetIn` to swap with, can be type(uint256).max
+     * @param exchange enum value that determines what exchange to make the swap on
+     *                 see SwapRouter.sol
+     * @param params swap params needed to perform the swap, dependent on which exchange is selected
+     *               see SwapRouter.sol
+     * @param slippage number less than 1e18, defining the max swap slippage
+     * @return amountOut the amount of `assetOut` received from the swap.
+     */
+    function oracleSwap(
+        ERC20 assetIn,
+        ERC20 assetOut,
+        uint256 amountIn,
+        SwapRouter.Exchange exchange,
+        bytes memory params,
+        uint64 slippage
+    ) public returns (uint256 amountOut) {
+        amountIn = _maxAvailable(assetIn, amountIn);
+        // Copy over the path/fees then set the amount and minAmount.
+        if (exchange == SwapRouter.Exchange.UNIV2) {
+            address[] memory path = abi.decode(params, (address[]));
+            params = abi.encode(path, amountIn, 0);
+        } else if (exchange == SwapRouter.Exchange.UNIV3) {
+            (address[] memory path, uint24[] memory poolFees) = abi.decode(params, (address[], uint24[]));
+            params = abi.encode(path, poolFees, amountIn, 0);
+        } else revert BaseAdaptor__ExchangeNotSupported();
+
+        // Get the address of the latest swap router.
+        SwapRouter swapRouter = SwapRouter(Cellar(address(this)).registry().getAddress(SWAP_ROUTER_REGISTRY_SLOT()));
+
+        // Get the address of the latest price router.
+        PriceRouter priceRouter = PriceRouter(
+            Cellar(address(this)).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
+        );
+
+        // Approve swap router to swap assets.
+        assetIn.safeApprove(address(swapRouter), amountIn);
+
+        // Perform swap.
+        amountOut = swapRouter.swap(exchange, params, address(this), assetIn, assetOut);
+
+        // Make sure amountIn vs amountOut is reasonable.
+        amountIn = priceRouter.getValue(assetIn, amountIn, assetOut);
+        uint256 amountInWithSlippage = amountIn.mulDivDown(slippage, 1e18);
+        if (amountOut < amountInWithSlippage) revert BaseAdaptor__BadSlippage();
     }
 }

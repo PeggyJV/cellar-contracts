@@ -172,7 +172,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns teh cellars balance of the positions aToken.
+     * @notice Returns the cellars balance of the positions aToken.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address token = abi.decode(adaptorData, (address));
