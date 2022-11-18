@@ -2,12 +2,37 @@
 pragma solidity 0.8.16;
 
 import { Cellar, Owned, ERC20, SafeTransferLib, Address } from "src/base/Cellar.sol";
+import { CellarInitializable } from "src/base/CellarInitializable.sol";
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
 
 contract CellarFactory is Owned {
     using SafeTransferLib for ERC20;
     using Clones for address;
     using Address for address;
+
+    /**
+     * @notice Get a Cellar implementation by passing x, and y into getImplementation[x][y]
+     *         Where:
+     *              x - The major version number
+     *              y - The minor version number
+     *         Example:
+     *                Version 1.5 => x = 1, and y = 5
+     */
+    mapping(uint256 => mapping(uint256 => address)) public getImplementation;
+
+    /**
+     * @notice Attempted to overwrite an existing implementation.
+     */
+    error CellarFactory__AlreadyExists();
+
+    function addImplementation(
+        address implementation,
+        uint256 version,
+        uint256 subVersion
+    ) external onlyOwner {
+        if (getImplementation[version][subVersion] != address(0)) revert CellarFactory__AlreadyExists();
+        getImplementation[version][subVersion] = implementation;
+    }
 
     /**
      * @notice Keep track of what addresses can create Cellars using this factory.
@@ -41,27 +66,31 @@ contract CellarFactory is Owned {
 
     /**
      * @notice Deterministically deploys cellars using OpenZepplin Clones.
-     * @param implementation the implementation address to mimic functionality of
+     * @param version the major version of the implementation to use.
+     * @param subVersion the minor version of the implementation to use.
      * @param asset the ERC20 asset of the new cellar
      * @param initialDeposit if non zero, then this function will make the initial deposit into the cellar
      * @param salt salt used to deterministically deploy the cellar
      * @return clone the address of the cellar clone
      */
     function deploy(
-        address implementation,
-        bytes calldata initializeCallData,
+        uint256 version,
+        uint256 subVersion,
+        bytes calldata initializeData,
         ERC20 asset,
         uint256 initialDeposit,
         bytes32 salt
     ) external returns (address clone) {
         if (!isDeployer[msg.sender]) revert CellarFactory__NotADeployer();
+        address implementation = getImplementation[version][subVersion];
         clone = implementation.cloneDeterministic(salt);
-        clone.functionCall(initializeCallData);
+        CellarInitializable cellar = CellarInitializable(clone);
+        cellar.initialize(initializeData);
         // Deposit into cellar if need be.
         if (initialDeposit > 0) {
             asset.safeTransferFrom(msg.sender, address(this), initialDeposit);
             asset.safeApprove(clone, initialDeposit);
-            Cellar(clone).deposit(initialDeposit, address(this));
+            cellar.deposit(initialDeposit, address(this));
             //TODO I guess we could transfer the shares out? Or do we wanna "lock" them in here to always have liquidity in the cellars?
         }
         emit CellarDeployed(clone, implementation, salt);

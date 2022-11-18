@@ -118,8 +118,7 @@ contract CellarTest is Test {
         factory = new CellarFactory();
         factory.adjustIsDeployer(address(this), true);
         implementation = new MockCellarImplementation(registry);
-        bytes memory initializeCallData = abi.encodeWithSelector(
-            CellarInitializable.initialize.selector,
+        bytes memory initializeCallData = abi.encode(
             registry,
             USDC,
             positions,
@@ -130,7 +129,8 @@ contract CellarTest is Test {
             type(uint128).max,
             type(uint128).max
         );
-        address clone = factory.deploy(address(implementation), initializeCallData, USDC, 0, keccak256(abi.encode(2)));
+        factory.addImplementation(address(implementation), 2, 0);
+        address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
         cellar = MockCellarImplementation(clone);
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
@@ -744,8 +744,7 @@ contract CellarTest is Test {
             positions = new uint32[](1);
             positions[0] = usdcPosition;
             bytes[] memory positionConfigs = new bytes[](1);
-            bytes memory initializeCallData = abi.encodeWithSelector(
-                CellarInitializable.initialize.selector,
+            bytes memory initializeCallData = abi.encode(
                 registry,
                 USDC,
                 positions,
@@ -756,24 +755,9 @@ contract CellarTest is Test {
                 type(uint128).max,
                 type(uint128).max
             );
-            address clone = factory.deploy(
-                address(implementation),
-                initializeCallData,
-                USDC,
-                0,
-                keccak256(abi.encode(0))
-            );
+            address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(0)));
             multiPositionCellar = MockCellarImplementation(clone);
 
-            // multiPositionCellar = new MockCellar(
-            //     registry,
-            //     USDC,
-            //     positions,
-            //     positionConfigs,
-            //     "Asset Management Cellar LP Token",
-            //     "assetmanagement-CLR",
-            //     strategist
-            // );
             stdstore
                 .target(address(multiPositionCellar))
                 .sig(multiPositionCellar.shareLockPeriod.selector)
@@ -1005,8 +989,7 @@ contract CellarTest is Test {
         positions[1] = debtWethPosition; // not a real debt position, but for test will be treated as such
 
         bytes[] memory positionConfigs = new bytes[](2);
-        bytes memory initializeCallData = abi.encodeWithSelector(
-            CellarInitializable.initialize.selector,
+        bytes memory initializeCallData = abi.encode(
             registry,
             USDC,
             positions,
@@ -1017,18 +1000,8 @@ contract CellarTest is Test {
             type(uint128).max,
             type(uint128).max
         );
-        address clone = factory.deploy(address(implementation), initializeCallData, USDC, 0, keccak256(abi.encode(1)));
+        address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(1)));
         MockCellarImplementation debtCellar = MockCellarImplementation(clone);
-
-        // MockCellar debtCellar = new MockCellar(
-        //     registry,
-        //     USDC,
-        //     positions,
-        //     positionConfigs,
-        //     "Multiposition Cellar LP Token",
-        //     "multiposition-CLR",
-        //     strategist
-        // );
 
         //constructor should set isDebt
         (, bool isDebt, , ) = debtCellar.getPositionData(debtWethPosition);

@@ -10,17 +10,18 @@ contract CellarInitializable is Cellar, Initializable {
         Cellar(_registry, ERC20(address(0)), new uint32[](0), new bytes[](0), "", "", address(0), 0, 0)
     {}
 
-    function initialize(
-        Registry _registry,
-        ERC20 _asset,
-        uint32[] memory _positions,
-        bytes[] memory _configurationData,
-        string memory _name,
-        string memory _symbol,
-        address _strategistPayout,
-        uint128 _assetRiskTolerance,
-        uint128 _protocolRiskTolerance
-    ) external initializer {
+    function initialize(bytes calldata params) external initializer {
+        (
+            Registry _registry,
+            ERC20 _asset,
+            uint32[] memory _positions,
+            bytes[] memory _configurationData,
+            string memory _name,
+            string memory _symbol,
+            address _strategistPayout,
+            uint128 _assetRiskTolerance,
+            uint128 _protocolRiskTolerance
+        ) = abi.decode(params, (Registry, ERC20, uint32[], bytes[], string, string, address, uint128, uint128));
         // Initialize Cellar
         registry = _registry;
         asset = _asset;
