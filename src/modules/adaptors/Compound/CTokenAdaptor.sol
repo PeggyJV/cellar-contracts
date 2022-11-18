@@ -133,6 +133,13 @@ contract CTokenAdaptor is BaseAdaptor {
         return ERC20(cToken.underlying());
     }
 
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public view override returns (bool) {
+        return false;
+    }
+
     //============================================ Strategist Functions ===========================================
     /**
      * @notice Allows strategists to lend assets on Compound.

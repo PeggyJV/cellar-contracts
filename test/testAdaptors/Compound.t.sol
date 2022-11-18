@@ -88,29 +88,29 @@ contract CellarCompoundTest is Test {
         // Setup Cellar:
         // Cellar positions array.
         uint32[] memory positions = new uint32[](5);
+        uint32[] memory debtPositions;
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
         registry.trustAdaptor(address(cTokenAdaptor), 0, 0);
         registry.trustAdaptor(address(vestingAdaptor), 0, 0);
-        daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
-        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), false, abi.encode(address(cDAI)), 0, 0);
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
-        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), false, abi.encode(address(cUSDC)), 0, 0);
-        daiVestingPosition = registry.trustPosition(address(vestingAdaptor), false, abi.encode(vesting), 0, 0);
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cDAI)), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDC)), 0, 0);
+        daiVestingPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(vesting), 0, 0);
         positions[0] = cDAIPosition;
         positions[1] = daiPosition;
         positions[2] = cUSDCPosition;
         positions[3] = usdcPosition;
         positions[4] = daiVestingPosition;
         bytes[] memory positionConfigs = new bytes[](5);
+        bytes[] memory debtConfigs;
         cellar = new MockCellar(
             registry,
             DAI,
-            positions,
-            positionConfigs,
             "Compound Lending Cellar",
             "COMP-CLR",
-            address(0)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, address(0))
         );
         cellar.setupAdaptor(address(cTokenAdaptor));
         cellar.setupAdaptor(address(vestingAdaptor));
@@ -229,7 +229,8 @@ contract CellarCompoundTest is Test {
 
     function testMaliciousStrategistMovingFundsIntoUntrackedCompoundPosition() external {
         // Remove cDAI as a position from Cellar.
-        cellar.removePosition(0);
+        cellar.setHoldingIndex(1);
+        cellar.removePosition(0, false);
 
         // Add DAI to the Cellar.
         uint256 assets = 100_000e18;

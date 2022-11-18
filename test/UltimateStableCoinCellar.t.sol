@@ -165,7 +165,8 @@ contract UltimateStableCoinCellarTest is Test {
         priceRouter.addAsset(COMP, settings, abi.encode(stor), price);
 
         // Cellar positions array.
-        uint32[] memory positions = new uint32[](15);
+        uint32[] memory positions = new uint32[](12);
+        uint32[] memory debtPositions = new uint32[](3);
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
@@ -175,21 +176,21 @@ contract UltimateStableCoinCellarTest is Test {
         registry.trustAdaptor(address(cTokenAdaptor), 0, 0);
         registry.trustAdaptor(address(vestingAdaptor), 0, 0);
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
-        daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
-        usdtPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDT), 0, 0);
-        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), false, abi.encode(DAI, USDC), 0, 0);
-        usdcUsdtPosition = registry.trustPosition(address(uniswapV3Adaptor), false, abi.encode(USDC, USDT), 0, 0);
-        aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), false, abi.encode(address(aUSDC)), 0, 0);
-        dUSDCPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), true, abi.encode(address(dUSDC)), 0, 0);
-        aDAIPosition = registry.trustPosition(address(aaveATokenAdaptor), false, abi.encode(address(aDAI)), 0, 0);
-        dDAIPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), true, abi.encode(address(dDAI)), 0, 0);
-        aUSDTPosition = registry.trustPosition(address(aaveATokenAdaptor), false, abi.encode(address(aUSDT)), 0, 0);
-        dUSDTPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), true, abi.encode(address(dUSDT)), 0, 0);
-        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), false, abi.encode(address(cUSDC)), 0, 0);
-        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), false, abi.encode(address(cDAI)), 0, 0);
-        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), false, abi.encode(address(cUSDT)), 0, 0);
-        vUSDCPosition = registry.trustPosition(address(vestingAdaptor), false, abi.encode(usdcVestor), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
+        usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT), 0, 0);
+        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC), 0, 0);
+        usdcUsdtPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, USDT), 0, 0);
+        aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDC)), 0, 0);
+        dUSDCPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDC)), 0, 0);
+        aDAIPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aDAI)), 0, 0);
+        dDAIPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dDAI)), 0, 0);
+        aUSDTPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDT)), 0, 0);
+        dUSDTPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDT)), 0, 0);
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDC)), 0, 0);
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cDAI)), 0, 0);
+        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDT)), 0, 0);
+        vUSDCPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(usdcVestor), 0, 0);
 
         positions[0] = usdcPosition;
         positions[1] = daiPosition;
@@ -197,17 +198,19 @@ contract UltimateStableCoinCellarTest is Test {
         positions[3] = usdcDaiPosition;
         positions[4] = usdcUsdtPosition;
         positions[5] = aUSDCPosition;
-        positions[6] = dUSDCPosition;
-        positions[7] = aDAIPosition;
-        positions[8] = dDAIPosition;
-        positions[9] = aUSDTPosition;
-        positions[10] = dUSDTPosition;
-        positions[11] = cUSDCPosition;
-        positions[12] = cDAIPosition;
-        positions[13] = cUSDTPosition;
-        positions[14] = vUSDCPosition;
+        positions[6] = aDAIPosition;
+        positions[7] = aUSDTPosition;
+        positions[8] = cUSDCPosition;
+        positions[9] = cDAIPosition;
+        positions[10] = cUSDTPosition;
+        positions[11] = vUSDCPosition;
 
-        bytes[] memory positionConfigs = new bytes[](15);
+        debtPositions[0] = dUSDCPosition;
+        debtPositions[1] = dDAIPosition;
+        debtPositions[2] = dUSDTPosition;
+
+        bytes[] memory positionConfigs = new bytes[](12);
+        bytes[] memory debtConfigs = new bytes[](3);
 
         uint256 minHealthFactor = 1.1e18;
         positionConfigs[5] = abi.encode(minHealthFactor);
@@ -219,13 +222,18 @@ contract UltimateStableCoinCellarTest is Test {
         bytes memory initializeCallData = abi.encode(
             registry,
             USDC,
-            positions,
-            positionConfigs,
             "Ultimate Stable Coin Cellar",
             "USCC-CLR",
-            strategist,
-            type(uint128).max,
-            type(uint128).max
+            abi.encode(
+                positions,
+                debtPositions,
+                positionConfigs,
+                debtConfigs,
+                0,
+                strategist,
+                type(uint128).max,
+                type(uint128).max
+            )
         );
         factory.addImplementation(implementation, 2, 0);
         address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(2)));

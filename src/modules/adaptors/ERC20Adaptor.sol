@@ -85,5 +85,12 @@ contract ERC20Adaptor is BaseAdaptor {
         return token;
     }
 
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public view override returns (bool) {
+        return false;
+    }
+
     //============================================ Strategist Functions ===========================================
 }

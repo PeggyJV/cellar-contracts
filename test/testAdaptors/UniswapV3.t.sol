@@ -115,16 +115,17 @@ contract UniswapV3AdaptorTest is Test {
 
         // Cellar positions array.
         uint32[] memory positions = new uint32[](5);
+        uint32[] memory debtPositions;
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(uniswapV3Adaptor), 0, 0);
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
-        daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
-        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
-        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), false, abi.encode(DAI, USDC), 0, 0);
-        usdcWethPosition = registry.trustPosition(address(uniswapV3Adaptor), false, abi.encode(USDC, WETH), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
+        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
+        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC), 0, 0);
+        usdcWethPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, WETH), 0, 0);
 
         positions[0] = usdcPosition;
         positions[1] = daiPosition;
@@ -133,15 +134,14 @@ contract UniswapV3AdaptorTest is Test {
         positions[4] = usdcWethPosition;
 
         bytes[] memory positionConfigs = new bytes[](5);
+        bytes[] memory debtConfigs;
 
         cellar = new MockCellar(
             registry,
             USDC,
-            positions,
-            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            strategist
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
         );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
@@ -325,7 +325,7 @@ contract UniswapV3AdaptorTest is Test {
     // ========================================== REVERT TEST ==========================================
     function testUsingUntrackedLPPosition() external {
         // Remove USDC WETH LP position from cellar.
-        cellar.removePosition(4);
+        cellar.removePosition(4, false);
 
         // Strategist tries to move funds into USDC WETH LP position.
         uint256 assets = 100_000e6;
