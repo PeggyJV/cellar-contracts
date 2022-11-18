@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { SafeTransferLib } from "src/base/SafeTransferLib.sol";
 import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
 import { CTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { Registry } from "src/Registry.sol";
