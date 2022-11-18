@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC20 } from "src/base/ERC20.sol";
+import { SafeTransferLib } from "src/base/SafeTransferLib.sol";
 import { Math } from "src/utils/Math.sol";
 
 /// @notice Minimal ERC4626 tokenized Vault implementation.
@@ -29,7 +29,7 @@ abstract contract ERC4626 is ERC20 {
                                IMMUTABLES
     //////////////////////////////////////////////////////////////*/
 
-    ERC20 public immutable asset;
+    ERC20 public asset;
 
     constructor(
         ERC20 _asset,

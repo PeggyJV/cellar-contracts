@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC20, SafeTransferLib } from "src/base/ERC4626.sol";
 
 contract MockGravity {
     using SafeTransferLib for ERC20;

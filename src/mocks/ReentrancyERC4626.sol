@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, SafeTransferLib } from "src/base/ERC4626.sol";
+import { ERC4626, SafeTransferLib, ERC20 } from "src/base/ERC4626.sol";
 import { MockCellar } from "src/mocks/MockCellar.sol";
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 
 contract ReentrancyERC4626 is ERC4626, Test {

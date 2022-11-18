@@ -18,13 +18,28 @@ import { Owned } from "@solmate/auth/Owned.sol";
  * @notice A composable ERC4626 that can use arbitrary DeFi assets/positions using adaptors.
  * @author crispymangoes
  */
-contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
+contract Cellar is ERC4626, Owned, ERC721Holder {
     using Uint32Array for uint32[];
     using SafeTransferLib for ERC20;
     using SafeCast for uint256;
     using Math for uint256;
     using Address for address;
 
+    // ========================================= REENTRANCY GUARD =========================================
+    /**
+     * @notice `locked` is public, so that the state can be checked even during view function calls.
+     */
+    uint256 public locked = 1;
+
+    modifier nonReentrant() {
+        require(locked == 1, "REENTRANCY");
+
+        locked = 2;
+
+        _;
+
+        locked = 1;
+    }
     // ========================================= POSITIONS CONFIG =========================================
 
     /**
@@ -132,6 +147,17 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         uint32 positionId,
         bytes memory configurationData
     ) external onlyOwner whenNotShutdown {
+        _addPosition(index, positionId, configurationData);
+    }
+
+    /**
+     * @notice Internal function ise used by `addPosition` and initialize function.
+     */
+    function _addPosition(
+        uint32 index,
+        uint32 positionId,
+        bytes memory configurationData
+    ) internal {
         if (positions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
 
         // Check if position is already being used.
@@ -150,7 +176,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
             configurationData: configurationData
         });
 
-        if (index == 0 && _assetOf(positionId) != asset) revert("Holding position asset mismatch.");
+        if (index == 0 && _assetOf(positionId) != asset)
+            revert Cellar__AssetMismatch(address(asset), address(_assetOf(positionId)));
 
         // Add new position at a specified index.
         positions.add(index, positionId);
@@ -173,7 +200,8 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
         if (positionBalance > 0) revert Cellar__PositionNotEmpty(positionId, positionBalance);
 
         // If removing the holding position, make sure new holding position is valid.
-        if (index == 0 && _assetOf(positions[1]) != asset) revert("Holding position asset mismatch.");
+        if (index == 0 && _assetOf(positions[1]) != asset)
+            revert Cellar__AssetMismatch(address(asset), address(_assetOf(positions[1])));
 
         // Remove position at the given index.
         positions.remove(index);
@@ -395,21 +423,21 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     /**
      * @notice Address of the platform's registry contract. Used to get the latest address of modules.
      */
-    Registry public immutable registry;
+    Registry public registry;
 
     /**
      * @notice Determines this cellars risk tolerance in regards to assets it is exposed to.
      * @dev 0: safest
      *      type(uint128).max: no restrictions
      */
-    uint128 public immutable assetRiskTolerance;
+    uint128 public assetRiskTolerance;
 
     /**
      * @notice Determines this cellars risk tolerance in regards to protocols it uses.
      * @dev 0: safest
      *      type(uint128).max: no restrictions
      */
-    uint128 public immutable protocolRiskTolerance;
+    uint128 public protocolRiskTolerance;
 
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
@@ -466,9 +494,12 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
 
         // Initialize holding position.
         // Holding position is the zero position.
-        ERC20 holdingPositionAsset = _assetOf(_positions[0]);
-        if (holdingPositionAsset != _asset)
-            revert Cellar__AssetMismatch(address(holdingPositionAsset), address(_asset));
+        //TODO remove this check
+        if (_positions.length > 0) {
+            ERC20 holdingPositionAsset = _assetOf(_positions[0]);
+            if (holdingPositionAsset != _asset)
+                revert Cellar__AssetMismatch(address(holdingPositionAsset), address(_asset));
+        }
 
         // Initialize last accrual timestamp to time that cellar was created, otherwise the first
         // `accrue` will take platform fees from 1970 to the time it is called.
@@ -1161,7 +1192,7 @@ contract Cellar is ERC4626, Owned, ReentrancyGuard, ERC721Holder {
     /**
      * @notice The Aave V2 Pool contract on Ethereum Mainnet.
      */
-    address public constant aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
+    address public aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
 
     /**
      * @notice Allows strategist to utilize Aave V2 flashloans while rebalancing the cellar.

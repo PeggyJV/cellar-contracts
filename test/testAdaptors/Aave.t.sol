@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { MockCellar, Cellar, ERC4626, ERC20 } from "src/mocks/MockCellar.sol";
+import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
+import { Cellar } from "src/base/Cellar.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
 import { AaveDebtTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
@@ -26,7 +26,7 @@ contract CellarAaveTest is Test {
     AaveATokenAdaptor private aaveATokenAdaptor;
     AaveDebtTokenAdaptor private aaveDebtTokenAdaptor;
     ERC20Adaptor private erc20Adaptor;
-    MockCellar private cellar;
+    Cellar private cellar;
     PriceRouter private priceRouter;
     Registry private registry;
     SwapRouter private swapRouter;
@@ -113,7 +113,17 @@ contract CellarAaveTest is Test {
         uint256 minHealthFactor = 1.1e18;
         positionConfigs[0] = abi.encode(minHealthFactor);
 
-        cellar = new MockCellar(registry, USDC, positions, positionConfigs, "AAVE Debt Cellar", "AAVE-CLR", address(0));
+        cellar = new Cellar(
+            registry,
+            USDC,
+            positions,
+            positionConfigs,
+            "AAVE Debt Cellar",
+            "AAVE-CLR",
+            address(0),
+            type(uint128).max,
+            type(uint128).max
+        );
 
         cellar.setupAdaptor(address(aaveATokenAdaptor));
         cellar.setupAdaptor(address(aaveDebtTokenAdaptor));
