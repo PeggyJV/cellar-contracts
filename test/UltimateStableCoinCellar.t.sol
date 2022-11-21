@@ -64,6 +64,8 @@ contract UltimateStableCoinCellarTest is Test {
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
+    Comptroller private comptroller = Comptroller(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
+
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
@@ -439,9 +441,98 @@ contract UltimateStableCoinCellarTest is Test {
                 callData: adaptorCallsForFlashLoan
             });
         }
-        uint256 gas = gasleft();
+
+        // Perform all adaptor operations to move into desired positions.
         cellar.callOnAdaptor(data);
-        console.log("Gas used", gas - gasleft());
+
+        // Generate some Compound, and Uniswap V3 earnings.
+        // Manipulate Comptroller storage to give Cellar some pending COMP.
+        uint256 compReward = 100e18;
+        stdstore
+            .target(address(comptroller))
+            .sig(comptroller.compAccrued.selector)
+            .with_key(address(cellar))
+            .checked_write(compReward);
+
+        // Have test contract perform a ton of swaps in Uniswap V3 DAI/USDC and USDC/USDT pools.
+        uint256 assetsToSwap = 100_000_000e6;
+        deal(address(USDC), address(this), assetsToSwap);
+        address[] memory path0 = new address[](2);
+        path0[0] = address(USDC);
+        path0[1] = address(DAI);
+        address[] memory path1 = new address[](2);
+        path1[0] = address(USDC);
+        path1[1] = address(USDT);
+        address[] memory path2 = new address[](2);
+        path2[0] = address(DAI);
+        path2[1] = address(USDC);
+        address[] memory path3 = new address[](2);
+        path3[0] = address(USDT);
+        path3[1] = address(USDC);
+        uint24[] memory poolFees = new uint24[](1);
+        bytes memory swapData;
+        poolFees[0] = 100;
+        USDC.safeApprove(address(swapRouter), type(uint256).max);
+        DAI.safeApprove(address(swapRouter), type(uint256).max);
+        USDT.safeApprove(address(swapRouter), type(uint256).max);
+        for (uint256 i = 0; i < 10; i++) {
+            uint256 swapAmount = assetsToSwap / 2;
+            swapData = abi.encode(path0, poolFees, swapAmount, 0);
+            uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+            swapData = abi.encode(path1, poolFees, swapAmount, 0);
+            uint256 usdtAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, USDT);
+            swapData = abi.encode(path2, poolFees, daiAmount, 0);
+            assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+            swapData = abi.encode(path3, poolFees, usdtAmount, 0);
+            assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), USDT, USDC);
+        }
+
+        data = new Cellar.AdaptorCall[](3);
+        // Create data to claim COMP rewards.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            address[] memory path = new address[](3);
+            path[0] = address(COMP);
+            path[1] = address(WETH);
+            path[2] = address(USDC);
+            uint24[] memory poolFees = new uint24[](2);
+            poolFees[0] = 3000;
+            poolFees[1] = 500;
+            bytes memory params = abi.encode(path, poolFees, 0, 0);
+            adaptorCalls[0] = abi.encodeWithSelector(
+                CTokenAdaptor.claimCompAndSwap.selector,
+                USDC,
+                SwapRouter.Exchange.UNIV3,
+                params,
+                0.90e18
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        // Create data to claim Uniswap V3 fees.
+        {
+            bytes[] memory adaptorCalls = new bytes[](4);
+            adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
+            adaptorCalls[1] = _createBytesDataToCollectFees(address(cellar), 2, type(uint128).max, type(uint128).max);
+            adaptorCalls[2] = _createBytesDataForOracleSwap(DAI, USDC, 100, type(uint256).max); // Swap all DAI for USDC.
+            adaptorCalls[3] = _createBytesDataForOracleSwap(USDT, USDC, 100, type(uint256).max); // Swap all USDT for USDC.
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
+        // Create data to vest all rewards.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            // Deposit all Idle USDC into Vesting Contract.
+            adaptorCalls[0] = abi.encodeWithSelector(
+                VestingSimpleAdaptor.depositToVesting.selector,
+                type(uint256).max,
+                abi.encode(usdcVestor)
+            );
+            data[2] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform all adaptor operations to claim rewards/fees, and vest them.
+        cellar.callOnAdaptor(data);
+
+        vm.warp(block.timestamp + 1 days / 4);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
