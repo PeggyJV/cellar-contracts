@@ -12,24 +12,10 @@ contract MockCellar is Cellar, Test {
     constructor(
         Registry _registry,
         ERC20 _asset,
-        uint32[] memory _positions,
-        bytes[] memory _configurationData,
         string memory _name,
         string memory _symbol,
-        address _strategistPayout
-    )
-        Cellar(
-            _registry,
-            _asset,
-            _positions,
-            _configurationData,
-            _name,
-            _symbol,
-            _strategistPayout,
-            type(uint128).max,
-            type(uint128).max
-        )
-    {}
+        bytes memory _params
+    ) Cellar(_registry, _asset, _name, _symbol, _params) {}
 
     function depositIntoPosition(
         uint32 position,

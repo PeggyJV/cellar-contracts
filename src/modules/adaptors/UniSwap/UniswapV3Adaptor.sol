@@ -164,6 +164,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
         return token;
     }
 
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public pure override returns (bool) {
+        return false;
+    }
+
     //============================================ Strategist Functions ===========================================
     /**
      * @notice Allows strategist to open up arbritray Uniswap V3 positions.

@@ -187,6 +187,13 @@ contract AaveATokenAdaptor is BaseAdaptor {
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
     }
 
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public pure override returns (bool) {
+        return false;
+    }
+
     //============================================ Strategist Functions ===========================================
     /**
      * @notice Allows strategists to lend assets on Aave.

@@ -37,7 +37,7 @@ contract MockPriceRouter {
         for (uint256 i; i < baseAssets.length; i++) value += getValue(baseAssets[i], amounts[i], quoteAsset);
     }
 
-    function getValueDiff(
+    function getValuesDelta(
         ERC20[] calldata baseAssets0,
         uint256[] calldata amounts0,
         ERC20[] calldata baseAssets1,
@@ -56,6 +56,7 @@ contract MockPriceRouter {
         uint256 amount,
         ERC20 quoteAsset
     ) public view returns (uint256 value) {
+        if (amount == 0) return 0;
         value = amount.mulDivDown(getExchangeRate[baseAsset][quoteAsset], 10**baseAsset.decimals());
     }
 

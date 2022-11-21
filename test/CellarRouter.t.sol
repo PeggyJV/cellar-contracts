@@ -100,10 +100,10 @@ contract CellarRouterTest is Test {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
-        daiPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(DAI), 0, 0);
-        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
-        wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
+        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
+        wbtcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WBTC), 0, 0);
 
         uint32[] memory positions = new uint32[](4);
         positions[0] = usdcPosition;
@@ -111,16 +111,18 @@ contract CellarRouterTest is Test {
         positions[2] = wethPosition;
         positions[3] = wbtcPosition;
 
+        uint32[] memory debtPositions;
+
         bytes[] memory positionConfigs = new bytes[](4);
+
+        bytes[] memory debtConfigs;
 
         cellar = new MockCellar(
             registry,
             USDC,
-            positions,
-            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            address(0)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, address(0))
         );
         vm.label(address(cellar), "cellar");
 
@@ -146,22 +148,21 @@ contract CellarRouterTest is Test {
         // Create a WETH Cellar.
         uint32[] memory positions = new uint32[](1);
         positions[0] = wethPosition;
+        uint32[] memory debtPositions;
 
         bytes[] memory positionConfigs = new bytes[](1);
+        bytes[] memory debtConfigs;
 
         MockCellar wethCellar = new MockCellar(
             registry,
             WETH,
-            positions,
-            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            address(0)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, address(0))
         );
 
         // Generate permit sig
-        uint256 ownerPrivateKey = 0xA11CE;
-        address pOwner = vm.addr(ownerPrivateKey);
+        address pOwner = vm.addr(0xA11CE);
         bytes memory sig;
         {
             MockERC20 usdcPermit = MockERC20(address(USDC));
@@ -176,7 +177,7 @@ contract CellarRouterTest is Test {
 
             bytes32 digest = sigUtils.getTypedDataHash(permit);
 
-            (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xA11CE, digest);
             sig = abi.encodePacked(r, s, v);
         }
 
@@ -744,8 +745,8 @@ contract CellarRouterTest is Test {
         // Grant depositor privilege.
         registry.setApprovedForDepositOnBehalf(address(router), true);
 
-        // Require shares are held for 8 blocks.
-        cellar.setShareLockPeriod(8);
+        // Require shares are held for 5 minutes.
+        cellar.setShareLockPeriod(300);
 
         router.depositAndSwap(cellar, SwapRouter.Exchange.UNIV2, swapData, assets, DAI);
         // Receiver should not be able to redeem, withdraw, or transfer shares for locking period.
@@ -754,8 +755,8 @@ contract CellarRouterTest is Test {
             bytes(
                 abi.encodeWithSelector(
                     Cellar.Cellar__SharesAreLocked.selector,
-                    block.number + cellar.shareLockPeriod(),
-                    block.number
+                    block.timestamp + cellar.shareLockPeriod(),
+                    block.timestamp
                 )
             )
         );
@@ -765,8 +766,8 @@ contract CellarRouterTest is Test {
             bytes(
                 abi.encodeWithSelector(
                     Cellar.Cellar__SharesAreLocked.selector,
-                    block.number + cellar.shareLockPeriod(),
-                    block.number
+                    block.timestamp + cellar.shareLockPeriod(),
+                    block.timestamp
                 )
             )
         );
@@ -777,8 +778,8 @@ contract CellarRouterTest is Test {
             bytes(
                 abi.encodeWithSelector(
                     Cellar.Cellar__SharesAreLocked.selector,
-                    block.number + cellar.shareLockPeriod(),
-                    block.number
+                    block.timestamp + cellar.shareLockPeriod(),
+                    block.timestamp
                 )
             )
         );

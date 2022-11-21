@@ -110,6 +110,12 @@ abstract contract BaseAdaptor {
      */
     function assetOf(bytes memory adaptorData) public view virtual returns (ERC20);
 
+    /**
+     * @notice Functions Registry/Cellars use to determine if this adaptor reports debt values.
+     * @dev returns true if this adaptor reports debt values.
+     */
+    function isDebt() public view virtual returns (bool);
+
     //============================================ Strategist Functions ===========================================
     //==================== Strategist Function Specification ====================
     // Strategist functions are only callable by strategists through the Cellars

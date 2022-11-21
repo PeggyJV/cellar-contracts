@@ -88,6 +88,13 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
     }
 
+    /**
+     * @notice This adaptor reports values in terms of debt.
+     */
+    function isDebt() public pure override returns (bool) {
+        return true;
+    }
+
     //============================================ Strategist Functions ===========================================
     /**
      * @notice Strategist attempted to open an untracked Aave loan.

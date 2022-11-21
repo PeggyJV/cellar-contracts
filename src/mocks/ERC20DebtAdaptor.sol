@@ -8,7 +8,7 @@ import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAd
  * @notice Allows Cellars to interact with ERC20 positions.
  * @author crispymangoes
  */
-contract ERC20Adaptor is BaseAdaptor {
+contract ERC20DebtAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
 
     //==================== Adaptor Data Specification ====================
@@ -27,7 +27,7 @@ contract ERC20Adaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("ERC20 Adaptor V 0.0"));
+        return keccak256(abi.encode("ERC20 Debt Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -89,7 +89,7 @@ contract ERC20Adaptor is BaseAdaptor {
      * @notice This adaptor returns collateral, and not debt.
      */
     function isDebt() public pure override returns (bool) {
-        return false;
+        return true;
     }
 
     //============================================ Strategist Functions ===========================================

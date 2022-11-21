@@ -94,6 +94,13 @@ contract CellarAdaptor is BaseAdaptor {
         return cellar.asset();
     }
 
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public pure override returns (bool) {
+        return false;
+    }
+
     //============================================ Strategist Functions ===========================================
     /**
      * @notice Allows strategists to deposit into Cellar positions.

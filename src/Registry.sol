@@ -107,8 +107,35 @@ contract Registry is Ownable {
         nextId++;
     }
 
-    // ============================================ POSITION LOGIC ============================================
+    // ============================================ FEE DISTRIBUTOR LOGIC ============================================
+    /**
+     * @notice Emitted when fees distributor is changed.
+     * @param oldFeesDistributor address of fee distributor was changed from
+     * @param newFeesDistributor address of fee distributor was changed to
+     */
+    event FeesDistributorChanged(bytes32 oldFeesDistributor, bytes32 newFeesDistributor);
 
+    /**
+     * @notice Attempted to use an invalid cosmos address.
+     */
+    error Registry__InvalidCosmosAddress();
+
+    bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+
+    /**
+     * @notice Set the address of the fee distributor on the Sommelier chain.
+     * @dev IMPORTANT: Ensure that the address is formatted in the specific way that the Gravity contract
+     *      expects it to be.
+     * @param newFeesDistributor formatted address of the new fee distributor module
+     */
+    function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
+        if (uint256(newFeesDistributor) > type(uint160).max) revert Registry__InvalidCosmosAddress();
+        emit FeesDistributorChanged(feesDistributor, newFeesDistributor);
+
+        feesDistributor = newFeesDistributor;
+    }
+
+    // ============================================ POSITION LOGIC ============================================
     /**
      * @notice stores data related to Cellar positions.
      * @param adaptors address of the adaptor to use for this position
@@ -208,7 +235,6 @@ contract Registry is Ownable {
     /**
      * @notice Trust a position to be used by the cellar.
      * @param adaptor the adaptor address this position uses
-     * @param isDebt bool indicating whether this position should be treated as debt
      * @param adaptorData arbitrary bytes used to configure this position
      * @param assetRisk the risk rating of this positions asset
      * @param protocolRisk the risk rating of this positions underlying protocol
@@ -216,12 +242,12 @@ contract Registry is Ownable {
      */
     function trustPosition(
         address adaptor,
-        bool isDebt,
         bytes memory adaptorData,
         uint128 assetRisk,
         uint128 protocolRisk
     ) external onlyOwner returns (uint32 positionId) {
         bytes32 identifier = BaseAdaptor(adaptor).identifier();
+        bool isDebt = BaseAdaptor(adaptor).isDebt();
         bytes32 positionHash = keccak256(abi.encode(identifier, isDebt, adaptorData));
         positionId = positionCount + 1; //Add one so that we do not use Id 0.
 
