@@ -201,6 +201,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         int24 tickLower,
         int24 tickUpper
     ) public {
+        amount0 = _maxAvailable(token0, amount0);
+        amount1 = _maxAvailable(token1, amount1);
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         token0.safeApprove(address(positionManager()), amount0);
         token1.safeApprove(address(positionManager()), amount1);
@@ -291,6 +293,9 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
+        amount0 = _maxAvailable(ERC20(t0), amount0);
+        amount1 = _maxAvailable(ERC20(t1), amount1);
+
         ERC20(t0).safeApprove(address(positionManager()), amount0);
         ERC20(t1).safeApprove(address(positionManager()), amount1);
 

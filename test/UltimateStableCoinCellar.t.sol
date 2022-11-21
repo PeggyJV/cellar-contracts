@@ -62,6 +62,8 @@ contract UltimateStableCoinCellarTest is Test {
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
+    IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
@@ -256,7 +258,7 @@ contract UltimateStableCoinCellarTest is Test {
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
 
-    function testTotalAssetsEmpty() external {
+    function testTotalAssetsEmpty() external view {
         uint256 gas = gasleft();
         cellar.totalAssets();
         console.log("Gas used for empty total assets", gas - gasleft());
@@ -314,6 +316,132 @@ contract UltimateStableCoinCellarTest is Test {
         uint256 totalAssets = cellar.totalAssets();
         console.log("Gas used for full total assets", gas - gasleft());
         console.log("Assets", totalAssets);
+    }
+
+    function testUltimateStableCoinCellar() external {
+        // Start by managing credit positions to reflect the following.
+        // 0) Vesting USDC
+        // 1) Compound USDC (holding posiiton)
+        // 2) Aave USDC
+        // 3) Uniswap V3 DAI/USDC LP
+        // 4) Uniswap V3 USDC/USDT LP
+        // debt positions
+        // 0) Aave debt USDT
+
+        // Swap cUSDC and DAI position.
+        cellar.swapPositions(1, 8, false);
+        // Change holding position to index 1
+        cellar.setHoldingIndex(1);
+        // Swap USDC and vesting USDC positions.
+        cellar.swapPositions(0, 11, false);
+        // Swap USDT position and aUSDC.
+        cellar.swapPositions(2, 5, false);
+        // Uniswap V3 positions are already in their correct spot.
+        // Remove unused credit positions.
+        for (uint256 i; i < 7; i++) cellar.removePosition(5, false);
+
+        // Remove unused debt positions.
+        cellar.removePosition(0, true); // Removes dUSDC
+        cellar.removePosition(0, true); // Removes dDAI
+
+        // Have whale join the cellar with 10M USDC.
+        uint256 assets = 10_000_000e6;
+        address whale = vm.addr(777);
+        deal(address(USDC), whale, assets);
+        vm.startPrank(whale);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, whale);
+        vm.stopPrank();
+
+        // Change rebalance deviation to 0.8% so we can do more stuff during the rebalance.
+        cellar.setRebalanceDeviation(0.008e18);
+
+        // Strategist manages cellar in order to achieve the following portfolio.
+        // ~20% in cUSDC.
+        // ~20% in aUSDC/dUSDT with a 5x USDT short
+        // ~30% Uniswap V3 DAI/USDC 0.01% and 0.05% LP
+        // ~30% Uniswap V3 USDC/USDT 0.01% and 0.05% LP
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](4);
+        // Create data to withdraw 80% of assets from compound.
+        {
+            uint256 amountToWithdraw = assets.mulDivDown(8, 10);
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromCompound(cUSDC, amountToWithdraw);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Create data to lend 20% of assets on Aave.
+        {
+            uint256 amountToLend = assets.mulDivDown(2, 10);
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLendOnAave(USDC, amountToLend);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Create data to add liquidity to Uniswap V3.
+        {
+            bytes[] memory adaptorCalls = new bytes[](6);
+            uint256 usdcToUse = assets.mulDivDown(15, 100);
+
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+            adaptorCalls[1] = _createBytesDataForSwap(USDC, USDT, 100, usdcToUse);
+
+            // Since we are dividing the USDC into 2 LP positions each, cut it in half.
+            usdcToUse = usdcToUse / 2;
+
+            adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, usdcToUse, 30);
+            adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 500, type(uint256).max, usdcToUse, 40);
+
+            adaptorCalls[4] = _createBytesDataToOpenLP(USDC, USDT, 100, usdcToUse, type(uint256).max, 20);
+            adaptorCalls[5] = _createBytesDataToOpenLP(USDC, USDT, 500, usdcToUse, type(uint256).max, 80);
+
+            data[2] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
+
+        // Create data to short USDT for USDC at 5x leverage on Aave.
+        // Note any remaining USDC dust from prior calls will be lent on Aave.
+        {
+            // divide by 5 to use 20% of assets.
+            // multiply by 4 to use 5x leverage.
+            uint256 USDTtoFlashLoan = assets.mulDivDown(4, 5);
+            // Borrow the flash loan amount + premium.
+            uint256 USDTtoBorrow = USDTtoFlashLoan.mulDivDown(1e3 + pool.FLASHLOAN_PREMIUM_TOTAL(), 1e3);
+
+            bytes[] memory adaptorCallsForFlashLoan = new bytes[](1);
+            Cellar.AdaptorCall[] memory dataInsideFlashLoan = new Cellar.AdaptorCall[](2);
+            bytes[] memory adaptorCallsInsideFlashLoanFirstAdaptor = new bytes[](2);
+            bytes[] memory adaptorCallsInsideFlashLoanSecondAdaptor = new bytes[](1);
+            // Swap all the USDT for USDC.
+            adaptorCallsInsideFlashLoanFirstAdaptor[0] = _createBytesDataForSwap(USDT, USDC, 100, USDTtoFlashLoan);
+            // Lend USDC on Aave specifying to use the max amount available.
+            adaptorCallsInsideFlashLoanFirstAdaptor[1] = _createBytesDataToLendOnAave(USDC, type(uint256).max);
+            adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToBorrow(dUSDT, USDTtoBorrow);
+            dataInsideFlashLoan[0] = Cellar.AdaptorCall({
+                adaptor: address(aaveATokenAdaptor),
+                callData: adaptorCallsInsideFlashLoanFirstAdaptor
+            });
+            dataInsideFlashLoan[1] = Cellar.AdaptorCall({
+                adaptor: address(aaveDebtTokenAdaptor),
+                callData: adaptorCallsInsideFlashLoanSecondAdaptor
+            });
+            address[] memory loanToken = new address[](1);
+            loanToken[0] = address(USDT);
+            uint256[] memory loanAmount = new uint256[](1);
+            loanAmount[0] = USDTtoFlashLoan;
+            adaptorCallsForFlashLoan[0] = _createBytesDataToFlashLoan(
+                loanToken,
+                loanAmount,
+                abi.encode(dataInsideFlashLoan)
+            );
+            data[3] = Cellar.AdaptorCall({
+                adaptor: address(aaveDebtTokenAdaptor),
+                callData: adaptorCallsForFlashLoan
+            });
+        }
+        uint256 gas = gasleft();
+        cellar.callOnAdaptor(data);
+        console.log("Gas used", gas - gasleft());
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
