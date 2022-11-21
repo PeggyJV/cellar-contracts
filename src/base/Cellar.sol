@@ -105,6 +105,17 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     error Cellar__PositionArrayFull(uint256 maxPositions);
 
     /**
+     * @notice Attempted to add a position, with mismatched debt.
+     * @param position the posiiton id that was mismatched
+     */
+    error Cellar__DebtMismatch(uint32 position);
+
+    /**
+     * @notice Attempted to remove the Cellars holding position.
+     */
+    error Cellar__RemovingHoldingPosition();
+
+    /**
      * @notice Array of uint32s made up of cellars credit positions Ids.
      */
     uint32[] public creditPositions;
@@ -185,7 +196,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             assetRiskTolerance,
             protocolRiskTolerance
         );
-        if (isDebt != inDebtArray) revert("Debt Mismatch");
+
+        if (isDebt != inDebtArray) revert Cellar__DebtMismatch(positionId);
 
         // Copy position data from registry to here.
         getPositionData[positionId] = Registry.PositionData({
@@ -211,8 +223,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
         emit PositionAdded(positionId, index);
     }
-
-    error Cellar__RemovingHoldingPosition();
 
     /**
      * @notice Remove the position at a given index from the list of positions used by the cellar.

@@ -97,7 +97,7 @@ contract CellarAdaptor is BaseAdaptor {
     /**
      * @notice This adaptor returns collateral, and not debt.
      */
-    function isDebt() public view override returns (bool) {
+    function isDebt() public pure override returns (bool) {
         return false;
     }
 

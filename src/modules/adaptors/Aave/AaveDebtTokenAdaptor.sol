@@ -91,7 +91,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     /**
      * @notice This adaptor reports values in terms of debt.
      */
-    function isDebt() public view override returns (bool) {
+    function isDebt() public pure override returns (bool) {
         return true;
     }
 

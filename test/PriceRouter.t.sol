@@ -1028,15 +1028,11 @@ contract PriceRouterTest is Test {
 
         (upkeepNeeded, performData) = priceRouter.checkUpkeep(abi.encode(CURVE_DERIVATIVE, abi.encode(0, 0)));
         vm.prank(automationRegistry);
-        uint256 gas = gasleft();
         priceRouter.performUpkeep(abi.encode(CURVE_DERIVATIVE, performData));
-        console.log("Gas used", gas - gasleft());
         // Virtual price is now back within logical bounds so pricing operations work as expected.
         priceRouter.getValue(CRV_WETH_CRV, 1e18, WETH);
         (datum, , , , ) = priceRouter.getVirtualPriceBound(address(CRV_WETH_CRV));
         upper = uint256(datum).mulDivDown(1.02e8, 1e8).changeDecimals(8, 18);
-        console.log("VP", currentVirtualPrice);
-        console.log("Upper", upper);
     }
 
     // ======================================= INTEGRATION TESTS =======================================

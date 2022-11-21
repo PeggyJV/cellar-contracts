@@ -30,15 +30,6 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
 
     event AddAsset(address indexed asset);
 
-    //TODO could probs just replace this with a function that does two get values, and subtracts them.
-    function multicall(bytes[] calldata data) external view returns (bytes[] memory results) {
-        results = new bytes[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
-            results[i] = Address.functionStaticCall(address(this), data[i]);
-        }
-        return results;
-    }
-
     // =========================================== ASSETS CONFIG ===========================================
     /**
      * @notice Stores bare minimum settings all derivatives support like so.

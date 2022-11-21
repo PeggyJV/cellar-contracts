@@ -755,8 +755,8 @@ contract CellarRouterTest is Test {
             bytes(
                 abi.encodeWithSelector(
                     Cellar.Cellar__SharesAreLocked.selector,
-                    block.number + cellar.shareLockPeriod(),
-                    block.number
+                    block.timestamp + cellar.shareLockPeriod(),
+                    block.timestamp
                 )
             )
         );
@@ -766,8 +766,8 @@ contract CellarRouterTest is Test {
             bytes(
                 abi.encodeWithSelector(
                     Cellar.Cellar__SharesAreLocked.selector,
-                    block.number + cellar.shareLockPeriod(),
-                    block.number
+                    block.timestamp + cellar.shareLockPeriod(),
+                    block.timestamp
                 )
             )
         );
@@ -778,8 +778,8 @@ contract CellarRouterTest is Test {
             bytes(
                 abi.encodeWithSelector(
                     Cellar.Cellar__SharesAreLocked.selector,
-                    block.number + cellar.shareLockPeriod(),
-                    block.number
+                    block.timestamp + cellar.shareLockPeriod(),
+                    block.timestamp
                 )
             )
         );

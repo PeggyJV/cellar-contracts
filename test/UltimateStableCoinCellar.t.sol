@@ -73,9 +73,9 @@ contract UltimateStableCoinCellarTest is Test {
     ERC20 private dDAI = ERC20(0x6C3c78838c761c6Ac7bE9F59fe808ea2A6E4379d);
     ERC20 private aUSDT = ERC20(0x3Ed3B47Dd13EC9a98b44e6204A523E766B225811);
     ERC20 private dUSDT = ERC20(0x531842cEbbdD378f8ee36D171d6cC9C4fcf475Ec);
-    ERC20 private cUSDC = ERC20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
-    ERC20 private cDAI = ERC20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);
-    ERC20 private cUSDT = ERC20(0xf650C3d88D12dB855b8bf7D11Be6C55A4e07dCC9);
+    CErc20 private cUSDC = CErc20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
+    CErc20 private cDAI = CErc20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);
+    CErc20 private cUSDT = CErc20(0xf650C3d88D12dB855b8bf7D11Be6C55A4e07dCC9);
 
     address private immutable strategist = vm.addr(0xBEEF);
 
@@ -242,7 +242,7 @@ contract UltimateStableCoinCellarTest is Test {
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
 
-        // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
+        // Setup all the adaptors the cellar will use.
         cellar.setupAdaptor(address(uniswapV3Adaptor));
         cellar.setupAdaptor(address(aaveATokenAdaptor));
         cellar.setupAdaptor(address(aaveDebtTokenAdaptor));
@@ -297,6 +297,18 @@ contract UltimateStableCoinCellarTest is Test {
         cellar.callOnAdaptor(data);
 
         // Create positions on Compound.
+        // Mint cellar $2 of each stable.
+        deal(address(USDC), address(cellar), 2e6);
+        deal(address(DAI), address(cellar), 2e18);
+        deal(address(USDT), address(cellar), 2e6);
+        data = new Cellar.AdaptorCall[](1);
+        adaptorCalls = new bytes[](3);
+        adaptorCalls[0] = _createBytesDataToLendOnCompound(cUSDC, 1e6);
+        adaptorCalls[1] = _createBytesDataToLendOnCompound(cDAI, 1e18);
+        adaptorCalls[2] = _createBytesDataToLendOnCompound(cUSDT, 1e6);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
         uint256 gas = gasleft();
         uint256 totalAssets = cellar.totalAssets();
