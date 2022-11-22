@@ -139,8 +139,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
                 (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
             );
 
-            // Skip LP tokens that are not for this position.
-            if (t0 != address(token0) || t1 != address(token1)) continue;
+            // Skip LP tokens that are not for this position, or if there is no liquidity in the position.
+            if (t0 != address(token0) || t1 != address(token1) || liquidity == 0) continue;
 
             (uint256 amountA, uint256 amountB) = LiquidityAmounts.getAmountsForLiquidity(
                 sqrtPriceX96,
@@ -248,25 +248,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 min0,
         uint256 min1
     ) public {
-        // Make sure the cellar owns this positionId. Also checks the positionId exists.
-        if (positionManager().ownerOf(positionId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(positionId);
-
-        // Create decrease liquidity params.
-        (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(positionId);
-        INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
-            .DecreaseLiquidityParams({
-                tokenId: positionId,
-                liquidity: liquidity,
-                amount0Min: min0,
-                amount1Min: min1,
-                deadline: block.timestamp
-            });
-
-        // Decrease liquidity in pool.
-        positionManager().decreaseLiquidity(params);
-
-        // Collect principal and fees before "burning" NFT.
-        collectFees(positionId, type(uint128).max, type(uint128).max);
+        takeFromPosition(positionId, type(uint128).max, min0, min1);
 
         // Position now has no more liquidity, so transfer NFT to dead address to save on `balanceOf` gas usage.
         // Transfer token to a dead address.
@@ -336,9 +318,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Make sure the cellar owns this positionId. Also checks the positionId exists.
         if (positionManager().ownerOf(positionId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(positionId);
 
-        // Check that the position isn't being closed fully.
-        (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager().positions(positionId);
-        if (liquidity >= positionLiquidity) revert UniswapV3Adaptor__CallClosePosition();
+        // If uint128 max is specified for liquidity, withdraw the full amount.
+        if (liquidity == type(uint128).max) {
+            (, , , , , , , liquidity, , , , ) = positionManager().positions(positionId);
+        }
 
         // Create decrease liquidity params.
         INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
