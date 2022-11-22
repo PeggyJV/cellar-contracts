@@ -438,7 +438,8 @@ contract CellarTest is Test {
         );
 
         assertFalse(cellar.isPositionUsed(wethPosition), "`isPositionUsed` should be false for WETH.");
-
+        (address zeroAddressAdaptor, , , ) = cellar.getPositionData(wethPosition);
+        assertEq(zeroAddressAdaptor, address(0), "Removing position should have deleted position data.");
         // Check that adding a credit position as debt reverts.
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DebtMismatch.selector, wethPosition)));
         cellar.addPosition(4, wethPosition, abi.encode(0), true);
@@ -485,10 +486,72 @@ contract CellarTest is Test {
         // Set Cellar WETH balance to 0.
         deal(address(WETH), address(cellar), 0);
 
+        cellar.removePosition(4, false);
+        // Check that adding a position to the holding index reverts if the position asset does not
+        // equal the cellar asset.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(USDC), address(WETH)))
+        );
+        cellar.addPosition(0, wethPosition, abi.encode(0), false);
+
+        // Check that addPosition sets position data.
+        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        (address adaptor, bool isDebt, bytes memory adaptorData, bytes memory configurationData) = cellar
+            .getPositionData(wethPosition);
+        assertEq(adaptor, address(erc20Adaptor), "Adaptor should be the ERC20 adaptor.");
+        assertTrue(!isDebt, "Position should not be debt.");
+        assertEq(adaptorData, abi.encode((WETH)), "Adaptor data should be abi encoded WETH.");
+        assertEq(configurationData, abi.encode(0), "Configuration data should be abi encoded ZERO.");
+
+        // Try setting the holding index to a position that does not use the holding asset.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(USDC), address(WETH)))
+        );
+        cellar.setHoldingIndex(4);
+
         // Check that `swapPosition` works as expected.
         cellar.swapPositions(4, 2, false);
         assertEq(cellar.creditPositions(4), wethCLRPosition, "`positions[4]` should be wethCLR.");
         assertEq(cellar.creditPositions(2), wethPosition, "`positions[2]` should be WETH.");
+
+        // Make sure we can't remove the holding position index.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemovingHoldingPosition.selector)));
+        cellar.removePosition(0, false);
+
+        // Make sure we can't swap an invalid position into the holding index.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(WETH), address(USDC)))
+        );
+        cellar.swapPositions(0, 2, false);
+
+        // Work with debt positions now.
+        ERC20DebtAdaptor debtAdaptor = new ERC20DebtAdaptor();
+        registry.trustAdaptor(address(debtAdaptor), 0, 0);
+        uint32 debtWethPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WETH), 0, 0);
+        uint32 debtWbtcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WBTC), 0, 0);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DebtMismatch.selector, debtWethPosition)));
+        cellar.addPosition(0, debtWethPosition, abi.encode(0), false);
+
+        cellar.addPosition(0, debtWethPosition, abi.encode(0), true);
+        assertEq(cellar.getDebtPositions().length, 1, "Debt positions should be length 1.");
+
+        cellar.addPosition(0, debtWbtcPosition, abi.encode(0), true);
+        assertEq(cellar.getDebtPositions().length, 2, "Debt positions should be length 2.");
+
+        // Remove all debt.
+        cellar.removePosition(0, true);
+        assertEq(cellar.getDebtPositions().length, 1, "Debt positions should be length 1.");
+
+        cellar.removePosition(0, true);
+        assertEq(cellar.getDebtPositions().length, 0, "Debt positions should be length 1.");
+
+        // Add debt positions back.
+        cellar.addPosition(0, debtWethPosition, abi.encode(0), true);
+        assertEq(cellar.getDebtPositions().length, 1, "Debt positions should be length 1.");
+
+        cellar.addPosition(0, debtWbtcPosition, abi.encode(0), true);
+        assertEq(cellar.getDebtPositions().length, 2, "Debt positions should be length 2.");
     }
 
     // ========================================== REBALANCE TEST ==========================================

@@ -156,7 +156,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     uint8 public holdingIndex;
 
+    /**
+     * @notice Allows owner to change the holding position.
+     */
     function setHoldingIndex(uint8 index) external onlyOwner {
+        uint32 positionId = creditPositions[index];
+        if (_assetOf(positionId) != asset) revert Cellar__AssetMismatch(address(asset), address(_assetOf(positionId)));
         holdingIndex = index;
     }
 
