@@ -32,20 +32,19 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
 
     // =========================================== ASSETS CONFIG ===========================================
     /**
-     * @notice Stores bare minimum settings all derivatives support like so.
-     * 256 Bit
-     * uint88 Reserved for future use.
-     * uint160 Source address: Where does this contract look to handle pricing.
-     * uint8 Derivative: Note 0 is an invalid Derivative.
-     * 0 Bit
+     * @notice Bare minimum settings all derivatives support.
+     * @param derivative the derivative used to price the asset
+     * @param source the address used to price the asset
      */
-
     struct AssetSettings {
         uint8 derivative;
         address source;
     }
 
-    mapping(ERC20 => AssetSettings) public getAssetSettings; // maps an asset -> settings
+    /**
+     * @notice Mapping between an asset to price and its `AssetSettings`.
+     */
+    mapping(ERC20 => AssetSettings) public getAssetSettings;
 
     // ======================================= ADAPTOR OPERATIONS =======================================
 
@@ -86,18 +85,39 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      */
     error PriceRouter__MinPriceGreaterThanMaxPrice(uint256 min, uint256 max);
 
+    /**
+     * @notice The allowed deviation between the expected answer vs the actual answer.
+     */
     uint256 public constant EXPECTED_ANSWER_DEVIATION = 0.02e18;
 
-    // Struct to store pricing information during calls.
+    /**
+     * @notice Stores pricing information during calls.
+     * @param asset the address of the asset
+     * @param price the USD price of the asset
+     * @dev If the price does not fit into a uint96, the asset is NOT added to the cache.
+     */
     struct PriceCache {
         address asset;
         uint96 price;
     }
 
-    // The size of the price cache. A larger cache can hold more values, but incurs a larger gas cost overhead.
-    // A smaller cache has a smaller gas overhead but caches less prices.
+    /**
+     * @notice The size of the price cache. A larger cache can hold more values,
+     *         but incurs a larger gas cost overhead. A smaller cache has a
+     *         smaller gas overhead but caches less prices.
+     */
     uint8 private constant PRICE_CACHE_SIZE = 8;
 
+    /**
+     * @notice Allows owner to add assets to the price router.
+     * @dev Performs a sanity check by comparing the price router computed price to
+     * a user input `_expectedAnswer`.
+     * @param _asset the asset to add to the pricing router
+     * @param _settings the settings for `_asset`
+     *        @dev The `derivative` value in settings MUST be non zero.
+     * @param _storage arbitrary bytes data used to configure `_asset` pricing
+     * @param _expectedAnswer the expected answer for the asset from  `_getPriceInUSD`
+     */
     function addAsset(
         ERC20 _asset,
         AssetSettings memory _settings,
@@ -141,6 +161,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     // ======================================= CHAINLINK AUTOMATION =======================================
+    /**
+     * @notice `checkUpkeep` is set up to allow for multiple derivatives to use Chainlink Automation.
+     */
     function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData) {
         (uint8 derivative, bytes memory derivativeCheckData) = abi.decode(checkData, (uint8, bytes));
 
@@ -151,6 +174,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         } else revert PriceRouter__UnkownDerivative(derivative);
     }
 
+    /**
+     * @notice `performUpkeep` is set up to allow for multiple derivatives to use Chainlink Automation.
+     */
     function performUpkeep(bytes calldata performData) external {
         (uint8 derivative, bytes memory derivativePerformData) = abi.decode(performData, (uint8, bytes));
 
@@ -177,6 +203,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         value = amount.mulDivDown(getExchangeRate(baseAsset, quoteAsset), 10**baseAsset.decimals());
     }
 
+    /**
+     * @notice Helper function that compares `_getValues` between input 0 and input 1.
+     */
     function getValuesDelta(
         ERC20[] calldata baseAssets0,
         uint256[] calldata amounts0,
@@ -192,6 +221,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         return value0 - value1;
     }
 
+    /**
+     * @notice Helper function that determines the value of assets using `_getValues`.
+     */
     function getValues(
         ERC20[] calldata baseAssets,
         uint256[] calldata amounts,
@@ -291,6 +323,11 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         return exchangeRate;
     }
 
+    /**
+     * @notice Helper function to get an assets price in USD.
+     * @dev Returns price in USD with 8 decimals.
+     * @dev Favors using cached prices if available.
+     */
     function _getPriceInUSD(
         ERC20 asset,
         AssetSettings memory settings,
@@ -381,6 +418,14 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     // =========================================== CHAINLINK PRICE DERIVATIVE ===========================================\
+    /**
+     * @notice Stores data for Chainlink derivative assets.
+     * @param max the max valid price of the asset
+     * @param min the min valid price of the asset
+     * @param heartbeat the max amount of time between price updates
+     * @param inETH bool indicating whether the price feed is
+     *        denominated in ETH(true) or USD(false)
+     */
     struct ChainlinkDerivativeStorage {
         uint144 max;
         uint80 min;
@@ -388,7 +433,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         bool inETH;
     }
     /**
-     * @notice Chainlink Derivative Storage
+     * @notice Returns Chainlink Derivative Storage
      */
     mapping(ERC20 => ChainlinkDerivativeStorage) public getChainlinkDerivativeStorage;
 
@@ -446,6 +491,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         getChainlinkDerivativeStorage[_asset] = parameters;
     }
 
+    /**
+     * @notice Get the price of a Chainlink derivative in terms of USD.
+     */
     function _getPriceForChainlinkDerivative(
         ERC20 _asset,
         address _source,
@@ -545,6 +593,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint32 rateLimit;
     }
 
+    /**
+     * @notice Returns a Curve asset virtual price bound
+     */
     mapping(address => VirtualPriceBound) public getVirtualPriceBound;
 
     /**
@@ -782,6 +833,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     // =========================================== CURVE PRICE DERIVATIVE ===========================================
     /**
      * @notice Curve Derivative Storage
+     * @dev Stores an array of the underlying token addresses in the curve pool.
      */
     mapping(ERC20 => address[]) public getCurveDerivativeStorage;
 
@@ -829,6 +881,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         getVirtualPriceBound[address(_asset)] = vpBound;
     }
 
+    /**
+     * @notice Get the price of a CurveV1 derivative in terms of USD.
+     */
     function _getPriceForCurveDerivative(
         ERC20 asset,
         address _source,
@@ -864,6 +919,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     // =========================================== CURVEV2 PRICE DERIVATIVE ===========================================
     /**
      * @notice Curve Derivative Storage
+     * @dev Stores an array of the underlying token addresses in the curve pool.
      */
     mapping(ERC20 => address[]) public getCurveV2DerivativeStorage;
 
@@ -930,6 +986,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
 
     /**
      * Inspired by https://etherscan.io/address/0xE8b2989276E2Ca8FDEA2268E3551b2b4B2418950#code
+     * @notice Get the price of a CurveV1 derivative in terms of USD.
      */
     function _getPriceForCurveV2Derivative(
         ERC20 asset,
@@ -989,6 +1046,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         getAaveDerivativeStorage[_asset] = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
     }
 
+    /**
+     * @notice Get the price of an Aave derivative in terms of USD.
+     */
     function _getPriceForAaveDerivative(
         ERC20 asset,
         address,
@@ -997,6 +1057,4 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         asset = getAaveDerivativeStorage[asset];
         return _getPriceInUSD(asset, getAssetSettings[asset], cache);
     }
-
-    // =========================================== COMPOUND PRICE DERIVATIVE ===========================================
 }

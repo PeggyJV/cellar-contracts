@@ -2,12 +2,10 @@
 pragma solidity 0.8.16;
 
 import { ERC4626, SafeTransferLib, Math, ERC20 } from "./ERC4626.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
 import { Uint32Array } from "src/utils/Uint32Array.sol";
-import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
@@ -21,7 +19,6 @@ import { Owned } from "@solmate/auth/Owned.sol";
 contract Cellar is ERC4626, Owned, ERC721Holder {
     using Uint32Array for uint32[];
     using SafeTransferLib for ERC20;
-    using SafeCast for uint256;
     using Math for uint256;
     using Address for address;
 
@@ -440,8 +437,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     // =========================================== CONSTRUCTOR ===========================================
-
-    error Cellar__DebtInWrongArray();
     /**
      * @notice Addresses of the positions currently used by the cellar.
      */
@@ -475,7 +470,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param _asset address of underlying token used for the for accounting, depositing, and withdrawing
      * @param _name name of this cellar's share token
      * @param _symbol symbol of this cellar's share token
-     * @param params abi encode valeus.
+     * @param params abi encode values.
      *               -  _creditPositions ids of the credit positions to initialize the cellar with
      *               -  _debtPositions ids of the credit positions to initialize the cellar with
      *               -  _creditConfigurationData configuration data for each position
@@ -505,10 +500,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
             // Initialize positions.
             holdingIndex = _holdingIndex;
-            for (uint32 i; i < _creditPositions.length; i++) {
+            for (uint32 i; i < _creditPositions.length; ++i) {
                 _addPosition(i, _creditPositions[i], _creditConfigurationData[i], false);
             }
-            for (uint32 i; i < _debtPositions.length; i++) {
+            for (uint32 i; i < _debtPositions.length; ++i) {
                 _addPosition(i, _debtPositions[i], _debtConfigurationData[i], true);
             }
         }
@@ -577,7 +572,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     error Cellar__NotApprovedToDepositOnBehalf(address depositor);
 
     /**
-     * @notice Shares must be locked for atleast 5 minutes after minting.
+     * @notice Shares must be locked for at least 5 minutes after minting.
      */
     uint256 public constant MINIMUM_SHARE_LOCK_PERIOD = 5 * 60;
 
@@ -587,12 +582,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     uint256 public constant MAXIMUM_SHARE_LOCK_PERIOD = 2 days;
 
     /**
-     * @notice After deposits users must wait `shareLockPeriod` blocks before being able to transfer or withdraw their shares.
+     * @notice After deposits users must wait `shareLockPeriod` time before being able to transfer or withdraw their shares.
      */
     uint256 public shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
 
     /**
-     * @notice mapping that stores every users last block they minted shares.
+     * @notice mapping that stores every users last time stamp they minted shares.
      */
     mapping(address => uint256) public userShareLockStartTime;
 
@@ -828,7 +823,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Get the price router.
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         uint256 creditLength = creditPositions.length;
-        for (uint256 i; i < creditLength; i++) {
+        for (uint256 i; i < creditLength; ++i) {
             // Move on to next position if this one is empty.
             uint32 position = creditPositions[i];
             if (_balanceOf(position) == 0) continue;
@@ -865,6 +860,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     // ========================================= ACCOUNTING LOGIC =========================================
 
+    /**
+     * @notice Internal accounting function that can report total assets, or total assets withdrawable.
+     * @param reportWithdrawable if true, then the withdrawable total assets is reported,
+     *                           if false, then the total assets is reported
+     */
     function _accounting(bool reportWithdrawable) internal view returns (uint256 assets) {
         uint256 numOfCreditPositions = creditPositions.length;
         ERC20[] memory creditAssets = new ERC20[](numOfCreditPositions);
@@ -872,7 +872,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         // If we just need the withdrawable, then query credit array value.
         if (reportWithdrawable) {
-            for (uint256 i; i < numOfCreditPositions; i++) {
+            for (uint256 i; i < numOfCreditPositions; ++i) {
                 uint32 position = creditPositions[i];
                 // If the withdrawable balance is zero there is no point to query the asset since a zero balance has zero value.
                 if ((creditBalances[i] = _withdrawableFrom(position)) == 0) continue;
@@ -883,13 +883,13 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             uint256 numOfDebtPositions = debtPositions.length;
             ERC20[] memory debtAssets = new ERC20[](numOfDebtPositions);
             uint256[] memory debtBalances = new uint256[](numOfDebtPositions);
-            for (uint256 i; i < numOfCreditPositions; i++) {
+            for (uint256 i; i < numOfCreditPositions; ++i) {
                 uint32 position = creditPositions[i];
                 // If the balance is zero there is no point to query the asset since a zero balance has zero value.
                 if ((creditBalances[i] = _balanceOf(position)) == 0) continue;
                 creditAssets[i] = _assetOf(position);
             }
-            for (uint256 i; i < numOfDebtPositions; i++) {
+            for (uint256 i; i < numOfDebtPositions; ++i) {
                 uint32 position = debtPositions[i];
                 // If the balance is zero there is no point to query the asset since a zero balance has zero value.
                 if ((debtBalances[i] = _balanceOf(position)) == 0) continue;
@@ -994,10 +994,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             if (timeSharesAreUnlocked > block.timestamp) return 0;
         }
         // Get amount of assets to withdraw.
-        uint256 _totalAssets = totalAssets();
+        uint256 _totalAssets = _accounting(false);
         uint256 assets = _convertToAssets(balanceOf[owner], _totalAssets);
 
-        uint256 withdrawable = totalAssetsWithdrawable();
+        uint256 withdrawable = _accounting(true);
         maxOut = assets <= withdrawable ? assets : withdrawable;
 
         if (inShares) maxOut = _convertToShares(maxOut, _totalAssets);
@@ -1165,12 +1165,15 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     /**
-     * @notice Allows strategists to manage their Cellar using arbritrary logic calls to adaptors.
-     * @dev There are several safety checks in this function to prevernt strategists from abusing it.
+     * @notice Allows strategists to manage their Cellar using arbitrary logic calls to adaptors.
+     * @dev There are several safety checks in this function to prevent strategists from abusing it.
      *      - `blockExternalReceiver`
      *      - `totalAssets` must not change by much
      *      - `totalShares` must remain constant
      *      - adaptors must be set up to be used with this cellar
+     * @dev Since `totalAssets` is allowed to deviate slightly, strategists could abuse this by sending
+     *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
+     *      To mitigate this, rate limiting will be put in place on the Sommelier side.
      */
     function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner whenNotShutdown nonReentrant {
         blockExternalReceiver = true;
@@ -1187,7 +1190,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         }
 
         // Run all adaptor calls.
-        for (uint8 i = 0; i < data.length; i++) {
+        for (uint8 i = 0; i < data.length; ++i) {
             address adaptor = data[i].adaptor;
             if (!isAdaptorSetup[adaptor]) revert Cellar__AdaptorNotSetUp(adaptor);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
@@ -1238,7 +1241,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         AdaptorCall[] memory data = abi.decode(params, (AdaptorCall[]));
 
         // Run all adaptor calls.
-        for (uint8 i = 0; i < data.length; i++) {
+        for (uint8 i = 0; i < data.length; ++i) {
             address adaptor = data[i].adaptor;
             if (!isAdaptorSetup[adaptor]) revert Cellar__AdaptorNotSetUp(adaptor);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
@@ -1247,7 +1250,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         }
 
         // Approve pool to repay all debt.
-        for (uint256 i = 0; i < amounts.length; i++) {
+        for (uint256 i = 0; i < amounts.length; ++i) {
             ERC20(assets[i]).safeApprove(aavePool, (amounts[i] + premiums[i]));
         }
 
@@ -1440,7 +1443,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     function getPositionAssets() external view returns (ERC20[] memory assets) {
         assets = new ERC20[](creditPositions.length);
-        for (uint256 i = 0; i < creditPositions.length; i++) {
+        for (uint256 i = 0; i < creditPositions.length; ++i) {
             assets[i] = _assetOf(creditPositions[i]);
         }
     }

@@ -192,6 +192,7 @@ abstract contract BaseAdaptor {
 
     /**
      * @notice Helper function to make safe "blind" Uniswap Swaps by comparing value in vs value out of the swap.
+     * @dev Only works for Uniswap V2 or V3 exchanges.
      * @param assetIn the asset to make a swap with
      * @param assetOut the asset to get out of the swap
      * @param amountIn the amount of `assetIn` to swap with, can be type(uint256).max

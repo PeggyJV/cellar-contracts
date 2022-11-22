@@ -57,7 +57,7 @@ contract CTokenAdaptor is BaseAdaptor {
     /**
      * @notice Cellar must approve market to spend its assets, then call mint to lend its assets.
      * @param assets the amount of assets to lend on Compound
-     * @param adaptorData adaptor data containining the abi encoded cToken
+     * @param adaptorData adaptor data containing the abi encoded cToken
      * @dev configurationData is NOT used
      */
     function deposit(
@@ -65,7 +65,7 @@ contract CTokenAdaptor is BaseAdaptor {
         bytes memory adaptorData,
         bytes memory
     ) public override {
-        // Deposit assets to Aave.
+        // Deposit assets to Compound.
         CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
         ERC20 token = ERC20(cToken.underlying());
         token.safeApprove(address(cToken), assets);
@@ -77,7 +77,7 @@ contract CTokenAdaptor is BaseAdaptor {
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
      * @param assets the amount of assets to withdraw from Compound
      * @param receiver the address to send withdrawn assets to
-     * @param adaptorData adaptor data containining the abi encoded cToken
+     * @param adaptorData adaptor data containing the abi encoded cToken
      * @dev configurationData is NOT used
      * @dev There are NO health factor checks done in `withdraw`, or `withdrawableFrom`.
      *      If cellars ever take on Compound Debt it is crucial these checks are added,
@@ -115,9 +115,10 @@ contract CTokenAdaptor is BaseAdaptor {
     /**
      * @notice Returns the cellars balance of the positions cToken underlying.
      * @dev Relies on `exchangeRateStored`, so if the stored exchange rate diverges
-     *      from the current exchange rate, an arbitrage oppurtunity is created for
+     *      from the current exchange rate, an arbitrage opportunity is created for
      *      people to enter the cellar right before the stored value is updated, then
-     *      leave immediately after
+     *      leave immediately after. This is mitigated by the shareLockPeriod,
+     *      and because it is rare for the exchange rates to diverge significantly.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
