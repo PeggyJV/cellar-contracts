@@ -1211,7 +1211,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // ========================================= Aave Flash Loan Support =========================================
 
     /**
-     * @notice Extenal contract attempted to initiate a flash loan.
+     * @notice External contract attempted to initiate a flash loan.
      */
     error Cellar__ExternalInitiator();
 
