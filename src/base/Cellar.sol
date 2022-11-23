@@ -829,10 +829,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         uint256 creditLength = creditPositions.length;
         for (uint256 i; i < creditLength; ++i) {
-            // Move on to next position if this one is empty.
             uint32 position = creditPositions[i];
-            if (_balanceOf(position) == 0) continue;
             uint256 withdrawableBalance = _withdrawableFrom(position);
+            // Move on to next position if this one is empty.
             if (withdrawableBalance == 0) continue;
             ERC20 positionAsset = _assetOf(position);
 

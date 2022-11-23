@@ -379,7 +379,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
     /**
      * @notice Checks that given `positionId` exists, and is owned by the cellar.
      */
-    function _checkPositionId(uint256 positionId) internal {
+    function _checkPositionId(uint256 positionId) internal view {
         // Make sure the cellar owns this positionId. Also checks the positionId exists.
         if (positionManager().ownerOf(positionId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(positionId);
     }
