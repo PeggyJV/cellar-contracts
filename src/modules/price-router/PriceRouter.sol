@@ -188,6 +188,18 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     // ======================================= PRICING OPERATIONS =======================================
+
+    /**
+     * @notice Get `asset` price in USD.
+     * @dev Returns price in USD with 8 decimals.
+     */
+    function getPriceInUSD(ERC20 asset) external returns (uint256) {
+        AssetSettings memory assetSettings = getAssetSettings[asset];
+        // Create an empty Price Cache.
+        PriceCache[PRICE_CACHE_SIZE] memory cache;
+        return _getPriceInUSD(asset, assetSettings, cache);
+    }
+
     /**
      * @notice Get the value of an asset in terms of another asset.
      * @param baseAsset address of the asset to get the price of in terms of the quote asset

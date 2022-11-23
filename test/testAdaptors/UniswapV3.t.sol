@@ -20,6 +20,9 @@ import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol"
 import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
+import "@uniswapV3C/libraries/FixedPoint128.sol";
+import "@uniswapV3C/libraries/FullMath.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -29,6 +32,7 @@ contract UniswapV3AdaptorTest is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
+    using Address for address;
 
     MockCellar private cellar;
     MockGravity private gravity;
@@ -108,10 +112,6 @@ contract UniswapV3AdaptorTest is Test {
         price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
         priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
-
-        // priceRouter.addAsset(USDC, 0, 0, false, 0);
-        // priceRouter.addAsset(DAI, 0, 0, false, 0);
-        // priceRouter.addAsset(WETH, 0, 0, false, 0);
 
         // Cellar positions array.
         uint32[] memory positions = new uint32[](5);
@@ -322,6 +322,10 @@ contract UniswapV3AdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
+    function testIsDebtReturnsFalse() external {
+        assertTrue(!uniswapV3Adaptor.isDebt(), "Adaptor does not report debt.");
+    }
+
     // ========================================== REVERT TEST ==========================================
     function testUsingUntrackedLPPosition() external {
         // Remove USDC WETH LP position from cellar.
@@ -368,11 +372,73 @@ contract UniswapV3AdaptorTest is Test {
         );
     }
 
-    function testIsDebtReturnsFalse() external {
-        assertTrue(!uniswapV3Adaptor.isDebt(), "Adaptor does not report debt.");
+    function testUsingLPTokensNotOwnedByCellarOrTokensThatDoNotExist() external {
+        deal(address(USDC), address(cellar), 100_000e6);
+        deal(address(DAI), address(cellar), 100_000e6);
+
+        uint256 tokenId = 100;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Strategist first tries to add funds to a NFT the cellar does not own.
+        {
+            adaptorCalls[0] = abi.encodeWithSelector(
+                UniswapV3Adaptor.addToPosition.selector,
+                tokenId,
+                type(uint256).max,
+                type(uint256).max,
+                0,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            vm.expectRevert(
+                bytes(abi.encodeWithSelector(UniswapV3Adaptor.UniswapV3Adaptor__NotTheOwner.selector, tokenId))
+            );
+            cellar.callOnAdaptor(data);
+        }
+
+        // Strategist tries to add funds to a NFT that does not exist.
+        tokenId = type(uint256).max;
+        {
+            adaptorCalls[0] = abi.encodeWithSelector(
+                UniswapV3Adaptor.addToPosition.selector,
+                tokenId,
+                type(uint256).max,
+                type(uint256).max,
+                0,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            vm.expectRevert(bytes("ERC721: owner query for nonexistent token"));
+            cellar.callOnAdaptor(data);
+        }
+    }
+
+    function testRemovingMoreLiquidityThenWhatIsInToken() external {
+        deal(address(USDC), address(cellar), 100_000e6);
+        deal(address(DAI), address(cellar), 100_000e6);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Open a position.
+        adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, type(uint256).max, 30);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Take more liquidity than available.
+        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 1.01e18);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        vm.expectRevert(bytes("Address: low-level delegate call failed"));
+        cellar.callOnAdaptor(data);
     }
 
     // ========================================== INTEGRATION TEST ==========================================
+    /**
+     * @notice Used to check if fees are being collected.
+     */
+    event Collect(uint256 indexed tokenId, address recipient, uint256 amount0, uint256 amount1);
+
     function testIntegration() external {
         // Manage positions to reflect the following
         // 0) USDC
@@ -443,59 +509,61 @@ contract UniswapV3AdaptorTest is Test {
         cellar.callOnAdaptor(data);
 
         // Have test contract perform a ton of swaps in Uniswap V3 DAI/USDC and USDC/WETH pools.
-        uint256 assetsToSwap = 1_000_000e6;
-        deal(address(USDC), address(this), assetsToSwap);
-        address[] memory path0 = new address[](2);
-        path0[0] = address(USDC);
-        path0[1] = address(DAI);
-        address[] memory path1 = new address[](2);
-        path1[0] = address(USDC);
-        path1[1] = address(WETH);
-        address[] memory path2 = new address[](2);
-        path2[0] = address(DAI);
-        path2[1] = address(USDC);
-        address[] memory path3 = new address[](2);
-        path3[0] = address(WETH);
-        path3[1] = address(USDC);
-        bytes memory swapData;
-        uint24[] memory poolFees_100 = new uint24[](1);
-        poolFees_100[0] = 100;
-        uint24[] memory poolFees_500 = new uint24[](1);
-        poolFees_500[0] = 500;
-        uint24[] memory poolFees_3000 = new uint24[](1);
-        poolFees_3000[0] = 3000;
-        uint24[] memory poolFees_10000 = new uint24[](1);
-        poolFees_10000[0] = 10000;
+        {
+            uint256 assetsToSwap = 1_000_000e6;
+            deal(address(USDC), address(this), assetsToSwap);
+            address[] memory path0 = new address[](2);
+            path0[0] = address(USDC);
+            path0[1] = address(DAI);
+            address[] memory path1 = new address[](2);
+            path1[0] = address(USDC);
+            path1[1] = address(WETH);
+            address[] memory path2 = new address[](2);
+            path2[0] = address(DAI);
+            path2[1] = address(USDC);
+            address[] memory path3 = new address[](2);
+            path3[0] = address(WETH);
+            path3[1] = address(USDC);
+            bytes memory swapData;
+            uint24[] memory poolFees_100 = new uint24[](1);
+            poolFees_100[0] = 100;
+            uint24[] memory poolFees_500 = new uint24[](1);
+            poolFees_500[0] = 500;
+            uint24[] memory poolFees_3000 = new uint24[](1);
+            poolFees_3000[0] = 3000;
+            uint24[] memory poolFees_10000 = new uint24[](1);
+            poolFees_10000[0] = 10000;
 
-        USDC.safeApprove(address(swapRouter), type(uint256).max);
-        DAI.safeApprove(address(swapRouter), type(uint256).max);
-        WETH.safeApprove(address(swapRouter), type(uint256).max);
-        for (uint256 i = 0; i < 10; i++) {
-            uint256 swapAmount = assetsToSwap / 2;
-            swapData = abi.encode(path0, poolFees_100, swapAmount, 0);
-            uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
-            swapData = abi.encode(path1, poolFees_500, swapAmount, 0);
-            uint256 wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
-            swapData = abi.encode(path2, poolFees_100, daiAmount, 0);
-            assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
-            swapData = abi.encode(path3, poolFees_500, wethAmount, 0);
-            assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+            USDC.safeApprove(address(swapRouter), type(uint256).max);
+            DAI.safeApprove(address(swapRouter), type(uint256).max);
+            WETH.safeApprove(address(swapRouter), type(uint256).max);
+            for (uint256 i = 0; i < 10; i++) {
+                uint256 swapAmount = assetsToSwap / 2;
+                swapData = abi.encode(path0, poolFees_100, swapAmount, 0);
+                uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                swapData = abi.encode(path1, poolFees_500, swapAmount, 0);
+                uint256 wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                swapData = abi.encode(path2, poolFees_100, daiAmount, 0);
+                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                swapData = abi.encode(path3, poolFees_500, wethAmount, 0);
+                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
 
-            swapAmount = assetsToSwap / 2;
-            swapData = abi.encode(path0, poolFees_500, swapAmount, 0);
-            daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
-            swapData = abi.encode(path1, poolFees_3000, swapAmount, 0);
-            wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
-            swapData = abi.encode(path2, poolFees_500, daiAmount, 0);
-            assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
-            swapData = abi.encode(path3, poolFees_3000, wethAmount, 0);
-            assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                swapAmount = assetsToSwap / 2;
+                swapData = abi.encode(path0, poolFees_500, swapAmount, 0);
+                daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                swapData = abi.encode(path1, poolFees_3000, swapAmount, 0);
+                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                swapData = abi.encode(path2, poolFees_500, daiAmount, 0);
+                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                swapData = abi.encode(path3, poolFees_3000, wethAmount, 0);
+                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
 
-            swapAmount = assetsToSwap;
-            swapData = abi.encode(path1, poolFees_10000, swapAmount, 0);
-            wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
-            swapData = abi.encode(path3, poolFees_10000, wethAmount, 0);
-            assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                swapAmount = assetsToSwap;
+                swapData = abi.encode(path1, poolFees_10000, swapAmount, 0);
+                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                swapData = abi.encode(path3, poolFees_10000, wethAmount, 0);
+                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+            }
         }
 
         {
@@ -506,10 +574,10 @@ contract UniswapV3AdaptorTest is Test {
             adaptorCalls[1] = _createBytesDataToCollectFees(address(cellar), 1, type(uint128).max, type(uint128).max);
             adaptorCalls[2] = _createBytesDataToCollectFees(address(cellar), 2, type(uint128).max, type(uint128).max);
 
-            // Take all liquidity from tokens 3, 4, 5 using takeFromPosition.
+            // Take varying amounts of liquidity from tokens 3, 4, 5 using takeFromPosition.
             adaptorCalls[3] = _createBytesDataToTakeLP(address(cellar), 3, 1e18);
-            adaptorCalls[4] = _createBytesDataToTakeLP(address(cellar), 4, 1e18);
-            adaptorCalls[5] = _createBytesDataToTakeLP(address(cellar), 5, 1e18);
+            adaptorCalls[4] = _createBytesDataToTakeLP(address(cellar), 4, 0.75e18);
+            adaptorCalls[5] = _createBytesDataToTakeLP(address(cellar), 5, 0.5e18);
 
             //// Take all liquidity from tokens 6, 7, 8, 9 using closePosition.
             adaptorCalls[6] = _createBytesDataToCloseLP(address(cellar), 6);
@@ -526,21 +594,163 @@ contract UniswapV3AdaptorTest is Test {
         // Change rebalance deviation, so the rebalance check passes. Normally any yield would be sent to a vesting contract,
         // but for simplicity this test is not doing that.
         cellar.setRebalanceDeviation(0.01e18);
+
+        // Check that all Cellar NFT positions have their Fees Collected by checking emitted Collect events.
+        uint256[] memory nfts = new uint256[](10);
+        for (uint8 i; i < 10; i++) {
+            nfts[i] = positionManager.tokenOfOwnerByIndex(address(cellar), i);
+            vm.expectEmit(true, true, false, false, address(positionManager));
+            emit Collect(nfts[i], address(cellar), 0, 0);
+        }
         cellar.callOnAdaptor(data);
 
-        //TODO check that fees were collected from ALL positions.
-        //TODO check that closePosition positions NFT were transferred to the dead address.
+        // Check that closePosition positions NFT were transferred to the dead address.
+        for (uint8 i = 6; i < 10; i++) {
+            assertEq(positionManager.ownerOf(nfts[i]), address(1), "NFT should be owned by DEAD address.");
+        }
 
-        //TODO Use new liquidity to add to remaining LP positions.
-        //TODO Have a user deposit more funds, and add liquidity to some positions that takeFromPosition was used to take all the liquidity from.
+        // New User deposits more funds.
+        assets = 100_000e6;
+        address user = vm.addr(7777);
+        deal(address(USDC), user, assets);
+        vm.startPrank(user);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        vm.stopPrank();
 
-        //TODO try to do stuff with LP tokens the cellar does not own/ LP tokens that do not exist.
+        // Add to some LP positions.
+        {
+            bytes[] memory adaptorCalls = new bytes[](5);
+            uint256 usdcToUse = assets.mulDivDown(25, 100);
 
-        //TODO what if takeFromPosition specifies a liquidity greater than the amount in the token.
-        //TODO if strategist tries to open an LP position that is not set up? Think the TVL check would fail
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
+            adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
 
-        //TODO Run another round of swaps to generate fees.
-        //TODO Close all positions, and have users exit the cellar.
+            // Since we are dividing the USDC into 2 LP positions each, cut it in half.
+            usdcToUse = usdcToUse / 2;
+
+            // Add liquidity to DAI/USDC positions.
+            adaptorCalls[2] = _createBytesDataToAddLP(address(cellar), 3, type(uint256).max, usdcToUse);
+            adaptorCalls[3] = _createBytesDataToAddLP(address(cellar), 4, type(uint256).max, usdcToUse);
+
+            // Add liquidity to USDC/WETH position.
+            adaptorCalls[4] = _createBytesDataToAddLP(address(cellar), 4, 2 * usdcToUse, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // Run another round of swaps to generate fees.
+        // Have test contract perform a ton of swaps in Uniswap V3 DAI/USDC and USDC/WETH pools.
+        {
+            uint256 assetsToSwap = 1_000_000e6;
+            deal(address(USDC), address(this), assetsToSwap);
+            address[] memory path0 = new address[](2);
+            path0[0] = address(USDC);
+            path0[1] = address(DAI);
+            address[] memory path1 = new address[](2);
+            path1[0] = address(USDC);
+            path1[1] = address(WETH);
+            address[] memory path2 = new address[](2);
+            path2[0] = address(DAI);
+            path2[1] = address(USDC);
+            address[] memory path3 = new address[](2);
+            path3[0] = address(WETH);
+            path3[1] = address(USDC);
+            bytes memory swapData;
+            uint24[] memory poolFees_100 = new uint24[](1);
+            poolFees_100[0] = 100;
+            uint24[] memory poolFees_500 = new uint24[](1);
+            poolFees_500[0] = 500;
+            uint24[] memory poolFees_3000 = new uint24[](1);
+            poolFees_3000[0] = 3000;
+            uint24[] memory poolFees_10000 = new uint24[](1);
+            poolFees_10000[0] = 10000;
+
+            USDC.safeApprove(address(swapRouter), type(uint256).max);
+            DAI.safeApprove(address(swapRouter), type(uint256).max);
+            WETH.safeApprove(address(swapRouter), type(uint256).max);
+            for (uint256 i = 0; i < 10; i++) {
+                uint256 swapAmount = assetsToSwap / 2;
+                swapData = abi.encode(path0, poolFees_100, swapAmount, 0);
+                uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                swapData = abi.encode(path1, poolFees_500, swapAmount, 0);
+                uint256 wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                swapData = abi.encode(path2, poolFees_100, daiAmount, 0);
+                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                swapData = abi.encode(path3, poolFees_500, wethAmount, 0);
+                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+
+                swapAmount = assetsToSwap / 2;
+                swapData = abi.encode(path0, poolFees_500, swapAmount, 0);
+                daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                swapData = abi.encode(path1, poolFees_3000, swapAmount, 0);
+                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                swapData = abi.encode(path2, poolFees_500, daiAmount, 0);
+                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                swapData = abi.encode(path3, poolFees_3000, wethAmount, 0);
+                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+
+                swapAmount = assetsToSwap;
+                swapData = abi.encode(path1, poolFees_10000, swapAmount, 0);
+                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                swapData = abi.encode(path3, poolFees_10000, wethAmount, 0);
+                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+            }
+        }
+
+        // Close all positions.
+        {
+            bytes[] memory adaptorCalls = new bytes[](6);
+
+            //// Take all liquidity from tokens 0, 1, 2, 3, 4, and 5 using closePosition.
+            adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
+            adaptorCalls[1] = _createBytesDataToCloseLP(address(cellar), 1);
+            adaptorCalls[2] = _createBytesDataToCloseLP(address(cellar), 2);
+            adaptorCalls[3] = _createBytesDataToCloseLP(address(cellar), 3);
+            adaptorCalls[4] = _createBytesDataToCloseLP(address(cellar), 4);
+            adaptorCalls[5] = _createBytesDataToCloseLP(address(cellar), 5);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
+
+        // Check that all Cellar NFT positions have their Fees Collected by checking emitted Collect events.
+        nfts = new uint256[](6);
+        for (uint8 i; i < 6; i++) {
+            nfts[i] = positionManager.tokenOfOwnerByIndex(address(cellar), i);
+            vm.expectEmit(true, true, false, false, address(positionManager));
+            emit Collect(nfts[i], address(cellar), 0, 0);
+        }
+        cellar.callOnAdaptor(data);
+        assertEq(positionManager.balanceOf(address(cellar)), 0, "Cellar should have no more LP positions.");
+
+        // Strategist converts DAI and WETH to USDC for easier withdraws.
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+
+            adaptorCalls[0] = _createBytesDataForSwap(DAI, USDC, 100, DAI.balanceOf(address(cellar)));
+            adaptorCalls[1] = _createBytesDataForSwap(WETH, USDC, 500, WETH.balanceOf(address(cellar)));
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        // Advance time so users can withdraw.
+        vm.roll(block.timestamp + cellar.shareLockPeriod());
+
+        // Have users exit the cellar.
+        uint256 whaleAssetsToWithdraw = cellar.maxWithdraw(whale);
+        uint256 userAssetsToWithdraw = cellar.maxWithdraw(user);
+        uint256 cellarAssets = cellar.totalAssets();
+        uint256 cellarLiability = whaleAssetsToWithdraw + userAssetsToWithdraw;
+        assertGe(cellarAssets, cellarLiability, "Cellar Assets should be greater than or equal to its Liability.");
+
+        vm.startPrank(whale);
+        cellar.redeem(cellar.balanceOf(whale), whale, whale);
+        vm.stopPrank();
+
+        vm.startPrank(user);
+        cellar.redeem(cellar.balanceOf(user), user, user);
+        vm.stopPrank();
     }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
@@ -658,7 +868,7 @@ contract UniswapV3AdaptorTest is Test {
         uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
         (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager.positions(tokenId);
         uint128 liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
-        return abi.encodeWithSelector(UniswapV3Adaptor.takeFromPosition.selector, tokenId, liquidity, 0, 0);
+        return abi.encodeWithSelector(UniswapV3Adaptor.takeFromPosition.selector, tokenId, liquidity, 0, 0, true);
     }
 
     function _createBytesDataToCollectFees(
