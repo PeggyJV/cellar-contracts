@@ -168,7 +168,10 @@ contract AaveATokenAdaptor is BaseAdaptor {
 
         // Else convert `maxBorrowableWithMin` from WETH to position underlying asset.
         PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(2));
-        return priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
+        uint256 withdrawable = priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
+        uint256 balance = ERC20(address(token)).balanceOf(msg.sender);
+        // Check if withdrawable is greater than the position balance and if so return the balance instead of withdrawable.
+        return withdrawable > balance ? balance : withdrawable;
     }
 
     /**

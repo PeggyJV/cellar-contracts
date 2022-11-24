@@ -41,8 +41,8 @@ contract CellarAaveTest is Test {
     ERC20 private aUSDC = ERC20(0xBcca60bB61934080951369a648Fb03DF4F96263C);
     ERC20 private dUSDC = ERC20(0x619beb58998eD2278e08620f97007e1116D5D25b);
     ERC20 private dWETH = ERC20(0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf);
-    ERC20 private CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
-    ERC20 private dCVX = ERC20(0x4Ae5E4409C6Dbc84A00f9f89e4ba096603fb7d50);
+    ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
+    ERC20 private aWBTC = ERC20(0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656);
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
@@ -51,6 +51,8 @@ contract CellarAaveTest is Test {
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
+    // Note this is the BTC USD data feed, but we assume the risk that WBTC depegs from BTC.
+    address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
 
     uint32 private usdcPosition;
     uint32 private aUSDCPosition;
@@ -77,6 +79,10 @@ contract CellarAaveTest is Test {
         price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(WBTC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WBTC_USD_FEED);
+        priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
 
         // Setup Cellar:
         // Cellar positions array.
@@ -152,9 +158,6 @@ contract CellarAaveTest is Test {
         );
     }
 
-    //TODO add test seeing if strategists can take on debt in untracked positions.
-    // //TODO test balanceOf adaptor position
-    // //TODO test assetOf adaptor position
     function testTotalAssets() external {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
@@ -183,6 +186,32 @@ contract CellarAaveTest is Test {
             1,
             "Cellar should have dUSDC worth of assets/2."
         );
+    }
+
+    function testTakingOutLoansInUntrackedPosition() external {
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 1, "Cellar should have aUSDC worth of assets.");
+
+        // Take out a USDC loan.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        uint256 usdcPrice = priceRouter.getExchangeRate(USDC, WETH);
+        uint256 wethLoanAmount = assets.mulDivDown(10**WETH.decimals(), usdcPrice) / 2;
+        adaptorCalls[0] = _createBytesDataToBorrow(dWETH, wethLoanAmount);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(aaveDebtTokenAdaptor), callData: adaptorCalls });
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    AaveDebtTokenAdaptor.AaveDebtTokenAdaptor__DebtPositionsMustBeTracked.selector,
+                    address(dWETH)
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
     }
 
     function testRepayingLoans() external {
@@ -402,12 +431,6 @@ contract CellarAaveTest is Test {
             USDC.balanceOf(address(cellar)),
             "Only assets withdrawable should be USDC sitting in the cellar."
         );
-
-        // (, , , uint256 currentLiquidationThreshold, , uint256 healthFactor) = IPool(
-        //     0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9
-        // ).getUserAccountData(address(cellar));
-        // console.log("Health Factor after flash loan", healthFactor);
-        // console.log("CLT", currentLiquidationThreshold);
     }
 
     function testMulitipleATokensAndDebtTokens() external {
@@ -477,7 +500,235 @@ contract CellarAaveTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    //TODO is it possible to repay a debt position the cellar does not have?
+    function testRepayingDebtThatIsNotOwed() external {
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToRepay(USDC, 1e6);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(aaveDebtTokenAdaptor), callData: adaptorCalls });
+
+        // Error code 15: No debt of selected type.
+        vm.expectRevert(bytes("15"));
+        cellar.callOnAdaptor(data);
+    }
+
+    function testBlockExternalReceiver() external {
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Strategist tries to withdraw USDC to their own wallet using Adaptor's `withdraw` function.
+        address maliciousStrategist = vm.addr(10);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = abi.encodeWithSelector(
+            AaveATokenAdaptor.withdraw.selector,
+            100e6,
+            maliciousStrategist,
+            abi.encode(address(aUSDC)),
+            abi.encode(0)
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(aaveDebtTokenAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
+    // ========================================== INTEGRATION TEST ==========================================
+
+    function testIntegration() external {
+        // Manage positions to reflect the following
+        // 0) aUSDC (holding)
+        // 1) aWETH
+        // 2) aWBTC
+
+        // Debt Position
+        // 0) dUSDC
+        uint32 aWETHPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aWETH)), 0, 0);
+        uint32 aWBTCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aWBTC)), 0, 0);
+        cellar.addPosition(1, aWETHPosition, abi.encode(0), false);
+        cellar.addPosition(2, aWBTCPosition, abi.encode(0), false);
+        cellar.removePosition(3, false);
+
+        // Have whale join the cellar with 1M USDC.
+        uint256 assets = 1_000_000e6;
+        address whale = vm.addr(777);
+        deal(address(USDC), whale, assets);
+        vm.startPrank(whale);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, whale);
+        vm.stopPrank();
+
+        // Strategist manages cellar in order to achieve the following portfolio.
+        // ~20% in aUSDC.
+        // ~40% Aave aWETH/dUSDC with 2x LONG on WETH.
+        // ~40% Aave aWBTC/dUSDC with 3x LONG on WBTC.
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
+        // Create data to withdraw USDC, swap for WETH and WBTC and lend them on Aave.
+        {
+            uint256 amountToSwap = assets.mulDivDown(8, 10);
+            bytes[] memory adaptorCalls = new bytes[](5);
+            adaptorCalls[0] = _createBytesDataToWithdraw(USDC, assets.mulDivDown(8, 10));
+            adaptorCalls[1] = _createBytesDataForSwap(USDC, WETH, 500, amountToSwap);
+            amountToSwap = priceRouter.getValue(USDC, amountToSwap / 2, WETH);
+            adaptorCalls[2] = _createBytesDataForSwap(WETH, WBTC, 500, amountToSwap);
+
+            adaptorCalls[3] = _createBytesDataToLend(WETH, type(uint256).max);
+            adaptorCalls[4] = _createBytesDataToLend(WBTC, type(uint256).max);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Create data to flash loan USDC, sell it, and lend more WETH and WBTC on Aave.
+        {
+            // Want to borrow 3x 40% of assets
+            uint256 USDCtoFlashLoan = assets.mulDivDown(12, 10);
+            // Borrow the flash loan amount + premium.
+            uint256 USDCtoBorrow = USDCtoFlashLoan.mulDivDown(1e3 + pool.FLASHLOAN_PREMIUM_TOTAL(), 1e3);
+
+            bytes[] memory adaptorCallsForFlashLoan = new bytes[](1);
+            Cellar.AdaptorCall[] memory dataInsideFlashLoan = new Cellar.AdaptorCall[](2);
+            bytes[] memory adaptorCallsInsideFlashLoanFirstAdaptor = new bytes[](4);
+            bytes[] memory adaptorCallsInsideFlashLoanSecondAdaptor = new bytes[](1);
+            // Swap USDC for WETH.
+            adaptorCallsInsideFlashLoanFirstAdaptor[0] = _createBytesDataForSwap(USDC, WETH, 500, USDCtoFlashLoan);
+            // Swap USDC for WBTC.
+            uint256 amountToSwap = priceRouter.getValue(USDC, USDCtoFlashLoan.mulDivDown(2, 3), WETH);
+            adaptorCallsInsideFlashLoanFirstAdaptor[1] = _createBytesDataForSwap(WETH, WBTC, 500, amountToSwap);
+            // Lend USDC on Aave specifying to use the max amount available.
+            adaptorCallsInsideFlashLoanFirstAdaptor[2] = _createBytesDataToLend(WETH, type(uint256).max);
+            adaptorCallsInsideFlashLoanFirstAdaptor[3] = _createBytesDataToLend(WBTC, type(uint256).max);
+            adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToBorrow(dUSDC, USDCtoBorrow);
+            dataInsideFlashLoan[0] = Cellar.AdaptorCall({
+                adaptor: address(aaveATokenAdaptor),
+                callData: adaptorCallsInsideFlashLoanFirstAdaptor
+            });
+            dataInsideFlashLoan[1] = Cellar.AdaptorCall({
+                adaptor: address(aaveDebtTokenAdaptor),
+                callData: adaptorCallsInsideFlashLoanSecondAdaptor
+            });
+            address[] memory loanToken = new address[](1);
+            loanToken[0] = address(USDC);
+            uint256[] memory loanAmount = new uint256[](1);
+            loanAmount[0] = USDCtoFlashLoan;
+            adaptorCallsForFlashLoan[0] = _createBytesDataToFlashLoan(
+                loanToken,
+                loanAmount,
+                abi.encode(dataInsideFlashLoan)
+            );
+            data[1] = Cellar.AdaptorCall({
+                adaptor: address(aaveDebtTokenAdaptor),
+                callData: adaptorCallsForFlashLoan
+            });
+        }
+
+        // Create data to lend remaining USDC on Aave.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(USDC, type(uint256).max);
+
+            data[2] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls });
+        }
+        // Adjust rebalance deviation to account for slippage and fees(swap and flash loan).
+        cellar.setRebalanceDeviation(0.03e18);
+        cellar.callOnAdaptor(data);
+
+        assertLt(cellar.totalAssetsWithdrawable(), assets, "Assets withdrawable should be less than assets.");
+
+        // Whale withdraws as much as they can.
+        vm.startPrank(whale);
+        uint256 assetsToWithdraw = cellar.maxWithdraw(whale);
+        cellar.withdraw(assetsToWithdraw, whale, whale);
+        vm.stopPrank();
+
+        assertEq(USDC.balanceOf(whale), assetsToWithdraw, "Amount withdrawn should equal maxWithdraw for Whale.");
+
+        // Other user joins.
+        assets = 100_000e6;
+        address user = vm.addr(777);
+        deal(address(USDC), user, assets);
+        vm.startPrank(user);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        vm.stopPrank();
+
+        assertApproxEqAbs(
+            cellar.totalAssetsWithdrawable(),
+            assets,
+            1,
+            "Total assets withdrawable should equal user deposit."
+        );
+
+        // Whale withdraws as much as they can.
+        vm.startPrank(whale);
+        assetsToWithdraw = cellar.maxWithdraw(whale);
+        cellar.withdraw(assetsToWithdraw, whale, whale);
+        vm.stopPrank();
+
+        // Strategist must unwind strategy before any more withdraws can be made.
+        assertEq(cellar.totalAssetsWithdrawable(), 0, "There should be no more assets withdrawable.");
+
+        // Strategist is more Bullish on WBTC than WETH, so they unwind the WETH position and keep the WBTC position.
+        data = new Cellar.AdaptorCall[](2);
+        {
+            uint256 cellarAWETH = aWETH.balanceOf(address(cellar));
+            // By lowering the USDC flash loan amount, we free up more aUSDC for withdraw, but lower the health factor
+            uint256 USDCtoFlashLoan = priceRouter.getValue(WETH, cellarAWETH, USDC).mulDivDown(8, 10);
+
+            bytes[] memory adaptorCallsForFlashLoan = new bytes[](1);
+            Cellar.AdaptorCall[] memory dataInsideFlashLoan = new Cellar.AdaptorCall[](2);
+            bytes[] memory adaptorCallsInsideFlashLoanFirstAdaptor = new bytes[](1);
+            bytes[] memory adaptorCallsInsideFlashLoanSecondAdaptor = new bytes[](2);
+            // Repay USDC debt.
+            adaptorCallsInsideFlashLoanFirstAdaptor[0] = _createBytesDataToRepay(USDC, USDCtoFlashLoan);
+            // Withdraw WETH and swap for USDC.
+            adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToWithdraw(WETH, cellarAWETH);
+            adaptorCallsInsideFlashLoanSecondAdaptor[1] = _createBytesDataForSwap(WETH, USDC, 500, cellarAWETH);
+            dataInsideFlashLoan[0] = Cellar.AdaptorCall({
+                adaptor: address(aaveDebtTokenAdaptor),
+                callData: adaptorCallsInsideFlashLoanFirstAdaptor
+            });
+            dataInsideFlashLoan[1] = Cellar.AdaptorCall({
+                adaptor: address(aaveATokenAdaptor),
+                callData: adaptorCallsInsideFlashLoanSecondAdaptor
+            });
+            address[] memory loanToken = new address[](1);
+            loanToken[0] = address(USDC);
+            uint256[] memory loanAmount = new uint256[](1);
+            loanAmount[0] = USDCtoFlashLoan;
+            adaptorCallsForFlashLoan[0] = _createBytesDataToFlashLoan(
+                loanToken,
+                loanAmount,
+                abi.encode(dataInsideFlashLoan)
+            );
+            data[0] = Cellar.AdaptorCall({
+                adaptor: address(aaveDebtTokenAdaptor),
+                callData: adaptorCallsForFlashLoan
+            });
+        }
+
+        // Create data to lend remaining USDC on Aave.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(USDC, type(uint256).max);
+
+            data[1] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls });
+        }
+
+        cellar.callOnAdaptor(data);
+
+        assertGt(
+            cellar.totalAssetsWithdrawable(),
+            100_000e6,
+            "There should a significant amount of assets withdrawable."
+        );
+    }
 
     // ========================================= HELPER FUNCTIONS =========================================
     function _createBytesDataForSwap(
@@ -546,94 +797,4 @@ contract CellarAaveTest is Test {
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveDebtTokenAdaptor.flashLoan.selector, loanToken, loanAmount, params);
     }
-    // //TODO test malicous strategist trying to move funds out of the cellar.
-    // //TODO integration tests maybe looping assets on Aave?
-    // //TODO test blockExternalReceiver
-
-    // function testAavePositions() external {
-    //     cellar.deposit(10000e6, address(this));
-    //     Cellar.AdaptorCall[] memory callInfo = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory callData = new bytes[](2);
-    //     bool[] memory isRevertOkay = new bool[](2);
-
-    //     //borrow data
-    //     callData[0] = abi.encodeWithSelector(AaveDebtTokenAdaptor.borrowFromAave.selector, address(WETH), 1e18);
-    //     isRevertOkay[0] = false;
-
-    //     callData[1] = abi.encodeWithSelector(AaveDebtTokenAdaptor.borrowFromAave.selector, address(CVX), 200e18);
-    //     isRevertOkay[1] = false;
-
-    //     callInfo[0] = Cellar.AdaptorCall({
-    //         adaptor: address(aaveDebtTokenAdaptor),
-    //         callData: callData,
-    //         isRevertOkay: isRevertOkay
-    //     });
-
-    //     //SP Calls on Adaptor
-    //     cellar.callOnAdaptor(callInfo);
-    // }
-
-    // //TODO use swapAndRepay
-    // function testRepayLoanWithCollateral() external {
-    //     cellar.deposit(10_000e6, address(this));
-    //     Cellar.AdaptorCall[] memory callInfo = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory callData = new bytes[](2);
-    //     bool[] memory isRevertOkay = new bool[](2);
-
-    //     //borrow data
-    //     callData[0] = abi.encodeWithSelector(AaveDebtTokenAdaptor.borrowFromAave.selector, address(WETH), 1e18);
-    //     isRevertOkay[0] = false;
-
-    //     callData[1] = abi.encodeWithSelector(AaveDebtTokenAdaptor.borrowFromAave.selector, address(CVX), 200e18);
-    //     isRevertOkay[1] = false;
-
-    //     callInfo[0] = Cellar.AdaptorCall({
-    //         adaptor: address(aaveDebtTokenAdaptor),
-    //         callData: callData,
-    //         isRevertOkay: isRevertOkay
-    //     });
-
-    //     //SP Calls on Adaptor
-    //     cellar.callOnAdaptor(callInfo);
-
-    //     callInfo = new Cellar.AdaptorCall[](2);
-    //     callData = new bytes[](1);
-    //     isRevertOkay = new bool[](1);
-
-    //     // Withdraw 100 USDC from Aave.
-    //     callData[0] = abi.encodeWithSelector(AaveATokenAdaptor.withdrawFromAave.selector, USDC, 99e6);
-    //     isRevertOkay[0] = false;
-    //     callInfo[0] = Cellar.AdaptorCall({
-    //         adaptor: address(aaveATokenAdaptor),
-    //         callData: callData,
-    //         isRevertOkay: isRevertOkay
-    //     });
-
-    //     // Swap USDC for WETH to repay loan
-    //     address[] memory path = new address[](2);
-    //     path[0] = address(USDC);
-    //     path[1] = address(WETH);
-    //     bytes memory swapParams = abi.encode(path, 99e6, 0);
-    //     bytes[] memory callData0 = new bytes[](1);
-    //     callData0[0] = abi.encodeWithSelector(
-    //         AaveDebtTokenAdaptor.swapAndRepay.selector,
-    //         USDC,
-    //         WETH,
-    //         99e6,
-    //         SwapRouter.Exchange.UNIV2,
-    //         swapParams
-    //     );
-    //     isRevertOkay[0] = false;
-    //     callInfo[1] = Cellar.AdaptorCall({
-    //         adaptor: address(aaveDebtTokenAdaptor),
-    //         callData: callData0,
-    //         isRevertOkay: isRevertOkay
-    //     });
-
-    //     uint256 dWETHBalBefore = dWETH.balanceOf(address(cellar));
-
-    //     cellar.callOnAdaptor(callInfo);
-
-    //     assertTrue(dWETHBalBefore > dWETH.balanceOf(address(cellar)), "Some debt should have been repaid.");
-    // }
 }

@@ -72,6 +72,8 @@ contract CellarFactory is Owned {
      * @param initialDeposit if non zero, then this function will make the initial deposit into the cellar
      * @param salt salt used to deterministically deploy the cellar
      * @return clone the address of the cellar clone
+     * @dev Initial Deposit shares are intentionally locked in the factory.
+     *      This way there is always some liquidity and outstanding shares.
      */
     function deploy(
         uint256 version,
@@ -91,7 +93,6 @@ contract CellarFactory is Owned {
             asset.safeTransferFrom(msg.sender, address(this), initialDeposit);
             asset.safeApprove(clone, initialDeposit);
             cellar.deposit(initialDeposit, address(this));
-            //TODO I guess we could transfer the shares out? Or do we wanna "lock" them in here to always have liquidity in the cellars?
         }
         emit CellarDeployed(clone, implementation, salt);
     }
