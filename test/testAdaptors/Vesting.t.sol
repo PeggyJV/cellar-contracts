@@ -64,25 +64,25 @@ contract CellarVestingTest is Test {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
         registry.trustAdaptor(address(vestingAdaptor), 0, 0);
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
-        vestingPosition = registry.trustPosition(address(vestingAdaptor), false, abi.encode(vesting), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
+        vestingPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(vesting), 0, 0);
 
         // Cellar positions array
         uint32[] memory positions = new uint32[](2);
         positions[0] = usdcPosition;
         positions[1] = vestingPosition;
+        uint32[] memory debtPositions;
 
         bytes[] memory positionConfigs = new bytes[](2);
+        bytes[] memory debtConfigs;
 
         // Deploy cellar
         cellar = new MockCellar(
             registry,
             USDC,
-            positions,
-            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            strategist
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
         );
 
         vm.label(address(cellar), "cellar");
@@ -107,7 +107,7 @@ contract CellarVestingTest is Test {
 
     function testCannotTakeUserDeposits() external {
         // Make the vesting adaptor the first position
-        cellar.swapPositions(0, 1);
+        cellar.swapPositions(0, 1, false);
 
         // Set up user2 with funds and have them attempt to deposit
         deal(address(USDC), user2, totalDeposit);
@@ -121,7 +121,7 @@ contract CellarVestingTest is Test {
         vm.stopPrank();
 
         // Fix positions
-        cellar.swapPositions(0, 1);
+        cellar.swapPositions(0, 1, false);
     }
 
     function testDepositToVesting() external {
@@ -223,7 +223,7 @@ contract CellarVestingTest is Test {
 
         // Swap positions so vesting is first, and skip forward
         skip(vestingPeriod + 1);
-        cellar.swapPositions(0, 1);
+        cellar.swapPositions(0, 1, false);
 
         vm.expectEmit(true, true, false, false);
         _emitWithdraw(totalDeposit / 20, 1);
@@ -255,7 +255,7 @@ contract CellarVestingTest is Test {
         assertApproxEqAbs(USDC.balanceOf(address(this)), totalDeposit / 20, 1, "User should withdraw 5% of tokens");
 
         // Swap positions back
-        cellar.swapPositions(0, 1);
+        cellar.swapPositions(0, 1, false);
     }
 
     function testStrategistWithdrawFromVesting() external {

@@ -115,11 +115,11 @@ contract CellarAssetManagerTest is Test {
         registry.trustAdaptor(address(cellarAdaptor), 0, 0);
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
-        usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(usdcCLR), 0, 0);
-        wethCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wethCLR), 0, 0);
-        wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(wbtcCLR), 0, 0);
-        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
+        usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(usdcCLR), 0, 0);
+        wethCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wethCLR), 0, 0);
+        wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wbtcCLR), 0, 0);
+        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
 
         positions[0] = usdcPosition;
         positions[1] = usdcCLRPosition;
@@ -127,16 +127,18 @@ contract CellarAssetManagerTest is Test {
         positions[3] = wbtcCLRPosition;
         positions[4] = wethPosition;
 
+        uint32[] memory debtPositions;
+
         bytes[] memory positionConfigs = new bytes[](5);
+
+        bytes[] memory debtConfigs;
 
         cellar = new MockCellar(
             registry,
             USDC,
-            positions,
-            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            strategist
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
         );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
@@ -367,12 +369,11 @@ contract CellarAssetManagerTest is Test {
 
         uint32 maliciousPosition = registry.trustPosition(
             address(cellarAdaptor),
-            false,
             abi.encode(Cellar(address(maliciousCellar))),
             0,
             0
         );
-        cellar.addPosition(5, maliciousPosition, abi.encode(0));
+        cellar.addPosition(5, maliciousPosition, abi.encode(0), false);
 
         uint256 assets = 10000e6;
         deal(address(USDC), address(this), assets);
@@ -409,16 +410,17 @@ contract CellarAssetManagerTest is Test {
         positions[0] = usdcPosition;
         positions[1] = wethPosition;
 
+        uint32[] memory debtPositions;
+
         bytes[] memory positionConfigs = new bytes[](2);
+        bytes[] memory debtConfigs;
 
         Cellar badCellar = new MockCellar(
             registry,
             USDC,
-            positions,
-            positionConfigs,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            strategist
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
         );
         stdstore.target(address(badCellar)).sig(badCellar.shareLockPeriod.selector).checked_write(uint256(0));
         badCellar.setupAdaptor(address(cellarAdaptor));
@@ -464,12 +466,11 @@ contract CellarAssetManagerTest is Test {
 
         uint32 maliciousPosition = registry.trustPosition(
             address(cellarAdaptor),
-            false,
             abi.encode(Cellar(address(maliciousCellar))),
             0,
             0
         );
-        cellar.addPosition(5, maliciousPosition, abi.encode(0));
+        cellar.addPosition(5, maliciousPosition, abi.encode(0), false);
 
         // Deposit into cellar.
         uint256 assets = 10000e6;
@@ -507,36 +508,39 @@ contract CellarAssetManagerTest is Test {
         LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 0.9e18); // 90% of funds are locked.
         LockedERC4626 lockedWETH = new LockedERC4626(WETH, "Locked WETH", "LWETH", 1e18); // 100% of funds are locked
 
+        MockCellar cellarWithLockedFunds;
         // Setup Cellar:
-        uint32[] memory positions = new uint32[](4);
-        positions[0] = usdcPosition;
-        positions[1] = registry.trustPosition(
-            address(cellarAdaptor),
-            false,
-            abi.encode(Cellar(address(lockedUSDC))),
-            0,
-            0
-        );
-        positions[2] = registry.trustPosition(
-            address(cellarAdaptor),
-            false,
-            abi.encode(Cellar(address(lockedWETH))),
-            0,
-            0
-        );
-        positions[3] = wethPosition;
+        {
+            uint32[] memory positions = new uint32[](4);
+            positions[0] = usdcPosition;
+            positions[1] = registry.trustPosition(
+                address(cellarAdaptor),
+                abi.encode(Cellar(address(lockedUSDC))),
+                0,
+                0
+            );
+            positions[2] = registry.trustPosition(
+                address(cellarAdaptor),
+                abi.encode(Cellar(address(lockedWETH))),
+                0,
+                0
+            );
+            positions[3] = wethPosition;
 
-        bytes[] memory positionConfigs = new bytes[](4);
+            uint32[] memory debtPositions;
 
-        MockCellar cellarWithLockedFunds = new MockCellar(
-            registry,
-            USDC,
-            positions,
-            positionConfigs,
-            "Multiposition Cellar LP Token",
-            "multiposition-CLR",
-            strategist
-        );
+            bytes[] memory positionConfigs = new bytes[](4);
+
+            bytes[] memory debtConfigs;
+
+            cellarWithLockedFunds = new MockCellar(
+                registry,
+                USDC,
+                "Multiposition Cellar LP Token",
+                "multiposition-CLR",
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            );
+        }
 
         cellarWithLockedFunds.setupAdaptor(address(cellarAdaptor));
         stdstore
@@ -639,8 +643,8 @@ contract CellarAssetManagerTest is Test {
 
         // Strategist moves half of funds into an illiquid position.
         LockedERC4626 lockedUSDC = new LockedERC4626(USDC, "Locked USDC", "LUSDC", 1e18); // 100% of funds are locked.
-        uint32 lockedUSDCPosition = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedUSDC), 0, 0);
-        cellar.addPosition(5, lockedUSDCPosition, abi.encode(0));
+        uint32 lockedUSDCPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(lockedUSDC), 0, 0);
+        cellar.addPosition(5, lockedUSDCPosition, abi.encode(0), false);
 
         // Strategist rebalances into illiquid cellar.
         _rebalanceWithERC4626Positions(cellar, USDC, ERC20(address(lockedUSDC)), 5e6);
@@ -828,7 +832,7 @@ contract CellarAssetManagerTest is Test {
     function _checkSendFees(Cellar target, uint256 amountOfTimeToPass) internal {
         skip(amountOfTimeToPass);
 
-        (, uint64 platformFee, , , address strategistPayoutAddress) = target.feeData();
+        (, uint64 platformFee, , address strategistPayoutAddress) = target.feeData();
 
         uint256 cellarTotalAssets = target.totalAssets();
         uint256 feesInAssetsSentToCosmos;
@@ -855,7 +859,7 @@ contract CellarAssetManagerTest is Test {
             "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
         );
 
-        (uint64 strategistPlatformCut, , , , ) = target.feeData();
+        (uint64 strategistPlatformCut, , , ) = target.feeData();
 
         assertApproxEqRel(
             feesInAssetsSentToStrategist,
@@ -879,7 +883,7 @@ contract CellarAssetManagerTest is Test {
         view
         returns (uint256 assetReq)
     {
-        (uint64 strategistPlatformCut, uint64 platformFee, , , ) = target.feeData();
+        (uint64 strategistPlatformCut, uint64 platformFee, , ) = target.feeData();
 
         uint256 expectedPlatformFeeInAssets;
         uint256 cellarTotalAssets = target.totalAssets();
@@ -928,7 +932,7 @@ contract CellarAssetManagerTest is Test {
         MockCellar assetManagementCellar;
         {
             // Add wBTC position to registry.
-            uint32 wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
+            uint32 wbtcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WBTC), 0, 0);
 
             // Create new cellar with WETH, USDC, and WBTC positions.
             uint32[] memory positions = new uint32[](3);
@@ -936,16 +940,17 @@ contract CellarAssetManagerTest is Test {
             positions[1] = wethPosition;
             positions[2] = wbtcPosition;
 
+            uint32[] memory debtPositions;
+
             bytes[] memory positionConfigs = new bytes[](3);
+            bytes[] memory debtConfigs;
 
             assetManagementCellar = new MockCellar(
                 registry,
                 USDC,
-                positions,
-                positionConfigs,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                strategist
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
             );
         }
 
@@ -1199,12 +1204,12 @@ contract CellarAssetManagerTest is Test {
             // Strategists trusts LINK, and then adds it as a position.
             // No need to set LINK price since its assets will always be zero.
             priceRouter.supportAsset(LINK);
-            uint32 linkPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(LINK), 0, 0);
+            uint32 linkPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(LINK), 0, 0);
 
-            assetManagementCellar.addPosition(3, linkPosition, abi.encode(0));
+            assetManagementCellar.addPosition(3, linkPosition, abi.encode(0), false);
 
             // Swap LINK position with WETH position.
-            assetManagementCellar.swapPositions(3, 1);
+            assetManagementCellar.swapPositions(3, 1, false);
 
             // Adjust asset prices such that the cellar's TVL drops below the high watermark.
 
@@ -1396,7 +1401,7 @@ contract CellarAssetManagerTest is Test {
         MockCellar assetManagementCellar;
         {
             // Add wBTC position to registry.
-            uint32 wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
+            uint32 wbtcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WBTC), 0, 0);
 
             // Create new cellar with WETH, USDC, and WBTC positions.
             uint32[] memory positions = new uint32[](3);
@@ -1404,16 +1409,18 @@ contract CellarAssetManagerTest is Test {
             positions[1] = usdcPosition;
             positions[2] = wbtcPosition;
 
+            uint32[] memory debtPositions;
+
             bytes[] memory positionConfigs = new bytes[](3);
+
+            bytes[] memory debtConfigs;
 
             assetManagementCellar = new MockCellar(
                 registry,
                 WETH,
-                positions,
-                positionConfigs,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                strategist
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
             );
         }
 
@@ -1710,20 +1717,22 @@ contract CellarAssetManagerTest is Test {
             // Create new cellar with WETH, USDC, and WBTC positions.
             uint32[] memory positions = new uint32[](4);
             positions[0] = wethPosition;
-            positions[1] = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedWETH), 0, 0);
+            positions[1] = registry.trustPosition(address(cellarAdaptor), abi.encode(lockedWETH), 0, 0);
             positions[2] = usdcPosition;
-            positions[3] = registry.trustPosition(address(cellarAdaptor), false, abi.encode(lockedUSDC), 0, 0);
+            positions[3] = registry.trustPosition(address(cellarAdaptor), abi.encode(lockedUSDC), 0, 0);
+
+            uint32[] memory debtPositions;
 
             bytes[] memory positionConfigs = new bytes[](4);
+
+            bytes[] memory debtConfigs;
 
             assetManagementCellar = new MockCellar(
                 registry,
                 WETH,
-                positions,
-                positionConfigs,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                strategist
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
             );
 
             stdstore

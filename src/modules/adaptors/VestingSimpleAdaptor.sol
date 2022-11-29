@@ -94,6 +94,13 @@ contract VestingSimpleAdaptor is BaseAdaptor {
         return vestingContract.asset();
     }
 
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public pure override returns (bool) {
+        return false;
+    }
+
     //============================================ Strategist Functions ===========================================
     //==================== Strategist Function Specification ====================
     // Strategist functions are only callable by strategists through the Cellars
@@ -136,7 +143,11 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * @param amountToWithdraw The amount of tokens to withdraw.
      * @param adaptorData Data needed to interact with the position.
      */
-    function withdrawFromVesting(uint256 depositId, uint256 amountToWithdraw, bytes memory adaptorData) public {
+    function withdrawFromVesting(
+        uint256 depositId,
+        uint256 amountToWithdraw,
+        bytes memory adaptorData
+    ) public {
         VestingSimple vestingContract = abi.decode(adaptorData, (VestingSimple));
         vestingContract.withdraw(depositId, amountToWithdraw);
     }

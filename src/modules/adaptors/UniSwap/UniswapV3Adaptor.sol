@@ -139,8 +139,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
                 (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
             );
 
-            // Skip LP tokens that are not for this position.
-            if (t0 != address(token0) || t1 != address(token1)) continue;
+            // Skip LP tokens that are not for this position, or if there is no liquidity in the position.
+            if (t0 != address(token0) || t1 != address(token1) || liquidity == 0) continue;
 
             (uint256 amountA, uint256 amountB) = LiquidityAmounts.getAmountsForLiquidity(
                 sqrtPriceX96,
@@ -162,6 +162,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         ERC20 token = abi.decode(adaptorData, (ERC20));
         return token;
+    }
+
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public pure override returns (bool) {
+        return false;
     }
 
     //============================================ Strategist Functions ===========================================
@@ -194,6 +201,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         int24 tickLower,
         int24 tickUpper
     ) public {
+        amount0 = _maxAvailable(token0, amount0);
+        amount1 = _maxAvailable(token1, amount1);
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         token0.safeApprove(address(positionManager()), amount0);
         token1.safeApprove(address(positionManager()), amount1);
@@ -239,25 +248,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 min0,
         uint256 min1
     ) public {
-        // Make sure the cellar owns this positionId. Also checks the positionId exists.
-        if (positionManager().ownerOf(positionId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(positionId);
-
-        // Create decrease liquidity params.
-        (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(positionId);
-        INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
-            .DecreaseLiquidityParams({
-                tokenId: positionId,
-                liquidity: liquidity,
-                amount0Min: min0,
-                amount1Min: min1,
-                deadline: block.timestamp
-            });
-
-        // Decrease liquidity in pool.
-        positionManager().decreaseLiquidity(params);
-
-        // Collect principal and fees before "burning" NFT.
-        collectFees(positionId, type(uint128).max, type(uint128).max);
+        // Pass in true for `collectFees` since the token will be sent to the dead address.
+        takeFromPosition(positionId, type(uint128).max, min0, min1, true);
 
         // Position now has no more liquidity, so transfer NFT to dead address to save on `balanceOf` gas usage.
         // Transfer token to a dead address.
@@ -279,11 +271,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 min0,
         uint256 min1
     ) public {
-        // Make sure the cellar owns this positionId. Also checks the positionId exists.
-        if (positionManager().ownerOf(positionId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(positionId);
+        _checkPositionId(positionId);
 
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
+        amount0 = _maxAvailable(ERC20(t0), amount0);
+        amount1 = _maxAvailable(ERC20(t1), amount1);
+
         ERC20(t0).safeApprove(address(positionManager()), amount0);
         ERC20(t1).safeApprove(address(positionManager()), amount1);
 
@@ -314,19 +308,22 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param liquidity the amount of liquidity to take from the position
      * @param min0 the minimum amount of `token0` to get from taking liquidity
      * @param min1 the minimum amount of `token1` to get from taking liquidity
+     * @param collectFees bool indicating whether to collect principal(if false),
+     *                    or principal + fees (if true)
      */
     function takeFromPosition(
         uint256 positionId,
         uint128 liquidity,
         uint256 min0,
-        uint256 min1
+        uint256 min1,
+        bool collectFees
     ) public {
-        // Make sure the cellar owns this positionId. Also checks the positionId exists.
-        if (positionManager().ownerOf(positionId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(positionId);
+        _checkPositionId(positionId);
 
-        // Check that the position isn't being closed fully.
-        (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager().positions(positionId);
-        if (liquidity >= positionLiquidity) revert UniswapV3Adaptor__CallClosePosition();
+        // If uint128 max is specified for liquidity, withdraw the full amount.
+        if (liquidity == type(uint128).max) {
+            (, , , , , , , liquidity, , , , ) = positionManager().positions(positionId);
+        }
 
         // Create decrease liquidity params.
         INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
@@ -341,8 +338,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Decrease liquidity in pool.
         (uint256 amount0, uint256 amount1) = positionManager().decreaseLiquidity(params);
 
-        // Collect principal from position.
-        collectFees(positionId, amount0.toUint128(), amount1.toUint128());
+        if (collectFees) {
+            // Collect principal + fees from position.
+            _collectFees(positionId, type(uint128).max, type(uint128).max);
+        } else {
+            // Collect principal from position.
+            _collectFees(positionId, amount0.toUint128(), amount1.toUint128());
+        }
     }
 
     /**
@@ -355,20 +357,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 positionId,
         uint128 amount0,
         uint128 amount1
-    ) public {
-        // Make sure the cellar owns this positionId. Also checks the positionId exists.
-        if (positionManager().ownerOf(positionId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(positionId);
+    ) external {
+        _checkPositionId(positionId);
 
-        // Create fee collection params.
-        INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
-            tokenId: positionId,
-            recipient: address(this),
-            amount0Max: amount0,
-            amount1Max: amount1
-        });
-
-        // Collect fees.
-        positionManager().collect(params);
+        _collectFees(positionId, amount0, amount1);
     }
 
     //============================================ Helper Functions ============================================
@@ -382,5 +374,33 @@ contract UniswapV3Adaptor is BaseAdaptor {
             y = z;
             z = (_x / z + z) / 2;
         }
+    }
+
+    /**
+     * @notice Checks that given `positionId` exists, and is owned by the cellar.
+     */
+    function _checkPositionId(uint256 positionId) internal view {
+        // Make sure the cellar owns this positionId. Also checks the positionId exists.
+        if (positionManager().ownerOf(positionId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(positionId);
+    }
+
+    /**
+     * @notice Helper function to collect Uniswap V3 position fees.
+     */
+    function _collectFees(
+        uint256 positionId,
+        uint128 amount0,
+        uint128 amount1
+    ) internal {
+        // Create fee collection params.
+        INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
+            tokenId: positionId,
+            recipient: address(this),
+            amount0Max: amount0,
+            amount1Max: amount1
+        });
+
+        // Collect fees.
+        positionManager().collect(params);
     }
 }

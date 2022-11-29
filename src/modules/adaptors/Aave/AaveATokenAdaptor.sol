@@ -168,7 +168,10 @@ contract AaveATokenAdaptor is BaseAdaptor {
 
         // Else convert `maxBorrowableWithMin` from WETH to position underlying asset.
         PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(2));
-        return priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
+        uint256 withdrawable = priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
+        uint256 balance = ERC20(address(token)).balanceOf(msg.sender);
+        // Check if withdrawable is greater than the position balance and if so return the balance instead of withdrawable.
+        return withdrawable > balance ? balance : withdrawable;
     }
 
     /**
@@ -185,6 +188,13 @@ contract AaveATokenAdaptor is BaseAdaptor {
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
+    }
+
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public pure override returns (bool) {
+        return false;
     }
 
     //============================================ Strategist Functions ===========================================
