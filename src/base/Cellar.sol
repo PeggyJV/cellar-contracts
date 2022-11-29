@@ -1443,7 +1443,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     /**
-     * @notice Get all the creit positions underlying assets.
+     * @notice Get all the credit positions underlying assets.
      */
     function getPositionAssets() external view returns (ERC20[] memory assets) {
         assets = new ERC20[](creditPositions.length);
