@@ -47,7 +47,7 @@ contract UltimateStablecoinCellarScript is Script {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-    address private strategist = 0x13FBB7e817e5347ce4ae39c3dff1E6705746DCdC;
+    address private strategist = 0x97238B45C626a4CA4C99E7Eb34e2DAD5e5107D32;
     address private deployer = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
 
     CellarFactory private factory;
@@ -173,7 +173,7 @@ contract UltimateStablecoinCellarScript is Script {
 
         // Cellar positions array.
         uint32[] memory positions = new uint32[](12);
-        uint32[] memory debtPositions = new uint32[](3);
+        uint32[] memory debtPositions;
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(erc20Adaptor), 0, 0);
@@ -199,25 +199,21 @@ contract UltimateStablecoinCellarScript is Script {
         cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDT)), 0, 0);
         vUSDCPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(usdcVestor), 0, 0);
 
-        positions[0] = usdcPosition;
-        positions[1] = daiPosition;
-        positions[2] = usdtPosition;
-        positions[3] = usdcDaiPosition;
-        positions[4] = usdcUsdtPosition;
-        positions[5] = aUSDCPosition;
-        positions[6] = aDAIPosition;
-        positions[7] = aUSDTPosition;
-        positions[8] = cUSDCPosition;
-        positions[9] = cDAIPosition;
-        positions[10] = cUSDTPosition;
-        positions[11] = vUSDCPosition;
-
-        debtPositions[0] = dUSDCPosition;
-        debtPositions[1] = dDAIPosition;
-        debtPositions[2] = dUSDTPosition;
+        positions[0] = vUSDCPosition;
+        positions[1] = aUSDCPosition;
+        positions[2] = usdcPosition;
+        positions[3] = daiPosition;
+        positions[4] = usdtPosition;
+        positions[5] = aDAIPosition;
+        positions[6] = aUSDTPosition;
+        positions[7] = cUSDCPosition;
+        positions[8] = cDAIPosition;
+        positions[9] = cUSDTPosition;
+        positions[10] = usdcDaiPosition;
+        positions[11] = usdcUsdtPosition;
 
         bytes[] memory positionConfigs = new bytes[](12);
-        bytes[] memory debtConfigs = new bytes[](3);
+        bytes[] memory debtConfigs;
 
         uint256 minHealthFactor = 1.1e18;
         positionConfigs[5] = abi.encode(minHealthFactor);
@@ -230,13 +226,13 @@ contract UltimateStablecoinCellarScript is Script {
             registry,
             USDC,
             "Test Ultimate Stable Coin Cellar",
-            "TEST-USCC-CLR",
+            "TEST-USC-CLR",
             abi.encode(
                 positions,
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                1,
                 strategist,
                 type(uint128).max,
                 type(uint128).max
