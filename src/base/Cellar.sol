@@ -819,6 +819,22 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     /**
+     * @notice Struct used in `_withdrawInOrder` in order to hold multiple pricing values in a single variable.
+     * @dev Prevents stack too deep errors.
+     */
+    struct WithdrawPricing {
+        uint256 priceBaseUSD;
+        uint256 oneBase;
+        uint256 priceQuoteUSD;
+        uint256 oneQuote;
+    }
+
+    /**
+     * @notice Multipler used to insure calculations use very high precision.
+     */
+    uint256 private constant PRECISION_MULTIPLIER = 1e18;
+
+    /**
      * @dev Withdraw from positions in the order defined by `positions`.
      * @param assets the amount of assets to withdraw from cellar
      * @param receiver the address to sent withdrawn assets to
@@ -827,6 +843,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function _withdrawInOrder(uint256 assets, address receiver) internal {
         // Get the price router.
         PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+        // Save asset price in USD, and decimals to reduce external calls.
+        WithdrawPricing memory pricingInfo;
+        pricingInfo.priceQuoteUSD = priceRouter.getPriceInUSD(asset);
+        pricingInfo.oneQuote = 10**asset.decimals();
         uint256 creditLength = creditPositions.length;
         for (uint256 i; i < creditLength; ++i) {
             uint32 position = creditPositions[i];
@@ -835,17 +855,36 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             if (withdrawableBalance == 0) continue;
             ERC20 positionAsset = _assetOf(position);
 
-            uint256 onePositionAsset = 10**positionAsset.decimals();
-            uint256 exchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
+            pricingInfo.priceBaseUSD = priceRouter.getPriceInUSD(positionAsset);
+            pricingInfo.oneBase = 10**positionAsset.decimals();
+            uint256 totalWithdrawableBalanceInAssets;
+            {
+                uint256 withdrawableBalanceInUSD = (PRECISION_MULTIPLIER * withdrawableBalance).mulDivDown(
+                    pricingInfo.priceBaseUSD,
+                    pricingInfo.oneBase
+                );
+                totalWithdrawableBalanceInAssets = withdrawableBalanceInUSD.mulDivDown(
+                    pricingInfo.oneQuote,
+                    pricingInfo.priceQuoteUSD
+                );
+                totalWithdrawableBalanceInAssets = totalWithdrawableBalanceInAssets / PRECISION_MULTIPLIER;
+            }
+            //  exchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
 
             // Denominate withdrawable position balance in cellar's asset.
-            uint256 totalWithdrawableBalanceInAssets = withdrawableBalance.mulDivDown(exchangeRate, onePositionAsset);
+            // uint256 totalWithdrawableBalanceInAssets = withdrawableBalance.mulDivDown(exchangeRate, onePositionAsset);
 
             // We want to pull as much as we can from this position, but no more than needed.
             uint256 amount;
 
             if (totalWithdrawableBalanceInAssets > assets) {
-                amount = assets.mulDivDown(onePositionAsset, exchangeRate);
+                // Convert assets into position asset.
+                uint256 assetsInUSD = (PRECISION_MULTIPLIER * assets).mulDivDown(
+                    pricingInfo.priceQuoteUSD,
+                    pricingInfo.oneQuote
+                );
+                amount = assetsInUSD.mulDivDown(pricingInfo.oneBase, pricingInfo.priceBaseUSD);
+                amount = amount / PRECISION_MULTIPLIER;
                 assets = 0;
             } else {
                 amount = withdrawableBalance;

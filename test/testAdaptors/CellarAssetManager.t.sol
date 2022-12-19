@@ -104,6 +104,10 @@ contract CellarAssetManagerTest is Test {
         priceRouter.setExchangeRate(WETH, WBTC, 0.06666666e8);
         priceRouter.setExchangeRate(WBTC, WETH, 15e18);
 
+        priceRouter.setPrice(USDC, 1e8);
+        priceRouter.setPrice(WETH, 2_000e8);
+        priceRouter.setPrice(WBTC, 30_000e8);
+
         priceRouter.supportAsset(USDC);
         priceRouter.supportAsset(WETH);
         priceRouter.supportAsset(WBTC);
@@ -688,6 +692,7 @@ contract CellarAssetManagerTest is Test {
                     newPricesInUSD[quoteIndex]
                 );
                 priceRouter.setExchangeRate(assetsToAdjust[i], assetsToAdjust[quoteIndex], exchangeRate);
+                priceRouter.setPrice(assetsToAdjust[i], newPricesInUSD[i]);
             }
         }
     }
