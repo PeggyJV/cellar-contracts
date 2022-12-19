@@ -1082,6 +1082,24 @@ contract PriceRouterTest is Test {
         siloBalance = SILO.balanceOf(address(this));
     }
 
+    // ======================================= AUDIT ISSUES =======================================
+    // M-2
+    function testNumericError() external {
+        uint256 amount = 100_000_000e18;
+        deal(address(WETH), address(this), amount);
+        uint256 inputAmountWorth = priceRouter.getValue(WETH, amount, USDC);
+
+        ERC20[] memory baseAssets = new ERC20[](1);
+        uint256[] memory amounts2 = new uint256[](1);
+
+        baseAssets[0] = WETH;
+        amounts2[0] = amount;
+
+        uint256 totalValue = priceRouter.getValues(baseAssets, amounts2, USDC);
+
+        assertEq(totalValue, inputAmountWorth, "Values should be equal.");
+    }
+
     // ======================================= HELPER FUNCTIONS =======================================
     function _adjustVirtualPrice(ERC20 token, uint256 multiplier) internal {
         uint256 targetSupply = token.totalSupply().mulDivDown(multiplier, 1e18);
