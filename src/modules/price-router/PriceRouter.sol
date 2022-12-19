@@ -212,7 +212,14 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint256 amount,
         ERC20 quoteAsset
     ) external view returns (uint256 value) {
-        value = amount.mulDivDown(getExchangeRate(baseAsset, quoteAsset), 10**baseAsset.decimals());
+        AssetSettings memory baseSettings = getAssetSettings[baseAsset];
+        AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
+        if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
+        if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
+        PriceCache[PRICE_CACHE_SIZE] memory cache;
+        uint256 priceBaseUSD = _getPriceInUSD(baseAsset, baseSettings, cache);
+        uint256 priceQuoteUSD = _getPriceInUSD(quoteAsset, quoteSettings, cache);
+        value = _getValueInQuote(priceBaseUSD, priceQuoteUSD, baseAsset.decimals(), quoteAsset.decimals(), amount);
     }
 
     /**
@@ -385,6 +392,27 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     /**
+     * @notice math function that preserves precision by multiplying the amountBase before dividing.
+     * @param priceBaseUSD the base asset price in USD
+     * @param priceQuoteUSD the quote asset price in USD
+     * @param baseDecimals the base asset decimals
+     * @param quoteDecimals the quote asset decimals
+     * @param amountBase the amount of base asset
+     */
+    function _getValueInQuote(
+        uint256 priceBaseUSD,
+        uint256 priceQuoteUSD,
+        uint8 baseDecimals,
+        uint8 quoteDecimals,
+        uint256 amountBase
+    ) internal pure returns (uint256 valueInQuote) {
+        // Get amountBase converted into USD.
+        uint256 baseUSD = amountBase.mulDivDown(priceBaseUSD, 10**baseDecimals);
+        // Get value in quote asset.
+        valueInQuote = baseUSD.mulDivDown(10**quoteDecimals, priceQuoteUSD);
+    }
+
+    /**
      * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
      */
     error PriceRouter__LengthMismatch();
@@ -410,7 +438,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
         }
         uint256 valueInQuote;
-        uint256 price;
+        // uint256 price;
         uint8 quoteDecimals = quoteAsset.decimals();
 
         for (uint8 i = 0; i < baseAssets.length; i++) {
@@ -419,11 +447,21 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             ERC20 baseAsset = baseAssets[i];
             if (baseAsset == quoteAsset) valueInQuote += amounts[i];
             else {
-                AssetSettings memory baseSettings = getAssetSettings[baseAsset];
-                if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
-                price = _getPriceInUSD(baseAsset, baseSettings, cache);
-                uint256 valueInUSD = (amounts[i].mulDivDown(price, 10**baseAsset.decimals()));
-                valueInQuote += valueInUSD.mulDivDown(10**quoteDecimals, quotePrice);
+                uint256 basePrice;
+                {
+                    AssetSettings memory baseSettings = getAssetSettings[baseAsset];
+                    if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
+                    basePrice = _getPriceInUSD(baseAsset, baseSettings, cache);
+                }
+                valueInQuote += _getValueInQuote(
+                    basePrice,
+                    quotePrice,
+                    baseAsset.decimals(),
+                    quoteDecimals,
+                    amounts[i]
+                );
+                // uint256 valueInUSD = (amounts[i].mulDivDown(price, 10**baseAsset.decimals()));
+                // valueInQuote += valueInUSD.mulDivDown(10**quoteDecimals, quotePrice);
             }
         }
         return valueInQuote;
