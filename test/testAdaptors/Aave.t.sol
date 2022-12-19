@@ -119,7 +119,7 @@ contract CellarAaveTest is Test {
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                aUSDCPosition,
                 address(0),
                 type(uint128).max,
                 type(uint128).max
@@ -323,6 +323,7 @@ contract CellarAaveTest is Test {
         // First adjust cellar to work primarily with WETH.
         // Make vanilla USDC the holding position.
         cellar.swapPositions(0, 1, false);
+        cellar.setHoldingPosition(usdcPosition);
 
         // Add WETH, aWETH, and dWETH as trusted positions to the registry.
         uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);

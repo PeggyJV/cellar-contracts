@@ -83,7 +83,7 @@ contract CellarVestingTest is Test {
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
         );
 
         vm.label(address(cellar), "cellar");
@@ -108,7 +108,7 @@ contract CellarVestingTest is Test {
 
     function testCannotTakeUserDeposits() external {
         // Make the vesting adaptor the first position
-        cellar.swapPositions(0, 1, false);
+        cellar.setHoldingPosition(vestingPosition);
 
         // Set up user2 with funds and have them attempt to deposit
         deal(address(USDC), user2, totalDeposit);
@@ -122,7 +122,7 @@ contract CellarVestingTest is Test {
         vm.stopPrank();
 
         // Fix positions
-        cellar.swapPositions(0, 1, false);
+        cellar.setHoldingPosition(usdcPosition);
     }
 
     function testDepositToVesting() external {

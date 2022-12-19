@@ -141,7 +141,7 @@ contract UniswapV3AdaptorTest is Test {
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
         );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");

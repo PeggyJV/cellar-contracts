@@ -233,7 +233,7 @@ contract UltimateStableCoinCellarTest is Test {
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                usdcPosition,
                 strategist,
                 type(uint128).max,
                 type(uint128).max
@@ -323,7 +323,7 @@ contract UltimateStableCoinCellarTest is Test {
     function testUltimateStableCoinCellar() external {
         // Start by managing credit positions to reflect the following.
         // 0) Vesting USDC
-        // 1) Compound USDC (holding posiiton)
+        // 1) Compound USDC (holding position)
         // 2) Aave USDC
         // 3) Uniswap V3 DAI/USDC LP
         // 4) Uniswap V3 USDC/USDT LP
@@ -333,7 +333,7 @@ contract UltimateStableCoinCellarTest is Test {
         // Swap cUSDC and DAI position.
         cellar.swapPositions(1, 8, false);
         // Change holding position to index 1
-        cellar.setHoldingIndex(1);
+        cellar.setHoldingPosition(cUSDCPosition);
         // Swap USDC and vesting USDC positions.
         cellar.swapPositions(0, 11, false);
         // Swap USDT position and aUSDC.

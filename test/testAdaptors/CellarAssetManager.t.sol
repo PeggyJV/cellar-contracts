@@ -142,7 +142,7 @@ contract CellarAssetManagerTest is Test {
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
         );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
@@ -424,7 +424,7 @@ contract CellarAssetManagerTest is Test {
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
         );
         stdstore.target(address(badCellar)).sig(badCellar.shareLockPeriod.selector).checked_write(uint256(0));
         badCellar.setupAdaptor(address(cellarAdaptor));
@@ -542,7 +542,7 @@ contract CellarAssetManagerTest is Test {
                 USDC,
                 "Multiposition Cellar LP Token",
                 "multiposition-CLR",
-                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
             );
         }
 
@@ -955,7 +955,7 @@ contract CellarAssetManagerTest is Test {
                 USDC,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
             );
         }
 
@@ -1425,7 +1425,7 @@ contract CellarAssetManagerTest is Test {
                 WETH,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, wethPosition, strategist)
             );
         }
 
@@ -1737,7 +1737,7 @@ contract CellarAssetManagerTest is Test {
                 WETH,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, wethPosition, strategist)
             );
 
             stdstore

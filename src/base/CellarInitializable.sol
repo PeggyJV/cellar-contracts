@@ -16,16 +16,7 @@ contract CellarInitializable is Cellar, Initializable {
             ERC20(address(0)),
             "",
             "",
-            abi.encode(
-                new uint32[](0),
-                new uint32[](0),
-                new bytes[](0),
-                new bytes[](0),
-                100, // Pick an invalid holding index so we skip the asset check.
-                address(0),
-                0,
-                0
-            )
+            abi.encode(new uint32[](0), new uint32[](0), new bytes[](0), new bytes[](0), 0, address(0), 0, 0)
         )
     {}
 
@@ -41,7 +32,7 @@ contract CellarInitializable is Cellar, Initializable {
      *                 - uint32[] array of debt positions
      *                 - bytes[] array of credit config data
      *                 - bytes[] array of debt config data
-     *                 - uint8 holding index
+     *                 - uint32 holding position id
      *                 - address strategist payout address
      *                 - uint128 asset risk tolerance
      *                 - uint128 protocol risk tolerance
@@ -71,16 +62,17 @@ contract CellarInitializable is Cellar, Initializable {
             uint32[] memory _debtPositions,
             bytes[] memory _creditConfigurationData,
             bytes[] memory _debtConfigurationData,
-            uint8 _holdingIndex,
+            uint32 _holdingPosition,
             address _strategistPayout,
             uint128 _assetRiskTolerance,
             uint128 _protocolRiskTolerance
-        ) = abi.decode(_params, (uint32[], uint32[], bytes[], bytes[], uint8, address, uint128, uint128));
-        holdingIndex = _holdingIndex;
+        ) = abi.decode(_params, (uint32[], uint32[], bytes[], bytes[], uint32, address, uint128, uint128));
+
         for (uint32 i; i < _creditPositions.length; i++)
             _addPosition(i, _creditPositions[i], _creditConfigurationData[i], false);
         for (uint32 i; i < _debtPositions.length; i++)
             _addPosition(i, _debtPositions[i], _debtConfigurationData[i], true);
+        _setHoldingPosition(_holdingPosition);
 
         // Initialize remaining values.
         assetRiskTolerance = _assetRiskTolerance;
