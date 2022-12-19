@@ -233,7 +233,8 @@ contract VestingSimple {
             if (s.amountPerSecond > 0 && (s.vested > 0 || s.lastClaimed < s.until)) {
                 _vestDeposit(msg.sender, depositIds[i]);
 
-                shares += s.vested;
+                uint256 vested = s.vested;
+                shares += vested;
                 s.vested = 0;
 
                 // Remove deposit if needed
@@ -242,7 +243,7 @@ contract VestingSimple {
                     allUserDepositIds[msg.sender].remove(depositIds[i]);
                 }
 
-                emit Withdraw(msg.sender, depositIds[i], s.vested);
+                emit Withdraw(msg.sender, depositIds[i], vested);
             }
         }
 
