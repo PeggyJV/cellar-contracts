@@ -109,7 +109,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         if (minHealthFactor == 0) {
             revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(msg.sender);
+        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
         if (healthFactor < minHealthFactor) revert AaveATokenAdaptor__HealthFactorTooLow();
 
         // Transfer assets to receiver.
