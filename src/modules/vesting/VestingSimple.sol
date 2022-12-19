@@ -175,7 +175,7 @@ contract VestingSimple {
         unvestedDeposits += assets;
 
         // Collect tokens
-        ERC20(asset).transferFrom(msg.sender, address(this), assets);
+        ERC20(asset).safeTransferFrom(msg.sender, address(this), assets);
 
         emit Deposit(receiver, assets);
     }
