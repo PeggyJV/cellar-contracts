@@ -134,7 +134,7 @@ contract CellarTest is Test {
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                usdcPosition,
                 strategist,
                 type(uint128).max,
                 type(uint128).max
@@ -490,12 +490,6 @@ contract CellarTest is Test {
         deal(address(WETH), address(cellar), 0);
 
         cellar.removePosition(4, false);
-        // Check that adding a position to the holding index reverts if the position asset does not
-        // equal the cellar asset.
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(USDC), address(WETH)))
-        );
-        cellar.addPosition(0, wethPosition, abi.encode(0), false);
 
         // Check that addPosition sets position data.
         cellar.addPosition(4, wethPosition, abi.encode(0), false);
@@ -506,32 +500,38 @@ contract CellarTest is Test {
         assertEq(adaptorData, abi.encode((WETH)), "Adaptor data should be abi encoded WETH.");
         assertEq(configurationData, abi.encode(0), "Configuration data should be abi encoded ZERO.");
 
-        // Try setting the holding index to a position that does not use the holding asset.
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(USDC), address(WETH)))
-        );
-        cellar.setHoldingIndex(4);
-
         // Check that `swapPosition` works as expected.
         cellar.swapPositions(4, 2, false);
         assertEq(cellar.creditPositions(4), wethCLRPosition, "`positions[4]` should be wethCLR.");
         assertEq(cellar.creditPositions(2), wethPosition, "`positions[2]` should be WETH.");
 
-        // Make sure we can't remove the holding position index.
+        // Try setting the holding position to an unused position.
+        uint32 invalidPositionId = 100;
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotUsed.selector, invalidPositionId)));
+        cellar.setHoldingPosition(invalidPositionId);
+        // Try setting holding position with a position with different asset.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(USDC), address(WETH)))
+        );
+        cellar.setHoldingPosition(wethPosition);
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemovingHoldingPosition.selector)));
+        // Try removing the holding position.
         cellar.removePosition(0, false);
 
-        // Make sure we can't swap an invalid position into the holding index.
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(WETH), address(USDC)))
-        );
-        cellar.swapPositions(0, 2, false);
-
         // Work with debt positions now.
+        // Try setting holding position to a debt position.
         ERC20DebtAdaptor debtAdaptor = new ERC20DebtAdaptor();
         registry.trustAdaptor(address(debtAdaptor), 0, 0);
         uint32 debtWethPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WETH), 0, 0);
         uint32 debtWbtcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WBTC), 0, 0);
+
+        uint32 debtUsdcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(USDC), 0, 0);
+        cellar.addPosition(0, debtUsdcPosition, abi.encode(0), true);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidHoldingPosition.selector, debtUsdcPosition))
+        );
+        cellar.setHoldingPosition(debtUsdcPosition);
+        cellar.removePosition(0, true);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DebtMismatch.selector, debtWethPosition)));
         cellar.addPosition(0, debtWethPosition, abi.encode(0), false);
@@ -814,7 +814,7 @@ contract CellarTest is Test {
                     debtPositions,
                     positionConfigs,
                     debtConfigs,
-                    0,
+                    usdcPosition,
                     strategist,
                     type(uint128).max,
                     type(uint128).max
@@ -1081,7 +1081,7 @@ contract CellarTest is Test {
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                usdcPosition,
                 strategist,
                 type(uint128).max,
                 type(uint128).max
@@ -1150,7 +1150,7 @@ contract CellarTest is Test {
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                usdcPosition,
                 strategist,
                 type(uint128).max,
                 type(uint128).max
@@ -1172,7 +1172,7 @@ contract CellarTest is Test {
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                cellarBPosition,
                 strategist,
                 type(uint128).max,
                 type(uint128).max
@@ -1258,7 +1258,7 @@ contract CellarTest is Test {
         // holding position. Governance uses multicall to rebalance cellar out
         // of position, set a new holding position, and distrust it.
 
-        cellar.swapPositions(0, 1, false);
+        cellar.setHoldingPosition(usdcCLRPosition);
 
         // Rebalance into USDC. No swap is made because both positions use
         // USDC.
@@ -1289,7 +1289,7 @@ contract CellarTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        cellar.swapPositions(0, 1, false);
+        cellar.setHoldingPosition(usdcPosition);
     }
 
     function testDepeggedCellarAsset() external {
@@ -1414,7 +1414,8 @@ contract CellarTest is Test {
 
         uint32 maliciousPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(maliciousCellar), 0, 0);
         cellar.addPosition(5, maliciousPosition, abi.encode(0), false);
-        cellar.swapPositions(0, 5, false);
+
+        cellar.setHoldingPosition(maliciousPosition);
 
         uint256 assets = 10000e6;
         deal(address(USDC), address(this), assets);
@@ -1491,7 +1492,7 @@ contract CellarTest is Test {
             USDC,
             "Asset Management Cellar LP Token",
             "assetmanagement-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
         );
 
         // Set up worst case scenario where

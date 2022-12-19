@@ -110,7 +110,7 @@ contract CellarCompoundTest is Test {
             DAI,
             "Compound Lending Cellar",
             "COMP-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, address(0))
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, cDAIPosition, address(0))
         );
         cellar.setupAdaptor(address(cTokenAdaptor));
         cellar.setupAdaptor(address(vestingAdaptor));
@@ -229,7 +229,7 @@ contract CellarCompoundTest is Test {
 
     function testMaliciousStrategistMovingFundsIntoUntrackedCompoundPosition() external {
         // Remove cDAI as a position from Cellar.
-        cellar.setHoldingIndex(1);
+        cellar.setHoldingPosition(daiPosition);
         cellar.removePosition(0, false);
 
         // Add DAI to the Cellar.

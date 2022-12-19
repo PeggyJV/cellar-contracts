@@ -63,16 +63,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     event PositionSwapped(uint32 newPosition1, uint32 newPosition2, uint256 index1, uint256 index2);
 
     /**
-     * @notice Attempted an operation on an untrusted position.
-     * @param position address of the position
-     */
-    error Cellar__UntrustedPosition(address position);
-
-    /**
      * @notice Attempted to add a position that is already being used.
-     * @param position address of the position
+     * @param position id of the position
      */
     error Cellar__PositionAlreadyUsed(uint32 position);
+
+    /**
+     * @notice Attempted to make an unused position the holding position.
+     * @param position id of the position
+     */
+    error Cellar__PositionNotUsed(uint32 position);
 
     /**
      * @notice Attempted an action on a position that is required to be empty before the action can be performed.
@@ -87,13 +87,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param expectedAsset address of the expected asset
      */
     error Cellar__AssetMismatch(address asset, address expectedAsset);
-
-    /**
-     * @notice Attempted an action on a position that is not being used by the cellar but must be for
-     *         the operation to succeed.
-     * @param position address of the invalid position
-     */
-    error Cellar__InvalidPosition(address position);
 
     /**
      * @notice Attempted to add a position when the position array is full.
@@ -111,6 +104,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Attempted to remove the Cellars holding position.
      */
     error Cellar__RemovingHoldingPosition();
+
+    /**
+     * @notice Attempted to add an invalid holding position.
+     * @param positionId the id of the invalid position.
+     */
+    error Cellar__InvalidHoldingPosition(uint32 positionId);
 
     /**
      * @notice Array of uint32s made up of cellars credit positions Ids.
@@ -154,15 +153,20 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Stores the index of the holding position in the creditPositions array.
      */
-    uint8 public holdingIndex;
+    uint32 public holdingPosition;
 
     /**
      * @notice Allows owner to change the holding position.
      */
-    function setHoldingIndex(uint8 index) external onlyOwner {
-        uint32 positionId = creditPositions[index];
+    function setHoldingPosition(uint32 positionId) external onlyOwner {
+        _setHoldingPosition(positionId);
+    }
+
+    function _setHoldingPosition(uint32 positionId) internal {
+        if (!isPositionUsed[positionId]) revert Cellar__PositionNotUsed(positionId);
         if (_assetOf(positionId) != asset) revert Cellar__AssetMismatch(address(asset), address(_assetOf(positionId)));
-        holdingIndex = index;
+        if (getPositionData[positionId].isDebt) revert Cellar__InvalidHoldingPosition(positionId);
+        holdingPosition = positionId;
     }
 
     /**
@@ -215,8 +219,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             debtPositions.add(index, positionId);
         } else {
             if (creditPositions.length >= MAX_POSITIONS) revert Cellar__PositionArrayFull(MAX_POSITIONS);
-            if (index == holdingIndex && _assetOf(positionId) != asset)
-                revert Cellar__AssetMismatch(address(asset), address(_assetOf(positionId)));
             // Add new position at a specified index.
             creditPositions.add(index, positionId);
         }
@@ -234,6 +236,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Get position being removed.
         uint32 positionId = inDebtArray ? debtPositions[index] : creditPositions[index];
 
+        if (positionId == holdingPosition) revert Cellar__RemovingHoldingPosition();
+
         // Only remove position if it is empty, and if it is not the holding position.
         uint256 positionBalance = _balanceOf(positionId);
         if (positionBalance > 0) revert Cellar__PositionNotEmpty(positionId, positionBalance);
@@ -242,8 +246,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             // Remove position at the given index.
             debtPositions.remove(index);
         } else {
-            // If removing the holding position, make sure new holding position is valid.
-            if (index == holdingIndex) revert Cellar__RemovingHoldingPosition();
             creditPositions.remove(index);
         }
 
@@ -278,11 +280,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             newPosition2 = creditPositions[index1];
             // Swap positions.
             (creditPositions[index1], creditPositions[index2]) = (newPosition1, newPosition2);
-            // If we swapped with the holding index make sure new holding position works.
-            if (index1 == holdingIndex || index2 == holdingIndex) {
-                if (_assetOf(creditPositions[holdingIndex]) != asset)
-                    revert Cellar__AssetMismatch(address(_assetOf(creditPositions[holdingIndex])), address(asset));
-            }
         }
 
         emit PositionSwapped(newPosition1, newPosition2, index1, index2);
@@ -485,6 +482,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *               -  _assetRiskTolerance this cellars risk tolerance for assets it is exposed to
      *               -  _protocolRiskTolerance this cellars risk tolerance for protocols it will use
      */
+    //  TODO add tests related to setting new holding position
+    // Fix initializer function
+    // Fix tests.
     constructor(
         Registry _registry,
         ERC20 _asset,
@@ -500,17 +500,19 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
                 uint32[] memory _debtPositions,
                 bytes[] memory _creditConfigurationData,
                 bytes[] memory _debtConfigurationData,
-                uint8 _holdingIndex
+                uint32 _holdingPosition
             ) = abi.decode(params, (uint32[], uint32[], bytes[], bytes[], uint8));
 
             // Initialize positions.
-            holdingIndex = _holdingIndex;
             for (uint32 i; i < _creditPositions.length; ++i) {
                 _addPosition(i, _creditPositions[i], _creditConfigurationData[i], false);
             }
             for (uint32 i; i < _debtPositions.length; ++i) {
                 _addPosition(i, _debtPositions[i], _debtConfigurationData[i], true);
             }
+            // This check allows us to deploy an implementation contract.
+            /// @dev No cellars will be deployed with a zero length credit positions array.
+            if (_creditPositions.length > 0) _setHoldingPosition(_holdingPosition);
         }
 
         // Initialize last accrual timestamp to time that cellar was created, otherwise the first
@@ -675,7 +677,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         uint256,
         address receiver
     ) internal override {
-        _depositTo(creditPositions[holdingIndex], assets);
+        _depositTo(holdingPosition, assets);
         userShareLockStartTime[receiver] = block.timestamp;
     }
 
@@ -869,10 +871,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
                 );
                 totalWithdrawableBalanceInAssets = totalWithdrawableBalanceInAssets / PRECISION_MULTIPLIER;
             }
-            //  exchangeRate = priceRouter.getExchangeRate(positionAsset, asset);
-
-            // Denominate withdrawable position balance in cellar's asset.
-            // uint256 totalWithdrawableBalanceInAssets = withdrawableBalance.mulDivDown(exchangeRate, onePositionAsset);
 
             // We want to pull as much as we can from this position, but no more than needed.
             uint256 amount;

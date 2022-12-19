@@ -122,7 +122,7 @@ contract CellarRouterTest is Test {
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, address(0))
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, address(0))
         );
         vm.label(address(cellar), "cellar");
 
@@ -158,7 +158,7 @@ contract CellarRouterTest is Test {
             WETH,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, address(0))
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, wethPosition, address(0))
         );
 
         // Generate permit sig
