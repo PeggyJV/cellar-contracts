@@ -226,9 +226,8 @@ contract CellarVestingTest is Test {
         skip(vestingPeriod + 1);
         cellar.swapPositions(0, 1, false);
 
-        // TODO ask Kevin about this.
+        vm.expectEmit(true, true, false, false);
         _emitWithdraw(address(this), totalDeposit / 20, 1);
-        vm.expectEmit(true, false, false, false);
 
         // Withdraw vested positions
         cellar.withdraw(totalDeposit / 20, address(this), address(this));
