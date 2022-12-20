@@ -226,9 +226,8 @@ contract CellarVestingTest is Test {
         skip(vestingPeriod + 1);
         cellar.swapPositions(0, 1, false);
 
-        // TODO ask Kevin about this.
-        // _emitWithdraw(totalDeposit / 20, 1);
-        // vm.expectEmit(true, true, false, false);
+        vm.expectEmit(true, true, false, false);
+        _emitWithdraw(address(this), totalDeposit / 20, 1);
 
         // Withdraw vested positions
         cellar.withdraw(totalDeposit / 20, address(this), address(this));
@@ -278,7 +277,7 @@ contract CellarVestingTest is Test {
 
         // Not looking at specific payload because amount available may be slightly off
         vm.expectEmit(true, true, false, false);
-        _emitWithdraw(totalDeposit / 20, 1);
+        _emitWithdraw(address(cellar), totalDeposit / 20, 1);
 
         cellar.callOnAdaptor(data);
 
@@ -318,7 +317,7 @@ contract CellarVestingTest is Test {
 
         // Not looking at specific payload because amount available may be slightly off
         vm.expectEmit(true, true, false, false);
-        _emitWithdraw(totalDeposit / 20, 1);
+        _emitWithdraw(address(cellar), totalDeposit / 20, 1);
 
         cellar.callOnAdaptor(data);
 
@@ -358,7 +357,7 @@ contract CellarVestingTest is Test {
 
         // Not looking at specific payload because amount available may be slightly off
         vm.expectEmit(true, true, false, false);
-        _emitWithdraw(totalDeposit / 40, 1);
+        _emitWithdraw(address(cellar), totalDeposit / 20, 1);
 
         cellar.callOnAdaptor(data);
 
@@ -404,7 +403,7 @@ contract CellarVestingTest is Test {
 
         // Not looking at specific payload because amount available may be slightly off
         vm.expectEmit(true, true, false, false);
-        _emitWithdraw(totalDeposit / 40, 1);
+        _emitWithdraw(address(cellar), totalDeposit / 40, 1);
 
         cellar.callOnAdaptor(data);
 
@@ -429,7 +428,7 @@ contract CellarVestingTest is Test {
     // ========================================= HELPER FUNCTIONS =========================================
 
     function _createBytesDataToDeposit(VestingSimple _vesting, uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(VestingSimpleAdaptor.depositToVesting.selector, amount, abi.encode(_vesting));
+        return abi.encodeWithSelector(VestingSimpleAdaptor.depositToVesting.selector, address(_vesting), amount);
     }
 
     function _createBytesDataToWithdraw(
@@ -440,9 +439,9 @@ contract CellarVestingTest is Test {
         return
             abi.encodeWithSelector(
                 VestingSimpleAdaptor.withdrawFromVesting.selector,
+                address(_vesting),
                 depositId,
-                amount,
-                abi.encode(_vesting)
+                amount
             );
     }
 
@@ -452,31 +451,33 @@ contract CellarVestingTest is Test {
         returns (bytes memory)
     {
         return
-            abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAnyFromVesting.selector, amount, abi.encode(_vesting));
+            abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAnyFromVesting.selector, address(_vesting), amount);
     }
 
     function _createBytesDataToWithdrawAll(VestingSimple _vesting) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAllFromVesting.selector, abi.encode(_vesting));
+        return abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAllFromVesting.selector, address(_vesting));
     }
 
-    /// @notice Emitted when tokens are deosited for vesting.
+    /// @notice Emitted when tokens are deposited for vesting.
     ///
-    /// @param user The user receiving the deposit.
+    /// @param user The user making the deposit.
+    /// @param receiver The user receiving the shares.
     /// @param amount The amount of tokens deposited.
-    event Deposit(address indexed user, uint256 amount);
+    event VestingDeposit(address indexed user, address indexed receiver, uint256 amount);
 
     /// @notice Emitted when vested tokens are withdrawn.
     ///
-    /// @param user The user receiving the deposit.
+    /// @param user The owner of the deposit.
+    /// @param receiver The user receiving the deposit.
     /// @param depositId The ID of the deposit specified.
     /// @param amount The amount of tokens deposited.
-    event Withdraw(address indexed user, uint256 depositId, uint256 amount);
+    event VestingWithdraw(address indexed user, address indexed receiver, uint256 depositId, uint256 amount);
 
     function _emitDeposit(uint256 amount) internal {
-        emit Deposit(address(cellar), amount);
+        emit VestingDeposit(address(cellar), address(cellar), amount);
     }
 
-    function _emitWithdraw(uint256 amount, uint256 depositId) internal {
-        emit Withdraw(address(cellar), depositId, amount);
+    function _emitWithdraw(address receiver, uint256 amount, uint256 depositId) internal {
+        emit VestingWithdraw(address(cellar), receiver, depositId, amount);
     }
 }

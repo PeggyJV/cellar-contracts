@@ -523,8 +523,8 @@ contract UltimateStableCoinCellarTest is Test {
             // Deposit all Idle USDC into Vesting Contract.
             adaptorCalls[0] = abi.encodeWithSelector(
                 VestingSimpleAdaptor.depositToVesting.selector,
-                type(uint256).max,
-                abi.encode(usdcVestor)
+                usdcVestor,
+                type(uint256).max
             );
             data[2] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
         }

@@ -18,18 +18,20 @@ contract VestingSimple {
     using EnumerableSet for EnumerableSet.UintSet;
     using Math for uint256;
 
-    /// @notice Emitted when tokens are deosited for vesting.
+    /// @notice Emitted when tokens are deposited for vesting.
     ///
-    /// @param user The user receiving the deposit.
+    /// @param user The user making the deposit.
+    /// @param receiver The user receiving the shares.
     /// @param amount The amount of tokens deposited.
-    event Deposit(address indexed user, uint256 amount);
+    event VestingDeposit(address indexed user, address indexed receiver, uint256 amount);
 
     /// @notice Emitted when vested tokens are withdrawn.
     ///
-    /// @param user The user receiving the deposit.
+    /// @param user The owner of the deposit.
+    /// @param receiver The user receiving the deposit.
     /// @param depositId The ID of the deposit specified.
     /// @param amount The amount of tokens deposited.
-    event Withdraw(address indexed user, uint256 depositId, uint256 amount);
+    event VestingWithdraw(address indexed user, address indexed receiver, uint256 depositId, uint256 amount);
 
     // ============================================= ERRORS =============================================
 
@@ -175,9 +177,9 @@ contract VestingSimple {
         unvestedDeposits += assets;
 
         // Collect tokens
-        ERC20(asset).transferFrom(msg.sender, address(this), assets);
+        ERC20(asset).safeTransferFrom(msg.sender, address(this), assets);
 
-        emit Deposit(receiver, assets);
+        emit VestingDeposit(msg.sender, receiver, assets);
     }
 
     /**
@@ -212,7 +214,7 @@ contract VestingSimple {
             allUserDepositIds[msg.sender].remove(depositId);
         }
 
-        emit Withdraw(msg.sender, depositId, assets);
+        emit VestingWithdraw(msg.sender, msg.sender, depositId, assets);
 
         asset.safeTransfer(msg.sender, assets);
     }
@@ -233,7 +235,8 @@ contract VestingSimple {
             if (s.amountPerSecond > 0 && (s.vested > 0 || s.lastClaimed < s.until)) {
                 _vestDeposit(msg.sender, depositIds[i]);
 
-                shares += s.vested;
+                uint256 vested = s.vested;
+                shares += vested;
                 s.vested = 0;
 
                 // Remove deposit if needed
@@ -242,7 +245,7 @@ contract VestingSimple {
                     allUserDepositIds[msg.sender].remove(depositIds[i]);
                 }
 
-                emit Withdraw(msg.sender, depositIds[i], s.vested);
+                emit VestingWithdraw(msg.sender, msg.sender, depositIds[i], vested);
             }
         }
 
@@ -284,7 +287,7 @@ contract VestingSimple {
                     s.vested = 0;
                 }
 
-                emit Withdraw(msg.sender, depositIds[i], payout);
+                emit VestingWithdraw(msg.sender, receiver, depositIds[i], payout);
 
                 // Remove deposit if needed
                 // Will not affect loop logic because values are pre-defined
