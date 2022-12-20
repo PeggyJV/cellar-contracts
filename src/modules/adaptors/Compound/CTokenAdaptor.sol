@@ -135,6 +135,17 @@ contract CTokenAdaptor is BaseAdaptor {
     }
 
     /**
+     * @notice When positions are added to the Registry, this function can be used in order to figure out
+     *         what assets this adaptor needs to price, and confirm pricing is properly setup.
+     * @dev COMP is used when claiming COMP and swapping.
+     */
+    function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
+        assets = new ERC20[](2);
+        assets[0] = assetOf(adaptorData);
+        assets[1] = COMP();
+    }
+
+    /**
      * @notice This adaptor returns collateral, and not debt.
      */
     function isDebt() public pure override returns (bool) {

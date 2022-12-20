@@ -165,6 +165,17 @@ contract UniswapV3Adaptor is BaseAdaptor {
     }
 
     /**
+     * @notice When positions are added to the Registry, this function can be used in order to figure out
+     *         what assets this adaptor needs to price, and confirm pricing is properly setup.
+     */
+    function assetsUsed(bytes memory adaptorData) public pure override returns (ERC20[] memory assets) {
+        assets = new ERC20[](2);
+        (ERC20 token0, ERC20 token1) = abi.decode(adaptorData, (ERC20, ERC20));
+        assets[0] = token0;
+        assets[1] = token1;
+    }
+
+    /**
      * @notice This adaptor returns collateral, and not debt.
      */
     function isDebt() public pure override returns (bool) {

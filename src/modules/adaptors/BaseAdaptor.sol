@@ -111,6 +111,15 @@ abstract contract BaseAdaptor {
     function assetOf(bytes memory adaptorData) public view virtual returns (ERC20);
 
     /**
+     * @notice When positions are added to the Registry, this function can be used in order to figure out
+     *         what assets this adaptor needs to price, and confirm pricing is properly setup.
+     */
+    function assetsUsed(bytes memory adaptorData) public view virtual returns (ERC20[] memory assets) {
+        assets = new ERC20[](1);
+        assets[0] = assetOf(adaptorData);
+    }
+
+    /**
      * @notice Functions Registry/Cellars use to determine if this adaptor reports debt values.
      * @dev returns true if this adaptor reports debt values.
      */

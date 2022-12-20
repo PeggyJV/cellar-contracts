@@ -43,6 +43,8 @@ contract CellarCompoundTest is Test {
     CErc20 private cDAI = CErc20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     CErc20 private cUSDC = CErc20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
+    ERC20 private TUSD = ERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
+    CErc20 private cTUSD = CErc20(0x12392F67bdf24faE0AF363c24aC620a2f67DAd86);
 
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -54,6 +56,7 @@ contract CellarCompoundTest is Test {
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
     address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
     address private COMP_USD_FEED = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
+    address private TUSD_USD_FEED = 0xec746eCF986E2927Abd291a2A1716c940100f8Ba;
 
     uint32 private daiPosition;
     uint32 private cDAIPosition;
@@ -273,6 +276,24 @@ contract CellarCompoundTest is Test {
         }
 
         assertApproxEqRel(cellar.totalAssets(), assets, 0.001e18, "totalAssets should be equal to original assets.");
+    }
+
+    function testAddingPositionWithUnsupportedAssetsReverts() external {
+        // trust position fails because TUSD is not set up for pricing.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(TUSD)))
+        );
+        registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)), 0, 0);
+
+        // Add TUSD.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(TUSD_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, TUSD_USD_FEED);
+        priceRouter.addAsset(TUSD, settings, abi.encode(stor), price);
+
+        // trust position works now.
+        registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)), 0, 0);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
