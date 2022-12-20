@@ -23,7 +23,7 @@ contract VestingSimple {
     /// @param user The user making the deposit.
     /// @param receiver The user receiving the shares.
     /// @param amount The amount of tokens deposited.
-    event Deposit(address indexed user, address indexed receiver, uint256 amount);
+    event VestingDeposit(address indexed user, address indexed receiver, uint256 amount);
 
     /// @notice Emitted when vested tokens are withdrawn.
     ///
@@ -31,7 +31,7 @@ contract VestingSimple {
     /// @param receiver The user receiving the deposit.
     /// @param depositId The ID of the deposit specified.
     /// @param amount The amount of tokens deposited.
-    event Withdraw(address indexed user, address indexed receiver, uint256 depositId, uint256 amount);
+    event VestingWithdraw(address indexed user, address indexed receiver, uint256 depositId, uint256 amount);
 
     // ============================================= ERRORS =============================================
 
@@ -179,7 +179,7 @@ contract VestingSimple {
         // Collect tokens
         ERC20(asset).safeTransferFrom(msg.sender, address(this), assets);
 
-        emit Deposit(msg.sender, receiver, assets);
+        emit VestingDeposit(msg.sender, receiver, assets);
     }
 
     /**
@@ -214,7 +214,7 @@ contract VestingSimple {
             allUserDepositIds[msg.sender].remove(depositId);
         }
 
-        emit Withdraw(msg.sender, msg.sender, depositId, assets);
+        emit VestingWithdraw(msg.sender, msg.sender, depositId, assets);
 
         asset.safeTransfer(msg.sender, assets);
     }
@@ -245,7 +245,7 @@ contract VestingSimple {
                     allUserDepositIds[msg.sender].remove(depositIds[i]);
                 }
 
-                emit Withdraw(msg.sender, msg.sender, depositIds[i], vested);
+                emit VestingWithdraw(msg.sender, msg.sender, depositIds[i], vested);
             }
         }
 
@@ -287,7 +287,7 @@ contract VestingSimple {
                     s.vested = 0;
                 }
 
-                emit Withdraw(msg.sender, receiver, depositIds[i], payout);
+                emit VestingWithdraw(msg.sender, receiver, depositIds[i], payout);
 
                 // Remove deposit if needed
                 // Will not affect loop logic because values are pre-defined
