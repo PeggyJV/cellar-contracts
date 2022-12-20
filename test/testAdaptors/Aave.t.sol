@@ -43,6 +43,8 @@ contract CellarAaveTest is Test {
     ERC20 private dWETH = ERC20(0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf);
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     ERC20 private aWBTC = ERC20(0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656);
+    ERC20 private TUSD = ERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
+    ERC20 private aTUSD = ERC20(0x101cc05f4A51C0319f570d5E146a8C625198e636);
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
@@ -53,6 +55,7 @@ contract CellarAaveTest is Test {
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
     // Note this is the BTC USD data feed, but we assume the risk that WBTC depegs from BTC.
     address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
+    address private TUSD_USD_FEED = 0xec746eCF986E2927Abd291a2A1716c940100f8Ba;
 
     uint32 private usdcPosition;
     uint32 private aUSDCPosition;
@@ -538,6 +541,24 @@ contract CellarAaveTest is Test {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
         cellar.callOnAdaptor(data);
+    }
+
+    function testAddingPositionWithUnsupportedAssetsReverts() external {
+        // trust position fails because TUSD is not set up for pricing.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(TUSD)))
+        );
+        registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aTUSD)), 0, 0);
+
+        // Add TUSD.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(TUSD_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, TUSD_USD_FEED);
+        priceRouter.addAsset(TUSD, settings, abi.encode(stor), price);
+
+        // trust position works now.
+        registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aTUSD)), 0, 0);
     }
 
     // ========================================== INTEGRATION TEST ==========================================
