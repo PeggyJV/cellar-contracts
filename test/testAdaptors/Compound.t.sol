@@ -209,8 +209,8 @@ contract CellarCompoundTest is Test {
         bytes[] memory adaptorCalls0 = new bytes[](1);
         adaptorCalls0[0] = abi.encodeWithSelector(
             VestingSimpleAdaptor.depositToVesting.selector,
-            type(uint256).max,
-            abi.encode(vesting)
+            vesting,
+            type(uint256).max
         );
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
