@@ -191,9 +191,9 @@ contract UltimateStableCoinCellarTest is Test {
         dDAIPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dDAI)), 0, 0);
         aUSDTPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDT)), 0, 0);
         dUSDTPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDT)), 0, 0);
-        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDC)), 0, 0);
-        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cDAI)), 0, 0);
-        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDT)), 0, 0);
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC), 0, 0);
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI), 0, 0);
+        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDT), 0, 0);
         vUSDCPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(usdcVestor), 0, 0);
 
         positions[0] = usdcPosition;
