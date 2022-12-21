@@ -150,6 +150,8 @@ contract UniswapV3AdaptorTest is Test {
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
         cellar.setupAdaptor(address(uniswapV3Adaptor));
 
+        cellar.setRebalanceDeviation(0.003e18);
+
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
 

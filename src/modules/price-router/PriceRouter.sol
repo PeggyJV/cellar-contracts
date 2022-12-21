@@ -967,11 +967,6 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     // =========================================== CURVEV2 PRICE DERIVATIVE ===========================================
-    /**
-     * @notice Curve Derivative Storage
-     * @dev Stores an array of the underlying token addresses in the curve pool.
-     */
-    mapping(ERC20 => address[]) public getCurveV2DerivativeStorage;
 
     /**
      * @notice Setup function for pricing CurveV2 derivative assets.
