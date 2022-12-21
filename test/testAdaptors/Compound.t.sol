@@ -115,6 +115,7 @@ contract CellarCompoundTest is Test {
             "COMP-CLR",
             abi.encode(positions, debtPositions, positionConfigs, debtConfigs, cDAIPosition, address(0))
         );
+        cellar.setRebalanceDeviation(0.003e18);
         cellar.setupAdaptor(address(cTokenAdaptor));
         cellar.setupAdaptor(address(vestingAdaptor));
         DAI.safeApprove(address(cellar), type(uint256).max);

@@ -439,8 +439,14 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     // =========================================== CONSTRUCTOR ===========================================
+
     /**
-     * @notice Addresses of the positions currently used by the cellar.
+     * @notice Id to get the gravity bridge from the registry.
+     */
+    uint256 public constant GRAVITY_BRIDGE_REGISTRY_SLOT = 0;
+
+    /**
+     * @notice Id to get the price router from the registry.
      */
     uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
 
@@ -482,16 +488,13 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *               -  _assetRiskTolerance this cellars risk tolerance for assets it is exposed to
      *               -  _protocolRiskTolerance this cellars risk tolerance for protocols it will use
      */
-    //  TODO add tests related to setting new holding position
-    // Fix initializer function
-    // Fix tests.
     constructor(
         Registry _registry,
         ERC20 _asset,
         string memory _name,
         string memory _symbol,
         bytes memory params
-    ) ERC4626(_asset, _name, _symbol, 18) Owned(_registry.getAddress(0)) {
+    ) ERC4626(_asset, _name, _symbol, 18) Owned(_registry.getAddress(GRAVITY_BRIDGE_REGISTRY_SLOT)) {
         registry = _registry;
 
         {
@@ -1173,7 +1176,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice The percent the total assets of a cellar may deviate during a `callOnAdaptor`(rebalance) call.
      */
-    uint256 public allowedRebalanceDeviation = 0.003e18;
+    uint256 public allowedRebalanceDeviation = 0.0003e18;
 
     /**
      * @notice Allows governance to change this cellars rebalance deviation.
@@ -1396,7 +1399,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             _burn(address(this), platformFees);
 
             // Transfer assets to a fee distributor on the Sommelier chain.
-            IGravity gravityBridge = IGravity(registry.getAddress(0));
+            IGravity gravityBridge = IGravity(registry.getAddress(GRAVITY_BRIDGE_REGISTRY_SLOT));
             asset.safeApprove(address(gravityBridge), assets);
             gravityBridge.sendToCosmos(address(asset), registry.feesDistributor(), assets);
         }

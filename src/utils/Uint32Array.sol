@@ -2,16 +2,16 @@
 pragma solidity 0.8.16;
 
 /**
- * @notice A library to extend the address array data type.
+ * @notice A library to extend the uint32 array data type.
  */
 library Uint32Array {
     // =========================================== ADDRESS STORAGE ===========================================
 
     /**
-     * @notice Add an address to the array at a given index.
-     * @param array address array to add the address to
-     * @param index index to add the address at
-     * @param value address to add to the array
+     * @notice Add an uint32 to the array at a given index.
+     * @param array uint32 array to add the uint32 to
+     * @param index index to add the uint32 at
+     * @param value uint32 to add to the array
      */
     function add(
         uint32[] storage array,
@@ -32,9 +32,9 @@ library Uint32Array {
     }
 
     /**
-     * @notice Remove a uint256 from the array at a given index.
-     * @param array uint256 array to remove the uint256 from
-     * @param index index to remove the uint256 at
+     * @notice Remove a uint32 from the array at a given index.
+     * @param array uint32 array to remove the uint32 from
+     * @param index index to remove the uint32 at
      */
     function remove(uint32[] storage array, uint32 index) internal {
         uint256 len = array.length;
@@ -47,9 +47,9 @@ library Uint32Array {
     }
 
     /**
-     * @notice Check whether an array contains an uint256.
-     * @param array uint256 array to check
-     * @param value uint256 to check for
+     * @notice Check whether an array contains an uint32.
+     * @param array uint32 array to check
+     * @param value uint32 to check for
      */
     function contains(uint32[] storage array, uint32 value) internal view returns (bool) {
         for (uint256 i; i < array.length; i++) if (value == array[i]) return true;

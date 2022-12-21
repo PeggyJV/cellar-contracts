@@ -150,6 +150,8 @@ contract CellarAssetManagerTest is Test {
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
         cellar.setupAdaptor(address(cellarAdaptor));
 
+        cellar.setRebalanceDeviation(0.003e18);
+
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(exchange), type(uint224).max);
         deal(address(WETH), address(exchange), type(uint224).max);
