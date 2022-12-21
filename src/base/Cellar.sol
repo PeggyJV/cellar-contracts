@@ -1486,9 +1486,38 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Get all the credit positions underlying assets.
      */
     function getPositionAssets() external view returns (ERC20[] memory assets) {
-        assets = new ERC20[](creditPositions.length);
-        for (uint256 i = 0; i < creditPositions.length; ++i) {
-            assets[i] = _assetOf(creditPositions[i]);
+        (assets, , , ) = getPositionsOverview();
+    }
+
+    /**
+     * @notice Returns an overview of all Cellar positions.
+     */
+    function getPositionsOverview()
+        public
+        view
+        returns (
+            ERC20[] memory creditAssets,
+            uint256[] memory creditBalances,
+            ERC20[] memory debtAssets,
+            uint256[] memory debtBalances
+        )
+    {
+        uint256 creditLength = creditPositions.length;
+        uint256 debtLength = debtPositions.length;
+        creditAssets = new ERC20[](creditLength);
+        creditBalances = new uint256[](creditLength);
+        debtAssets = new ERC20[](debtLength);
+        debtBalances = new uint256[](debtLength);
+        for (uint256 i = 0; i < creditLength; ++i) {
+            uint32 position = creditPositions[i];
+            creditAssets[i] = _assetOf(position);
+            creditBalances[i] = _balanceOf(position);
+        }
+
+        for (uint256 i = 0; i < debtLength; ++i) {
+            uint32 position = debtPositions[i];
+            debtAssets[i] = _assetOf(position);
+            debtBalances[i] = _balanceOf(position);
         }
     }
 }

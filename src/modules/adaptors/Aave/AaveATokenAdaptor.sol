@@ -233,6 +233,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
      * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
      */
     function withdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
+        amountToWithdraw = _maxAvailable(tokenToWithdraw, amountToWithdraw);
         pool().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
     }
 }

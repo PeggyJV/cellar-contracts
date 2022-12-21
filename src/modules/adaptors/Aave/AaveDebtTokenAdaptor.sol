@@ -148,6 +148,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         SwapRouter.Exchange exchange,
         bytes memory params
     ) public {
+        amountIn = _maxAvailable(tokenIn, amountIn);
         uint256 amountToRepay = swap(tokenIn, tokenToRepay, amountIn, exchange, params);
         repayAaveDebt(tokenToRepay, amountToRepay);
     }

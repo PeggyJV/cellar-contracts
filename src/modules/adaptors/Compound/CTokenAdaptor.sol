@@ -172,6 +172,7 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
+        amountToWithdraw = _maxAvailable(ERC20(address(market)), amountToWithdraw);
         market.redeemUnderlying(amountToWithdraw);
     }
 

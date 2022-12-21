@@ -319,7 +319,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param liquidity the amount of liquidity to take from the position
      * @param min0 the minimum amount of `token0` to get from taking liquidity
      * @param min1 the minimum amount of `token1` to get from taking liquidity
-     * @param collectFees bool indicating whether to collect principal(if false),
+     * @param takeFees bool indicating whether to collect principal(if false),
      *                    or principal + fees (if true)
      */
     function takeFromPosition(
@@ -327,7 +327,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint128 liquidity,
         uint256 min0,
         uint256 min1,
-        bool collectFees
+        bool takeFees
     ) public {
         _checkPositionId(positionId);
 
@@ -349,7 +349,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Decrease liquidity in pool.
         (uint256 amount0, uint256 amount1) = positionManager().decreaseLiquidity(params);
 
-        if (collectFees) {
+        if (takeFees) {
             // Collect principal + fees from position.
             _collectFees(positionId, type(uint128).max, type(uint128).max);
         } else {
