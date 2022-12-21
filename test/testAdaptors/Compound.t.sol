@@ -97,9 +97,9 @@ contract CellarCompoundTest is Test {
         registry.trustAdaptor(address(cTokenAdaptor), 0, 0);
         registry.trustAdaptor(address(vestingAdaptor), 0, 0);
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
-        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cDAI)), 0, 0);
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI), 0, 0);
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDC)), 0, 0);
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC), 0, 0);
         daiVestingPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(vesting), 0, 0);
         positions[0] = cDAIPosition;
         positions[1] = daiPosition;

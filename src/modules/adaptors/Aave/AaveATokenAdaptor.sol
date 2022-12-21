@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
@@ -12,6 +12,7 @@ import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
  */
 contract AaveATokenAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
+    using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(address aToken)
@@ -125,6 +126,9 @@ contract AaveATokenAdaptor is BaseAdaptor {
      *      -the current health factor is less than the minimum health factor + 2x `cushion`
      *      Otherwise this function calculates the withdrawable amount using
      *      minimum health factor + `cushion` for its calcualtions.
+     * @dev It is possible for the math below to lose a small amount of precision since it is only
+     *      maintaining 18 decimals during the calculation, but this is desired since
+     *      doing so lowers the withdrawable from amount which in turn raises the health factor.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory configData)
         public
@@ -159,15 +163,17 @@ contract AaveATokenAdaptor is BaseAdaptor {
         else {
             maxBorrowableWithMin =
                 totalCollateralETH -
-                (((minHealthFactor) * totalDebtETH) / (currentLiquidationThreshold * 1e14));
+                minHealthFactor.mulDivDown(totalDebtETH, (currentLiquidationThreshold * 1e14));
         }
+        /// @dev The 1e14 comes from totalDebtETH is given in 18 decimals, so we need to divide by 1e18, but
+        // currentLiquidationThreshold has 4 decimals, so by multiplying it by 1e14, we make it not have 18 decimals total.
 
         // If aToken underlying is WETH, then no Price Router conversion is needed.
         ERC20 underlying = ERC20(token.UNDERLYING_ASSET_ADDRESS());
         if (underlying == WETH()) return maxBorrowableWithMin;
 
         // Else convert `maxBorrowableWithMin` from WETH to position underlying asset.
-        PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(2));
+        PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT()));
         uint256 withdrawable = priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
         uint256 balance = ERC20(address(token)).balanceOf(msg.sender);
         // Check if withdrawable is greater than the position balance and if so return the balance instead of withdrawable.
