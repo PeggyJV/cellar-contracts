@@ -400,8 +400,8 @@ contract CellarAaveTest is Test {
         Cellar.AdaptorCall[] memory dataInsideFlashLoan = new Cellar.AdaptorCall[](2);
         bytes[] memory adaptorCallsInsideFlashLoanFirstAdaptor = new bytes[](1);
         bytes[] memory adaptorCallsInsideFlashLoanSecondAdaptor = new bytes[](1);
-        adaptorCallsInsideFlashLoanFirstAdaptor[0] = _createBytesDataToLend(USDC, 4 * assets);
-        adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToBorrow(dUSDC, 4 * assets.mulWadDown(1.009e18));
+        adaptorCallsInsideFlashLoanFirstAdaptor[0] = _createBytesDataToLend(USDC, 2 * assets);
+        adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToBorrow(dUSDC, 2 * assets.mulWadDown(1.009e18));
         dataInsideFlashLoan[0] = Cellar.AdaptorCall({
             adaptor: address(aaveATokenAdaptor),
             callData: adaptorCallsInsideFlashLoanFirstAdaptor
@@ -424,16 +424,9 @@ contract CellarAaveTest is Test {
 
         assertApproxEqAbs(
             aUSDC.balanceOf(address(cellar)),
-            5 * assets,
+            3 * assets,
             1,
-            "Cellar should have 5x its aave assets using a flash loan."
-        );
-
-        uint256 maxWithdraw = cellar.maxWithdraw(address(this));
-        assertEq(
-            maxWithdraw,
-            USDC.balanceOf(address(cellar)),
-            "Only assets withdrawable should be USDC sitting in the cellar."
+            "Cellar should have 3x its aave assets using a flash loan."
         );
     }
 

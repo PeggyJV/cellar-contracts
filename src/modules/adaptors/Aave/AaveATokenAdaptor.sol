@@ -64,6 +64,14 @@ contract AaveATokenAdaptor is BaseAdaptor {
         return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     }
 
+    /**
+     * @notice Minimum Health Factor enforced after every aToken withdraw.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    function HFMIN() internal pure returns (uint256) {
+        return 1.2e18;
+    }
+
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
@@ -110,6 +118,8 @@ contract AaveATokenAdaptor is BaseAdaptor {
         if (minHealthFactor == 0) {
             revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
+        // Check if adaptor minimum health factor is more conservative than strategist set.
+        if (HFMIN() < minHealthFactor) minHealthFactor = HFMIN();
         (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
         if (healthFactor < minHealthFactor) revert AaveATokenAdaptor__HealthFactorTooLow();
 
@@ -138,6 +148,8 @@ contract AaveATokenAdaptor is BaseAdaptor {
     {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         uint256 minHealthFactor = abi.decode(configData, (uint256));
+        // Check if adaptor minimum health factor is more conservative than strategist set.
+        if (HFMIN() < minHealthFactor) minHealthFactor = HFMIN();
         (
             uint256 totalCollateralETH,
             uint256 totalDebtETH,
@@ -234,5 +246,8 @@ contract AaveATokenAdaptor is BaseAdaptor {
      */
     function withdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
         pool().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
+        // Check that health factor is above adaptor minimum.
+        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
+        if (healthFactor < HFMIN()) revert AaveATokenAdaptor__HealthFactorTooLow();
     }
 }
