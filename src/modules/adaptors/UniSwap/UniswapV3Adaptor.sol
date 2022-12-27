@@ -90,11 +90,23 @@ contract UniswapV3Adaptor is BaseAdaptor {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         // Get exchnage rate between token0 and token1.
         (ERC20 token0, ERC20 token1) = abi.decode(adaptorData, (ERC20, ERC20));
-        uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT()))
-            .getExchangeRate(token1, token0);
+        uint256 precisionPrice;
+        {
+            PriceRouter priceRouter = PriceRouter(
+                Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
+            );
+            uint256 baseToUSD = priceRouter.getPriceInUSD(token1);
+            uint256 quoteToUSD = priceRouter.getPriceInUSD(token0);
+            baseToUSD = baseToUSD * 1e18; // Multiplt by 1e18 to keep some precision.
+            precisionPrice = baseToUSD.mulDivDown(10**token0.decimals(), quoteToUSD);
+        }
+        // TODO remove this.
+        // Old price implementation for reference.
+        // uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT()))
+        //     .getExchangeRate(token1, token0);
 
         // Calculate current sqrtPrice.
-        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
+        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (precisionPrice / 1e18);
         uint160 sqrtPriceX96 = _sqrt(ratioX192).toUint160();
 
         // Grab cellars balance of UniV3 NFTs.
@@ -153,7 +165,9 @@ contract UniswapV3Adaptor is BaseAdaptor {
         }
 
         // Return amount of `token0` + amount of `token1` converted into `token0`;
-        return amount0 + amount1.mulDivDown(price, 10**token1.decimals());
+        amount1 = amount1.mulDivDown(precisionPrice, 10**token1.decimals());
+        amount1 = amount1 / 1e18; // Remove precision scaler.
+        return amount0 + amount1;
     }
 
     /**
