@@ -119,7 +119,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
             revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
         // Check if adaptor minimum health factor is more conservative than strategist set.
-        if (HFMIN() < minHealthFactor) minHealthFactor = HFMIN();
+        if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
         (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
         if (healthFactor < minHealthFactor) revert AaveATokenAdaptor__HealthFactorTooLow();
 
@@ -149,7 +149,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         uint256 minHealthFactor = abi.decode(configData, (uint256));
         // Check if adaptor minimum health factor is more conservative than strategist set.
-        if (HFMIN() < minHealthFactor) minHealthFactor = HFMIN();
+        if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
         (
             uint256 totalCollateralETH,
             uint256 totalDebtETH,
