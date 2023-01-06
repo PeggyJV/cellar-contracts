@@ -4,6 +4,8 @@
 solc_version = '0.8.16'
 auto_detect_solc = false
 
-# eth_rpc_url = "YOUR_ALCHEMY_HTTPS_URL_HERE"
-# etherscan_api_key = "YOUR_ETHERSCAN_API_KEY_HERE"
+# eth_rpc_url = "https://eth-mainnet.g.alchemy.com/v2/zpL9dcaeUW0JXonFxvxfinv-ZS_ud63K"
+eth_rpc_url = "https://rpc.tenderly.co/fork/0aacda62-d972-4ffc-929d-c2c58b1fdadd"
+etherscan_api_key = "5TG6FZ8JHIPPSWQYYGKVPBHEISRDNN2VH3"
 block_number = 15000000
+

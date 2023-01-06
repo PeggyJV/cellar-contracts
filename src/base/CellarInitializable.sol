@@ -68,15 +68,16 @@ contract CellarInitializable is Cellar, Initializable {
             uint128 _protocolRiskTolerance
         ) = abi.decode(_params, (uint32[], uint32[], bytes[], bytes[], uint32, address, uint128, uint128));
 
+        // Initialize remaining values.
+        assetRiskTolerance = _assetRiskTolerance;
+        protocolRiskTolerance = _protocolRiskTolerance;
+
         for (uint32 i; i < _creditPositions.length; i++)
             _addPosition(i, _creditPositions[i], _creditConfigurationData[i], false);
         for (uint32 i; i < _debtPositions.length; i++)
             _addPosition(i, _debtPositions[i], _debtConfigurationData[i], true);
         _setHoldingPosition(_holdingPosition);
 
-        // Initialize remaining values.
-        assetRiskTolerance = _assetRiskTolerance;
-        protocolRiskTolerance = _protocolRiskTolerance;
         feeData = FeeData({
             strategistPlatformCut: 0.75e18,
             platformFee: 0.01e18,
