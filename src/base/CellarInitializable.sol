@@ -3,7 +3,6 @@ pragma solidity 0.8.16;
 
 import { Cellar, Registry, ERC20 } from "src/base/Cellar.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import { console } from "@forge-std/Test.sol";
 
 contract CellarInitializable is Cellar, Initializable {
     /**

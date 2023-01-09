@@ -3,18 +3,13 @@ pragma solidity 0.8.16;
 
 import { ERC20, SafeTransferLib } from "src/base/ERC4626.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { AggregatorV2V3Interface } from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
-import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
-
-import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Price Router
@@ -406,10 +401,11 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint8 quoteDecimals,
         uint256 amountBase
     ) internal pure returns (uint256 valueInQuote) {
-        // Get amountBase converted into USD.
-        uint256 baseUSD = amountBase.mulDivDown(priceBaseUSD, 10**baseDecimals);
-        // Get value in quote asset.
-        valueInQuote = baseUSD.mulDivDown(10**quoteDecimals, priceQuoteUSD);
+        // Get value in quote asset, but maintain as much precision as possible.
+        // Cleaner equations below.
+        // baseToUSD = amountBase * priceBaseUSD / 10**baseDecimals.
+        // valueInQuote = baseToUSD * 10**quoteDecimals / priceQuoteUSD
+        valueInQuote = amountBase.mulDivDown((priceBaseUSD * 10**quoteDecimals), (10**baseDecimals * priceQuoteUSD));
     }
 
     /**
