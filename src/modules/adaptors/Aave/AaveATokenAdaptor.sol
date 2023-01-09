@@ -4,6 +4,7 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Aave aToken Adaptor
@@ -116,6 +117,8 @@ contract AaveATokenAdaptor is BaseAdaptor {
         // Run minimum health factor checks.
         uint256 minHealthFactor = abi.decode(configData, (uint256));
         if (minHealthFactor == 0) {
+            console.log("Why are you here", minHealthFactor);
+            console.log("Token", token.UNDERLYING_ASSET_ADDRESS());
             revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
         // Check if adaptor minimum health factor is more conservative than strategist set.
@@ -148,6 +151,9 @@ contract AaveATokenAdaptor is BaseAdaptor {
     {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         uint256 minHealthFactor = abi.decode(configData, (uint256));
+        // Check if minimum health factor is set.
+        // If not the strategist does not want users to withdraw from this position.
+        if (minHealthFactor == 0) return 0;
         // Check if adaptor minimum health factor is more conservative than strategist set.
         if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
         (
