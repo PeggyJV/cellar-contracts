@@ -98,7 +98,10 @@ contract PriceRouterTest is Test {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BOND_ETH_FEED);
         stor = PriceRouter.ChainlinkDerivativeStorage(0, 0, 0, true);
 
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), 2.673e8);
+        price = uint256(IChainlinkAggregator(BOND_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        priceRouter.addAsset(BOND, settings, abi.encode(stor), price);
     }
 
     // ======================================= ASSET TESTS =======================================
@@ -110,8 +113,10 @@ contract PriceRouterTest is Test {
             2 days,
             true
         );
-
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), 2.673e8);
+        uint256 price = uint256(IChainlinkAggregator(BOND_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        priceRouter.addAsset(BOND, settings, abi.encode(stor), price);
 
         (uint144 maxPrice, uint80 minPrice, uint24 heartbeat, bool isETH) = priceRouter.getChainlinkDerivativeStorage(
             BOND

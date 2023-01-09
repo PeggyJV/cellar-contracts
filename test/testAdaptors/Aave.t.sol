@@ -328,6 +328,9 @@ contract CellarAaveTest is Test {
         cellar.swapPositions(0, 1, false);
         cellar.setHoldingPosition(usdcPosition);
 
+        // Adjust rebalance deviation so we can swap full amount of USDC for WETH.
+        cellar.setRebalanceDeviation(0.003e18);
+
         // Add WETH, aWETH, and dWETH as trusted positions to the registry.
         uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
         uint32 aWETHPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aWETH)), 0, 0);

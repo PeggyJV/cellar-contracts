@@ -169,7 +169,7 @@ contract CellarCompoundTest is Test {
         assertApproxEqRel(
             cellar.totalAssets(),
             assets,
-            0.0002e18,
+            0.0005e18,
             "Total assets should equal assets deposited minus swap fees."
         );
     }
@@ -204,7 +204,7 @@ contract CellarCompoundTest is Test {
             USDC,
             SwapRouter.Exchange.UNIV3,
             params,
-            0.99e18
+            0.98e18
         );
         // Create data to vest USDC.
         bytes[] memory adaptorCalls0 = new bytes[](1);

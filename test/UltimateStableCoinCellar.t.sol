@@ -405,8 +405,8 @@ contract UltimateStableCoinCellarTest is Test {
         // Note any remaining USDC dust from prior calls will be lent on Aave.
         {
             // divide by 5 to use 20% of assets.
-            // multiply by 4 to use 5x leverage.
-            uint256 USDTtoFlashLoan = assets.mulDivDown(4, 5);
+            // multiply by 2 to use 3x leverage.
+            uint256 USDTtoFlashLoan = assets.mulDivDown(2, 5);
             // Borrow the flash loan amount + premium.
             uint256 USDTtoBorrow = USDTtoFlashLoan.mulDivDown(1e3 + pool.FLASHLOAN_PREMIUM_TOTAL(), 1e3);
 
