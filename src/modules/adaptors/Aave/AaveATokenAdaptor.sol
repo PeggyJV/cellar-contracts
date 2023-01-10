@@ -4,7 +4,6 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
-import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Aave aToken Adaptor
@@ -117,8 +116,6 @@ contract AaveATokenAdaptor is BaseAdaptor {
         // Run minimum health factor checks.
         uint256 minHealthFactor = abi.decode(configData, (uint256));
         if (minHealthFactor == 0) {
-            console.log("Why are you here", minHealthFactor);
-            console.log("Token", token.UNDERLYING_ASSET_ADDRESS());
             revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
         // Check if adaptor minimum health factor is more conservative than strategist set.
@@ -176,7 +173,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         if (totalDebtETH == 0) return ERC20(address(token)).balanceOf(msg.sender);
 
         // If minHealthFactor is not set, or if current health factor is less than the minHealthFactor + 2X cushion, return 0.
-        if (minHealthFactor == cushion || healthFactor < (minHealthFactor + cushion)) return 0;
+        if (healthFactor < (minHealthFactor + cushion)) return 0;
         // Calculate max amount withdrawable while preserving minimum health factor.
         else {
             maxBorrowableWithMin =
@@ -184,7 +181,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
                 minHealthFactor.mulDivDown(totalDebtETH, (currentLiquidationThreshold * 1e14));
         }
         /// @dev The 1e14 comes from totalDebtETH is given in 18 decimals, so we need to divide by 1e18, but
-        // currentLiquidationThreshold has 4 decimals, so by multiplying it by 1e14, we make it not have 18 decimals total.
+        // currentLiquidationThreshold has 4 decimals, so by multiplying it by 1e14, the denominator has 18 decimals total.
 
         // If aToken underlying is WETH, then no Price Router conversion is needed.
         ERC20 underlying = ERC20(token.UNDERLYING_ASSET_ADDRESS());
