@@ -191,9 +191,9 @@ contract UltimateStableCoinCellarTest is Test {
         dDAIPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dDAI)), 0, 0);
         aUSDTPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDT)), 0, 0);
         dUSDTPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDT)), 0, 0);
-        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDC)), 0, 0);
-        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cDAI)), 0, 0);
-        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDT)), 0, 0);
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC), 0, 0);
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI), 0, 0);
+        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDT), 0, 0);
         vUSDCPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(usdcVestor), 0, 0);
 
         positions[0] = usdcPosition;
@@ -233,7 +233,7 @@ contract UltimateStableCoinCellarTest is Test {
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                usdcPosition,
                 strategist,
                 type(uint128).max,
                 type(uint128).max
@@ -323,7 +323,7 @@ contract UltimateStableCoinCellarTest is Test {
     function testUltimateStableCoinCellar() external {
         // Start by managing credit positions to reflect the following.
         // 0) Vesting USDC
-        // 1) Compound USDC (holding posiiton)
+        // 1) Compound USDC (holding position)
         // 2) Aave USDC
         // 3) Uniswap V3 DAI/USDC LP
         // 4) Uniswap V3 USDC/USDT LP
@@ -333,7 +333,7 @@ contract UltimateStableCoinCellarTest is Test {
         // Swap cUSDC and DAI position.
         cellar.swapPositions(1, 8, false);
         // Change holding position to index 1
-        cellar.setHoldingIndex(1);
+        cellar.setHoldingPosition(cUSDCPosition);
         // Swap USDC and vesting USDC positions.
         cellar.swapPositions(0, 11, false);
         // Swap USDT position and aUSDC.
@@ -405,8 +405,8 @@ contract UltimateStableCoinCellarTest is Test {
         // Note any remaining USDC dust from prior calls will be lent on Aave.
         {
             // divide by 5 to use 20% of assets.
-            // multiply by 4 to use 5x leverage.
-            uint256 USDTtoFlashLoan = assets.mulDivDown(4, 5);
+            // multiply by 2 to use 3x leverage.
+            uint256 USDTtoFlashLoan = assets.mulDivDown(2, 5);
             // Borrow the flash loan amount + premium.
             uint256 USDTtoBorrow = USDTtoFlashLoan.mulDivDown(1e3 + pool.FLASHLOAN_PREMIUM_TOTAL(), 1e3);
 
@@ -523,8 +523,8 @@ contract UltimateStableCoinCellarTest is Test {
             // Deposit all Idle USDC into Vesting Contract.
             adaptorCalls[0] = abi.encodeWithSelector(
                 VestingSimpleAdaptor.depositToVesting.selector,
-                type(uint256).max,
-                abi.encode(usdcVestor)
+                usdcVestor,
+                type(uint256).max
             );
             data[2] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
         }

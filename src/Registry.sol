@@ -271,10 +271,12 @@ contract Registry is Ownable {
 
         getPositionHashToPositionId[positionHash] = positionId;
 
-        // Check that asset of position is supported for pricing operations.
-        ERC20 positionAsset = BaseAdaptor(adaptor).assetOf(adaptorData);
-        if (!PriceRouter(getAddress[PRICE_ROUTER_REGISTRY_SLOT]).isSupported(positionAsset))
-            revert Registry__PositionPricingNotSetUp(address(positionAsset));
+        // Check that assets position uses are supported for pricing operations.
+        ERC20[] memory assets = BaseAdaptor(adaptor).assetsUsed(adaptorData);
+        PriceRouter priceRouter = PriceRouter(getAddress[PRICE_ROUTER_REGISTRY_SLOT]);
+        for (uint256 i; i < assets.length; i++) {
+            if (!priceRouter.isSupported(assets[i])) revert Registry__PositionPricingNotSetUp(address(assets[i]));
+        }
 
         positionCount = positionId;
 

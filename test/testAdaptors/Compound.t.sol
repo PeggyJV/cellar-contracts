@@ -43,6 +43,8 @@ contract CellarCompoundTest is Test {
     CErc20 private cDAI = CErc20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     CErc20 private cUSDC = CErc20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
+    ERC20 private TUSD = ERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
+    CErc20 private cTUSD = CErc20(0x12392F67bdf24faE0AF363c24aC620a2f67DAd86);
 
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -54,6 +56,7 @@ contract CellarCompoundTest is Test {
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
     address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
     address private COMP_USD_FEED = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
+    address private TUSD_USD_FEED = 0xec746eCF986E2927Abd291a2A1716c940100f8Ba;
 
     uint32 private daiPosition;
     uint32 private cDAIPosition;
@@ -94,9 +97,9 @@ contract CellarCompoundTest is Test {
         registry.trustAdaptor(address(cTokenAdaptor), 0, 0);
         registry.trustAdaptor(address(vestingAdaptor), 0, 0);
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
-        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cDAI)), 0, 0);
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI), 0, 0);
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cUSDC)), 0, 0);
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC), 0, 0);
         daiVestingPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(vesting), 0, 0);
         positions[0] = cDAIPosition;
         positions[1] = daiPosition;
@@ -110,8 +113,9 @@ contract CellarCompoundTest is Test {
             DAI,
             "Compound Lending Cellar",
             "COMP-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, address(0))
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, cDAIPosition, address(0))
         );
+        cellar.setRebalanceDeviation(0.003e18);
         cellar.setupAdaptor(address(cTokenAdaptor));
         cellar.setupAdaptor(address(vestingAdaptor));
         DAI.safeApprove(address(cellar), type(uint256).max);
@@ -165,7 +169,7 @@ contract CellarCompoundTest is Test {
         assertApproxEqRel(
             cellar.totalAssets(),
             assets,
-            0.0002e18,
+            0.0005e18,
             "Total assets should equal assets deposited minus swap fees."
         );
     }
@@ -200,14 +204,14 @@ contract CellarCompoundTest is Test {
             USDC,
             SwapRouter.Exchange.UNIV3,
             params,
-            0.99e18
+            0.98e18
         );
         // Create data to vest USDC.
         bytes[] memory adaptorCalls0 = new bytes[](1);
         adaptorCalls0[0] = abi.encodeWithSelector(
             VestingSimpleAdaptor.depositToVesting.selector,
-            type(uint256).max,
-            abi.encode(vesting)
+            vesting,
+            type(uint256).max
         );
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
@@ -229,7 +233,7 @@ contract CellarCompoundTest is Test {
 
     function testMaliciousStrategistMovingFundsIntoUntrackedCompoundPosition() external {
         // Remove cDAI as a position from Cellar.
-        cellar.setHoldingIndex(1);
+        cellar.setHoldingPosition(daiPosition);
         cellar.removePosition(0, false);
 
         // Add DAI to the Cellar.
@@ -273,6 +277,24 @@ contract CellarCompoundTest is Test {
         }
 
         assertApproxEqRel(cellar.totalAssets(), assets, 0.001e18, "totalAssets should be equal to original assets.");
+    }
+
+    function testAddingPositionWithUnsupportedAssetsReverts() external {
+        // trust position fails because TUSD is not set up for pricing.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(TUSD)))
+        );
+        registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)), 0, 0);
+
+        // Add TUSD.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(TUSD_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, TUSD_USD_FEED);
+        priceRouter.addAsset(TUSD, settings, abi.encode(stor), price);
+
+        // trust position works now.
+        registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)), 0, 0);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================

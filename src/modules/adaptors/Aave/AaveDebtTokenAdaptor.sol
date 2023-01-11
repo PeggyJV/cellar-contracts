@@ -21,6 +21,11 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     // NOT USED
     //====================================================================
 
+    /**
+     @notice Attempted borrow would lower Cellar health factor too low.
+     */
+    error AaveDebtTokenAdaptor__HealthFactorTooLow();
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -37,6 +42,14 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      */
     function pool() internal pure returns (IPool) {
         return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    }
+
+    /**
+     * @notice Minimum Health Factor enforced after every borrow.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    function HFMIN() internal pure returns (uint256) {
+        return 1.2e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -123,6 +136,10 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
             0,
             address(this)
         ); // 2 is the interest rate mode, either 1 for stable or 2 for variable
+
+        // Check that health factor is above adaptor minimum.
+        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
+        if (healthFactor < HFMIN()) revert AaveDebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -134,7 +151,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     function repayAaveDebt(ERC20 tokenToRepay, uint256 amountToRepay) public {
         amountToRepay = _maxAvailable(tokenToRepay, amountToRepay);
         tokenToRepay.safeApprove(address(pool()), amountToRepay);
-        pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  ethier 1 for stable or 2 for variable
+        pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  either 1 for stable or 2 for variable
     }
 
     /**

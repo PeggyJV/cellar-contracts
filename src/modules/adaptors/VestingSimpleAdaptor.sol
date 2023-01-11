@@ -121,11 +121,10 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      *         a max uint256 for amountToDeposit, the cellar will deposit its entire
      *         balance (appropriate in most cases).
      *
+     * @param vestingContract The vesting contract to interact with.
      * @param amountToDeposit The amount of tokens to deposit.
-     * @param adaptorData Data needed to interact with the position.
      */
-    function depositToVesting(uint256 amountToDeposit, bytes memory adaptorData) public {
-        VestingSimple vestingContract = abi.decode(adaptorData, (VestingSimple));
+    function depositToVesting(VestingSimple vestingContract, uint256 amountToDeposit) public {
         ERC20 asset = vestingContract.asset();
 
         amountToDeposit = _maxAvailable(asset, amountToDeposit);
@@ -139,16 +138,15 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      *         because any deposit must already have vested, and will be reported in balanceOf.
      *         Will revert if not enough tokens are available based on amountToWithdraw.
      *
+     * @param vestingContract The vesting contract to interact with.
      * @param depositId The ID of the deposit to withdraw from.
      * @param amountToWithdraw The amount of tokens to withdraw.
-     * @param adaptorData Data needed to interact with the position.
      */
     function withdrawFromVesting(
+        VestingSimple vestingContract,
         uint256 depositId,
-        uint256 amountToWithdraw,
-        bytes memory adaptorData
+        uint256 amountToWithdraw
     ) public {
-        VestingSimple vestingContract = abi.decode(adaptorData, (VestingSimple));
         vestingContract.withdraw(depositId, amountToWithdraw);
     }
 
@@ -158,11 +156,10 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      *         will be reported in balanceOf. Will revert if not enough tokens are available
      *         based on amountToWithdraw.
      *
+     * @param vestingContract The vesting contract to interact with.
      * @param amountToWithdraw The amount of tokens to withdraw.
-     * @param adaptorData Data needed to interact with the position.
      */
-    function withdrawAnyFromVesting(uint256 amountToWithdraw, bytes memory adaptorData) public {
-        VestingSimple vestingContract = abi.decode(adaptorData, (VestingSimple));
+    function withdrawAnyFromVesting(VestingSimple vestingContract, uint256 amountToWithdraw) public {
         vestingContract.withdrawAnyFor(amountToWithdraw, address(this));
     }
 
@@ -170,10 +167,9 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * @notice Withdraw all available tokens from vesting. This will not affect the cellar's TVL
      *         because all withdrawn deposits must already have vested, and will be reported in balanceOf.
      *
-     * @param adaptorData Data needed to interact with the position.
+     * @param vestingContract The vesting contract to interact with.
      */
-    function withdrawAllFromVesting(bytes memory adaptorData) public {
-        VestingSimple vestingContract = abi.decode(adaptorData, (VestingSimple));
+    function withdrawAllFromVesting(VestingSimple vestingContract) public {
         vestingContract.withdrawAll();
     }
 }

@@ -10,6 +10,7 @@ contract MockPriceRouter {
     using Math for uint256;
 
     mapping(ERC20 => mapping(ERC20 => uint256)) public getExchangeRate;
+    mapping(ERC20 => uint256) public getPriceInUSD;
 
     mapping(ERC20 => bool) public isSupported;
 
@@ -27,6 +28,10 @@ contract MockPriceRouter {
         uint256 exchangeRate
     ) external {
         getExchangeRate[baseAsset][quoteAsset] = exchangeRate;
+    }
+
+    function setPrice(ERC20 asset, uint256 price) external {
+        getPriceInUSD[asset] = price;
     }
 
     function getValues(

@@ -98,7 +98,10 @@ contract PriceRouterTest is Test {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BOND_ETH_FEED);
         stor = PriceRouter.ChainlinkDerivativeStorage(0, 0, 0, true);
 
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), 2.673e8);
+        price = uint256(IChainlinkAggregator(BOND_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        priceRouter.addAsset(BOND, settings, abi.encode(stor), price);
     }
 
     // ======================================= ASSET TESTS =======================================
@@ -110,8 +113,10 @@ contract PriceRouterTest is Test {
             2 days,
             true
         );
-
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), 2.673e8);
+        uint256 price = uint256(IChainlinkAggregator(BOND_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        priceRouter.addAsset(BOND, settings, abi.encode(stor), price);
 
         (uint144 maxPrice, uint80 minPrice, uint24 heartbeat, bool isETH) = priceRouter.getChainlinkDerivativeStorage(
             BOND
@@ -1080,6 +1085,24 @@ contract PriceRouterTest is Test {
         // console.log("FRAX Remaining:", FRAX.balanceOf(address(this)));
         // console.log("FRAX Lost: (-)", amount - FRAX.balanceOf(address(this)));
         siloBalance = SILO.balanceOf(address(this));
+    }
+
+    // ======================================= AUDIT ISSUES =======================================
+    // M-2
+    function testNumericError() external {
+        uint256 amount = 100_000_000e18;
+        deal(address(WETH), address(this), amount);
+        uint256 inputAmountWorth = priceRouter.getValue(WETH, amount, USDC);
+
+        ERC20[] memory baseAssets = new ERC20[](1);
+        uint256[] memory amounts2 = new uint256[](1);
+
+        baseAssets[0] = WETH;
+        amounts2[0] = amount;
+
+        uint256 totalValue = priceRouter.getValues(baseAssets, amounts2, USDC);
+
+        assertEq(totalValue, inputAmountWorth, "Values should be equal.");
     }
 
     // ======================================= HELPER FUNCTIONS =======================================

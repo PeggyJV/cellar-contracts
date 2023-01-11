@@ -74,6 +74,7 @@ contract UniswapV3AdaptorTest is Test {
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
     address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
+    address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
 
     uint32 private usdcPosition;
     uint32 private wethPosition;
@@ -141,13 +142,15 @@ contract UniswapV3AdaptorTest is Test {
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
         );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
 
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
         cellar.setupAdaptor(address(uniswapV3Adaptor));
+
+        cellar.setRebalanceDeviation(0.003e18);
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
@@ -370,6 +373,27 @@ contract UniswapV3AdaptorTest is Test {
             0,
             "`withdrawableFrom` should return 0."
         );
+    }
+
+    function testAddingPositionWithUnsupportedToken0Reverts() external {
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(WBTC)))
+        );
+        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT), 0, 0);
+    }
+
+    function testAddingPositionWithUnsupportedToken1Reverts() external {
+        // Add WBTC as a supported asset.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(WBTC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WBTC_USD_FEED);
+        priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
+        // TX still reverts because USDT is not set up.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(USDT)))
+        );
+        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT), 0, 0);
     }
 
     function testUsingLPTokensNotOwnedByCellarOrTokensThatDoNotExist() external {

@@ -104,6 +104,10 @@ contract CellarAssetManagerTest is Test {
         priceRouter.setExchangeRate(WETH, WBTC, 0.06666666e8);
         priceRouter.setExchangeRate(WBTC, WETH, 15e18);
 
+        priceRouter.setPrice(USDC, 1e8);
+        priceRouter.setPrice(WETH, 2_000e8);
+        priceRouter.setPrice(WBTC, 30_000e8);
+
         priceRouter.supportAsset(USDC);
         priceRouter.supportAsset(WETH);
         priceRouter.supportAsset(WBTC);
@@ -138,13 +142,15 @@ contract CellarAssetManagerTest is Test {
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
         );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
 
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
         cellar.setupAdaptor(address(cellarAdaptor));
+
+        cellar.setRebalanceDeviation(0.003e18);
 
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(exchange), type(uint224).max);
@@ -420,7 +426,7 @@ contract CellarAssetManagerTest is Test {
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
         );
         stdstore.target(address(badCellar)).sig(badCellar.shareLockPeriod.selector).checked_write(uint256(0));
         badCellar.setupAdaptor(address(cellarAdaptor));
@@ -538,7 +544,7 @@ contract CellarAssetManagerTest is Test {
                 USDC,
                 "Multiposition Cellar LP Token",
                 "multiposition-CLR",
-                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
             );
         }
 
@@ -688,6 +694,7 @@ contract CellarAssetManagerTest is Test {
                     newPricesInUSD[quoteIndex]
                 );
                 priceRouter.setExchangeRate(assetsToAdjust[i], assetsToAdjust[quoteIndex], exchangeRate);
+                priceRouter.setPrice(assetsToAdjust[i], newPricesInUSD[i]);
             }
         }
     }
@@ -950,7 +957,7 @@ contract CellarAssetManagerTest is Test {
                 USDC,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
             );
         }
 
@@ -1420,7 +1427,7 @@ contract CellarAssetManagerTest is Test {
                 WETH,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, wethPosition, strategist)
             );
         }
 
@@ -1732,7 +1739,7 @@ contract CellarAssetManagerTest is Test {
                 WETH,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, 0, strategist)
+                abi.encode(positions, debtPositions, positionConfigs, debtConfigs, wethPosition, strategist)
             );
 
             stdstore

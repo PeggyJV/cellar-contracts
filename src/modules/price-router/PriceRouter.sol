@@ -3,18 +3,13 @@ pragma solidity 0.8.16;
 
 import { ERC20, SafeTransferLib } from "src/base/ERC4626.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { AggregatorV2V3Interface } from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
-import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
-
-import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Price Router
@@ -212,7 +207,14 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint256 amount,
         ERC20 quoteAsset
     ) external view returns (uint256 value) {
-        value = amount.mulDivDown(getExchangeRate(baseAsset, quoteAsset), 10**baseAsset.decimals());
+        AssetSettings memory baseSettings = getAssetSettings[baseAsset];
+        AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
+        if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
+        if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
+        PriceCache[PRICE_CACHE_SIZE] memory cache;
+        uint256 priceBaseUSD = _getPriceInUSD(baseAsset, baseSettings, cache);
+        uint256 priceQuoteUSD = _getPriceInUSD(quoteAsset, quoteSettings, cache);
+        value = _getValueInQuote(priceBaseUSD, priceQuoteUSD, baseAsset.decimals(), quoteAsset.decimals(), amount);
     }
 
     /**
@@ -385,6 +387,28 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     /**
+     * @notice math function that preserves precision by multiplying the amountBase before dividing.
+     * @param priceBaseUSD the base asset price in USD
+     * @param priceQuoteUSD the quote asset price in USD
+     * @param baseDecimals the base asset decimals
+     * @param quoteDecimals the quote asset decimals
+     * @param amountBase the amount of base asset
+     */
+    function _getValueInQuote(
+        uint256 priceBaseUSD,
+        uint256 priceQuoteUSD,
+        uint8 baseDecimals,
+        uint8 quoteDecimals,
+        uint256 amountBase
+    ) internal pure returns (uint256 valueInQuote) {
+        // Get value in quote asset, but maintain as much precision as possible.
+        // Cleaner equations below.
+        // baseToUSD = amountBase * priceBaseUSD / 10**baseDecimals.
+        // valueInQuote = baseToUSD * 10**quoteDecimals / priceQuoteUSD
+        valueInQuote = amountBase.mulDivDown((priceBaseUSD * 10**quoteDecimals), (10**baseDecimals * priceQuoteUSD));
+    }
+
+    /**
      * @notice Attempted an operation with arrays of unequal lengths that were expected to be equal length.
      */
     error PriceRouter__LengthMismatch();
@@ -410,7 +434,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
         }
         uint256 valueInQuote;
-        uint256 price;
+        // uint256 price;
         uint8 quoteDecimals = quoteAsset.decimals();
 
         for (uint8 i = 0; i < baseAssets.length; i++) {
@@ -419,11 +443,21 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             ERC20 baseAsset = baseAssets[i];
             if (baseAsset == quoteAsset) valueInQuote += amounts[i];
             else {
-                AssetSettings memory baseSettings = getAssetSettings[baseAsset];
-                if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
-                price = _getPriceInUSD(baseAsset, baseSettings, cache);
-                uint256 valueInUSD = (amounts[i].mulDivDown(price, 10**baseAsset.decimals()));
-                valueInQuote += valueInUSD.mulDivDown(10**quoteDecimals, quotePrice);
+                uint256 basePrice;
+                {
+                    AssetSettings memory baseSettings = getAssetSettings[baseAsset];
+                    if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
+                    basePrice = _getPriceInUSD(baseAsset, baseSettings, cache);
+                }
+                valueInQuote += _getValueInQuote(
+                    basePrice,
+                    quotePrice,
+                    baseAsset.decimals(),
+                    quoteDecimals,
+                    amounts[i]
+                );
+                // uint256 valueInUSD = (amounts[i].mulDivDown(price, 10**baseAsset.decimals()));
+                // valueInQuote += valueInUSD.mulDivDown(10**quoteDecimals, quotePrice);
             }
         }
         return valueInQuote;
@@ -929,11 +963,6 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     // =========================================== CURVEV2 PRICE DERIVATIVE ===========================================
-    /**
-     * @notice Curve Derivative Storage
-     * @dev Stores an array of the underlying token addresses in the curve pool.
-     */
-    mapping(ERC20 => address[]) public getCurveV2DerivativeStorage;
 
     /**
      * @notice Setup function for pricing CurveV2 derivative assets.

@@ -15,9 +15,9 @@ contract CTokenAdaptor is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address cToken)
+    // adaptorData = abi.encode(CERC20 cToken)
     // Where:
-    // `cToken` is the cToken address position this adaptor is working with
+    // `cToken` is the cToken position this adaptor is working with
     //================= Configuration Data Specification =================
     // NOT USED
     // **************************** IMPORTANT ****************************
@@ -66,7 +66,7 @@ contract CTokenAdaptor is BaseAdaptor {
         bytes memory
     ) public override {
         // Deposit assets to Compound.
-        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        CErc20 cToken = abi.decode(adaptorData, (CErc20));
         ERC20 token = ERC20(cToken.underlying());
         token.safeApprove(address(cToken), assets);
         cToken.mint(assets);
@@ -93,7 +93,7 @@ contract CTokenAdaptor is BaseAdaptor {
         _externalReceiverCheck(receiver);
 
         // Withdraw assets from Compound.
-        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        CErc20 cToken = abi.decode(adaptorData, (CErc20));
         cToken.redeemUnderlying(assets);
 
         // Transfer assets to receiver.
@@ -107,7 +107,7 @@ contract CTokenAdaptor is BaseAdaptor {
      *      see "IMPORTANT" above.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        CErc20 cToken = abi.decode(adaptorData, (CErc20));
         uint256 cTokenBalance = cToken.balanceOf(msg.sender);
         return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
     }
@@ -121,7 +121,7 @@ contract CTokenAdaptor is BaseAdaptor {
      *      and because it is rare for the exchange rates to diverge significantly.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        CErc20 cToken = abi.decode(adaptorData, (CErc20));
         uint256 cTokenBalance = cToken.balanceOf(msg.sender);
         return cTokenBalance.mulDivDown(cToken.exchangeRateStored(), 1e18);
     }
@@ -130,8 +130,19 @@ contract CTokenAdaptor is BaseAdaptor {
      * @notice Returns the positions cToken underlying asset.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        CErc20 cToken = CErc20(abi.decode(adaptorData, (address)));
+        CErc20 cToken = abi.decode(adaptorData, (CErc20));
         return ERC20(cToken.underlying());
+    }
+
+    /**
+     * @notice When positions are added to the Registry, this function can be used in order to figure out
+     *         what assets this adaptor needs to price, and confirm pricing is properly setup.
+     * @dev COMP is used when claiming COMP and swapping.
+     */
+    function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
+        assets = new ERC20[](2);
+        assets[0] = assetOf(adaptorData);
+        assets[1] = COMP();
     }
 
     /**

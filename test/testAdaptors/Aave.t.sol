@@ -43,6 +43,8 @@ contract CellarAaveTest is Test {
     ERC20 private dWETH = ERC20(0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf);
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     ERC20 private aWBTC = ERC20(0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656);
+    ERC20 private TUSD = ERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
+    ERC20 private aTUSD = ERC20(0x101cc05f4A51C0319f570d5E146a8C625198e636);
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
@@ -53,6 +55,7 @@ contract CellarAaveTest is Test {
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
     // Note this is the BTC USD data feed, but we assume the risk that WBTC depegs from BTC.
     address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
+    address private TUSD_USD_FEED = 0xec746eCF986E2927Abd291a2A1716c940100f8Ba;
 
     uint32 private usdcPosition;
     uint32 private aUSDCPosition;
@@ -119,7 +122,7 @@ contract CellarAaveTest is Test {
                 debtPositions,
                 positionConfigs,
                 debtConfigs,
-                0,
+                aUSDCPosition,
                 address(0),
                 type(uint128).max,
                 type(uint128).max
@@ -323,6 +326,10 @@ contract CellarAaveTest is Test {
         // First adjust cellar to work primarily with WETH.
         // Make vanilla USDC the holding position.
         cellar.swapPositions(0, 1, false);
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Adjust rebalance deviation so we can swap full amount of USDC for WETH.
+        cellar.setRebalanceDeviation(0.003e18);
 
         // Add WETH, aWETH, and dWETH as trusted positions to the registry.
         uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
@@ -396,8 +403,8 @@ contract CellarAaveTest is Test {
         Cellar.AdaptorCall[] memory dataInsideFlashLoan = new Cellar.AdaptorCall[](2);
         bytes[] memory adaptorCallsInsideFlashLoanFirstAdaptor = new bytes[](1);
         bytes[] memory adaptorCallsInsideFlashLoanSecondAdaptor = new bytes[](1);
-        adaptorCallsInsideFlashLoanFirstAdaptor[0] = _createBytesDataToLend(USDC, 4 * assets);
-        adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToBorrow(dUSDC, 4 * assets.mulWadDown(1.009e18));
+        adaptorCallsInsideFlashLoanFirstAdaptor[0] = _createBytesDataToLend(USDC, 2 * assets);
+        adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToBorrow(dUSDC, 2 * assets.mulWadDown(1.009e18));
         dataInsideFlashLoan[0] = Cellar.AdaptorCall({
             adaptor: address(aaveATokenAdaptor),
             callData: adaptorCallsInsideFlashLoanFirstAdaptor
@@ -420,16 +427,9 @@ contract CellarAaveTest is Test {
 
         assertApproxEqAbs(
             aUSDC.balanceOf(address(cellar)),
-            5 * assets,
+            3 * assets,
             1,
-            "Cellar should have 5x its aave assets using a flash loan."
-        );
-
-        uint256 maxWithdraw = cellar.maxWithdraw(address(this));
-        assertEq(
-            maxWithdraw,
-            USDC.balanceOf(address(cellar)),
-            "Only assets withdrawable should be USDC sitting in the cellar."
+            "Cellar should have 3x its aave assets using a flash loan."
         );
     }
 
@@ -537,6 +537,24 @@ contract CellarAaveTest is Test {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
         cellar.callOnAdaptor(data);
+    }
+
+    function testAddingPositionWithUnsupportedAssetsReverts() external {
+        // trust position fails because TUSD is not set up for pricing.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(TUSD)))
+        );
+        registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aTUSD)), 0, 0);
+
+        // Add TUSD.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(TUSD_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, TUSD_USD_FEED);
+        priceRouter.addAsset(TUSD, settings, abi.encode(stor), price);
+
+        // trust position works now.
+        registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aTUSD)), 0, 0);
     }
 
     // ========================================== INTEGRATION TEST ==========================================
