@@ -43,7 +43,7 @@ import { Math } from "src/utils/Math.sol";
  *      `source .env && forge script script/UltimateStablecoinCellar.s.sol:UltimateStablecoinCellarScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 10000000000 --verify --etherscan-api-key $ETHERSCAN_KEY`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
-contract UltimateStablecoinCellarScript is Script {
+contract DeployV2Script is Script {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -130,13 +130,7 @@ contract UltimateStablecoinCellarScript is Script {
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         factory = new CellarFactory();
-        registry = new Registry(
-            // Set this contract to the Gravity Bridge for testing to give the permissions usually
-            // given to the Gravity Bridge to this contract.
-            gravityBridge,
-            address(swapRouter),
-            address(priceRouter)
-        );
+        registry = new Registry(gravityBridge, address(swapRouter), address(priceRouter));
         usdcVestor = new VestingSimple(USDC, 7 days, 1e6);
         erc20Adaptor = new ERC20Adaptor();
         uniswapV3Adaptor = new UniswapV3Adaptor();
@@ -194,6 +188,10 @@ contract UltimateStablecoinCellarScript is Script {
         factory.addImplementation(implementation, 2, 0);
 
         factory.transferOwnership(sommMultiSig);
+
+        registry.transferOwnership(sommMultiSig);
+
+        priceRouter.transferOwnership(sommMultiSig);
 
         vm.stopBroadcast();
     }
