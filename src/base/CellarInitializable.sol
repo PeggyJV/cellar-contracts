@@ -77,8 +77,8 @@ contract CellarInitializable is Cellar, Initializable {
         assetRiskTolerance = _assetRiskTolerance;
         protocolRiskTolerance = _protocolRiskTolerance;
         feeData = FeeData({
-            strategistPlatformCut: 0.75e18,
-            platformFee: 0.01e18,
+            strategistPlatformCut: 0.8e18,
+            platformFee: 0.005e18,
             lastAccrual: uint64(block.timestamp),
             strategistPayoutAddress: _strategistPayout
         });
