@@ -40,7 +40,7 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/UltimateStablecoinCellar.s.sol:UltimateStablecoinCellarScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 10000000000 --verify --etherscan-api-key $ETHERSCAN_KEY`
+ *      `source .env && forge script script/DeployV2_1.s.sol:DeployV2Script --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 30000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --broadcast --slow`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployRealYieldScript is Script {
