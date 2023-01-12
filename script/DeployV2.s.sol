@@ -40,7 +40,7 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/UltimateStablecoinCellar.s.sol:UltimateStablecoinCellarScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 10000000000 --verify --etherscan-api-key $ETHERSCAN_KEY`
+ *      `source .env && forge script script/DeployV2Script.s.sol:DeployV2Script --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployV2Script is Script {
@@ -68,10 +68,6 @@ contract DeployV2Script is Script {
     IUniswapV3Factory internal v3factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
-
-    IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-
-    Comptroller private comptroller = Comptroller(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
@@ -183,6 +179,7 @@ contract DeployV2Script is Script {
 
         // Deploy cellar using factory.
         factory.adjustIsDeployer(deployer, true);
+        factory.adjustIsDeployer(0xbaf7d863B4504D520797EFef4434F2067C1142c5, true);
         address implementation = address(new CellarInitializable(registry));
 
         factory.addImplementation(implementation, 2, 0);

@@ -49,19 +49,11 @@ contract DeployRealYieldScript is Script {
 
     address private strategist = 0x4a1554ae3661661BA155c1Aa6c3d5B17251088a7;
 
-    CellarFactory private factory;
-    Registry private registry;
+    CellarFactory private factory = CellarFactory(0x95f0eD6581AdF2ee1149fc7830594C7933C876AE);
+    Registry private registry = Registry(0xeFFe069b1c62c2f55F41A501eCc3c6Ff4dB6D70a);
     CellarInitializable private cellar;
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-
-    // Define Adaptors.
-    ERC20Adaptor private erc20Adaptor;
-    UniswapV3Adaptor private uniswapV3Adaptor;
-    AaveATokenAdaptor private aaveATokenAdaptor;
-    AaveDebtTokenAdaptor private aaveDebtTokenAdaptor;
-    CTokenAdaptor private cTokenAdaptor;
-    VestingSimpleAdaptor private vestingAdaptor;
 
     // Base positions.
     uint32 private usdcPosition = 1;
