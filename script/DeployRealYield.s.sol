@@ -48,6 +48,7 @@ contract DeployRealYieldScript is Script {
     using Math for uint256;
 
     address private strategist = 0x4a1554ae3661661BA155c1Aa6c3d5B17251088a7;
+    address private sommMultiSig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
 
     CellarFactory private factory = CellarFactory(0x95f0eD6581AdF2ee1149fc7830594C7933C876AE);
     Registry private registry = Registry(0xeFFe069b1c62c2f55F41A501eCc3c6Ff4dB6D70a);
@@ -76,6 +77,12 @@ contract DeployRealYieldScript is Script {
 
     // Vesting positions.
     uint32 private vUSDCPosition = 12;
+
+    // Define Adaptors.
+    UniswapV3Adaptor private uniswapV3Adaptor = UniswapV3Adaptor(0xc31137bbFd277E93ef36Aa7d1b6DE88a8ce8E487);
+    AaveATokenAdaptor private aaveATokenAdaptor = AaveATokenAdaptor(0x9810F192D90fF4fdE38792e098c27914Cc05a039);
+    CTokenAdaptor private cTokenAdaptor = CTokenAdaptor(0x55534e5F1f8dFB4db0f1D2A3a1D241cA5Cf0DC62);
+    VestingSimpleAdaptor private vestingAdaptor = VestingSimpleAdaptor(0xf842b9545102CE21635F9f43bcc462080025DE62);
 
     function run() external {
         vm.startBroadcast();
@@ -121,14 +128,16 @@ contract DeployRealYieldScript is Script {
             )
         );
 
-        address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
+        address clone = factory.deploy(2, 1, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
         cellar = CellarInitializable(clone);
 
         // Setup all the adaptors the cellar will use.
-        // cellar.setupAdaptor(address(uniswapV3Adaptor));
-        // cellar.setupAdaptor(address(aaveATokenAdaptor));
-        // cellar.setupAdaptor(address(cTokenAdaptor));
-        // cellar.setupAdaptor(address(vestingAdaptor));
+        cellar.setupAdaptor(address(uniswapV3Adaptor));
+        cellar.setupAdaptor(address(aaveATokenAdaptor));
+        cellar.setupAdaptor(address(cTokenAdaptor));
+        cellar.setupAdaptor(address(vestingAdaptor));
+
+        cellar.transferOwnership(sommMultiSig);
 
         vm.stopBroadcast();
     }
