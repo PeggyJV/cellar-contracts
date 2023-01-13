@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IEuler, IEulerMarkets, IEulerExec, IEulerDToken } from "src/interfaces/external/IEuler.sol";
+import { console } from "@forge-std/Test.sol";
 
 /**
- * @title Aave debtToken Adaptor
- * @notice Allows Cellars to interact with Aave debtToken positions.
+ * @title Euler debtToken Adaptor
+ * @notice Allows Cellars to interact with Euler debtToken positions.
  * @author crispymangoes
  */
-contract AaveDebtTokenAdaptor is BaseAdaptor {
+contract EulerDebtTokenAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
+    using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(IEulerDToken dToken)
@@ -23,7 +25,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     /**
      @notice Attempted borrow would lower Cellar health factor too low.
      */
-    error EulerETokenAdaptor__HealthFactorTooLow();
+    error EulerDebtTokenAdaptor__HealthFactorTooLow();
 
     //============================================ Global Functions ===========================================
     /**
@@ -37,15 +39,12 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
+     * @notice The Euler Markets contract on Ethereum Mainnet.
      */
     function markets() internal pure returns (IEulerMarkets) {
         return IEulerMarkets(0x3520d5a913427E6F0D6A83E07ccD4A4da316e4d3);
     }
 
-    /**
-     * @notice The WETH contract on Ethereum Mainnet.
-     */
     function exec() internal pure returns (IEulerExec) {
         return IEulerExec(0x59828FdF7ee634AaaD3f58B19fDBa3b03E2D9d80);
     }
@@ -55,7 +54,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Maximum LTV enforced after every eToken withdraw/market exiting.
+     * @notice Minimum HF enforced after every eToken withdraw/market exiting.
      */
     function HFMIN() internal pure returns (uint256) {
         return 1.2e18;
@@ -119,7 +118,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
     /**
-     * @notice Strategist attempted to open an untracked Aave loan.
+     * @notice Strategist attempted to open an untracked Euler loan.
      * @param untrackedDebtPosition the address of the untracked loan
      */
     error EulerDebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
@@ -135,7 +134,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
 
         // Check that health factor is above adaptor minimum.
         uint256 healthFactor = _calculateHF(address(this));
-        if (healthFactor < HFMIN()) revert EulerETokenAdaptor__HealthFactorTooLow();
+        if (healthFactor < HFMIN()) revert EulerDebtTokenAdaptor__HealthFactorTooLow();
     }
 
     function repayEulerDebt(IEulerDToken debtTokenToRepay, uint256 amountToRepay) public {
@@ -147,7 +146,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
 
     /**
      * @notice Allows strategists to swap assets and repay loans in one call.
-     * @dev see `repayAaveDebt`, and BaseAdaptor.sol `swap`
+     * @dev see `repayEulerDebt`, and BaseAdaptor.sol `swap`
      */
     function swapAndRepay(
         ERC20 tokenIn,
@@ -170,12 +169,16 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
             if (assets[i].status.collateralValue > 0) {
                 totalCollateral += assets[i].status.collateralValue;
                 IEuler.AssetConfig memory config = markets().underlyingToAssetConfig(assets[i].underlying);
-                valueWeightedCollateralFactor += config.collateralFactor * assets[i].status.collateralValue;
+                valueWeightedCollateralFactor += assets[i].status.collateralValue.mulDivDown(
+                    config.collateralFactor,
+                    4e9
+                );
+                // 4e9 is the max possible value CF can be, so a CF of 1 would equal 4e9.
             }
         }
         // Left here for derivation of actual return value.
         // uint256 avgCollateralFactor = valueWeightedCollateralFactor / totalCollateral;
         // return totalCollateral.mulDivDown(avgCollateralFactor, totalLiabilites);
-        return valueWeightedCollateralFactor / totalLiabilites;
+        return valueWeightedCollateralFactor.mulDivDown(1e18, totalLiabilites);
     }
 }

@@ -5,8 +5,8 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "
 import { IEuler, IEulerMarkets, IEulerExec, IEulerEToken } from "src/interfaces/external/IEuler.sol";
 
 /**
- * @title Aave aToken Adaptor
- * @notice Allows Cellars to interact with Aave aToken positions.
+ * @title Euler aToken Adaptor
+ * @notice Allows Cellars to interact with Euler aToken positions.
  * @author crispymangoes
  */
 contract EulerETokenAdaptor is BaseAdaptor {
@@ -40,16 +40,10 @@ contract EulerETokenAdaptor is BaseAdaptor {
         return keccak256(abi.encode("Euler eToken Adaptor V 0.0"));
     }
 
-    /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
-     */
     function markets() internal pure returns (IEulerMarkets) {
         return IEulerMarkets(0x3520d5a913427E6F0D6A83E07ccD4A4da316e4d3);
     }
 
-    /**
-     * @notice The WETH contract on Ethereum Mainnet.
-     */
     function exec() internal pure returns (IEulerExec) {
         return IEulerExec(0x59828FdF7ee634AaaD3f58B19fDBa3b03E2D9d80);
     }
@@ -59,7 +53,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Maximum LTV enforced after every eToken withdraw/market exiting.
+     * @notice Minimum HF enforced after every eToken withdraw/market exiting.
      */
     function HFMIN() internal pure returns (uint256) {
         return 1.2e18;
@@ -68,7 +62,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
-     * @param assets the amount of assets to lend on Aave
+     * @param assets the amount of assets to lend on Euler
      * @param adaptorData adaptor data containining the abi encoded aToken
      */
     function deposit(
@@ -85,10 +79,10 @@ contract EulerETokenAdaptor is BaseAdaptor {
     }
 
     /**
-     @notice Cellars must withdraw from Aave, check if a minimum health factor is specified
+     @notice Cellars must withdraw from Euler, check if a minimum health factor is specified
      *       then transfer assets to receiver.
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
-     * @param assets the amount of assets to withdraw from Aave
+     * @param assets the amount of assets to withdraw from Euler
      * @param receiver the address to send withdrawn assets to
      * @param adaptorData adaptor data containining the abi encoded aToken
 
@@ -109,15 +103,17 @@ contract EulerETokenAdaptor is BaseAdaptor {
         for (uint256 i; i < entered.length; ++i) {
             if (entered[i] == address(underlying)) revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
-
+        // TODO does this always withdraw `assets`?
         eToken.withdraw(0, assets);
+
+        underlying.transfer(receiver, assets);
     }
 
     /**
-     * @notice Uses configurartion data minimum health factor to calculate withdrawable assets from Aave.
+     * @notice Uses configurartion data minimum health factor to calculate withdrawable assets from Euler.
      * @dev Applies a `cushion` value to the health factor checks and calculation.
      *      The goal of this is to minimize scenarios where users are withdrawing a very small amount of
-     *      assets from Aave. This function returns zero if
+     *      assets from Euler. This function returns zero if
      *      -minimum health factor is NOT set.
      *      -the current health factor is less than the minimum health factor + 2x `cushion`
      *      Otherwise this function calculates the withdrawable amount using
@@ -132,7 +128,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
 
         bool marketEntered;
 
-        address[] memory entered = markets().getEnteredMarkets(address(this));
+        address[] memory entered = markets().getEnteredMarkets(msg.sender);
         for (uint256 i; i < entered.length; ++i) {
             if (entered[i] == address(underlying)) {
                 marketEntered = true;
@@ -168,10 +164,10 @@ contract EulerETokenAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
     /**
-     * @notice Allows strategists to lend assets on Aave.
+     * @notice Allows strategists to lend assets on Euler.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * @param tokenToDeposit the token to lend on Aave
-     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Aave.
+     * @param tokenToDeposit the token to lend on Euler
+     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Euler.
      */
     function depositToEuler(IEulerEToken tokenToDeposit, uint256 amountToDeposit) public {
         ERC20 underlying = ERC20(tokenToDeposit.underlyingAsset());
@@ -181,9 +177,9 @@ contract EulerETokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Allows strategists to withdraw assets from Aave.
-     * @param tokenToWithdraw the token to withdraw from Aave.
-     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
+     * @notice Allows strategists to withdraw assets from Euler.
+     * @param tokenToWithdraw the token to withdraw from Euler.
+     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Euler
      */
     function withdrawFromEuler(IEulerEToken tokenToWithdraw, uint256 amountToWithdraw) public {
         tokenToWithdraw.withdraw(0, amountToWithdraw);
