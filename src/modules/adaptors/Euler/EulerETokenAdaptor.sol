@@ -20,7 +20,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
     //================= Configuration Data Specification =================
     // NONE
     // **************************** IMPORTANT ****************************
-    // eToken positions have two uinque states, the first one (when eToken is being used as collateral)
+    // eToken positions have two unique states, the first one (when eToken is being used as collateral)
     // restricts all user deposits/withdraws, but allows strategists to take out loans against eToken collateral
     //====================================================================
 
@@ -79,12 +79,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
         IEulerEToken eToken = abi.decode(adaptorData, (IEulerEToken));
         ERC20 underlying = ERC20(eToken.underlyingAsset());
 
-        address[] memory entered = markets().getEnteredMarkets(address(this));
-        for (uint256 i; i < entered.length; ++i) {
-            if (entered[i] == address(underlying)) revert("User deposits not allowed");
-        }
         // Deposit assets to Euler.
-
         underlying.safeApprove(euler(), assets);
         eToken.deposit(0, assets);
     }
@@ -112,7 +107,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
 
         address[] memory entered = markets().getEnteredMarkets(address(this));
         for (uint256 i; i < entered.length; ++i) {
-            if (entered[i] == address(underlying)) revert("User deposits not allowed");
+            if (entered[i] == address(underlying)) revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
 
         eToken.withdraw(0, assets);
@@ -192,12 +187,10 @@ contract EulerETokenAdaptor is BaseAdaptor {
      */
     function withdrawFromEuler(IEulerEToken tokenToWithdraw, uint256 amountToWithdraw) public {
         tokenToWithdraw.withdraw(0, amountToWithdraw);
-        IEulerExec.LiquidityStatus memory status = exec().liquidity(address(this));
-        IEuler.AssetConfig memory config = markets().underlyingToAssetConfig(tokenToWithdraw.underlyingAsset());
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _calculateHF(status.collateralValue, status.liabilityValue, config.collateralFactor);
-        if (healthFactor < HFMIN()) revert("Health Factor Too low");
+        uint256 healthFactor = _calculateHF(address(this));
+        if (healthFactor < HFMIN()) revert EulerETokenAdaptor__HealthFactorTooLow();
     }
 
     function enterMarket(IEulerEToken eToken) public {
@@ -206,19 +199,28 @@ contract EulerETokenAdaptor is BaseAdaptor {
 
     function exitMarket(IEulerEToken eToken) public {
         markets().exitMarket(0, eToken.underlyingAsset());
-        IEulerExec.LiquidityStatus memory status = exec().liquidity(address(this));
-        IEuler.AssetConfig memory config = markets().underlyingToAssetConfig(eToken.underlyingAsset());
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _calculateHF(status.collateralValue, status.liabilityValue, config.collateralFactor);
-        if (healthFactor < HFMIN()) revert("Health Factor Too low");
+        uint256 healthFactor = _calculateHF(address(this));
+        if (healthFactor < HFMIN()) revert EulerETokenAdaptor__HealthFactorTooLow();
     }
 
-    function _calculateHF(
-        uint256 assets,
-        uint256 liabilities,
-        uint256 collateralFactor
-    ) internal pure returns (uint256) {
-        return assets.mulDivDown(collateralFactor, liabilities);
+    function _calculateHF(address target) internal view returns (uint256) {
+        IEulerExec.AssetLiquidity[] memory assets = exec().detailedLiquidity(target);
+        uint256 valueWeightedCollateralFactor;
+        uint256 totalCollateral;
+        uint256 totalLiabilites;
+        for (uint256 i; i < assets.length; ++i) {
+            totalLiabilites += assets[i].status.liabilityValue;
+            if (assets[i].status.collateralValue > 0) {
+                totalCollateral += assets[i].status.collateralValue;
+                IEuler.AssetConfig memory config = markets().underlyingToAssetConfig(assets[i].underlying);
+                valueWeightedCollateralFactor += config.collateralFactor * assets[i].status.collateralValue;
+            }
+        }
+        // Left here for derivation of actual return value.
+        // uint256 avgCollateralFactor = valueWeightedCollateralFactor / totalCollateral;
+        // return totalCollateral.mulDivDown(avgCollateralFactor, totalLiabilites);
+        return valueWeightedCollateralFactor / totalLiabilites;
     }
 }
