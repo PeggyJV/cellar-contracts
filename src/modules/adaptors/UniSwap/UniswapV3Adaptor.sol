@@ -100,10 +100,6 @@ contract UniswapV3Adaptor is BaseAdaptor {
             baseToUSD = baseToUSD * 1e18; // Multiplt by 1e18 to keep some precision.
             precisionPrice = baseToUSD.mulDivDown(10**token0.decimals(), quoteToUSD);
         }
-        // TODO remove this.
-        // Old price implementation for reference.
-        // uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT()))
-        //     .getExchangeRate(token1, token0);
 
         // Calculate current sqrtPrice.
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (precisionPrice / 1e18);
