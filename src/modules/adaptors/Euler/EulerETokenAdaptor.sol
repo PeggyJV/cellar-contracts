@@ -211,12 +211,17 @@ contract EulerETokenAdaptor is BaseAdaptor {
             if (assets[i].status.collateralValue > 0) {
                 totalCollateral += assets[i].status.collateralValue;
                 IEuler.AssetConfig memory config = markets().underlyingToAssetConfig(assets[i].underlying);
-                valueWeightedCollateralFactor += config.collateralFactor * assets[i].status.collateralValue;
+                valueWeightedCollateralFactor += assets[i].status.collateralValue.mulDivDown(
+                    config.collateralFactor,
+                    4e9
+                );
+                // 4e9 is the max possible value CF can be, so a CF of 1 would equal 4e9.
+                // TODO is the 4e9 assumption correct.
             }
         }
         // Left here for derivation of actual return value.
         // uint256 avgCollateralFactor = valueWeightedCollateralFactor / totalCollateral;
         // return totalCollateral.mulDivDown(avgCollateralFactor, totalLiabilites);
-        return valueWeightedCollateralFactor / totalLiabilites;
+        return valueWeightedCollateralFactor.mulDivDown(1e18, totalLiabilites);
     }
 }
