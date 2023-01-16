@@ -97,7 +97,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
             );
             uint256 baseToUSD = priceRouter.getPriceInUSD(token1);
             uint256 quoteToUSD = priceRouter.getPriceInUSD(token0);
-            baseToUSD = baseToUSD * 1e18; // Multiplt by 1e18 to keep some precision.
+            baseToUSD = baseToUSD * 1e18; // Multiply by 1e18 to keep some precision.
             precisionPrice = baseToUSD.mulDivDown(10**token0.decimals(), quoteToUSD);
         }
 
