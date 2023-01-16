@@ -318,7 +318,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
             });
 
         // Increase liquidity in pool.
-        positionManager().increaseLiquidity(params);
+        (, uint256 amount0Act, uint256 amount1Act) = positionManager().increaseLiquidity(params);
+
+        // Zero out approvals if necessary.
+        if (amount0Act < amount0) ERC20(t0).safeApprove(address(positionManager()), 0);
+        if (amount1Act < amount1) ERC20(t1).safeApprove(address(positionManager()), 0);
     }
 
     /**

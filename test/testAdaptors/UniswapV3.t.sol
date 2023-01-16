@@ -329,6 +329,81 @@ contract UniswapV3AdaptorTest is Test {
         assertTrue(!uniswapV3Adaptor.isDebt(), "Adaptor does not report debt.");
     }
 
+    function testHandlingUnusedApprovals() external {
+        // Open a position, but manipulate state so that router does not use full allowance
+        uint256 assets = 200_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a swap by setting Cellar USDC and DAI balances.
+        deal(address(USDC), address(cellar), 100_000e6);
+        deal(address(DAI), address(cellar), 100_000e18);
+
+        // Use `callOnAdaptor` to swap and enter 6 different UniV3 positions.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertTrue(
+            USDC.balanceOf(address(cellar)) > 50_000e6 || DAI.balanceOf(address(cellar)) > 50_000e18,
+            "One of that assets should not have been fully used."
+        );
+
+        // Make sure that approvals are zero.
+        assertEq(USDC.allowance(address(cellar), address(positionManager)), 0, "USDC allowance should be zero.");
+        assertEq(DAI.allowance(address(cellar), address(positionManager)), 0, "DAI allowance should be zero.");
+
+        // Set balances to 50k each.
+        deal(address(USDC), address(cellar), 50_000e6);
+        deal(address(DAI), address(cellar), 50_000e18);
+
+        // Make sure addToPosition revokes unused approvals.
+        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertTrue(
+            USDC.balanceOf(address(cellar)) > 0 || DAI.balanceOf(address(cellar)) > 0,
+            "One of that assets should not have been fully used."
+        );
+
+        // Make sure that approvals are zero.
+        assertEq(USDC.allowance(address(cellar), address(positionManager)), 0, "USDC allowance should be zero.");
+        assertEq(DAI.allowance(address(cellar), address(positionManager)), 0, "DAI allowance should be zero.");
+
+        // Simulate some edge case scenario happens where there is an unused approval.
+        vm.startPrank(address(cellar));
+        USDC.approve(address(positionManager), 1);
+        DAI.approve(address(positionManager), 1);
+        vm.stopPrank();
+
+        // Strategist can manually revoke approval.
+        bytes[] memory adaptorCallsToRevoke = new bytes[](2);
+
+        adaptorCallsToRevoke[0] = abi.encodeWithSelector(
+            BaseAdaptor.revokeApproval.selector,
+            USDC,
+            address(positionManager)
+        );
+        adaptorCallsToRevoke[1] = abi.encodeWithSelector(
+            BaseAdaptor.revokeApproval.selector,
+            DAI,
+            address(positionManager)
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCallsToRevoke });
+        cellar.callOnAdaptor(data);
+
+        // Make sure that approvals are zero.
+        assertEq(USDC.allowance(address(cellar), address(positionManager)), 0, "USDC allowance should be zero.");
+        assertEq(DAI.allowance(address(cellar), address(positionManager)), 0, "DAI allowance should be zero.");
+    }
+
     // ========================================== REVERT TEST ==========================================
     function testUsingUntrackedLPPosition() external {
         // Remove USDC WETH LP position from cellar.
