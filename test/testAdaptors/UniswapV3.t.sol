@@ -382,6 +382,10 @@ contract UniswapV3AdaptorTest is Test {
         DAI.approve(address(positionManager), 1);
         vm.stopPrank();
 
+        // Confirm approvals are non zero.
+        assertEq(USDC.allowance(address(cellar), address(positionManager)), 1, "USDC allowance should be one.");
+        assertEq(DAI.allowance(address(cellar), address(positionManager)), 1, "DAI allowance should be one.");
+
         // Strategist can manually revoke approval.
         bytes[] memory adaptorCallsToRevoke = new bytes[](2);
 
