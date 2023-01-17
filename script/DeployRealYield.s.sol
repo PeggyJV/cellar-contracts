@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
-import { CellarInitializable } from "src/base/CellarInitializable.sol";
+import { CellarInitializableV2_1 } from "src/base/CellarInitializableV2_1.sol";
 import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
@@ -40,19 +40,20 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/DeployV2_1.s.sol:DeployV2Script --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 30000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --broadcast --slow`
+ *      `source .env && forge script script/DeployRealYield.s.sol:DeployRealYieldScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 30000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --broadcast --slow`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployRealYieldScript is Script {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-    address private strategist = 0x4a1554ae3661661BA155c1Aa6c3d5B17251088a7;
+    address private strategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
     address private sommMultiSig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
+    address private deployer = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
 
-    CellarFactory private factory = CellarFactory(0x95f0eD6581AdF2ee1149fc7830594C7933C876AE);
-    Registry private registry = Registry(0xeFFe069b1c62c2f55F41A501eCc3c6Ff4dB6D70a);
-    CellarInitializable private cellar;
+    CellarFactory private factory;
+    Registry private registry = Registry(0x2Cbd27E034FEE53f79b607430dA7771B22050741);
+    CellarInitializableV2_1 private cellar;
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 
@@ -79,13 +80,23 @@ contract DeployRealYieldScript is Script {
     uint32 private vUSDCPosition = 12;
 
     // Define Adaptors.
-    UniswapV3Adaptor private uniswapV3Adaptor = UniswapV3Adaptor(0xc31137bbFd277E93ef36Aa7d1b6DE88a8ce8E487);
-    AaveATokenAdaptor private aaveATokenAdaptor = AaveATokenAdaptor(0x9810F192D90fF4fdE38792e098c27914Cc05a039);
-    CTokenAdaptor private cTokenAdaptor = CTokenAdaptor(0x55534e5F1f8dFB4db0f1D2A3a1D241cA5Cf0DC62);
-    VestingSimpleAdaptor private vestingAdaptor = VestingSimpleAdaptor(0xf842b9545102CE21635F9f43bcc462080025DE62);
+    UniswapV3Adaptor private uniswapV3Adaptor = UniswapV3Adaptor(0x7C4262f83e6775D6ff6fE8d9ab268611Ed9d13Ee);
+    AaveATokenAdaptor private aaveATokenAdaptor = AaveATokenAdaptor(0x8646F6A7658a7B6399dc238d6018d0344ad81D3d);
+    CTokenAdaptor private cTokenAdaptor = CTokenAdaptor(0x26DbA82495f6189DDe7648Ae88bEAd46C402F078);
+    VestingSimpleAdaptor private vestingAdaptor = VestingSimpleAdaptor(0x1eAA1a100a460f46A2032f0402Bc01FE89FaAB60);
 
     function run() external {
         vm.startBroadcast();
+
+        // Deploy cellar using factory.
+        factory = new CellarFactory();
+        factory.adjustIsDeployer(deployer, true);
+        factory.adjustIsDeployer(0xbaf7d863B4504D520797EFef4434F2067C1142c5, true);
+        address implementation = address(new CellarInitializableV2_1(registry));
+
+        factory.addImplementation(implementation, 2, 1);
+
+        factory.transferOwnership(sommMultiSig);
 
         // Cellar positions array.
         uint32[] memory positions = new uint32[](12);
@@ -112,6 +123,7 @@ contract DeployRealYieldScript is Script {
 
         // Deploy cellar using factory.
         bytes memory initializeCallData = abi.encode(
+            deployer,
             registry,
             USDC,
             "Real Yield USD",
@@ -129,7 +141,7 @@ contract DeployRealYieldScript is Script {
         );
 
         address clone = factory.deploy(2, 1, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
-        cellar = CellarInitializable(clone);
+        cellar = CellarInitializableV2_1(clone);
 
         // Setup all the adaptors the cellar will use.
         cellar.setupAdaptor(address(uniswapV3Adaptor));
@@ -137,7 +149,10 @@ contract DeployRealYieldScript is Script {
         cellar.setupAdaptor(address(cTokenAdaptor));
         cellar.setupAdaptor(address(vestingAdaptor));
 
-        cellar.transferOwnership(sommMultiSig);
+        cellar.transferOwnership(strategist);
+
+        // Initialize implementation.
+        CellarInitializableV2_1(implementation).initialize(initializeCallData);
 
         vm.stopBroadcast();
     }

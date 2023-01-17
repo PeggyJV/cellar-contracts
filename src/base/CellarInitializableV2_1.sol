@@ -37,12 +37,18 @@ contract CellarInitializableV2_1 is Cellar, Initializable {
      *                 - uint128 protocol risk tolerance
      */
     function initialize(bytes calldata params) external initializer {
-        (Registry _registry, ERC20 _asset, string memory _name, string memory _symbol, bytes memory _params) = abi
-            .decode(params, (Registry, ERC20, string, string, bytes));
+        (
+            address tmpOwner,
+            Registry _registry,
+            ERC20 _asset,
+            string memory _name,
+            string memory _symbol,
+            bytes memory _params
+        ) = abi.decode(params, (address, Registry, ERC20, string, string, bytes));
         // Initialize Cellar
         registry = _registry;
         asset = _asset;
-        owner = msg.sender;
+        owner = tmpOwner;
         shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
         allowedRebalanceDeviation = 0.003e18;
         aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;

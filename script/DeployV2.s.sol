@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
-import { CellarInitializable } from "src/base/CellarInitializable.sol";
+import { CellarInitializableV2_1 } from "src/base/CellarInitializableV2_1.sol";
 import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
@@ -40,7 +40,7 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/DeployV2Script.s.sol:DeployV2Script --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY`
+ *      `source .env && forge script script/DeployV2.s.sol:DeployV2Script --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployV2Script is Script {
@@ -52,7 +52,7 @@ contract DeployV2Script is Script {
     address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
 
     CellarFactory private factory;
-    CellarInitializable private cellar;
+    CellarInitializableV2_1 private cellar;
 
     PriceRouter private priceRouter;
     SwapRouter private swapRouter;
@@ -180,9 +180,9 @@ contract DeployV2Script is Script {
         // Deploy cellar using factory.
         factory.adjustIsDeployer(deployer, true);
         factory.adjustIsDeployer(0xbaf7d863B4504D520797EFef4434F2067C1142c5, true);
-        address implementation = address(new CellarInitializable(registry));
+        address implementation = address(new CellarInitializableV2_1(registry));
 
-        factory.addImplementation(implementation, 2, 0);
+        factory.addImplementation(implementation, 2, 1);
 
         factory.transferOwnership(sommMultiSig);
 
