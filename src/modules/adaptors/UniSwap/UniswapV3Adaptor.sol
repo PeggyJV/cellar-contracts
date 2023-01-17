@@ -43,7 +43,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Uniswap V3 Adaptor V 0.0"));
+        return keccak256(abi.encode("Uniswap V3 Adaptor V 0.1"));
     }
 
     /**
@@ -97,13 +97,9 @@ contract UniswapV3Adaptor is BaseAdaptor {
             );
             uint256 baseToUSD = priceRouter.getPriceInUSD(token1);
             uint256 quoteToUSD = priceRouter.getPriceInUSD(token0);
-            baseToUSD = baseToUSD * 1e18; // Multiplt by 1e18 to keep some precision.
+            baseToUSD = baseToUSD * 1e18; // Multiply by 1e18 to keep some precision.
             precisionPrice = baseToUSD.mulDivDown(10**token0.decimals(), quoteToUSD);
         }
-        // TODO remove this.
-        // Old price implementation for reference.
-        // uint256 price = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT()))
-        //     .getExchangeRate(token1, token0);
 
         // Calculate current sqrtPrice.
         uint256 ratioX192 = ((10**token1.decimals()) << 192) / (precisionPrice / 1e18);
@@ -318,7 +314,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
             });
 
         // Increase liquidity in pool.
-        positionManager().increaseLiquidity(params);
+        (, uint256 amount0Act, uint256 amount1Act) = positionManager().increaseLiquidity(params);
+
+        // Zero out approvals if necessary.
+        if (amount0Act < amount0) ERC20(t0).safeApprove(address(positionManager()), 0);
+        if (amount1Act < amount1) ERC20(t1).safeApprove(address(positionManager()), 0);
     }
 
     /**
