@@ -249,4 +249,13 @@ abstract contract BaseAdaptor {
         uint256 amountInWithSlippage = amountIn.mulDivDown(slippage, 1e18);
         if (amountOut < amountInWithSlippage) revert BaseAdaptor__BadSlippage();
     }
+
+    /**
+     * @notice Allows strategists to zero out an approval for a given `asset`.
+     * @param asset the ERC20 asset to revoke `spender`s approval for
+     * @param spender the address to revoke approval for
+     */
+    function revokeApproval(ERC20 asset, address spender) public {
+        asset.safeApprove(spender, 0);
+    }
 }
