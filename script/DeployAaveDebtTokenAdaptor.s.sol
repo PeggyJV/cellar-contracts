@@ -19,7 +19,7 @@ contract DeployAaveDebtTokenAdaptor is Script {
 
     function run() external {
         vm.startBroadcast();
-'
+
         // Deploy UniswapV3 Adaptor.
         aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
 
