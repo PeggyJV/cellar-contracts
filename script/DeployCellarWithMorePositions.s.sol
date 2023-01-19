@@ -14,10 +14,10 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/DeployV2Script.s.sol:DeployV2Script --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY`
+ *      `source .env && forge script script/DeployCellarWithMorePositions.s.sol:DeployCellarWithMorePositions --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
-contract DeployV2Script is Script {
+contract DeployCellarWithMorePositions is Script {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -27,8 +27,7 @@ contract DeployV2Script is Script {
 
     CellarInitializableV2_1 private cellar;
 
-    CellarFactory private factory = CellarFactory(0x95f0eD6581AdF2ee1149fc7830594C7933C876AE);
-    Registry private registry = Registry(0xeFFe069b1c62c2f55F41A501eCc3c6Ff4dB6D70a);
+    Registry private registry = Registry(0x2Cbd27E034FEE53f79b607430dA7771B22050741);
 
     function run() external {
         vm.startBroadcast();

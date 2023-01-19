@@ -209,8 +209,8 @@ contract CellarTest is Test {
         );
 
         (uint64 strategistPlatformCut, uint64 platformFee, , address strategistPayoutAddress) = cellar.feeData();
-        assertEq(strategistPlatformCut, 0.75e18, "Platform cut should be set to 0.75e18.");
-        assertEq(platformFee, 0.01e18, "Platform fee should be set to 0.01e18.");
+        assertEq(strategistPlatformCut, 0.8e18, "Platform cut should be set to 0.75e18.");
+        assertEq(platformFee, 0.005e18, "Platform fee should be set to 0.01e18.");
         assertEq(strategistPayoutAddress, strategist, "Strategist payout address should be equal to strategist.");
 
         assertEq(cellar.owner(), address(this), "Should initialize owner to this contract.");

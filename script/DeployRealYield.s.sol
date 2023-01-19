@@ -89,14 +89,10 @@ contract DeployRealYieldScript is Script {
         vm.startBroadcast();
 
         // Deploy cellar using factory.
-        factory = new CellarFactory();
-        factory.adjustIsDeployer(deployer, true);
-        factory.adjustIsDeployer(0xbaf7d863B4504D520797EFef4434F2067C1142c5, true);
+        factory = CellarFactory(0x9D30672eED8D514cD1ad009Cfe85Ea8f0019D37F);
         address implementation = address(new CellarInitializableV2_1(registry));
 
-        factory.addImplementation(implementation, 2, 1);
-
-        factory.transferOwnership(sommMultiSig);
+        factory.addImplementation(implementation, 2, 2);
 
         // Cellar positions array.
         uint32[] memory positions = new uint32[](12);
@@ -139,8 +135,8 @@ contract DeployRealYieldScript is Script {
                 type(uint128).max
             )
         );
-
-        address clone = factory.deploy(2, 1, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
+        require(false, "Was implementation 2, 2 added to the factory?");
+        address clone = factory.deploy(2, 2, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
         cellar = CellarInitializableV2_1(clone);
 
         // Setup all the adaptors the cellar will use.
