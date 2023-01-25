@@ -12,10 +12,11 @@ contract CurveAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(ERC20 lpToken, CurveFi pool)
+    // adaptorData = abi.encode(ERC20 lpToken, uint256 poolId, address rewarder)
     // Where:
     // `lpToken` is the Curve LP token this adaptor is working with
-    // `pool` is the Curve pool this adaptor is working with
+    // `poolId` is the Convex booster pool id this adaptor is working with
+    // `rewarder` is the rewarder contract this adaptor works with
     //================= Configuration Data Specification =================
     // NOT USED
     //================================ NOTES ==============================
@@ -31,7 +32,7 @@ contract CurveAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Curve LP Adaptor V 0.0"));
+        return keccak256(abi.encode("Convex Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -58,7 +59,7 @@ contract CurveAdaptor is BaseAdaptor {
         bytes memory,
         bytes memory
     ) public pure override {
-        revert BaseAdaptor__UserWithdrawsNotAllowed();
+        // TODO calls withdrawAndUnwrap on the rewarder
     }
 
     /**
@@ -66,15 +67,14 @@ contract CurveAdaptor is BaseAdaptor {
      *         then a NEW adaptor contract is needed.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public pure override returns (uint256) {
-        return 0;
+        // TODO returns rewarder.balanceOf(msg.sender)
     }
 
     /**
      * @notice Returns the balance of `token`.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        ERC20 lpToken = abi.decode(adaptorData, (ERC20));
-        return lpToken.balanceOf(msg.sender);
+        // TODO returns rewarder.balanceOf(msg.sender)
     }
 
     /**
@@ -94,5 +94,5 @@ contract CurveAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-    // TODO add functions for adding and removing liquidity from curve pools.
+    // TODO add functions for bposter deposit, rewarder withdraw, rewarder getReward
 }
