@@ -3,20 +3,22 @@ pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IEuler, IEulerMarkets, IEulerExec, IEulerEToken } from "src/interfaces/external/IEuler.sol";
+import { IStakingRewards } from "src/interfaces/external/IStakingRewards.sol";
 
 /**
- * @title Euler eToken Adaptor
+ * @title Euler eToken Staking Adaptor
  * @notice Allows Cellars to interact with Euler aToken positions.
  * @author crispymangoes
  */
-contract EulerETokenAdaptor is BaseAdaptor {
+contract EulerETokenStakingAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(IEulerToken eToken)
+    // adaptorData = abi.encode(IEulerToken eToken, IStakingRewards rewarder)
     // Where:
     // `eToken` is the eToken address position this adaptor is working with
+    // `rewarder` is the Euler staking rewards contract
     //================= Configuration Data Specification =================
     // NONE
     // **************************** IMPORTANT ****************************

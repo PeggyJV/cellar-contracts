@@ -208,6 +208,42 @@ contract CellarEulerTest is Test {
         }
     }
 
+    function testSelfBorrow() external {
+        // Deposit into Euler.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        uint256 totalAssetsBefore = cellar.totalAssets();
+
+        // Enter market and self borrow  2x USDC assets.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+            bytes[] memory adaptorCalls0 = new bytes[](1);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC);
+            bytes[] memory adaptorCalls1 = new bytes[](1);
+            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 2 * assets);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
+            data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
+            cellar.callOnAdaptor(data);
+        }
+
+        assertApproxEqAbs(cellar.totalAssets(), totalAssetsBefore, 1, "Cellar Total Assets should be unchanged.");
+        assertApproxEqAbs(
+            eUSDC.balanceOfUnderlying(address(cellar)),
+            3 * assets,
+            1,
+            "Cellar eUSDC balance should be 3x assets deposited."
+        );
+        assertApproxEqAbs(
+            dUSDC.balanceOf(address(cellar)),
+            2 * assets,
+            1,
+            "Cellar dUSDC balance should be 2x assets deposited."
+        );
+    }
+
     function _createBytesDataToEnterMarket(IEulerEToken eToken) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(EulerETokenAdaptor.enterMarket.selector, eToken);
     }
@@ -223,5 +259,9 @@ contract CellarEulerTest is Test {
     {
         return
             abi.encodeWithSelector(EulerDebtTokenAdaptor.borrowFromEuler.selector, debtTokenToBorrow, amountToBorrow);
+    }
+
+    function _createBytesDataToSelfBorrow(address target, uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(EulerDebtTokenAdaptor.selfBorrow.selector, target, amount);
     }
 }

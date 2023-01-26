@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IEuler, IEulerMarkets, IEulerExec, IEulerDToken } from "src/interfaces/external/IEuler.sol";
+import { IEuler, IEulerMarkets, IEulerExec, IEulerDToken, IEulerEToken } from "src/interfaces/external/IEuler.sol";
 import { console } from "@forge-std/Test.sol";
 
 /**
@@ -157,6 +157,22 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
     ) public {
         uint256 amountToRepay = swap(tokenIn, ERC20(debtTokenToRepay.underlyingAsset()), amountIn, exchange, params);
         repayEulerDebt(debtTokenToRepay, amountToRepay);
+    }
+
+    function selfBorrow(address target, uint256 amount) public {
+        // Check that debt position is properly set up to be tracked in the Cellar.
+        address debtToken = markets().underlyingToDToken(target);
+        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(debtToken)));
+        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(positionId))
+            revert EulerDebtTokenAdaptor__DebtPositionsMustBeTracked(debtToken);
+
+        IEulerEToken eToken = IEulerEToken(markets().underlyingToEToken(target));
+        eToken.mint(0, amount);
+
+        // Check that health factor is above adaptor minimum.
+        uint256 healthFactor = _calculateHF(address(this));
+        if (healthFactor < HFMIN()) revert EulerDebtTokenAdaptor__HealthFactorTooLow();
     }
 
     function _calculateHF(address target) internal view returns (uint256) {
