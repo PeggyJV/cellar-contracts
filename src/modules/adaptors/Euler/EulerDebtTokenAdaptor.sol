@@ -190,6 +190,9 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
         if (healthFactor < HFMIN()) revert EulerDebtTokenAdaptor__HealthFactorTooLow();
     }
 
+    // TODO
+    function selfRepay() public {}
+
     function _calculateHF(address target) internal view returns (uint256) {
         IEulerExec.AssetLiquidity[] memory assets = exec().detailedLiquidity(target);
         uint256 valueWeightedCollateralFactor;
