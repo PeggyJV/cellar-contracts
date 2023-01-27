@@ -44,7 +44,7 @@ contract RealYieldTest is Test {
 
     address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address private sommMultiSig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
-    address private strategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
+    address private strategist = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
 
     address private uniswapV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     address private uniswapV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -98,7 +98,66 @@ contract RealYieldTest is Test {
         USDC.approve(address(realYield), assets);
         realYield.deposit(assets, address(this));
 
-        assertApproxEqAbs(aUSDC.balanceOf(address(realYield)), assets, 1, "Assets should have been deposited to Aave.");
+        uint32[] memory oldCreditPositions = realYield.getCreditPositions();
+        Registry.PositionData[] memory oldData = new Registry.PositionData[](12);
+        for (uint32 i = 1; i < 13; i++) {
+            (address adaptor, bool isDebt, bytes memory adaptorData, bytes memory configData) = realYield
+                .getPositionData(i);
+            oldData[i - 1] = Registry.PositionData({
+                adaptor: adaptor,
+                isDebt: isDebt,
+                adaptorData: adaptorData,
+                configurationData: configData
+            });
+        }
+
+        // Remove aDAI and aUSDT from the cellar.
+        vm.startPrank(gravityBridge);
+        realYield.removePosition(5, false);
+        realYield.removePosition(5, false);
+        realYield.addPosition(5, 7, abi.encode(0), false);
+        realYield.addPosition(6, 8, abi.encode(0), false);
+        vm.stopPrank();
+
+        assertTrue(realYield.isPositionUsed(7), "aDAI should be used.");
+        assertTrue(realYield.isPositionUsed(8), "aUSDT should be used.");
+
+        uint32[] memory newCreditPositions = realYield.getCreditPositions();
+        Registry.PositionData[] memory newData = new Registry.PositionData[](12);
+        for (uint32 i = 1; i < 13; i++) {
+            (address adaptor, bool isDebt, bytes memory adaptorData, bytes memory configData) = realYield
+                .getPositionData(i);
+            newData[i - 1] = Registry.PositionData({
+                adaptor: adaptor,
+                isDebt: isDebt,
+                adaptorData: adaptorData,
+                configurationData: configData
+            });
+        }
+        // These should not revert anymore.
+        realYield.maxRedeem(0x97238B45C626a4CA4C99E7Eb34e2DAD5e5107D32);
+        realYield.maxWithdraw(0x97238B45C626a4CA4C99E7Eb34e2DAD5e5107D32);
+
+        // Compare old state to new state.
+        for (uint32 i; i < 12; i++) {
+            assertEq(newCreditPositions[i], oldCreditPositions[i], "Positions array should be the same.");
+        }
+
+        for (uint32 i = 1; i < 13; i++) {
+            (address adaptor, bool isDebt, bytes memory adaptorData, bytes memory configData) = realYield
+                .getPositionData(i);
+
+            assertEq(adaptor, oldData[i - 1].adaptor, "Position adaptor should be the same.");
+            assertEq(isDebt, oldData[i - 1].isDebt, "Position isDebt should be the same.");
+            assertEq(adaptorData, oldData[i - 1].adaptorData, "Position adaptorData should be the same.");
+
+            if (i == 7 || i == 8) {
+                // console.log(abi.decode(newData[newCreditPositions[i] - 1].adaptorData, (address)));
+                assertEq(configData, abi.encode(0), "Config data should have been updated.");
+            } else {
+                assertEq(configData, oldData[i - 1].configurationData, "Config data should not have been updated.");
+            }
+        }
 
         // Have strategist withdraw from Aave, deposit some into Compound, then add liquidity to Uniswap.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
@@ -118,7 +177,25 @@ contract RealYieldTest is Test {
 
         data[2] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCallsThirdAdaptor });
 
-        vm.prank(strategist);
+        vm.prank(gravityBridge);
+        realYield.callOnAdaptor(data);
+
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(realYield), assets);
+        realYield.deposit(assets, address(this));
+
+        // Strategist lends DAI and USDT on Aave.
+        data = new Cellar.AdaptorCall[](1);
+        adaptorCallsFirstAdaptor = new bytes[](5);
+        adaptorCallsFirstAdaptor[0] = _createBytesDataToWithdraw(USDC, assets);
+        adaptorCallsFirstAdaptor[1] = _createBytesDataForSwap(USDC, USDT, 500, assets / 2);
+        adaptorCallsFirstAdaptor[2] = _createBytesDataForSwap(USDC, DAI, 500, assets / 2);
+        adaptorCallsFirstAdaptor[3] = _createBytesDataToLendOnAave(USDT, type(uint256).max);
+        adaptorCallsFirstAdaptor[4] = _createBytesDataToLendOnAave(DAI, type(uint256).max);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCallsFirstAdaptor });
+
+        vm.prank(gravityBridge);
         realYield.callOnAdaptor(data);
 
         // Give the cellar a large amount of yield by minting it COMP, then have it swap COMP for WETH, then USDC and vest it.
@@ -131,7 +208,7 @@ contract RealYieldTest is Test {
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
 
-        vm.prank(strategist);
+        vm.prank(gravityBridge);
         realYield.callOnAdaptor(data);
 
         uint256 vestedBalance = usdcVestor.vestedBalanceOf(address(realYield));
@@ -177,6 +254,14 @@ contract RealYieldTest is Test {
         returns (bytes memory)
     {
         return abi.encodeWithSelector(AaveATokenAdaptor.withdrawFromAave.selector, tokenToWithdraw, amountToWithdraw);
+    }
+
+    function _createBytesDataToLendOnAave(ERC20 tokenToLend, uint256 amountToLend)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(AaveATokenAdaptor.depositToAave.selector, tokenToLend, amountToLend);
     }
 
     function _createBytesDataToLend(CErc20 market, uint256 amountToLend) internal pure returns (bytes memory) {
