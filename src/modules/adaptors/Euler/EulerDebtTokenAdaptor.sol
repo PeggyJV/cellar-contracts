@@ -15,9 +15,10 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(IEulerDToken dToken)
+    // adaptorData = abi.encode(IEulerDToken dToken, uint256 subAccountId)
     // Where:
     // `dToken` is the Euler debt token address position this adaptor is working with
+    // `subAccountId` is the sub account id the position uses
     //================= Configuration Data Specification =================
     // NOT USED
     //====================================================================
@@ -96,9 +97,10 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
     /**
      * @notice Returns the cellars balance of the positions debtToken.
      */
+    //  TODO could use the exact version of balance of which has extra decimals.
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        IEulerDToken dToken = abi.decode(adaptorData, (IEulerDToken));
-        return dToken.balanceOf(msg.sender);
+        (IEulerDToken dToken, uint256 subAccountId) = abi.decode(adaptorData, (IEulerDToken, uint256));
+        return dToken.balanceOf(_getSubAccount(msg.sender, subAccountId));
     }
 
     /**
@@ -123,25 +125,33 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
      */
     error EulerDebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
 
-    function borrowFromEuler(IEulerDToken debtTokenToBorrow, uint256 amountToBorrow) public {
+    function borrowFromEuler(
+        IEulerDToken debtTokenToBorrow,
+        uint256 subAccountId,
+        uint256 amountToBorrow
+    ) public {
         // Check that debt position is properly set up to be tracked in the Cellar.
-        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(address(debtTokenToBorrow))));
+        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(debtTokenToBorrow, subAccountId)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert EulerDebtTokenAdaptor__DebtPositionsMustBeTracked(address(debtTokenToBorrow));
 
-        debtTokenToBorrow.borrow(0, amountToBorrow);
+        debtTokenToBorrow.borrow(subAccountId, amountToBorrow);
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _calculateHF(address(this));
+        uint256 healthFactor = _calculateHF(_getSubAccount(address(this), subAccountId));
         if (healthFactor < HFMIN()) revert EulerDebtTokenAdaptor__HealthFactorTooLow();
     }
 
-    function repayEulerDebt(IEulerDToken debtTokenToRepay, uint256 amountToRepay) public {
+    function repayEulerDebt(
+        IEulerDToken debtTokenToRepay,
+        uint256 subAccountId,
+        uint256 amountToRepay
+    ) public {
         // Think Euler by default allows the type(uint256).max logic
         // amountToRepay = _maxAvailable(tokenToRepay, amountToRepay);
         ERC20(debtTokenToRepay.underlyingAsset()).safeApprove(euler(), amountToRepay);
-        debtTokenToRepay.repay(0, amountToRepay);
+        debtTokenToRepay.repay(subAccountId, amountToRepay);
     }
 
     /**
@@ -150,28 +160,33 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
      */
     function swapAndRepay(
         ERC20 tokenIn,
+        uint256 subAccountId,
         IEulerDToken debtTokenToRepay,
         uint256 amountIn,
         SwapRouter.Exchange exchange,
         bytes memory params
     ) public {
         uint256 amountToRepay = swap(tokenIn, ERC20(debtTokenToRepay.underlyingAsset()), amountIn, exchange, params);
-        repayEulerDebt(debtTokenToRepay, amountToRepay);
+        repayEulerDebt(debtTokenToRepay, subAccountId, amountToRepay);
     }
 
-    function selfBorrow(address target, uint256 amount) public {
+    function selfBorrow(
+        address target,
+        uint256 subAccountId,
+        uint256 amount
+    ) public {
         // Check that debt position is properly set up to be tracked in the Cellar.
         address debtToken = markets().underlyingToDToken(target);
-        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(debtToken)));
+        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(debtToken, subAccountId)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert EulerDebtTokenAdaptor__DebtPositionsMustBeTracked(debtToken);
 
         IEulerEToken eToken = IEulerEToken(markets().underlyingToEToken(target));
-        eToken.mint(0, amount);
+        eToken.mint(subAccountId, amount);
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _calculateHF(address(this));
+        uint256 healthFactor = _calculateHF(_getSubAccount(address(this), subAccountId));
         if (healthFactor < HFMIN()) revert EulerDebtTokenAdaptor__HealthFactorTooLow();
     }
 
@@ -196,5 +211,10 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
         // uint256 avgCollateralFactor = valueWeightedCollateralFactor / totalCollateral;
         // return totalCollateral.mulDivDown(avgCollateralFactor, totalLiabilites);
         return valueWeightedCollateralFactor.mulDivDown(1e18, totalLiabilites);
+    }
+
+    function _getSubAccount(address primary, uint256 subAccountId) internal pure returns (address) {
+        require(subAccountId < 256, "e/sub-account-id-too-big");
+        return address(uint160(primary) ^ uint160(subAccountId));
     }
 }

@@ -14,9 +14,10 @@ contract EulerETokenAdaptor is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(IEulerToken eToken)
+    // adaptorData = abi.encode(IEulerToken eToken, uint256 subAccountId)
     // Where:
     // `eToken` is the eToken address position this adaptor is working with
+    // `subAccountId` is the sub account id the position uses
     //================= Configuration Data Specification =================
     // NONE
     // **************************** IMPORTANT ****************************
@@ -70,12 +71,12 @@ contract EulerETokenAdaptor is BaseAdaptor {
         bytes memory adaptorData,
         bytes memory
     ) public override {
-        IEulerEToken eToken = abi.decode(adaptorData, (IEulerEToken));
+        (IEulerEToken eToken, uint256 subAccountId) = abi.decode(adaptorData, (IEulerEToken, uint256));
         ERC20 underlying = ERC20(eToken.underlyingAsset());
 
         // Deposit assets to Euler.
         underlying.safeApprove(euler(), assets);
-        eToken.deposit(0, assets);
+        eToken.deposit(subAccountId, assets);
     }
 
     /**
@@ -96,15 +97,15 @@ contract EulerETokenAdaptor is BaseAdaptor {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        IEulerEToken eToken = abi.decode(adaptorData, (IEulerEToken));
+        (IEulerEToken eToken, uint256 subAccountId) = abi.decode(adaptorData, (IEulerEToken, uint256));
         ERC20 underlying = ERC20(eToken.underlyingAsset());
 
-        address[] memory entered = markets().getEnteredMarkets(address(this));
+        address[] memory entered = markets().getEnteredMarkets(_getSubAccount(address(this), subAccountId));
         for (uint256 i; i < entered.length; ++i) {
             if (entered[i] == address(underlying)) revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
         // TODO does this always withdraw `assets`?
-        eToken.withdraw(0, assets);
+        eToken.withdraw(subAccountId, assets);
 
         underlying.transfer(receiver, assets);
     }
@@ -123,12 +124,13 @@ contract EulerETokenAdaptor is BaseAdaptor {
      *      doing so lowers the withdrawable from amount which in turn raises the health factor.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        IEulerEToken eToken = abi.decode(adaptorData, (IEulerEToken));
+        (IEulerEToken eToken, uint256 subAccountId) = abi.decode(adaptorData, (IEulerEToken, uint256));
         ERC20 underlying = ERC20(eToken.underlyingAsset());
 
         bool marketEntered;
+        address subAccount = _getSubAccount(msg.sender, subAccountId);
 
-        address[] memory entered = markets().getEnteredMarkets(msg.sender);
+        address[] memory entered = markets().getEnteredMarkets(subAccount);
         for (uint256 i; i < entered.length; ++i) {
             if (entered[i] == address(underlying)) {
                 marketEntered = true;
@@ -136,15 +138,16 @@ contract EulerETokenAdaptor is BaseAdaptor {
             }
         }
 
-        return marketEntered ? 0 : eToken.balanceOfUnderlying(msg.sender);
+        return marketEntered ? 0 : eToken.balanceOfUnderlying(subAccount);
     }
 
     /**
      * @notice Returns the cellars balance of the positions aToken.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        IEulerEToken eToken = abi.decode(adaptorData, (IEulerEToken));
-        return eToken.balanceOfUnderlying(msg.sender);
+        (IEulerEToken eToken, uint256 subAccountId) = abi.decode(adaptorData, (IEulerEToken, uint256));
+
+        return eToken.balanceOfUnderlying(_getSubAccount(msg.sender, subAccountId));
     }
 
     /**
@@ -152,6 +155,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         IEulerEToken eToken = abi.decode(adaptorData, (IEulerEToken));
+
         return ERC20(eToken.underlyingAsset());
     }
 
@@ -169,11 +173,15 @@ contract EulerETokenAdaptor is BaseAdaptor {
      * @param tokenToDeposit the token to lend on Euler
      * @param amountToDeposit the amount of `tokenToDeposit` to lend on Euler.
      */
-    function depositToEuler(IEulerEToken tokenToDeposit, uint256 amountToDeposit) public {
+    function depositToEuler(
+        IEulerEToken tokenToDeposit,
+        uint256 subAccountId,
+        uint256 amountToDeposit
+    ) public {
         ERC20 underlying = ERC20(tokenToDeposit.underlyingAsset());
         amountToDeposit = _maxAvailable(underlying, amountToDeposit);
         underlying.safeApprove(euler(), amountToDeposit);
-        tokenToDeposit.deposit(0, amountToDeposit);
+        tokenToDeposit.deposit(subAccountId, amountToDeposit);
     }
 
     /**
@@ -181,26 +189,46 @@ contract EulerETokenAdaptor is BaseAdaptor {
      * @param tokenToWithdraw the token to withdraw from Euler.
      * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Euler
      */
-    function withdrawFromEuler(IEulerEToken tokenToWithdraw, uint256 amountToWithdraw) public {
-        tokenToWithdraw.withdraw(0, amountToWithdraw);
+    function withdrawFromEuler(
+        IEulerEToken tokenToWithdraw,
+        uint256 subAccountId,
+        uint256 amountToWithdraw
+    ) public {
+        tokenToWithdraw.withdraw(subAccountId, amountToWithdraw);
+
+        // Check that health factor is above adaptor minimum.
+        uint256 healthFactor = _calculateHF(_getSubAccount(address(this), subAccountId));
+        if (healthFactor < HFMIN()) revert EulerETokenAdaptor__HealthFactorTooLow();
+    }
+
+    function enterMarket(IEulerEToken eToken, uint256 subAccountId) public {
+        markets().enterMarket(subAccountId, eToken.underlyingAsset());
+    }
+
+    function exitMarket(IEulerEToken eToken, uint256 subAccountId) public {
+        markets().exitMarket(subAccountId, eToken.underlyingAsset());
 
         // Check that health factor is above adaptor minimum.
         uint256 healthFactor = _calculateHF(address(this));
         if (healthFactor < HFMIN()) revert EulerETokenAdaptor__HealthFactorTooLow();
     }
 
-    function enterMarket(IEulerEToken eToken) public {
-        markets().enterMarket(0, eToken.underlyingAsset());
+    function transferETokensBetweenSubAccounts(
+        IEulerEToken eToken,
+        uint256 from,
+        uint256 to,
+        uint256 amount
+    ) public {
+        bool success = eToken.transferFrom(
+            _getSubAccount(address(this), from),
+            _getSubAccount(address(this), to),
+            amount
+        );
+
+        require(success, "TransferFrom Failed");
     }
 
-    function exitMarket(IEulerEToken eToken) public {
-        markets().exitMarket(0, eToken.underlyingAsset());
-
-        // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _calculateHF(address(this));
-        if (healthFactor < HFMIN()) revert EulerETokenAdaptor__HealthFactorTooLow();
-    }
-
+    // TODO health score = risk adjusted collateral / risk adjusted liabilities
     function _calculateHF(address target) internal view returns (uint256) {
         IEulerExec.AssetLiquidity[] memory assets = exec().detailedLiquidity(target);
         uint256 valueWeightedCollateralFactor;
@@ -223,5 +251,10 @@ contract EulerETokenAdaptor is BaseAdaptor {
         // uint256 avgCollateralFactor = valueWeightedCollateralFactor / totalCollateral;
         // return totalCollateral.mulDivDown(avgCollateralFactor, totalLiabilites);
         return valueWeightedCollateralFactor.mulDivDown(1e18, totalLiabilites);
+    }
+
+    function _getSubAccount(address primary, uint256 subAccountId) internal pure returns (address) {
+        require(subAccountId < 256, "e/sub-account-id-too-big");
+        return address(uint160(primary) ^ uint160(subAccountId));
     }
 }

@@ -39,6 +39,8 @@ contract CellarEulerTest is Test {
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
 
     IEulerMarkets private markets = IEulerMarkets(0x3520d5a913427E6F0D6A83E07ccD4A4da316e4d3);
+    address private euler = 0x27182842E098f60e3D576794A5bFFb0777E025d3;
+    IEulerExec private exec = IEulerExec(0x59828FdF7ee634AaaD3f58B19fDBa3b03E2D9d80);
 
     IEulerEToken private eUSDC;
     IEulerEToken private eWETH;
@@ -68,6 +70,7 @@ contract CellarEulerTest is Test {
         priceRouter = new PriceRouter();
 
         eUSDC = IEulerEToken(markets.underlyingToEToken(address(USDC)));
+        // console.log("eUSDC", address(eUSDC));
         eWETH = IEulerEToken(markets.underlyingToEToken(address(WETH)));
         eWBTC = IEulerEToken(markets.underlyingToEToken(address(WBTC)));
 
@@ -106,8 +109,8 @@ contract CellarEulerTest is Test {
         registry.trustAdaptor(address(eulerDebtTokenAdaptor), 0, 0);
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        eUSDCPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC), 0, 0);
-        debtUSDCPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDC), 0, 0);
+        eUSDCPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 0), 0, 0);
+        debtUSDCPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDC, 0), 0, 0);
 
         positions[0] = eUSDCPosition;
         positions[1] = usdcPosition;
@@ -181,7 +184,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](1);
-            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
             bytes[] memory adaptorCalls1 = new bytes[](1);
             adaptorCalls1[0] = _createBytesDataToBorrow(dUSDC, assets / 2);
 
@@ -200,7 +203,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToExitMarket(eUSDC);
+            adaptorCalls[0] = _createBytesDataToExitMarket(eUSDC, 0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls });
             vm.expectRevert(bytes("e/outstanding-borrow"));
@@ -220,9 +223,9 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](1);
-            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
             bytes[] memory adaptorCalls1 = new bytes[](1);
-            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 2 * assets);
+            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 0, 2 * assets);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
             data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
@@ -244,12 +247,95 @@ contract CellarEulerTest is Test {
         );
     }
 
-    function _createBytesDataToEnterMarket(IEulerEToken eToken) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(EulerETokenAdaptor.enterMarket.selector, eToken);
+    function testSubAccounts() external {
+        // Remove vanilla USDC position.
+        cellar.removePosition(1, false);
+
+        // Add liquid euler position.
+        uint32 eUSDCPosition1 = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 1), 0, 0);
+
+        // Reconfigure cellar so it has 1 liquid euler position and an illiquid one.
+        cellar.addPosition(1, eUSDCPosition1, abi.encode(0), false);
+
+        // Make the liquid euler position the holding position.
+        cellar.setHoldingPosition(eUSDCPosition1);
+
+        // Deposit into Euler.
+        uint256 assets = 200e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        assertApproxEqAbs(
+            eUSDC.balanceOfUnderlying(_getSubAccount(address(cellar), 1)),
+            assets,
+            1,
+            "USDC should have been deposited into sub account 1."
+        );
+
+        assertEq(
+            eUSDC.balanceOfUnderlying(_getSubAccount(address(cellar), 0)),
+            0,
+            "USDC should not have been deposited into sub account 0."
+        );
+
+        uint256 eUSDCBalance = eUSDC.balanceOf(_getSubAccount(address(cellar), 1));
+
+        // Strategist moves half of assets into sub account 0, enter markets for 0, then self borrows.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+            bytes[] memory adaptorCalls0 = new bytes[](2);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
+            adaptorCalls0[1] = _createBytesDataToTransferBetweenAccounts(eUSDC, 1, 0, eUSDCBalance / 2);
+            bytes[] memory adaptorCalls1 = new bytes[](1);
+            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 0, assets);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
+            data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Users can still withdraw.
+        uint256 withdrawable = cellar.maxWithdraw(address(this));
+        assertApproxEqAbs(withdrawable, assets / 2, 1, "Withdrawable should equal half of assets.");
+
+        assertApproxEqAbs(
+            eUSDC.balanceOfUnderlying(_getSubAccount(address(cellar), 1)),
+            assets / 2,
+            1,
+            "USDC should have been moved from sub account 1."
+        );
+
+        assertApproxEqAbs(
+            eUSDC.balanceOfUnderlying(_getSubAccount(address(cellar), 0)),
+            assets.mulDivDown(1.5e18, 1e18),
+            1,
+            "USDC should be set as collateral in sub account 0."
+        );
+
+        assertApproxEqAbs(
+            dUSDC.balanceOf(_getSubAccount(address(cellar), 0)),
+            assets,
+            1,
+            "Sub Account 0 should have assets worth of USDC debt."
+        );
+
+        assertEq(dUSDC.balanceOf(_getSubAccount(address(cellar), 1)), 0, "Sub Account 1 should have zero USDC debt.");
     }
 
-    function _createBytesDataToExitMarket(IEulerEToken eToken) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(EulerETokenAdaptor.exitMarket.selector, eToken);
+    function _createBytesDataToEnterMarket(IEulerEToken eToken, uint256 subAccountId)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(EulerETokenAdaptor.enterMarket.selector, eToken, subAccountId);
+    }
+
+    function _createBytesDataToExitMarket(IEulerEToken eToken, uint256 subAccountId)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(EulerETokenAdaptor.exitMarket.selector, eToken, subAccountId);
     }
 
     function _createBytesDataToBorrow(IEulerDToken debtTokenToBorrow, uint256 amountToBorrow)
@@ -261,7 +347,32 @@ contract CellarEulerTest is Test {
             abi.encodeWithSelector(EulerDebtTokenAdaptor.borrowFromEuler.selector, debtTokenToBorrow, amountToBorrow);
     }
 
-    function _createBytesDataToSelfBorrow(address target, uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(EulerDebtTokenAdaptor.selfBorrow.selector, target, amount);
+    function _createBytesDataToSelfBorrow(
+        address target,
+        uint256 subAccountId,
+        uint256 amount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(EulerDebtTokenAdaptor.selfBorrow.selector, target, subAccountId, amount);
+    }
+
+    function _createBytesDataToTransferBetweenAccounts(
+        IEulerEToken eToken,
+        uint256 from,
+        uint256 to,
+        uint256 amount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                EulerETokenAdaptor.transferETokensBetweenSubAccounts.selector,
+                eToken,
+                from,
+                to,
+                amount
+            );
+    }
+
+    function _getSubAccount(address primary, uint256 subAccountId) internal pure returns (address) {
+        require(subAccountId < 256, "e/sub-account-id-too-big");
+        return address(uint160(primary) ^ uint160(subAccountId));
     }
 }
