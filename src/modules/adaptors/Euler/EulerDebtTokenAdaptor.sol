@@ -2,7 +2,8 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IEuler, IEulerMarkets, IEulerExec, IEulerDToken, IEulerEToken } from "src/interfaces/external/IEuler.sol";
+import { IEuler, IEulerMarkets, IEulerExec, IEulerDToken, IEulerEToken, IEulerEulDistributor, EUL } from "src/interfaces/external/IEuler.sol";
+// TODO remove this
 import { console } from "@forge-std/Test.sol";
 
 /**
@@ -54,11 +55,19 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
         return 0x27182842E098f60e3D576794A5bFFb0777E025d3;
     }
 
+    function distributor() internal pure returns (IEulerEulDistributor) {
+        return IEulerEulDistributor(0xd524E29E3BAF5BB085403Ca5665301E94387A7e2);
+    }
+
+    function eul() internal pure returns (EUL) {
+        return EUL(0xd9Fcd98c322942075A5C3860693e9f4f03AAE07b);
+    }
+
     /**
      * @notice Minimum HF enforced after every eToken withdraw/market exiting.
      */
     function HFMIN() internal pure returns (uint256) {
-        return 1.2e18;
+        return 1.01e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -135,7 +144,6 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert EulerDebtTokenAdaptor__DebtPositionsMustBeTracked(address(debtTokenToBorrow));
-
         debtTokenToBorrow.borrow(subAccountId, amountToBorrow);
 
         // Check that health factor is above adaptor minimum.
@@ -187,33 +195,60 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
 
         // Check that health factor is above adaptor minimum.
         uint256 healthFactor = _calculateHF(_getSubAccount(address(this), subAccountId));
+        console.log("Health Factor", healthFactor);
         if (healthFactor < HFMIN()) revert EulerDebtTokenAdaptor__HealthFactorTooLow();
     }
 
-    // TODO
-    function selfRepay() public {}
+    function selfRepay(
+        address target,
+        uint256 subAccountId,
+        uint256 amount
+    ) public {
+        IEulerEToken eToken = IEulerEToken(markets().underlyingToEToken(target));
+        eToken.burn(subAccountId, amount);
+        // No need to check HF since burn will raise it.
+    }
+
+    function claim(
+        address token,
+        uint256 claimable,
+        bytes32[] calldata proof
+    ) public {
+        distributor().claim(address(this), token, claimable, proof, address(0));
+    }
+
+    function delegate(address delegatee) public {
+        eul().delegate(delegatee);
+    }
 
     function _calculateHF(address target) internal view returns (uint256) {
         IEulerExec.AssetLiquidity[] memory assets = exec().detailedLiquidity(target);
-        uint256 valueWeightedCollateralFactor;
-        uint256 totalCollateral;
-        uint256 totalLiabilites;
+        uint256 riskAdjustedCollateral;
+        uint256 riskAdjustedLiabilities;
+
         for (uint256 i; i < assets.length; ++i) {
-            totalLiabilites += assets[i].status.liabilityValue;
-            if (assets[i].status.collateralValue > 0) {
-                totalCollateral += assets[i].status.collateralValue;
-                IEuler.AssetConfig memory config = markets().underlyingToAssetConfig(assets[i].underlying);
-                valueWeightedCollateralFactor += assets[i].status.collateralValue.mulDivDown(
-                    config.collateralFactor,
-                    4e9
-                );
+            IEuler.AssetConfig memory config;
+            if (assets[i].status.liabilityValue > 0 || assets[i].status.collateralValue > 0) {
+                config = markets().underlyingToAssetConfig(assets[i].underlying);
+                if (assets[i].status.liabilityValue > 0) {
+                    riskAdjustedLiabilities += assets[i].status.liabilityValue.mulDivDown(config.borrowFactor, 4e9);
+                }
+                if (assets[i].status.collateralValue > 0) {
+                    riskAdjustedCollateral += assets[i].status.collateralValue.mulDivDown(config.collateralFactor, 4e9);
+                }
                 // 4e9 is the max possible value CF can be, so a CF of 1 would equal 4e9.
+                console.log("Collateral Value", assets[i].status.collateralValue);
+                console.log("Liability Value", assets[i].status.liabilityValue);
+                console.log("Collateral Factor", config.collateralFactor);
+                console.log("Borrow Factor", config.borrowFactor);
             }
         }
         // Left here for derivation of actual return value.
-        // uint256 avgCollateralFactor = valueWeightedCollateralFactor / totalCollateral;
+        // uint256 avgCollateralFactor = riskAdjustedCollateral / totalCollateral;
         // return totalCollateral.mulDivDown(avgCollateralFactor, totalLiabilites);
-        return valueWeightedCollateralFactor.mulDivDown(1e18, totalLiabilites);
+        console.log("Risk Adjusted Collateral", riskAdjustedCollateral);
+        console.log("Risk Adjusted Liabilities", riskAdjustedLiabilities);
+        return riskAdjustedCollateral.mulDivDown(1e18, riskAdjustedLiabilities);
     }
 
     function _getSubAccount(address primary, uint256 subAccountId) internal pure returns (address) {

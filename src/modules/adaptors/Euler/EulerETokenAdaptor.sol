@@ -3,10 +3,12 @@ pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IEuler, IEulerMarkets, IEulerExec, IEulerEToken } from "src/interfaces/external/IEuler.sol";
+// TODO remove this
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Euler eToken Adaptor
- * @notice Allows Cellars to interact with Euler aToken positions.
+ * @notice Allows Cellars to interact with Euler eToken positions.
  * @author crispymangoes
  */
 contract EulerETokenAdaptor is BaseAdaptor {
@@ -57,14 +59,14 @@ contract EulerETokenAdaptor is BaseAdaptor {
      * @notice Minimum HF enforced after every eToken withdraw/market exiting.
      */
     function HFMIN() internal pure returns (uint256) {
-        return 1.2e18;
+        return 1.01e18;
     }
 
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
      * @param assets the amount of assets to lend on Euler
-     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @param adaptorData adaptor data containining the abi encoded eToken
      */
     function deposit(
         uint256 assets,
@@ -85,7 +87,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
      * @param assets the amount of assets to withdraw from Euler
      * @param receiver the address to send withdrawn assets to
-     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @param adaptorData adaptor data containining the abi encoded eToken
 
      */
     function withdraw(
@@ -142,7 +144,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the cellars balance of the positions aToken.
+     * @notice Returns the cellars balance of the positions eToken.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (IEulerEToken eToken, uint256 subAccountId) = abi.decode(adaptorData, (IEulerEToken, uint256));
@@ -151,7 +153,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the positions aToken underlying asset.
+     * @notice Returns the positions eToken underlying asset.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         IEulerEToken eToken = abi.decode(adaptorData, (IEulerEToken));
@@ -228,29 +230,30 @@ contract EulerETokenAdaptor is BaseAdaptor {
         require(success, "TransferFrom Failed");
     }
 
-    // TODO health score = risk adjusted collateral / risk adjusted liabilities
     function _calculateHF(address target) internal view returns (uint256) {
         IEulerExec.AssetLiquidity[] memory assets = exec().detailedLiquidity(target);
-        uint256 valueWeightedCollateralFactor;
-        uint256 totalCollateral;
-        uint256 totalLiabilites;
+        uint256 riskAdjustedCollateral;
+        uint256 riskAdjustedLiabilities;
+
         for (uint256 i; i < assets.length; ++i) {
-            totalLiabilites += assets[i].status.liabilityValue;
-            if (assets[i].status.collateralValue > 0) {
-                totalCollateral += assets[i].status.collateralValue;
-                IEuler.AssetConfig memory config = markets().underlyingToAssetConfig(assets[i].underlying);
-                valueWeightedCollateralFactor += assets[i].status.collateralValue.mulDivDown(
-                    config.collateralFactor,
-                    4e9
-                );
+            IEuler.AssetConfig memory config;
+            if (assets[i].status.liabilityValue > 0 || assets[i].status.collateralValue > 0) {
+                config = markets().underlyingToAssetConfig(assets[i].underlying);
+                if (assets[i].status.liabilityValue > 0) {
+                    riskAdjustedLiabilities += assets[i].status.liabilityValue.mulDivDown(config.borrowFactor, 4e9);
+                }
+                if (assets[i].status.collateralValue > 0) {
+                    riskAdjustedCollateral += assets[i].status.collateralValue.mulDivDown(config.collateralFactor, 4e9);
+                }
                 // 4e9 is the max possible value CF can be, so a CF of 1 would equal 4e9.
-                // TODO is the 4e9 assumption correct.
+                console.log("Collateral Factor", config.collateralFactor);
+                console.log("Borrow Factor", config.borrowFactor);
             }
         }
         // Left here for derivation of actual return value.
-        // uint256 avgCollateralFactor = valueWeightedCollateralFactor / totalCollateral;
+        // uint256 avgCollateralFactor = riskAdjustedCollateral / totalCollateral;
         // return totalCollateral.mulDivDown(avgCollateralFactor, totalLiabilites);
-        return valueWeightedCollateralFactor.mulDivDown(1e18, totalLiabilites);
+        return riskAdjustedCollateral.mulDivDown(1e18, riskAdjustedLiabilities);
     }
 
     function _getSubAccount(address primary, uint256 subAccountId) internal pure returns (address) {
