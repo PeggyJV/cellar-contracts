@@ -231,29 +231,9 @@ contract EulerETokenAdaptor is BaseAdaptor {
     }
 
     function _calculateHF(address target) internal view returns (uint256) {
-        IEulerExec.AssetLiquidity[] memory assets = exec().detailedLiquidity(target);
-        uint256 riskAdjustedCollateral;
-        uint256 riskAdjustedLiabilities;
+        IEulerExec.LiquidityStatus memory status = exec().liquidity(target);
 
-        for (uint256 i; i < assets.length; ++i) {
-            IEuler.AssetConfig memory config;
-            if (assets[i].status.liabilityValue > 0 || assets[i].status.collateralValue > 0) {
-                config = markets().underlyingToAssetConfig(assets[i].underlying);
-                if (assets[i].status.liabilityValue > 0) {
-                    riskAdjustedLiabilities += assets[i].status.liabilityValue.mulDivDown(config.borrowFactor, 4e9);
-                }
-                if (assets[i].status.collateralValue > 0) {
-                    riskAdjustedCollateral += assets[i].status.collateralValue.mulDivDown(config.collateralFactor, 4e9);
-                }
-                // 4e9 is the max possible value CF can be, so a CF of 1 would equal 4e9.
-                console.log("Collateral Factor", config.collateralFactor);
-                console.log("Borrow Factor", config.borrowFactor);
-            }
-        }
-        // Left here for derivation of actual return value.
-        // uint256 avgCollateralFactor = riskAdjustedCollateral / totalCollateral;
-        // return totalCollateral.mulDivDown(avgCollateralFactor, totalLiabilites);
-        return riskAdjustedCollateral.mulDivDown(1e18, riskAdjustedLiabilities);
+        return status.collateralValue.mulDivDown(1e18, status.liabilityValue);
     }
 
     function _getSubAccount(address primary, uint256 subAccountId) internal pure returns (address) {

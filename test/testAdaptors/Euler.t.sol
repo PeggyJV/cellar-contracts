@@ -517,19 +517,23 @@ contract CellarEulerTest is Test {
 
         // Strategist moves half of assets into sub account 0, enter markets for 0, then self borrows.
         {
-            uint256 eUSDCToTransfer = eUSDC.balanceOf(_getSubAccount(address(cellar), 1)).mulDivDown(10, 10);
+            uint256 eUSDCToTransfer = eUSDC.balanceOf(_getSubAccount(address(cellar), 1)).mulDivDown(9, 10);
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](2);
             adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
             adaptorCalls0[1] = _createBytesDataToTransferBetweenAccounts(eUSDC, 1, 0, eUSDCToTransfer);
             bytes[] memory adaptorCalls1 = new bytes[](1);
-            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 0, 10 * assets);
+            // adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 0, 1 * assets);
+            // adaptorCalls1[1] = _createBytesDataToSelfBorrow(address(DAI), 0, 3 * assets.changeDecimals(6, 18));
+            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDT), 0, 9 * assets);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
             data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
             cellar.callOnAdaptor(data);
         }
     }
+
+    // TODO add test with vanilla eToken position with no borrows. So like we could add it to the stable coin cellar.
 
     function _createBytesDataToEnterMarket(IEulerEToken eToken, uint256 subAccountId)
         internal
