@@ -195,7 +195,6 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
 
         // Check that health factor is above adaptor minimum.
         uint256 healthFactor = _calculateHF(_getSubAccount(address(this), subAccountId));
-        console.log("Health Factor", healthFactor);
         if (healthFactor < HFMIN()) revert EulerDebtTokenAdaptor__HealthFactorTooLow();
     }
 
@@ -224,6 +223,7 @@ contract EulerDebtTokenAdaptor is BaseAdaptor {
     function _calculateHF(address target) internal view returns (uint256) {
         IEulerExec.LiquidityStatus memory status = exec().liquidity(target);
 
+        if (status.liabilityValue == 0) return type(uint256).max;
         return status.collateralValue.mulDivDown(1e18, status.liabilityValue);
     }
 

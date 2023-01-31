@@ -106,10 +106,10 @@ contract EulerETokenAdaptor is BaseAdaptor {
         for (uint256 i; i < entered.length; ++i) {
             if (entered[i] == address(underlying)) revert BaseAdaptor__UserWithdrawsNotAllowed();
         }
-        // TODO does this always withdraw `assets`?
+
         eToken.withdraw(subAccountId, assets);
 
-        underlying.transfer(receiver, assets);
+        underlying.safeTransfer(receiver, assets);
     }
 
     /**
@@ -181,7 +181,6 @@ contract EulerETokenAdaptor is BaseAdaptor {
         uint256 amountToDeposit
     ) public {
         ERC20 underlying = ERC20(tokenToDeposit.underlyingAsset());
-        amountToDeposit = _maxAvailable(underlying, amountToDeposit);
         underlying.safeApprove(euler(), amountToDeposit);
         tokenToDeposit.deposit(subAccountId, amountToDeposit);
     }
@@ -233,6 +232,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
     function _calculateHF(address target) internal view returns (uint256) {
         IEulerExec.LiquidityStatus memory status = exec().liquidity(target);
 
+        if (status.liabilityValue == 0) return type(uint256).max;
         return status.collateralValue.mulDivDown(1e18, status.liabilityValue);
     }
 

@@ -481,12 +481,7 @@ contract CellarEulerTest is Test {
         }
     }
 
-    function testMultiAssetMultiDebt() external {
-        // Integration test with multiple collaterals, and debt positions
-    }
-
-    function testLeveragedStable() external {
-        // Integration test with multiple stable collateral positions leveraged
+    function testLeveragedUSDC() external {
         // Remove vanilla USDC position.
         cellar.removePosition(1, false);
 
@@ -499,41 +494,259 @@ contract CellarEulerTest is Test {
         // Make the liquid euler position the holding position.
         cellar.setHoldingPosition(eUSDCPosition1);
 
-        // Add eUSDT, eDAI, and dUSDT, dDAI.
-        uint32 eDAIPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eDAI, 0), 0, 0);
-        uint32 debtDAIPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dDAI, 0), 0, 0);
-        uint32 eUSDTPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 0), 0, 0);
-        uint32 debtUSDTPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDT, 0), 0, 0);
+        // Deposit into Euler.
+        uint256 assets = 1_000_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-        cellar.addPosition(2, eDAIPosition, abi.encode(0), false);
-        cellar.addPosition(3, eUSDTPosition, abi.encode(0), false);
-        cellar.addPosition(1, debtDAIPosition, abi.encode(0), true);
-        cellar.addPosition(1, debtUSDTPosition, abi.encode(0), true);
+        _checkLeveragedPosition(assets, cellar, eUSDC, 10);
+    }
+
+    function testLeveragedWETH() external {
+        uint32 eWETHPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eWETH, 0), 0, 0);
+        uint32 eWETHPosition1 = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eWETH, 1), 0, 0);
+        uint32 debtWETHPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dWETH, 0), 0, 0);
+
+        uint32[] memory positions = new uint32[](2);
+        uint32[] memory debtPositions = new uint32[](1);
+
+        positions[0] = eWETHPosition1;
+        positions[1] = eWETHPosition;
+
+        debtPositions[0] = debtWETHPosition;
+
+        bytes[] memory positionConfigs = new bytes[](2);
+        bytes[] memory debtConfigs = new bytes[](1);
+
+        Cellar leveragedCellar = new Cellar(
+            registry,
+            WETH,
+            "Euler Cellar",
+            "EULER-CLR",
+            abi.encode(
+                positions,
+                debtPositions,
+                positionConfigs,
+                debtConfigs,
+                eWETHPosition1,
+                address(0),
+                type(uint128).max,
+                type(uint128).max
+            )
+        );
+
+        leveragedCellar.setupAdaptor(address(eulerETokenAdaptor));
+        leveragedCellar.setupAdaptor(address(eulerDebtTokenAdaptor));
+
+        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
+        stdstore.target(address(leveragedCellar)).sig(leveragedCellar.shareLockPeriod.selector).checked_write(
+            uint256(0)
+        );
+
+        // Deposit into Euler.
+        uint256 assets = 1_000e18;
+        WETH.approve(address(leveragedCellar), assets);
+        deal(address(WETH), address(this), assets);
+        leveragedCellar.deposit(assets, address(this));
+
+        _checkLeveragedPosition(assets, leveragedCellar, eWETH, 10);
+    }
+
+    function testLeveragedUSDT() external {
+        // uint32 eUSDTPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 0), 0, 0);
+        // uint32 eUSDTPosition1 = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 1), 0, 0);
+        // uint32 debtUSDTPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDT, 0), 0, 0);
+        // uint32[] memory positions = new uint32[](2);
+        // uint32[] memory debtPositions = new uint32[](1);
+        // positions[0] = eUSDTPosition1;
+        // positions[1] = eUSDTPosition;
+        // debtPositions[0] = debtUSDTPosition;
+        // bytes[] memory positionConfigs = new bytes[](2);
+        // bytes[] memory debtConfigs = new bytes[](1);
+        // Cellar leveragedCellar = new Cellar(
+        //     registry,
+        //     USDT,
+        //     "Euler Cellar",
+        //     "EULER-CLR",
+        //     abi.encode(
+        //         positions,
+        //         debtPositions,
+        //         positionConfigs,
+        //         debtConfigs,
+        //         eUSDTPosition1,
+        //         address(0),
+        //         type(uint128).max,
+        //         type(uint128).max
+        //     )
+        // );
+        // leveragedCellar.setupAdaptor(address(eulerETokenAdaptor));
+        // leveragedCellar.setupAdaptor(address(eulerDebtTokenAdaptor));
+        // // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
+        // stdstore.target(address(leveragedCellar)).sig(leveragedCellar.shareLockPeriod.selector).checked_write(
+        //     uint256(0)
+        // );
+        // // Deposit into Euler.
+        // uint256 assets = 1_000_000e6;
+        // USDT.safeApprove(address(leveragedCellar), assets);
+        // deal(address(USDT), address(this), assets);
+        // leveragedCellar.deposit(assets, address(this));
+        // _checkLeveragedPosition(assets, leveragedCellar, eUSDT, 2);
+    }
+
+    // TODO add test where we use maxAvailable for Euler calls, like I think we don't even need to support it in the adaptor.
+    // TODO add test where we do normal borrowing and repaying, and swap and repaying. Also check the max available logic too.
+
+    function testETokenPositionsWithNoDebt() external {
+        // Remove vanilla USDC position, and dUSDC position.
+        cellar.removePosition(1, false);
+        cellar.removePosition(0, true);
+
+        // Add liquid euler position.
+        uint32 eDAIPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eDAI, 0), 0, 0);
+        uint32 eUSDTPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 0), 0, 0);
+
+        // Reconfigure cellar so it has 1 liquid euler position and an illiquid one.
+        cellar.addPosition(1, eDAIPosition, abi.encode(0), false);
+        cellar.addPosition(2, eUSDTPosition, abi.encode(0), false);
 
         // Deposit into Euler.
         uint256 assets = 1_000_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        // Strategist moves half of assets into sub account 0, enter markets for 0, then self borrows.
+        // Strategist moves assets into eDAI and eUSDT positions.
         {
-            uint256 eUSDCToTransfer = eUSDC.balanceOf(_getSubAccount(address(cellar), 1)).mulDivDown(9, 10);
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](6);
+            adaptorCalls[0] = _createBytesDataToWithdraw(eUSDC, 0, type(uint256).max);
+            adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 500, assets / 3);
+            adaptorCalls[2] = _createBytesDataForSwap(USDC, USDT, 500, assets / 3);
+            adaptorCalls[3] = _createBytesDataToDeposit(eDAI, 0, type(uint256).max);
+            adaptorCalls[4] = _createBytesDataToDeposit(eUSDT, 0, type(uint256).max);
+            adaptorCalls[5] = _createBytesDataToDeposit(eUSDC, 0, type(uint256).max);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        uint256 cellarAssets = cellar.totalAssets();
+        assertApproxEqRel(cellarAssets, assets, 0.0001e18, "Total assets should be relatively unchanged.");
+
+        // Pass some time to earn interest.
+        vm.warp(block.timestamp + 1 days / 4);
+        assertGt(cellar.totalAssets(), cellarAssets, "Assets should have increased.");
+
+        cellarAssets = cellar.totalAssets();
+
+        // Positions should be fully withdrawable.
+        uint256 maxWithdraw = cellar.maxWithdraw(address(this));
+        assertApproxEqAbs(maxWithdraw, cellarAssets, 1, "All assets should be withdrawable.");
+
+        cellar.withdraw(maxWithdraw, address(this), address(this));
+
+        // Caller should have USDC, DAI, and USDT.
+        assertGt(USDC.balanceOf(address(this)), 0, "USDC balance should be greater than zero.");
+        assertGt(DAI.balanceOf(address(this)), 0, "DAI balance should be greater than zero.");
+        assertGt(USDT.balanceOf(address(this)), 0, "USDT balance should be greater than zero.");
+    }
+
+    function _checkLeveragedPosition(
+        uint256 assets,
+        Cellar leveragedCellar,
+        IEulerEToken leveragedAsset,
+        uint256 targetLeverage
+    ) internal {
+        address vanillaAsset = markets.eTokenToUnderlying(address(leveragedAsset));
+        // Strategist moves half of assets into sub account 0, enter markets for 0, then self borrows.
+        uint256 eTokensToTransfer = leveragedAsset.balanceOf(_getSubAccount(address(leveragedCellar), 1)).mulDivDown(
+            9,
+            10
+        );
+        {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](2);
-            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
-            adaptorCalls0[1] = _createBytesDataToTransferBetweenAccounts(eUSDC, 1, 0, eUSDCToTransfer);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(leveragedAsset, 0);
+            adaptorCalls0[1] = _createBytesDataToTransferBetweenAccounts(leveragedAsset, 1, 0, eTokensToTransfer);
             bytes[] memory adaptorCalls1 = new bytes[](1);
-            // adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 0, 1 * assets);
-            // adaptorCalls1[1] = _createBytesDataToSelfBorrow(address(DAI), 0, 3 * assets.changeDecimals(6, 18));
-            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDT), 0, 9 * assets);
+            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(vanillaAsset), 0, targetLeverage * assets);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
             data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
-            cellar.callOnAdaptor(data);
+            leveragedCellar.callOnAdaptor(data);
         }
+
+        // Cellar Withdrawable assets drops to 10% of assets deposited.
+        uint256 expectedWithdrawable = assets / 10;
+        assertApproxEqAbs(
+            leveragedCellar.maxWithdraw(address(this)),
+            expectedWithdrawable,
+            1,
+            "maxWithdraw should equal 10% of assets."
+        );
+
+        // User withdraws as much as they can.
+        uint256 userWithdrawAmount = leveragedCellar.maxWithdraw(address(this));
+        leveragedCellar.withdraw(userWithdrawAmount, address(this), address(this));
+
+        expectedWithdrawable = 0;
+        assertApproxEqAbs(
+            leveragedCellar.maxWithdraw(address(this)),
+            expectedWithdrawable,
+            1,
+            "maxWithdraw should be zero."
+        );
+
+        // Strategist deleverages and moves funds to liquid eToken position.
+        {
+            eTokensToTransfer = eTokensToTransfer.mulDivDown(1, 10);
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+            bytes[] memory adaptorCalls0 = new bytes[](1);
+            adaptorCalls0[0] = _createBytesDataToSelfRepay(address(vanillaAsset), 0, (targetLeverage * assets) / 2);
+            bytes[] memory adaptorCalls1 = new bytes[](1);
+            adaptorCalls1[0] = _createBytesDataToTransferBetweenAccounts(leveragedAsset, 0, 1, eTokensToTransfer);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls0 });
+            data[1] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls1 });
+            leveragedCellar.callOnAdaptor(data);
+        }
+
+        // Cellar Withdrawable assets drops to 9% of assets deposited.
+        expectedWithdrawable = assets.mulDivDown(9, 100);
+        assertApproxEqAbs(
+            leveragedCellar.maxWithdraw(address(this)),
+            expectedWithdrawable,
+            1,
+            "maxWithdraw should equal 9% of assets."
+        );
+
+        // User withdraws as much as they can.
+        userWithdrawAmount = leveragedCellar.maxWithdraw(address(this));
+        leveragedCellar.withdraw(userWithdrawAmount, address(this), address(this));
+
+        expectedWithdrawable = 0;
+        assertApproxEqAbs(
+            leveragedCellar.maxWithdraw(address(this)),
+            expectedWithdrawable,
+            1,
+            "maxWithdraw should be zero."
+        );
     }
 
-    // TODO add test with vanilla eToken position with no borrows. So like we could add it to the stable coin cellar.
+    function _createBytesDataForSwap(
+        ERC20 from,
+        ERC20 to,
+        uint24 poolFee,
+        uint256 fromAmount
+    ) internal pure returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = poolFee;
+        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
+        return
+            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+    }
 
     function _createBytesDataToEnterMarket(IEulerEToken eToken, uint256 subAccountId)
         internal
