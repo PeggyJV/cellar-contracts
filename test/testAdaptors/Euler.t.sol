@@ -242,6 +242,12 @@ contract CellarEulerTest is Test {
         assertEq(dUSDC.balanceOf(_getSubAccount(address(cellar), 0)), 0, "Sub Account 0 should have zero USDC debt.");
     }
 
+    function testHunch() external {
+        markets.eTokenToUnderlying(address(eUSDC));
+        // Below line reverts? Maybe it isn't set up yet?
+        // markets.dTokenToUnderlying(address(dUSDC));
+    }
+
     function testSelfBorrowAndSelfRepay() external {
         // Deposit into Euler.
         uint256 assets = 100e6;
@@ -593,15 +599,75 @@ contract CellarEulerTest is Test {
         // _checkLeveragedPosition(assets, leveragedCellar, eUSDT, 2);
     }
 
-    // TODO add test where we use maxAvailable for Euler calls, like I think we don't even need to support it in the adaptor.
-    // TODO add test where we do normal borrowing and repaying, and swap and repaying. Also check the max available logic too.
+    function testETokenAndDebtTokenPositions() external {
+        // Adjust rebalance deviation so we can make larger positions changes in less TXs.
+        cellar.setRebalanceDeviation(0.02e18);
+        // Remove dUSDC position.
+        cellar.removePosition(0, true);
+        uint32 debtWETHPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dWETH, 0), 0, 0);
+
+        cellar.addPosition(0, debtWETHPosition, abi.encode(0), true);
+
+        // Deposit into Euler.
+        uint256 assets = 1_000_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Strategist enters USDC market, borrows WETH, and sells it.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+            bytes[] memory adaptorCalls0 = new bytes[](1);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
+
+            bytes[] memory adaptorCalls1 = new bytes[](2);
+            uint256 amountToBorrow = priceRouter.getValue(USDC, assets / 2, WETH);
+            adaptorCalls1[0] = _createBytesDataToBorrow(dWETH, 0, amountToBorrow);
+            adaptorCalls1[1] = _createBytesDataForSwap(WETH, USDC, 500, amountToBorrow);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
+            data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Strategist repays some of WETH loan using collateral.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+            bytes[] memory adaptorCalls0 = new bytes[](1);
+            adaptorCalls0[0] = _createBytesDataToWithdraw(eUSDC, 0, assets / 10);
+
+            bytes[] memory adaptorCalls1 = new bytes[](1);
+            adaptorCalls1[0] = _createBytesDataToSwapAndRepay(USDC, 0, dWETH, WETH, 500, assets / 10);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
+            data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Setup WETH as a position in the cellar.
+        uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
+        cellar.addPosition(1, wethPosition, abi.encode(0), false);
+
+        // Strategist repays remaining loan.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            uint256 USDCToSwap = USDC.balanceOf(address(cellar));
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, USDCToSwap);
+            adaptorCalls[1] = _createBytesDataToRepay(dWETH, 0, type(uint256).max);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        assertEq(dWETH.balanceOf(address(cellar)), 0, "Cellar should have no WETH debt.");
+    }
 
     function testETokenPositionsWithNoDebt() external {
         // Remove vanilla USDC position, and dUSDC position.
         cellar.removePosition(1, false);
         cellar.removePosition(0, true);
 
-        // Add liquid euler position.
+        // Add liquid euler positions.
         uint32 eDAIPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eDAI, 0), 0, 0);
         uint32 eUSDTPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 0), 0, 0);
 
@@ -730,6 +796,32 @@ contract CellarEulerTest is Test {
             1,
             "maxWithdraw should be zero."
         );
+    }
+
+    function _createBytesDataToSwapAndRepay(
+        ERC20 from,
+        uint256 subAccountId,
+        IEulerDToken debtTokenToRepay,
+        ERC20 to,
+        uint24 fee,
+        uint256 amount
+    ) internal view returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = fee;
+        bytes memory params = abi.encode(path, poolFees, amount, 0);
+        return
+            abi.encodeWithSelector(
+                EulerDebtTokenAdaptor.swapAndRepay.selector,
+                from,
+                subAccountId,
+                debtTokenToRepay,
+                amount,
+                SwapRouter.Exchange.UNIV3,
+                params
+            );
     }
 
     function _createBytesDataForSwap(
