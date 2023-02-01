@@ -805,7 +805,7 @@ contract CellarEulerTest is Test {
         ERC20 to,
         uint24 fee,
         uint256 amount
-    ) internal view returns (bytes memory) {
+    ) internal pure returns (bytes memory) {
         address[] memory path = new address[](2);
         path[0] = address(from);
         path[1] = address(to);
