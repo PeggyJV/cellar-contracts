@@ -145,21 +145,15 @@ contract DeployV2Script is Script {
         eUsdcLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 1), 0, 0);
         eDaiLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eDAI, 1), 0, 0);
         eUsdtLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 1), 0, 0);
-        debtUsdcPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(dUSDC, 0), 0, 0);
-        debtDaiPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(dDAI, 0), 0, 0);
-        debtUsdtPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(dUSDT, 0), 0, 0);
+        debtUsdcPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDC, 0), 0, 0);
+        debtDaiPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dDAI, 0), 0, 0);
+        debtUsdtPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDT, 0), 0, 0);
 
         // Deploy cellar using factory.
         factory.adjustIsDeployer(devOwner, true);
         address implementation = address(new CellarInitializableV2_1(registry));
 
         factory.addImplementation(implementation, 2, 0);
-
-        factory.transferOwnership(devOwner);
-
-        registry.transferOwnership(devOwner);
-
-        priceRouter.transferOwnership(devOwner);
 
         vm.stopBroadcast();
     }

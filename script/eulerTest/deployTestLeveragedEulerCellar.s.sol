@@ -31,13 +31,10 @@ contract DeployTestLeveragedEulerCellarScript is Script {
     address private strategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
     address private devOwner = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
 
-    CellarFactory private factory;
+    CellarFactory private factory = CellarFactory(0xFCed747657ACfFc6FAfacD606E17D0988EDf3Fd9);
+    Registry private registry = Registry(0xd1c18363F81d8E6260511b38FcF1e8b710E7e31D);
+
     CellarInitializableV2_1 private cellar;
-
-    PriceRouter private priceRouter;
-    SwapRouter private swapRouter;
-
-    Registry private registry;
 
     IEulerMarkets private markets = IEulerMarkets(0x3520d5a913427E6F0D6A83E07ccD4A4da316e4d3);
     address private euler = 0x27182842E098f60e3D576794A5bFFb0777E025d3;
@@ -56,8 +53,9 @@ contract DeployTestLeveragedEulerCellarScript is Script {
     IEulerDToken private dUSDT;
 
     // Define Adaptors.
-    EulerETokenAdaptor private eulerETokenAdaptor;
-    EulerDebtTokenAdaptor private eulerDebtTokenAdaptor;
+    EulerETokenAdaptor private eulerETokenAdaptor = EulerETokenAdaptor(0x7291960D1E14a4369bcB26Df31077D7637491C81);
+    EulerDebtTokenAdaptor private eulerDebtTokenAdaptor =
+        EulerDebtTokenAdaptor(0xB079D4CcF8557b0dD9Ab829eEDb62FA70fEB1B38);
 
     // Chainlink PriceFeeds
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
@@ -71,18 +69,24 @@ contract DeployTestLeveragedEulerCellarScript is Script {
     uint32 private eUsdcLiquidPosition = 4;
     uint32 private eDaiLiquidPosition = 5;
     uint32 private eUsdtLiquidPosition = 6;
-    uint32 private debtUsdcPosition = 7;
-    uint32 private debtDaiPosition = 8;
-    uint32 private debtUsdtPosition = 9;
+    uint32 private debtUsdcPosition;
+    uint32 private debtDaiPosition;
+    uint32 private debtUsdtPosition;
 
     function run() external {
         vm.startBroadcast();
 
-        // Deploy cellar using factory.
-        factory = CellarFactory(address(0));
-        address implementation = address(new CellarInitializableV2_1(registry));
+        eUSDC = IEulerEToken(markets.underlyingToEToken(address(USDC)));
+        eDAI = IEulerEToken(markets.underlyingToEToken(address(DAI)));
+        eUSDT = IEulerEToken(markets.underlyingToEToken(address(USDT)));
 
-        factory.addImplementation(implementation, 2, 0);
+        dUSDC = IEulerDToken(markets.underlyingToDToken(address(USDC)));
+        dDAI = IEulerDToken(markets.underlyingToDToken(address(DAI)));
+        dUSDT = IEulerDToken(markets.underlyingToDToken(address(USDT)));
+
+        debtUsdcPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDC, 0), 0, 0);
+        debtDaiPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dDAI, 0), 0, 0);
+        debtUsdtPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDT, 0), 0, 0);
 
         // Cellar positions array.
         uint32[] memory positions = new uint32[](2);
