@@ -242,12 +242,6 @@ contract CellarEulerTest is Test {
         assertEq(dUSDC.balanceOf(_getSubAccount(address(cellar), 0)), 0, "Sub Account 0 should have zero USDC debt.");
     }
 
-    function testHunch() external {
-        markets.eTokenToUnderlying(address(eUSDC));
-        // Below line reverts? Maybe it isn't set up yet?
-        // markets.dTokenToUnderlying(address(dUSDC));
-    }
-
     function testSelfBorrowAndSelfRepay() external {
         // Deposit into Euler.
         uint256 assets = 100e6;
