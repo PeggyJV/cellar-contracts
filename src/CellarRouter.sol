@@ -24,6 +24,7 @@ contract CellarRouter is ICellarRouter {
      */
     IUniswapV3Router public immutable uniswapV3Router; // 0xE592427A0AEce92De3Edee1F18E0157C05861564
 
+    // TODO :: HARDCODE AAVE CELLAR TO IMPLEMENT withdrawAndSwap
     /**
      * @notice Uniswap V2 swap router contract. Used for swapping if pool fees are not specified.
      */
@@ -297,36 +298,27 @@ contract CellarRouter is ICellarRouter {
         // Get all the assets that could potentially have been received.
         ERC20[] memory positionAssets = cellar.getPositionAssets();
 
-        if (swapDatas.length != 0) {
-            // Encode data used to perform swap.
-            bytes[] memory data = new bytes[](swapDatas.length);
-            for (uint256 i; i < swapDatas.length; i++) {
-                // Grab path data from swapDatas to pass in assetIn and assetOut to swap router.
-                address[] memory path = abi.decode(swapDatas[i], (address[]));
-                data[i] = abi.encodeCall(
-                    SwapRouter.swap,
-                    (exchanges[i], swapDatas[i], receiver, ERC20(path[0]), ERC20(path[path.length - 1]))
-                );
-            }
+        _withdraw(receiver, swapRouter, swapDatas, positionAssets, exchanges);
+    }
 
-            // Approve swap router to swap each asset.
-            for (uint256 i; i < positionAssets.length; i++)
-                positionAssets[i].safeApprove(address(swapRouter), type(uint256).max);
+    //** WITHDRAW 1.5 */
+    function withdrawAndSwapLegacy(
+        Cellar cellar,
+        SwapRouter.Exchange[] calldata exchanges,
+        bytes[] calldata swapDatas,
+        uint256 assets,
+        address receiver
+    ) public returns (uint256 shares) {
+        // Withdraw from the cellar. May potentially receive multiple assets
+        shares = cellar.withdraw(assets, address(this), msg.sender);
 
-            // Execute swap(s).
-            swapRouter.multicall(data);
-        }
+        // Get the address of the swap router.
+        SwapRouter swapRouter = SwapRouter(registry.getAddress(SWAP_ROUTER_REGISTRY_SLOT));
 
-        for (uint256 i; i < positionAssets.length; i++) {
-            ERC20 asset = positionAssets[i];
+        // Get all the assets that could potentially have been received.
+        ERC20[] memory positionAssets = _getPositionAssets(cellar);
 
-            // Reset approvals.
-            asset.safeApprove(address(swapRouter), 0);
-
-            // Transfer remaining unswapped balances to receiver.
-            uint256 remainingBalance = asset.balanceOf(address(this));
-            if (remainingBalance != 0) asset.transfer(receiver, remainingBalance);
-        }
+        _withdraw(receiver, swapRouter, swapDatas, positionAssets, exchanges);
     }
 
     /**
@@ -540,6 +532,47 @@ contract CellarRouter is ICellarRouter {
                     amountOutMinimum: assetsOutMin
                 })
             );
+        }
+    }
+
+    function _withdraw(
+        address receiver,
+        address swapRouter,
+        bytes[] calldata swapDatas,
+        ERC20[] positionAssets,
+        SwapRouter.Exchange[] calldata exchanges
+    ) internal {
+        if (swapDatas.length != 0) {
+            // Encode data used to perform swap.
+            bytes[] memory data = new bytes[](swapDatas.length);
+            for (uint256 i; i < swapDatas.length; i++) {
+                // Grab path data from swapDatas to pass in assetIn and assetOut to swap router.
+                address[] memory path = abi.decode(swapDatas[i], (address[]));
+                data[i] = abi.encodeCall(
+                    SwapRouter.swap,
+                    (exchanges[i], swapDatas[i], receiver, ERC20(path[0]), ERC20(path[path.length - 1]))
+                );
+            }
+
+            // Approve swap router to swap each asset.
+            // TODO:: CHECK IF ALLOWANCE IS ALREADY MAX AND SKIP :: safe guard here for tokens that dont allow multiple approvals
+            for (uint256 i; i < positionAssets.length; i++)
+                positionAssets[i].safeApprove(address(swapRouter), type(uint256).max);
+
+            // Execute swap(s).
+            swapRouter.multicall(data);
+        }
+
+        for (uint256 i; i < positionAssets.length; i++) {
+            ERC20 asset = positionAssets[i];
+
+            // Reset approvals.
+            // TODO:: CHECK IF APPROVALS ARE ALREADY 0 AND SKIP IF YES
+            asset.safeApprove(address(swapRouter), 0);
+
+            // Transfer remaining unswapped balances to receiver.
+            uint256 remainingBalance = asset.balanceOf(address(this));
+            if (remainingBalance != 0) asset.transfer(receiver, remainingBalance);
         }
     }
 }
