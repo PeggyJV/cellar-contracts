@@ -27,7 +27,13 @@ contract FeesAndReserves is Owned {
 
     mapping(Cellar => MetaData) public metaData;
 
+    mapping(Cellar => uint256) public feesReadyForClaim;
+
     constructor() Owned(msg.sender) {}
+
+    // TODO so this reverts cuz we do a re-entrancy... So could we have a chainlink upkeep ocassionally log these values? Maybe weekly?
+    // maybe the strategist just moves assets into reserves, then the upkeep will log fees and prepare fees?
+    // If we did do keepers, could our upkeep take some assets from reserves and covnert them to link to top up the upkeep?
 
     // Strategist function
     function setupMetaData(uint32 targetAPR, uint32 performanceFee) external {
@@ -37,6 +43,7 @@ contract FeesAndReserves is Owned {
         ERC20 reserveAsset = cellar.asset();
         uint256 totalAssets = cellar.totalAssets();
         uint256 totalSupply = cellar.totalSupply();
+        if (totalSupply == 0) revert("No supply");
         uint8 cellarDecimals = cellar.decimals();
         uint8 reserveAssetDecimals = reserveAsset.decimals();
 
@@ -61,7 +68,7 @@ contract FeesAndReserves is Owned {
     }
 
     // TODO how do we reset HWM? Could have the owner do it, or maybe we could allow the strategist to do it, but rate limit it to a monthly reset?
-
+    // TODO we could allow strategists to reset it, but once reset it can't be reset for a month?
     // Strategist function
     function updatePerformanceFee(uint32 performanceFee) external {
         Cellar cellar = Cellar(msg.sender);
@@ -107,11 +114,42 @@ contract FeesAndReserves is Owned {
         // TODO emit an event
     }
 
+    // TODO what would happen if we allow strategists to build up performance fees? Like
+    // maybe we dont punsih them by zeroing out performacne fees owed, if reserves can't cover it?
+    // would strategists be able to build up a bunch of fees owed and drain assets out of the cellar?
+    // I guess they could do move assets into reserves if the TVL doesn't trip the total assets check....
+    // Strategist function
+    /**
+     * @dev removes assets from reserves, so that `sendFees` can be called.
+     */
+    function prepareFees(uint256 amount) external {
+        Cellar cellar = Cellar(msg.sender);
+        MetaData storage data = metaData[cellar];
+
+        if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
+
+        if (amount > data.performanceFeesOwed) revert("Not enough fees owed.");
+        if (amount > data.reserves) revert("Not enough reserves.");
+
+        // Reduce fees owed and reduce reserves.
+        data.performanceFeesOwed -= amount;
+        data.reserves -= amount;
+
+        feesReadyForClaim[cellar] += amount;
+    }
+
+    function logFees() external {
+        Cellar cellar = Cellar(msg.sender);
+        _logFees(cellar, metaData[cellar]);
+    }
+
     // Callable by anyone
     function sendFees(Cellar cellar) external {
         MetaData storage data = metaData[cellar];
 
         if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
+        uint256 payout = feesReadyForClaim[cellar];
+        if (payout == 0) revert("Nothing to payout.");
 
         Registry registry = cellar.registry();
 
@@ -119,15 +157,8 @@ contract FeesAndReserves is Owned {
         // but if we make a custom fee split, gov needs to be able to update this...
         (uint64 strategistPlatformCut, , , address strategistPayout) = cellar.feeData();
 
-        // If fees earned is greater than reserves, only use reserves
-        uint256 payout = data.performanceFeesOwed >= data.reserves ? data.reserves : data.performanceFeesOwed;
-
         uint256 strategistCut = payout.mulDivDown(strategistPlatformCut, 1e18);
         uint256 sommCut = payout - strategistCut;
-
-        // Zero out fees owed and reduce reserves.
-        data.performanceFeesOwed = 0;
-        data.reserves -= payout;
 
         // Send assets to strategist.
         data.reserveAsset.safeTransfer(strategistPayout, strategistCut);
@@ -161,8 +192,6 @@ contract FeesAndReserves is Owned {
                 annualAPR = percentIncrease.mulDivDown(SECONDS_IN_A_YEAR, uint64(block.timestamp) - data.timestamp);
             }
             uint256 feeEarned;
-            // TODO does this calculation make sense? Like is it really taking a 20% performance fee from yield? I should check the math on this...
-            // TODO I might need to multiple by the time since last fee log, then divide by seconds in a year!
             if (annualAPR >= data.targetAPR) {
                 // Performance fee is based off target apr.
                 feeEarned = totalAssets.min(data.totalAssets).mulDivDown(data.targetAPR, 10**BPS_DECIMALS).mulDivDown(
@@ -178,7 +207,7 @@ contract FeesAndReserves is Owned {
                     .mulDivDown(data.performanceFee, 10**BPS_DECIMALS)
                     .mulDivDown(feeMultiplier, 10**BPS_DECIMALS);
             }
-            // Convert Fees earned from a yearly value to one based off time sinze last fee log.
+            // Convert Fees earned from a yearly value to one based off time since last fee log.
             feeEarned = feeEarned.mulDivDown(uint64(block.timestamp) - data.timestamp, SECONDS_IN_A_YEAR);
             // Save the earned fees.
             data.performanceFeesOwed += feeEarned;
