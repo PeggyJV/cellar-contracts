@@ -103,14 +103,14 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
     /**
      * @notice Returns the cellars balance of the positions debtToken.
      */
-    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
+    function balanceOf(bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
     /**
      * @notice Returns the positions debtToken underlying asset.
      */
-    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+    function assetOf(bytes memory) public pure override returns (ERC20) {
         return ERC20(address(0));
     }
 
@@ -141,6 +141,14 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
         feesAndReserves.updateTargetAPR(targetAPR);
     }
 
+    function changeUpkeepFrequency(FeesAndReserves feesAndReserves, uint64 newFrequency) public {
+        feesAndReserves.changeUpkeepFrequency(newFrequency);
+    }
+
+    function changeUpkeepMaxGas(FeesAndReserves feesAndReserves, uint64 newMaxGas) public {
+        feesAndReserves.changeUpkeepMaxGas(newMaxGas);
+    }
+
     function setupMetaData(
         FeesAndReserves feesAndReserves,
         uint32 targetAPR,
@@ -166,9 +174,5 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
 
     function prepareFees(FeesAndReserves feesAndReserves, uint256 amount) public {
         feesAndReserves.prepareFees(amount);
-    }
-
-    function logFees(FeesAndReserves feesAndReserves) public {
-        feesAndReserves.logFees();
     }
 }

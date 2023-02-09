@@ -122,19 +122,98 @@ contract FeesAndReservesTest is Test {
 
         // Strategist calls fees and reserves setup.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
+        bytes[] memory adaptorCalls = new bytes[](3);
         adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0.05e4, 0.2e4);
+        adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+        adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        // Upkeep should be needed.
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+
+        (bool upkeepNeeded, bytes memory performData) = far.checkUpkeep(abi.encode(cellars));
+
+        assertTrue(upkeepNeeded, "Upkeep should be needed to finish setup.");
+
+        far.performUpkeep(performData);
+        {
+            (
+                ERC20 reserveAsset,
+                uint32 targetAPR,
+                ,
+                ,
+                // uint64 timestamp,
+                // uint256 reserves,
+                uint256 highWaterMark,
+                uint256 totalAssets,
+                uint256 performanceFeesOwed, // uint8 cellarDecimals, // uint8 reserveAssetDecimals, // uint32 performanceFee
+                ,
+                ,
+
+            ) = far.metaData(cellar);
+
+            assertEq(address(reserveAsset), address(USDC), "Reserve Asset should be USDC.");
+            assertEq(targetAPR, 0.05e4, "Target APR should be 5%.");
+            // assertEq(timestamp, block.timestamp, "Timestamp should be block timestamp.");
+            // assertEq(reserves, 0, "Reserves should be zero.");
+            assertEq(highWaterMark, 1e18, "High Watermark should be 1 USDC.");
+            assertEq(totalAssets, assets.changeDecimals(6, 18), "Total Assets should equal assets.");
+            assertEq(performanceFeesOwed, 0, "There should be no performance fee owed.");
+            // assertEq(cellarDecimals, 18, "Cellar decimals should be 18.");
+            // assertEq(reserveAssetDecimals, 6, "Reserve Asset decimals should be 6.");
+            // assertEq(performanceFee, 0.2e4, "Performance fee should be 20%.");
+        }
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+
+        assertEq(upkeepNeeded, false, "Upkeep should not be needed.");
+
+        // Wait 10 min
+        vm.warp(block.timestamp + 600);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+
+        assertEq(upkeepNeeded, false, "Upkeep should not be needed because there is no yield.");
+
+        // Simulate yield.
+        uint256 percentIncreaseFor500BPSFor10Min = uint256(0.05e18).mulDivDown(600, 365 days);
+        console.log("Percent Increase", percentIncreaseFor500BPSFor10Min);
+        uint256 yieldEarnedFor500BPSFor10Min = assets.mulDivDown(percentIncreaseFor500BPSFor10Min, 1e18);
+        console.log("Yield Earned", yieldEarnedFor500BPSFor10Min);
+        deal(address(USDC), address(cellar), assets + yieldEarnedFor500BPSFor10Min);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+
+        assertEq(upkeepNeeded, true, "Upkeep should be needed because there is yield.");
+
+        far.performUpkeep(performData);
+
+        {
+            (, , , , uint256 highWaterMark, , uint256 performanceFeesOwed, , , ) = far.metaData(cellar);
+            console.log("Performance Fees Owed", performanceFeesOwed);
+            assertEq(
+                performanceFeesOwed,
+                yieldEarnedFor500BPSFor10Min.mulDivDown(0.2e18, 1e18),
+                "Performance fees owed should be 20% of yield earned."
+            );
+        }
     }
+
+    // TODO try performUpkeep on a cellar that is not set up
+    // TODO call setup, then performupkeep and make sure cellar is setup properly
+    // TODO add test where we make sure negative periods do not earn fees, and that when share prices rises back up, fees are only earned on the difference between current share price and HWM.
+    // TODO add test where strategist is over shooting target
+    // TODO add test where strategist is under shooting target
 
     // Make sure that if a strategists makes a huge deposit before calling log fees, it doesn't affect fee pay out
     function _createBytesDataToSetupFeesAndReserves(
         FeesAndReserves feesAndReserves,
         uint32 targetAPR,
         uint32 performanceFee
-    ) internal returns (bytes memory) {
+    ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 FeesAndReservesAdaptor.setupMetaData.selector,
@@ -142,5 +221,26 @@ contract FeesAndReservesTest is Test {
                 targetAPR,
                 performanceFee
             );
+    }
+
+    function _createBytesDataToChangeUpkeepFrequency(FeesAndReserves feesAndReserves, uint64 newFrequency)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return
+            abi.encodeWithSelector(
+                FeesAndReservesAdaptor.changeUpkeepFrequency.selector,
+                feesAndReserves,
+                newFrequency
+            );
+    }
+
+    function _createBytesDataToChangeUpkeepMaxGas(FeesAndReserves feesAndReserves, uint64 newMaxGas)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepMaxGas.selector, feesAndReserves, newMaxGas);
     }
 }
