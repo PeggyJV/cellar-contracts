@@ -65,7 +65,7 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
     }
 
     /**
-     * @notice Minimum HF enforced after every eToken borrows/self borrows.
+     * @notice Minimum HF enforced after self borrows.
      * @dev A low `HFMIN` is required for strategist to run leveraged strategies,
      *      where the collateral and borrow token are the same.
      *      This does pose a risk of strategists intentionally making their Cellar vulnerable to liquidation

@@ -41,17 +41,7 @@ contract EulerBaseAdaptor {
 
     /**
      * @notice Minimum HF enforced after every eToken withdraw/market exit.
-     * @dev A low `HFMIN` is required for strategist to run leveraged strategies,
-     *      where the collateral and borrow token are the same.
-     *      This does pose a risk of strategists intentionally making their Cellar vulnerable to liquidation
-     *      but this is mitigated because of the following
-     *      - Euler liquidations are gradual, and increase in size as the position becomes worse, so even if
-     *        a Cellar's health factor is slightly below 1, the value lost from liquidation is much less
-     *        compared to an Aave or Compound liquidiation
-     *      - Given that the MEV liquidation space is so competitive it is extremely unlikely that a strategist
-     *        would be able to consistently be the one liquidating the Cellar.
-     *      - If a Cellar is constantly being liquidated because of a malicious strategist intentionally lowering the HF,
-     *        users will leave the Cellar, and the strategist will lose future recurring income.
+     *         Also enforced when borrowing assets.
      */
     function HFMIN() internal pure returns (uint256) {
         return 1.1e18;
