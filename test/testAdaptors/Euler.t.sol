@@ -552,47 +552,6 @@ contract CellarEulerTest is Test {
         _checkLeveragedPosition(assets, leveragedCellar, eWETH, 10);
     }
 
-    function testLeveragedUSDT() external {
-        // uint32 eUSDTPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 0), 0, 0);
-        // uint32 eUSDTPosition1 = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 1), 0, 0);
-        // uint32 debtUSDTPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDT, 0), 0, 0);
-        // uint32[] memory positions = new uint32[](2);
-        // uint32[] memory debtPositions = new uint32[](1);
-        // positions[0] = eUSDTPosition1;
-        // positions[1] = eUSDTPosition;
-        // debtPositions[0] = debtUSDTPosition;
-        // bytes[] memory positionConfigs = new bytes[](2);
-        // bytes[] memory debtConfigs = new bytes[](1);
-        // Cellar leveragedCellar = new Cellar(
-        //     registry,
-        //     USDT,
-        //     "Euler Cellar",
-        //     "EULER-CLR",
-        //     abi.encode(
-        //         positions,
-        //         debtPositions,
-        //         positionConfigs,
-        //         debtConfigs,
-        //         eUSDTPosition1,
-        //         address(0),
-        //         type(uint128).max,
-        //         type(uint128).max
-        //     )
-        // );
-        // leveragedCellar.setupAdaptor(address(eulerETokenAdaptor));
-        // leveragedCellar.setupAdaptor(address(eulerDebtTokenAdaptor));
-        // // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        // stdstore.target(address(leveragedCellar)).sig(leveragedCellar.shareLockPeriod.selector).checked_write(
-        //     uint256(0)
-        // );
-        // // Deposit into Euler.
-        // uint256 assets = 1_000_000e6;
-        // USDT.safeApprove(address(leveragedCellar), assets);
-        // deal(address(USDT), address(this), assets);
-        // leveragedCellar.deposit(assets, address(this));
-        // _checkLeveragedPosition(assets, leveragedCellar, eUSDT, 2);
-    }
-
     function testETokenAndDebtTokenPositions() external {
         // Adjust rebalance deviation so we can make larger positions changes in less TXs.
         cellar.setRebalanceDeviation(0.02e18);
