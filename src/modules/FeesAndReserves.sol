@@ -9,6 +9,7 @@ import { console } from "@forge-std/Test.sol";
 
 // TODO how do we reset HWM? Could have the owner do it, or maybe we could allow the strategist to do it, but rate limit it to a monthly reset?
 // TODO we could allow strategists to reset it, but once reset it can't be reset for a month?
+// TODO add method to shutdown this contract and only allow withdraws
 contract FeesAndReserves is Owned, AutomationCompatibleInterface {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -169,6 +170,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
         if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
         MetaData storage data = metaData[cellar];
 
+        data.reserves += amount;
         data.reserveAsset.safeTransferFrom(msg.sender, address(this), amount);
 
         // TODO emit an event.

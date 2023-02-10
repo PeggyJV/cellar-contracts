@@ -9,6 +9,7 @@ import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
  * @notice Allows Cellars to interact with Euler debtToken positions.
  * @author crispymangoes
  */
+//  TODO could deploy a fees and resrves contract then make it a constant in here!
 contract FeesAndReservesAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -165,6 +166,8 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
      *         taking performance fees without dilluting share price
      */
     function addAssetsToReserves(FeesAndReserves feesAndReserves, uint256 amount) public {
+        (ERC20 asset, , , , , , , , , ) = feesAndReserves.metaData(Cellar(address(this)));
+        asset.safeApprove(address(feesAndReserves), amount);
         feesAndReserves.addAssetsToReserves(amount);
     }
 

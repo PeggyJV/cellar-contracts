@@ -34,10 +34,13 @@ contract FeesAndReservesTest is Test {
     FeesAndReserves private far;
 
     address private immutable strategist = vm.addr(0xBEEF);
+    address private immutable cosmos = vm.addr(0xCAAA);
 
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
@@ -74,6 +77,10 @@ contract FeesAndReservesTest is Test {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
 
+        price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
         // Setup Cellar:
         // Cellar positions array.
         uint32[] memory positions = new uint32[](1);
@@ -101,7 +108,7 @@ contract FeesAndReservesTest is Test {
                 positionConfigs,
                 debtConfigs,
                 usdcPosition,
-                address(0),
+                strategist,
                 type(uint128).max,
                 type(uint128).max
             )
@@ -116,6 +123,7 @@ contract FeesAndReservesTest is Test {
     }
 
     function testPositiveYield() external {
+        cellar.setRebalanceDeviation(0.05e18);
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -180,9 +188,7 @@ contract FeesAndReservesTest is Test {
 
         // Simulate yield.
         uint256 percentIncreaseFor500BPSFor10Min = uint256(0.05e18).mulDivDown(600, 365 days);
-        console.log("Percent Increase", percentIncreaseFor500BPSFor10Min);
         uint256 yieldEarnedFor500BPSFor10Min = assets.mulDivDown(percentIncreaseFor500BPSFor10Min, 1e18);
-        console.log("Yield Earned", yieldEarnedFor500BPSFor10Min);
         deal(address(USDC), address(cellar), assets + yieldEarnedFor500BPSFor10Min);
 
         (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
@@ -200,6 +206,64 @@ contract FeesAndReservesTest is Test {
                 "Performance fees owed should be 20% of yield earned."
             );
         }
+        assets = cellar.totalAssets();
+        // Advance time 10 days
+        vm.warp(block.timestamp + 10 days);
+
+        // Now give the cellar yield in an untracked asset WETH, so that it can be added to reserves.
+        deal(address(WETH), address(cellar), 1e18);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+
+        assertEq(upkeepNeeded, false, "Upkeep should not be needed because there is no yield.");
+
+        uint256 amountOfUsdcToAddToReserves = priceRouter.getValue(WETH, 1e18, USDC);
+
+        uint256 percentIncreaseFor500BPSFor10Day = uint256(0.05e18).mulDivDown(10 days, 365 days);
+        uint256 yieldEarnedFor500BPSFor10Day = assets.mulDivDown(percentIncreaseFor500BPSFor10Day, 1e18);
+        console.log("Percent Increase", percentIncreaseFor500BPSFor10Day);
+        console.log("Yield Earned", yieldEarnedFor500BPSFor10Day);
+
+        // Leave expected yield in contract so that strategist earns full performance fees.
+        // Strategist swaps WETH yield into USDC, then adds it to reserves.
+        adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
+        adaptorCalls[1] = _createBytesDataToAddToReserves(
+            far,
+            amountOfUsdcToAddToReserves - yieldEarnedFor500BPSFor10Day
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+
+        assertEq(upkeepNeeded, true, "Upkeep should be needed because there is yield.");
+
+        far.performUpkeep(performData);
+
+        uint256 performanceFeesOwed;
+        {
+            uint256 expectedPerformanceFeeOwed = yieldEarnedFor500BPSFor10Min.mulDivDown(0.2e18, 1e18) +
+                yieldEarnedFor500BPSFor10Day.mulDivDown(0.2e18, 1e18);
+            (, , , , , , performanceFeesOwed, , , ) = far.metaData(cellar);
+            console.log("Performance Fees Owed", performanceFeesOwed);
+            assertEq(
+                performanceFeesOwed,
+                expectedPerformanceFeeOwed,
+                "Performance fees owed should be 20% of yield earned."
+            );
+        }
+
+        // Strategist calls prepareFees.
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToPrepareFees(far, performanceFeesOwed);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        far.sendFees(cellar);
+
+        console.log("Strategist Fees Earned", USDC.balanceOf(strategist));
     }
 
     // TODO try performUpkeep on a cellar that is not set up
@@ -207,6 +271,22 @@ contract FeesAndReservesTest is Test {
     // TODO add test where we make sure negative periods do not earn fees, and that when share prices rises back up, fees are only earned on the difference between current share price and HWM.
     // TODO add test where strategist is over shooting target
     // TODO add test where strategist is under shooting target
+
+    function _createBytesDataForSwap(
+        ERC20 from,
+        ERC20 to,
+        uint24 poolFee,
+        uint256 fromAmount
+    ) internal pure returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = poolFee;
+        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
+        return
+            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+    }
 
     // Make sure that if a strategists makes a huge deposit before calling log fees, it doesn't affect fee pay out
     function _createBytesDataToSetupFeesAndReserves(
@@ -242,5 +322,33 @@ contract FeesAndReservesTest is Test {
         returns (bytes memory)
     {
         return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepMaxGas.selector, feesAndReserves, newMaxGas);
+    }
+
+    function _createBytesDataToAddToReserves(FeesAndReserves feesAndReserves, uint256 amount)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.addAssetsToReserves.selector, feesAndReserves, amount);
+    }
+
+    function _createBytesDataToPrepareFees(FeesAndReserves feesAndReserves, uint256 amount)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.prepareFees.selector, feesAndReserves, amount);
+    }
+
+    // ========================================= GRAVITY FUNCTIONS =========================================
+
+    // Since this contract is set as the Gravity Bridge, this will be called by
+    // the Cellar's `sendFees` function to send funds Cosmos.
+    function sendToCosmos(
+        address asset,
+        bytes32,
+        uint256 assets
+    ) external {
+        ERC20(asset).transferFrom(msg.sender, cosmos, assets);
     }
 }
