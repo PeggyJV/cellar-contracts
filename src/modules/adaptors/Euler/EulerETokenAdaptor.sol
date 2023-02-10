@@ -236,7 +236,7 @@ contract EulerETokenAdaptor is BaseAdaptor {
         markets().exitMarket(subAccountId, eToken.underlyingAsset());
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _calculateHF(address(this));
+        uint256 healthFactor = _calculateHF(_getSubAccount(address(this), subAccountId));
         if (healthFactor < HFMIN()) revert EulerETokenAdaptor__HealthFactorTooLow();
     }
 
