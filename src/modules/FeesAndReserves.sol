@@ -14,9 +14,9 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-    uint256 public constant BPS_DECIMALS = 4;
+    uint8 public constant BPS_DECIMALS = 4;
     uint8 public constant HWM_DECIMALS = 18;
-    uint256 public constant SECONDS_IN_A_YEAR = 86400 * 365;
+    uint256 public constant SECONDS_IN_A_YEAR = 365 days;
     uint256 public constant MAX_PERFORMANCE_FEE = 3 * 10**(BPS_DECIMALS - 1); // 30%
 
     struct MetaData {
@@ -302,6 +302,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
         }
     }
 
+    // TODO seems to have very bad precision...
     function _calculateFees(Cellar cellar) internal view returns (PerformInput memory input) {
         MetaData memory data = metaData[cellar];
 
@@ -323,26 +324,34 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
             input.totalAssets = totalAssets;
         } else if (input.sharePrice > data.highWaterMark) {
             // calculate Actual APR.
-            uint256 annualAPR;
+            uint256 actualAPR;
 
             {
-                uint256 percentIncrease = input.sharePrice.mulDivDown(10**BPS_DECIMALS, data.highWaterMark);
-                annualAPR = percentIncrease.mulDivDown(SECONDS_IN_A_YEAR, uint64(block.timestamp) - data.timestamp);
+                uint256 percentIncrease = input.sharePrice.mulDivDown(10**HWM_DECIMALS, data.highWaterMark) -
+                    10**HWM_DECIMALS;
+                console.log("Percent Increase", percentIncrease);
+                actualAPR = percentIncrease.mulDivDown(SECONDS_IN_A_YEAR, uint64(block.timestamp) - data.timestamp);
+                console.log("Actual APR", actualAPR);
             }
-            if (annualAPR >= data.targetAPR) {
+            // Convert 4 decimal values to 18 decimals for increased precision.
+            uint256 targetAPR = uint256(data.targetAPR).changeDecimals(BPS_DECIMALS, HWM_DECIMALS);
+            uint256 performanceFee = uint256(data.performanceFee).changeDecimals(BPS_DECIMALS, HWM_DECIMALS);
+            if (actualAPR >= targetAPR) {
                 // Performance fee is based off target apr.
-                input.feeEarned = totalAssets
-                    .min(data.totalAssets)
-                    .mulDivDown(data.targetAPR, 10**BPS_DECIMALS)
-                    .mulDivDown(data.performanceFee, 10**BPS_DECIMALS);
+                input.feeEarned = totalAssets.min(data.totalAssets).mulDivDown(targetAPR, 10**HWM_DECIMALS).mulDivDown(
+                    performanceFee,
+                    10**HWM_DECIMALS
+                );
             } else {
-                // Performance fee is based off how close cellar got to target apr
-                uint256 feeMultiplier = (data.targetAPR - annualAPR).mulDivDown(10**BPS_DECIMALS, data.targetAPR);
+                // Performance fee is based off how close cellar got to target apr.
+                uint256 feeMultiplier = 10**HWM_DECIMALS -
+                    (targetAPR - actualAPR).mulDivDown(10**HWM_DECIMALS, targetAPR);
+                console.log("Fee Multipler", feeMultiplier);
                 input.feeEarned = totalAssets
                     .min(data.totalAssets)
-                    .mulDivDown(annualAPR, 10**BPS_DECIMALS)
-                    .mulDivDown(data.performanceFee, 10**BPS_DECIMALS)
-                    .mulDivDown(feeMultiplier, 10**BPS_DECIMALS);
+                    .mulDivDown(actualAPR, 10**HWM_DECIMALS)
+                    .mulDivDown(performanceFee, 10**HWM_DECIMALS)
+                    .mulDivDown(feeMultiplier, 10**HWM_DECIMALS);
             }
             // Convert Fees earned from a yearly value to one based off time since last fee log.
             input.feeEarned = input.feeEarned.mulDivDown(uint64(block.timestamp) - data.timestamp, SECONDS_IN_A_YEAR);

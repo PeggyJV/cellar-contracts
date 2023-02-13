@@ -123,7 +123,7 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
     }
 
     //============================================ Strategist Functions ===========================================
-
+    /// @notice Below Functions that accept `feesAndReserves` will be changed so that a constant is used.
     /**
      * @notice Strategists are free to update their cellar's performance fee as they see fit.
      *         Ultimately the compeition between strategists will keep this in check, since
