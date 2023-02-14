@@ -4,18 +4,20 @@ pragma solidity 0.8.16;
 import { Cellar, Registry, Owned, ERC20, SafeTransferLib, Math, Address, IGravity } from "src/base/Cellar.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 import { console } from "@forge-std/Test.sol";
 
-// TODO how do we reset HWM? Could have the owner do it, or maybe we could allow the strategist to do it, but rate limit it to a monthly reset?
-// TODO we could allow strategists to reset it, but once reset it can't be reset for a month?
-// TODO add method to shutdown this contract and only allow withdraws
-contract FeesAndReserves is Owned, AutomationCompatibleInterface {
+// TODO need to think if there is a way a malicioud contract could change their reserve asset after it is set, or get their "reserves" value increased before the reserve asset is set.
+// Cuz then an attacker could raise their reserves value using a useless token, then change their reserve asset to be WETH or something, and then withdraw it
+// TODO this contract is extremely prone to reentrnacy since it makes calls to multiple addresses that are ultimately supplied by a caller.
+contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuard {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
     uint8 public constant BPS_DECIMALS = 4;
-    uint8 public constant HWM_DECIMALS = 18;
+    uint256 public constant PRECISION_MULTIPLIER = 1e27;
+    uint8 public constant NORMALIZED_DECIMALS = 27;
     uint256 public constant SECONDS_IN_A_YEAR = 365 days;
     uint256 public constant MAX_PERFORMANCE_FEE = 3 * 10**(BPS_DECIMALS - 1); // 30%
 
@@ -24,7 +26,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
         uint32 targetAPR; // The annual APR the cellar targets
         uint64 timestamp; // Timestamp fees were last logged
         uint256 reserves; // Total amount of `reserveAsset` cellar has in reserves
-        uint256 highWaterMark; // The Cellars Share Price High Water Mark with 18 decimals
+        uint256 highWaterMark; // The Cellars Share Price High Water Mark Normalized to 27 decimals
         uint256 totalAssets; // The Cellars totalAssets with 18 decimals
         uint256 performanceFeesOwed; // The performance fees cellar has earned, to be paid out
         uint8 cellarDecimals;
@@ -40,7 +42,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
     struct PerformInput {
         Cellar cellar;
         uint256 feeEarned;
-        uint256 sharePrice;
+        uint256 exactSharePrice; // Normalized to 27 decimals
         uint256 totalAssets;
         uint64 timestamp;
     }
@@ -71,6 +73,58 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
 
     constructor() Owned(msg.sender) {}
 
+    // =========================================== EMERGENCY LOGIC ===========================================
+
+    /**
+     * @notice Emitted when FeesAndReserves emergency state is changed.
+     * @param isShutdown whether the cellar is shutdown
+     */
+    event ShutdownChanged(bool isShutdown);
+
+    /**
+     * @notice Attempted action was prevented due to contract being shutdown.
+     */
+    error FeesAndReserves__ContractShutdown();
+
+    /**
+     * @notice Attempted action was prevented due to contract not being shutdown.
+     */
+    error FeesAndReserves__ContractNotShutdown();
+
+    /**
+     * @notice Whether or not the contract is shutdown in case of an emergency.
+     */
+    bool public isShutdown;
+
+    /**
+     * @notice Prevent a function from being called during a shutdown.
+     */
+    modifier whenNotShutdown() {
+        if (isShutdown) revert FeesAndReserves__ContractShutdown();
+
+        _;
+    }
+
+    /**
+     * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
+     * @dev In the case where
+     */
+    function initiateShutdown() external whenNotShutdown onlyOwner {
+        isShutdown = true;
+
+        emit ShutdownChanged(true);
+    }
+
+    /**
+     * @notice Restart the cellar.
+     */
+    function liftShutdown() external onlyOwner {
+        if (!isShutdown) revert FeesAndReserves__ContractNotShutdown();
+        isShutdown = false;
+
+        emit ShutdownChanged(false);
+    }
+
     //============================================ onlyOwner Functions ===========================================
 
     /**
@@ -89,11 +143,28 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
         ETH_FAST_GAS_FEED = gasFeed;
     }
 
+    function resetHWM(Cellar cellar) external onlyOwner {
+        MetaData storage data = metaData[cellar];
+
+        uint256 totalAssets = cellar.totalAssets();
+
+        uint256 totalSupply = cellar.totalSupply();
+        // Calculate Share price normalized to 27 decimals.
+        uint256 exactSharePrice = totalAssets.changeDecimals(data.reserveAssetDecimals, NORMALIZED_DECIMALS).mulDivDown(
+            10**data.cellarDecimals,
+            totalSupply
+        );
+
+        data.highWaterMark = exactSharePrice;
+
+        // TODO emit an event
+    }
+
     //============================== Strategist Functions(called through adaptors) ===============================
     // NOTE these function are callable by anyone, but they all use msg.sender determine what cellar they are affecting.
 
     // Strategist function
-    function setupMetaData(uint32 targetAPR, uint32 performanceFee) external {
+    function setupMetaData(uint32 targetAPR, uint32 performanceFee) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         if (address(metaData[cellar].reserveAsset) != address(0)) revert("Cellar already setup.");
         if (performanceFee > MAX_PERFORMANCE_FEE) revert("Large Fee.");
@@ -122,7 +193,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
     /**
      * @notice Strategist callable, value is immediately used.
      */
-    function changeUpkeepFrequency(uint64 newFrequency) external {
+    function changeUpkeepFrequency(uint64 newFrequency) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         cellarToUpkeepData[cellar].frequency = newFrequency;
     }
@@ -130,7 +201,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
     /**
      * @notice Strategist callable, value is immediatley used.
      */
-    function changeUpkeepMaxGas(uint64 newMaxGas) external {
+    function changeUpkeepMaxGas(uint64 newMaxGas) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         cellarToUpkeepData[cellar].maxGas = newMaxGas;
     }
@@ -139,7 +210,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
      * @notice Strategist callable, value is only used after
      *         performUpkeep is ran for the cellar.
      */
-    function updatePerformanceFee(uint32 performanceFee) external {
+    function updatePerformanceFee(uint32 performanceFee) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         PendingMetaData storage data = pendingMetaData[cellar];
 
@@ -152,7 +223,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
      * @notice Strategist callable, value is only used after
      *         performUpkeep is ran for the cellar.
      */
-    function updateTargetAPR(uint32 targetAPR) external {
+    function updateTargetAPR(uint32 targetAPR) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
 
         PendingMetaData storage data = pendingMetaData[cellar];
@@ -165,7 +236,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
     /**
      * @notice Allows strategists to freely move assets into reserves.
      */
-    function addAssetsToReserves(uint256 amount) external {
+    function addAssetsToReserves(uint256 amount) external whenNotShutdown nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
         MetaData storage data = metaData[cellar];
@@ -179,7 +250,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
     /**
      * @notice Allows strategists to freely move assets from reserves.
      */
-    function withdrawAssetsFromReserves(uint256 amount) external {
+    function withdrawAssetsFromReserves(uint256 amount) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
         MetaData storage data = metaData[cellar];
@@ -193,7 +264,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
      * @dev removes assets from reserves, so that `sendFees` can be called.
      * @param amount the amount of reserves to set aside for fees.
      */
-    function prepareFees(uint256 amount) external {
+    function prepareFees(uint256 amount) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         MetaData storage data = metaData[cellar];
 
@@ -211,12 +282,15 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
 
     //============================== Public Functions(called by anyone) ===============================
 
+    // TODO is this okay to not have reentrnacy check? If it needs it need to remove send fees logic in perform upkeep too.
     function sendFees(Cellar cellar) public {
         MetaData storage data = metaData[cellar];
 
         if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
         uint256 payout = feesReadyForClaim[cellar];
         if (payout == 0) revert("Nothing to payout.");
+        // Zero out balance before any external calls.
+        feesReadyForClaim[cellar] = 0;
 
         Registry registry = cellar.registry();
 
@@ -236,6 +310,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
     }
 
     function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData) {
+        if (isShutdown) return (false, abi.encode(0));
+
         Cellar[] memory cellars = abi.decode(checkData, (Cellar[]));
         uint256 currentGasPrice = uint256(IChainlinkAggregator(ETH_FAST_GAS_FEED).latestAnswer());
 
@@ -260,7 +336,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
         if (upkeepNeeded) performData = abi.encode(performInput);
     }
 
-    function performUpkeep(bytes calldata performData) external {
+    // TODO so this does revert if the cellar has not been setup before calling it, but it is not an explicit check...
+    function performUpkeep(bytes calldata performData) external whenNotShutdown nonReentrant {
         PerformInput[] memory performInput = abi.decode(performData, (PerformInput[]));
         if (msg.sender != automationRegistry) {
             // Do not trust callers perform input data.
@@ -277,13 +354,13 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
                 // Check if fees were earned and update data if so.
                 if (performInput[i].feeEarned > 0) {
                     data.performanceFeesOwed += performInput[i].feeEarned;
-                    data.highWaterMark = performInput[i].sharePrice;
+                    data.highWaterMark = performInput[i].exactSharePrice;
                     data.timestamp = performInput[i].timestamp;
                     data.totalAssets = performInput[i].totalAssets;
                     upkeepData.lastUpkeepTime = uint64(block.timestamp);
                 } else if (data.highWaterMark == 0) {
                     // Need to set up cellar by setting HWM, TA, and timestamp.
-                    data.highWaterMark = performInput[i].sharePrice;
+                    data.highWaterMark = performInput[i].exactSharePrice;
                     data.timestamp = performInput[i].timestamp;
                     data.totalAssets = performInput[i].totalAssets;
                     upkeepData.lastUpkeepTime = uint64(block.timestamp);
@@ -302,89 +379,79 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface {
         }
     }
 
-    // TODO seems to have very bad precision...
     function _calculateFees(Cellar cellar) internal view returns (PerformInput memory input) {
         MetaData memory data = metaData[cellar];
 
         uint256 totalAssets = cellar.totalAssets();
 
-        // Convert Assets to HWM decimals.
-        totalAssets = totalAssets.changeDecimals(data.reserveAssetDecimals, HWM_DECIMALS);
-
-        {
-            uint256 totalSupply = cellar.totalSupply();
-            // Share price with HWM decimals.
-            input.sharePrice = totalAssets.mulDivDown(10**data.cellarDecimals, totalSupply);
-        }
+        uint256 totalSupply = cellar.totalSupply();
+        // Calculate Share price normalized to 27 decimals.
+        input.exactSharePrice = totalAssets.changeDecimals(data.reserveAssetDecimals, NORMALIZED_DECIMALS).mulDivDown(
+            10**data.cellarDecimals,
+            totalSupply
+        );
 
         if (data.highWaterMark == 0) {
             // Cellar has not been set up, so no need to calcualte fees earned.
-            input.cellar = cellar;
             input.timestamp = uint64(block.timestamp);
             input.totalAssets = totalAssets;
-        } else if (input.sharePrice > data.highWaterMark) {
+        } else if (input.exactSharePrice > data.highWaterMark) {
             // calculate Actual APR.
             uint256 actualAPR;
 
             {
-                uint256 percentIncrease = input.sharePrice.mulDivDown(10**HWM_DECIMALS, data.highWaterMark) -
-                    10**HWM_DECIMALS;
-                console.log("Percent Increase", percentIncrease);
+                uint256 percentIncrease = input.exactSharePrice.mulDivDown(PRECISION_MULTIPLIER, data.highWaterMark) -
+                    PRECISION_MULTIPLIER;
                 actualAPR = percentIncrease.mulDivDown(SECONDS_IN_A_YEAR, uint64(block.timestamp) - data.timestamp);
-                console.log("Actual APR", actualAPR);
             }
-            // Convert 4 decimal values to 18 decimals for increased precision.
-            uint256 targetAPR = uint256(data.targetAPR).changeDecimals(BPS_DECIMALS, HWM_DECIMALS);
-            uint256 performanceFee = uint256(data.performanceFee).changeDecimals(BPS_DECIMALS, HWM_DECIMALS);
+            // Convert 4 decimal values to 27 decimals for increased precision.
+            uint256 targetAPR = uint256(data.targetAPR).changeDecimals(BPS_DECIMALS, NORMALIZED_DECIMALS);
             if (actualAPR >= targetAPR) {
                 // Performance fee is based off target apr.
-                input.feeEarned = totalAssets.min(data.totalAssets).mulDivDown(targetAPR, 10**HWM_DECIMALS).mulDivDown(
-                    performanceFee,
-                    10**HWM_DECIMALS
-                );
-            } else {
-                // Performance fee is based off how close cellar got to target apr.
-                uint256 feeMultiplier = 10**HWM_DECIMALS -
-                    (targetAPR - actualAPR).mulDivDown(10**HWM_DECIMALS, targetAPR);
-                console.log("Fee Multipler", feeMultiplier);
                 input.feeEarned = totalAssets
                     .min(data.totalAssets)
-                    .mulDivDown(actualAPR, 10**HWM_DECIMALS)
-                    .mulDivDown(performanceFee, 10**HWM_DECIMALS)
-                    .mulDivDown(feeMultiplier, 10**HWM_DECIMALS);
+                    .mulDivDown(targetAPR, PRECISION_MULTIPLIER)
+                    .mulDivDown(data.performanceFee, 10**BPS_DECIMALS);
+            } else {
+                // Performance fee is based off how close cellar got to target apr.
+                uint256 feeMultiplier = PRECISION_MULTIPLIER -
+                    (targetAPR - actualAPR).mulDivDown(PRECISION_MULTIPLIER, targetAPR);
+                input.feeEarned = totalAssets
+                    .min(data.totalAssets)
+                    .mulDivDown(actualAPR, PRECISION_MULTIPLIER)
+                    .mulDivDown(data.performanceFee, 10**BPS_DECIMALS)
+                    .mulDivDown(feeMultiplier, PRECISION_MULTIPLIER);
             }
             // Convert Fees earned from a yearly value to one based off time since last fee log.
             input.feeEarned = input.feeEarned.mulDivDown(uint64(block.timestamp) - data.timestamp, SECONDS_IN_A_YEAR);
 
-            // Now that all the math is done, convert fee earned back into reserve decimals.
-            input.feeEarned = input.feeEarned.changeDecimals(HWM_DECIMALS, data.reserveAssetDecimals);
-
-            input.cellar = cellar;
             input.timestamp = uint64(block.timestamp);
             input.totalAssets = totalAssets;
         } // else No performance fees are rewarded.
+
+        // Setup cellar in input, so that performUpkeep can still run `sendFees`, or update pending values.
+        input.cellar = cellar;
     }
 
-    function getActualAPR(Cellar cellar) external view returns (uint32 actualAPR) {
+    // 27 decimals of precision
+    function getActualAPR(Cellar cellar) external view returns (uint256 actualAPR) {
         MetaData memory data = metaData[cellar];
         if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
 
         uint256 totalAssets = cellar.totalAssets();
 
-        // Convert Assets to HWM decimals.
-        totalAssets = totalAssets.changeDecimals(data.reserveAssetDecimals, HWM_DECIMALS);
-
-        uint256 sharePrice;
-        {
-            uint256 totalSupply = cellar.totalSupply();
-            // Share price with HWM decimals.
-            sharePrice = totalAssets.mulDivDown(10**data.cellarDecimals, totalSupply);
-        }
+        uint256 totalSupply = cellar.totalSupply();
+        // Share price with HWM decimals.
+        uint256 sharePrice = totalAssets.changeDecimals(data.reserveAssetDecimals, NORMALIZED_DECIMALS).mulDivDown(
+            10**data.cellarDecimals,
+            totalSupply
+        );
         if (sharePrice > data.highWaterMark) {
             // calculate Actual APR.
 
-            uint256 percentIncrease = sharePrice.mulDivDown(10**BPS_DECIMALS, data.highWaterMark);
-            actualAPR = uint32(percentIncrease.mulDivDown(SECONDS_IN_A_YEAR, uint64(block.timestamp) - data.timestamp));
+            uint256 percentIncrease = sharePrice.mulDivDown(PRECISION_MULTIPLIER, data.highWaterMark) -
+                PRECISION_MULTIPLIER;
+            actualAPR = percentIncrease.mulDivDown(SECONDS_IN_A_YEAR, uint64(block.timestamp) - data.timestamp);
         } // else actual apr is zero bc share price is still below hwm.
     }
 }

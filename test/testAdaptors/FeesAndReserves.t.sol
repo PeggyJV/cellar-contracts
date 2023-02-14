@@ -67,7 +67,7 @@ contract FeesAndReservesTest is Test {
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage({
             max: 0,
             min: 0,
-            heartbeat: 150 days,
+            heartbeat: 170 days,
             inETH: false
         });
 
@@ -167,8 +167,8 @@ contract FeesAndReservesTest is Test {
             assertEq(targetAPR, 0.05e4, "Target APR should be 5%.");
             // assertEq(timestamp, block.timestamp, "Timestamp should be block timestamp.");
             // assertEq(reserves, 0, "Reserves should be zero.");
-            assertEq(highWaterMark, 1e18, "High Watermark should be 1 USDC.");
-            assertEq(totalAssets, assets.changeDecimals(6, 18), "Total Assets should equal assets.");
+            assertEq(highWaterMark, 1e27, "High Watermark should be 1 USDC.");
+            assertEq(totalAssets, assets, "Total Assets should equal assets.");
             assertEq(performanceFeesOwed, 0, "There should be no performance fee owed.");
             // assertEq(cellarDecimals, 18, "Cellar decimals should be 18.");
             // assertEq(reserveAssetDecimals, 6, "Reserve Asset decimals should be 6.");
@@ -179,17 +179,12 @@ contract FeesAndReservesTest is Test {
 
         assertEq(upkeepNeeded, false, "Upkeep should not be needed.");
 
-        // Wait 10 min
-        vm.warp(block.timestamp + 600);
-
-        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
-
-        assertEq(upkeepNeeded, false, "Upkeep should not be needed because there is no yield.");
-
-        // Simulate yield.
-        uint256 percentIncreaseFor500BPSFor10Min = uint256(0.05e18).mulDivDown(600, 365 days);
-        uint256 yieldEarnedFor500BPSFor10Min = assets.mulDivDown(percentIncreaseFor500BPSFor10Min, 1e18);
-        deal(address(USDC), address(cellar), assets + yieldEarnedFor500BPSFor10Min);
+        uint256 expectedPerformanceFees = _simulateYieldAndReturnExpectedAndPassTime(
+            0.05e4,
+            0.05e4,
+            cellar.totalAssets(),
+            600
+        );
 
         (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
 
@@ -199,40 +194,20 @@ contract FeesAndReservesTest is Test {
 
         {
             (, , , , uint256 highWaterMark, , uint256 performanceFeesOwed, , , ) = far.metaData(cellar);
-            console.log("Performance Fees Owed", performanceFeesOwed);
-            assertEq(
+            assertApproxEqAbs(
                 performanceFeesOwed,
-                yieldEarnedFor500BPSFor10Min.mulDivDown(0.2e18, 1e18),
+                expectedPerformanceFees,
+                1,
                 "Performance fees owed should be 20% of yield earned."
             );
         }
-        assets = cellar.totalAssets();
-        // Advance time 10 days
-        vm.warp(block.timestamp + 10 days);
 
-        // Now give the cellar yield in an untracked asset WETH, so that it can be added to reserves.
-        deal(address(WETH), address(cellar), 1e18);
-
-        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
-
-        assertEq(upkeepNeeded, false, "Upkeep should not be needed because there is no yield.");
-
-        uint256 amountOfUsdcToAddToReserves = priceRouter.getValue(WETH, 1e18, USDC);
-
-        uint256 percentIncreaseFor500BPSFor10Day = uint256(0.05e18).mulDivDown(10 days, 365 days);
-        uint256 yieldEarnedFor500BPSFor10Day = assets.mulDivDown(percentIncreaseFor500BPSFor10Day, 1e18);
-
-        // Leave expected yield in contract so that strategist earns full performance fees.
-        // Strategist swaps WETH yield into USDC, then adds it to reserves.
-        adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
-        adaptorCalls[1] = _createBytesDataToAddToReserves(
-            far,
-            amountOfUsdcToAddToReserves - yieldEarnedFor500BPSFor10Day
+        expectedPerformanceFees += _simulateYieldAndReturnExpectedAndPassTime(
+            0.05e4,
+            0.05e4,
+            cellar.totalAssets(),
+            10 days
         );
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
 
         (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
 
@@ -242,16 +217,27 @@ contract FeesAndReservesTest is Test {
 
         uint256 performanceFeesOwed;
         {
-            uint256 expectedPerformanceFeeOwed = yieldEarnedFor500BPSFor10Min.mulDivDown(0.2e18, 1e18) +
-                yieldEarnedFor500BPSFor10Day.mulDivDown(0.2e18, 1e18);
             (, , , , , , performanceFeesOwed, , , ) = far.metaData(cellar);
-            console.log("Performance Fees Owed", performanceFeesOwed);
             assertEq(
                 performanceFeesOwed,
-                expectedPerformanceFeeOwed,
+                expectedPerformanceFees,
                 "Performance fees owed should be 20% of yield earned."
             );
         }
+
+        // Now give the cellar yield in an untracked asset WETH, so that it can be added to reserves.
+        deal(address(WETH), address(cellar), 1e18);
+
+        uint256 amountOfUsdcToAddToReserves = priceRouter.getValue(WETH, 1e18, USDC).mulDivDown(99, 100);
+
+        // Leave expected yield in contract so that strategist earns full performance fees.
+        // Strategist swaps WETH yield into USDC, then adds it to reserves.
+        adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
+        adaptorCalls[1] = _createBytesDataToAddToReserves(far, amountOfUsdcToAddToReserves);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
         // Strategist calls prepareFees.
         adaptorCalls = new bytes[](1);
@@ -259,9 +245,29 @@ contract FeesAndReservesTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
+        (, , , uint256 reserves, , , uint256 feesOwed, , , ) = far.metaData(cellar);
+        assertEq(reserves, amountOfUsdcToAddToReserves - performanceFeesOwed, "Reserves have been reduced.");
+        assertEq(feesOwed, 0, "feesOwed should be zero.");
+
         far.sendFees(cellar);
 
+        assertEq(far.feesReadyForClaim(cellar), 0, "Fees ready for claim should be zero.");
+
         assertTrue(USDC.balanceOf(strategist) > 0, "Strategist should have earned USDC fees.");
+
+        uint256 expectedTotalAssets = cellar.totalAssets() + reserves;
+
+        // Strategist withdraws some assets from reserves.
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToWithdrawFromReserves(far, reserves);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        (, , , reserves, , , , , , ) = far.metaData(cellar);
+
+        assertEq(reserves, 0, "Reserves should be zero.");
+
+        assertEq(cellar.totalAssets(), expectedTotalAssets, "Total assets should have increased by `reserves` amount.");
     }
 
     function testPerformanceFees(
@@ -270,10 +276,10 @@ contract FeesAndReservesTest is Test {
         uint256 totalAssets,
         uint256 timeToPass
     ) external {
-        targetAPR = 0.05e4; //bound(targetAPR, 0.01e4, 100e4);
-        actualAPR = 0.03e4; //bound(actualAPR, 0, 100e4);
-        totalAssets = 1_000e6; //bound(totalAssets, 100e6, 1_000_000e6);
-        timeToPass = 10 days; //bound(timeToPass, 300, 100 days);
+        targetAPR = bound(targetAPR, 0.01e4, 100e4);
+        actualAPR = bound(actualAPR, 0, 100e4);
+        totalAssets = bound(totalAssets, 100e6, 100_000_000e6);
+        timeToPass = bound(timeToPass, 300, 100 days);
 
         // Add assets to the cellar.
         deal(address(USDC), address(this), totalAssets);
@@ -301,75 +307,486 @@ contract FeesAndReservesTest is Test {
             far.performUpkeep(performData);
         }
 
-        // Fees And Reserves has been properly set up.
+        // Determine Expected Performance Fees Owed.
+        uint256 expectedPerformanceFeeOwed = _simulateYieldAndReturnExpectedAndPassTime(
+            actualAPR,
+            targetAPR,
+            totalAssets,
+            timeToPass
+        );
 
-        // Determine yield earned.
-        actualAPR = actualAPR.changeDecimals(4, 18);
-        targetAPR = targetAPR.changeDecimals(4, 18);
-        {
-            uint256 expectedPercentIncrease = actualAPR.mulDivDown(timeToPass, 365 days);
-            console.log("Percent Increase", expectedPercentIncrease);
-            uint256 expectedYieldEarned = totalAssets.mulDivDown(expectedPercentIncrease, 1e18);
-            console.log("Yield Earned", expectedYieldEarned);
-            // Simulate yield earned in Cellar.
-            deal(address(USDC), address(cellar), totalAssets + expectedYieldEarned);
-        }
-
-        // Now calculate the expected performance fee owed.
-        uint256 expectedPerformanceFeeOwed;
-        if (actualAPR >= targetAPR) {
-            // Met/Exceeded target.
-            expectedPerformanceFeeOwed = totalAssets.mulDivDown(targetAPR, 1e18).mulDivDown(0.2e4, 1e4).mulDivDown(
-                timeToPass,
-                365 days
-            );
-        } else {
-            // Missed target.
-            uint256 feeMultipler = 1e18 - (1e18 * (targetAPR - actualAPR)) / targetAPR;
-            expectedPerformanceFeeOwed = totalAssets
-                .mulDivDown(actualAPR, 1e18)
-                .mulDivDown(0.2e4, 1e4)
-                .mulDivDown(timeToPass, 365 days)
-                .mulDivDown(feeMultipler, 1e18);
-        }
-
-        // Advance Time.
-        vm.warp(block.timestamp + timeToPass);
-
-        // Upkeep should be needed.
+        // Upkeep should be needed, but can be false if above bounds are small enough, so return if no upkeep is needed.
         {
             Cellar[] memory cellars = new Cellar[](1);
             cellars[0] = cellar;
 
-            (, bytes memory performData) = far.checkUpkeep(abi.encode(cellars));
+            (bool upkeepNeeded, bytes memory performData) = far.checkUpkeep(abi.encode(cellars));
+            if (!upkeepNeeded) return;
 
             far.performUpkeep(performData);
         }
 
         (, , , , , , uint256 performanceFeesOwed, , , ) = far.metaData(cellar);
-        assertEq(
+        assertApproxEqAbs(
             performanceFeesOwed,
             expectedPerformanceFeeOwed,
+            1,
             "Performance fees owed should be 20% of yield earned."
         );
-        // assertTrue(false, ":(");
     }
 
-    function _checkPerformanceFees(
-        Cellar targetCellar,
-        uint32 targetAPR,
-        uint32 actualAPR,
+    function testPerformanceFeeAccrual() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint32 targetAPR = 0.05e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        uint256 performanceFeesOwed;
+        uint256 actualPerformanceFeesOwed;
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, targetAPR, 0.2e4);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        // Cellar earns yield.
+        performanceFeesOwed = _simulateYieldAndReturnExpectedAndPassTime(0.03e4, targetAPR, totalAssets, 10 days);
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        (, , , , , , actualPerformanceFeesOwed, , , ) = far.metaData(cellar);
+
+        assertApproxEqAbs(
+            actualPerformanceFeesOwed,
+            performanceFeesOwed,
+            1,
+            "Actual Performance Fees differ from expected."
+        );
+
+        totalAssets = cellar.totalAssets();
+
+        // Cellar loses yield.
+        deal(address(USDC), address(cellar), totalAssets.mulDivDown(99, 100));
+        (upkeepNeeded, ) = far.checkUpkeep(abi.encode(cellars));
+        assertEq(upkeepNeeded, false, "Upkeep should not be needed.");
+        // Pass in old perform data to try and take performance fees eventhough none are due.
+        far.performUpkeep(performData);
+        // No new performance fees should be rewarded.
+        (, , , , , , actualPerformanceFeesOwed, , , ) = far.metaData(cellar);
+        assertApproxEqAbs(
+            actualPerformanceFeesOwed,
+            performanceFeesOwed,
+            1,
+            "Actual Performance Fees differ from expected."
+        );
+
+        // Cellar regains lost yield, and performance fees are earned again.
+        deal(address(USDC), address(cellar), totalAssets);
+
+        performanceFeesOwed += _simulateYieldAndReturnExpectedAndPassTime(0.04e4, targetAPR, totalAssets, 20 days);
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        (, , , , , , actualPerformanceFeesOwed, , , ) = far.metaData(cellar);
+
+        assertApproxEqAbs(
+            actualPerformanceFeesOwed,
+            performanceFeesOwed,
+            1,
+            "Actual Performance Fees differ from expected."
+        );
+    }
+
+    function testOverPerformingCellarUpdatingVsNotUpdating() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint32 targetAPR = 0.05e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, targetAPR, 0.2e4);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        uint256 performanceFeesEarnedWithoutUpdatingTarget;
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+
+        (, , , , , , performanceFeesEarnedWithoutUpdatingTarget, , , ) = far.metaData(cellar);
+
+        console.log("Total Fees Earned No Updating", performanceFeesEarnedWithoutUpdatingTarget);
+
+        // Reset Cellars yield.
+        deal(address(USDC), address(cellar), totalAssets);
+        far.resetHWM(cellar);
+
+        // Run same calculations with a cellar
+        uint256 performanceFeesEarnedWithUpdatingTarget;
+        _updateTargetAPR(cellar, 0.06e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.06e4;
+        _updateTargetAPR(cellar, 0.07e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.07e4;
+        _updateTargetAPR(cellar, 0.08e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.08e4;
+        _updateTargetAPR(cellar, 0.09e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.09e4;
+        _updateTargetAPR(cellar, 0.1e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.1e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.1e4;
+
+        (, , , , , , performanceFeesEarnedWithUpdatingTarget, , , ) = far.metaData(cellar);
+        performanceFeesEarnedWithUpdatingTarget =
+            performanceFeesEarnedWithUpdatingTarget -
+            performanceFeesEarnedWithoutUpdatingTarget;
+
+        console.log("Total Fees Earned Updating", performanceFeesEarnedWithUpdatingTarget);
+
+        // Reset Cellars yield.
+        deal(address(USDC), address(cellar), totalAssets);
+        far.resetHWM(cellar);
+
+        // Now run same test, but where Cellar target is perfect.
+        uint256 maxPossibleFees;
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.1e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.1e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.1e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.1e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.1e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+
+        (, , , , , , maxPossibleFees, , , ) = far.metaData(cellar);
+        maxPossibleFees =
+            maxPossibleFees -
+            (performanceFeesEarnedWithUpdatingTarget + performanceFeesEarnedWithoutUpdatingTarget);
+
+        console.log("Max Possible Fees", maxPossibleFees);
+
+        assertGt(
+            maxPossibleFees,
+            performanceFeesEarnedWithUpdatingTarget,
+            "Cellar with accurate target should earn more fees."
+        );
+        assertGt(
+            performanceFeesEarnedWithUpdatingTarget,
+            performanceFeesEarnedWithoutUpdatingTarget,
+            "Upadting target should earn more fees."
+        );
+    }
+
+    function testUnderPerformingCellarUpdatingVsNotUpdating() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint32 targetAPR = 0.05e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, targetAPR, 0.2e4);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        uint256 performanceFeesEarnedWithoutUpdatingTarget;
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.01e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.01e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.01e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        performanceFeesEarnedWithoutUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.01e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+
+        (, , , , , , performanceFeesEarnedWithoutUpdatingTarget, , , ) = far.metaData(cellar);
+
+        console.log("Total Fees Earned No Updating", performanceFeesEarnedWithoutUpdatingTarget);
+
+        // Reset Cellars yield.
+        deal(address(USDC), address(cellar), totalAssets);
+        far.resetHWM(cellar);
+
+        // Run same calculations with a cellar
+        uint256 performanceFeesEarnedWithUpdatingTarget;
+        _updateTargetAPR(cellar, 0.04e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.01e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.04e4;
+        _updateTargetAPR(cellar, 0.03e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.01e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.03e4;
+        _updateTargetAPR(cellar, 0.02e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.01e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.02e4;
+        _updateTargetAPR(cellar, 0.01e4);
+        performanceFeesEarnedWithUpdatingTarget += _simulateYieldAndReturnExpectedAndPassTime(
+            0.01e4,
+            targetAPR,
+            cellar.totalAssets(),
+            10 days
+        );
+        far.performUpkeep(performData);
+        targetAPR = 0.01e4;
+
+        (, , , , , , performanceFeesEarnedWithUpdatingTarget, , , ) = far.metaData(cellar);
+        performanceFeesEarnedWithUpdatingTarget =
+            performanceFeesEarnedWithUpdatingTarget -
+            performanceFeesEarnedWithoutUpdatingTarget;
+
+        console.log("Total Fees Earned Updating", performanceFeesEarnedWithUpdatingTarget);
+
+        // Reset Cellars yield.
+        deal(address(USDC), address(cellar), totalAssets);
+        far.resetHWM(cellar);
+
+        // Now run same test, but where Cellar target is perfect.
+        uint256 maxPossibleFees;
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.01e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.01e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.01e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+        maxPossibleFees += _simulateYieldAndReturnExpectedAndPassTime(0.01e4, targetAPR, cellar.totalAssets(), 10 days);
+        far.performUpkeep(performData);
+
+        (, , , , , , maxPossibleFees, , , ) = far.metaData(cellar);
+        maxPossibleFees =
+            maxPossibleFees -
+            (performanceFeesEarnedWithUpdatingTarget + performanceFeesEarnedWithoutUpdatingTarget);
+
+        console.log("Max Possible Fees", maxPossibleFees);
+
+        assertGt(
+            maxPossibleFees,
+            performanceFeesEarnedWithUpdatingTarget,
+            "Cellar with accurate target should earn more fees."
+        );
+        assertGt(
+            performanceFeesEarnedWithUpdatingTarget,
+            performanceFeesEarnedWithoutUpdatingTarget,
+            "Upadting target should earn more fees."
+        );
+    }
+
+    function testPerformUpkeepOnCellarNotSetUp() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint32 targetAPR = 0.05e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        FeesAndReserves.PerformInput[] memory inputs = new FeesAndReserves.PerformInput[](1);
+        inputs[0].cellar = cellar;
+
+        performData = abi.encode(inputs);
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        vm.expectRevert();
+        far.performUpkeep(performData);
+    }
+
+    function _updateTargetAPR(Cellar cellar, uint32 newTarget) internal {
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToUpdateTargetAPR(far, newTarget);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
+    function _simulateYieldAndReturnExpectedAndPassTime(
+        uint256 actualAPR,
+        uint256 targetAPR,
         uint256 totalAssets,
         uint256 timeToPass
-    ) internal {
-        uint256 percentIncreaseForTimeToPass = uint256(0.05e18).mulDivDown(10 days, 365 days);
-    }
+    ) internal returns (uint256 expectedPerformanceFeeOwed) {
+        // Determine yield earned.
+        actualAPR = actualAPR.changeDecimals(4, 27);
+        targetAPR = targetAPR.changeDecimals(4, 27);
+        {
+            uint256 expectedPercentIncrease = actualAPR.mulDivDown(timeToPass, 365 days);
+            uint256 expectedYieldEarned = totalAssets.mulDivDown(expectedPercentIncrease, 1e27);
+            // Simulate yield earned in Cellar.
+            deal(address(USDC), address(cellar), totalAssets + expectedYieldEarned);
+        }
 
-    // TODO try performUpkeep on a cellar that is not set up
-    // TODO call setup, then performupkeep and make sure cellar is setup properly
-    // TODO add test where we make sure negative periods do not earn fees, and that when share prices rises back up, fees are only earned on the difference between current share price and HWM.
-    // TODO add test where strategist is over shooting target
-    // TODO add test where strategist is under shooting target
+        // Now calculate the expected performance fee owed.
+        if (actualAPR >= targetAPR) {
+            // Met/Exceeded target.
+            expectedPerformanceFeeOwed = totalAssets.mulDivDown(targetAPR, 1e27).mulDivDown(0.2e4, 1e4).mulDivDown(
+                timeToPass,
+                365 days
+            );
+        } else {
+            // Missed target.
+            uint256 feeMultipler = 1e27 - (targetAPR - actualAPR).mulDivDown(1e27, targetAPR);
+            expectedPerformanceFeeOwed = totalAssets
+                .mulDivDown(actualAPR, 1e27)
+                .mulDivDown(0.2e4, 1e4)
+                .mulDivDown(timeToPass, 365 days)
+                .mulDivDown(feeMultipler, 1e27);
+        }
+
+        // Advance Time.
+        vm.warp(block.timestamp + timeToPass);
+    }
 
     function _createBytesDataForSwap(
         ERC20 from,
@@ -431,12 +848,29 @@ contract FeesAndReservesTest is Test {
         return abi.encodeWithSelector(FeesAndReservesAdaptor.addAssetsToReserves.selector, feesAndReserves, amount);
     }
 
+    function _createBytesDataToWithdrawFromReserves(FeesAndReserves feesAndReserves, uint256 amount)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return
+            abi.encodeWithSelector(FeesAndReservesAdaptor.withdrawAssetsFromReserves.selector, feesAndReserves, amount);
+    }
+
     function _createBytesDataToPrepareFees(FeesAndReserves feesAndReserves, uint256 amount)
         internal
         pure
         returns (bytes memory)
     {
         return abi.encodeWithSelector(FeesAndReservesAdaptor.prepareFees.selector, feesAndReserves, amount);
+    }
+
+    function _createBytesDataToUpdateTargetAPR(FeesAndReserves feesAndReserves, uint32 newTarget)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.updateTargetAPR.selector, feesAndReserves, newTarget);
     }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
