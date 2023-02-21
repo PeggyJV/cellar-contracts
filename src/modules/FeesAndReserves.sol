@@ -283,7 +283,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     //============================== Public Functions(called by anyone) ===============================
 
     // TODO is this okay to not have reentrnacy check? If it needs it need to remove send fees logic in perform upkeep too.
-    function sendFees(Cellar cellar) public {
+    function sendFees(Cellar cellar) external nonReentrant {
         MetaData storage data = metaData[cellar];
 
         if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
@@ -365,10 +365,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
                     data.totalAssets = performInput[i].totalAssets;
                     upkeepData.lastUpkeepTime = uint64(block.timestamp);
                 }
-            }
-            // If there are fees ready for claiming, call sendFees.
-            if (feesReadyForClaim[performInput[i].cellar] > 0) {
-                sendFees(performInput[i].cellar);
             }
 
             // Update pending values if need be.
