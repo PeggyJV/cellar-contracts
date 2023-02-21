@@ -21,6 +21,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     uint256 public constant SECONDS_IN_A_YEAR = 365 days;
     uint256 public constant MAX_PERFORMANCE_FEE = 3 * 10**(BPS_DECIMALS - 1); // 30%
 
+    /**
+     * @notice Store calling Cellars meta data in this contract to help mitigate malicous external contracts
+     *         attempting to break logic by illogically changing meta data values.
+     */
     struct MetaData {
         ERC20 reserveAsset; // Same as cellars accounting asset
         uint32 targetAPR; // The annual APR the cellar targets
@@ -34,6 +38,9 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         uint32 performanceFee;
     }
 
+    /**
+     * @notice Pending meta data values that are used to update a Cellar's actual MetaData once fees have been calculated using the old values.
+     */
     struct PendingMetaData {
         uint32 pendingTargetAPR;
         uint32 pendingPerformanceFee;
@@ -107,7 +114,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
     /**
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
-     * @dev In the case where
      */
     function initiateShutdown() external whenNotShutdown onlyOwner {
         isShutdown = true;
@@ -143,6 +149,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         ETH_FAST_GAS_FEED = gasFeed;
     }
 
+    event HighWatermarkReset(address cellar);
+
     function resetHWM(Cellar cellar) external onlyOwner {
         MetaData storage data = metaData[cellar];
 
@@ -157,12 +165,16 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
         data.highWaterMark = exactSharePrice;
 
-        // TODO emit an event
+        emit HighWatermarkReset(address(cellar));
     }
 
     //============================== Strategist Functions(called through adaptors) ===============================
-    // NOTE these function are callable by anyone, but they all use msg.sender determine what cellar they are affecting.
-
+    /**
+     * @notice These functions are callable by anyone, but are intended to be called by strategists through their Cellars `callOnAdaptor`.
+     *         To help reduce attack vectors, several mitigations have been added:
+     *         - important meta data, like a Cellar's asset is saved in this contract
+     *         - all public mutative functions have reentrancy protection
+     */
     // Strategist function
     function setupMetaData(uint32 targetAPR, uint32 performanceFee) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
@@ -195,6 +207,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      */
     function changeUpkeepFrequency(uint64 newFrequency) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
+        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
+
         cellarToUpkeepData[cellar].frequency = newFrequency;
     }
 
@@ -203,8 +217,12 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      */
     function changeUpkeepMaxGas(uint64 newMaxGas) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
+        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
+
         cellarToUpkeepData[cellar].maxGas = newMaxGas;
     }
+
+    event PerformanceFeeChanged(address cellar, uint32 newFee);
 
     /**
      * @notice Strategist callable, value is only used after
@@ -212,12 +230,16 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      */
     function updatePerformanceFee(uint32 performanceFee) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
+        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
+
         PendingMetaData storage data = pendingMetaData[cellar];
 
         data.pendingPerformanceFee = performanceFee;
 
-        // TODO emit an event.
+        emit PerformanceFeeChanged(address(cellar), performanceFee);
     }
+
+    event TargetAPRChanged(address cellar, uint32 newTarget);
 
     /**
      * @notice Strategist callable, value is only used after
@@ -225,13 +247,16 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      */
     function updateTargetAPR(uint32 targetAPR) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
+        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
 
         PendingMetaData storage data = pendingMetaData[cellar];
 
         data.pendingTargetAPR = targetAPR;
 
-        // TODO emit an event.
+        emit TargetAPRChanged(address(cellar), targetAPR);
     }
+
+    event AssetsAddedToReserves(address cellar, uint256 amount);
 
     /**
      * @notice Allows strategists to freely move assets into reserves.
@@ -244,8 +269,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         data.reserves += amount;
         data.reserveAsset.safeTransferFrom(msg.sender, address(this), amount);
 
-        // TODO emit an event.
+        emit AssetsAddedToReserves(address(cellar), amount);
     }
+
+    event AssetsWithdrawnFromReserves(address cellar, uint256 amount);
 
     /**
      * @notice Allows strategists to freely move assets from reserves.
@@ -255,10 +282,14 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
         MetaData storage data = metaData[cellar];
 
+        if (amount > data.reserves) revert("Not enough reserves.");
+
         data.reserves -= amount;
         data.reserveAsset.safeTransfer(msg.sender, amount);
-        // TODO emit an event
+        emit AssetsWithdrawnFromReserves(address(cellar), amount);
     }
+
+    event FeesPrepared(address cellar, uint256 amount, uint256 totalFeesReady);
 
     /**
      * @dev removes assets from reserves, so that `sendFees` can be called.
@@ -278,11 +309,14 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         data.reserves -= amount;
 
         feesReadyForClaim[cellar] += amount;
+
+        emit FeesPrepared(address(cellar), amount, feesReadyForClaim[cellar]);
     }
 
     //============================== Public Functions(called by anyone) ===============================
 
-    // TODO is this okay to not have reentrnacy check? If it needs it need to remove send fees logic in perform upkeep too.
+    event FeesSent(address cellar);
+
     function sendFees(Cellar cellar) external nonReentrant {
         MetaData storage data = metaData[cellar];
 
@@ -307,6 +341,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         IGravity gravityBridge = IGravity(registry.getAddress(0));
         data.reserveAsset.safeApprove(address(gravityBridge), sommCut);
         gravityBridge.sendToCosmos(address(data.reserveAsset), registry.feesDistributor(), sommCut);
+        emit FeesSent(address(cellar));
     }
 
     function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData) {
@@ -336,13 +371,14 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         if (upkeepNeeded) performData = abi.encode(performInput);
     }
 
-    // TODO so this does revert if the cellar has not been setup before calling it, but it is not an explicit check...
     function performUpkeep(bytes calldata performData) external whenNotShutdown nonReentrant {
         PerformInput[] memory performInput = abi.decode(performData, (PerformInput[]));
         if (msg.sender != automationRegistry) {
             // Do not trust callers perform input data.
             for (uint256 i; i < performInput.length; ++i) {
                 Cellar target = performInput[i].cellar;
+
+                if (address(metaData[target].reserveAsset) == address(0)) revert("Cellar not setup.");
                 performInput[i] = _calculateFees(target);
             }
         }

@@ -738,8 +738,7 @@ contract FeesAndReservesTest is Test {
 
         performData = abi.encode(inputs);
 
-        (, performData) = far.checkUpkeep(abi.encode(cellars));
-        vm.expectRevert();
+        vm.expectRevert(bytes("Cellar not setup."));
         far.performUpkeep(performData);
     }
 

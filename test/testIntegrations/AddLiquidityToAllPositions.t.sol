@@ -33,6 +33,10 @@ contract AddLiqquidityToAllPositionsTest is Test {
     function setUp() external {}
 
     function testCleanUp() external {
+        if (block.number < 16679559) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16679559.");
+            return;
+        }
         deal(address(USDC), address(this), 3_000e6);
         USDC.approve(address(cellar), 3_000e6);
 
