@@ -14,7 +14,7 @@ contract EulerBaseAdaptor {
     /**
      * @notice Attempted to use an invalid subAccountId.
      */
-    error EulerETokenAdaptor__InvalidSubAccountId();
+    error EulerBaseAdaptor__InvalidSubAccountId();
 
     //============================================ Global Functions ===========================================
 
@@ -40,7 +40,7 @@ contract EulerBaseAdaptor {
     }
 
     /**
-     * @notice Minimum HF enforced after every eToken withdraw/market exit.
+     * @notice Minimum HF enforced after every e/dToken withdraw/market exit.
      *         Also enforced when borrowing assets.
      */
     function HFMIN() internal pure returns (uint256) {
@@ -65,7 +65,7 @@ contract EulerBaseAdaptor {
      * @notice Helper function to compute the sub account address given the primary account, and sub account Id.
      */
     function _getSubAccount(address primary, uint256 subAccountId) internal pure returns (address) {
-        if (subAccountId >= 256) revert EulerETokenAdaptor__InvalidSubAccountId();
+        if (subAccountId >= 256) revert EulerBaseAdaptor__InvalidSubAccountId();
         return address(uint160(primary) ^ uint160(subAccountId));
     }
 }
