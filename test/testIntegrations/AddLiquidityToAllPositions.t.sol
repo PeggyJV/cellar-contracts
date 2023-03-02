@@ -45,35 +45,35 @@ contract AddLiqquidityToAllPositionsTest is Test {
         cellar.deposit(1_000e6, address(this));
         console.log("Gas Used", gas - gasleft());
 
-        gas = gasleft();
-        cellar.deposit(1_000e6, address(this));
-        console.log("Gas Used", gas - gasleft());
+        // gas = gasleft();
+        // cellar.deposit(1_000e6, address(this));
+        // console.log("Gas Used", gas - gasleft());
 
-        uint256 nftCount = positionManager.balanceOf(address(cellar));
+        // uint256 nftCount = positionManager.balanceOf(address(cellar));
 
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](nftCount);
+        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // bytes[] memory adaptorCalls = new bytes[](nftCount);
 
-        uint256 i;
-        while (i < nftCount) {
-            uint256 id = positionManager.tokenOfOwnerByIndex(address(cellar), i);
-            // We wanna keep this liquidity
-            adaptorCalls[i] = _createBytesDataToCloseLP(id);
-            i++;
-        }
+        // uint256 i;
+        // while (i < nftCount) {
+        //     uint256 id = positionManager.tokenOfOwnerByIndex(address(cellar), i);
+        //     // We wanna keep this liquidity
+        //     adaptorCalls[i] = _createBytesDataToCloseLP(id);
+        //     i++;
+        // }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        // data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
 
-        // Strategist rebalances cellar to remove unused positions.
-        vm.startPrank(cellar.owner());
-        gas = gasleft();
-        cellar.callOnAdaptor(data);
-        console.log("Gas Used to rebalance", gas - gasleft());
-        vm.stopPrank();
+        // // Strategist rebalances cellar to remove unused positions.
+        // vm.startPrank(cellar.owner());
+        // gas = gasleft();
+        // cellar.callOnAdaptor(data);
+        // console.log("Gas Used to rebalance", gas - gasleft());
+        // vm.stopPrank();
 
-        gas = gasleft();
-        cellar.deposit(1_000e6, address(this));
-        console.log("Gas Used", gas - gasleft());
+        // gas = gasleft();
+        // cellar.deposit(1_000e6, address(this));
+        // console.log("Gas Used", gas - gasleft());
     }
 
     function _createBytesDataToCloseLP(uint256 id) internal pure returns (bytes memory) {

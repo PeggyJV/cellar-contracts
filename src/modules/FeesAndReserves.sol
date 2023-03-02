@@ -8,9 +8,6 @@ import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 import { console } from "@forge-std/Test.sol";
 
-// TODO need to think if there is a way a malicioud contract could change their reserve asset after it is set, or get their "reserves" value increased before the reserve asset is set.
-// Cuz then an attacker could raise their reserves value using a useless token, then change their reserve asset to be WETH or something, and then withdraw it
-// TODO this contract is extremely prone to reentrnacy since it makes calls to multiple addresses that are ultimately supplied by a caller.
 contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuard {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -27,12 +24,12 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      */
     struct MetaData {
         ERC20 reserveAsset; // Same as cellars accounting asset
-        uint32 targetAPR; // The annual APR the cellar targets
+        uint32 managementFee;
         uint64 timestamp; // Timestamp fees were last logged
         uint256 reserves; // Total amount of `reserveAsset` cellar has in reserves
-        uint256 highWaterMark; // The Cellars Share Price High Water Mark Normalized to 27 decimals
+        uint256 exactHighWatermark; // The Cellars Share Price High Water Mark Normalized to 27 decimals
         uint256 totalAssets; // The Cellars totalAssets with 18 decimals
-        uint256 performanceFeesOwed; // The performance fees cellar has earned, to be paid out
+        uint256 feesOwed; // The performance fees cellar has earned, to be paid out
         uint8 cellarDecimals;
         uint8 reserveAssetDecimals;
         uint32 performanceFee;
@@ -42,7 +39,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      * @notice Pending meta data values that are used to update a Cellar's actual MetaData once fees have been calculated using the old values.
      */
     struct PendingMetaData {
-        uint32 pendingTargetAPR;
+        uint32 pendingManagementFee;
         uint32 pendingPerformanceFee;
     }
 
@@ -65,6 +62,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     mapping(Cellar => UpkeepData) public cellarToUpkeepData;
 
     mapping(Cellar => MetaData) public metaData;
+
+    function getMetaData(Cellar cellar) external view returns (MetaData memory) {
+        return metaData[cellar];
+    }
 
     mapping(Cellar => uint256) public feesReadyForClaim;
 
@@ -163,7 +164,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             totalSupply
         );
 
-        data.highWaterMark = exactSharePrice;
+        data.exactHighWatermark = exactSharePrice;
 
         emit HighWatermarkReset(address(cellar));
     }
@@ -176,7 +177,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      *         - all public mutative functions have reentrancy protection
      */
     // Strategist function
-    function setupMetaData(uint32 targetAPR, uint32 performanceFee) external nonReentrant {
+    function setupMetaData(uint32 managementFee, uint32 performanceFee) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         if (address(metaData[cellar].reserveAsset) != address(0)) revert("Cellar already setup.");
         if (performanceFee > MAX_PERFORMANCE_FEE) revert("Large Fee.");
@@ -186,19 +187,19 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
         metaData[cellar] = MetaData({
             reserveAsset: reserveAsset,
-            targetAPR: targetAPR,
+            managementFee: managementFee,
             timestamp: uint64(block.timestamp),
             reserves: 0,
-            highWaterMark: 0,
+            exactHighWatermark: 0,
             totalAssets: 0,
-            performanceFeesOwed: 0,
+            feesOwed: 0,
             cellarDecimals: cellarDecimals,
             reserveAssetDecimals: reserveAssetDecimals,
             performanceFee: performanceFee
         });
 
         // Update pending values to match actual.
-        pendingMetaData[cellar].pendingTargetAPR = targetAPR;
+        pendingMetaData[cellar].pendingManagementFee = managementFee;
         pendingMetaData[cellar].pendingPerformanceFee = performanceFee;
     }
 
@@ -224,6 +225,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
     event PerformanceFeeChanged(address cellar, uint32 newFee);
 
+    // TODO add limits to these.
     /**
      * @notice Strategist callable, value is only used after
      *         performUpkeep is ran for the cellar.
@@ -239,21 +241,21 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         emit PerformanceFeeChanged(address(cellar), performanceFee);
     }
 
-    event TargetAPRChanged(address cellar, uint32 newTarget);
+    event ManagementFeeChanged(address cellar, uint32 newFee);
 
     /**
      * @notice Strategist callable, value is only used after
      *         performUpkeep is ran for the cellar.
      */
-    function updateTargetAPR(uint32 targetAPR) external nonReentrant {
+    function updateManagementFee(uint32 managementFee) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
         if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
 
         PendingMetaData storage data = pendingMetaData[cellar];
 
-        data.pendingTargetAPR = targetAPR;
+        data.pendingManagementFee = managementFee;
 
-        emit TargetAPRChanged(address(cellar), targetAPR);
+        emit ManagementFeeChanged(address(cellar), managementFee);
     }
 
     event AssetsAddedToReserves(address cellar, uint256 amount);
@@ -301,11 +303,11 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
         if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
 
-        if (amount > data.performanceFeesOwed) revert("Not enough fees owed.");
+        if (amount > data.feesOwed) revert("Not enough fees owed.");
         if (amount > data.reserves) revert("Not enough reserves.");
 
         // Reduce fees owed and reduce reserves.
-        data.performanceFeesOwed -= amount;
+        data.feesOwed -= amount;
         data.reserves -= amount;
 
         feesReadyForClaim[cellar] += amount;
@@ -362,7 +364,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
             PerformInput memory input = _calculateFees(cellars[i]);
             // Only log fees if there are fees to be earned.
-            if (input.feeEarned > 0 || metaData[cellars[i]].highWaterMark == 0) {
+            if (input.feeEarned > 0 || metaData[cellars[i]].exactHighWatermark == 0) {
                 upkeepNeeded = true;
                 performInput[i] = input;
             }
@@ -389,14 +391,14 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             if (block.timestamp >= (upkeepData.lastUpkeepTime + upkeepData.frequency)) {
                 // Check if fees were earned and update data if so.
                 if (performInput[i].feeEarned > 0) {
-                    data.performanceFeesOwed += performInput[i].feeEarned;
-                    data.highWaterMark = performInput[i].exactSharePrice;
+                    data.feesOwed += performInput[i].feeEarned;
+                    data.exactHighWatermark = performInput[i].exactSharePrice;
                     data.timestamp = performInput[i].timestamp;
                     data.totalAssets = performInput[i].totalAssets;
                     upkeepData.lastUpkeepTime = uint64(block.timestamp);
-                } else if (data.highWaterMark == 0) {
+                } else if (data.exactHighWatermark == 0) {
                     // Need to set up cellar by setting HWM, TA, and timestamp.
-                    data.highWaterMark = performInput[i].exactSharePrice;
+                    data.exactHighWatermark = performInput[i].exactSharePrice;
                     data.timestamp = performInput[i].timestamp;
                     data.totalAssets = performInput[i].totalAssets;
                     upkeepData.lastUpkeepTime = uint64(block.timestamp);
@@ -405,7 +407,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
             // Update pending values if need be.
             PendingMetaData storage pending = pendingMetaData[performInput[i].cellar];
-            if (data.targetAPR != pending.pendingTargetAPR) data.targetAPR = pending.pendingTargetAPR;
+            if (data.managementFee != pending.pendingManagementFee) data.managementFee = pending.pendingManagementFee;
             if (data.performanceFee != pending.pendingPerformanceFee)
                 data.performanceFee = pending.pendingPerformanceFee;
         }
@@ -414,76 +416,40 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     function _calculateFees(Cellar cellar) internal view returns (PerformInput memory input) {
         MetaData memory data = metaData[cellar];
 
-        uint256 totalAssets = cellar.totalAssets();
+        // Save values in
+        input.totalAssets = cellar.totalAssets();
+        input.timestamp = uint64(block.timestamp);
 
         uint256 totalSupply = cellar.totalSupply();
         // Calculate Share price normalized to 27 decimals.
-        input.exactSharePrice = totalAssets.changeDecimals(data.reserveAssetDecimals, NORMALIZED_DECIMALS).mulDivDown(
-            10**data.cellarDecimals,
-            totalSupply
-        );
+        input.exactSharePrice = input
+            .totalAssets
+            .changeDecimals(data.reserveAssetDecimals, NORMALIZED_DECIMALS)
+            .mulDivDown(10**data.cellarDecimals, totalSupply);
 
-        if (data.highWaterMark == 0) {
-            // Cellar has not been set up, so no need to calcualte fees earned.
-            input.timestamp = uint64(block.timestamp);
-            input.totalAssets = totalAssets;
-        } else if (input.exactSharePrice > data.highWaterMark) {
-            // calculate Actual APR.
-            uint256 actualAPR;
-
-            {
-                uint256 percentIncrease = input.exactSharePrice.mulDivDown(PRECISION_MULTIPLIER, data.highWaterMark) -
-                    PRECISION_MULTIPLIER;
-                actualAPR = percentIncrease.mulDivDown(SECONDS_IN_A_YEAR, uint64(block.timestamp) - data.timestamp);
-            }
-            // Convert 4 decimal values to 27 decimals for increased precision.
-            uint256 targetAPR = uint256(data.targetAPR).changeDecimals(BPS_DECIMALS, NORMALIZED_DECIMALS);
-            if (actualAPR >= targetAPR) {
-                // Performance fee is based off target apr.
-                input.feeEarned = totalAssets
+        if (data.exactHighWatermark > 0) {
+            // Calculate Management Fees owed.
+            uint256 elapsedTime = block.timestamp - data.timestamp;
+            if (elapsedTime > 0) {
+                input.feeEarned += input
+                    .totalAssets
                     .min(data.totalAssets)
-                    .mulDivDown(targetAPR, PRECISION_MULTIPLIER)
+                    .mulDivDown(data.managementFee, 10**BPS_DECIMALS)
+                    .mulDivDown(elapsedTime, 365 days);
+            }
+
+            // Calculate Performance Fees owed.
+            if (input.exactSharePrice > data.exactHighWatermark) {
+                input.feeEarned += input
+                    .totalAssets
+                    .min(data.totalAssets)
+                    .mulDivDown(input.exactSharePrice - data.exactHighWatermark, PRECISION_MULTIPLIER)
                     .mulDivDown(data.performanceFee, 10**BPS_DECIMALS);
-            } else {
-                // Performance fee is based off how close cellar got to target apr.
-                uint256 feeMultiplier = PRECISION_MULTIPLIER -
-                    (targetAPR - actualAPR).mulDivDown(PRECISION_MULTIPLIER, targetAPR);
-                input.feeEarned = totalAssets
-                    .min(data.totalAssets)
-                    .mulDivDown(actualAPR, PRECISION_MULTIPLIER)
-                    .mulDivDown(data.performanceFee, 10**BPS_DECIMALS)
-                    .mulDivDown(feeMultiplier, PRECISION_MULTIPLIER);
             }
-            // Convert Fees earned from a yearly value to one based off time since last fee log.
-            input.feeEarned = input.feeEarned.mulDivDown(uint64(block.timestamp) - data.timestamp, SECONDS_IN_A_YEAR);
+        } // else Cellar needs to finish its setup..
+        // This will trigger `performUpkeep` to save the totalAssets, exactHighWatermark, and timestamp.
 
-            input.timestamp = uint64(block.timestamp);
-            input.totalAssets = totalAssets;
-        } // else No performance fees are rewarded.
-
-        // Setup cellar in input, so that performUpkeep can still run `sendFees`, or update pending values.
+        // Setup cellar in input, so that performUpkeep can still run update pending values.
         input.cellar = cellar;
-    }
-
-    // 27 decimals of precision
-    function getActualAPR(Cellar cellar) external view returns (uint256 actualAPR) {
-        MetaData memory data = metaData[cellar];
-        if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
-
-        uint256 totalAssets = cellar.totalAssets();
-
-        uint256 totalSupply = cellar.totalSupply();
-        // Share price with HWM decimals.
-        uint256 sharePrice = totalAssets.changeDecimals(data.reserveAssetDecimals, NORMALIZED_DECIMALS).mulDivDown(
-            10**data.cellarDecimals,
-            totalSupply
-        );
-        if (sharePrice > data.highWaterMark) {
-            // calculate Actual APR.
-
-            uint256 percentIncrease = sharePrice.mulDivDown(PRECISION_MULTIPLIER, data.highWaterMark) -
-                PRECISION_MULTIPLIER;
-            actualAPR = percentIncrease.mulDivDown(SECONDS_IN_A_YEAR, uint64(block.timestamp) - data.timestamp);
-        } // else actual apr is zero bc share price is still below hwm.
     }
 }
