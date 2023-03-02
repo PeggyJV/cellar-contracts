@@ -131,7 +131,7 @@ contract FeesAndReservesTest is Test {
         // Strategist calls fees and reserves setup.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](3);
-        adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0.0, 0.2e4);
+        adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, 0.2e4);
         adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
         adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
 
@@ -147,34 +147,46 @@ contract FeesAndReservesTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed to finish setup.");
 
         far.performUpkeep(performData);
-        vm.warp(block.timestamp + 301);
-        // {
-        //     (
-        //         ERC20 reserveAsset,
-        //         uint32 targetAPR,
-        //         ,
-        //         ,
-        //         // uint64 timestamp,
-        //         // uint256 reserves,
-        //         uint256 highWaterMark,
-        //         uint256 totalAssets,
-        //         uint256 performanceFeesOwed, // uint8 cellarDecimals, // uint8 reserveAssetDecimals, // uint32 performanceFee
-        //         ,
-        //         ,
+        FeesAndReserves.MetaData memory expectedMetaData = FeesAndReserves.MetaData({
+            reserveAsset: USDC,
+            managementFee: 0,
+            timestamp: uint64(block.timestamp),
+            reserves: 0,
+            exactHighWatermark: 1e27,
+            totalAssets: assets,
+            feesOwed: 0,
+            cellarDecimals: 18,
+            reserveAssetDecimals: 6,
+            performanceFee: 0.2e4
+        });
+        {
+            FeesAndReserves.MetaData memory actualMetaData = far.getMetaData(cellar);
 
-        //     ) = far.metaData(cellar);
+            assertEq(
+                address(actualMetaData.reserveAsset),
+                address(expectedMetaData.reserveAsset),
+                "Reserve Asset should be USDC."
+            );
+            assertEq(actualMetaData.managementFee, expectedMetaData.managementFee, "Management fee should be 0.");
+            assertEq(actualMetaData.timestamp, expectedMetaData.timestamp, "Timestamp should be block timestamp.");
+            assertEq(actualMetaData.reserves, expectedMetaData.reserves, "Reserves should be zero.");
+            assertEq(
+                actualMetaData.exactHighWatermark,
+                expectedMetaData.exactHighWatermark,
+                "High Watermark should be 1 USDC."
+            );
+            assertEq(actualMetaData.totalAssets, expectedMetaData.totalAssets, "Total Assets should equal assets.");
+            assertEq(actualMetaData.feesOwed, expectedMetaData.feesOwed, "There should be no performance fee owed.");
+            assertEq(actualMetaData.cellarDecimals, expectedMetaData.cellarDecimals, "Cellar decimals should be 18.");
+            assertEq(
+                actualMetaData.reserveAssetDecimals,
+                expectedMetaData.reserveAssetDecimals,
+                "Reserve Asset decimals should be 6."
+            );
+            assertEq(actualMetaData.performanceFee, expectedMetaData.performanceFee, "Performance fee should be 20%.");
+        }
 
-        //     assertEq(address(reserveAsset), address(USDC), "Reserve Asset should be USDC.");
-        //     assertEq(targetAPR, 0.05e4, "Target APR should be 5%.");
-        //     // assertEq(timestamp, block.timestamp, "Timestamp should be block timestamp.");
-        //     // assertEq(reserves, 0, "Reserves should be zero.");
-        //     assertEq(highWaterMark, 1e27, "High Watermark should be 1 USDC.");
-        //     assertEq(totalAssets, assets, "Total Assets should equal assets.");
-        //     assertEq(performanceFeesOwed, 0, "There should be no performance fee owed.");
-        //     // assertEq(cellarDecimals, 18, "Cellar decimals should be 18.");
-        //     // assertEq(reserveAssetDecimals, 6, "Reserve Asset decimals should be 6.");
-        //     // assertEq(performanceFee, 0.2e4, "Performance fee should be 20%.");
-        // }
+        vm.warp(block.timestamp + 300);
 
         (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
 
@@ -291,7 +303,7 @@ contract FeesAndReservesTest is Test {
         (, performData) = far.checkUpkeep(abi.encode(cellars));
         far.performUpkeep(performData);
 
-        vm.warp(block.timestamp + 301);
+        vm.warp(block.timestamp + 300);
 
         // Cellar earns yield.
         _simulateYieldAndCheckTotalFeesEarned(cellar, 100_000e6, 0);
@@ -324,7 +336,6 @@ contract FeesAndReservesTest is Test {
 
     function testPerformUpkeepOnCellarNotSetUp() external {
         uint256 totalAssets = 1_000_000e6;
-        uint32 targetAPR = 0.05e4;
         // Add assets to the cellar.
         deal(address(USDC), address(this), totalAssets);
         cellar.deposit(totalAssets, address(this));
@@ -343,17 +354,305 @@ contract FeesAndReservesTest is Test {
         far.performUpkeep(performData);
     }
 
-    // TODO add tests with zero performance fees, and test with zero management fees
-    // TODO test where share price is negative make sure no fees are paid out.
-    // TODO add simple test with both perofrmance and management fees
-    // So really just add in the happy paths of
     // yield earned w performance fees
+    function testYieldWithPerformanceFees() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 200_000e6;
+        uint32 performanceFee = 0.25e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
+
+        // Management fees are zero, so cellar should only earn yield * performance fee.
+        uint256 expectedFee = yield.mulDivDown(performanceFee, 1e4);
+
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+    }
+
     // no yield earned w performance fees
+    function testNoYieldWithPerformanceFees() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 0;
+        uint32 performanceFee = 0.25e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
+
+        // Management fees are zero, so cellar should only earn yield * performance fee.
+        uint256 expectedFee = 0;
+
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+    }
+
+    // Negative yield earned with performance fees.
+    function testNegativeYieldWithPerformanceFees() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 0;
+        uint32 performanceFee = 0.25e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        deal(address(USDC), address(cellar), totalAssets.mulDivDown(99, 100));
+
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
+
+        // Management fees are zero, so cellar should only earn yield * performance fee.
+        uint256 expectedFee = 0;
+
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+    }
+
     // yield earned w management fees
-    // no yield earned w management fees
+    function testManagementFees() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 0;
+        uint32 performanceFee = 0;
+        uint32 managementFee = 0.02e4;
+        uint256 timePassed = 100 days;
+
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, managementFee, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, timePassed);
+
+        // Management fees are zero, so cellar should only earn yield * performance fee.
+        uint256 expectedFee = totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
+
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+
+        // Have no time pass and immediately try earning management fees again.
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 0);
+
+        metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should not change.");
+    }
+
     // yield earned w both fees
+    function testYieldWithPerformanceFeesAndManagementFees() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 200_000e6;
+        uint32 performanceFee = 0.25e4;
+        uint32 managementFee = 0.02e4;
+        uint256 timePassed = 100 days;
+
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, managementFee, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, timePassed);
+
+        // Management fees are zero, so cellar should only earn yield * performance fee.
+        uint256 expectedFee = yield.mulDivDown(performanceFee, 1e4);
+        expectedFee += totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
+
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+    }
+
     // no yield earned w both fees
-    // TODO also maybe a negative yield earned for all 3 scenarios?
+    function testNoYieldWithPerformanceFeesAndManagementFees() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 0;
+        uint32 performanceFee = 0.25e4;
+        uint32 managementFee = 0.02e4;
+        uint256 timePassed = 100 days;
+
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, managementFee, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
+
+        // Management fees are zero, so cellar should only earn yield * performance fee.
+        uint256 expectedFee = 0;
+        expectedFee += totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
+
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+    }
+
+    // Negative yield earned with both fees.
+    function testNegativeYieldWithPerformanceFeesAndManagementFees() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 0;
+        uint32 performanceFee = 0.25e4;
+        uint32 managementFee = 0.02e4;
+        uint256 timePassed = 100 days;
+
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, managementFee, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        totalAssets = totalAssets.mulDivDown(99, 100);
+        deal(address(USDC), address(cellar), totalAssets);
+
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
+
+        // Management fees are zero, so cellar should only earn yield * performance fee.
+        uint256 expectedFee = 0;
+        expectedFee += totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
+
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+    }
 
     function testFeesEarned(
         uint256 totalAssets,
@@ -363,15 +662,10 @@ contract FeesAndReservesTest is Test {
         uint256 managementFee
     ) external {
         totalAssets = bound(totalAssets, 1e6, 1_000_000_000e6);
-        // totalAssets = 33810527;
         yield = bound(yield, 0, 100_000_000_000e6);
-        // yield = 0;
         timePassed = bound(timePassed, 0, 150 days);
-        // timePassed = 0;
         performanceFee = bound(performanceFee, 0, 0.3e4);
-        // performanceFee = 0;
         managementFee = bound(managementFee, 0, 0.1e4);
-        // managementFee = 32;
 
         // Add assets to the cellar.
         deal(address(USDC), address(this), totalAssets);
