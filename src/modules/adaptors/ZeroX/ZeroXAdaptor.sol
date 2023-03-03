@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IEuler, IEulerMarkets, IEulerExec, IEulerDToken, IEulerEToken, IEulerEulDistributor, EUL } from "src/interfaces/external/IEuler.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 /**
@@ -12,7 +11,6 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
  */
 contract ZeroXAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
-    using Math for uint256;
     using Address for address;
 
     //==================== Adaptor Data Specification ====================
@@ -43,7 +41,7 @@ contract ZeroXAdaptor is BaseAdaptor {
     //============================================ Implement Base Functions ===========================================
 
     /**
-     * @notice User deposits are NOT allowed into this position.
+     * @notice User deposits are NOT allowed.
      */
     function deposit(
         uint256,
@@ -54,7 +52,7 @@ contract ZeroXAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice User withdraws are NOT allowed from this position.
+     * @notice User withdraws are NOT allowed.
      */
     function withdraw(
         uint256,
@@ -66,37 +64,38 @@ contract ZeroXAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice This position is a debt position, and user withdraws are not allowed so
-     *         this position must return 0 for withdrawableFrom.
+     * @notice There is no underlying position so return zero.
      */
     function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
     /**
-     * @notice Returns the cellars balance of the positions debtToken.
+     * @notice There is no underlying position so return zero.
      */
     function balanceOf(bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
     /**
-     * @notice Returns the positions debtToken underlying asset.
+     * @notice There is no underlying position so return zero address.
      */
     function assetOf(bytes memory) public pure override returns (ERC20) {
         return ERC20(address(0));
     }
 
     /**
-     * @notice This adaptor reports values in terms of debt.
+     * @notice There is no underlying position so return false.
      */
     function isDebt() public pure override returns (bool) {
         return false;
     }
 
     //============================================ Strategist Functions ===========================================
-    // TODO does this need to be payable?
-    // TODO does spender/swapTarget ever really change?
+
+    /**
+     * @notice Allows strategists to make ERC20 swaps using 0x.
+     */
     function swapWith0x(
         ERC20 tokenIn,
         uint256 amount,

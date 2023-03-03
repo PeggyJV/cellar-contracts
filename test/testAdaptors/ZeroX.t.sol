@@ -18,7 +18,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-contract CellarEulerTest is Test {
+contract CellarZeroXTest is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
