@@ -181,6 +181,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     error FeesAndReserves__InvalidPerformanceFee();
     error FeesAndReserves__InvalidManagementFee();
     error FeesAndReserves__InvalidReserveAsset();
+    error FeesAndReserves__InvalidUpkeep();
 
     //============================== IMMUTABLES ===============================
 
@@ -252,7 +253,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     /**
      * @notice Setup function called when a new cellar begins using this contract
      */
-    function setupMetaData(uint32 managementFee, uint32 performanceFee) external nonReentrant {
+    function setupMetaData(uint32 managementFee, uint32 performanceFee) external whenNotShutdown nonReentrant {
         Cellar cellar = Cellar(msg.sender);
 
         if (address(metaData[cellar].reserveAsset) != address(0)) revert FeesAndReserves__CellerAlreadySetup();
@@ -482,14 +483,14 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
                     data.timestamp = performInput[i].timestamp;
                     data.totalAssets = performInput[i].totalAssets;
                     upkeepData.lastUpkeepTime = uint64(block.timestamp);
-                }
+                } else revert FeesAndReserves__InvalidUpkeep();
+                // Update pending values if need be.
+                PendingMetaData storage pending = pendingMetaData[performInput[i].cellar];
+                if (data.managementFee != pending.pendingManagementFee)
+                    data.managementFee = pending.pendingManagementFee;
+                if (data.performanceFee != pending.pendingPerformanceFee)
+                    data.performanceFee = pending.pendingPerformanceFee;
             }
-
-            // Update pending values if need be.
-            PendingMetaData storage pending = pendingMetaData[performInput[i].cellar];
-            if (data.managementFee != pending.pendingManagementFee) data.managementFee = pending.pendingManagementFee;
-            if (data.performanceFee != pending.pendingPerformanceFee)
-                data.performanceFee = pending.pendingPerformanceFee;
         }
     }
 
@@ -514,7 +515,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         if (data.exactHighWatermark > 0) {
             // Calculate Management Fees owed.
             uint256 elapsedTime = block.timestamp - data.timestamp;
-            if (elapsedTime > 0) {
+            if (data.managementFee > 0 && elapsedTime > 0) {
                 input.feeEarned += input
                     .totalAssets
                     .min(data.totalAssets)
