@@ -452,6 +452,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      * @dev If cellar is not setup, this function reverts.
      * @dev If not enough time has passed, the cellar does not have its fees calculated.
      * @dev If cellar has pending values that differ from current stored values, they are updated.
+     * @dev We also update stored totalAssets, and timestamp when any fees are earned, so that future fee calculations are more accurate.
      */
     function performUpkeep(bytes calldata performData) external whenNotShutdown nonReentrant {
         PerformInput[] memory performInput = abi.decode(performData, (PerformInput[]));
@@ -473,10 +474,12 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
                 // Check if fees were earned and update data if so.
                 if (performInput[i].feeEarned > 0) {
                     data.feesOwed += performInput[i].feeEarned;
-                    data.exactHighWatermark = performInput[i].exactSharePrice;
                     data.timestamp = performInput[i].timestamp;
                     data.totalAssets = performInput[i].totalAssets;
                     upkeepData.lastUpkeepTime = uint64(block.timestamp);
+                    // Only update the HWM if current share price is greater than it.
+                    if (performInput[i].exactSharePrice > data.exactHighWatermark)
+                        data.exactHighWatermark = performInput[i].exactSharePrice;
                 } else if (data.exactHighWatermark == 0) {
                     // Need to set up cellar by setting HWM, TA, and timestamp.
                     data.exactHighWatermark = performInput[i].exactSharePrice;
