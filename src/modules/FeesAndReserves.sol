@@ -8,41 +8,68 @@ import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 import { console } from "@forge-std/Test.sol";
 
+/**
+ * @dev This model favors users by using the
+ * @dev Important Safety Considerations
+ *      - There should be no way for strategists to call `performUpkeep` DURING a rebalance.
+ *      - All public mutative functions run reentrancy checks.
+ *      -
+ */
 contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuard {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-    uint8 public constant BPS_DECIMALS = 4;
-    uint256 public constant PRECISION_MULTIPLIER = 1e27;
-    uint8 public constant NORMALIZED_DECIMALS = 27;
-    uint256 public constant SECONDS_IN_A_YEAR = 365 days;
-    uint256 public constant MAX_PERFORMANCE_FEE = 3 * 10**(BPS_DECIMALS - 1); // 30%
+    // ========================================= STRUCTS =========================================
 
     /**
-     * @notice Store calling Cellars meta data in this contract to help mitigate malicous external contracts
+     * @notice Stores meta data needed to calculate a calling cellars earned fees.
+     * @dev Store calling Cellars meta data in this contract to help mitigate malicious external contracts
      *         attempting to break logic by illogically changing meta data values.
+     * @param reserveAsset ERC20 asset Cellar does all its accounting in
+     * @param managementFee Fee charged for managing a Cellar's assets
+     *        - Based off basis points, so 100% would be 1e4
+     * @param timestamp The last time this cellar had it's fees calculated
+     * @param reserves The amount of `reserveAsset` a Cellar has available to it
+     * @param exactHighWatermark High Watermark normalized to 27 decimals
+     * @param totalAssets Stored total assets
+     *        - When calculating fees this value is compared against the current Total Assets, and the minimum value is used
+     * @param feesOwed The amount of fees this cellar has accumulated from both performance and management fees
+     * @param cellarDecimals Number of decimals Cellar Shares have
+     * @param reserveAssetDecimals Number of decimals the `reserveAsset` has
+     * @param performanceFee Fee charged based off a cellar share price growth
+     *        - Based off basis points, so 100% would be 1e4
      */
     struct MetaData {
-        ERC20 reserveAsset; // Same as cellars accounting asset
+        ERC20 reserveAsset;
         uint32 managementFee;
-        uint64 timestamp; // Timestamp fees were last logged
-        uint256 reserves; // Total amount of `reserveAsset` cellar has in reserves
-        uint256 exactHighWatermark; // The Cellars Share Price High Water Mark Normalized to 27 decimals
-        uint256 totalAssets; // The Cellars totalAssets with 18 decimals
-        uint256 feesOwed; // The performance fees cellar has earned, to be paid out
+        uint64 timestamp;
+        uint256 reserves;
+        uint256 exactHighWatermark;
+        uint256 totalAssets;
+        uint256 feesOwed;
         uint8 cellarDecimals;
         uint8 reserveAssetDecimals;
         uint32 performanceFee;
     }
 
     /**
-     * @notice Pending meta data values that are used to update a Cellar's actual MetaData once fees have been calculated using the old values.
+     * @notice Pending meta data values that are used to update a Cellar's actual MetaData
+     *         once fees have been calculated using the old values.
      */
     struct PendingMetaData {
         uint32 pendingManagementFee;
         uint32 pendingPerformanceFee;
     }
 
+    /**
+     * @notice `performUpkeep` input struct.
+     * @dev This contract leverages Chainlink secure offchain computation by calculating
+     *      - fee earned
+     *      - current exact share price normalized to 27 decimals
+     *      - total assets
+     *      - timestamp these calcualtions were performed
+     *      Off chain so that Chainlink Automation calls are cheaper
+     */
     struct PerformInput {
         Cellar cellar;
         uint256 feeEarned;
@@ -51,22 +78,45 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         uint64 timestamp;
     }
 
-    mapping(Cellar => PendingMetaData) public pendingMetaData;
-
+    /**
+     * @notice Struct stores data used to change how an upkeep behaves.
+     * @param frequency The amount of time that must pass since the last upkeep before upkeep can be done again
+     * @param maxGas The max gas price strategist is willing to pay for an upkeep
+     * @param lasUpkeepTime The timestamp of the last upkeep
+     */
     struct UpkeepData {
         uint64 frequency; // Frequency to log fees
         uint64 maxGas; // Max gas price owner is willing to pay to log fees.
         uint64 lastUpkeepTime; // The last time an upkeep was ran.
     }
 
+    // ========================================= GLOBAL STATE =========================================
+
+    uint8 public constant BPS_DECIMALS = 4;
+    uint256 public constant PRECISION_MULTIPLIER = 1e27;
+    uint8 public constant NORMALIZED_DECIMALS = 27;
+    uint256 public constant SECONDS_IN_A_YEAR = 365 days;
+    uint256 public constant MAX_PERFORMANCE_FEE = 3 * 10**(BPS_DECIMALS - 1); // 30%
+    uint256 public constant MAX_MANAGEMENT_FEE = 1 * 10**(BPS_DECIMALS - 1); // 10%
+
+    /**
+     * @notice Maps a cellar to its pending meta data.
+     */
+    mapping(Cellar => PendingMetaData) public pendingMetaData;
+
+    /**
+     * @notice Maps a cellar to its upkeep data.
+     */
     mapping(Cellar => UpkeepData) public cellarToUpkeepData;
 
+    /**
+     * @notice Maps a cellar to its meta data.
+     */
     mapping(Cellar => MetaData) public metaData;
 
-    function getMetaData(Cellar cellar) external view returns (MetaData memory) {
-        return metaData[cellar];
-    }
-
+    /**
+     * @notice Maps a cellar to the amount of fees it will claim on `sendFees` call.
+     */
     mapping(Cellar => uint256) public feesReadyForClaim;
 
     /**
@@ -79,30 +129,23 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      */
     address public ETH_FAST_GAS_FEED = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
 
-    constructor() Owned(msg.sender) {}
-
-    // =========================================== EMERGENCY LOGIC ===========================================
-
-    /**
-     * @notice Emitted when FeesAndReserves emergency state is changed.
-     * @param isShutdown whether the cellar is shutdown
-     */
-    event ShutdownChanged(bool isShutdown);
-
-    /**
-     * @notice Attempted action was prevented due to contract being shutdown.
-     */
-    error FeesAndReserves__ContractShutdown();
-
-    /**
-     * @notice Attempted action was prevented due to contract not being shutdown.
-     */
-    error FeesAndReserves__ContractNotShutdown();
-
     /**
      * @notice Whether or not the contract is shutdown in case of an emergency.
      */
     bool public isShutdown;
+
+    //============================== MODIFIERS ===============================
+
+    /**
+     * @notice Make sure a caller has been properly setup.
+     */
+    modifier checkCallerIsSetup() {
+        if (
+            address(metaData[Cellar(msg.sender)].reserveAsset) == address(0) ||
+            metaData[Cellar(msg.sender)].exactHighWatermark == 0
+        ) revert FeesAndReserves__CellerNotSetup();
+        _;
+    }
 
     /**
      * @notice Prevent a function from being called during a shutdown.
@@ -112,6 +155,41 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
         _;
     }
+
+    //============================== EVENTS ===============================
+
+    event ShutdownChanged(bool isShutdown);
+    event HighWatermarkReset(address cellar);
+    event FeesPrepared(address cellar, uint256 amount, uint256 totalFeesReady);
+    event AssetsWithdrawnFromReserves(address cellar, uint256 amount);
+    event AssetsAddedToReserves(address cellar, uint256 amount);
+    event ManagementFeeChanged(address cellar, uint32 newFee);
+    event PerformanceFeeChanged(address cellar, uint32 newFee);
+    event FeesSent(address cellar);
+
+    //============================== ERRORS ===============================
+
+    error FeesAndReserves__ContractShutdown();
+    error FeesAndReserves__ContractNotShutdown();
+    error FeesAndReserves__CellerNotSetup();
+    error FeesAndReserves__CellerAlreadySetup();
+    error FeesAndReserves__InvalidCut();
+    error FeesAndReserves__NothingToPayout();
+    error FeesAndReserves__NotEnoughReserves();
+    error FeesAndReserves__NotEnoughFeesOwed();
+    error FeesAndReserves__InvalidPerformanceFee();
+    error FeesAndReserves__InvalidManagementFee();
+    error FeesAndReserves__InvalidReserveAsset();
+
+    //============================== IMMUTABLES ===============================
+
+    Registry public registry;
+
+    constructor(Registry _registry) Owned(msg.sender) {
+        registry = _registry;
+    }
+
+    //============================================ onlyOwner Functions ===========================================
 
     /**
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
@@ -132,8 +210,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         emit ShutdownChanged(false);
     }
 
-    //============================================ onlyOwner Functions ===========================================
-
     /**
      * @notice Allows owner to update the Automation Registry.
      * @dev In rare cases, Chainlink's registry CAN change.
@@ -150,8 +226,9 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         ETH_FAST_GAS_FEED = gasFeed;
     }
 
-    event HighWatermarkReset(address cellar);
-
+    /**
+     * @notice Allows owner to reset a Cellar's Share Price High Watermark.
+     */
     function resetHWM(Cellar cellar) external onlyOwner {
         MetaData storage data = metaData[cellar];
 
@@ -170,18 +247,26 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     }
 
     //============================== Strategist Functions(called through adaptors) ===============================
+
     /**
      * @notice These functions are callable by anyone, but are intended to be called by strategists through their Cellars `callOnAdaptor`.
      *         To help reduce attack vectors, several mitigations have been added:
      *         - important meta data, like a Cellar's asset is saved in this contract
      *         - all public mutative functions have reentrancy protection
      */
-    // Strategist function
+
+    /**
+     * @notice Setup function called when a new cellar begins using this contract
+     */
     function setupMetaData(uint32 managementFee, uint32 performanceFee) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
-        if (address(metaData[cellar].reserveAsset) != address(0)) revert("Cellar already setup.");
-        if (performanceFee > MAX_PERFORMANCE_FEE) revert("Large Fee.");
+
+        if (address(metaData[cellar].reserveAsset) != address(0)) revert FeesAndReserves__CellerAlreadySetup();
+        if (performanceFee > MAX_PERFORMANCE_FEE) revert FeesAndReserves__InvalidPerformanceFee();
+        if (managementFee > MAX_MANAGEMENT_FEE) revert FeesAndReserves__InvalidManagementFee();
+
         ERC20 reserveAsset = cellar.asset();
+        if (address(reserveAsset) == address(0)) revert FeesAndReserves__InvalidReserveAsset();
         uint8 cellarDecimals = cellar.decimals();
         uint8 reserveAssetDecimals = reserveAsset.decimals();
 
@@ -208,31 +293,26 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      */
     function changeUpkeepFrequency(uint64 newFrequency) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
-        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
 
         cellarToUpkeepData[cellar].frequency = newFrequency;
     }
 
     /**
-     * @notice Strategist callable, value is immediatley used.
+     * @notice Strategist callable, value is immediately used.
      */
     function changeUpkeepMaxGas(uint64 newMaxGas) external nonReentrant {
         Cellar cellar = Cellar(msg.sender);
-        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
 
         cellarToUpkeepData[cellar].maxGas = newMaxGas;
     }
 
-    event PerformanceFeeChanged(address cellar, uint32 newFee);
-
-    // TODO add limits to these.
     /**
      * @notice Strategist callable, value is only used after
      *         performUpkeep is ran for the cellar.
      */
-    function updatePerformanceFee(uint32 performanceFee) external nonReentrant {
+    function updatePerformanceFee(uint32 performanceFee) external nonReentrant checkCallerIsSetup {
         Cellar cellar = Cellar(msg.sender);
-        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
+        if (performanceFee > MAX_PERFORMANCE_FEE) revert FeesAndReserves__InvalidPerformanceFee();
 
         PendingMetaData storage data = pendingMetaData[cellar];
 
@@ -241,15 +321,13 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         emit PerformanceFeeChanged(address(cellar), performanceFee);
     }
 
-    event ManagementFeeChanged(address cellar, uint32 newFee);
-
     /**
      * @notice Strategist callable, value is only used after
      *         performUpkeep is ran for the cellar.
      */
-    function updateManagementFee(uint32 managementFee) external nonReentrant {
+    function updateManagementFee(uint32 managementFee) external nonReentrant checkCallerIsSetup {
         Cellar cellar = Cellar(msg.sender);
-        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
+        if (managementFee > MAX_MANAGEMENT_FEE) revert FeesAndReserves__InvalidManagementFee();
 
         PendingMetaData storage data = pendingMetaData[cellar];
 
@@ -258,14 +336,11 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         emit ManagementFeeChanged(address(cellar), managementFee);
     }
 
-    event AssetsAddedToReserves(address cellar, uint256 amount);
-
     /**
      * @notice Allows strategists to freely move assets into reserves.
      */
-    function addAssetsToReserves(uint256 amount) external whenNotShutdown nonReentrant {
+    function addAssetsToReserves(uint256 amount) external whenNotShutdown nonReentrant checkCallerIsSetup {
         Cellar cellar = Cellar(msg.sender);
-        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
         MetaData storage data = metaData[cellar];
 
         data.reserves += amount;
@@ -274,37 +349,30 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         emit AssetsAddedToReserves(address(cellar), amount);
     }
 
-    event AssetsWithdrawnFromReserves(address cellar, uint256 amount);
-
     /**
      * @notice Allows strategists to freely move assets from reserves.
      */
-    function withdrawAssetsFromReserves(uint256 amount) external nonReentrant {
+    function withdrawAssetsFromReserves(uint256 amount) external nonReentrant checkCallerIsSetup {
         Cellar cellar = Cellar(msg.sender);
-        if (address(metaData[cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
         MetaData storage data = metaData[cellar];
 
-        if (amount > data.reserves) revert("Not enough reserves.");
+        if (amount > data.reserves) revert FeesAndReserves__NotEnoughReserves();
 
         data.reserves -= amount;
         data.reserveAsset.safeTransfer(msg.sender, amount);
         emit AssetsWithdrawnFromReserves(address(cellar), amount);
     }
 
-    event FeesPrepared(address cellar, uint256 amount, uint256 totalFeesReady);
-
     /**
-     * @dev removes assets from reserves, so that `sendFees` can be called.
+     * @dev Moves assets from reserves into `feesReadyForClaim`.
      * @param amount the amount of reserves to set aside for fees.
      */
-    function prepareFees(uint256 amount) external nonReentrant {
+    function prepareFees(uint256 amount) external nonReentrant checkCallerIsSetup {
         Cellar cellar = Cellar(msg.sender);
         MetaData storage data = metaData[cellar];
 
-        if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
-
-        if (amount > data.feesOwed) revert("Not enough fees owed.");
-        if (amount > data.reserves) revert("Not enough reserves.");
+        if (amount > data.feesOwed) revert FeesAndReserves__NotEnoughFeesOwed();
+        if (amount > data.reserves) revert FeesAndReserves__NotEnoughReserves();
 
         // Reduce fees owed and reduce reserves.
         data.feesOwed -= amount;
@@ -317,22 +385,24 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
     //============================== Public Functions(called by anyone) ===============================
 
-    event FeesSent(address cellar);
-
+    /**
+     * @notice Takes assets stored in `feesReadyForClaim`, splits it up between strategist and gravity bridge.
+     */
     function sendFees(Cellar cellar) external nonReentrant {
         MetaData storage data = metaData[cellar];
 
-        if (address(data.reserveAsset) == address(0)) revert("Cellar not setup.");
+        if (address(metaData[cellar].reserveAsset) == address(0)) revert FeesAndReserves__CellerNotSetup();
+
         uint256 payout = feesReadyForClaim[cellar];
-        if (payout == 0) revert("Nothing to payout.");
+        if (payout == 0) revert FeesAndReserves__NothingToPayout();
         // Zero out balance before any external calls.
         feesReadyForClaim[cellar] = 0;
 
-        Registry registry = cellar.registry();
-
-        // Get the registry, and fee split from the cellar, even thought the fee split is intended for platform fees
-        // but if we make a custom fee split, gov needs to be able to update this...
+        // Get the fee split, and payout address from the cellar, even thought the fee split is intended for platform fees
         (uint64 strategistPlatformCut, , , address strategistPayout) = cellar.feeData();
+
+        // Make sure `strategistPlatformCut` is logical.
+        if (strategistPlatformCut > 1e18) revert FeesAndReserves__InvalidCut();
 
         uint256 strategistCut = payout.mulDivDown(strategistPlatformCut, 1e18);
         uint256 sommCut = payout - strategistCut;
@@ -356,9 +426,11 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         for (uint256 i; i < cellars.length; ++i) {
             // Skip cellars that are not set up yet.
             if (address(metaData[cellars[i]].reserveAsset) == address(0)) continue;
+
             UpkeepData memory data = cellarToUpkeepData[cellars[i]];
             // Skip cellar if gas is too high.
             if (currentGasPrice > data.maxGas) continue;
+
             // Skip cellar if not enough time has passed.
             if (block.timestamp < (data.lastUpkeepTime + data.frequency)) continue;
 
@@ -380,12 +452,13 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             for (uint256 i; i < performInput.length; ++i) {
                 Cellar target = performInput[i].cellar;
 
-                if (address(metaData[target].reserveAsset) == address(0)) revert("Cellar not setup.");
+                if (address(metaData[target].reserveAsset) == address(0)) revert FeesAndReserves__CellerNotSetup();
                 performInput[i] = _calculateFees(target);
             }
         }
         for (uint256 i; i < performInput.length; ++i) {
-            if (address(metaData[performInput[i].cellar].reserveAsset) == address(0)) revert("Cellar not setup.");
+            if (address(metaData[performInput[i].cellar].reserveAsset) == address(0))
+                revert FeesAndReserves__CellerNotSetup();
             UpkeepData storage upkeepData = cellarToUpkeepData[performInput[i].cellar];
             MetaData storage data = metaData[performInput[i].cellar];
             if (block.timestamp >= (upkeepData.lastUpkeepTime + upkeepData.frequency)) {
@@ -413,6 +486,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         }
     }
 
+    /**
+     * @notice Calculates fees owed, by comparing current state, to previous state when `_calculateFees` was last called.
+     * @dev If stored High Watermark is zero, then no fees are calculated, because setup must be finished.
+     */
     function _calculateFees(Cellar cellar) internal view returns (PerformInput memory input) {
         MetaData memory data = metaData[cellar];
 
@@ -435,7 +512,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
                     .totalAssets
                     .min(data.totalAssets)
                     .mulDivDown(data.managementFee, 10**BPS_DECIMALS)
-                    .mulDivDown(elapsedTime, 365 days);
+                    .mulDivDown(elapsedTime, SECONDS_IN_A_YEAR);
             }
 
             // Calculate Performance Fees owed.
@@ -451,5 +528,9 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
         // Setup cellar in input, so that performUpkeep can still run update pending values.
         input.cellar = cellar;
+    }
+
+    function getMetaData(Cellar cellar) external view returns (MetaData memory) {
+        return metaData[cellar];
     }
 }

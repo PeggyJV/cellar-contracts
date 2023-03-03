@@ -59,10 +59,9 @@ contract FeesAndReservesTest is Test {
         feesAndReservesAdaptor = new FeesAndReservesAdaptor();
         erc20Adaptor = new ERC20Adaptor();
         priceRouter = new PriceRouter();
-        far = new FeesAndReserves();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
+        far = new FeesAndReserves(registry);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage({
             max: 0,
@@ -342,7 +341,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         FeesAndReserves.PerformInput[] memory inputs = new FeesAndReserves.PerformInput[](1);
@@ -350,7 +348,7 @@ contract FeesAndReservesTest is Test {
 
         performData = abi.encode(inputs);
 
-        vm.expectRevert(bytes("Cellar not setup."));
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__CellerNotSetup.selector)));
         far.performUpkeep(performData);
     }
 
@@ -365,7 +363,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -404,7 +401,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -443,7 +439,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -487,7 +482,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -536,7 +530,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -579,7 +572,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -622,7 +614,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -673,7 +664,6 @@ contract FeesAndReservesTest is Test {
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -747,43 +737,6 @@ contract FeesAndReservesTest is Test {
             assertApproxEqAbs((newFeesOwed - currentFeesOwed), expectedFeesOwed, 1, "Fees owed differs from expected.");
         } else assertEq(upkeepNeeded, false, "Upkeep should not be needed.");
     }
-
-    // function _simulateYieldAndReturnExpectedAndPassTime(
-    //     uint256 actualAPR,
-    //     uint256 targetAPR,
-    //     uint256 totalAssets,
-    //     uint256 timeToPass
-    // ) internal returns (uint256 expectedPerformanceFeeOwed) {
-    //     // Determine yield earned.
-    //     actualAPR = actualAPR.changeDecimals(4, 27);
-    //     targetAPR = targetAPR.changeDecimals(4, 27);
-    //     {
-    //         uint256 expectedPercentIncrease = actualAPR.mulDivDown(timeToPass, 365 days);
-    //         uint256 expectedYieldEarned = totalAssets.mulDivDown(expectedPercentIncrease, 1e27);
-    //         // Simulate yield earned in Cellar.
-    //         deal(address(USDC), address(cellar), totalAssets + expectedYieldEarned);
-    //     }
-
-    //     // Now calculate the expected performance fee owed.
-    //     if (actualAPR >= targetAPR) {
-    //         // Met/Exceeded target.
-    //         expectedPerformanceFeeOwed = totalAssets.mulDivDown(targetAPR, 1e27).mulDivDown(0.2e4, 1e4).mulDivDown(
-    //             timeToPass,
-    //             365 days
-    //         );
-    //     } else {
-    //         // Missed target.
-    //         uint256 feeMultipler = 1e27 - (targetAPR - actualAPR).mulDivDown(1e27, targetAPR);
-    //         expectedPerformanceFeeOwed = totalAssets
-    //             .mulDivDown(actualAPR, 1e27)
-    //             .mulDivDown(0.2e4, 1e4)
-    //             .mulDivDown(timeToPass, 365 days)
-    //             .mulDivDown(feeMultipler, 1e27);
-    //     }
-
-    //     // Advance Time.
-    //     vm.warp(block.timestamp + timeToPass);
-    // }
 
     function _createBytesDataForSwap(
         ERC20 from,

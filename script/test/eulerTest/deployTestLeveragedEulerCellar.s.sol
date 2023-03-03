@@ -65,7 +65,7 @@ contract DeployTestLeveragedEulerCellarScript is Script, TEnv {
         vm.startBroadcast();
 
         // Deploy new contracts.
-        far = new FeesAndReserves();
+        far = new FeesAndReserves(registry);
 
         // Setup price feeds.
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);

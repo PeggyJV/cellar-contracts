@@ -5,11 +5,11 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, Math
 import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
 
 /**
- * @title Euler debtToken Adaptor
- * @notice Allows Cellars to interact with Euler debtToken positions.
+ * @title Fees And Reserves Adaptor
+ * @notice Allows Cellars to interact with Sommelier FeesAndReserves contract
+ *         in order to store/withdraw reserves and take fees.
  * @author crispymangoes
  */
-//  TODO Before this contract goes to prod, the FeesAndReserves contract will be a constant in here.
 contract FeesAndReservesAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -86,7 +86,7 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
     }
 
     //============================================ Strategist Functions ===========================================
-    /// @notice Below Functions that accept `feesAndReserves` will be changed so that a constant is used.
+
     /**
      * @notice Strategists are free to update their cellar's performance fee as they see fit.
      *         Ultimately the compeition between strategists will keep this in check, since
