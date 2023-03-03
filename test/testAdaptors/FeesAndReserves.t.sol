@@ -503,6 +503,8 @@ contract FeesAndReservesTest is Test {
 
         FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
 
+        uint256 expectedTime = block.timestamp;
+        assertEq(metaData.timestamp, expectedTime, "Stored timestamp should equal expectedTime.");
         assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
 
         // Have no time pass and immediately try earning management fees again.
@@ -510,6 +512,7 @@ contract FeesAndReservesTest is Test {
 
         metaData = far.getMetaData(cellar);
 
+        assertEq(metaData.timestamp, expectedTime, "Stored timestamp should equal expectedTime.");
         assertEq(metaData.feesOwed, expectedFee, "Fees owed should not change.");
 
         // Pass the some more time and make sure that management fee is still right.
@@ -519,6 +522,7 @@ contract FeesAndReservesTest is Test {
 
         metaData = far.getMetaData(cellar);
 
+        assertEq(metaData.timestamp, block.timestamp, "Stored timestamp should equal current time.");
         assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
     }
 
