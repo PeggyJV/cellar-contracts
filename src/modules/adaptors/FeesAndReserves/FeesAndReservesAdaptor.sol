@@ -18,6 +18,9 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
     // NOT USED
     //================= Configuration Data Specification =================
     // NOT USED
+    // **************************** IMPORTANT ****************************
+    // This adaptor has NO underlying position, its only purpose is to
+    // expose the expose Fees And Reserves to strategists during rebalances.
     //====================================================================
 
     //============================================ Global Functions ===========================================
@@ -34,7 +37,7 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
     //============================================ Implement Base Functions ===========================================
 
     /**
-     * @notice User deposits are NOT allowed into this position.
+     * @notice User deposits are NOT allowed.
      */
     function deposit(
         uint256,
@@ -45,7 +48,7 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice User withdraws are NOT allowed from this position.
+     * @notice User withdraws are NOT allowed.
      */
     function withdraw(
         uint256,
@@ -57,29 +60,28 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice This position is a debt position, and user withdraws are not allowed so
-     *         this position must return 0 for withdrawableFrom.
+     * @notice There is no underlying position so return zero.
      */
     function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
     /**
-     * @notice Returns the cellars balance of the positions debtToken.
+     * @notice There is no underlying position so return zero.
      */
     function balanceOf(bytes memory) public pure override returns (uint256) {
         return 0;
     }
 
     /**
-     * @notice Returns the positions debtToken underlying asset.
+     * @notice There is no underlying position so return zero address.
      */
     function assetOf(bytes memory) public pure override returns (ERC20) {
         return ERC20(address(0));
     }
 
     /**
-     * @notice This adaptor reports values in terms of debt.
+     * @notice There is no underlying position so return false.
      */
     function isDebt() public pure override returns (bool) {
         return false;
@@ -89,39 +91,51 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
 
     /**
      * @notice Strategists are free to update their cellar's performance fee as they see fit.
-     *         Ultimately the compeition between strategists will keep this in check, since
+     *         Ultimately the competition between strategists will keep this in check, since
      *         a strategist could out perform another strategist simply because they take a smaller fee.
      */
     function updatePerformanceFee(FeesAndReserves feesAndReserves, uint32 performanceFee) public {
         feesAndReserves.updatePerformanceFee(performanceFee);
     }
 
+    /**
+     * @notice Strategists are free to update their cellar's management fee as they see fit.
+     *         Ultimately the competition between strategists will keep this in check, since
+     *         a strategist could out perform another strategist simply because they take a smaller fee.
+     */
     function updateManagementFee(FeesAndReserves feesAndReserves, uint32 managementFee) public {
         feesAndReserves.updateManagementFee(managementFee);
     }
 
+    /**
+     * @notice Allows strategist to change how frequently they want their cellars fees calculated.
+     */
     function changeUpkeepFrequency(FeesAndReserves feesAndReserves, uint64 newFrequency) public {
         feesAndReserves.changeUpkeepFrequency(newFrequency);
     }
 
+    /**
+     * @notice Allows strategist to change the max gas they are willing to pay for fee calculations..
+     */
     function changeUpkeepMaxGas(FeesAndReserves feesAndReserves, uint64 newMaxGas) public {
         feesAndReserves.changeUpkeepMaxGas(newMaxGas);
     }
 
+    /**
+     * @notice Setup function strategist must call in order to use FeesAndReserves.
+     */
     function setupMetaData(
         FeesAndReserves feesAndReserves,
-        uint32 targetAPR,
+        uint32 managementFee,
         uint32 performanceFee
     ) public {
-        feesAndReserves.setupMetaData(targetAPR, performanceFee);
+        feesAndReserves.setupMetaData(managementFee, performanceFee);
     }
 
     /**
      * @notice Strategists are free to add/remove assets to reserves because it allows them to
      *         inject yield into the cellar during time of under performance, and reserve yield
      *         during times of over performance.
-     *         This allows strategists to push actual APR towards the target, and also facilitates
-     *         taking performance fees without dilluting share price
      */
     function addAssetsToReserves(FeesAndReserves feesAndReserves, uint256 amount) public {
         (ERC20 asset, , , , , , , , , ) = feesAndReserves.metaData(Cellar(address(this)));
@@ -129,10 +143,18 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
         feesAndReserves.addAssetsToReserves(amount);
     }
 
+    /**
+     * @notice Strategists are free to add/remove assets to reserves because it allows them to
+     *         inject yield into the cellar during time of under performance, and reserve yield
+     *         during times of over performance.
+     */
     function withdrawAssetsFromReserves(FeesAndReserves feesAndReserves, uint256 amount) public {
         feesAndReserves.withdrawAssetsFromReserves(amount);
     }
 
+    /**
+     * @notice Allows strategists to take pending fees owed, and set them up to be distributed using `sendFees` in FeesAndReserves contract.
+     */
     function prepareFees(FeesAndReserves feesAndReserves, uint256 amount) public {
         feesAndReserves.prepareFees(amount);
     }

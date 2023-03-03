@@ -6,14 +6,15 @@ import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/int
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
-import { console } from "@forge-std/Test.sol";
-
 /**
- * @dev This model favors users by using the
+ * @title Fees And Reserves
+ * @notice Allows strategists to move yield in/out of reserves in order to better manage their strategy.
+ * @notice Allows strategists to take performance and management fees on their cellars.
+ * @author crispymangoes
  * @dev Important Safety Considerations
  *      - There should be no way for strategists to call `performUpkeep` DURING a rebalance.
  *      - All public mutative functions run reentrancy checks.
- *      -
+ *      - Important meta data, like a Cellar's asset is saved in this contract
  */
 contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuard {
     using SafeTransferLib for ERC20;
@@ -249,13 +250,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     //============================== Strategist Functions(called through adaptors) ===============================
 
     /**
-     * @notice These functions are callable by anyone, but are intended to be called by strategists through their Cellars `callOnAdaptor`.
-     *         To help reduce attack vectors, several mitigations have been added:
-     *         - important meta data, like a Cellar's asset is saved in this contract
-     *         - all public mutative functions have reentrancy protection
-     */
-
-    /**
      * @notice Setup function called when a new cellar begins using this contract
      */
     function setupMetaData(uint32 managementFee, uint32 performanceFee) external nonReentrant {
@@ -416,6 +410,13 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         emit FeesSent(address(cellar));
     }
 
+    /**
+     * @notice CheckUpkeep runs several checks on proposed cellars.
+     *         - Checks that the Cellar has called setup function.
+     *         - Checks that gas is reasonable.
+     *         - Checks that enough time has passed.
+     *         - Checks that the cellar has pending fees, or that it needs to finish setup.
+     */
     function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData) {
         if (isShutdown) return (false, abi.encode(0));
 
@@ -445,6 +446,12 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         if (upkeepNeeded) performData = abi.encode(performInput);
     }
 
+    /**
+     * @notice PerformUpkeep will trust `performData` input if the caller is `automationRegistry` otherwise the input is recalcualted.
+     * @dev If cellar is not setup, this function reverts.
+     * @dev If not enough time has passed, the cellar does not have its fees calculated.
+     * @dev If cellar has pending values that differ from current stored values, they are updated.
+     */
     function performUpkeep(bytes calldata performData) external whenNotShutdown nonReentrant {
         PerformInput[] memory performInput = abi.decode(performData, (PerformInput[]));
         if (msg.sender != automationRegistry) {

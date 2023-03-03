@@ -87,7 +87,7 @@ contract FeesAndReservesTest is Test {
         assertEq(USDC.balanceOf(address(this)), 100e6, "Test contract should have original USDC balance.");
 
         // Withdrawing more assets should revert.
-        vm.expectRevert(bytes("Not enough reserves."));
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__NotEnoughReserves.selector)));
         feesAndReserves.withdrawAssetsFromReserves(1);
 
         // Adjust totalAssets so that FeesAndReserves thinks there are performance fees owed.
