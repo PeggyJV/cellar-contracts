@@ -280,11 +280,8 @@ contract FeesAndReservesTest is Test {
         deal(address(USDC), address(this), totalAssets);
         cellar.deposit(totalAssets, address(this));
 
-        uint256 performanceFeesOwed;
-        uint256 actualPerformanceFeesOwed;
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
-        bool upkeepNeeded;
         bytes memory performData;
 
         // Strategist calls fees and reserves setup.
@@ -514,6 +511,15 @@ contract FeesAndReservesTest is Test {
         metaData = far.getMetaData(cellar);
 
         assertEq(metaData.feesOwed, expectedFee, "Fees owed should not change.");
+
+        // Pass the some more time and make sure that management fee is still right.
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, timePassed / 2);
+
+        expectedFee += totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed / 2, 365 days);
+
+        metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
     }
 
     // yield earned w both fees
@@ -691,11 +697,11 @@ contract FeesAndReservesTest is Test {
     }
 
     function _simulateYieldAndCheckTotalFeesEarned(
-        Cellar cellar,
+        Cellar target,
         uint256 yield,
         uint256 timeToPass
     ) internal {
-        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(target);
         // Save the current fees owed.
         uint256 currentFeesOwed = metaData.feesOwed;
         uint256 expectedFeesOwed;
@@ -706,15 +712,15 @@ contract FeesAndReservesTest is Test {
         uint256 timeDelta = block.timestamp - metaData.timestamp;
 
         // Simulate yield.
-        ERC20 asset = cellar.asset();
-        deal(address(asset), address(cellar), asset.balanceOf(address(cellar)) + yield);
+        ERC20 asset = target.asset();
+        deal(address(asset), address(target), asset.balanceOf(address(target)) + yield);
 
-        uint256 minTotalAssets = cellar.totalAssets().min(metaData.totalAssets);
+        uint256 minTotalAssets = target.totalAssets().min(metaData.totalAssets);
 
         // Calculate Share price normalized to 27 decimals.
-        uint256 exactSharePrice = cellar.totalAssets().changeDecimals(metaData.reserveAssetDecimals, 27).mulDivDown(
+        uint256 exactSharePrice = target.totalAssets().changeDecimals(metaData.reserveAssetDecimals, 27).mulDivDown(
             10**metaData.cellarDecimals,
-            cellar.totalSupply()
+            target.totalSupply()
         );
 
         if (metaData.managementFee > 0 && timeDelta > 0)
@@ -726,13 +732,13 @@ contract FeesAndReservesTest is Test {
         }
 
         Cellar[] memory cellars = new Cellar[](1);
-        cellars[0] = cellar;
+        cellars[0] = target;
 
         (bool upkeepNeeded, bytes memory performData) = far.checkUpkeep(abi.encode(cellars));
         if (expectedFeesOwed > 0 || metaData.exactHighWatermark == 0) {
             assertEq(upkeepNeeded, true, "Upkeep should be needed!");
             far.performUpkeep(performData);
-            metaData = far.getMetaData(cellar);
+            metaData = far.getMetaData(target);
             uint256 newFeesOwed = metaData.feesOwed;
             assertApproxEqAbs((newFeesOwed - currentFeesOwed), expectedFeesOwed, 1, "Fees owed differs from expected.");
         } else assertEq(upkeepNeeded, false, "Upkeep should not be needed.");
