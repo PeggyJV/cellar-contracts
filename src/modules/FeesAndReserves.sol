@@ -437,7 +437,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             if (block.timestamp < (data.lastUpkeepTime + data.frequency)) continue;
 
             PerformInput memory input = _calculateFees(cellars[i]);
-            // Only log fees if there are fees to be earned.
+            // Only log fees if there are fees to be earned, or if we need to finish setup.
             if (input.feeEarned > 0 || metaData[cellars[i]].exactHighWatermark == 0) {
                 upkeepNeeded = true;
                 performInput[i] = input;
