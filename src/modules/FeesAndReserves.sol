@@ -6,6 +6,8 @@ import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/int
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
+import { console } from "@forge-std/Test.sol";
+
 /**
  * @title Fees And Reserves
  * @notice Allows strategists to move yield in/out of reserves in order to better manage their strategy.
@@ -182,6 +184,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     error FeesAndReserves__InvalidManagementFee();
     error FeesAndReserves__InvalidReserveAsset();
     error FeesAndReserves__InvalidUpkeep();
+    error FeesAndReserves__UpkeepTimeCheckFailed();
 
     //============================== IMMUTABLES ===============================
 
@@ -424,7 +427,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         Cellar[] memory cellars = abi.decode(checkData, (Cellar[]));
         uint256 currentGasPrice = uint256(IChainlinkAggregator(ETH_FAST_GAS_FEED).latestAnswer());
 
-        PerformInput[] memory performInput = new PerformInput[](cellars.length);
         for (uint256 i; i < cellars.length; ++i) {
             // Skip cellars that are not set up yet.
             if (address(metaData[cellars[i]].reserveAsset) == address(0)) continue;
@@ -440,11 +442,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             // Only log fees if there are fees to be earned, or if we need to finish setup.
             if (input.feeEarned > 0 || metaData[cellars[i]].exactHighWatermark == 0) {
                 upkeepNeeded = true;
-                performInput[i] = input;
+                performData = abi.encode(input);
+                break;
             }
         }
-
-        if (upkeepNeeded) performData = abi.encode(performInput);
     }
 
     /**
@@ -455,46 +456,45 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      * @dev We also update stored totalAssets, and timestamp when any fees are earned, so that future fee calculations are more accurate.
      */
     function performUpkeep(bytes calldata performData) external whenNotShutdown nonReentrant {
-        PerformInput[] memory performInput = abi.decode(performData, (PerformInput[]));
+        PerformInput memory performInput = abi.decode(performData, (PerformInput));
+        UpkeepData storage upkeepData = cellarToUpkeepData[performInput.cellar];
         if (msg.sender != automationRegistry) {
             // Do not trust callers perform input data.
-            for (uint256 i; i < performInput.length; ++i) {
-                Cellar target = performInput[i].cellar;
+            Cellar target = performInput.cellar;
 
-                if (address(metaData[target].reserveAsset) == address(0)) revert FeesAndReserves__CellarNotSetup();
-                performInput[i] = _calculateFees(target);
-            }
-        }
-        for (uint256 i; i < performInput.length; ++i) {
-            if (address(metaData[performInput[i].cellar].reserveAsset) == address(0))
+            if (address(metaData[target].reserveAsset) == address(0)) revert FeesAndReserves__CellarNotSetup();
+            performInput = _calculateFees(target);
+        } else {
+            if (address(metaData[performInput.cellar].reserveAsset) == address(0))
                 revert FeesAndReserves__CellarNotSetup();
-            UpkeepData storage upkeepData = cellarToUpkeepData[performInput[i].cellar];
-            MetaData storage data = metaData[performInput[i].cellar];
-            if (block.timestamp >= (upkeepData.lastUpkeepTime + upkeepData.frequency)) {
-                // Check if fees were earned and update data if so.
-                if (performInput[i].feeEarned > 0) {
-                    data.feesOwed += performInput[i].feeEarned;
-                    data.timestamp = performInput[i].timestamp;
-                    data.totalAssets = performInput[i].totalAssets;
-                    upkeepData.lastUpkeepTime = uint64(block.timestamp);
-                    // Only update the HWM if current share price is greater than it.
-                    if (performInput[i].exactSharePrice > data.exactHighWatermark)
-                        data.exactHighWatermark = performInput[i].exactSharePrice;
-                } else if (data.exactHighWatermark == 0) {
-                    // Need to set up cellar by setting HWM, TA, and timestamp.
-                    data.exactHighWatermark = performInput[i].exactSharePrice;
-                    data.timestamp = performInput[i].timestamp;
-                    data.totalAssets = performInput[i].totalAssets;
-                    upkeepData.lastUpkeepTime = uint64(block.timestamp);
-                } else revert FeesAndReserves__InvalidUpkeep();
-                // Update pending values if need be.
-                PendingMetaData storage pending = pendingMetaData[performInput[i].cellar];
-                if (data.managementFee != pending.pendingManagementFee)
-                    data.managementFee = pending.pendingManagementFee;
-                if (data.performanceFee != pending.pendingPerformanceFee)
-                    data.performanceFee = pending.pendingPerformanceFee;
-            }
+            // Make sure performInput is not stale.
+            if (upkeepData.lastUpkeepTime > performInput.timestamp) revert FeesAndReserves__UpkeepTimeCheckFailed();
         }
+
+        MetaData storage data = metaData[performInput.cellar];
+        // If not enough time has passed since the last upkeep, revert.
+        if (block.timestamp < (upkeepData.lastUpkeepTime + upkeepData.frequency))
+            revert FeesAndReserves__UpkeepTimeCheckFailed();
+        // Check if fees were earned and update data if so.
+        if (performInput.feeEarned > 0) {
+            data.feesOwed += performInput.feeEarned;
+            data.timestamp = performInput.timestamp;
+            data.totalAssets = performInput.totalAssets;
+            upkeepData.lastUpkeepTime = uint64(block.timestamp);
+            // Only update the HWM if current share price is greater than it.
+            if (performInput.exactSharePrice > data.exactHighWatermark)
+                data.exactHighWatermark = performInput.exactSharePrice;
+        } else if (data.exactHighWatermark == 0) {
+            // Need to set up cellar by setting HWM, TA, and timestamp.
+            data.exactHighWatermark = performInput.exactSharePrice;
+            data.timestamp = performInput.timestamp;
+            data.totalAssets = performInput.totalAssets;
+            upkeepData.lastUpkeepTime = uint64(block.timestamp);
+        } else revert FeesAndReserves__InvalidUpkeep();
+        // Update pending values if need be.
+        PendingMetaData storage pending = pendingMetaData[performInput.cellar];
+        if (data.managementFee != pending.pendingManagementFee) data.managementFee = pending.pendingManagementFee;
+        if (data.performanceFee != pending.pendingPerformanceFee) data.performanceFee = pending.pendingPerformanceFee;
     }
 
     /**
@@ -503,6 +503,9 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      */
     function _calculateFees(Cellar cellar) internal view returns (PerformInput memory input) {
         MetaData memory data = metaData[cellar];
+
+        // Setup cellar in input, so that performUpkeep can still run update pending values.
+        input.cellar = cellar;
 
         // Save values in
         input.totalAssets = cellar.totalAssets();
@@ -536,9 +539,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             }
         } // else Cellar needs to finish its setup..
         // This will trigger `performUpkeep` to save the totalAssets, exactHighWatermark, and timestamp.
-
-        // Setup cellar in input, so that performUpkeep can still run update pending values.
-        input.cellar = cellar;
     }
 
     function getMetaData(Cellar cellar) external view returns (MetaData memory) {

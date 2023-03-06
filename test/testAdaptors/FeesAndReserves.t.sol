@@ -310,17 +310,8 @@ contract FeesAndReservesTest is Test {
         _simulateYieldAndCheckTotalFeesEarned(cellar, 0, 0);
 
         // Pass in old perform data to try and take performance fees eventhough none are due.
-        FeesAndReserves.MetaData memory oldMetaData = far.getMetaData(cellar);
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__UpkeepTimeCheckFailed.selector)));
         far.performUpkeep(performData);
-        FeesAndReserves.MetaData memory newMetaData = far.getMetaData(cellar);
-
-        // No new performance fees should be rewarded.
-        assertApproxEqAbs(
-            oldMetaData.feesOwed,
-            newMetaData.feesOwed,
-            1,
-            "Actual Performance Fees differ from expected."
-        );
 
         vm.warp(block.timestamp + 300);
 
@@ -698,6 +689,128 @@ contract FeesAndReservesTest is Test {
         vm.warp(block.timestamp + 300);
 
         _simulateYieldAndCheckTotalFeesEarned(cellar, yield, timePassed);
+    }
+
+    function testMultipleCellarsServedByOneUpkeep() external {
+        Cellar cellarA = _createCellar();
+        Cellar cellarB = _createCellar();
+        Cellar cellarC = _createCellar();
+
+        Cellar[] memory cellars = new Cellar[](3);
+        cellars[0] = cellarA;
+        cellars[1] = cellarB;
+        cellars[2] = cellarC;
+        bytes memory performData;
+        bool upkeepNeeded;
+        FeesAndReserves.PerformInput memory input;
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+
+        // Warp so enough time has passed to allow upkeeps.
+        vm.warp(block.timestamp + 300);
+
+        assertEq(upkeepNeeded, false, "Upkeep should not be needed.");
+
+        //Simulate yield on Cellars, A, B, C.
+        uint256 yield = 1_000e6;
+        deal(address(USDC), address(cellarA), USDC.balanceOf(address(cellarA)) + yield);
+        deal(address(USDC), address(cellarB), USDC.balanceOf(address(cellarB)) + yield);
+        deal(address(USDC), address(cellarC), USDC.balanceOf(address(cellarC)) + yield);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+        input = abi.decode(performData, (FeesAndReserves.PerformInput));
+        assertEq(upkeepNeeded, true, "Upkeep should be needed.");
+        assertEq(address(input.cellar), address(cellarA), "Cellar A should need upkeep.");
+        far.performUpkeep(performData);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+        input = abi.decode(performData, (FeesAndReserves.PerformInput));
+        assertEq(upkeepNeeded, true, "Upkeep should be needed.");
+        assertEq(address(input.cellar), address(cellarB), "Cellar B should need upkeep.");
+        far.performUpkeep(performData);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+        input = abi.decode(performData, (FeesAndReserves.PerformInput));
+        assertEq(upkeepNeeded, true, "Upkeep should be needed.");
+        assertEq(address(input.cellar), address(cellarC), "Cellar C should need upkeep.");
+        far.performUpkeep(performData);
+
+        // Warp so enough time has passed to allow upkeeps.
+        vm.warp(block.timestamp + 300);
+
+        // Yield is only earned on cellar A, and C
+        deal(address(USDC), address(cellarA), USDC.balanceOf(address(cellarA)) + yield);
+        deal(address(USDC), address(cellarC), USDC.balanceOf(address(cellarC)) + yield);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+        input = abi.decode(performData, (FeesAndReserves.PerformInput));
+        assertEq(upkeepNeeded, true, "Upkeep should be needed.");
+        assertEq(address(input.cellar), address(cellarA), "Cellar A should need upkeep.");
+        far.performUpkeep(performData);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+        input = abi.decode(performData, (FeesAndReserves.PerformInput));
+        assertEq(upkeepNeeded, true, "Upkeep should be needed.");
+        assertEq(address(input.cellar), address(cellarC), "Cellar C should need upkeep.");
+        far.performUpkeep(performData);
+    }
+
+    function _createCellar() internal returns (Cellar target) {
+        // Setup Cellar:
+        // Cellar positions array.
+        uint32[] memory positions = new uint32[](1);
+        uint32[] memory debtPositions;
+
+        positions[0] = usdcPosition;
+
+        bytes[] memory positionConfigs = new bytes[](1);
+        bytes[] memory debtConfigs;
+
+        target = new Cellar(
+            registry,
+            USDC,
+            "FAR Cellar",
+            "FAR-CLR",
+            abi.encode(
+                positions,
+                debtPositions,
+                positionConfigs,
+                debtConfigs,
+                usdcPosition,
+                strategist,
+                type(uint128).max,
+                type(uint128).max
+            )
+        );
+
+        target.setupAdaptor(address(feesAndReservesAdaptor));
+
+        USDC.safeApprove(address(target), type(uint256).max);
+
+        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
+        stdstore.target(address(target)).sig(target.shareLockPeriod.selector).checked_write(uint256(0));
+
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), 100_000e6);
+        target.deposit(100_000e6, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = target;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, uint32(0), uint32(0.2e4));
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            target.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
     }
 
     function _simulateYieldAndCheckTotalFeesEarned(
