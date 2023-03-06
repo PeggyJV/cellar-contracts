@@ -144,7 +144,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         if (
             address(metaData[Cellar(msg.sender)].reserveAsset) == address(0) ||
             metaData[Cellar(msg.sender)].exactHighWatermark == 0
-        ) revert FeesAndReserves__CellerNotSetup();
+        ) revert FeesAndReserves__CellarNotSetup();
         _;
     }
 
@@ -172,8 +172,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
     error FeesAndReserves__ContractShutdown();
     error FeesAndReserves__ContractNotShutdown();
-    error FeesAndReserves__CellerNotSetup();
-    error FeesAndReserves__CellerAlreadySetup();
+    error FeesAndReserves__CellarNotSetup();
+    error FeesAndReserves__CellarAlreadySetup();
     error FeesAndReserves__InvalidCut();
     error FeesAndReserves__NothingToPayout();
     error FeesAndReserves__NotEnoughReserves();
@@ -256,7 +256,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     function setupMetaData(uint32 managementFee, uint32 performanceFee) external whenNotShutdown nonReentrant {
         Cellar cellar = Cellar(msg.sender);
 
-        if (address(metaData[cellar].reserveAsset) != address(0)) revert FeesAndReserves__CellerAlreadySetup();
+        if (address(metaData[cellar].reserveAsset) != address(0)) revert FeesAndReserves__CellarAlreadySetup();
         if (performanceFee > MAX_PERFORMANCE_FEE) revert FeesAndReserves__InvalidPerformanceFee();
         if (managementFee > MAX_MANAGEMENT_FEE) revert FeesAndReserves__InvalidManagementFee();
 
@@ -386,7 +386,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     function sendFees(Cellar cellar) external nonReentrant {
         MetaData storage data = metaData[cellar];
 
-        if (address(metaData[cellar].reserveAsset) == address(0)) revert FeesAndReserves__CellerNotSetup();
+        if (address(metaData[cellar].reserveAsset) == address(0)) revert FeesAndReserves__CellarNotSetup();
 
         uint256 payout = feesReadyForClaim[cellar];
         if (payout == 0) revert FeesAndReserves__NothingToPayout();
@@ -461,13 +461,13 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             for (uint256 i; i < performInput.length; ++i) {
                 Cellar target = performInput[i].cellar;
 
-                if (address(metaData[target].reserveAsset) == address(0)) revert FeesAndReserves__CellerNotSetup();
+                if (address(metaData[target].reserveAsset) == address(0)) revert FeesAndReserves__CellarNotSetup();
                 performInput[i] = _calculateFees(target);
             }
         }
         for (uint256 i; i < performInput.length; ++i) {
             if (address(metaData[performInput[i].cellar].reserveAsset) == address(0))
-                revert FeesAndReserves__CellerNotSetup();
+                revert FeesAndReserves__CellarNotSetup();
             UpkeepData storage upkeepData = cellarToUpkeepData[performInput[i].cellar];
             MetaData storage data = metaData[performInput[i].cellar];
             if (block.timestamp >= (upkeepData.lastUpkeepTime + upkeepData.frequency)) {

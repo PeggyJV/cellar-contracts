@@ -345,7 +345,7 @@ contract FeesAndReservesTest is Test {
 
         performData = abi.encode(inputs);
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__CellerNotSetup.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__CellarNotSetup.selector)));
         far.performUpkeep(performData);
     }
 
