@@ -754,6 +754,57 @@ contract FeesAndReservesTest is Test {
         far.performUpkeep(performData);
     }
 
+    function testStalePerformData() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 200_000e6;
+        uint32 performanceFee = 0.25e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        // Warp so enough time has passed to allow upkeeps.
+        vm.warp(block.timestamp + 300);
+
+        // Give cellar some yield.
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+
+        // Some time passes.
+        vm.warp(block.timestamp + 300);
+
+        // EOA manually calls performUpkeep, while keeper TX is stuck.
+        far.performUpkeep(performData);
+
+        // Enough time has passed to allow for another upkeep, but keeper tries to submit stale inputs.
+        vm.warp(block.timestamp + 300);
+
+        // Prank automation registry address.
+        vm.startPrank(0x02777053d6764996e594c3E88AF1D58D5363a2e6);
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__UpkeepTimeCheckFailed.selector)));
+        far.performUpkeep(performData);
+        vm.stopPrank();
+    }
+
     function _createCellar() internal returns (Cellar target) {
         // Setup Cellar:
         // Cellar positions array.
