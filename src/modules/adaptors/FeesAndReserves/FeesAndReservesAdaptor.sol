@@ -141,6 +141,8 @@ contract FeesAndReservesAdaptor is BaseAdaptor {
         (ERC20 asset, , , , , , , , , ) = feesAndReserves.metaData(Cellar(address(this)));
         asset.safeApprove(address(feesAndReserves), amount);
         feesAndReserves.addAssetsToReserves(amount);
+        if (asset.allowance(address(this), address(feesAndReserves)) > 0)
+            asset.safeApprove(address(feesAndReserves), 0);
     }
 
     /**
