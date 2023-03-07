@@ -16,6 +16,7 @@ import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+import { FakeFeesAndReserves } from "src/mocks/FakeFeesAndReserves.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -805,6 +806,57 @@ contract FeesAndReservesTest is Test {
         vm.stopPrank();
     }
 
+    function testMaliciousStrategistWithFakeFeesAndReserves() external {
+        // Deploy fake fees and reserves.
+        FakeFeesAndReserves fake = new FakeFeesAndReserves();
+        uint256 totalAssets = 1_000_000e6;
+        uint32 performanceFee = 0.25e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        // Warp so enough time has passed to allow upkeeps.
+        vm.warp(block.timestamp + 300);
+
+        // Strategist will no try to get the Cellar to approve their fake FeesAndReserves contract to spend its USDC
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddToReserves(FeesAndReserves(address(fake)), totalAssets);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Confirm that fake fees and reserves has no USDC approval.
+        assertEq(
+            USDC.allowance(address(cellar), address(fake)),
+            0,
+            "Fake fees and reserves should have no USDC allowance."
+        );
+    }
+
+    // ========================================= HELPER FUNCTIONS =========================================
+
     function _createCellar() internal returns (Cellar target) {
         // Setup Cellar:
         // Cellar positions array.
@@ -869,45 +921,48 @@ contract FeesAndReservesTest is Test {
         uint256 yield,
         uint256 timeToPass
     ) internal {
-        FeesAndReserves.MetaData memory metaData = far.getMetaData(target);
+        FeesAndReserves.MetaData memory targetMetaData = far.getMetaData(target);
         // Save the current fees owed.
-        uint256 currentFeesOwed = metaData.feesOwed;
+        uint256 currentFeesOwed = targetMetaData.feesOwed;
         uint256 expectedFeesOwed;
 
         // Advance time.
         if (timeToPass > 0) vm.warp(block.timestamp + timeToPass);
 
-        uint256 timeDelta = block.timestamp - metaData.timestamp;
+        uint256 timeDelta = block.timestamp - targetMetaData.timestamp;
 
         // Simulate yield.
         ERC20 asset = target.asset();
         deal(address(asset), address(target), asset.balanceOf(address(target)) + yield);
 
-        uint256 minTotalAssets = target.totalAssets().min(metaData.totalAssets);
+        uint256 minTotalAssets = target.totalAssets().min(targetMetaData.totalAssets);
 
         // Calculate Share price normalized to 27 decimals.
-        uint256 exactSharePrice = target.totalAssets().changeDecimals(metaData.reserveAssetDecimals, 27).mulDivDown(
-            10**metaData.cellarDecimals,
-            target.totalSupply()
-        );
+        uint256 exactSharePrice = target
+            .totalAssets()
+            .changeDecimals(targetMetaData.reserveAssetDecimals, 27)
+            .mulDivDown(10**targetMetaData.cellarDecimals, target.totalSupply());
 
-        if (metaData.managementFee > 0 && timeDelta > 0)
-            expectedFeesOwed += minTotalAssets.mulDivDown(metaData.managementFee, 1e4).mulDivDown(timeDelta, 365 days);
-        if (metaData.performanceFee > 0 && yield > 0) {
+        if (targetMetaData.managementFee > 0 && timeDelta > 0)
+            expectedFeesOwed += minTotalAssets.mulDivDown(targetMetaData.managementFee, 1e4).mulDivDown(
+                timeDelta,
+                365 days
+            );
+        if (targetMetaData.performanceFee > 0 && yield > 0) {
             expectedFeesOwed += minTotalAssets
-                .mulDivDown(exactSharePrice - metaData.exactHighWatermark, 1e27)
-                .mulDivDown(metaData.performanceFee, 1e4);
+                .mulDivDown(exactSharePrice - targetMetaData.exactHighWatermark, 1e27)
+                .mulDivDown(targetMetaData.performanceFee, 1e4);
         }
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = target;
 
         (bool upkeepNeeded, bytes memory performData) = far.checkUpkeep(abi.encode(cellars));
-        if (expectedFeesOwed > 0 || metaData.exactHighWatermark == 0) {
+        if (expectedFeesOwed > 0 || targetMetaData.exactHighWatermark == 0) {
             assertEq(upkeepNeeded, true, "Upkeep should be needed!");
             far.performUpkeep(performData);
-            metaData = far.getMetaData(target);
-            uint256 newFeesOwed = metaData.feesOwed;
+            targetMetaData = far.getMetaData(target);
+            uint256 newFeesOwed = targetMetaData.feesOwed;
             assertApproxEqAbs((newFeesOwed - currentFeesOwed), expectedFeesOwed, 1, "Fees owed differs from expected.");
         } else assertEq(upkeepNeeded, false, "Upkeep should not be needed.");
     }
