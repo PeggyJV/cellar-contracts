@@ -112,15 +112,17 @@ contract AaveATokenAdaptor is BaseAdaptor {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         pool().withdraw(token.UNDERLYING_ASSET_ADDRESS(), assets, address(this));
 
-        // Run minimum health factor checks.
-        uint256 minHealthFactor = abi.decode(configData, (uint256));
-        if (minHealthFactor == 0) {
-            revert BaseAdaptor__UserWithdrawsNotAllowed();
+        (, uint256 totalDebtETH, , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
+        if (totalDebtETH > 0) {
+            // Run minimum health factor checks.
+            uint256 minHealthFactor = abi.decode(configData, (uint256));
+            if (minHealthFactor == 0) {
+                revert BaseAdaptor__UserWithdrawsNotAllowed();
+            }
+            // Check if adaptor minimum health factor is more conservative than strategist set.
+            if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
+            if (healthFactor < minHealthFactor) revert AaveATokenAdaptor__HealthFactorTooLow();
         }
-        // Check if adaptor minimum health factor is more conservative than strategist set.
-        if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (healthFactor < minHealthFactor) revert AaveATokenAdaptor__HealthFactorTooLow();
 
         // Transfer assets to receiver.
         ERC20(token.UNDERLYING_ASSET_ADDRESS()).safeTransfer(receiver, assets);
