@@ -297,6 +297,51 @@ contract CellarCompoundTest is Test {
         registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)), 0, 0);
     }
 
+    function testErrorCodeCheck() external {
+        // Remove cDAI as a position from Cellar.
+        cellar.setHoldingPosition(daiPosition);
+        cellar.removePosition(0, false);
+
+        // Add DAI to the Cellar.
+        uint256 assets = 100_000e18;
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Convert cellar assets to USDC.
+        assets = assets.changeDecimals(18, 6);
+        deal(address(DAI), address(cellar), 0);
+        deal(address(USDC), address(cellar), assets);
+
+        // Strategist tries to lend more USDC then they have,
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Choose an amount too large so deposit fails.
+        uint256 amountToLend = assets + 1;
+
+        adaptorCalls[0] = _createBytesDataToLend(cUSDC, amountToLend);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__NonZeroCompoundErrorCode.selector, 13))
+        );
+        cellar.callOnAdaptor(data);
+
+        // Strategist tries to withdraw more assets then they have.
+        adaptorCalls = new bytes[](2);
+        amountToLend = assets;
+        uint256 amountToWithdraw = assets + 1e6;
+
+        adaptorCalls[0] = _createBytesDataToLend(cUSDC, amountToLend);
+        adaptorCalls[1] = _createBytesDataToWithdraw(cUSDC, amountToWithdraw);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__NonZeroCompoundErrorCode.selector, 9))
+        );
+        cellar.callOnAdaptor(data);
+    }
+
     // ========================================= HELPER FUNCTIONS =========================================
     function _createBytesDataForSwap(
         ERC20 from,

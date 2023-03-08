@@ -28,6 +28,11 @@ contract CTokenAdaptor is BaseAdaptor {
     // Aave aToken adaptor.
     //====================================================================
 
+    /**
+     @notice Compound action returned a non zero error code.
+     */
+    error CTokenAdaptor__NonZeroCompoundErrorCode(uint256 errorCode);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -65,7 +70,10 @@ contract CTokenAdaptor is BaseAdaptor {
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
         ERC20 token = ERC20(cToken.underlying());
         token.safeApprove(address(cToken), assets);
-        cToken.mint(assets);
+        uint256 errorCode = cToken.mint(assets);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         // Zero out approvals if necessary.
         if (token.allowance(address(this), address(cToken)) > 0) token.safeApprove(address(cToken), 0);
@@ -88,7 +96,10 @@ contract CTokenAdaptor is BaseAdaptor {
 
         // Withdraw assets from Compound.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
-        cToken.redeemUnderlying(assets);
+        uint256 errorCode = cToken.redeemUnderlying(assets);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         // Transfer assets to receiver.
         ERC20(cToken.underlying()).safeTransfer(receiver, assets);
@@ -157,7 +168,10 @@ contract CTokenAdaptor is BaseAdaptor {
         ERC20 tokenToDeposit = ERC20(market.underlying());
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(market), amountToDeposit);
-        market.mint(amountToDeposit);
+        uint256 errorCode = market.mint(amountToDeposit);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         // Zero out approvals if necessary.
         if (tokenToDeposit.allowance(address(this), address(market)) > 0)
@@ -170,7 +184,10 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
-        market.redeemUnderlying(amountToWithdraw);
+        uint256 errorCode = market.redeemUnderlying(amountToWithdraw);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
     }
 
     /**
