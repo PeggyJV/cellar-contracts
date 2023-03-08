@@ -16,7 +16,7 @@ contract UniswapV3PositionTracker {
 
     INonfungiblePositionManager public immutable positionManager;
 
-    uint256 public constant MAX_HOLDINGS = 20;
+    uint256 public constant MAX_HOLDINGS = 100;
 
     mapping(address => uint256[]) private callerLPHoldings;
 
@@ -41,7 +41,7 @@ contract UniswapV3PositionTracker {
     // TODO should this check if the caller has the token or does not have the token
     // ie are we asking them to burn the token before or after this is called
     function removePositionFromArray(uint256 tokenId) external {
-        if (positionManager.ownerOf(tokenId) != msg.sender) revert("Caller does not own tokenId.");
+        if (positionManager.ownerOf(tokenId) != address(1)) revert("Token Id must be owened by DEAD address.");
 
         uint256 holdingLength = callerLPHoldings[msg.sender].length;
 

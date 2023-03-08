@@ -44,7 +44,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Uniswap V3 Adaptor V 0.1"));
+        return keccak256(abi.encode("Uniswap V3 Adaptor V 0.2"));
     }
 
     /**
@@ -126,6 +126,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 amount0;
         uint256 amount1;
         for (uint256 i = 0; i < positions.length; i++) {
+            // TODO add owner of check and revert
             (, , address t0, address t1, , int24 tickLower, int24 tickUpper, uint128 liquidity, , , , ) = abi.decode(
                 positionDataRequest[i],
                 (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
@@ -260,10 +261,12 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Position now has no more liquidity, so transfer NFT to dead address to save on `balanceOf` gas usage.
         // Transfer token to a dead address.
 
-        positionManager().burn(positionId);
-        //TODO finish this
         positionManager().transferFrom(address(this), address(1), positionId);
+
+        tracker().removePositionFromArray(positionId);
     }
+
+    // TODO add function to clear out empty positions
 
     /**
      * @notice Allows strategist to add to existing Uniswap V3 positions.
