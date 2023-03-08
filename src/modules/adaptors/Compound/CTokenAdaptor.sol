@@ -60,16 +60,15 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param adaptorData adaptor data containing the abi encoded cToken
      * @dev configurationData is NOT used
      */
-    function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Compound.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
         ERC20 token = ERC20(cToken.underlying());
         token.safeApprove(address(cToken), assets);
         cToken.mint(assets);
+
+        // Zero out approvals if necessary.
+        if (token.allowance(address(this), address(cToken)) > 0) token.safeApprove(address(cToken), 0);
     }
 
     /**
@@ -83,12 +82,7 @@ contract CTokenAdaptor is BaseAdaptor {
      *      If cellars ever take on Compound Debt it is crucial these checks are added,
      *      see "IMPORTANT" above.
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
@@ -164,6 +158,10 @@ contract CTokenAdaptor is BaseAdaptor {
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(market), amountToDeposit);
         market.mint(amountToDeposit);
+
+        // Zero out approvals if necessary.
+        if (tokenToDeposit.allowance(address(this), address(market)) > 0)
+            tokenToDeposit.safeApprove(address(market), 0);
     }
 
     /**

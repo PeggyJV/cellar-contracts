@@ -39,11 +39,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
@@ -55,12 +51,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * @param adaptorData data needed to withdraw from this position
      * @dev configurationData is NOT used
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         _externalReceiverCheck(receiver);
         VestingSimple vestingContract = abi.decode(adaptorData, (VestingSimple));
         vestingContract.withdrawAnyFor(assets, receiver);
@@ -128,9 +119,13 @@ contract VestingSimpleAdaptor is BaseAdaptor {
         ERC20 asset = vestingContract.asset();
 
         amountToDeposit = _maxAvailable(asset, amountToDeposit);
-        vestingContract.asset().safeApprove(address(vestingContract), amountToDeposit);
+        asset.safeApprove(address(vestingContract), amountToDeposit);
 
         vestingContract.deposit(amountToDeposit, address(this));
+
+        // Zero out approvals if necessary.
+        if (asset.allowance(address(this), address(vestingContract)) > 0)
+            asset.safeApprove(address(vestingContract), 0);
     }
 
     /**
@@ -142,11 +137,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * @param depositId The ID of the deposit to withdraw from.
      * @param amountToWithdraw The amount of tokens to withdraw.
      */
-    function withdrawFromVesting(
-        VestingSimple vestingContract,
-        uint256 depositId,
-        uint256 amountToWithdraw
-    ) public {
+    function withdrawFromVesting(VestingSimple vestingContract, uint256 depositId, uint256 amountToWithdraw) public {
         vestingContract.withdraw(depositId, amountToWithdraw);
     }
 

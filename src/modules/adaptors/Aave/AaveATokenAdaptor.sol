@@ -79,16 +79,15 @@ contract AaveATokenAdaptor is BaseAdaptor {
      * @param adaptorData adaptor data containining the abi encoded aToken
      * @dev configurationData is NOT used because this action will only increase the health factor
      */
-    function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Aave.
         IAaveToken aToken = IAaveToken(abi.decode(adaptorData, (address)));
         ERC20 token = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
         token.safeApprove(address(pool()), assets);
         pool().deposit(address(token), assets, address(this), 0);
+
+        // Zero out approvals if necessary.
+        if (token.allowance(address(this), address(pool())) > 0) token.safeApprove(address(pool()), 0);
     }
 
     /**
@@ -140,12 +139,10 @@ contract AaveATokenAdaptor is BaseAdaptor {
      *      maintaining 18 decimals during the calculation, but this is desired since
      *      doing so lowers the withdrawable from amount which in turn raises the health factor.
      */
-    function withdrawableFrom(bytes memory adaptorData, bytes memory configData)
-        public
-        view
-        override
-        returns (uint256)
-    {
+    function withdrawableFrom(
+        bytes memory adaptorData,
+        bytes memory configData
+    ) public view override returns (uint256) {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         uint256 minHealthFactor = abi.decode(configData, (uint256));
         // Check if minimum health factor is set.
@@ -240,6 +237,10 @@ contract AaveATokenAdaptor is BaseAdaptor {
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(pool()), amountToDeposit);
         pool().deposit(address(tokenToDeposit), amountToDeposit, address(this), 0);
+
+        // Zero out approvals if necessary.
+        if (tokenToDeposit.allowance(address(this), address(pool())) > 0)
+            tokenToDeposit.safeApprove(address(pool()), 0);
     }
 
     /**

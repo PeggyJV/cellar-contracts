@@ -57,23 +57,14 @@ contract UniswapV3Adaptor is BaseAdaptor {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are NOT allowed from this position.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -98,11 +89,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
             uint256 baseToUSD = priceRouter.getPriceInUSD(token1);
             uint256 quoteToUSD = priceRouter.getPriceInUSD(token0);
             baseToUSD = baseToUSD * 1e18; // Multiply by 1e18 to keep some precision.
-            precisionPrice = baseToUSD.mulDivDown(10**token0.decimals(), quoteToUSD);
+            precisionPrice = baseToUSD.mulDivDown(10 ** token0.decimals(), quoteToUSD);
         }
 
         // Calculate current sqrtPrice.
-        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (precisionPrice / 1e18);
+        uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (precisionPrice / 1e18);
         uint160 sqrtPriceX96 = _sqrt(ratioX192).toUint160();
 
         // Grab cellars balance of UniV3 NFTs.
@@ -161,7 +152,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         }
 
         // Return amount of `token0` + amount of `token1` converted into `token0`;
-        amount1 = amount1.mulDivDown(precisionPrice, 10**token1.decimals());
+        amount1 = amount1.mulDivDown(precisionPrice, 10 ** token1.decimals());
         amount1 = amount1 / 1e18; // Remove precision scaler.
         return amount0 + amount1;
     }
@@ -244,11 +235,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
         });
 
         // Supply liquidity to pool.
-        (, , uint256 amount0Act, uint256 amount1Act) = positionManager().mint(params);
+        positionManager().mint(params);
 
         // Zero out approvals if necessary.
-        if (amount0Act < amount0) token0.safeApprove(address(positionManager()), 0);
-        if (amount1Act < amount1) token1.safeApprove(address(positionManager()), 0);
+        if (token0.allowance(address(this), address(positionManager())) > 0)
+            token0.safeApprove(address(positionManager()), 0);
+        if (token1.allowance(address(this), address(positionManager())) > 0)
+            token1.safeApprove(address(positionManager()), 0);
     }
 
     /**
@@ -264,11 +257,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param min0 the minimum amount of `token0` to get from closing this position
      * @param min1 the minimum amount of `token1` to get from closing this position
      */
-    function closePosition(
-        uint256 positionId,
-        uint256 min0,
-        uint256 min1
-    ) public {
+    function closePosition(uint256 positionId, uint256 min0, uint256 min1) public {
         // Pass in true for `collectFees` since the token will be sent to the dead address.
         takeFromPosition(positionId, type(uint128).max, min0, min1, true);
 
@@ -285,22 +274,18 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param min0 the minimum amount of `token0` to add to liquidity
      * @param min1 the minimum amount of `token1` to add to liquidity
      */
-    function addToPosition(
-        uint256 positionId,
-        uint256 amount0,
-        uint256 amount1,
-        uint256 min0,
-        uint256 min1
-    ) public {
+    function addToPosition(uint256 positionId, uint256 amount0, uint256 amount1, uint256 min0, uint256 min1) public {
         _checkPositionId(positionId);
 
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
-        amount0 = _maxAvailable(ERC20(t0), amount0);
-        amount1 = _maxAvailable(ERC20(t1), amount1);
+        ERC20 token0 = ERC20(t0);
+        ERC20 token1 = ERC20(t1);
+        amount0 = _maxAvailable(token0, amount0);
+        amount1 = _maxAvailable(token1, amount1);
 
-        ERC20(t0).safeApprove(address(positionManager()), amount0);
-        ERC20(t1).safeApprove(address(positionManager()), amount1);
+        token0.safeApprove(address(positionManager()), amount0);
+        token1.safeApprove(address(positionManager()), amount1);
 
         // Create increase liquidity params.
         INonfungiblePositionManager.IncreaseLiquidityParams memory params = INonfungiblePositionManager
@@ -314,11 +299,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
             });
 
         // Increase liquidity in pool.
-        (, uint256 amount0Act, uint256 amount1Act) = positionManager().increaseLiquidity(params);
+        positionManager().increaseLiquidity(params);
 
         // Zero out approvals if necessary.
-        if (amount0Act < amount0) ERC20(t0).safeApprove(address(positionManager()), 0);
-        if (amount1Act < amount1) ERC20(t1).safeApprove(address(positionManager()), 0);
+        if (token0.allowance(address(this), address(positionManager())) > 0)
+            token0.safeApprove(address(positionManager()), 0);
+        if (token1.allowance(address(this), address(positionManager())) > 0)
+            token1.safeApprove(address(positionManager()), 0);
     }
 
     /**
@@ -378,11 +365,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param amount0 amount of `token0` fees to collect use type(uint128).max to get collect all
      * @param amount1 amount of `token1` fees to collect use type(uint128).max to get collect all
      */
-    function collectFees(
-        uint256 positionId,
-        uint128 amount0,
-        uint128 amount1
-    ) external {
+    function collectFees(uint256 positionId, uint128 amount0, uint128 amount1) external {
         _checkPositionId(positionId);
 
         _collectFees(positionId, amount0, amount1);
@@ -412,11 +395,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
     /**
      * @notice Helper function to collect Uniswap V3 position fees.
      */
-    function _collectFees(
-        uint256 positionId,
-        uint128 amount0,
-        uint128 amount1
-    ) internal {
+    function _collectFees(uint256 positionId, uint128 amount0, uint128 amount1) internal {
         // Create fee collection params.
         INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
             tokenId: positionId,

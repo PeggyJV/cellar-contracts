@@ -57,23 +57,14 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are NOT allowed from this position.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -152,6 +143,9 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         amountToRepay = _maxAvailable(tokenToRepay, amountToRepay);
         tokenToRepay.safeApprove(address(pool()), amountToRepay);
         pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  either 1 for stable or 2 for variable
+
+        // Zero out approvals if necessary.
+        if (tokenToRepay.allowance(address(this), address(pool())) > 0) tokenToRepay.safeApprove(address(pool()), 0);
     }
 
     /**
@@ -175,11 +169,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      * @param loanAmount uint256 array of loan amounts for each `loanToken`
      * @dev `modes` is always a zero array meaning that this flash loan can NOT take on new debt positions, it must be paid in full.
      */
-    function flashLoan(
-        address[] memory loanToken,
-        uint256[] memory loanAmount,
-        bytes memory params
-    ) public {
+    function flashLoan(address[] memory loanToken, uint256[] memory loanAmount, bytes memory params) public {
         require(loanToken.length == loanAmount.length, "Input length mismatch.");
         uint256[] memory modes = new uint256[](loanToken.length);
         pool().flashLoan(address(this), loanToken, loanAmount, modes, address(this), params, 0);

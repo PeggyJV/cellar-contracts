@@ -37,15 +37,15 @@ contract CellarAdaptor is BaseAdaptor {
      * @param adaptorData adaptor data containining the abi encoded Cellar
      * @dev configurationData is NOT used
      */
-    function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to `cellar`.
         Cellar cellar = abi.decode(adaptorData, (Cellar));
-        cellar.asset().safeApprove(address(cellar), assets);
+        ERC20 asset = cellar.asset();
+        asset.safeApprove(address(cellar), assets);
         cellar.deposit(assets, address(this));
+
+        // Zero out approvals if necessary.
+        if (asset.allowance(address(this), address(cellar)) > 0) asset.safeApprove(address(cellar), 0);
     }
 
     /**
@@ -56,12 +56,7 @@ contract CellarAdaptor is BaseAdaptor {
      * @param adaptorData data needed to withdraw from the Cellar position
      * @dev configurationData is NOT used
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
@@ -110,8 +105,12 @@ contract CellarAdaptor is BaseAdaptor {
      */
     function depositToCellar(Cellar cellar, uint256 assets) public {
         assets = _maxAvailable(cellar.asset(), assets);
-        cellar.asset().safeApprove(address(cellar), assets);
+        ERC20 asset = cellar.asset();
+        asset.safeApprove(address(cellar), assets);
         cellar.deposit(assets, address(this));
+
+        // Zero out approvals if necessary.
+        if (asset.allowance(address(this), address(cellar)) > 0) asset.safeApprove(address(cellar), 0);
     }
 
     /**

@@ -87,23 +87,14 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are NOT allowed from this position.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -146,11 +137,7 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
      * @param subAccountId the sub account id to borrow assets on
      * @param amountToBorrow the amount of `debtTokenToBorrow` on Euler
      */
-    function borrowFromEuler(
-        IEulerDToken debtTokenToBorrow,
-        uint256 subAccountId,
-        uint256 amountToBorrow
-    ) public {
+    function borrowFromEuler(IEulerDToken debtTokenToBorrow, uint256 subAccountId, uint256 amountToBorrow) public {
         // Check that debt position is properly set up to be tracked in the Cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(debtTokenToBorrow, subAccountId)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
@@ -170,13 +157,13 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
      * @param subAccountId the sub account id to repay debt for
      * @param amountToRepay the amount of debt to repay
      */
-    function repayEulerDebt(
-        IEulerDToken debtTokenToRepay,
-        uint256 subAccountId,
-        uint256 amountToRepay
-    ) public {
-        ERC20(debtTokenToRepay.underlyingAsset()).safeApprove(euler(), amountToRepay);
+    function repayEulerDebt(IEulerDToken debtTokenToRepay, uint256 subAccountId, uint256 amountToRepay) public {
+        ERC20 underlying = ERC20(debtTokenToRepay.underlyingAsset());
+        underlying.safeApprove(euler(), amountToRepay);
         debtTokenToRepay.repay(subAccountId, amountToRepay);
+
+        // Zero out approvals if necessary.
+        if (underlying.allowance(address(this), address(euler())) > 0) underlying.safeApprove(address(euler()), 0);
     }
 
     /**
@@ -201,11 +188,7 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
      * @param subAccountId the subAccount to use
      * @param amount the amount of eTokens, and debtTokens to mint
      */
-    function selfBorrow(
-        address target,
-        uint256 subAccountId,
-        uint256 amount
-    ) public {
+    function selfBorrow(address target, uint256 subAccountId, uint256 amount) public {
         // Check that debt position is properly set up to be tracked in the Cellar.
         address debtToken = markets().underlyingToDToken(target);
         bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(debtToken, subAccountId)));
@@ -227,11 +210,7 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
      * @param subAccountId the subAccount to use
      * @param amount the amount of eTokens, and debtTokens to burn
      */
-    function selfRepay(
-        address target,
-        uint256 subAccountId,
-        uint256 amount
-    ) public {
+    function selfRepay(address target, uint256 subAccountId, uint256 amount) public {
         IEulerEToken eToken = IEulerEToken(markets().underlyingToEToken(target));
         eToken.burn(subAccountId, amount);
         // No need to check HF since burn will raise it.
@@ -240,11 +219,7 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
     /**
      * @dev Allows strategists to claim pending EUL rewards earned from borrowing.
      */
-    function claim(
-        address token,
-        uint256 claimable,
-        bytes32[] calldata proof
-    ) public {
+    function claim(address token, uint256 claimable, bytes32[] calldata proof) public {
         distributor().claim(address(this), token, claimable, proof, address(0));
     }
 
