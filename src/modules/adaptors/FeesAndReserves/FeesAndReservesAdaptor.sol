@@ -83,6 +83,7 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
      */
     function addAssetsToReserves(FeesAndReserves feesAndReserves, uint256 amount) public {
         (ERC20 asset, , , , , , , , , ) = feesAndReserves.metaData(Cellar(address(this)));
+        amount = _maxAvailable(asset, amount);
         asset.safeApprove(address(feesAndReserves), amount);
         feesAndReserves.addAssetsToReserves(amount);
 

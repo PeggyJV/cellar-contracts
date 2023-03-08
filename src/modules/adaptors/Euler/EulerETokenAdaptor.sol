@@ -46,6 +46,11 @@ contract EulerETokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice Cellar must approve Euler to spend its assets, then call deposit to lend its assets.
+     * @notice `depositToEuler` does expose `_maxAvailable` logic to user actions, but in order
+     *         for `_maxAvailable` to change the amount being deposited, the amount must be type(uint256).max
+     *         so the user would have had to pass a transfer of type(uint256).max assets into the cellar before
+     *         this, which means the cellar would be holding type(uint256).max assets so `_maxAvailable` would not
+     *         change the amount.
      * @param assets the amount of assets to lend on Euler
      * @param adaptorData adaptor data containing the abi encoded eToken, and sub account id
      */
@@ -138,6 +143,7 @@ contract EulerETokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
      */
     function depositToEuler(IEulerEToken tokenToDeposit, uint256 subAccountId, uint256 amountToDeposit) public {
         ERC20 underlying = ERC20(tokenToDeposit.underlyingAsset());
+        amountToDeposit = _maxAvailable(underlying, amountToDeposit);
         underlying.safeApprove(euler(), amountToDeposit);
         tokenToDeposit.deposit(subAccountId, amountToDeposit);
 

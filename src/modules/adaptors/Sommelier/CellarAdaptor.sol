@@ -104,8 +104,8 @@ contract CellarAdaptor is BaseAdaptor {
      * @param assets the amount of assets to deposit into `cellar`
      */
     function depositToCellar(Cellar cellar, uint256 assets) public {
-        assets = _maxAvailable(cellar.asset(), assets);
         ERC20 asset = cellar.asset();
+        assets = _maxAvailable(asset, assets);
         asset.safeApprove(address(cellar), assets);
         cellar.deposit(assets, address(this));
 
@@ -119,6 +119,7 @@ contract CellarAdaptor is BaseAdaptor {
      * @param assets the amount of assets to withdraw from `cellar`
      */
     function withdrawFromCellar(Cellar cellar, uint256 assets) public {
+        if (assets == type(uint256).max) assets = cellar.maxWithdraw(address(this));
         cellar.withdraw(assets, address(this), address(this));
     }
 }

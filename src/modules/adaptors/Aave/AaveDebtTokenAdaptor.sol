@@ -140,7 +140,6 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      * @param amountToRepay the amount of `tokenToRepay` to repay with.
      */
     function repayAaveDebt(ERC20 tokenToRepay, uint256 amountToRepay) public {
-        amountToRepay = _maxAvailable(tokenToRepay, amountToRepay);
         tokenToRepay.safeApprove(address(pool()), amountToRepay);
         pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  either 1 for stable or 2 for variable
 

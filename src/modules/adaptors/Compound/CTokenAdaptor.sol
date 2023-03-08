@@ -184,7 +184,9 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
-        uint256 errorCode = market.redeemUnderlying(amountToWithdraw);
+        uint256 errorCode;
+        if (amountToWithdraw == type(uint256).max) errorCode = market.redeem(market.balanceOf(address(this)));
+        else errorCode = market.redeemUnderlying(amountToWithdraw);
 
         // Check for errors.
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);

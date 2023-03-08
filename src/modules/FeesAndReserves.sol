@@ -99,8 +99,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     uint256 public constant PRECISION_MULTIPLIER = 1e27;
     uint8 public constant NORMALIZED_DECIMALS = 27;
     uint256 public constant SECONDS_IN_A_YEAR = 365 days;
-    uint256 public constant MAX_PERFORMANCE_FEE = 3 * 10**(BPS_DECIMALS - 1); // 30%
-    uint256 public constant MAX_MANAGEMENT_FEE = 1 * 10**(BPS_DECIMALS - 1); // 10%
+    uint256 public constant MAX_PERFORMANCE_FEE = 3 * 10 ** (BPS_DECIMALS - 1); // 30%
+    uint256 public constant MAX_MANAGEMENT_FEE = 1 * 10 ** (BPS_DECIMALS - 1); // 10%
 
     /**
      * @notice Maps a cellar to its pending meta data.
@@ -242,7 +242,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         uint256 totalSupply = cellar.totalSupply();
         // Calculate Share price normalized to 27 decimals.
         uint256 exactSharePrice = totalAssets.changeDecimals(data.reserveAssetDecimals, NORMALIZED_DECIMALS).mulDivDown(
-            10**data.cellarDecimals,
+            10 ** data.cellarDecimals,
             totalSupply
         );
 
@@ -354,6 +354,9 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         Cellar cellar = Cellar(msg.sender);
         MetaData storage data = metaData[cellar];
 
+        // If amount is type(uint256).max caller is trying to withdraw all reserves.
+        if (amount == type(uint256).max) amount = data.reserves;
+
         if (amount > data.reserves) revert FeesAndReserves__NotEnoughReserves();
 
         data.reserves -= amount;
@@ -368,6 +371,9 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     function prepareFees(uint256 amount) external nonReentrant checkCallerIsSetup {
         Cellar cellar = Cellar(msg.sender);
         MetaData storage data = metaData[cellar];
+
+        // If amount is type(uint256).max caller is trying to prepare max possible fees owed.
+        if (amount == type(uint256).max) amount = data.feesOwed.min(data.reserves);
 
         if (amount > data.feesOwed) revert FeesAndReserves__NotEnoughFeesOwed();
         if (amount > data.reserves) revert FeesAndReserves__NotEnoughReserves();
@@ -516,7 +522,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         input.exactSharePrice = input
             .totalAssets
             .changeDecimals(data.reserveAssetDecimals, NORMALIZED_DECIMALS)
-            .mulDivDown(10**data.cellarDecimals, totalSupply);
+            .mulDivDown(10 ** data.cellarDecimals, totalSupply);
 
         if (data.exactHighWatermark > 0) {
             // Calculate Management Fees owed.
@@ -525,7 +531,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
                 input.feeEarned += input
                     .totalAssets
                     .min(data.totalAssets)
-                    .mulDivDown(data.managementFee, 10**BPS_DECIMALS)
+                    .mulDivDown(data.managementFee, 10 ** BPS_DECIMALS)
                     .mulDivDown(elapsedTime, SECONDS_IN_A_YEAR);
             }
 
@@ -535,7 +541,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
                     .totalAssets
                     .min(data.totalAssets)
                     .mulDivDown(input.exactSharePrice - data.exactHighWatermark, PRECISION_MULTIPLIER)
-                    .mulDivDown(data.performanceFee, 10**BPS_DECIMALS);
+                    .mulDivDown(data.performanceFee, 10 ** BPS_DECIMALS);
             }
         } // else Cellar needs to finish its setup..
         // This will trigger `performUpkeep` to save the totalAssets, exactHighWatermark, and timestamp.
