@@ -7,6 +7,7 @@ import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungible
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
 import { LiquidityAmounts } from "@uniswapV3P/libraries/LiquidityAmounts.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 
 /**
  * @title Uniswap V3 Adaptor
@@ -53,27 +54,23 @@ contract UniswapV3Adaptor is BaseAdaptor {
         return INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
     }
 
+    // TODO update to real value, and remove as input to all strategist functions.
+    function tracker() internal pure returns (UniswapV3PositionTracker) {
+        return UniswapV3PositionTracker(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
+    }
+
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are NOT allowed from this position.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -98,38 +95,25 @@ contract UniswapV3Adaptor is BaseAdaptor {
             uint256 baseToUSD = priceRouter.getPriceInUSD(token1);
             uint256 quoteToUSD = priceRouter.getPriceInUSD(token0);
             baseToUSD = baseToUSD * 1e18; // Multiply by 1e18 to keep some precision.
-            precisionPrice = baseToUSD.mulDivDown(10**token0.decimals(), quoteToUSD);
+            precisionPrice = baseToUSD.mulDivDown(10 ** token0.decimals(), quoteToUSD);
         }
 
         // Calculate current sqrtPrice.
-        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (precisionPrice / 1e18);
+        uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (precisionPrice / 1e18);
         uint160 sqrtPriceX96 = _sqrt(ratioX192).toUint160();
 
-        // Grab cellars balance of UniV3 NFTs.
-        uint256 bal = positionManager().balanceOf(msg.sender);
+        // Grab cellars Uniswap V3 positions from tracker.
+        uint256[] memory positions = tracker().getPositions(msg.sender);
 
         // If cellar does not own any UniV3 positions it has no assets in UniV3.
-        if (bal == 0) return 0;
+        if (positions.length == 0) return 0;
 
-        // Grab cellars array of token ids with `tokenOfOwnerByIndex` using multicall.
-        bytes[] memory positionDataRequest = new bytes[](bal);
-        for (uint256 i = 0; i < bal; i++) {
-            positionDataRequest[i] = abi.encodeWithSignature("tokenOfOwnerByIndex(address,uint256)", msg.sender, i);
-        }
-        positionDataRequest = abi.decode(
-            address(positionManager()).functionStaticCall(
-                abi.encodeWithSignature("multicall(bytes[])", (positionDataRequest))
-            ),
-            (bytes[])
-        );
+        bytes[] memory positionDataRequest = new bytes[](positions.length);
 
         // Grab array of positions using previous token id array.
         // `positionDataRequest` currently holds abi encoded token ids that caller owns.
-        for (uint256 i = 0; i < bal; i++) {
-            positionDataRequest[i] = abi.encodeWithSignature(
-                "positions(uint256)",
-                abi.decode(positionDataRequest[i], (uint256))
-            );
+        for (uint256 i = 0; i < positions.length; i++) {
+            positionDataRequest[i] = abi.encodeWithSignature("positions(uint256)", positions[i]);
         }
         positionDataRequest = abi.decode(
             address(positionManager()).functionStaticCall(
@@ -141,7 +125,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Loop through position data and sum total amount of Token 0 and Token 1 from LP positions that match `token0` and `token1`.
         uint256 amount0;
         uint256 amount1;
-        for (uint256 i = 0; i < bal; i++) {
+        for (uint256 i = 0; i < positions.length; i++) {
             (, , address t0, address t1, , int24 tickLower, int24 tickUpper, uint128 liquidity, , , , ) = abi.decode(
                 positionDataRequest[i],
                 (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
@@ -161,7 +145,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         }
 
         // Return amount of `token0` + amount of `token1` converted into `token0`;
-        amount1 = amount1.mulDivDown(precisionPrice, 10**token1.decimals());
+        amount1 = amount1.mulDivDown(precisionPrice, 10 ** token1.decimals());
         amount1 = amount1 / 1e18; // Remove precision scaler.
         return amount0 + amount1;
     }
@@ -212,6 +196,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param tickUpper the upper liquidity tick
      */
     function openPosition(
+        UniswapV3PositionTracker tracker,
         ERC20 token0,
         ERC20 token1,
         uint24 poolFee,
@@ -244,7 +229,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
         });
 
         // Supply liquidity to pool.
-        (, , uint256 amount0Act, uint256 amount1Act) = positionManager().mint(params);
+        (uint256 tokenId, , uint256 amount0Act, uint256 amount1Act) = positionManager().mint(params);
+
+        // Add new token to the array.
+        tracker.addPositionToArray(tokenId);
 
         // Zero out approvals if necessary.
         if (amount0Act < amount0) token0.safeApprove(address(positionManager()), 0);
@@ -264,16 +252,16 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param min0 the minimum amount of `token0` to get from closing this position
      * @param min1 the minimum amount of `token1` to get from closing this position
      */
-    function closePosition(
-        uint256 positionId,
-        uint256 min0,
-        uint256 min1
-    ) public {
+    function closePosition(UniswapV3PositionTracker tracker, uint256 positionId, uint256 min0, uint256 min1) public {
         // Pass in true for `collectFees` since the token will be sent to the dead address.
-        takeFromPosition(positionId, type(uint128).max, min0, min1, true);
+        // `takeFromPosition checks if positionId is in tracker.`
+        takeFromPosition(tracker, positionId, type(uint128).max, min0, min1, true);
 
         // Position now has no more liquidity, so transfer NFT to dead address to save on `balanceOf` gas usage.
         // Transfer token to a dead address.
+
+        positionManager().burn(positionId);
+        //TODO finish this
         positionManager().transferFrom(address(this), address(1), positionId);
     }
 
@@ -286,6 +274,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param min1 the minimum amount of `token1` to add to liquidity
      */
     function addToPosition(
+        UniswapV3PositionTracker tracker,
         uint256 positionId,
         uint256 amount0,
         uint256 amount1,
@@ -293,6 +282,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 min1
     ) public {
         _checkPositionId(positionId);
+
+        // Make sure position is in tracker, otherwise outside user sent it to the cellar so revert.
+        (bool found, ) = tracker.checkIfPositionIsInTracker(address(this), positionId);
+        if (!found) revert("Invalid Position ID");
 
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
@@ -329,6 +322,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
     /**
      * @notice Allows strategist to take from existing Uniswap V3 positions.
+     * @dev This leaves the positionId in the tracker so it can be used at a later date.
      * @param positionId the UniV3 LP NFT id to take from
      * @param liquidity the amount of liquidity to take from the position
      * @param min0 the minimum amount of `token0` to get from taking liquidity
@@ -337,6 +331,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      *                    or principal + fees (if true)
      */
     function takeFromPosition(
+        UniswapV3PositionTracker tracker,
         uint256 positionId,
         uint128 liquidity,
         uint256 min0,
@@ -344,6 +339,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
         bool collectFees
     ) public {
         _checkPositionId(positionId);
+
+        // Make sure position is in tracker, otherwise outside user sent it to the cellar so revert.
+        (bool found, ) = tracker.checkIfPositionIsInTracker(address(this), positionId);
+        if (!found) revert("Invalid Position ID");
 
         // If uint128 max is specified for liquidity, withdraw the full amount.
         if (liquidity == type(uint128).max) {
@@ -378,11 +377,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param amount0 amount of `token0` fees to collect use type(uint128).max to get collect all
      * @param amount1 amount of `token1` fees to collect use type(uint128).max to get collect all
      */
-    function collectFees(
-        uint256 positionId,
-        uint128 amount0,
-        uint128 amount1
-    ) external {
+    function collectFees(uint256 positionId, uint128 amount0, uint128 amount1) external {
         _checkPositionId(positionId);
 
         _collectFees(positionId, amount0, amount1);
@@ -412,11 +407,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
     /**
      * @notice Helper function to collect Uniswap V3 position fees.
      */
-    function _collectFees(
-        uint256 positionId,
-        uint128 amount0,
-        uint128 amount1
-    ) internal {
+    function _collectFees(uint256 positionId, uint128 amount0, uint128 amount1) internal {
         // Create fee collection params.
         INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
             tokenId: positionId,
