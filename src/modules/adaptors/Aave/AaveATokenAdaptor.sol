@@ -144,12 +144,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         bytes memory configData
     ) public view override returns (uint256) {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        uint256 minHealthFactor = abi.decode(configData, (uint256));
-        // Check if minimum health factor is set.
-        // If not the strategist does not want users to withdraw from this position.
-        if (minHealthFactor == 0) return 0;
-        // Check if adaptor minimum health factor is more conservative than strategist set.
-        if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
+
         (
             uint256 totalCollateralETH,
             uint256 totalDebtETH,
@@ -158,6 +153,18 @@ contract AaveATokenAdaptor is BaseAdaptor {
             ,
             uint256 healthFactor
         ) = pool().getUserAccountData(msg.sender);
+
+        // If Cellar has no Aave debt, then return the cellars balance of the aToken.
+        if (totalDebtETH == 0) return ERC20(address(token)).balanceOf(msg.sender);
+
+        // Otherwise we need to look at minimum health factor.
+        uint256 minHealthFactor = abi.decode(configData, (uint256));
+        // Check if minimum health factor is set.
+        // If not the strategist does not want users to withdraw from this position.
+        if (minHealthFactor == 0) return 0;
+        // Check if adaptor minimum health factor is more conservative than strategist set.
+        if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
+
         uint256 maxBorrowableWithMin;
 
         // Choose 0.01 for cushion value. Value can be adjusted based off testing results.
@@ -166,10 +173,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         // Add cushion to min health factor.
         minHealthFactor += cushion;
 
-        // If Cellar has no Aave debt, then return the cellars balance of the aToken.
-        if (totalDebtETH == 0) return ERC20(address(token)).balanceOf(msg.sender);
-
-        // If minHealthFactor is not set, or if current health factor is less than the minHealthFactor + 2X cushion, return 0.
+        // If current health factor is less than the minHealthFactor + 2X cushion, return 0.
         if (healthFactor < (minHealthFactor + cushion)) return 0;
         // Calculate max amount withdrawable while preserving minimum health factor.
         else {
