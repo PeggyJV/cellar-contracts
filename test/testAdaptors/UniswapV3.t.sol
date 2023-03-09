@@ -224,7 +224,7 @@ contract UniswapV3AdaptorTest is Test {
         bytes[] memory adaptorCalls = new bytes[](2);
         adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 100_500e6);
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 100_000);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -232,7 +232,7 @@ contract UniswapV3AdaptorTest is Test {
         // TODO make sure position is in tracked array
 
         adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 1e18, 1e6);
+        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
