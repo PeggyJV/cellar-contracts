@@ -113,6 +113,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Grab array of positions using previous token id array.
         // `positionDataRequest` currently holds abi encoded token ids that caller owns.
         for (uint256 i = 0; i < positions.length; i++) {
+            if (positionManager().ownerOf(positions[i]) != msg.sender)
+                revert UniswapV3Adaptor__NotTheOwner(positions[i]);
             positionDataRequest[i] = abi.encodeWithSignature("positions(uint256)", positions[i]);
         }
         positionDataRequest = abi.decode(
@@ -126,7 +128,6 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 amount0;
         uint256 amount1;
         for (uint256 i = 0; i < positions.length; i++) {
-            // TODO add owner of check and revert
             (, , address t0, address t1, , int24 tickLower, int24 tickUpper, uint128 liquidity, , , , ) = abi.decode(
                 positionDataRequest[i],
                 (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
@@ -263,10 +264,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
         positionManager().transferFrom(address(this), address(1), positionId);
 
-        tracker().removePositionFromArray(positionId);
+        tracker.removePositionFromArray(positionId);
     }
-
-    // TODO add function to clear out empty positions
 
     /**
      * @notice Allows strategist to add to existing Uniswap V3 positions.
@@ -384,6 +383,36 @@ contract UniswapV3Adaptor is BaseAdaptor {
         _checkPositionId(positionId);
 
         _collectFees(positionId, amount0, amount1);
+    }
+
+    /**
+     * @notice Allows strategits to purge zero liquidity LP positions from tracker.
+     */
+    function purgeUnusedPositions() public {
+        uint256[] memory positions = tracker().getPositions(address(this));
+
+        for (uint256 i; i < positions.length; ++i) {
+            (
+                ,
+                ,
+                address t0,
+                address t1,
+                ,
+                int24 tickLower,
+                int24 tickUpper,
+                uint128 liquidity,
+                ,
+                ,
+                ,
+
+            ) = positionManager().positions(positions[i]);
+            if (liquidity == 0) {
+                // TODO does this revert if there are no fees available?
+                _collectFees(positions[i], type(uint128).max, type(uint128).max);
+                positionManager().transferFrom(address(this), address(1), positions[i]);
+                tracker().removePositionFromArray(positions[i]);
+            }
+        }
     }
 
     //============================================ Helper Functions ============================================
