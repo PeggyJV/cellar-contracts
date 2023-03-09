@@ -6,9 +6,8 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 
 /**
- * @title Uniswap V3 Adaptor
- * @notice Allows Cellars to hold and interact with Uniswap V3 LP Positions.
- * @dev `balanceOf` credited to https://github.com/0xparashar/UniV3NFTOracle/blob/master/contracts/UniV3NFTOracle.sol
+ * @title Uniswap V3 Position Tracker
+ * @notice Tracks Uniswap V3 positions Cellars have entered.
  * @author crispymangoes
  */
 contract UniswapV3PositionTracker {
@@ -20,28 +19,33 @@ contract UniswapV3PositionTracker {
 
     mapping(address => uint256[]) private callerLPHoldings;
 
+    error UniswapV3PositionTracker__MaxHoldingsExceeded();
+    error UniswapV3PositionTracker__CallerDoesNotOwnTokenId();
+    error UniswapV3PositionTracker__TokenIdAlreadyTracked();
+    error UniswapV3PositionTracker__TokenIdMustBeOwnedByDeadAddress();
+    error UniswapV3PositionTracker__TokenIdNotFound();
+
     constructor(INonfungiblePositionManager _positionManager) {
         positionManager = _positionManager;
     }
 
     function addPositionToArray(uint256 tokenId) external {
-        if (positionManager.ownerOf(tokenId) != msg.sender) revert("Caller does not own tokenId.");
+        if (positionManager.ownerOf(tokenId) != msg.sender) revert UniswapV3PositionTracker__CallerDoesNotOwnTokenId();
         uint256 holdingLength = callerLPHoldings[msg.sender].length;
 
-        if (holdingLength >= MAX_HOLDINGS) revert("Too big");
+        if (holdingLength >= MAX_HOLDINGS) revert UniswapV3PositionTracker__MaxHoldingsExceeded();
         // Make sure the position is not already in the array
         for (uint256 i; i < holdingLength; ++i) {
             uint256 currentPositionId = callerLPHoldings[msg.sender][i];
-            if (currentPositionId == tokenId) revert("Position already in array");
+            if (currentPositionId == tokenId) revert UniswapV3PositionTracker__TokenIdAlreadyTracked();
         }
 
         callerLPHoldings[msg.sender].push(tokenId);
     }
 
-    // TODO should this check if the caller has the token or does not have the token
-    // ie are we asking them to burn the token before or after this is called
     function removePositionFromArray(uint256 tokenId) external {
-        if (positionManager.ownerOf(tokenId) != address(1)) revert("Token Id must be owened by DEAD address.");
+        if (positionManager.ownerOf(tokenId) != address(1))
+            revert UniswapV3PositionTracker__TokenIdMustBeOwnedByDeadAddress();
 
         uint256 holdingLength = callerLPHoldings[msg.sender].length;
 
@@ -56,10 +60,8 @@ contract UniswapV3PositionTracker {
         }
 
         // If we made it this far we did not find the tokenId in the array, so revert.
-        revert("Token Id not found");
+        revert UniswapV3PositionTracker__TokenIdNotFound();
     }
-
-    // TODO function that returns if a token is in the array or not.
 
     function checkIfPositionIsInTracker(
         address caller,
@@ -82,12 +84,4 @@ contract UniswapV3PositionTracker {
     function getPositions(address caller) external view returns (uint256[] memory positions) {
         return callerLPHoldings[caller];
     }
-
-    // struct PositionUnderlying {
-    //     uint256 tokenId;
-    //     uint256 amount0;
-    //     uint256 amount1;
-    // }
-
-    // function viewPositionsUnderlying(address owner) external view returns (PositionUnderlying[20] memory summary) {}
 }

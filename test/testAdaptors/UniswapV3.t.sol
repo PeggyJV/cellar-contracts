@@ -23,6 +23,7 @@ import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungible
 import "@uniswapV3C/libraries/FixedPoint128.sol";
 import "@uniswapV3C/libraries/FullMath.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -69,6 +70,7 @@ contract UniswapV3AdaptorTest is Test {
 
     UniswapV3Adaptor private uniswapV3Adaptor;
     ERC20Adaptor private erc20Adaptor;
+    UniswapV3PositionTracker private tracker;
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -89,6 +91,9 @@ contract UniswapV3AdaptorTest is Test {
         gravity = new MockGravity();
         uniswapV3Adaptor = new UniswapV3Adaptor();
         erc20Adaptor = new ERC20Adaptor();
+        tracker = new UniswapV3PositionTracker(positionManager);
+        // console.log("Tracker", address(tracker));
+        // TODO remove above
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -199,7 +204,7 @@ contract UniswapV3AdaptorTest is Test {
         bytes[] memory adaptorCalls = new bytes[](2);
         adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 2);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -224,8 +229,10 @@ contract UniswapV3AdaptorTest is Test {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
+        // TODO make sure position is in tracked array
+
         adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
+        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 1e18, 1e6);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
     }
@@ -856,15 +863,20 @@ contract UniswapV3AdaptorTest is Test {
         vm.stopPrank();
     }
 
+    // TODO tests
+    // test where we try to max out tracked LPs
+    // test where cellar tries to add a token ID it does not own
+    // test where cellar tries to re add a token Id
+    // test where cellar tries to remove a position from tracked array when it still owns it
+    // test where cellar somehow manages to transfer a univ3 position out, make sure balnaceOf reverts
+    // test where cellar tries to remove a position id that was not tracked.
+    // test where we try the griefing attack vector
+
     // ========================================= GRAVITY FUNCTIONS =========================================
 
     // Since this contract is set as the Gravity Bridge, this will be called by
     // the Cellar's `sendFees` function to send funds Cosmos.
-    function sendToCosmos(
-        address asset,
-        bytes32,
-        uint256 assets
-    ) external {
+    function sendToCosmos(address asset, bytes32, uint256 assets) external {
         ERC20(asset).transferFrom(msg.sender, cosmos, assets);
     }
 
@@ -896,7 +908,7 @@ contract UniswapV3AdaptorTest is Test {
         int24 shift
     ) internal view returns (int24 lower, int24 upper) {
         uint256 price = priceRouter.getExchangeRate(token1, token0);
-        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
+        uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (price);
         uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
         int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
         tick = tick + shift;

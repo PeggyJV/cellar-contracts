@@ -9,6 +9,8 @@ import { LiquidityAmounts } from "@uniswapV3P/libraries/LiquidityAmounts.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 
+import { console } from "@forge-std/Test.sol";
+
 /**
  * @title Uniswap V3 Adaptor
  * @notice Allows Cellars to hold and interact with Uniswap V3 LP Positions.
@@ -42,6 +44,19 @@ contract UniswapV3Adaptor is BaseAdaptor {
      */
     error UniswapV3Adaptor__NotTheOwner(uint256 positionId);
 
+    /**
+     * @notice Strategist attempted to move liquidity into untracked LP positions.
+     * @param token0 The token0 of the untracked position
+     * @param token1 The token1 of the untracked position
+     */
+    error UniswapV3Adaptor__LiquidityProviderPositionsMustBeTracked(address token0, address token1);
+
+    /**
+     * @notice Strategist attempted an action with a position id that was not in the tracker.
+     * @param positionId The Uniswap V3 Position Id
+     */
+    error UniswapV3Adaptor__PositionIdNotFoundInTracker(uint256 positionId);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -62,7 +77,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
     // TODO update to real value, and remove as input to all strategist functions.
     function tracker() internal pure returns (UniswapV3PositionTracker) {
-        return UniswapV3PositionTracker(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
+        return UniswapV3PositionTracker(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -204,7 +219,6 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param tickUpper the upper liquidity tick
      */
     function openPosition(
-        UniswapV3PositionTracker tracker,
         ERC20 token0,
         ERC20 token1,
         uint24 poolFee,
@@ -215,6 +229,12 @@ contract UniswapV3Adaptor is BaseAdaptor {
         int24 tickLower,
         int24 tickUpper
     ) public {
+        // Check that Uniswap V3 position is properly set up to be tracked in the Cellar.
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(token0, token1)));
+        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(positionId))
+            revert UniswapV3Adaptor__LiquidityProviderPositionsMustBeTracked(address(token0), address(token1));
+
         amount0 = _maxAvailable(token0, amount0);
         amount1 = _maxAvailable(token1, amount1);
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
@@ -236,11 +256,17 @@ contract UniswapV3Adaptor is BaseAdaptor {
             deadline: block.timestamp
         });
 
+        console.log("token 0", token0.balanceOf(address(this)));
+        console.log("token 1", token1.balanceOf(address(this)));
+
         // Supply liquidity to pool.
         (uint256 tokenId, , , ) = positionManager().mint(params);
 
+        console.log("token 0", token0.balanceOf(address(this)));
+        console.log("token 1", token1.balanceOf(address(this)));
+
         // Add new token to the array.
-        tracker.addPositionToArray(tokenId);
+        tracker().addPositionToArray(tokenId);
 
         // Zero out approvals if necessary.
         if (token0.allowance(address(this), address(positionManager())) > 0)
@@ -256,17 +282,17 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param min0 the minimum amount of `token0` to get from closing this position
      * @param min1 the minimum amount of `token1` to get from closing this position
      */
-    function closePosition(UniswapV3PositionTracker tracker, uint256 positionId, uint256 min0, uint256 min1) public {
+    function closePosition(uint256 positionId, uint256 min0, uint256 min1) public {
         // Pass in true for `collectFees` since the token will be sent to the dead address.
         // `takeFromPosition checks if positionId is in tracker.`
-        takeFromPosition(tracker, positionId, type(uint128).max, min0, min1, true);
+        takeFromPosition(positionId, type(uint128).max, min0, min1, true);
 
         // Position now has no more liquidity, so transfer NFT to dead address to save on `balanceOf` gas usage.
         // Transfer token to a dead address.
 
         positionManager().transferFrom(address(this), address(1), positionId);
 
-        tracker.removePositionFromArray(positionId);
+        tracker().removePositionFromArray(positionId);
     }
 
     /**
@@ -277,27 +303,33 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param min0 the minimum amount of `token0` to add to liquidity
      * @param min1 the minimum amount of `token1` to add to liquidity
      */
-    function addToPosition(
-        UniswapV3PositionTracker tracker,
-        uint256 positionId,
-        uint256 amount0,
-        uint256 amount1,
-        uint256 min0,
-        uint256 min1
-    ) public {
+    function addToPosition(uint256 positionId, uint256 amount0, uint256 amount1, uint256 min0, uint256 min1) public {
         _checkPositionId(positionId);
 
         // Make sure position is in tracker, otherwise outside user sent it to the cellar so revert.
-        (bool found, ) = tracker.checkIfPositionIsInTracker(address(this), positionId);
-        if (!found) revert("Invalid Position ID");
+        (bool found, ) = tracker().checkIfPositionIsInTracker(address(this), positionId);
+        if (!found) revert UniswapV3Adaptor__PositionIdNotFoundInTracker(positionId);
 
-        // Approve NonfungiblePositionManager to spend `token0` and `token1`.
+        // Read `token0` and `token1` from position manager.
         (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
         ERC20 token0 = ERC20(t0);
         ERC20 token1 = ERC20(t1);
-        amount0 = _maxAvailable(ERC20(t0), amount0);
-        amount1 = _maxAvailable(ERC20(t1), amount1);
 
+        // Check that Uniswap V3 position is properly set up to be tracked in the Cellar.
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(token0, token1)));
+        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(positionId))
+            revert UniswapV3Adaptor__LiquidityProviderPositionsMustBeTracked(address(token0), address(token1));
+
+        amount0 = _maxAvailable(token0, amount0);
+        amount1 = _maxAvailable(token1, amount1);
+
+        // console.log("Balance 0", token0.balanceOf(address(this)));
+        // console.log("Amount 0", amount0);
+        // console.log("Balance 1", token1.balanceOf(address(this)));
+        // console.log("Amount 1", amount1);
+
+        // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         token0.safeApprove(address(positionManager()), amount0);
         token1.safeApprove(address(positionManager()), amount1);
 
@@ -313,13 +345,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
             });
 
         // Increase liquidity in pool.
-        (, uint256 amount0Act, uint256 amount1Act) = positionManager().increaseLiquidity(params);
+        positionManager().increaseLiquidity(params);
 
         // Zero out approvals if necessary.
-        if (token0.allowance(address(this), address(positionManager())) > 0)
-            token0.safeApprove(address(positionManager()), 0);
-        if (token1.allowance(address(this), address(positionManager())) > 0)
-            token1.safeApprove(address(positionManager()), 0);
+        // if (token0.allowance(address(this), address(positionManager())) > 0)
+        //     token0.safeApprove(address(positionManager()), 0);
+        // if (token1.allowance(address(this), address(positionManager())) > 0)
+        //     token1.safeApprove(address(positionManager()), 0);
     }
 
     /**
@@ -333,7 +365,6 @@ contract UniswapV3Adaptor is BaseAdaptor {
      *                    or principal + fees (if true)
      */
     function takeFromPosition(
-        UniswapV3PositionTracker tracker,
         uint256 positionId,
         uint128 liquidity,
         uint256 min0,
@@ -343,8 +374,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         _checkPositionId(positionId);
 
         // Make sure position is in tracker, otherwise outside user sent it to the cellar so revert.
-        (bool found, ) = tracker.checkIfPositionIsInTracker(address(this), positionId);
-        if (!found) revert("Invalid Position ID");
+        (bool found, ) = tracker().checkIfPositionIsInTracker(address(this), positionId);
+        if (!found) revert UniswapV3Adaptor__PositionIdNotFoundInTracker(positionId);
 
         // If uint128 max is specified for liquidity, withdraw the full amount.
         if (liquidity == type(uint128).max) {
@@ -392,20 +423,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256[] memory positions = tracker().getPositions(address(this));
 
         for (uint256 i; i < positions.length; ++i) {
-            (
-                ,
-                ,
-                address t0,
-                address t1,
-                ,
-                int24 tickLower,
-                int24 tickUpper,
-                uint128 liquidity,
-                ,
-                ,
-                ,
-
-            ) = positionManager().positions(positions[i]);
+            (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(positions[i]);
             if (liquidity == 0) {
                 // TODO does this revert if there are no fees available?
                 _collectFees(positions[i], type(uint128).max, type(uint128).max);
