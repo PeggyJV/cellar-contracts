@@ -134,8 +134,6 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Grab array of positions using previous token id array.
         // `positionDataRequest` currently holds abi encoded token ids that caller owns.
         for (uint256 i = 0; i < positions.length; i++) {
-            if (positionManager().ownerOf(positions[i]) != msg.sender)
-                revert UniswapV3Adaptor__NotTheOwner(positions[i]);
             positionDataRequest[i] = abi.encodeWithSignature("positions(uint256)", positions[i]);
         }
         positionDataRequest = abi.decode(
@@ -149,6 +147,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 amount0;
         uint256 amount1;
         for (uint256 i = 0; i < positions.length; i++) {
+            if (positionManager().ownerOf(positions[i]) != msg.sender) continue;
             (, , address t0, address t1, , int24 tickLower, int24 tickUpper, uint128 liquidity, , , , ) = abi.decode(
                 positionDataRequest[i],
                 (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
@@ -311,7 +310,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
         // Check that Uniswap V3 position is properly set up to be tracked in the Cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(token0, token1)));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        // uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         // if (!Cellar(address(this)).isPositionUsed(positionId))
         //     revert UniswapV3Adaptor__UntrackedLiquidity(address(token0), address(token1));
 

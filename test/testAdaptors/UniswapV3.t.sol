@@ -435,10 +435,9 @@ contract UniswapV3AdaptorTest is Test {
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector,
-                    0,
-                    assets.mulWadDown(1e18 - deviation),
-                    assets.mulWadDown(1e18 + deviation)
+                    UniswapV3Adaptor.UniswapV3Adaptor__UntrackedLiquidity.selector,
+                    address(USDC),
+                    address(WETH)
                 )
             )
         );
