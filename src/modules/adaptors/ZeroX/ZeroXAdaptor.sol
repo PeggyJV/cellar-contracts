@@ -39,6 +39,10 @@ contract ZeroXAdaptor is PositionlessAdaptor {
         return keccak256(abi.encode("0x Adaptor V 0.0"));
     }
 
+    function getTargetSlot() public pure return(uint256) {
+        return 4;
+    }
+
     //============================================ Strategist Functions ===========================================
 
     /**
@@ -47,10 +51,10 @@ contract ZeroXAdaptor is PositionlessAdaptor {
     function swapWith0x(
         ERC20 tokenIn,
         uint256 amount,
-        address spender,
-        address swapTarget,
         bytes memory swapCallData
     ) public {
+        // TODO
+        address target = Cellar(address(this)).registry().getAddress(getTargetSlot());
         // Revert if address inputs are the Cellar.
         if (spender == address(this) || swapTarget == address(this)) revert ZeroXAdaptor__InvalidAddressArgument();
         tokenIn.safeApprove(spender, amount);
