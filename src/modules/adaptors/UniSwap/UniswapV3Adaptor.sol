@@ -49,7 +49,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param token0 The token0 of the untracked position
      * @param token1 The token1 of the untracked position
      */
-    error UniswapV3Adaptor__LiquidityProviderPositionsMustBeTracked(address token0, address token1);
+    error UniswapV3Adaptor__UntrackedLiquidity(address token0, address token1);
 
     /**
      * @notice Strategist attempted an action with a position id that was not in the tracker.
@@ -233,7 +233,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(token0, token1)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert UniswapV3Adaptor__LiquidityProviderPositionsMustBeTracked(address(token0), address(token1));
+            revert UniswapV3Adaptor__UntrackedLiquidity(address(token0), address(token1));
 
         amount0 = _maxAvailable(token0, amount0);
         amount1 = _maxAvailable(token1, amount1);
@@ -256,14 +256,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
             deadline: block.timestamp
         });
 
-        console.log("token 0", token0.balanceOf(address(this)));
-        console.log("token 1", token1.balanceOf(address(this)));
-
         // Supply liquidity to pool.
         (uint256 tokenId, , , ) = positionManager().mint(params);
-
-        console.log("token 0", token0.balanceOf(address(this)));
-        console.log("token 1", token1.balanceOf(address(this)));
 
         // Add new token to the array.
         tracker().addPositionToArray(tokenId);
@@ -318,16 +312,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Check that Uniswap V3 position is properly set up to be tracked in the Cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(token0, token1)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert UniswapV3Adaptor__LiquidityProviderPositionsMustBeTracked(address(token0), address(token1));
+        // if (!Cellar(address(this)).isPositionUsed(positionId))
+        //     revert UniswapV3Adaptor__UntrackedLiquidity(address(token0), address(token1));
 
         amount0 = _maxAvailable(token0, amount0);
         amount1 = _maxAvailable(token1, amount1);
-
-        // console.log("Balance 0", token0.balanceOf(address(this)));
-        // console.log("Amount 0", amount0);
-        // console.log("Balance 1", token1.balanceOf(address(this)));
-        // console.log("Amount 1", amount1);
 
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         token0.safeApprove(address(positionManager()), amount0);
@@ -348,10 +337,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
         positionManager().increaseLiquidity(params);
 
         // Zero out approvals if necessary.
-        // if (token0.allowance(address(this), address(positionManager())) > 0)
-        //     token0.safeApprove(address(positionManager()), 0);
-        // if (token1.allowance(address(this), address(positionManager())) > 0)
-        //     token1.safeApprove(address(positionManager()), 0);
+        if (token0.allowance(address(this), address(positionManager())) > 0)
+            token0.safeApprove(address(positionManager()), 0);
+        if (token1.allowance(address(this), address(positionManager())) > 0)
+            token1.safeApprove(address(positionManager()), 0);
     }
 
     /**

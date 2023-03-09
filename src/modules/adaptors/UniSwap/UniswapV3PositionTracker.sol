@@ -54,7 +54,8 @@ contract UniswapV3PositionTracker {
             if (currentPositionId == tokenId) {
                 // We found the target tokenId.
                 callerLPHoldings[msg.sender][i] = callerLPHoldings[msg.sender][holdingLength - 1];
-                delete callerLPHoldings[msg.sender][holdingLength - 1];
+                callerLPHoldings[msg.sender].pop();
+                // delete callerLPHoldings[msg.sender][holdingLength - 1];
                 return;
             }
         }
