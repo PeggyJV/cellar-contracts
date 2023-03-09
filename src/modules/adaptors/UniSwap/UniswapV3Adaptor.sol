@@ -36,6 +36,12 @@ contract UniswapV3Adaptor is BaseAdaptor {
     // and is discouraged.
     //====================================================================
 
+    /**
+     * @notice Strategist attempted to interact with a Uniswap V3 position the cellar does not own.
+     * @param positionId the id of the position the cellar does not own
+     */
+    error UniswapV3Adaptor__NotTheOwner(uint256 positionId);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -231,21 +237,17 @@ contract UniswapV3Adaptor is BaseAdaptor {
         });
 
         // Supply liquidity to pool.
-        (uint256 tokenId, , uint256 amount0Act, uint256 amount1Act) = positionManager().mint(params);
+        (uint256 tokenId, , , ) = positionManager().mint(params);
 
         // Add new token to the array.
         tracker.addPositionToArray(tokenId);
 
         // Zero out approvals if necessary.
-        if (amount0Act < amount0) token0.safeApprove(address(positionManager()), 0);
-        if (amount1Act < amount1) token1.safeApprove(address(positionManager()), 0);
+        if (token0.allowance(address(this), address(positionManager())) > 0)
+            token0.safeApprove(address(positionManager()), 0);
+        if (token1.allowance(address(this), address(positionManager())) > 0)
+            token1.safeApprove(address(positionManager()), 0);
     }
-
-    /**
-     * @notice Strategist attempted to interact with a Uniswap V3 position the cellar does not own.
-     * @param positionId the id of the position the cellar does not own
-     */
-    error UniswapV3Adaptor__NotTheOwner(uint256 positionId);
 
     /**
      * @notice Allows strategist to close Uniswap V3 positions.
@@ -291,11 +293,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
         (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
+        ERC20 token0 = ERC20(t0);
+        ERC20 token1 = ERC20(t1);
         amount0 = _maxAvailable(ERC20(t0), amount0);
         amount1 = _maxAvailable(ERC20(t1), amount1);
 
-        ERC20(t0).safeApprove(address(positionManager()), amount0);
-        ERC20(t1).safeApprove(address(positionManager()), amount1);
+        token0.safeApprove(address(positionManager()), amount0);
+        token1.safeApprove(address(positionManager()), amount1);
 
         // Create increase liquidity params.
         INonfungiblePositionManager.IncreaseLiquidityParams memory params = INonfungiblePositionManager
@@ -312,15 +316,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
         (, uint256 amount0Act, uint256 amount1Act) = positionManager().increaseLiquidity(params);
 
         // Zero out approvals if necessary.
-        if (amount0Act < amount0) ERC20(t0).safeApprove(address(positionManager()), 0);
-        if (amount1Act < amount1) ERC20(t1).safeApprove(address(positionManager()), 0);
+        if (token0.allowance(address(this), address(positionManager())) > 0)
+            token0.safeApprove(address(positionManager()), 0);
+        if (token1.allowance(address(this), address(positionManager())) > 0)
+            token1.safeApprove(address(positionManager()), 0);
     }
-
-    /**
-     * @notice Strategist attempted to remove all of a positions liquidity using `takeFromPosition`,
-     *         but they need to use `closePosition`.
-     */
-    error UniswapV3Adaptor__CallClosePosition();
 
     /**
      * @notice Allows strategist to take from existing Uniswap V3 positions.
