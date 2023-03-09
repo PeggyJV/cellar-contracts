@@ -105,7 +105,7 @@ contract UniswapV3PositionTracker {
         ERC20 token1
     ) public view returns (bool positionFound, uint256 index) {
         // Search through caller's holdings and return true if the token id was found.
-        uint256 holdingLength = callerToToken0ToToken1ToHoldings[msg.sender][token0][token1].length;
+        uint256 holdingLength = callerToToken0ToToken1ToHoldings[caller][token0][token1].length;
 
         for (uint256 i; i < holdingLength; ++i) {
             uint256 currentPositionId = callerToToken0ToToken1ToHoldings[caller][token0][token1][i];
