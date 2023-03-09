@@ -44,8 +44,11 @@ contract UniswapV3PositionTracker {
     }
 
     function removePositionFromArray(uint256 tokenId) external {
-        if (positionManager.ownerOf(tokenId) != address(1))
-            revert UniswapV3PositionTracker__TokenIdMustBeOwnedByDeadAddress();
+        // Prove caller not only owns this token, but also that they approved this contract to spend it.
+        positionManager.transferFrom(msg.sender, address(this), tokenId);
+
+        // Burn this tokenId. Checks if token has liquidity or fees in it.
+        positionManager.burn(tokenId);
 
         uint256 holdingLength = callerLPHoldings[msg.sender].length;
 

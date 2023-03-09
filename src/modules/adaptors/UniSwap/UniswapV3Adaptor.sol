@@ -57,6 +57,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
      */
     error UniswapV3Adaptor__PositionIdNotFoundInTracker(uint256 positionId);
 
+    /**
+     * @notice Strategsit attempted to purge a position with liquidity.
+     */
+    error UniswapV3Adaptor__PurgingPositionWithLiquidity(uint256 positionId);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -280,12 +285,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // `takeFromPosition checks if positionId is in tracker.`
         takeFromPosition(positionId, type(uint128).max, min0, min1, true);
 
-        // Position now has no more liquidity, so transfer NFT to dead address to save on `balanceOf` gas usage.
-        // Transfer token to a dead address.
-
-        positionManager().transferFrom(address(this), address(1), positionId);
-
-        tracker().removePositionFromArray(positionId);
+        // Position now has no more liquidity, or fees, so purge it.
+        _purgePosition(positionId);
     }
 
     /**
@@ -310,9 +311,9 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
         // Check that Uniswap V3 position is properly set up to be tracked in the Cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(token0, token1)));
-        // uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        // if (!Cellar(address(this)).isPositionUsed(positionId))
-        //     revert UniswapV3Adaptor__UntrackedLiquidity(address(token0), address(token1));
+        uint32 registryPositionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(registryPositionId))
+            revert UniswapV3Adaptor__UntrackedLiquidity(address(token0), address(token1));
 
         amount0 = _maxAvailable(token0, amount0);
         amount1 = _maxAvailable(token1, amount1);
@@ -405,21 +406,36 @@ contract UniswapV3Adaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Allows strategits to purge zero liquidity LP positions from tracker.
+     * @notice Allows strategist to purge a single zero liquidity LP position from tracker.
+     * @dev If position has liquidity, then revert.
+     * @dev Collect fees from position before purging.
      */
-    function purgeUnusedPositions() public {
+    function purgeSinglePosition(uint256 tokenId) public {
+        (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(tokenId);
+        if (liquidity == 0) {
+            _collectFees(tokenId, type(uint128).max, type(uint128).max);
+            _purgePosition(tokenId);
+        } else revert UniswapV3Adaptor__PurgingPositionWithLiquidity(tokenId);
+    }
+
+    /**
+     * @notice Allows strategist to purge zero liquidity LP positions from tracker.
+     * @dev Loops through tracker array and if a position has no liquidity, then
+     *      Fees are collected, and position is purged.
+     */
+    function purgeAllZeroLiquidityPositions() public {
         uint256[] memory positions = tracker().getPositions(address(this));
 
         for (uint256 i; i < positions.length; ++i) {
             (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(positions[i]);
             if (liquidity == 0) {
-                // TODO does this revert if there are no fees available?
                 _collectFees(positions[i], type(uint128).max, type(uint128).max);
-                positionManager().transferFrom(address(this), address(1), positions[i]);
-                tracker().removePositionFromArray(positions[i]);
+                _purgePosition(positions[i]);
             }
         }
     }
+
+    function removePositionFromTracker(uint256 tokenId) public {}
 
     //============================================ Helper Functions ============================================
     /**
@@ -456,5 +472,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
         // Collect fees.
         positionManager().collect(params);
+    }
+
+    /**
+     * @notice Helper function to get rid of unused position.
+     */
+    function _purgePosition(uint256 positionId) internal {
+        positionManager().approve(address(tracker()), positionId);
+        tracker().removePositionFromArray(positionId);
     }
 }
