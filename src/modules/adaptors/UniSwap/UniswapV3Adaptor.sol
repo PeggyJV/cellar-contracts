@@ -36,6 +36,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
     // the same underlying as they want(With any ticks, or any fees),
     // but doing so will increase the adaptors `balanceOf` gas cost
     // and is discouraged.
+
+    // The Tracker value MUST be a hardcoded address. Do not allow strategists
+    // to enter their own tracker, or else _purgePosition can be used to
+    // gain an unused approval.
     //====================================================================
 
     /**
@@ -129,7 +133,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint160 sqrtPriceX96 = _sqrt(ratioX192).toUint160();
 
         // Grab cellars Uniswap V3 positions from tracker.
-        uint256[] memory positions = tracker().getPositions(msg.sender);
+        uint256[] memory positions = tracker().getPositions(msg.sender, token0, token1);
 
         // If cellar does not own any UniV3 positions it has no assets in UniV3.
         if (positions.length == 0) return 0;
@@ -264,7 +268,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         (uint256 tokenId, , , ) = positionManager().mint(params);
 
         // Add new token to the array.
-        tracker().addPositionToArray(tokenId);
+        tracker().addPositionToArray(tokenId, token0, token1);
 
         // Zero out approvals if necessary.
         if (token0.allowance(address(this), address(positionManager())) > 0)
@@ -284,9 +288,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Pass in true for `collectFees` since the token will be sent to the dead address.
         // `takeFromPosition checks if positionId is in tracker.`
         takeFromPosition(positionId, type(uint128).max, min0, min1, true);
+        // TODO could have `takeFromPosition` return these token addresses? Kinda weird but gas savings
+        (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
 
         // Position now has no more liquidity, or fees, so purge it.
-        _purgePosition(positionId);
+        _purgePosition(positionId, ERC20(t0), ERC20(t1));
     }
 
     /**
@@ -300,14 +306,14 @@ contract UniswapV3Adaptor is BaseAdaptor {
     function addToPosition(uint256 positionId, uint256 amount0, uint256 amount1, uint256 min0, uint256 min1) public {
         _checkPositionId(positionId);
 
-        // Make sure position is in tracker, otherwise outside user sent it to the cellar so revert.
-        (bool found, ) = tracker().checkIfPositionIsInTracker(address(this), positionId);
-        if (!found) revert UniswapV3Adaptor__PositionIdNotFoundInTracker(positionId);
-
         // Read `token0` and `token1` from position manager.
         (, , address t0, address t1, , , , , , , , ) = positionManager().positions(positionId);
         ERC20 token0 = ERC20(t0);
         ERC20 token1 = ERC20(t1);
+
+        // Make sure position is in tracker, otherwise outside user sent it to the cellar so revert.
+        (bool found, ) = tracker().checkIfPositionIsInTracker(address(this), positionId, token0, token1);
+        if (!found) revert UniswapV3Adaptor__PositionIdNotFoundInTracker(positionId);
 
         // Check that Uniswap V3 position is properly set up to be tracked in the Cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(token0, token1)));
@@ -350,26 +356,20 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @param liquidity the amount of liquidity to take from the position
      * @param min0 the minimum amount of `token0` to get from taking liquidity
      * @param min1 the minimum amount of `token1` to get from taking liquidity
-     * @param collectFees bool indicating whether to collect principal(if false),
+     * @param takeFees bool indicating whether to collect principal(if false),
      *                    or principal + fees (if true)
      */
-    function takeFromPosition(
-        uint256 positionId,
-        uint128 liquidity,
-        uint256 min0,
-        uint256 min1,
-        bool collectFees
-    ) public {
+    function takeFromPosition(uint256 positionId, uint128 liquidity, uint256 min0, uint256 min1, bool takeFees) public {
         _checkPositionId(positionId);
 
+        (, , address t0, address t1, , , , uint128 currentLiquidity, , , , ) = positionManager().positions(positionId);
+
         // Make sure position is in tracker, otherwise outside user sent it to the cellar so revert.
-        (bool found, ) = tracker().checkIfPositionIsInTracker(address(this), positionId);
+        (bool found, ) = tracker().checkIfPositionIsInTracker(address(this), positionId, ERC20(t0), ERC20(t1));
         if (!found) revert UniswapV3Adaptor__PositionIdNotFoundInTracker(positionId);
 
         // If uint128 max is specified for liquidity, withdraw the full amount.
-        if (liquidity == type(uint128).max) {
-            (, , , , , , , liquidity, , , , ) = positionManager().positions(positionId);
-        }
+        if (liquidity == type(uint128).max) liquidity = currentLiquidity;
 
         // Create decrease liquidity params.
         INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
@@ -384,7 +384,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         // Decrease liquidity in pool.
         (uint256 amount0, uint256 amount1) = positionManager().decreaseLiquidity(params);
 
-        if (collectFees) {
+        if (takeFees) {
             // Collect principal + fees from position.
             _collectFees(positionId, type(uint128).max, type(uint128).max);
         } else {
@@ -411,10 +411,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @dev Collect fees from position before purging.
      */
     function purgeSinglePosition(uint256 tokenId) public {
-        (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(tokenId);
+        (, , address t0, address t1, , , , uint128 liquidity, , , , ) = positionManager().positions(tokenId);
         if (liquidity == 0) {
             _collectFees(tokenId, type(uint128).max, type(uint128).max);
-            _purgePosition(tokenId);
+            _purgePosition(tokenId, ERC20(t0), ERC20(t1));
         } else revert UniswapV3Adaptor__PurgingPositionWithLiquidity(tokenId);
     }
 
@@ -423,19 +423,28 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @dev Loops through tracker array and if a position has no liquidity, then
      *      Fees are collected, and position is purged.
      */
-    function purgeAllZeroLiquidityPositions() public {
-        uint256[] memory positions = tracker().getPositions(address(this));
+    function purgeAllZeroLiquidityPositions(ERC20 token0, ERC20 token1) public {
+        uint256[] memory positions = tracker().getPositions(address(this), token0, token1);
 
         for (uint256 i; i < positions.length; ++i) {
-            (, , , , , , , uint128 liquidity, , , , ) = positionManager().positions(positions[i]);
+            (, , address t0, address t1, , , , uint128 liquidity, , , , ) = positionManager().positions(positions[i]);
+
             if (liquidity == 0) {
                 _collectFees(positions[i], type(uint128).max, type(uint128).max);
-                _purgePosition(positions[i]);
+                _purgePosition(positions[i], ERC20(t0), ERC20(t1));
             }
         }
     }
 
-    function removePositionFromTracker(uint256 tokenId) public {}
+    /**
+     * @notice Allows strategist to remove tracked positions that are not owned by the cellar.
+     *         In order for this situation to happen then an exploit needs to be found where UniV3
+     *         NFTs can be transferred out of the cellar during rebalance calls, so it is unlikely.
+     * @dev Reverts if tokenId is owned by cellar, or if tokenId is not in tracked array.
+     */
+    function removeUnOwnedPositionFromTracker(uint256 tokenId, ERC20 token0, ERC20 token1) public {
+        tracker().removePositionFromArrayThatIsNotOwnedByCaller(tokenId, token0, token1);
+    }
 
     //============================================ Helper Functions ============================================
     /**
@@ -476,9 +485,12 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
     /**
      * @notice Helper function to get rid of unused position.
+     * @dev The Tracker value MUST be a hardcoded address. Do not allow strategists
+     * to enter their own tracker, or else _purgePosition can be used to
+     * gain an unused approval.
      */
-    function _purgePosition(uint256 positionId) internal {
+    function _purgePosition(uint256 positionId, ERC20 token0, ERC20 token1) internal {
         positionManager().approve(address(tracker()), positionId);
-        tracker().removePositionFromArray(positionId);
+        tracker().removePositionFromArray(positionId, token0, token1);
     }
 }
