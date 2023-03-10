@@ -131,9 +131,9 @@ contract FeesAndReservesTest is Test {
         // Strategist calls fees and reserves setup.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](3);
-        adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, 0.2e4);
-        adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-        adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+        adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, 0.2e4);
+        adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+        adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(300);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -205,14 +205,14 @@ contract FeesAndReservesTest is Test {
         // Strategist swaps WETH yield into USDC, then adds it to reserves.
         adaptorCalls = new bytes[](2);
         adaptorCalls[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
-        adaptorCalls[1] = _createBytesDataToAddToReserves(far, amountOfUsdcToAddToReserves);
+        adaptorCalls[1] = _createBytesDataToAddToReserves(amountOfUsdcToAddToReserves);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Strategist calls prepareFees.
         adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToPrepareFees(far, metaData.feesOwed);
+        adaptorCalls[0] = _createBytesDataToPrepareFees(metaData.feesOwed);
         data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -230,7 +230,7 @@ contract FeesAndReservesTest is Test {
 
         // Strategist withdraws some assets from reserves.
         adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToWithdrawFromReserves(far, reserves);
+        adaptorCalls[0] = _createBytesDataToWithdrawFromReserves(reserves);
         data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -252,9 +252,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, uint32(0), 0.2e4);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(uint32(0), 0.2e4);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(300);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -289,9 +289,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, 0.2e4);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, 0.2e4);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(300);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -358,9 +358,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -396,9 +396,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -434,9 +434,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -477,9 +477,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, managementFee, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(managementFee, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -538,9 +538,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, managementFee, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(managementFee, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -580,9 +580,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, managementFee, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(managementFee, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -622,9 +622,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, managementFee, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(managementFee, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -672,13 +672,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(
-                far,
-                uint32(managementFee),
-                uint32(performanceFee)
-            );
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(uint32(managementFee), uint32(performanceFee));
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(300);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -771,9 +767,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -804,55 +800,6 @@ contract FeesAndReservesTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__UpkeepTimeCheckFailed.selector)));
         far.performUpkeep(performData);
         vm.stopPrank();
-    }
-
-    function testMaliciousStrategistWithFakeFeesAndReserves() external {
-        // Deploy fake fees and reserves.
-        FakeFeesAndReserves fake = new FakeFeesAndReserves();
-        uint256 totalAssets = 1_000_000e6;
-        uint32 performanceFee = 0.25e4;
-        // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
-
-        Cellar[] memory cellars = new Cellar[](1);
-        cellars[0] = cellar;
-        bytes memory performData;
-
-        // Strategist calls fees and reserves setup.
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-            bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, 0, performanceFee);
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 0);
-
-            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
-            cellar.callOnAdaptor(data);
-        }
-
-        (, performData) = far.checkUpkeep(abi.encode(cellars));
-        far.performUpkeep(performData);
-
-        // Warp so enough time has passed to allow upkeeps.
-        vm.warp(block.timestamp + 300);
-
-        // Strategist will no try to get the Cellar to approve their fake FeesAndReserves contract to spend its USDC
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAddToReserves(FeesAndReserves(address(fake)), totalAssets);
-
-            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
-            cellar.callOnAdaptor(data);
-        }
-
-        // Confirm that fake fees and reserves has no USDC approval.
-        assertEq(
-            USDC.allowance(address(cellar), address(fake)),
-            0,
-            "Fake fees and reserves should have no USDC allowance."
-        );
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
@@ -904,9 +851,9 @@ contract FeesAndReservesTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(far, uint32(0), uint32(0.2e4));
-            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(far, 1_000e9);
-            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(far, 300);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(uint32(0), uint32(0.2e4));
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(300);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
             target.callOnAdaptor(data);
@@ -916,11 +863,7 @@ contract FeesAndReservesTest is Test {
         far.performUpkeep(performData);
     }
 
-    function _simulateYieldAndCheckTotalFeesEarned(
-        Cellar target,
-        uint256 yield,
-        uint256 timeToPass
-    ) internal {
+    function _simulateYieldAndCheckTotalFeesEarned(Cellar target, uint256 yield, uint256 timeToPass) internal {
         FeesAndReserves.MetaData memory targetMetaData = far.getMetaData(target);
         // Save the current fees owed.
         uint256 currentFeesOwed = targetMetaData.feesOwed;
@@ -941,7 +884,7 @@ contract FeesAndReservesTest is Test {
         uint256 exactSharePrice = target
             .totalAssets()
             .changeDecimals(targetMetaData.reserveAssetDecimals, 27)
-            .mulDivDown(10**targetMetaData.cellarDecimals, target.totalSupply());
+            .mulDivDown(10 ** targetMetaData.cellarDecimals, target.totalSupply());
 
         if (targetMetaData.managementFee > 0 && timeDelta > 0)
             expectedFeesOwed += minTotalAssets.mulDivDown(targetMetaData.managementFee, 1e4).mulDivDown(
@@ -985,82 +928,41 @@ contract FeesAndReservesTest is Test {
 
     // Make sure that if a strategists makes a huge deposit before calling log fees, it doesn't affect fee pay out
     function _createBytesDataToSetupFeesAndReserves(
-        FeesAndReserves feesAndReserves,
         uint32 targetAPR,
         uint32 performanceFee
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodeWithSelector(
-                FeesAndReservesAdaptor.setupMetaData.selector,
-                feesAndReserves,
-                targetAPR,
-                performanceFee
-            );
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.setupMetaData.selector, targetAPR, performanceFee);
     }
 
-    function _createBytesDataToChangeUpkeepFrequency(FeesAndReserves feesAndReserves, uint64 newFrequency)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return
-            abi.encodeWithSelector(
-                FeesAndReservesAdaptor.changeUpkeepFrequency.selector,
-                feesAndReserves,
-                newFrequency
-            );
+    function _createBytesDataToChangeUpkeepFrequency(uint64 newFrequency) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepFrequency.selector, newFrequency);
     }
 
-    function _createBytesDataToChangeUpkeepMaxGas(FeesAndReserves feesAndReserves, uint64 newMaxGas)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepMaxGas.selector, feesAndReserves, newMaxGas);
+    function _createBytesDataToChangeUpkeepMaxGas(uint64 newMaxGas) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepMaxGas.selector, newMaxGas);
     }
 
-    function _createBytesDataToAddToReserves(FeesAndReserves feesAndReserves, uint256 amount)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.addAssetsToReserves.selector, feesAndReserves, amount);
+    function _createBytesDataToAddToReserves(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.addAssetsToReserves.selector, amount);
     }
 
-    function _createBytesDataToWithdrawFromReserves(FeesAndReserves feesAndReserves, uint256 amount)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return
-            abi.encodeWithSelector(FeesAndReservesAdaptor.withdrawAssetsFromReserves.selector, feesAndReserves, amount);
+    function _createBytesDataToWithdrawFromReserves(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.withdrawAssetsFromReserves.selector, amount);
     }
 
-    function _createBytesDataToPrepareFees(FeesAndReserves feesAndReserves, uint256 amount)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.prepareFees.selector, feesAndReserves, amount);
+    function _createBytesDataToPrepareFees(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.prepareFees.selector, amount);
     }
 
-    function _createBytesDataToUpdateManagementFee(FeesAndReserves feesAndReserves, uint32 newFee)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.updateManagementFee.selector, feesAndReserves, newFee);
+    function _createBytesDataToUpdateManagementFee(uint32 newFee) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.updateManagementFee.selector, newFee);
     }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
 
     // Since this contract is set as the Gravity Bridge, this will be called by
     // the Cellar's `sendFees` function to send funds Cosmos.
-    function sendToCosmos(
-        address asset,
-        bytes32,
-        uint256 assets
-    ) external {
+    function sendToCosmos(address asset, bytes32, uint256 assets) external {
         ERC20(asset).transferFrom(msg.sender, cosmos, assets);
     }
 }

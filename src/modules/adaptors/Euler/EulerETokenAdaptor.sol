@@ -40,7 +40,7 @@ contract EulerETokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Euler eToken Adaptor V 0.1"));
+        return keccak256(abi.encode("Euler eToken Adaptor V 1.0"));
     }
 
     //============================================ Implement Base Functions ===========================================

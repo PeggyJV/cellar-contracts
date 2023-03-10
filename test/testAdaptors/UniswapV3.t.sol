@@ -23,12 +23,14 @@ import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungible
 import "@uniswapV3C/libraries/FixedPoint128.sol";
 import "@uniswapV3C/libraries/FullMath.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
+import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
 // Will test the swapping and cellar position management using adaptors
-contract UniswapV3AdaptorTest is Test {
+contract UniswapV3AdaptorTest is Test, ERC721Holder {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
@@ -40,7 +42,7 @@ contract UniswapV3AdaptorTest is Test {
     PriceRouter private priceRouter;
     SwapRouter private swapRouter;
 
-    Registry private registry;
+    Registry public registry;
 
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
 
@@ -69,6 +71,7 @@ contract UniswapV3AdaptorTest is Test {
 
     UniswapV3Adaptor private uniswapV3Adaptor;
     ERC20Adaptor private erc20Adaptor;
+    UniswapV3PositionTracker private tracker;
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -89,6 +92,9 @@ contract UniswapV3AdaptorTest is Test {
         gravity = new MockGravity();
         uniswapV3Adaptor = new UniswapV3Adaptor();
         erc20Adaptor = new ERC20Adaptor();
+        tracker = new UniswapV3PositionTracker(positionManager);
+        // console.log("Tracker", address(tracker));
+        // TODO remove above
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -173,6 +179,15 @@ contract UniswapV3AdaptorTest is Test {
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
+
+        assertEq(positions.length, 1, "Tracker should only have 1 position.");
+        assertEq(
+            positions[0],
+            positionManager.tokenOfOwnerByIndex(address(cellar), 0),
+            "Tracker should be tracking cellars first Uni NFT."
+        );
     }
 
     function testOpenUSDC_WETHPosition() external {
@@ -188,6 +203,15 @@ contract UniswapV3AdaptorTest is Test {
         adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, fee, 50_000e6, wethOut, 222);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        uint256[] memory positions = tracker.getTokens(address(cellar), USDC, WETH);
+
+        assertEq(positions.length, 1, "Tracker should only have 1 position.");
+        assertEq(
+            positions[0],
+            positionManager.tokenOfOwnerByIndex(address(cellar), 0),
+            "Tracker should be tracking cellars first Uni NFT."
+        );
     }
 
     function testOpeningAndClosingUniV3Position() external {
@@ -199,7 +223,7 @@ contract UniswapV3AdaptorTest is Test {
         bytes[] memory adaptorCalls = new bytes[](2);
         adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 2);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -208,6 +232,9 @@ contract UniswapV3AdaptorTest is Test {
         adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
+        assertEq(positions.length, 0, "Tracker should have zero positions.");
     }
 
     function testAddingToExistingPosition() external {
@@ -219,15 +246,28 @@ contract UniswapV3AdaptorTest is Test {
         bytes[] memory adaptorCalls = new bytes[](2);
         adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 100_500e6);
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 100_000);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
+
+        assertEq(positions.length, 1, "Tracker should only have 1 position.");
+        assertEq(
+            positions[0],
+            positionManager.tokenOfOwnerByIndex(address(cellar), 0),
+            "Tracker should be tracking cellars first Uni NFT."
+        );
 
         adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
+
+        assertEq(positions.length, 1, "Tracker should only have 1 position.");
     }
 
     function testTakingFromExistingPosition() external {
@@ -245,9 +285,13 @@ contract UniswapV3AdaptorTest is Test {
         cellar.callOnAdaptor(data);
 
         adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18);
+        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18, true);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
+
+        assertEq(positions.length, 1, "Tracker should not have removed the position.");
     }
 
     function testTakingFees() external {
@@ -323,6 +367,28 @@ contract UniswapV3AdaptorTest is Test {
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
+
+        assertEq(positions.length, 3, "Tracker should have 3 DAI USDC positions.");
+        for (uint256 i; i < 3; ++i) {
+            assertEq(
+                positions[i],
+                positionManager.tokenOfOwnerByIndex(address(cellar), i),
+                "Tracker should be tracking cellars ith Uni NFT."
+            );
+        }
+
+        positions = tracker.getTokens(address(cellar), USDC, WETH);
+
+        assertEq(positions.length, 3, "Tracker should have 3 USDC WETH positions.");
+        for (uint256 i; i < 3; ++i) {
+            assertEq(
+                positions[i],
+                positionManager.tokenOfOwnerByIndex(address(cellar), i + 3),
+                "Tracker should be tracking cellars ith Uni NFT."
+            );
+        }
     }
 
     function testIsDebtReturnsFalse() external {
@@ -408,6 +474,69 @@ contract UniswapV3AdaptorTest is Test {
         assertEq(DAI.allowance(address(cellar), address(positionManager)), 0, "DAI allowance should be zero.");
     }
 
+    function testPositionBurning() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+
+        // Add liquidity to low liquidity DAI/USDC 0.3% fee pool.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 3000, 50_000e18, 50_000e6, 100);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Have Cellar make several terrible swaps
+        cellar.setRebalanceDeviation(0.1e18);
+        deal(address(USDC), address(cellar), 1_000_000e6);
+        deal(address(DAI), address(cellar), 1_000_000e18);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 10_000e6);
+        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 10_000e18);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // First try to get rid of a token with liquidity + fees
+        // Prank cellar, and give tacker approval to spend token with liquidity + fees
+        uint256 positionId = positionManager.tokenOfOwnerByIndex(address(cellar), 0);
+        vm.startPrank(address(cellar));
+        positionManager.approve(address(tracker), positionId);
+        vm.expectRevert(bytes("Not cleared"));
+        tracker.removePositionFromArray(positionId, DAI, USDC);
+        vm.stopPrank();
+
+        // Remove liquidity from position but do not take fees.
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, type(uint128).max, false);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Then try to get rid of a token with fees
+        vm.startPrank(address(cellar));
+        positionManager.approve(address(tracker), positionId);
+        vm.expectRevert(bytes("Not cleared"));
+        tracker.removePositionFromArray(positionId, DAI, USDC);
+        vm.stopPrank();
+
+        // Set cellar balance to 1M so we can check if fees were taken.
+        deal(address(USDC), address(cellar), 1_000_000e6);
+        deal(address(DAI), address(cellar), 1_000_000e18);
+        // Finally collect fees and purge unused token.
+        adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
+        adaptorCalls[1] = _createBytesDataToPurgePosition(address(cellar), 0);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
+
+        assertEq(positions.length, 0, "Tracker should have zero positions.");
+
+        assertTrue(USDC.balanceOf(address(cellar)) > 1_000_000e6, "Cellar should have earned USDC fees.");
+        assertTrue(DAI.balanceOf(address(cellar)) > 1_000_000e18, "Cellar should have earned DAI fees.");
+    }
+
     // ========================================== REVERT TEST ==========================================
     function testUsingUntrackedLPPosition() external {
         // Remove USDC WETH LP position from cellar.
@@ -424,14 +553,12 @@ contract UniswapV3AdaptorTest is Test {
         uint24 fee = 500;
         adaptorCalls[0] = _createBytesDataToOpenRangeOrder(USDC, WETH, fee, assets, 0);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        uint256 deviation = cellar.allowedRebalanceDeviation();
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector,
-                    0,
-                    assets.mulWadDown(1e18 - deviation),
-                    assets.mulWadDown(1e18 + deviation)
+                    UniswapV3Adaptor.UniswapV3Adaptor__UntrackedLiquidity.selector,
+                    address(USDC),
+                    address(WETH)
                 )
             )
         );
@@ -515,25 +642,6 @@ contract UniswapV3AdaptorTest is Test {
             vm.expectRevert(bytes("ERC721: owner query for nonexistent token"));
             cellar.callOnAdaptor(data);
         }
-    }
-
-    function testRemovingMoreLiquidityThenWhatIsInToken() external {
-        deal(address(USDC), address(cellar), 100_000e6);
-        deal(address(DAI), address(cellar), 100_000e6);
-
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-
-        // Open a position.
-        adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, type(uint256).max, 30);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-
-        // Take more liquidity than available.
-        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 1.01e18);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        vm.expectRevert(bytes("Address: low-level delegate call failed"));
-        cellar.callOnAdaptor(data);
     }
 
     // ========================================== INTEGRATION TEST ==========================================
@@ -678,9 +786,9 @@ contract UniswapV3AdaptorTest is Test {
             adaptorCalls[2] = _createBytesDataToCollectFees(address(cellar), 2, type(uint128).max, type(uint128).max);
 
             // Take varying amounts of liquidity from tokens 3, 4, 5 using takeFromPosition.
-            adaptorCalls[3] = _createBytesDataToTakeLP(address(cellar), 3, 1e18);
-            adaptorCalls[4] = _createBytesDataToTakeLP(address(cellar), 4, 0.75e18);
-            adaptorCalls[5] = _createBytesDataToTakeLP(address(cellar), 5, 0.5e18);
+            adaptorCalls[3] = _createBytesDataToTakeLP(address(cellar), 3, 1e18, true);
+            adaptorCalls[4] = _createBytesDataToTakeLP(address(cellar), 4, 0.75e18, true);
+            adaptorCalls[5] = _createBytesDataToTakeLP(address(cellar), 5, 0.5e18, true);
 
             //// Take all liquidity from tokens 6, 7, 8, 9 using closePosition.
             adaptorCalls[6] = _createBytesDataToCloseLP(address(cellar), 6);
@@ -707,9 +815,10 @@ contract UniswapV3AdaptorTest is Test {
         }
         cellar.callOnAdaptor(data);
 
-        // Check that closePosition positions NFT were transferred to the dead address.
+        // Check that closePosition positions NFT are burned.
         for (uint8 i = 6; i < 10; i++) {
-            assertEq(positionManager.ownerOf(nfts[i]), address(1), "NFT should be owned by DEAD address.");
+            vm.expectRevert(bytes("ERC721: owner query for nonexistent token"));
+            positionManager.ownerOf(nfts[i]);
         }
 
         // New User deposits more funds.
@@ -856,15 +965,321 @@ contract UniswapV3AdaptorTest is Test {
         vm.stopPrank();
     }
 
+    function testWorkingWithMaxNumberOfTrackedTokens() external {
+        deal(address(USDC), address(this), 202_000e6);
+        cellar.deposit(202_000e6, address(this));
+
+        // Give cellar both assets so no swap is needed.
+        deal(address(USDC), address(cellar), 101_000e6);
+        deal(address(DAI), address(cellar), 101_000e18);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 1_000e18, 1_000e6, 100_000);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        uint256[] memory positions;
+
+        // Fill tracker with Max positions.
+        for (uint256 i; i < tracker.MAX_HOLDINGS(); ++i) {
+            cellar.callOnAdaptor(data);
+            positions = tracker.getTokens(address(cellar), DAI, USDC);
+            assertEq(positions.length, i + 1, "Tracker should i+1 positions.");
+        }
+
+        // Adding 1 more position should revert.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(UniswapV3PositionTracker.UniswapV3PositionTracker__MaxHoldingsExceeded.selector)
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        // Loop through, and remove all liquidity from positions.'
+        for (uint256 i; i < tracker.MAX_HOLDINGS(); ++i) {
+            adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), i, type(uint128).max, true);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Try purging all positons in 1 TX and make sure gas usage is feasible
+        adaptorCalls[0] = _createBytesDataToPurgeAllZeroLiquidityPosition(DAI, USDC);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        uint256 startingGas = gasleft();
+        cellar.callOnAdaptor(data);
+        assertLt(startingGas - gasleft(), 10_000_000, "Gas should be below 10M.");
+
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
+        assertEq(positions.length, 0, "Cellar should zero DAI USDC positions.");
+    }
+
+    function testCellarPurgingSinglePositionsAndAllUnusedPositions() external {
+        // create 10 posiitons in the cellar
+        deal(address(USDC), address(this), 202_000e6);
+        cellar.deposit(202_000e6, address(this));
+
+        // Give cellar both assets so no swap is needed.
+        deal(address(USDC), address(cellar), 101_000e6);
+        deal(address(DAI), address(cellar), 101_000e18);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 1_000e18, 1_000e6, 100_000);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        uint256[] memory positions;
+
+        // Fill tracker with 10 positions.
+        for (uint256 i; i < 10; ++i) {
+            cellar.callOnAdaptor(data);
+            positions = tracker.getTokens(address(cellar), DAI, USDC);
+        }
+
+        // Try purging a position that has liquidity
+        adaptorCalls[0] = _createBytesDataToPurgePosition(address(cellar), 0);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    UniswapV3Adaptor.UniswapV3Adaptor__PurgingPositionWithLiquidity.selector,
+                    positionManager.tokenOfOwnerByIndex(address(cellar), 0)
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        // Call purge all and make sure nothing happens.
+        adaptorCalls[0] = _createBytesDataToPurgeAllZeroLiquidityPosition(DAI, USDC);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
+        assertEq(positions.length, 10, "Cellar should have 10 DAI USDC positions.");
+
+        // Remove liquidity from some positions.
+        adaptorCalls = new bytes[](5);
+        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 2, 0.5e18, true);
+        adaptorCalls[1] = _createBytesDataToTakeLP(address(cellar), 7, type(uint128).max, true);
+        adaptorCalls[2] = _createBytesDataToTakeLP(address(cellar), 3, 0.5e18, true);
+        adaptorCalls[3] = _createBytesDataToTakeLP(address(cellar), 9, type(uint128).max, true);
+        adaptorCalls[4] = _createBytesDataToTakeLP(address(cellar), 1, type(uint128).max, true);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Purge 1 Valid position.
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToPurgePosition(address(cellar), 7);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
+        assertEq(positions.length, 9, "Cellar should have 9 DAI USDC positions.");
+
+        // Purge all unused positions.
+        adaptorCalls[0] = _createBytesDataToPurgeAllZeroLiquidityPosition(DAI, USDC);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
+        assertEq(positions.length, 7, "Cellar should have 7 DAI USDC positions.");
+
+        for (uint256 i; i < 7; ++i) {
+            assertEq(
+                positions[i],
+                positionManager.tokenOfOwnerByIndex(address(cellar), i),
+                "Tracker should be tracking cellars ith Uni NFT."
+            );
+        }
+    }
+
+    function testCellarAddingAndRemovingPositionReverts() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Try to have the cellar add a position it does not own.
+        vm.startPrank(address(cellar));
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    UniswapV3PositionTracker.UniswapV3PositionTracker__CallerDoesNotOwnTokenId.selector
+                )
+            )
+        );
+        tracker.addPositionToArray(100, USDC, DAI);
+        vm.stopPrank();
+
+        // Try to re add a position.
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
+        vm.startPrank(address(cellar));
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    UniswapV3PositionTracker.UniswapV3PositionTracker__TokenIdAlreadyTracked.selector
+                )
+            )
+        );
+        tracker.addPositionToArray(positions[0], DAI, USDC);
+        vm.stopPrank();
+
+        deal(address(DAI), address(this), 50_000e18);
+        deal(address(USDC), address(this), 50_000e6);
+        address(uniswapV3Adaptor).functionDelegateCall(
+            _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10)
+        );
+        uint256 id = positionManager.tokenOfOwnerByIndex(address(this), 0);
+
+        uint256 totalAssetsBefore = cellar.totalAssets();
+
+        // Send token to cellar.
+        positionManager.transferFrom(address(this), address(cellar), id);
+
+        // Check totalAssets.
+        assertEq(cellar.totalAssets(), totalAssetsBefore, "Total Assets should not change.");
+
+        // First pass in incorrect underlying.
+        vm.startPrank(address(cellar));
+        positionManager.approve(address(tracker), id);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(UniswapV3PositionTracker.UniswapV3PositionTracker__TokenIdNotFound.selector))
+        );
+        tracker.removePositionFromArray(id, USDC, WETH);
+        vm.stopPrank();
+
+        // Now pass in correct underlying.
+        vm.startPrank(address(cellar));
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(UniswapV3PositionTracker.UniswapV3PositionTracker__TokenIdNotFound.selector))
+        );
+        tracker.removePositionFromArray(id, DAI, USDC);
+        vm.stopPrank();
+
+        // Try re-adding same position but with tokens swapped, should succeed but totalAssets should remain the same.
+        vm.startPrank(address(cellar));
+        tracker.addPositionToArray(positions[0], USDC, DAI);
+        vm.stopPrank();
+
+        // Check totalAssets.
+        assertEq(cellar.totalAssets(), totalAssetsBefore, "Total Assets should not change.");
+
+        // Try removing an owned postion from tracker using the remove unowned position and make sure it reverts
+        vm.startPrank(address(cellar));
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(UniswapV3PositionTracker.UniswapV3PositionTracker__CallerOwnsTokenId.selector))
+        );
+        tracker.removePositionFromArrayThatIsNotOwnedByCaller(id, DAI, USDC);
+        vm.stopPrank();
+    }
+
+    function testGriefingAttack() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 gas = gasleft();
+        cellar.totalAssets();
+        uint256 totalAssetsGasCost = gas - gasleft();
+
+        // Send multiple uniswap V3 NFTs to cellar.
+        deal(address(USDC), address(this), 50_000e6);
+        deal(address(DAI), address(this), 50_000e18);
+        for (uint256 i; i < 10; ++i) {
+            address(uniswapV3Adaptor).functionDelegateCall(
+                _createBytesDataToOpenLP(DAI, USDC, 100, 1_000e18, 1_000e6, 10)
+            );
+            uint256 id = positionManager.tokenOfOwnerByIndex(address(this), 0);
+
+            // Send token to cellar.
+            positionManager.transferFrom(address(this), address(cellar), id);
+        }
+
+        // Make sure totalAssets gas cost has not rose significantly.
+        gas = gasleft();
+        cellar.totalAssets();
+        uint256 totalAssetsGasCostAfterAttack = gas - gasleft();
+
+        assertEq(totalAssetsGasCost, totalAssetsGasCostAfterAttack, "Gas cost should be the same.");
+    }
+
+    function testIdsAreIgnoredIfNotOwnedByCellar() external {
+        deal(address(USDC), address(this), 101_000e6);
+        cellar.deposit(101_000e6, address(this));
+
+        // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](3);
+        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+
+        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 1_000);
+        adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 1_000);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Save total assets.
+        uint256 totalAssetsBefore = cellar.totalAssets();
+
+        // Now that cellar owns 2 uniswap v3 positions, spoof cellar to transfer 1 out.
+        vm.startPrank(address(cellar));
+        uint256 idToRemove = positionManager.tokenOfOwnerByIndex(address(cellar), 0);
+        positionManager.transferFrom(address(cellar), address(this), idToRemove);
+        vm.stopPrank();
+
+        // Tracked array still returns 2 LP positions.
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
+
+        assertEq(positions.length, 2, "Tracker should report 2 DAI USDC LP positions.");
+
+        // Total assets should be cut in half because the LP position the cellar does not own should not be included in totalAssets.
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            totalAssetsBefore / 2,
+            0.05e18,
+            "Cellar should have about half the assets."
+        );
+
+        // Strategist can remove the unowned tracked position.
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToRemoveTrackedPositionNotOwned(idToRemove, DAI, USDC);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
+
+        assertEq(positions.length, 1, "Tracker should report 1 DAI USDC LP position1.");
+
+        // Total assets should not change much.
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            totalAssetsBefore / 2,
+            0.05e18,
+            "Cellar should have about half the assets."
+        );
+    }
+
     // ========================================= GRAVITY FUNCTIONS =========================================
 
     // Since this contract is set as the Gravity Bridge, this will be called by
     // the Cellar's `sendFees` function to send funds Cosmos.
-    function sendToCosmos(
-        address asset,
-        bytes32,
-        uint256 assets
-    ) external {
+    function sendToCosmos(address asset, bytes32, uint256 assets) external {
         ERC20(asset).transferFrom(msg.sender, cosmos, assets);
     }
 
@@ -896,7 +1311,7 @@ contract UniswapV3AdaptorTest is Test {
         int24 shift
     ) internal view returns (int24 lower, int24 upper) {
         uint256 price = priceRouter.getExchangeRate(token1, token0);
-        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
+        uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (price);
         uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
         int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
         tick = tick + shift;
@@ -966,12 +1381,17 @@ contract UniswapV3AdaptorTest is Test {
     function _createBytesDataToTakeLP(
         address owner,
         uint256 index,
-        uint256 liquidityPer
+        uint256 liquidityPer,
+        bool takeFees
     ) internal view returns (bytes memory) {
         uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
-        (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager.positions(tokenId);
-        uint128 liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
-        return abi.encodeWithSelector(UniswapV3Adaptor.takeFromPosition.selector, tokenId, liquidity, 0, 0, true);
+        uint128 liquidity;
+        if (liquidityPer >= 1e18) liquidity = type(uint128).max;
+        else {
+            (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager.positions(tokenId);
+            liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
+        }
+        return abi.encodeWithSelector(UniswapV3Adaptor.takeFromPosition.selector, tokenId, liquidity, 0, 0, takeFees);
     }
 
     function _createBytesDataToCollectFees(
@@ -982,6 +1402,26 @@ contract UniswapV3AdaptorTest is Test {
     ) internal view returns (bytes memory) {
         uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
         return abi.encodeWithSelector(UniswapV3Adaptor.collectFees.selector, tokenId, amount0, amount1);
+    }
+
+    function _createBytesDataToPurgePosition(address owner, uint256 index) internal view returns (bytes memory) {
+        uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
+        return abi.encodeWithSelector(UniswapV3Adaptor.purgeSinglePosition.selector, tokenId);
+    }
+
+    function _createBytesDataToPurgeAllZeroLiquidityPosition(
+        ERC20 token0,
+        ERC20 token1
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(UniswapV3Adaptor.purgeAllZeroLiquidityPositions.selector, token0, token1);
+    }
+
+    function _createBytesDataToRemoveTrackedPositionNotOwned(
+        uint256 id,
+        ERC20 token0,
+        ERC20 token1
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(UniswapV3Adaptor.removeUnOwnedPositionFromTracker.selector, id, token0, token1);
     }
 
     function _createBytesDataToOpenRangeOrder(
@@ -1012,5 +1452,10 @@ contract UniswapV3AdaptorTest is Test {
                 lower,
                 upper
             );
+    }
+
+    // Used to spoof adaptor into thinkig this is a cellar contract.
+    function isPositionUsed(uint256) public pure returns (bool) {
+        return true;
     }
 }

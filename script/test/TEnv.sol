@@ -5,6 +5,7 @@ import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { ERC20, SafeTransferLib } from "src/base/Cellar.sol";
+import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 
 contract TEnv {
     // General Variables.
@@ -15,12 +16,15 @@ contract TEnv {
     Registry public registry = Registry(0xd1c18363F81d8E6260511b38FcF1e8b710E7e31D);
     PriceRouter public priceRouter = PriceRouter(0xD8029A05bEB0FaF1215fBb064D98c39B28d317Ee);
     SwapRouter public swapRouter = SwapRouter(0xC356F0AC3a0d3fC18167d8ee62e0A8FB487D1719);
+    ERC20Adaptor public erc20Adaptor = ERC20Adaptor(0x802818408DfC63E67ca4C56e2F5Ec37998Dd520C);
 
     // Common ERC20s.
     ERC20 public USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 public DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 public USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
     ERC20 public WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 public cbETH = ERC20(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+    ERC20 public rETH = ERC20(0xae78736Cd615f374D3085123A210448E74Fc6393);
 
     // Chainlink PriceFeeds
     uint8 public constant CHAINLINK_DERIVATIVE = 1;
@@ -28,9 +32,10 @@ contract TEnv {
     address public DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
     address public USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+    address public CBETH_ETH_FEED = 0xF017fcB346A1885194689bA23Eff2fE6fA5C483b;
+    address public RETH_ETH_FEED = 0x536218f9E9Eb48863970252233c8F271f554C2d0;
 
     // Registry Positions.
-    // Euler positions.
     uint32 public eUsdcPosition = 1;
     uint32 public eDaiPosition = 2;
     uint32 public eUsdtPosition = 3;
@@ -40,4 +45,7 @@ contract TEnv {
     uint32 public debtUsdcPosition = 10;
     uint32 public debtDaiPosition = 11;
     uint32 public debtUsdtPosition = 12;
+    uint32 public eWethPositionV2 = 13;
+    uint32 public eWethLiquidPositionV2 = 14;
+    uint32 public debtWethPositionV2 = 15;
 }

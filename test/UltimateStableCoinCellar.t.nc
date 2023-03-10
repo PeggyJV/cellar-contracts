@@ -563,7 +563,7 @@ contract UltimateStableCoinCellarTest is Test {
         int24 shift
     ) internal view returns (int24 lower, int24 upper) {
         uint256 price = priceRouter.getExchangeRate(token1, token0);
-        uint256 ratioX192 = ((10**token1.decimals()) << 192) / (price);
+        uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (price);
         uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
         int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
         tick = tick + shift;
@@ -637,7 +637,9 @@ contract UltimateStableCoinCellarTest is Test {
     ) internal view returns (bytes memory) {
         uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
         (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager.positions(tokenId);
-        uint128 liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
+        uint128 liquidity;
+        if (liquidity >= 1e18) liquidity = type(uint128).max;
+        else liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
         return abi.encodeWithSelector(UniswapV3Adaptor.takeFromPosition.selector, tokenId, liquidity, 0, 0);
     }
 
@@ -681,19 +683,17 @@ contract UltimateStableCoinCellarTest is Test {
             );
     }
 
-    function _createBytesDataToLendOnAave(ERC20 tokenToLend, uint256 amountToLend)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToLendOnAave(
+        ERC20 tokenToLend,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveATokenAdaptor.depositToAave.selector, tokenToLend, amountToLend);
     }
 
-    function _createBytesDataToWithdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawFromAave(
+        ERC20 tokenToWithdraw,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveATokenAdaptor.withdrawFromAave.selector, tokenToWithdraw, amountToWithdraw);
     }
 
@@ -760,19 +760,17 @@ contract UltimateStableCoinCellarTest is Test {
             );
     }
 
-    function _createBytesDataToLendOnCompound(CErc20 market, uint256 amountToLend)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToLendOnCompound(
+        CErc20 market,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.depositToCompound.selector, market, amountToLend);
     }
 
-    function _createBytesDataToWithdrawFromCompound(CErc20 market, uint256 amountToWithdraw)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawFromCompound(
+        CErc20 market,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.withdrawFromCompound.selector, market, amountToWithdraw);
     }
 

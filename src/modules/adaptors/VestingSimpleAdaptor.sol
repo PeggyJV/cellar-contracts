@@ -28,7 +28,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("VestingSimpleAdaptor V 0.0"));
+        return keccak256(abi.encode("VestingSimpleAdaptor V 1.0"));
     }
 
     //============================================ Implement Base Functions ===========================================

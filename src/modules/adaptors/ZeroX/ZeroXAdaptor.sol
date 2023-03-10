@@ -31,7 +31,7 @@ contract ZeroXAdaptor is PositionlessAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("0x Adaptor V 0.0"));
+        return keccak256(abi.encode("0x Adaptor V 1.0"));
     }
 
     /**

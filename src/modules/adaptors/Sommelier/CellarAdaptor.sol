@@ -32,7 +32,7 @@ contract CellarAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Sommelier Cellar Adaptor V 0.0"));
+        return keccak256(abi.encode("Sommelier Cellar Adaptor V 1.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
