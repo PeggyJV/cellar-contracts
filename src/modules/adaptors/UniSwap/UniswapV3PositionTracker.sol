@@ -108,8 +108,8 @@ contract UniswapV3PositionTracker {
         uint256 holdingLength = callerToToken0ToToken1ToHoldings[caller][token0][token1].length;
 
         for (uint256 i; i < holdingLength; ++i) {
-            uint256 currentPositionId = callerToToken0ToToken1ToHoldings[caller][token0][token1][i];
-            if (currentPositionId == tokenId) {
+            uint256 currentTokenId = callerToToken0ToToken1ToHoldings[caller][token0][token1][i];
+            if (currentTokenId == tokenId) {
                 return (true, i);
             }
         }
@@ -119,13 +119,9 @@ contract UniswapV3PositionTracker {
     }
 
     /**
-     * @notice Return an array of positions a caller owns for a given token0 and token1.
+     * @notice Return an array of tokens a caller owns for a given token0 and token1.
      */
-    function getPositions(
-        address caller,
-        ERC20 token0,
-        ERC20 token1
-    ) external view returns (uint256[] memory positions) {
+    function getTokens(address caller, ERC20 token0, ERC20 token1) external view returns (uint256[] memory tokens) {
         return callerToToken0ToToken1ToHoldings[caller][token0][token1];
     }
 
@@ -139,8 +135,8 @@ contract UniswapV3PositionTracker {
         uint256 holdingLength = callerToToken0ToToken1ToHoldings[user][token0][token1].length;
 
         for (uint256 i; i < holdingLength; ++i) {
-            uint256 currentPositionId = callerToToken0ToToken1ToHoldings[user][token0][token1][i];
-            if (currentPositionId == targetId) {
+            uint256 currentTokenId = callerToToken0ToToken1ToHoldings[user][token0][token1][i];
+            if (currentTokenId == targetId) {
                 // We found the target tokenId.
                 callerToToken0ToToken1ToHoldings[user][token0][token1][i] = callerToToken0ToToken1ToHoldings[user][
                     token0

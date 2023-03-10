@@ -180,7 +180,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        uint256[] memory positions = tracker.getPositions(address(cellar), DAI, USDC);
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
         assertEq(positions.length, 1, "Tracker should only have 1 position.");
         assertEq(
@@ -204,7 +204,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        uint256[] memory positions = tracker.getPositions(address(cellar), USDC, WETH);
+        uint256[] memory positions = tracker.getTokens(address(cellar), USDC, WETH);
 
         assertEq(positions.length, 1, "Tracker should only have 1 position.");
         assertEq(
@@ -233,7 +233,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        uint256[] memory positions = tracker.getPositions(address(cellar), DAI, USDC);
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
         assertEq(positions.length, 0, "Tracker should have zero positions.");
     }
 
@@ -251,7 +251,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        uint256[] memory positions = tracker.getPositions(address(cellar), DAI, USDC);
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
         assertEq(positions.length, 1, "Tracker should only have 1 position.");
         assertEq(
@@ -265,7 +265,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        positions = tracker.getPositions(address(cellar), DAI, USDC);
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
 
         assertEq(positions.length, 1, "Tracker should only have 1 position.");
     }
@@ -289,7 +289,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        uint256[] memory positions = tracker.getPositions(address(cellar), DAI, USDC);
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
         assertEq(positions.length, 1, "Tracker should not have removed the position.");
     }
@@ -368,7 +368,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        uint256[] memory positions = tracker.getPositions(address(cellar), DAI, USDC);
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
         assertEq(positions.length, 3, "Tracker should have 3 DAI USDC positions.");
         for (uint256 i; i < 3; ++i) {
@@ -379,7 +379,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
             );
         }
 
-        positions = tracker.getPositions(address(cellar), USDC, WETH);
+        positions = tracker.getTokens(address(cellar), USDC, WETH);
 
         assertEq(positions.length, 3, "Tracker should have 3 USDC WETH positions.");
         for (uint256 i; i < 3; ++i) {
@@ -529,7 +529,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        uint256[] memory positions = tracker.getPositions(address(cellar), DAI, USDC);
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
         assertEq(positions.length, 0, "Tracker should have zero positions.");
 
@@ -983,7 +983,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // Fill tracker with Max positions.
         for (uint256 i; i < tracker.MAX_HOLDINGS(); ++i) {
             cellar.callOnAdaptor(data);
-            positions = tracker.getPositions(address(cellar), DAI, USDC);
+            positions = tracker.getTokens(address(cellar), DAI, USDC);
             assertEq(positions.length, i + 1, "Tracker should i+1 positions.");
         }
 
@@ -1009,7 +1009,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.callOnAdaptor(data);
         assertLt(startingGas - gasleft(), 10_000_000, "Gas should be below 10M.");
 
-        positions = tracker.getPositions(address(cellar), DAI, USDC);
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
         assertEq(positions.length, 0, "Cellar should zero DAI USDC positions.");
     }
 
@@ -1032,7 +1032,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // Fill tracker with 10 positions.
         for (uint256 i; i < 10; ++i) {
             cellar.callOnAdaptor(data);
-            positions = tracker.getPositions(address(cellar), DAI, USDC);
+            positions = tracker.getTokens(address(cellar), DAI, USDC);
         }
 
         // Try purging a position that has liquidity
@@ -1053,7 +1053,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        positions = tracker.getPositions(address(cellar), DAI, USDC);
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
         assertEq(positions.length, 10, "Cellar should have 10 DAI USDC positions.");
 
         // Remove liquidity from some positions.
@@ -1072,7 +1072,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        positions = tracker.getPositions(address(cellar), DAI, USDC);
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
         assertEq(positions.length, 9, "Cellar should have 9 DAI USDC positions.");
 
         // Purge all unused positions.
@@ -1080,7 +1080,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        positions = tracker.getPositions(address(cellar), DAI, USDC);
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
         assertEq(positions.length, 7, "Cellar should have 7 DAI USDC positions.");
 
         for (uint256 i; i < 7; ++i) {
@@ -1119,7 +1119,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.stopPrank();
 
         // Try to re add a position.
-        uint256[] memory positions = tracker.getPositions(address(cellar), DAI, USDC);
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
         vm.startPrank(address(cellar));
         vm.expectRevert(
             bytes(
@@ -1244,7 +1244,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.stopPrank();
 
         // Tracked array still returns 2 LP positions.
-        uint256[] memory positions = tracker.getPositions(address(cellar), DAI, USDC);
+        uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
         assertEq(positions.length, 2, "Tracker should report 2 DAI USDC LP positions.");
 
@@ -1262,7 +1262,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        positions = tracker.getPositions(address(cellar), DAI, USDC);
+        positions = tracker.getTokens(address(cellar), DAI, USDC);
 
         assertEq(positions.length, 1, "Tracker should report 1 DAI USDC LP position1.");
 
