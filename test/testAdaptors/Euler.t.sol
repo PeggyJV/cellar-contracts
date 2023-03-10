@@ -203,9 +203,9 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](1);
-            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(USDC, 0);
             bytes[] memory adaptorCalls1 = new bytes[](1);
-            adaptorCalls1[0] = _createBytesDataToBorrow(dUSDC, 0, assets / 2);
+            adaptorCalls1[0] = _createBytesDataToBorrow(USDC, 0, assets / 2);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
             data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
@@ -222,7 +222,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToExitMarket(eUSDC, 0);
+            adaptorCalls[0] = _createBytesDataToExitMarket(USDC, 0);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls });
             vm.expectRevert(bytes("e/outstanding-borrow"));
@@ -233,7 +233,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToRepay(dUSDC, 0, assets / 2);
+            adaptorCalls[0] = _createBytesDataToRepay(USDC, 0, assets / 2);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -254,9 +254,9 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](1);
-            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(USDC, 0);
             bytes[] memory adaptorCalls1 = new bytes[](1);
-            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 0, 2 * assets);
+            adaptorCalls1[0] = _createBytesDataToSelfBorrow(USDC, 0, 2 * assets);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
             data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
@@ -281,7 +281,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSelfRepay(address(USDC), 0, 2 * assets);
+            adaptorCalls[0] = _createBytesDataToSelfRepay(USDC, 0, 2 * assets);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -334,10 +334,10 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](2);
-            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
-            adaptorCalls0[1] = _createBytesDataToTransferBetweenAccounts(eUSDC, 1, 0, eUSDCBalance / 2);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(USDC, 0);
+            adaptorCalls0[1] = _createBytesDataToTransferBetweenAccounts(USDC, 1, 0, eUSDCBalance / 2);
             bytes[] memory adaptorCalls1 = new bytes[](1);
-            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(USDC), 0, assets);
+            adaptorCalls1[0] = _createBytesDataToSelfBorrow(USDC, 0, assets);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
             data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
@@ -393,7 +393,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToEnterMarket(eUSDC, 0);
+            adaptorCalls[0] = _createBytesDataToEnterMarket(USDC, 0);
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls });
 
             cellar.callOnAdaptor(data);
@@ -403,7 +403,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToBorrow(dUSDT, 0, assets / 2);
+            adaptorCalls[0] = _createBytesDataToBorrow(USDT, 0, assets / 2);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls });
             vm.expectRevert(
@@ -421,7 +421,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSelfBorrow(address(USDT), 0, 2 * assets);
+            adaptorCalls[0] = _createBytesDataToSelfBorrow(USDT, 0, 2 * assets);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls });
             vm.expectRevert(
@@ -439,7 +439,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToBorrow(dUSDC, 1, assets / 2);
+            adaptorCalls[0] = _createBytesDataToBorrow(USDC, 1, assets / 2);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls });
             vm.expectRevert(
@@ -464,7 +464,7 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToTransferBetweenAccounts(eUSDC, 0, 1, eUSDCBalance / 2);
+            adaptorCalls[0] = _createBytesDataToTransferBetweenAccounts(USDC, 0, 1, eUSDCBalance / 2);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls });
             vm.expectRevert(
@@ -499,7 +499,7 @@ contract CellarEulerTest is Test {
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        _checkLeveragedPosition(assets, cellar, eUSDC, 10);
+        _checkLeveragedPosition(assets, cellar, USDC, 10);
     }
 
     function testLeveragedWETH() external {
@@ -549,7 +549,7 @@ contract CellarEulerTest is Test {
         deal(address(WETH), address(this), assets);
         leveragedCellar.deposit(assets, address(this));
 
-        _checkLeveragedPosition(assets, leveragedCellar, eWETH, 10);
+        _checkLeveragedPosition(assets, leveragedCellar, WETH, 10);
     }
 
     function testETokenAndDebtTokenPositions() external {
@@ -570,11 +570,11 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](1);
-            adaptorCalls0[0] = _createBytesDataToEnterMarket(eUSDC, 0);
+            adaptorCalls0[0] = _createBytesDataToEnterMarket(USDC, 0);
 
             bytes[] memory adaptorCalls1 = new bytes[](2);
             uint256 amountToBorrow = priceRouter.getValue(USDC, assets / 2, WETH);
-            adaptorCalls1[0] = _createBytesDataToBorrow(dWETH, 0, amountToBorrow);
+            adaptorCalls1[0] = _createBytesDataToBorrow(WETH, 0, amountToBorrow);
             adaptorCalls1[1] = _createBytesDataForSwap(WETH, USDC, 500, amountToBorrow);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
@@ -586,10 +586,10 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](1);
-            adaptorCalls0[0] = _createBytesDataToWithdraw(eUSDC, 0, assets / 10);
+            adaptorCalls0[0] = _createBytesDataToWithdraw(USDC, 0, assets / 10);
 
             bytes[] memory adaptorCalls1 = new bytes[](1);
-            adaptorCalls1[0] = _createBytesDataToSwapAndRepay(USDC, 0, dWETH, WETH, 500, assets / 10);
+            adaptorCalls1[0] = _createBytesDataToSwapAndRepay(USDC, 0, WETH, 500, assets / 10);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
             data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
@@ -606,7 +606,7 @@ contract CellarEulerTest is Test {
             uint256 USDCToSwap = USDC.balanceOf(address(cellar));
             bytes[] memory adaptorCalls = new bytes[](2);
             adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, USDCToSwap);
-            adaptorCalls[1] = _createBytesDataToRepay(dWETH, 0, type(uint256).max);
+            adaptorCalls[1] = _createBytesDataToRepay(WETH, 0, type(uint256).max);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -637,12 +637,12 @@ contract CellarEulerTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](6);
-            adaptorCalls[0] = _createBytesDataToWithdraw(eUSDC, 0, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToWithdraw(USDC, 0, type(uint256).max);
             adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 500, assets / 3);
             adaptorCalls[2] = _createBytesDataForSwap(USDC, USDT, 500, assets / 3);
-            adaptorCalls[3] = _createBytesDataToDeposit(eDAI, 0, type(uint256).max);
-            adaptorCalls[4] = _createBytesDataToDeposit(eUSDT, 0, type(uint256).max);
-            adaptorCalls[5] = _createBytesDataToDeposit(eUSDC, 0, type(uint256).max);
+            adaptorCalls[3] = _createBytesDataToDeposit(DAI, 0, type(uint256).max);
+            adaptorCalls[4] = _createBytesDataToDeposit(USDT, 0, type(uint256).max);
+            adaptorCalls[5] = _createBytesDataToDeposit(USDC, 0, type(uint256).max);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -672,22 +672,19 @@ contract CellarEulerTest is Test {
     function _checkLeveragedPosition(
         uint256 assets,
         Cellar leveragedCellar,
-        IEulerEToken leveragedAsset,
+        ERC20 leveragedAsset,
         uint256 targetLeverage
     ) internal {
-        address vanillaAsset = markets.eTokenToUnderlying(address(leveragedAsset));
         // Strategist moves half of assets into sub account 0, enter markets for 0, then self borrows.
-        uint256 eTokensToTransfer = leveragedAsset.balanceOf(_getSubAccount(address(leveragedCellar), 1)).mulDivDown(
-            9,
-            10
-        );
+        IEulerEToken eToken = IEulerEToken(markets.underlyingToEToken(address(leveragedAsset)));
+        uint256 eTokensToTransfer = eToken.balanceOf(_getSubAccount(address(leveragedCellar), 1)).mulDivDown(9, 10);
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](2);
             adaptorCalls0[0] = _createBytesDataToEnterMarket(leveragedAsset, 0);
             adaptorCalls0[1] = _createBytesDataToTransferBetweenAccounts(leveragedAsset, 1, 0, eTokensToTransfer);
             bytes[] memory adaptorCalls1 = new bytes[](1);
-            adaptorCalls1[0] = _createBytesDataToSelfBorrow(address(vanillaAsset), 0, targetLeverage * assets);
+            adaptorCalls1[0] = _createBytesDataToSelfBorrow(leveragedAsset, 0, targetLeverage * assets);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(eulerETokenAdaptor), callData: adaptorCalls0 });
             data[1] = Cellar.AdaptorCall({ adaptor: address(eulerDebtTokenAdaptor), callData: adaptorCalls1 });
@@ -720,7 +717,7 @@ contract CellarEulerTest is Test {
             eTokensToTransfer = eTokensToTransfer.mulDivDown(1, 10);
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
             bytes[] memory adaptorCalls0 = new bytes[](1);
-            adaptorCalls0[0] = _createBytesDataToSelfRepay(address(vanillaAsset), 0, (targetLeverage * assets) / 2);
+            adaptorCalls0[0] = _createBytesDataToSelfRepay(leveragedAsset, 0, (targetLeverage * assets) / 2);
             bytes[] memory adaptorCalls1 = new bytes[](1);
             adaptorCalls1[0] = _createBytesDataToTransferBetweenAccounts(leveragedAsset, 0, 1, eTokensToTransfer);
 
@@ -754,14 +751,13 @@ contract CellarEulerTest is Test {
     function _createBytesDataToSwapAndRepay(
         ERC20 from,
         uint256 subAccountId,
-        IEulerDToken debtTokenToRepay,
-        ERC20 to,
+        ERC20 underlying,
         uint24 fee,
         uint256 amount
     ) internal pure returns (bytes memory) {
         address[] memory path = new address[](2);
         path[0] = address(from);
-        path[1] = address(to);
+        path[1] = address(underlying);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = fee;
         bytes memory params = abi.encode(path, poolFees, amount, 0);
@@ -770,7 +766,7 @@ contract CellarEulerTest is Test {
                 EulerDebtTokenAdaptor.swapAndRepay.selector,
                 from,
                 subAccountId,
-                debtTokenToRepay,
+                underlying,
                 amount,
                 SwapRouter.Exchange.UNIV3,
                 params
@@ -793,80 +789,75 @@ contract CellarEulerTest is Test {
             abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
     }
 
-    function _createBytesDataToEnterMarket(IEulerEToken eToken, uint256 subAccountId)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodeWithSelector(EulerETokenAdaptor.enterMarket.selector, eToken, subAccountId);
+    function _createBytesDataToEnterMarket(
+        ERC20 underlying,
+        uint256 subAccountId
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(EulerETokenAdaptor.enterMarket.selector, underlying, subAccountId);
     }
 
-    function _createBytesDataToExitMarket(IEulerEToken eToken, uint256 subAccountId)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodeWithSelector(EulerETokenAdaptor.exitMarket.selector, eToken, subAccountId);
+    function _createBytesDataToExitMarket(ERC20 underlying, uint256 subAccountId) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(EulerETokenAdaptor.exitMarket.selector, underlying, subAccountId);
     }
 
     function _createBytesDataToDeposit(
-        IEulerEToken tokenToDeposit,
+        ERC20 underlying,
         uint256 subAccountId,
         uint256 amountToDeposit
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 EulerETokenAdaptor.depositToEuler.selector,
-                tokenToDeposit,
+                underlying,
                 subAccountId,
                 amountToDeposit
             );
     }
 
     function _createBytesDataToWithdraw(
-        IEulerEToken tokenToWithdraw,
+        ERC20 underlying,
         uint256 subAccountId,
         uint256 amountToWithdraw
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 EulerETokenAdaptor.withdrawFromEuler.selector,
-                tokenToWithdraw,
+                underlying,
                 subAccountId,
                 amountToWithdraw
             );
     }
 
     function _createBytesDataToBorrow(
-        IEulerDToken debtTokenToBorrow,
+        ERC20 underlying,
         uint256 subAccountId,
         uint256 amountToBorrow
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 EulerDebtTokenAdaptor.borrowFromEuler.selector,
-                debtTokenToBorrow,
+                underlying,
                 subAccountId,
                 amountToBorrow
             );
     }
 
     function _createBytesDataToRepay(
-        IEulerDToken debtTokenToRepay,
+        ERC20 underlying,
         uint256 subAccountId,
         uint256 amountToRepay
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 EulerDebtTokenAdaptor.repayEulerDebt.selector,
-                debtTokenToRepay,
+                underlying,
                 subAccountId,
                 amountToRepay
             );
     }
 
     function _createBytesDataToSelfBorrow(
-        address target,
+        ERC20 target,
         uint256 subAccountId,
         uint256 amount
     ) internal pure returns (bytes memory) {
@@ -874,7 +865,7 @@ contract CellarEulerTest is Test {
     }
 
     function _createBytesDataToSelfRepay(
-        address target,
+        ERC20 target,
         uint256 subAccountId,
         uint256 amount
     ) internal pure returns (bytes memory) {
@@ -882,7 +873,7 @@ contract CellarEulerTest is Test {
     }
 
     function _createBytesDataToTransferBetweenAccounts(
-        IEulerEToken eToken,
+        ERC20 underlying,
         uint256 from,
         uint256 to,
         uint256 amount
@@ -890,7 +881,7 @@ contract CellarEulerTest is Test {
         return
             abi.encodeWithSelector(
                 EulerETokenAdaptor.transferETokensBetweenSubAccounts.selector,
-                eToken,
+                underlying,
                 from,
                 to,
                 amount

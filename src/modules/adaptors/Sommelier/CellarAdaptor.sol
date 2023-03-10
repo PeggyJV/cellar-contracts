@@ -19,6 +19,11 @@ contract CellarAdaptor is BaseAdaptor {
     // NOT USED
     //====================================================================
 
+    /**
+     * @notice Strategist attempted to interact with a Cellar with no position setup for it.
+     */
+    error CellarAdaptor__CellarPositionNotUsed(address cellar);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -104,6 +109,7 @@ contract CellarAdaptor is BaseAdaptor {
      * @param assets the amount of assets to deposit into `cellar`
      */
     function depositToCellar(Cellar cellar, uint256 assets) public {
+        _verifyCellarPositionIsUsed(address(cellar));
         ERC20 asset = cellar.asset();
         assets = _maxAvailable(asset, assets);
         asset.safeApprove(address(cellar), assets);
@@ -119,7 +125,17 @@ contract CellarAdaptor is BaseAdaptor {
      * @param assets the amount of assets to withdraw from `cellar`
      */
     function withdrawFromCellar(Cellar cellar, uint256 assets) public {
+        _verifyCellarPositionIsUsed(address(cellar));
         if (assets == type(uint256).max) assets = cellar.maxWithdraw(address(this));
         cellar.withdraw(assets, address(this), address(this));
+    }
+
+    //============================================ Helper Functions ===========================================
+
+    function _verifyCellarPositionIsUsed(address cellar) internal {
+        // Check that cellar position is setup to be used in the cellar.
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(cellar)));
+        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(positionId)) revert CellarAdaptor__CellarPositionNotUsed(cellar);
     }
 }

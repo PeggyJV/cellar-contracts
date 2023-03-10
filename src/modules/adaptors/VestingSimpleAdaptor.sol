@@ -15,6 +15,11 @@ contract VestingSimpleAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
+    /**
+     * @notice Strategist attempted to interact with an unused vesting position.
+     */
+    error VestingSimpleAdaptor__VestingPositionNotUsed(address unUsedVestingContract);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -116,6 +121,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * @param amountToDeposit The amount of tokens to deposit.
      */
     function depositToVesting(VestingSimple vestingContract, uint256 amountToDeposit) public {
+        _verifyVestingPositionIsUsed(address(vestingContract));
         ERC20 asset = vestingContract.asset();
 
         amountToDeposit = _maxAvailable(asset, amountToDeposit);
@@ -138,6 +144,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * @param amountToWithdraw The amount of tokens to withdraw.
      */
     function withdrawFromVesting(VestingSimple vestingContract, uint256 depositId, uint256 amountToWithdraw) public {
+        _verifyVestingPositionIsUsed(address(vestingContract));
         vestingContract.withdraw(depositId, amountToWithdraw);
     }
 
@@ -151,6 +158,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * @param amountToWithdraw The amount of tokens to withdraw.
      */
     function withdrawAnyFromVesting(VestingSimple vestingContract, uint256 amountToWithdraw) public {
+        _verifyVestingPositionIsUsed(address(vestingContract));
         vestingContract.withdrawAnyFor(amountToWithdraw, address(this));
     }
 
@@ -161,6 +169,17 @@ contract VestingSimpleAdaptor is BaseAdaptor {
      * @param vestingContract The vesting contract to interact with.
      */
     function withdrawAllFromVesting(VestingSimple vestingContract) public {
+        _verifyVestingPositionIsUsed(address(vestingContract));
         vestingContract.withdrawAll();
+    }
+
+    //============================================ Helper Functions ===========================================
+
+    function _verifyVestingPositionIsUsed(address vestingContract) internal {
+        // Check that vesting position is setup to be used in the cellar.
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(vestingContract)));
+        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(positionId))
+            revert VestingSimpleAdaptor__VestingPositionNotUsed(vestingContract);
     }
 }

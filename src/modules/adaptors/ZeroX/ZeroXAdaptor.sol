@@ -23,11 +23,6 @@ contract ZeroXAdaptor is PositionlessAdaptor {
     // expose the swap function to strategists during rebalances.
     //====================================================================
 
-    /**
-     * @notice Attempted to pass in the Cellar Address as the spender or swapTarget.
-     */
-    error ZeroXAdaptor__InvalidAddressArgument();
-
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -39,8 +34,11 @@ contract ZeroXAdaptor is PositionlessAdaptor {
         return keccak256(abi.encode("0x Adaptor V 0.0"));
     }
 
-    function getTargetSlot() public pure return(uint256) {
-        return 4;
+    /**
+     * @notice Address of the current 0x swap target on Mainnet ETH.
+     */
+    function target() public pure returns (address) {
+        return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     }
 
     //============================================ Strategist Functions ===========================================
@@ -48,20 +46,12 @@ contract ZeroXAdaptor is PositionlessAdaptor {
     /**
      * @notice Allows strategists to make ERC20 swaps using 0x.
      */
-    function swapWith0x(
-        ERC20 tokenIn,
-        uint256 amount,
-        bytes memory swapCallData
-    ) public {
-        // TODO
-        address target = Cellar(address(this)).registry().getAddress(getTargetSlot());
-        // Revert if address inputs are the Cellar.
-        if (spender == address(this) || swapTarget == address(this)) revert ZeroXAdaptor__InvalidAddressArgument();
-        tokenIn.safeApprove(spender, amount);
+    function swapWith0x(ERC20 tokenIn, uint256 amount, bytes memory swapCallData) public {
+        tokenIn.safeApprove(target(), amount);
 
-        swapTarget.functionCall(swapCallData);
+        target().functionCall(swapCallData);
 
         // Insure spender has zero approval.
-        if (tokenIn.allowance(address(this), spender) > 0) tokenIn.safeApprove(spender, 0);
+        if (tokenIn.allowance(address(this), target()) > 0) tokenIn.safeApprove(target(), 0);
     }
 }

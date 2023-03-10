@@ -33,6 +33,11 @@ contract CTokenAdaptor is BaseAdaptor {
      */
     error CTokenAdaptor__NonZeroCompoundErrorCode(uint256 errorCode);
 
+    /**
+     * @notice Strategist attempted to interact with a market that is not listed.
+     */
+    error CTokenAdaptor__MarketNotListed(address market);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -165,6 +170,8 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param amountToDeposit the amount of `tokenToDeposit` to lend on Compound.
      */
     function depositToCompound(CErc20 market, uint256 amountToDeposit) public {
+        _validateMarketInput(address(market));
+
         ERC20 tokenToDeposit = ERC20(market.underlying());
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(market), amountToDeposit);
@@ -184,6 +191,8 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
+        _validateMarketInput(address(market));
+
         uint256 errorCode;
         if (amountToWithdraw == type(uint256).max) errorCode = market.redeem(market.balanceOf(address(this)));
         else errorCode = market.redeemUnderlying(amountToWithdraw);
@@ -216,5 +225,16 @@ contract CTokenAdaptor is BaseAdaptor {
         claimComp();
         balance = COMP().balanceOf(address(this)) - balance;
         oracleSwap(COMP(), assetOut, balance, exchange, params, slippage);
+    }
+
+    //============================================ Helper Functions ============================================
+
+    /**
+     * @notice Helper function that reverts if market is not listed in Comptroller.
+     */
+    function _validateMarketInput(address input) internal view {
+        (bool isListed, , ) = comptroller().markets(input);
+
+        if (!isListed) revert CTokenAdaptor__MarketNotListed(input);
     }
 }

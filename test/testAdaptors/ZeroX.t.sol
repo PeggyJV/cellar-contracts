@@ -132,7 +132,7 @@ contract CellarZeroXTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, spender, swapTarget, swapCallData);
+            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, swapCallData);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(zeroXAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -163,7 +163,7 @@ contract CellarZeroXTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, address(this), address(this), fakeData);
+            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, fakeData);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(zeroXAdaptor), callData: adaptorCalls });
             vm.expectRevert(
@@ -201,7 +201,7 @@ contract CellarZeroXTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, fakeSpender, address(this), fakeData);
+            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, fakeData);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(zeroXAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -212,45 +212,11 @@ contract CellarZeroXTest is Test {
 
     function doNothing(uint256) external {}
 
-    function testReenteringDuringRebalance() external {
-        if (block.number < 16571863) {
-            console.log("Invalid block number use 16571863");
-            return;
-        }
-        // Deposit into Cellar.
-        uint256 assets = 1_000_000e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        address maliciousStrategist = vm.addr(1);
-        bytes memory fakeData = abi.encodeWithSignature("deposit(uint256,address)", assets, maliciousStrategist);
-
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, address(cellar), address(cellar), fakeData);
-
-            data[0] = Cellar.AdaptorCall({ adaptor: address(zeroXAdaptor), callData: adaptorCalls });
-            vm.expectRevert(bytes(abi.encodeWithSelector(ZeroXAdaptor.ZeroXAdaptor__InvalidAddressArgument.selector)));
-            cellar.callOnAdaptor(data);
-        }
-    }
-
     function _createBytesDataToSwap(
         ERC20 tokenIn,
         uint256 amount,
-        address _spender,
-        address _swapTarget,
         bytes memory _swapCallData
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodeWithSelector(
-                ZeroXAdaptor.swapWith0x.selector,
-                tokenIn,
-                amount,
-                _spender,
-                _swapTarget,
-                _swapCallData
-            );
+        return abi.encodeWithSelector(ZeroXAdaptor.swapWith0x.selector, tokenIn, amount, _swapCallData);
     }
 }

@@ -16,6 +16,11 @@ contract EulerBaseAdaptor {
      */
     error EulerBaseAdaptor__InvalidSubAccountId();
 
+    /**
+     * @notice Attempted to use an underlying ERC20 that is not supported.
+     */
+    error EulerBaseAdaptor__UnderlyingNotSupported(address invalidUnderlying);
+
     //============================================ Global Functions ===========================================
 
     /**
