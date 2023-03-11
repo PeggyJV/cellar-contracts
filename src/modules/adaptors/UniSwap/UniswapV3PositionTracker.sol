@@ -57,8 +57,8 @@ contract UniswapV3PositionTracker {
 
         if (holdingLength >= MAX_HOLDINGS) revert UniswapV3PositionTracker__MaxHoldingsExceeded();
         // Make sure the position is not already in the array
-        (bool found, ) = checkIfPositionIsInTracker(msg.sender, tokenId, token0, token1);
-        if (found) revert UniswapV3PositionTracker__TokenIdAlreadyTracked();
+        if (checkIfPositionIsInTracker(msg.sender, tokenId, token0, token1))
+            revert UniswapV3PositionTracker__TokenIdAlreadyTracked();
 
         callerToToken0ToToken1ToHoldings[msg.sender][token0][token1].push(tokenId);
     }
@@ -70,7 +70,7 @@ contract UniswapV3PositionTracker {
      * @dev `burn` checks if given token as any liquidity or fees and reverts if so.
      */
     function removePositionFromArray(uint256 tokenId, ERC20 token0, ERC20 token1) external {
-        _iterateArrayAndPopTarget(msg.sender, tokenId, token0, token1);
+        _iterateArrayAndPopTarget(tokenId, token0, token1);
 
         // Prove caller not only owns this token, but also that they approved this contract to spend it.
         positionManager.transferFrom(msg.sender, address(this), tokenId);
@@ -88,34 +88,33 @@ contract UniswapV3PositionTracker {
     function removePositionFromArrayThatIsNotOwnedByCaller(uint256 tokenId, ERC20 token0, ERC20 token1) external {
         if (positionManager.ownerOf(tokenId) == msg.sender) revert UniswapV3PositionTracker__CallerOwnsTokenId();
 
-        _iterateArrayAndPopTarget(msg.sender, tokenId, token0, token1);
+        _iterateArrayAndPopTarget(tokenId, token0, token1);
     }
 
     //============================== View Functions ===============================
 
     /**
-     * @notice Returns a bool if `tokenId` is found in callers token0 and token1 holdings,
-     *         as well as the index it was found.
-     *         If not found returns false and 0 for index.
+     * @notice Returns a bool if `tokenId` is found in callers token0 and token1 holdings.
      */
     function checkIfPositionIsInTracker(
         address caller,
         uint256 tokenId,
         ERC20 token0,
         ERC20 token1
-    ) public view returns (bool positionFound, uint256 index) {
+    ) public view returns (bool tokenFound) {
         // Search through caller's holdings and return true if the token id was found.
-        uint256 holdingLength = callerToToken0ToToken1ToHoldings[caller][token0][token1].length;
+        uint256[] storage holdings = callerToToken0ToToken1ToHoldings[caller][token0][token1];
+        uint256 holdingLength = holdings.length;
 
         for (uint256 i; i < holdingLength; ++i) {
-            uint256 currentTokenId = callerToToken0ToToken1ToHoldings[caller][token0][token1][i];
+            uint256 currentTokenId = holdings[i];
             if (currentTokenId == tokenId) {
-                return (true, i);
+                return true;
             }
         }
 
-        // If we made it this far the LP position was not found.
-        return (false, 0);
+        // If we made it this far the LP token was not found.
+        return false;
     }
 
     /**
@@ -131,17 +130,16 @@ contract UniswapV3PositionTracker {
      * @notice Iterates over a user holdings, and removes targetId if found.
      * @dev If not found, revert.
      */
-    function _iterateArrayAndPopTarget(address user, uint256 targetId, ERC20 token0, ERC20 token1) internal {
-        uint256 holdingLength = callerToToken0ToToken1ToHoldings[user][token0][token1].length;
+    function _iterateArrayAndPopTarget(uint256 targetId, ERC20 token0, ERC20 token1) internal {
+        uint256[] storage holdings = callerToToken0ToToken1ToHoldings[msg.sender][token0][token1];
+        uint256 holdingLength = holdings.length;
 
         for (uint256 i; i < holdingLength; ++i) {
-            uint256 currentTokenId = callerToToken0ToToken1ToHoldings[user][token0][token1][i];
+            uint256 currentTokenId = holdings[i];
             if (currentTokenId == targetId) {
                 // We found the target tokenId.
-                callerToToken0ToToken1ToHoldings[user][token0][token1][i] = callerToToken0ToToken1ToHoldings[user][
-                    token0
-                ][token1][holdingLength - 1];
-                callerToToken0ToToken1ToHoldings[user][token0][token1].pop();
+                holdings[i] = holdings[holdingLength - 1];
+                holdings.pop();
                 return;
             }
         }
