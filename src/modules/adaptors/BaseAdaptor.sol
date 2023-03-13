@@ -68,11 +68,7 @@ abstract contract BaseAdaptor {
      * @param configurationData data settable when strategists add positions to their Cellar
      *                          Allows strategist to control how the adaptor interacts with the position
      */
-    function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
-        bytes memory configurationData
-    ) public virtual;
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory configurationData) public virtual;
 
     /**
      * @notice Function Cellars call to withdraw funds from positions to send to users.
@@ -151,6 +147,13 @@ abstract contract BaseAdaptor {
     function _maxAvailable(ERC20 token, uint256 amount) internal view virtual returns (uint256) {
         if (amount == type(uint256).max) return token.balanceOf(address(this));
         else return amount;
+    }
+
+    /**
+     * @notice Helper function that checks if `spender` has any more approval for `asset`, and if so revokes it.
+     */
+    function _revokeExternalApprovals(ERC20 asset, address spender) internal {
+        if (asset.allowance(address(this), spender) > 0) asset.safeApprove(spender, 0);
     }
 
     /**
