@@ -37,7 +37,7 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
 
     // TODO update this with the real value once deployed.
     function feesAndReserves() public pure returns (FeesAndReserves) {
-        return FeesAndReserves(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
+        return FeesAndReserves(0xBA7F27D2893a908cCeb08Bc9952EB1bA5A987c84);
     }
 
     //============================================ Strategist Functions ===========================================

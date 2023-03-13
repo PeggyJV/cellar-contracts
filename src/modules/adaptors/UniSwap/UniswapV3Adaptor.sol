@@ -86,7 +86,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
     // TODO update to real value, and remove as input to all strategist functions.
     function tracker() internal pure returns (UniswapV3PositionTracker) {
-        return UniswapV3PositionTracker(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
+        return UniswapV3PositionTracker(0x5888e6E463bDb1F3472E3Ad6493E590ce2A649d9);
     }
 
     //============================================ Implement Base Functions ===========================================
