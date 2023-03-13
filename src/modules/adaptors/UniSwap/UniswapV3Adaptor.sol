@@ -9,8 +9,6 @@ import { LiquidityAmounts } from "@uniswapV3P/libraries/LiquidityAmounts.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 
-import { console } from "@forge-std/Test.sol";
-
 /**
  * @title Uniswap V3 Adaptor
  * @notice Allows Cellars to hold and interact with Uniswap V3 LP Positions.
