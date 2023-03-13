@@ -82,9 +82,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
         return INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
     }
 
-    // TODO update to real value, and remove as input to all strategist functions.
+    /**
+     * @notice Uniswap V3 Tracker on ETH Mainnet.
+     */
     function tracker() internal pure returns (UniswapV3PositionTracker) {
-        return UniswapV3PositionTracker(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
+        return UniswapV3PositionTracker(0x0D2ca1DBA6B3245B259949a256974dD3461C5b05);
     }
 
     //============================================ Implement Base Functions ===========================================
