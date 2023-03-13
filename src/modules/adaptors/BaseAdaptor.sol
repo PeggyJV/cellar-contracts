@@ -152,7 +152,7 @@ abstract contract BaseAdaptor {
     /**
      * @notice Helper function that checks if `spender` has any more approval for `asset`, and if so revokes it.
      */
-    function _revokeExternalApprovals(ERC20 asset, address spender) internal {
+    function _revokeExternalApproval(ERC20 asset, address spender) internal {
         if (asset.allowance(address(this), spender) > 0) asset.safeApprove(spender, 0);
     }
 

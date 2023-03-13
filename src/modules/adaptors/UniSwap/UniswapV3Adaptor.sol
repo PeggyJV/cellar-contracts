@@ -267,8 +267,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         tracker().addPositionToArray(tokenId, token0, token1);
 
         // Zero out approvals if necessary.
-        _revokeExternalApprovals(token0, address(positionManager()));
-        _revokeExternalApprovals(token1, address(positionManager()));
+        _revokeExternalApproval(token0, address(positionManager()));
+        _revokeExternalApproval(token1, address(positionManager()));
     }
 
     /**
@@ -334,8 +334,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         positionManager().increaseLiquidity(params);
 
         // Zero out approvals if necessary.
-        _revokeExternalApprovals(token0, address(positionManager()));
-        _revokeExternalApprovals(token1, address(positionManager()));
+        _revokeExternalApproval(token0, address(positionManager()));
+        _revokeExternalApproval(token1, address(positionManager()));
     }
 
     /**
