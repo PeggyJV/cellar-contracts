@@ -45,6 +45,7 @@ contract CellarAdaptor is BaseAdaptor {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to `cellar`.
         Cellar cellar = abi.decode(adaptorData, (Cellar));
+        _verifyCellarPositionIsUsed(address(cellar));
         ERC20 asset = cellar.asset();
         asset.safeApprove(address(cellar), assets);
         cellar.deposit(assets, address(this));
@@ -67,6 +68,7 @@ contract CellarAdaptor is BaseAdaptor {
 
         // Withdraw assets from `cellar`.
         Cellar cellar = abi.decode(adaptorData, (Cellar));
+        _verifyCellarPositionIsUsed(address(cellar));
         cellar.withdraw(assets, receiver, address(this));
     }
 

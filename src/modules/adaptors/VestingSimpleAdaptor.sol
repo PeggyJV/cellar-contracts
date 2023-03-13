@@ -59,6 +59,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
     function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         _externalReceiverCheck(receiver);
         VestingSimple vestingContract = abi.decode(adaptorData, (VestingSimple));
+        _verifyVestingPositionIsUsed(address(vestingContract));
         vestingContract.withdrawAnyFor(assets, receiver);
     }
 

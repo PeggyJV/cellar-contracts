@@ -73,6 +73,7 @@ contract CTokenAdaptor is BaseAdaptor {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Compound.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
+        _validateMarketInput(address(cToken));
         ERC20 token = ERC20(cToken.underlying());
         token.safeApprove(address(cToken), assets);
         uint256 errorCode = cToken.mint(assets);
@@ -101,6 +102,7 @@ contract CTokenAdaptor is BaseAdaptor {
 
         // Withdraw assets from Compound.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
+        _validateMarketInput(address(cToken));
         uint256 errorCode = cToken.redeemUnderlying(assets);
 
         // Check for errors.
