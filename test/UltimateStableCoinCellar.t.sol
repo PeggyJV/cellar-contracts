@@ -7,6 +7,7 @@ import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
+import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 
 // Import adaptors.
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
@@ -52,6 +53,7 @@ contract UltimateStableCoinCellarTest is Test {
     VestingSimple private usdcVestor;
 
     Registry private registry;
+    UniswapV3PositionTracker private tracker;
 
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
 
@@ -137,8 +139,9 @@ contract UltimateStableCoinCellarTest is Test {
             address(swapRouter),
             address(priceRouter)
         );
-        usdcVestor = new VestingSimple(USDC, 1 days / 4, 1e6);
         erc20Adaptor = new ERC20Adaptor();
+        tracker = new UniswapV3PositionTracker(positionManager);
+        usdcVestor = new VestingSimple(USDC, 1 days / 4, 1e6);
         uniswapV3Adaptor = new UniswapV3Adaptor();
         aaveATokenAdaptor = new AaveATokenAdaptor();
         aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
@@ -637,9 +640,7 @@ contract UltimateStableCoinCellarTest is Test {
     ) internal view returns (bytes memory) {
         uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
         (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager.positions(tokenId);
-        uint128 liquidity;
-        if (liquidity >= 1e18) liquidity = type(uint128).max;
-        else liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
+        uint128 liquidity = uint128((positionLiquidity * liquidityPer) / 1e18);
         return abi.encodeWithSelector(UniswapV3Adaptor.takeFromPosition.selector, tokenId, liquidity, 0, 0);
     }
 

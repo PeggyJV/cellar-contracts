@@ -52,6 +52,6 @@ contract ZeroXAdaptor is PositionlessAdaptor {
         target().functionCall(swapCallData);
 
         // Insure spender has zero approval.
-        if (tokenIn.allowance(address(this), target()) > 0) tokenIn.safeApprove(target(), 0);
+        _revokeExternalApproval(tokenIn, target());
     }
 }

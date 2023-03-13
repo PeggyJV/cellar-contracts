@@ -50,7 +50,7 @@ contract CellarAdaptor is BaseAdaptor {
         cellar.deposit(assets, address(this));
 
         // Zero out approvals if necessary.
-        if (asset.allowance(address(this), address(cellar)) > 0) asset.safeApprove(address(cellar), 0);
+        _revokeExternalApproval(asset, address(cellar));
     }
 
     /**
@@ -116,7 +116,7 @@ contract CellarAdaptor is BaseAdaptor {
         cellar.deposit(assets, address(this));
 
         // Zero out approvals if necessary.
-        if (asset.allowance(address(this), address(cellar)) > 0) asset.safeApprove(address(cellar), 0);
+        _revokeExternalApproval(asset, address(cellar));
     }
 
     /**

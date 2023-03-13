@@ -81,7 +81,7 @@ contract CTokenAdaptor is BaseAdaptor {
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         // Zero out approvals if necessary.
-        if (token.allowance(address(this), address(cToken)) > 0) token.safeApprove(address(cToken), 0);
+        _revokeExternalApproval(token, address(cToken));
     }
 
     /**
@@ -181,8 +181,7 @@ contract CTokenAdaptor is BaseAdaptor {
         if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         // Zero out approvals if necessary.
-        if (tokenToDeposit.allowance(address(this), address(market)) > 0)
-            tokenToDeposit.safeApprove(address(market), 0);
+        _revokeExternalApproval(tokenToDeposit, address(market));
     }
 
     /**

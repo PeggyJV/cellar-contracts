@@ -57,7 +57,8 @@ contract DeployRealYieldEthScript is Script, TEnv {
     FeesAndReservesAdaptor private feesAndReservesAdaptor;
     AaveATokenAdaptor private aaveATokenAdaptor;
     UniswapV3Adaptor private uniswapV3Adaptor;
-    ZeroXAdaptor private zeroXAdaptor;
+
+    // ZeroXAdaptor private zeroXAdaptor;
 
     function run() external {
         eWETH = IEulerEToken(markets.underlyingToEToken(address(WETH)));

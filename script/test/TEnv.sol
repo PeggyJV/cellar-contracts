@@ -24,14 +24,14 @@ contract TEnv {
     PriceRouter public priceRouter = PriceRouter(0xD8029A05bEB0FaF1215fBb064D98c39B28d317Ee);
     SwapRouter public swapRouter = SwapRouter(0xC356F0AC3a0d3fC18167d8ee62e0A8FB487D1719);
     ERC20Adaptor public erc20Adaptor = ERC20Adaptor(0x802818408DfC63E67ca4C56e2F5Ec37998Dd520C);
-    EulerETokenAdaptor public eulerETokenAdaptor = EulerETokenAdaptor(0x4869a3c6642C824D9DE238ebbe6e4424086CFB8d);
-    EulerDebtTokenAdaptor public eulerDebtTokenAdaptor =
-        EulerDebtTokenAdaptor(0xb21DEbD3a10bB545824C3014aB0b1cE5aBCf3b64);
-    FeesAndReservesAdaptor public feesAndReservesAdaptor =
-        FeesAndReservesAdaptor(0xf260a0caD298BBB1b90c8D3EE24Ac896Ada65fA5);
-    AaveATokenAdaptor public aaveATokenAdaptor = AaveATokenAdaptor(0x3Dd3E51f1a1cD0E6767B5b2d939E8AAFdFcB20F3);
-    UniswapV3Adaptor public uniswapV3Adaptor = UniswapV3Adaptor(0x5038A79F9680E7Ca200EB7162CF374bce741a8f4);
-    ZeroXAdaptor public zeroXAdaptor = ZeroXAdaptor(0x1bd161EF8EE43E72Ce8CfB156c2cA4f64E49c086);
+    // EulerETokenAdaptor public eulerETokenAdaptor = EulerETokenAdaptor(0x4869a3c6642C824D9DE238ebbe6e4424086CFB8d);
+    // EulerDebtTokenAdaptor public eulerDebtTokenAdaptor =
+    //     EulerDebtTokenAdaptor(0xb21DEbD3a10bB545824C3014aB0b1cE5aBCf3b64);
+    // FeesAndReservesAdaptor public feesAndReservesAdaptor =
+    //     FeesAndReservesAdaptor(0xf260a0caD298BBB1b90c8D3EE24Ac896Ada65fA5);
+    // AaveATokenAdaptor public aaveATokenAdaptor = AaveATokenAdaptor(0x3Dd3E51f1a1cD0E6767B5b2d939E8AAFdFcB20F3);
+    // UniswapV3Adaptor public uniswapV3Adaptor = UniswapV3Adaptor(0x5038A79F9680E7Ca200EB7162CF374bce741a8f4);
+    // ZeroXAdaptor public zeroXAdaptor = ZeroXAdaptor(0x1bd161EF8EE43E72Ce8CfB156c2cA4f64E49c086);
 
     // Common ERC20s.
     ERC20 public USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);

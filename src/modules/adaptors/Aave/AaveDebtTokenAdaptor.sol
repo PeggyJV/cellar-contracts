@@ -144,7 +144,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  either 1 for stable or 2 for variable
 
         // Zero out approvals if necessary.
-        if (tokenToRepay.allowance(address(this), address(pool())) > 0) tokenToRepay.safeApprove(address(pool()), 0);
+        _revokeExternalApproval(tokenToRepay, address(pool()));
     }
 
     /**

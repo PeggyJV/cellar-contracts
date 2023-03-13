@@ -62,7 +62,7 @@ contract EulerETokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
         IEulerEToken(eToken).deposit(subAccountId, assets);
 
         // Zero out approvals if necessary.
-        if (underlying.allowance(address(this), address(euler())) > 0) underlying.safeApprove(address(euler()), 0);
+        _revokeExternalApproval(underlying, address(euler()));
     }
 
     /**
@@ -157,7 +157,7 @@ contract EulerETokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
         IEulerEToken(eToken).deposit(subAccountId, amountToDeposit);
 
         // Zero out approvals if necessary.
-        if (underlying.allowance(address(this), address(euler())) > 0) underlying.safeApprove(address(euler()), 0);
+        _revokeExternalApproval(underlying, address(euler()));
     }
 
     /**

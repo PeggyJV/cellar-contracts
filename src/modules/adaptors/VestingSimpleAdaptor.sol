@@ -130,8 +130,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
         vestingContract.deposit(amountToDeposit, address(this));
 
         // Zero out approvals if necessary.
-        if (asset.allowance(address(this), address(vestingContract)) > 0)
-            asset.safeApprove(address(vestingContract), 0);
+        _revokeExternalApproval(asset, address(vestingContract));
     }
 
     /**

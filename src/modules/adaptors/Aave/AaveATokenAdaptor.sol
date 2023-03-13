@@ -87,7 +87,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         pool().deposit(address(token), assets, address(this), 0);
 
         // Zero out approvals if necessary.
-        if (token.allowance(address(this), address(pool())) > 0) token.safeApprove(address(pool()), 0);
+        _revokeExternalApproval(token, address(pool()));
     }
 
     /**
@@ -245,8 +245,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         pool().deposit(address(tokenToDeposit), amountToDeposit, address(this), 0);
 
         // Zero out approvals if necessary.
-        if (tokenToDeposit.allowance(address(this), address(pool())) > 0)
-            tokenToDeposit.safeApprove(address(pool()), 0);
+        _revokeExternalApproval(tokenToDeposit, address(pool()));
     }
 
     /**

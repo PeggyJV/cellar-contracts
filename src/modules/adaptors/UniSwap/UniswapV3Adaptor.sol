@@ -9,8 +9,6 @@ import { LiquidityAmounts } from "@uniswapV3P/libraries/LiquidityAmounts.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 
-import { console } from "@forge-std/Test.sol";
-
 /**
  * @title Uniswap V3 Adaptor
  * @notice Allows Cellars to hold and interact with Uniswap V3 LP Positions.
@@ -84,9 +82,13 @@ contract UniswapV3Adaptor is BaseAdaptor {
         return INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
     }
 
-    // TODO update to real value, and remove as input to all strategist functions.
+    /**
+     * @notice Uniswap V3 Tracker on ETH Mainnet.
+     * @dev for testing use 0xa0Cb889707d426A7A386870A03bc70d1b0697598
+     * @dev for prod use 0x0D2ca1DBA6B3245B259949a256974dD3461C5b05
+     */
     function tracker() internal pure returns (UniswapV3PositionTracker) {
-        return UniswapV3PositionTracker(0x5888e6E463bDb1F3472E3Ad6493E590ce2A649d9);
+        return UniswapV3PositionTracker(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -269,10 +271,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         tracker().addPositionToArray(tokenId, token0, token1);
 
         // Zero out approvals if necessary.
-        if (token0.allowance(address(this), address(positionManager())) > 0)
-            token0.safeApprove(address(positionManager()), 0);
-        if (token1.allowance(address(this), address(positionManager())) > 0)
-            token1.safeApprove(address(positionManager()), 0);
+        _revokeExternalApproval(token0, address(positionManager()));
+        _revokeExternalApproval(token1, address(positionManager()));
     }
 
     /**
@@ -338,10 +338,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         positionManager().increaseLiquidity(params);
 
         // Zero out approvals if necessary.
-        if (token0.allowance(address(this), address(positionManager())) > 0)
-            token0.safeApprove(address(positionManager()), 0);
-        if (token1.allowance(address(this), address(positionManager())) > 0)
-            token1.safeApprove(address(positionManager()), 0);
+        _revokeExternalApproval(token0, address(positionManager()));
+        _revokeExternalApproval(token1, address(positionManager()));
     }
 
     /**

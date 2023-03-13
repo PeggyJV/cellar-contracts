@@ -171,7 +171,7 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
         IEulerDToken(dToken).repay(subAccountId, amountToRepay);
 
         // Zero out approvals if necessary.
-        if (underlying.allowance(address(this), address(euler())) > 0) underlying.safeApprove(address(euler()), 0);
+        _revokeExternalApproval(underlying, address(euler()));
     }
 
     /**
