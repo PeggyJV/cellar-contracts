@@ -67,15 +67,16 @@ contract USCUniswapAdaptorTest is Test {
         vm.stopPrank();
 
         deal(address(USDC), address(cellar), 1_000_000e6);
-        deal(address(DAI), address(cellar), 1_000_000e18);
+        deal(address(USDT), address(cellar), 1_000_000e6);
 
-        //     deal(address(USDC), address(this), 3_000e6);
-        //     USDC.approve(address(cellar), 3_000e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
 
-        //     // Deposit to make addresses warm
-        //     uint256 gas = gasleft();
-        //     cellar.deposit(1_000e6, address(this));
-        //     console.log("Gas Used", gas - gasleft());
+        adaptorCalls[0] = _createBytesDataToOpenLP(USDC, USDT, 100, 1_000_000e6, 1_000_000e6, 10_000);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        vm.prank(gravityBridge);
+        cellar.callOnAdaptor(data);
     }
 
     function _sqrt(uint256 _x) internal pure returns (uint256 y) {
