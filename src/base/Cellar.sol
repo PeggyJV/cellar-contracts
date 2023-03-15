@@ -244,10 +244,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function _removePosition(uint32 index, uint32 positionId, bool inDebtArray) internal {
         if (positionId == holdingPosition) revert Cellar__RemovingHoldingPosition();
 
-        // Only remove position if it is empty, and if it is not the holding position.
-        uint256 positionBalance = _balanceOf(positionId);
-        if (positionBalance > 0) revert Cellar__PositionNotEmpty(positionId, positionBalance);
-
         if (inDebtArray) {
             // Remove position at the given index.
             debtPositions.remove(index);
