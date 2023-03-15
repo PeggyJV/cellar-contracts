@@ -231,6 +231,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         ETH_FAST_GAS_FEED = gasFeed;
     }
 
+    // TODO add in percent so that HWM can be set some percent between current share price and old HWM
+    // TODO reset feeEarned when we reset HWM.
     /**
      * @notice Allows owner to reset a Cellar's Share Price High Watermark.
      */
@@ -420,6 +422,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         emit FeesSent(address(cellar));
     }
 
+    // TODO skip upkeep is frequency is zero.
     /**
      * @notice CheckUpkeep runs several checks on proposed cellars.
      *         - Checks that the Cellar has called setup function.
