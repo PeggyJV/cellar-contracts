@@ -43,6 +43,8 @@ contract ZeroXAdaptor is PositionlessAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
+    // TODO check value in vs value out
+    // Skip the check if we dont have pricing for the input token
     /**
      * @notice Allows strategists to make ERC20 swaps using 0x.
      */

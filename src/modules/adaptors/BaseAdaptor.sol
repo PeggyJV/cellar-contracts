@@ -156,6 +156,8 @@ abstract contract BaseAdaptor {
         if (asset.allowance(address(this), spender) > 0) asset.safeApprove(spender, 0);
     }
 
+    // TODO check value in vs value out
+    // Skip the check if we dont have pricing for the input token
     /**
      * @notice Helper function that allows adaptors to make swaps using the Swap Router
      * @param assetIn the asset to make a swap with
@@ -182,6 +184,9 @@ abstract contract BaseAdaptor {
 
         // Perform swap.
         amountOut = swapRouter.swap(exchange, params, address(this), assetIn, assetOut);
+
+        // Insure swap router has zero approval.
+        _revokeExternalApproval(assetIn, address(swapRouter));
     }
 
     /**
