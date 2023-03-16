@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
+import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { PositionlessAdaptor } from "src/modules/adaptors/PositionlessAdaptor.sol";
 
@@ -12,6 +12,7 @@ import { PositionlessAdaptor } from "src/modules/adaptors/PositionlessAdaptor.so
  */
 contract ZeroXAdaptor is PositionlessAdaptor {
     using SafeTransferLib for ERC20;
+    using Math for uint256;
     using Address for address;
 
     //==================== Adaptor Data Specification ====================
@@ -41,17 +42,41 @@ contract ZeroXAdaptor is PositionlessAdaptor {
         return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     }
 
+    function slippage() public pure returns (uint32) {
+        return 0.95e4;
+    }
+
     //============================================ Strategist Functions ===========================================
 
-    // TODO check value in vs value out
-    // Skip the check if we dont have pricing for the input token
     /**
      * @notice Allows strategists to make ERC20 swaps using 0x.
      */
-    function swapWith0x(ERC20 tokenIn, uint256 amount, bytes memory swapCallData) public {
+    function swapWith0x(ERC20 tokenIn, ERC20 tokenOut, uint256 amount, bytes memory swapCallData) public {
+        PriceRouter priceRouter = PriceRouter(Cellar(address(this)).registry().getAddress(2));
+
         tokenIn.safeApprove(target(), amount);
 
-        target().functionCall(swapCallData);
+        if (priceRouter.isSupported(tokenIn)) {
+            // If the asset in is supported, than require that asset out is also supported.
+            if (!priceRouter.isSupported(tokenOut)) revert("Unsupported asset out.");
+            // Save token balances.
+            uint256 tokenInBalance = tokenIn.balanceOf(address(this));
+            uint256 tokenOutBalance = tokenOut.balanceOf(address(this));
+
+            // Perform Swap.
+            target().functionCall(swapCallData);
+
+            uint256 tokenInAmountIn = tokenInBalance - tokenIn.balanceOf(address(this));
+            uint256 tokenOutAmountOut = tokenOut.balanceOf(address(this)) - tokenOutBalance;
+
+            uint256 tokenInValueOut = priceRouter.getValue(tokenOut, tokenOutAmountOut, tokenIn);
+
+            if (tokenInValueOut < tokenInAmountIn.mulDivDown(slippage(), 1e4)) revert("Slippage Revert");
+        } else {
+            // Token In is not supported by price router, so we know it is atleast not the Cellars Reserves,
+            // or a prominent asset, so skip value in vs value out check.
+            target().functionCall(swapCallData);
+        }
 
         // Insure spender has zero approval.
         _revokeExternalApproval(tokenIn, target());
