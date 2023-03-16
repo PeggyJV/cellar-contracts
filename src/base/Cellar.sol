@@ -10,6 +10,7 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
+import { Multicall } from "src/base/Multicall.sol";
 
 /**
  * @title Sommelier Cellar
@@ -21,6 +22,27 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using Address for address;
+
+    // ========================================= MULTICALL =========================================
+
+    function multicall(bytes[] calldata data) public returns (bytes[] memory results) {
+        results = new bytes[](data.length);
+        for (uint256 i = 0; i < data.length; i++) {
+            (bool success, bytes memory result) = address(this).delegatecall(data[i]);
+
+            if (!success) {
+                // Next 5 lines from https://ethereum.stackexchange.com/a/83577
+                // solhint-disable-next-line reason-string
+                if (result.length < 68) revert();
+                assembly {
+                    result := add(result, 0x04)
+                }
+                revert(abi.decode(result, (string)));
+            }
+
+            results[i] = result;
+        }
+    }
 
     // ========================================= REENTRANCY GUARD =========================================
     /**
@@ -352,16 +374,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     uint64 public constant MAX_FEE_CUT = 1e18;
 
-    /**
-     * @notice Set the percentage of platform fees accrued over a year.
-     * @param newPlatformFee value out of 1e18 that represents new platform fee percentage
-     */
-    function setPlatformFee(uint64 newPlatformFee) external onlyOwner {
-        if (newPlatformFee > MAX_PLATFORM_FEE) revert Cellar__InvalidFee();
-        emit PlatformFeeChanged(feeData.platformFee, newPlatformFee);
+    // /**
+    //  * @notice Set the percentage of platform fees accrued over a year.
+    //  * @param newPlatformFee value out of 1e18 that represents new platform fee percentage
+    //  */
+    // function setPlatformFee(uint64 newPlatformFee) external onlyOwner {
+    //     if (newPlatformFee > MAX_PLATFORM_FEE) revert Cellar__InvalidFee();
+    //     emit PlatformFeeChanged(feeData.platformFee, newPlatformFee);
 
-        feeData.platformFee = newPlatformFee;
-    }
+    //     feeData.platformFee = newPlatformFee;
+    // }
 
     /**
      * @notice Sets the Strategists cut of platform fees
@@ -454,20 +476,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     Registry public registry;
 
     /**
-     * @notice Determines this cellars risk tolerance in regards to assets it is exposed to.
-     * @dev 0: safest
-     *      type(uint128).max: no restrictions
-     */
-    uint128 public assetRiskTolerance;
-
-    /**
-     * @notice Determines this cellars risk tolerance in regards to protocols it uses.
-     * @dev 0: safest
-     *      type(uint128).max: no restrictions
-     */
-    uint128 public protocolRiskTolerance;
-
-    /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
      *      module to the cellars.
      *      https://github.com/PeggyJV/steward
@@ -520,15 +528,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // `accrue` will take platform fees from 1970 to the time it is called.
         feeData.lastAccrual = uint64(block.timestamp);
 
-        (, , , , , address _strategistPayout, uint128 _assetRiskTolerance, uint128 _protocolRiskTolerance) = abi.decode(
+        (, , , , , address _strategistPayout, , ) = abi.decode(
             params,
             (uint32[], uint32[], bytes[], bytes[], uint8, address, uint128, uint128)
         );
 
         feeData.strategistPayoutAddress = _strategistPayout;
-
-        assetRiskTolerance = _assetRiskTolerance;
-        protocolRiskTolerance = _protocolRiskTolerance;
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -1366,6 +1371,29 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         assets = new ERC20[](creditPositions.length);
         for (uint256 i = 0; i < creditPositions.length; ++i) {
             assets[i] = _assetOf(creditPositions[i]);
+        }
+    }
+
+    function viewPositionBalances()
+        external
+        view
+        returns (ERC20[] memory assets, uint256[] memory balances, bool[] memory isDebt)
+    {
+        uint256 creditLen = creditPositions.length;
+        uint256 debtLen = debtPositions.length;
+        assets = new ERC20[](creditLen + debtLen);
+        balances = new uint256[](creditLen + debtLen);
+        isDebt = new bool[](creditLen + debtLen);
+        for (uint256 i = 0; i < creditLen; ++i) {
+            assets[i] = _assetOf(creditPositions[i]);
+            balances[i] = _balanceOf(creditPositions[i]);
+            isDebt[i] = false;
+        }
+
+        for (uint256 i = 0; i < debtLen; ++i) {
+            assets[i + creditPositions.length] = _assetOf(debtPositions[i]);
+            balances[i + creditPositions.length] = _balanceOf(debtPositions[i]);
+            isDebt[i + creditPositions.length] = true;
         }
     }
 }
