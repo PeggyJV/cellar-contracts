@@ -58,7 +58,15 @@ contract CellarAaveV3Test is Test {
     uint32 private aUSDCPosition;
     uint32 private debtUSDCPosition;
 
-    function setUp() external {
+    modifier checkBlockNumber() {
+        if (block.number < 16842420) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16842420.");
+            return;
+        }
+        _;
+    }
+
+    function setUp() external checkBlockNumber {
         aaveATokenAdaptor = new AaveV3ATokenAdaptor();
         aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
         erc20Adaptor = new ERC20Adaptor();
@@ -137,14 +145,14 @@ contract CellarAaveV3Test is Test {
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
 
-    function testDeposit() external {
+    function testDeposit() external checkBlockNumber {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
         assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 1, "Assets should have been deposited into Aave.");
     }
 
-    function testWithdraw() external {
+    function testWithdraw() external checkBlockNumber {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -160,14 +168,14 @@ contract CellarAaveV3Test is Test {
         );
     }
 
-    function testTotalAssets() external {
+    function testTotalAssets() external checkBlockNumber {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
         assertApproxEqAbs(cellar.totalAssets(), assets, 1, "Total assets should equal assets deposited.");
     }
 
-    function testTakingOutLoans() external {
+    function testTakingOutLoans() external checkBlockNumber {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -190,7 +198,7 @@ contract CellarAaveV3Test is Test {
         );
     }
 
-    function testTakingOutLoansInUntrackedPosition() external {
+    function testTakingOutLoansInUntrackedPosition() external checkBlockNumber {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -216,7 +224,7 @@ contract CellarAaveV3Test is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testRepayingLoans() external {
+    function testRepayingLoans() external checkBlockNumber {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -246,7 +254,7 @@ contract CellarAaveV3Test is Test {
         assertApproxEqAbs(dUSDC.balanceOf(address(cellar)), 0, 1, "Cellar should have no dUSDC left.");
     }
 
-    function testSwapAndRepay() external {
+    function testSwapAndRepay() external checkBlockNumber {
         // Deposit into the cellar(which deposits into Aave).
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
@@ -293,7 +301,7 @@ contract CellarAaveV3Test is Test {
         assertApproxEqRel(dWETH.balanceOf(address(cellar)), 0, 0.0005e18, "Cellar should have `amount/2` WETH debt.");
     }
 
-    function testWithdrawableFromaUSDC() external {
+    function testWithdrawableFromaUSDC() external checkBlockNumber {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -321,7 +329,7 @@ contract CellarAaveV3Test is Test {
         // );
     }
 
-    function testWithdrawableFromaWETH() external {
+    function testWithdrawableFromaWETH() external checkBlockNumber {
         // First adjust cellar to work primarily with WETH.
         // Make vanilla USDC the holding position.
         cellar.swapPositions(0, 1, false);
@@ -383,7 +391,7 @@ contract CellarAaveV3Test is Test {
         );
     }
 
-    function testTakingOutAFlashLoan() external {
+    function testTakingOutAFlashLoan() external checkBlockNumber {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -432,7 +440,7 @@ contract CellarAaveV3Test is Test {
         );
     }
 
-    function testMulitipleATokensAndDebtTokens() external {
+    function testMulitipleATokensAndDebtTokens() external checkBlockNumber {
         // Add WETH, aWETH, and dWETH as trusted positions to the registry.
         uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
         uint32 aWETHPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aWETH)), 0, 0);
@@ -478,7 +486,7 @@ contract CellarAaveV3Test is Test {
 
     // This check stops strategists from taking on any debt in positions they do not set up properly.
     // This stops the attack vector or strategists opening up an untracked debt position then depositing the funds into a vesting contract.
-    function testTakingOutLoanInUntrackedPosition() external {
+    function testTakingOutLoanInUntrackedPosition() external checkBlockNumber {
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -499,7 +507,7 @@ contract CellarAaveV3Test is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testRepayingDebtThatIsNotOwed() external {
+    function testRepayingDebtThatIsNotOwed() external checkBlockNumber {
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -515,7 +523,7 @@ contract CellarAaveV3Test is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testBlockExternalReceiver() external {
+    function testBlockExternalReceiver() external checkBlockNumber {
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -540,7 +548,7 @@ contract CellarAaveV3Test is Test {
 
     // ========================================== INTEGRATION TEST ==========================================
 
-    function testIntegration() external {
+    function testIntegration() external checkBlockNumber {
         // Manage positions to reflect the following
         // 0) aUSDC (holding)
         // 1) aWETH

@@ -42,16 +42,16 @@ contract USCUniswapAdaptorTest is Test {
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
 
-    function setUp() external {
-        registry = cellar.registry();
-        priceRouter = PriceRouter(registry.getAddress(2));
-    }
+    function setUp() external {}
 
     function testAdaptor() external {
         if (block.number < 16820108) {
             console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16820108.");
             return;
         }
+
+        registry = cellar.registry();
+        priceRouter = PriceRouter(registry.getAddress(2));
 
         // Get the registry.
         vm.startPrank(multisig);

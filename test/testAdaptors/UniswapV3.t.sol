@@ -8,6 +8,7 @@ import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
+import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/UniSwap/UniswapV3Adaptor.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
@@ -69,7 +70,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
     address private immutable cosmos = vm.addr(0xCAAA);
 
-    UniswapV3Adaptor private uniswapV3Adaptor;
+    MockUniswapV3Adaptor private uniswapV3Adaptor;
     ERC20Adaptor private erc20Adaptor;
     UniswapV3PositionTracker private tracker;
 
@@ -90,7 +91,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         gravity = new MockGravity();
-        uniswapV3Adaptor = new UniswapV3Adaptor();
+        uniswapV3Adaptor = new MockUniswapV3Adaptor();
         erc20Adaptor = new ERC20Adaptor();
         tracker = new UniswapV3PositionTracker(positionManager);
 

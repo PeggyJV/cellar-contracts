@@ -12,6 +12,7 @@ import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3
 // Import adaptors.
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/UniSwap/UniswapV3Adaptor.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
 import { AaveDebtTokenAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
@@ -88,7 +89,7 @@ contract UltimateStableCoinCellarTest is Test {
 
     // Define Adaptors.
     ERC20Adaptor private erc20Adaptor;
-    UniswapV3Adaptor private uniswapV3Adaptor;
+    MockUniswapV3Adaptor private uniswapV3Adaptor;
     AaveATokenAdaptor private aaveATokenAdaptor;
     AaveDebtTokenAdaptor private aaveDebtTokenAdaptor;
     CTokenAdaptor private cTokenAdaptor;
@@ -141,7 +142,7 @@ contract UltimateStableCoinCellarTest is Test {
         erc20Adaptor = new ERC20Adaptor();
         tracker = new UniswapV3PositionTracker(positionManager);
         usdcVestor = new VestingSimple(USDC, 1 days / 4, 1e6);
-        uniswapV3Adaptor = new UniswapV3Adaptor();
+        uniswapV3Adaptor = new MockUniswapV3Adaptor();
         aaveATokenAdaptor = new AaveATokenAdaptor();
         aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
         cTokenAdaptor = new CTokenAdaptor();
