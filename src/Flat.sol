@@ -48,11 +48,7 @@ abstract contract ERC20 {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(
-        string memory _name,
-        string memory _symbol,
-        uint8 _decimals
-    ) {
+    constructor(string memory _name, string memory _symbol, uint8 _decimals) {
         name = _name;
         symbol = _symbol;
         decimals = _decimals;
@@ -87,11 +83,7 @@ abstract contract ERC20 {
         return true;
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public virtual returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) public virtual returns (bool) {
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
 
         if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
@@ -229,12 +221,7 @@ library SafeTransferLib {
                             ERC20 OPERATIONS
     //////////////////////////////////////////////////////////////*/
 
-    function safeTransferFrom(
-        ERC20 token,
-        address from,
-        address to,
-        uint256 amount
-    ) internal {
+    function safeTransferFrom(ERC20 token, address from, address to, uint256 amount) internal {
         bool success;
 
         assembly {
@@ -262,11 +249,7 @@ library SafeTransferLib {
         require(success, "TRANSFER_FROM_FAILED");
     }
 
-    function safeTransfer(
-        ERC20 token,
-        address to,
-        uint256 amount
-    ) internal {
+    function safeTransfer(ERC20 token, address to, uint256 amount) internal {
         bool success;
 
         assembly {
@@ -293,11 +276,7 @@ library SafeTransferLib {
         require(success, "TRANSFER_FAILED");
     }
 
-    function safeApprove(
-        ERC20 token,
-        address to,
-        uint256 amount
-    ) internal {
+    function safeApprove(ERC20 token, address to, uint256 amount) internal {
         bool success;
 
         assembly {
@@ -336,17 +315,13 @@ library Math {
     /**
      * @notice Used to change the decimals of precision used for an amount.
      */
-    function changeDecimals(
-        uint256 amount,
-        uint8 fromDecimals,
-        uint8 toDecimals
-    ) internal pure returns (uint256) {
+    function changeDecimals(uint256 amount, uint8 fromDecimals, uint8 toDecimals) internal pure returns (uint256) {
         if (fromDecimals == toDecimals) {
             return amount;
         } else if (fromDecimals < toDecimals) {
-            return amount * 10**(toDecimals - fromDecimals);
+            return amount * 10 ** (toDecimals - fromDecimals);
         } else {
-            return amount / 10**(fromDecimals - toDecimals);
+            return amount / 10 ** (fromDecimals - toDecimals);
         }
     }
 
@@ -364,11 +339,7 @@ library Math {
         return mulDivDown(x, y, WAD); // Equivalent to (x * y) / WAD rounded down.
     }
 
-    function mulDivDown(
-        uint256 x,
-        uint256 y,
-        uint256 denominator
-    ) internal pure returns (uint256 z) {
+    function mulDivDown(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 z) {
         assembly {
             // Store x * y in z for now.
             z := mul(x, y)
@@ -383,11 +354,7 @@ library Math {
         }
     }
 
-    function mulDivUp(
-        uint256 x,
-        uint256 y,
-        uint256 denominator
-    ) internal pure returns (uint256 z) {
+    function mulDivUp(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 z) {
         assembly {
             // Store x * y in z for now.
             z := mul(x, y)
@@ -475,11 +442,7 @@ abstract contract ERC4626 is ERC20 {
         afterDeposit(assets, shares, receiver);
     }
 
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public virtual returns (uint256 shares) {
+    function withdraw(uint256 assets, address receiver, address owner) public virtual returns (uint256 shares) {
         shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
 
         if (msg.sender != owner) {
@@ -499,11 +462,7 @@ abstract contract ERC4626 is ERC20 {
         afterWithdraw(assets, shares, receiver, owner);
     }
 
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public virtual returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address owner) public virtual returns (uint256 assets) {
         if (msg.sender != owner) {
             uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
 
@@ -586,31 +545,13 @@ abstract contract ERC4626 is ERC20 {
                           INTERNAL HOOKS LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function beforeDeposit(
-        uint256 assets,
-        uint256 shares,
-        address receiver
-    ) internal virtual {}
+    function beforeDeposit(uint256 assets, uint256 shares, address receiver) internal virtual {}
 
-    function afterDeposit(
-        uint256 assets,
-        uint256 shares,
-        address receiver
-    ) internal virtual {}
+    function afterDeposit(uint256 assets, uint256 shares, address receiver) internal virtual {}
 
-    function beforeWithdraw(
-        uint256 assets,
-        uint256 shares,
-        address receiver,
-        address owner
-    ) internal virtual {}
+    function beforeWithdraw(uint256 assets, uint256 shares, address receiver, address owner) internal virtual {}
 
-    function afterWithdraw(
-        uint256 assets,
-        uint256 shares,
-        address receiver,
-        address owner
-    ) internal virtual {}
+    function afterWithdraw(uint256 assets, uint256 shares, address receiver, address owner) internal virtual {}
 }
 
 // OpenZeppelin Contracts (last updated v4.7.0) (access/Ownable.sol)
@@ -715,88 +656,78 @@ abstract contract Ownable is Context {
 }
 
 interface AutomationCompatibleInterface {
-  /**
-   * @notice method that is simulated by the keepers to see if any work actually
-   * needs to be performed. This method does does not actually need to be
-   * executable, and since it is only ever simulated it can consume lots of gas.
-   * @dev To ensure that it is never called, you may want to add the
-   * cannotExecute modifier from KeeperBase to your implementation of this
-   * method.
-   * @param checkData specified in the upkeep registration so it is always the
-   * same for a registered upkeep. This can easily be broken down into specific
-   * arguments using `abi.decode`, so multiple upkeeps can be registered on the
-   * same contract and easily differentiated by the contract.
-   * @return upkeepNeeded boolean to indicate whether the keeper should call
-   * performUpkeep or not.
-   * @return performData bytes that the keeper should call performUpkeep with, if
-   * upkeep is needed. If you would like to encode data to decode later, try
-   * `abi.encode`.
-   */
-  function checkUpkeep(bytes calldata checkData) external returns (bool upkeepNeeded, bytes memory performData);
+    /**
+     * @notice method that is simulated by the keepers to see if any work actually
+     * needs to be performed. This method does does not actually need to be
+     * executable, and since it is only ever simulated it can consume lots of gas.
+     * @dev To ensure that it is never called, you may want to add the
+     * cannotExecute modifier from KeeperBase to your implementation of this
+     * method.
+     * @param checkData specified in the upkeep registration so it is always the
+     * same for a registered upkeep. This can easily be broken down into specific
+     * arguments using `abi.decode`, so multiple upkeeps can be registered on the
+     * same contract and easily differentiated by the contract.
+     * @return upkeepNeeded boolean to indicate whether the keeper should call
+     * performUpkeep or not.
+     * @return performData bytes that the keeper should call performUpkeep with, if
+     * upkeep is needed. If you would like to encode data to decode later, try
+     * `abi.encode`.
+     */
+    function checkUpkeep(bytes calldata checkData) external returns (bool upkeepNeeded, bytes memory performData);
 
-  /**
-   * @notice method that is actually executed by the keepers, via the registry.
-   * The data returned by the checkUpkeep simulation will be passed into
-   * this method to actually be executed.
-   * @dev The input to this method should not be trusted, and the caller of the
-   * method should not even be restricted to any single registry. Anyone should
-   * be able call it, and the input should be validated, there is no guarantee
-   * that the data passed in is the performData returned from checkUpkeep. This
-   * could happen due to malicious keepers, racing keepers, or simply a state
-   * change while the performUpkeep transaction is waiting for confirmation.
-   * Always validate the data passed in.
-   * @param performData is the data which was passed back from the checkData
-   * simulation. If it is encoded, it can easily be decoded into other types by
-   * calling `abi.decode`. This data should not be trusted, and should be
-   * validated against the contract's current state.
-   */
-  function performUpkeep(bytes calldata performData) external;
+    /**
+     * @notice method that is actually executed by the keepers, via the registry.
+     * The data returned by the checkUpkeep simulation will be passed into
+     * this method to actually be executed.
+     * @dev The input to this method should not be trusted, and the caller of the
+     * method should not even be restricted to any single registry. Anyone should
+     * be able call it, and the input should be validated, there is no guarantee
+     * that the data passed in is the performData returned from checkUpkeep. This
+     * could happen due to malicious keepers, racing keepers, or simply a state
+     * change while the performUpkeep transaction is waiting for confirmation.
+     * Always validate the data passed in.
+     * @param performData is the data which was passed back from the checkData
+     * simulation. If it is encoded, it can easily be decoded into other types by
+     * calling `abi.decode`. This data should not be trusted, and should be
+     * validated against the contract's current state.
+     */
+    function performUpkeep(bytes calldata performData) external;
 }
 
 interface AggregatorInterface {
-  function latestAnswer() external view returns (int256);
+    function latestAnswer() external view returns (int256);
 
-  function latestTimestamp() external view returns (uint256);
+    function latestTimestamp() external view returns (uint256);
 
-  function latestRound() external view returns (uint256);
+    function latestRound() external view returns (uint256);
 
-  function getAnswer(uint256 roundId) external view returns (int256);
+    function getAnswer(uint256 roundId) external view returns (int256);
 
-  function getTimestamp(uint256 roundId) external view returns (uint256);
+    function getTimestamp(uint256 roundId) external view returns (uint256);
 
-  event AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt);
+    event AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt);
 
-  event NewRound(uint256 indexed roundId, address indexed startedBy, uint256 startedAt);
+    event NewRound(uint256 indexed roundId, address indexed startedBy, uint256 startedAt);
 }
 
 interface AggregatorV3Interface {
-  function decimals() external view returns (uint8);
+    function decimals() external view returns (uint8);
 
-  function description() external view returns (string memory);
+    function description() external view returns (string memory);
 
-  function version() external view returns (uint256);
+    function version() external view returns (uint256);
 
-  function getRoundData(uint80 _roundId)
-    external
-    view
-    returns (
-      uint80 roundId,
-      int256 answer,
-      uint256 startedAt,
-      uint256 updatedAt,
-      uint80 answeredInRound
-    );
+    function getRoundData(
+        uint80 _roundId
+    )
+        external
+        view
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
 
-  function latestRoundData()
-    external
-    view
-    returns (
-      uint80 roundId,
-      int256 answer,
-      uint256 startedAt,
-      uint256 updatedAt,
-      uint80 answeredInRound
-    );
+    function latestRoundData()
+        external
+        view
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
 }
 
 interface AggregatorV2V3Interface is AggregatorInterface, AggregatorV3Interface {}
@@ -2002,7 +1933,7 @@ library Address {
     function sendValue(address payable recipient, uint256 amount) internal {
         require(address(this).balance >= amount, "Address: insufficient balance");
 
-        (bool success, ) = recipient.call{value: amount}("");
+        (bool success, ) = recipient.call{ value: amount }("");
         require(success, "Address: unable to send value, recipient may have reverted");
     }
 
@@ -2053,11 +1984,7 @@ library Address {
      *
      * _Available since v3.1._
      */
-    function functionCallWithValue(
-        address target,
-        bytes memory data,
-        uint256 value
-    ) internal returns (bytes memory) {
+    function functionCallWithValue(address target, bytes memory data, uint256 value) internal returns (bytes memory) {
         return functionCallWithValue(target, data, value, "Address: low-level call with value failed");
     }
 
@@ -2074,7 +2001,7 @@ library Address {
         string memory errorMessage
     ) internal returns (bytes memory) {
         require(address(this).balance >= value, "Address: insufficient balance for call");
-        (bool success, bytes memory returndata) = target.call{value: value}(data);
+        (bool success, bytes memory returndata) = target.call{ value: value }(data);
         return verifyCallResultFromTarget(target, success, returndata, errorMessage);
     }
 
@@ -2278,11 +2205,7 @@ interface IERC20 {
      *
      * Emits a {Transfer} event.
      */
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
 }
 
 interface IAaveToken {
@@ -2480,11 +2403,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      * @param quoteAsset address of the asset that the base asset is priced in terms of
      * @return value value of the amount of base assets specified in terms of the quote asset
      */
-    function getValue(
-        ERC20 baseAsset,
-        uint256 amount,
-        ERC20 quoteAsset
-    ) external view returns (uint256 value) {
+    function getValue(ERC20 baseAsset, uint256 amount, ERC20 quoteAsset) external view returns (uint256 value) {
         AssetSettings memory baseSettings = getAssetSettings[baseAsset];
         AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
         if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
@@ -2558,11 +2477,10 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      * @param quoteAsset address of the asset that the base assets are exchanged for
      * @return exchangeRates rate of exchange between the base assets and the quote asset
      */
-    function getExchangeRates(ERC20[] memory baseAssets, ERC20 quoteAsset)
-        external
-        view
-        returns (uint256[] memory exchangeRates)
-    {
+    function getExchangeRates(
+        ERC20[] memory baseAssets,
+        ERC20 quoteAsset
+    ) external view returns (uint256[] memory exchangeRates) {
         uint8 quoteAssetDecimals = quoteAsset.decimals();
         AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
         if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
@@ -2611,7 +2529,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     ) internal view returns (uint256) {
         uint256 basePrice = _getPriceInUSD(baseAsset, baseSettings, cache);
         uint256 quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
-        uint256 exchangeRate = basePrice.mulDivDown(10**quoteAssetDecimals, quotePrice);
+        uint256 exchangeRate = basePrice.mulDivDown(10 ** quoteAssetDecimals, quotePrice);
         return exchangeRate;
     }
 
@@ -2683,7 +2601,10 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         // Cleaner equations below.
         // baseToUSD = amountBase * priceBaseUSD / 10**baseDecimals.
         // valueInQuote = baseToUSD * 10**quoteDecimals / priceQuoteUSD
-        valueInQuote = amountBase.mulDivDown((priceBaseUSD * 10**quoteDecimals), (10**baseDecimals * priceQuoteUSD));
+        valueInQuote = amountBase.mulDivDown(
+            (priceBaseUSD * 10 ** quoteDecimals),
+            (10 ** baseDecimals * priceQuoteUSD)
+        );
     }
 
     /**
@@ -2771,11 +2692,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      * @dev _source The address of the Chainlink Data feed.
      * @dev _storage A ChainlinkDerivativeStorage value defining valid prices.
      */
-    function _setupPriceForChainlinkDerivative(
-        ERC20 _asset,
-        address _source,
-        bytes memory _storage
-    ) internal {
+    function _setupPriceForChainlinkDerivative(ERC20 _asset, address _source, bytes memory _storage) internal {
         ChainlinkDerivativeStorage memory parameters = abi.decode(_storage, (ChainlinkDerivativeStorage));
 
         // Use Chainlink to get the min and max of the asset.
@@ -2994,11 +2911,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      *      Doing this makes end = curveAssets.length.
      * @dev `performData` is the target index in `curveAssets` that needs its bounds updated.
      */
-    function _checkVirtualPriceBound(bytes memory checkData)
-        internal
-        view
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
+    function _checkVirtualPriceBound(
+        bytes memory checkData
+    ) internal view returns (bool upkeepNeeded, bytes memory performData) {
         // Decode checkData to get start and end index.
         (uint256 start, uint256 end) = abi.decode(checkData, (uint256, uint256));
         if (end == 0 || end > curveAssets.length) end = curveAssets.length;
@@ -3044,7 +2959,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
                 performData = abi.encode(targetIndex);
             } else {
                 // Run a gas check to determine if it makes sense to update the target curve asset.
-                uint256 gasPriceLimit = gasConstant.mulDivDown(maxDelta**3, 1e54); // 54 comes from 18 * 3.
+                uint256 gasPriceLimit = gasConstant.mulDivDown(maxDelta ** 3, 1e54); // 54 comes from 18 * 3.
                 uint256 currentGasPrice = uint256(IChainlinkAggregator(ETH_FAST_GAS_FEED).latestAnswer());
                 if (currentGasPrice <= gasPriceLimit) {
                     upkeepNeeded = true;
@@ -3145,11 +3060,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     /**
      * @notice Enforces a logical price bound on Curve pool tokens.
      */
-    function _checkBounds(
-        uint256 lower,
-        uint256 upper,
-        uint256 current
-    ) internal pure {
+    function _checkBounds(uint256 lower, uint256 upper, uint256 current) internal pure {
         if (current < lower) revert PriceRouter__CurrentBelowLowerBound(current, lower);
         if (current > upper) revert PriceRouter__CurrentAboveUpperBound(current, upper);
     }
@@ -3167,11 +3078,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      * @dev _storage A VirtualPriceBound value for this asset.
      * @dev Assumes that curve pools never add or remove tokens.
      */
-    function _setupPriceForCurveDerivative(
-        ERC20 _asset,
-        address _source,
-        bytes memory _storage
-    ) internal {
+    function _setupPriceForCurveDerivative(ERC20 _asset, address _source, bytes memory _storage) internal {
         ICurvePool pool = ICurvePool(_source);
         uint8 coinsLength = 0;
         // Figure out how many tokens are in the curve pool.
@@ -3237,7 +3144,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
 
         // Virtual price is based off the Curve Token decimals.
         uint256 curveTokenDecimals = ERC20(asset).decimals();
-        price = minPrice.mulDivDown(virtualPrice, 10**curveTokenDecimals);
+        price = minPrice.mulDivDown(virtualPrice, 10 ** curveTokenDecimals);
     }
 
     // =========================================== CURVEV2 PRICE DERIVATIVE ===========================================
@@ -3248,11 +3155,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      * @dev _storage A VirtualPriceBound value for this asset.
      * @dev Assumes that curve pools never add or remove tokens.
      */
-    function _setupPriceForCurveV2Derivative(
-        ERC20 _asset,
-        address _source,
-        bytes memory _storage
-    ) internal {
+    function _setupPriceForCurveV2Derivative(ERC20 _asset, address _source, bytes memory _storage) internal {
         ICurvePool pool = ICurvePool(_source);
         uint8 coinsLength = 0;
         // Figure out how many tokens are in the curve pool.
@@ -3285,7 +3188,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     }
 
     uint256 private constant GAMMA0 = 28000000000000;
-    uint256 private constant A0 = 2 * 3**3 * 10000;
+    uint256 private constant A0 = 2 * 3 ** 3 * 10000;
     uint256 private constant DISCOUNT0 = 1087460000000000;
 
     // x has 36 decimals
@@ -3298,7 +3201,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             D = (D * (2 * 1e18 + ((((x / D) * 1e18) / D) * 1e18) / D)) / (3 * 1e18);
             if (D > D_prev) diff = D - D_prev;
             else diff = D_prev - D;
-            if (diff <= 1 || diff * 10**18 < D) return D;
+            if (diff <= 1 || diff * 10 ** 18 < D) return D;
         }
         revert("Did not converge");
     }
@@ -3335,7 +3238,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             {
                 uint256 g = pool.gamma().mulDivDown(1e18, GAMMA0);
                 uint256 a = pool.A().mulDivDown(1e18, A0);
-                uint256 coefficient = (g**2 / 1e18) * a;
+                uint256 coefficient = (g ** 2 / 1e18) * a;
                 uint256 discount = coefficient > 1e34 ? coefficient : 1e34;
                 discount = _cubicRoot(discount).mulDivDown(DISCOUNT0, 1e18);
 
@@ -3356,11 +3259,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      * @dev _source The address of the aToken.
      * @dev _storage is not used.
      */
-    function _setupPriceForAaveDerivative(
-        ERC20 _asset,
-        address _source,
-        bytes memory
-    ) internal {
+    function _setupPriceForAaveDerivative(ERC20 _asset, address _source, bytes memory) internal {
         IAaveToken aToken = IAaveToken(_source);
         getAaveDerivativeStorage[_asset] = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
     }
@@ -3379,11 +3278,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
 }
 
 interface IGravity {
-    function sendToCosmos(
-        address _tokenContract,
-        bytes32 _destination,
-        uint256 _amount
-    ) external;
+    function sendToCosmos(address _tokenContract, bytes32 _destination, uint256 _amount) external;
 }
 
 /**
@@ -3398,11 +3293,7 @@ library Uint32Array {
      * @param index index to add the uint32 at
      * @param value uint32 to add to the array
      */
-    function add(
-        uint32[] storage array,
-        uint32 index,
-        uint32 value
-    ) internal {
+    function add(uint32[] storage array, uint32 index, uint32 value) internal {
         uint256 len = array.length;
 
         if (len > 0) {
@@ -3482,12 +3373,7 @@ contract ERC721Holder is IERC721Receiver {
      *
      * Always returns `IERC721Receiver.onERC721Received.selector`.
      */
-    function onERC721Received(
-        address,
-        address,
-        uint256,
-        bytes memory
-    ) public virtual override returns (bytes4) {
+    function onERC721Received(address, address, uint256, bytes memory) public virtual override returns (bytes4) {
         return this.onERC721Received.selector;
     }
 }
@@ -3710,12 +3596,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Internal function ise used by `addPosition` and initialize function.
      */
-    function _addPosition(
-        uint32 index,
-        uint32 positionId,
-        bytes memory configurationData,
-        bool inDebtArray
-    ) internal {
+    function _addPosition(uint32 index, uint32 positionId, bytes memory configurationData, bool inDebtArray) internal {
         // Check if position is already being used.
         if (isPositionUsed[positionId]) revert Cellar__PositionAlreadyUsed(positionId);
 
@@ -3784,11 +3665,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param index2 index of second position to swap
      * @param inDebtArray bool indicating to switch positions in the debt array, or the credit array.
      */
-    function swapPositions(
-        uint32 index1,
-        uint32 index2,
-        bool inDebtArray
-    ) external onlyOwner {
+    function swapPositions(uint32 index1, uint32 index2, bool inDebtArray) external onlyOwner {
         // Get the new positions that will be at each index.
         uint32 newPosition1;
         uint32 newPosition2;
@@ -4160,11 +4037,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Override `transferFrom` to add share lock check.
      */
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public override returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
         _checkIfSharesLocked(from);
         return super.transferFrom(from, to, amount);
     }
@@ -4181,11 +4054,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param assets amount of assets deposited by user.
      * @param receiver address receiving the shares.
      */
-    function beforeDeposit(
-        uint256 assets,
-        uint256,
-        address receiver
-    ) internal view override whenNotShutdown {
+    function beforeDeposit(uint256 assets, uint256, address receiver) internal view override whenNotShutdown {
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
                 revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
@@ -4198,11 +4067,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice called at the end of deposit.
      * @param assets amount of assets deposited by user.
      */
-    function afterDeposit(
-        uint256 assets,
-        uint256,
-        address receiver
-    ) internal override {
+    function afterDeposit(uint256 assets, uint256, address receiver) internal override {
         _depositTo(holdingPosition, assets);
         userShareLockStartTime[receiver] = block.timestamp;
     }
@@ -4210,21 +4075,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice called at the beginning of withdraw.
      */
-    function beforeWithdraw(
-        uint256,
-        uint256,
-        address,
-        address owner
-    ) internal view override {
+    function beforeWithdraw(uint256, uint256, address, address owner) internal view override {
         // Make sure users shares are not locked.
         _checkIfSharesLocked(owner);
     }
 
-    function _enter(
-        uint256 assets,
-        uint256 shares,
-        address receiver
-    ) internal {
+    function _enter(uint256 assets, uint256 shares, address receiver) internal {
         beforeDeposit(assets, shares, receiver);
 
         // Need to transfer before minting or ERC777s could reenter.
@@ -4269,12 +4125,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _enter(assets, shares, receiver);
     }
 
-    function _exit(
-        uint256 assets,
-        uint256 shares,
-        address receiver,
-        address owner
-    ) internal {
+    function _exit(uint256 assets, uint256 shares, address receiver, address owner) internal {
         beforeWithdraw(assets, shares, receiver, owner);
 
         if (msg.sender != owner) {
@@ -4374,7 +4225,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Save asset price in USD, and decimals to reduce external calls.
         WithdrawPricing memory pricingInfo;
         pricingInfo.priceQuoteUSD = priceRouter.getPriceInUSD(asset);
-        pricingInfo.oneQuote = 10**asset.decimals();
+        pricingInfo.oneQuote = 10 ** asset.decimals();
         uint256 creditLength = creditPositions.length;
         for (uint256 i; i < creditLength; ++i) {
             uint32 position = creditPositions[i];
@@ -4384,7 +4235,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             ERC20 positionAsset = _assetOf(position);
 
             pricingInfo.priceBaseUSD = priceRouter.getPriceInUSD(positionAsset);
-            pricingInfo.oneBase = 10**positionAsset.decimals();
+            pricingInfo.oneBase = 10 ** positionAsset.decimals();
             uint256 totalWithdrawableBalanceInAssets;
             {
                 uint256 withdrawableBalanceInUSD = (PRECISION_MULTIPLIER * withdrawableBalance).mulDivDown(
@@ -4954,11 +4805,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param assets the amount of assets to withdraw from the position
      * @param receiver the address to sent withdrawn assets to
      */
-    function _withdrawFrom(
-        uint32 position,
-        uint256 assets,
-        address receiver
-    ) internal {
+    function _withdrawFrom(uint32 position, uint256 assets, address receiver) internal {
         address adaptor = getPositionData[position].adaptor;
         adaptor.functionDelegateCall(
             abi.encodeWithSelector(
@@ -5081,11 +4928,7 @@ contract Registry is Ownable {
      * @param swapRouter address of SwapRouter contract
      * @param priceRouter address of PriceRouter contract
      */
-    constructor(
-        address gravityBridge,
-        address swapRouter,
-        address priceRouter
-    ) Ownable() {
+    constructor(address gravityBridge, address swapRouter, address priceRouter) Ownable() {
         _register(gravityBridge);
         _register(swapRouter);
         _register(priceRouter);
@@ -5304,15 +5147,7 @@ contract Registry is Ownable {
         uint32 positionId,
         uint128 assetRiskTolerance,
         uint128 protocolRiskTolerance
-    )
-        external
-        view
-        returns (
-            address adaptor,
-            bool isDebt,
-            bytes memory adaptorData
-        )
-    {
+    ) external view returns (address adaptor, bool isDebt, bytes memory adaptorData) {
         if (positionId > positionCount || positionId == 0) revert Registry__PositionDoesNotExist();
         RiskData memory data = getRiskData[positionId];
         if (assetRiskTolerance < data.assetRisk) revert Registry__AssetTooRisky();
@@ -5349,11 +5184,7 @@ contract Registry is Ownable {
      * @param assetRisk the asset risk level associated with this adaptor
      * @param protocolRisk the protocol risk level associated with this adaptor
      */
-    function trustAdaptor(
-        address adaptor,
-        uint128 assetRisk,
-        uint128 protocolRisk
-    ) external onlyOwner {
+    function trustAdaptor(address adaptor, uint128 assetRisk, uint128 protocolRisk) external onlyOwner {
         bytes32 identifier = BaseAdaptor(adaptor).identifier();
         if (isIdentifierUsed[identifier]) revert Registry__IdentifierNotUnique();
         isAdaptorTrusted[adaptor] = true;
@@ -5431,13 +5262,7 @@ interface IUniswapV2Router01 {
         uint256 amountBMin,
         address to,
         uint256 deadline
-    )
-        external
-        returns (
-            uint256 amountA,
-            uint256 amountB,
-            uint256 liquidity
-        );
+    ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity);
 
     function addLiquidityETH(
         address token,
@@ -5446,14 +5271,7 @@ interface IUniswapV2Router01 {
         uint256 amountETHMin,
         address to,
         uint256 deadline
-    )
-        external
-        payable
-        returns (
-            uint256 amountToken,
-            uint256 amountETH,
-            uint256 liquidity
-        );
+    ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
 
     function removeLiquidity(
         address tokenA,
@@ -5547,11 +5365,7 @@ interface IUniswapV2Router01 {
         uint256 deadline
     ) external payable returns (uint256[] memory amounts);
 
-    function quote(
-        uint256 amountA,
-        uint256 reserveA,
-        uint256 reserveB
-    ) external pure returns (uint256 amountB);
+    function quote(uint256 amountA, uint256 reserveA, uint256 reserveB) external pure returns (uint256 amountB);
 
     function getAmountOut(
         uint256 amountIn,
@@ -5629,11 +5443,7 @@ interface IUniswapV3SwapCallback {
     /// @param amount1Delta The amount of token1 that was sent (negative) or must be received (positive) by the pool by
     /// the end of the swap. If positive, the callback must send that amount of token1 to the pool.
     /// @param data Any data passed through by the caller via the IUniswapV3PoolActions#swap call
-    function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata data
-    ) external;
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external;
 }
 
 /// @title Router token swapping functionality
@@ -5975,11 +5785,7 @@ abstract contract BaseAdaptor {
      * @param configurationData data settable when strategists add positions to their Cellar
      *                          Allows strategist to control how the adaptor interacts with the position
      */
-    function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
-        bytes memory configurationData
-    ) public virtual;
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory configurationData) public virtual;
 
     /**
      * @notice Function Cellars call to withdraw funds from positions to send to users.

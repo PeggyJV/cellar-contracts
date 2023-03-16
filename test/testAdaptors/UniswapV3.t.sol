@@ -93,8 +93,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         uniswapV3Adaptor = new UniswapV3Adaptor();
         erc20Adaptor = new ERC20Adaptor();
         tracker = new UniswapV3PositionTracker(positionManager);
-        // console.log("Tracker", address(tracker));
-        // TODO remove above
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
