@@ -381,9 +381,11 @@ contract Registry is Ownable {
     function _checkPositionIsTrustedAndNotPaused(uint32 positionId) internal view returns (bool) {
         PauseAndTrust memory pauseAndTrust = getPositionIdToPauseAndTrust[positionId];
 
-        if (!pauseAndTrust.isTrusted) revert("Position is not trusted");
+        if (!pauseAndTrust.isTrusted) return false;
 
-        if (block.timestamp < pauseAndTrust.pausedUntil) revert("Position is paused.");
+        if (block.timestamp < pauseAndTrust.pausedUntil) return false;
+
+        return true;
     }
 
     function _checkAdaptorIsTrustedAndNotPaused(address adaptor) internal view returns (bool) {

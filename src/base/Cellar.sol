@@ -25,23 +25,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     // ========================================= MULTICALL =========================================
 
-    function multicall(bytes[] calldata data) public returns (bytes[] memory results) {
-        results = new bytes[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
-            (bool success, bytes memory result) = address(this).delegatecall(data[i]);
-
-            if (!success) {
-                // Next 5 lines from https://ethereum.stackexchange.com/a/83577
-                // solhint-disable-next-line reason-string
-                if (result.length < 68) revert();
-                assembly {
-                    result := add(result, 0x04)
-                }
-                revert(abi.decode(result, (string)));
-            }
-
-            results[i] = result;
-        }
+    function multicall(bytes[] calldata data) external {
+        for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
     }
 
     // ========================================= REENTRANCY GUARD =========================================
@@ -419,6 +404,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     error Cellar__ContractShutdown();
 
+    error Cellar__RebalancesNotAllowed();
+
     /**
      * @notice Attempted action was prevented due to contract not being shutdown.
      */
@@ -428,6 +415,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Whether or not the contract is shutdown in case of an emergency.
      */
     bool public isShutdown;
+
+    bool public allowRebalanceWhenShutdown;
+
+    function toggleAllowRebalanceWhenShutdown(bool toggle) external onlyOwner {
+        allowRebalanceWhenShutdown = toggle;
+    }
 
     /**
      * @notice Prevent a function from being called during a shutdown.
@@ -1181,7 +1174,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
      */
-    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner whenNotShutdown nonReentrant {
+    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner nonReentrant {
+        // Block rebalance calls if shutdown AND allowRebalanceWhenShutdown is false.
+        if (isShutdown && !allowRebalanceWhenShutdown) revert Cellar__RebalancesNotAllowed();
         blockExternalReceiver = true;
 
         // Record `totalAssets` and `totalShares` before making any external calls.
