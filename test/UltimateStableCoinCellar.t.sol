@@ -19,8 +19,7 @@ import { CTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Compound/CToken
 import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.sol";
 
 // Import Compound helpers.
-import { CErc20 } from "@compound/CErc20.sol";
-import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 
 // Import Aave helpers.
 import { IPool } from "src/interfaces/external/IPool.sol";
@@ -498,10 +497,10 @@ contract UltimateStableCoinCellarTest is Test {
             path[0] = address(COMP);
             path[1] = address(WETH);
             path[2] = address(USDC);
-            uint24[] memory poolFees = new uint24[](2);
-            poolFees[0] = 3000;
-            poolFees[1] = 500;
-            bytes memory params = abi.encode(path, poolFees, 0, 0);
+            uint24[] memory poolFees0 = new uint24[](2);
+            poolFees0[0] = 3000;
+            poolFees0[1] = 500;
+            bytes memory params = abi.encode(path, poolFees0, 0, 0);
             adaptorCalls[0] = abi.encodeWithSelector(
                 CTokenAdaptor.claimCompAndSwap.selector,
                 USDC,
@@ -571,8 +570,8 @@ contract UltimateStableCoinCellarTest is Test {
         int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
         tick = tick + shift;
 
-        IUniswapV3Pool pool = IUniswapV3Pool(v3factory.getPool(address(token0), address(token1), fee));
-        int24 spacing = pool.tickSpacing();
+        IUniswapV3Pool targetPool = IUniswapV3Pool(v3factory.getPool(address(token0), address(token1), fee));
+        int24 spacing = targetPool.tickSpacing();
         lower = tick - (tick % spacing);
         lower = lower - ((spacing * size) / 2);
         upper = lower + spacing * size;

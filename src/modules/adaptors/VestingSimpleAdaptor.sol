@@ -175,7 +175,7 @@ contract VestingSimpleAdaptor is BaseAdaptor {
 
     //============================================ Helper Functions ===========================================
 
-    function _verifyVestingPositionIsUsed(address vestingContract) internal {
+    function _verifyVestingPositionIsUsed(address vestingContract) internal view {
         // Check that vesting position is setup to be used in the cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(vestingContract)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);

@@ -2,8 +2,7 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Math, SwapRouter } from "src/modules/adaptors/BaseAdaptor.sol";
-import { CErc20 } from "@compound/CErc20.sol";
-import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 
 /**
  * @title Compound CToken Adaptor
