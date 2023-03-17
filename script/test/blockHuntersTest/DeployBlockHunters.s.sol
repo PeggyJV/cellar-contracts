@@ -42,81 +42,78 @@ contract DeployBlockHuntersScript is Script, TEnv {
 
     // Define Adaptors.
     AaveV3ATokenAdaptor private aaveV3ATokenAdaptor;
-    AaveV3DebtTokenAdaptor private aaveV3DebtTokenAdaptor;
 
     function run() external {
-        // uint32[] memory positions = new uint32[](3);
-        // uint32[] memory debtPositions = new uint32[](3);
-        // bytes[] memory positionConfigs = new bytes[](3);
-        // bytes[] memory debtConfigs = new bytes[](3);
+        uint32[] memory positions = new uint32[](6);
+        uint32[] memory debtPositions;
+        bytes[] memory positionConfigs = new bytes[](6);
+        bytes[] memory debtConfigs;
+        aaveV3ATokenAdaptor = AaveV3ATokenAdaptor(0x4E19245459A74490de144caEFE724aA3521338E4);
 
         vm.startBroadcast();
 
-        // Deploy new adaptors.
-        // feesAndReservesAdaptor = FeesAndReservesAdaptor(0xf260a0caD298BBB1b90c8D3EE24Ac896Ada65fA5);
-        // aaveATokenAdaptor = AaveATokenAdaptor(0x3Dd3E51f1a1cD0E6767B5b2d939E8AAFdFcB20F3);
-        // uniswapV3Adaptor = UniswapV3Adaptor(0x5038A79F9680E7Ca200EB7162CF374bce741a8f4);
-        // zeroXAdaptor = ZeroXAdaptor(0x1bd161EF8EE43E72Ce8CfB156c2cA4f64E49c086);
+        // Add assets to price router.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(AAVE_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, AAVE_USD_FEED);
+        priceRouter.addAsset(AAVE, settings, abi.encode(stor), price);
 
-        aaveV3ATokenAdaptor = new AaveV3ATokenAdaptor();
-        aaveV3DebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
+        price = uint256(IChainlinkAggregator(CRV_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, CRV_USD_FEED);
+        priceRouter.addAsset(CRV, settings, abi.encode(stor), price);
 
-        registry.trustAdaptor(address(aaveV3ATokenAdaptor), 0, 0);
-        registry.trustAdaptor(address(aaveV3DebtTokenAdaptor), 0, 0);
+        price = uint256(IChainlinkAggregator(UNI_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, UNI_USD_FEED);
+        priceRouter.addAsset(UNI, settings, abi.encode(stor), price);
 
-        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aWETH)), 0, 0);
-        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aRETH)), 0, 0);
-        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aCBETH)), 0, 0);
+        price = uint256(IChainlinkAggregator(COMP_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, COMP_USD_FEED);
+        priceRouter.addAsset(COMP, settings, abi.encode(stor), price);
 
-        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dWETH)), 0, 0);
-        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dRETH)), 0, 0);
-        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dCBETH)), 0, 0);
+        price = uint256(IChainlinkAggregator(MKR_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, MKR_USD_FEED);
+        priceRouter.addAsset(MKR, settings, abi.encode(stor), price);
+
+        positions[0] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aUSDCV3)), 0, 0);
+        positions[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(AAVE)), 0, 0);
+        positions[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(CRV)), 0, 0);
+        positions[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(UNI)), 0, 0);
+        positions[4] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(COMP)), 0, 0);
+        positions[5] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(MKR)), 0, 0);
+
+        positionConfigs[0] = abi.encode(1.1e18);
 
         // Deploy cellar using factory.
-        // bytes memory initializeCallData = abi.encode(
-        //     devOwner,
-        //     registry,
-        //     WETH,
-        //     "TEST Cellar",
-        //     "TEST",
-        //     abi.encode(
-        //         positions,
-        //         debtPositions,
-        //         positionConfigs,
-        //         debtConfigs,
-        //         positions[3],
-        //         strategist,
-        //         type(uint128).max,
-        //         type(uint128).max
-        //     )
-        // );
-        // address implementation = factory.getImplementation(2, 0);
-        // require(implementation != address(0), "Invalid implementation");
+        bytes memory initializeCallData = abi.encode(
+            devOwner,
+            registry,
+            USDC,
+            "TEST Cellar",
+            "TEST",
+            abi.encode(
+                positions,
+                debtPositions,
+                positionConfigs,
+                debtConfigs,
+                positions[0],
+                strategist,
+                type(uint128).max,
+                type(uint128).max
+            )
+        );
+        address implementation = factory.getImplementation(2, 0);
+        require(implementation != address(0), "Invalid implementation");
 
-        // address clone = factory.deploy(2, 0, initializeCallData, WETH, 0, keccak256(abi.encode(block.timestamp)));
-        // cellar = CellarInitializableV2_1(clone);
+        address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(block.timestamp)));
+        cellar = CellarInitializableV2_1(clone);
 
         // Setup all the adaptors the cellar will use.
-        // cellar.setupAdaptor(address(feesAndReservesAdaptor));
-        // cellar.setupAdaptor(address(aaveATokenAdaptor));
-        // cellar.setupAdaptor(address(uniswapV3Adaptor));
-        // cellar.setupAdaptor(address(zeroXAdaptor));
+        cellar.setupAdaptor(address(aaveV3ATokenAdaptor));
+        cellar.setupAdaptor(address(feesAndReservesAdaptor));
+        cellar.setupAdaptor(address(zeroXAdaptor));
 
-        // cellar.transferOwnership(strategist);
-
-        // Add cbETH and rETH to price router.
-        // PriceRouter.ChainlinkDerivativeStorage memory stor;
-        // stor.inETH = true;
-        // PriceRouter.AssetSettings memory settings;
-        // uint256 price = uint256(IChainlinkAggregator(CBETH_ETH_FEED).latestAnswer());
-        // price = price.mulDivDown(1656e8, 1e18);
-        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, CBETH_ETH_FEED);
-        // priceRouter.addAsset(cbETH, settings, abi.encode(stor), price);
-
-        // price = uint256(IChainlinkAggregator(RETH_ETH_FEED).latestAnswer());
-        // price = price.mulDivDown(1656e8, 1e18);
-        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, RETH_ETH_FEED);
-        // priceRouter.addAsset(rETH, settings, abi.encode(stor), price);
+        cellar.transferOwnership(strategist);
 
         vm.stopBroadcast();
     }

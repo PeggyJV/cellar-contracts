@@ -59,8 +59,8 @@ contract CellarAaveV3Test is Test {
     uint32 private debtUSDCPosition;
 
     modifier checkBlockNumber() {
-        if (block.number < 16842420) {
-            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16842420.");
+        if (block.number < 16700000) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16700000.");
             return;
         }
         _;
@@ -143,6 +143,7 @@ contract CellarAaveV3Test is Test {
 
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+        stdstore.target(address(cellar)).sig(cellar.aavePool.selector).checked_write(address(pool));
     }
 
     function testDeposit() external checkBlockNumber {

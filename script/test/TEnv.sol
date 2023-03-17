@@ -24,14 +24,9 @@ contract TEnv {
     PriceRouter public priceRouter = PriceRouter(0xD8029A05bEB0FaF1215fBb064D98c39B28d317Ee);
     SwapRouter public swapRouter = SwapRouter(0xC356F0AC3a0d3fC18167d8ee62e0A8FB487D1719);
     ERC20Adaptor public erc20Adaptor = ERC20Adaptor(0x802818408DfC63E67ca4C56e2F5Ec37998Dd520C);
-    // EulerETokenAdaptor public eulerETokenAdaptor = EulerETokenAdaptor(0x4869a3c6642C824D9DE238ebbe6e4424086CFB8d);
-    // EulerDebtTokenAdaptor public eulerDebtTokenAdaptor =
-    //     EulerDebtTokenAdaptor(0xb21DEbD3a10bB545824C3014aB0b1cE5aBCf3b64);
-    // FeesAndReservesAdaptor public feesAndReservesAdaptor =
-    //     FeesAndReservesAdaptor(0xf260a0caD298BBB1b90c8D3EE24Ac896Ada65fA5);
-    // AaveATokenAdaptor public aaveATokenAdaptor = AaveATokenAdaptor(0x3Dd3E51f1a1cD0E6767B5b2d939E8AAFdFcB20F3);
-    // UniswapV3Adaptor public uniswapV3Adaptor = UniswapV3Adaptor(0x5038A79F9680E7Ca200EB7162CF374bce741a8f4);
-    // ZeroXAdaptor public zeroXAdaptor = ZeroXAdaptor(0x1bd161EF8EE43E72Ce8CfB156c2cA4f64E49c086);
+    FeesAndReservesAdaptor public feesAndReservesAdaptor =
+        FeesAndReservesAdaptor(0xf260a0caD298BBB1b90c8D3EE24Ac896Ada65fA5);
+    ZeroXAdaptor public zeroXAdaptor = ZeroXAdaptor(0x1bd161EF8EE43E72Ce8CfB156c2cA4f64E49c086);
 
     // Common ERC20s.
     ERC20 public USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -40,6 +35,14 @@ contract TEnv {
     ERC20 public WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 public cbETH = ERC20(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
     ERC20 public rETH = ERC20(0xae78736Cd615f374D3085123A210448E74Fc6393);
+
+    ERC20 public AAVE = ERC20(0xae78736Cd615f374D3085123A210448E74Fc6393);
+    ERC20 public CRV = ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
+    ERC20 public UNI = ERC20(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
+    ERC20 public COMP = ERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
+    ERC20 public MKR = ERC20(0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2);
+
+    ERC20 public aUSDCV3 = ERC20(0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c);
 
     ERC20 public aWETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
     ERC20 public dWETH = ERC20(0xeA51d7853EEFb32b6ee06b1C12E6dcCA88Be0fFE);
@@ -58,6 +61,12 @@ contract TEnv {
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address public CBETH_ETH_FEED = 0xF017fcB346A1885194689bA23Eff2fE6fA5C483b;
     address public RETH_ETH_FEED = 0x536218f9E9Eb48863970252233c8F271f554C2d0;
+
+    address public AAVE_USD_FEED = 0x547a514d5e3769680Ce22B2361c10Ea13619e8a9;
+    address public CRV_USD_FEED = 0xCd627aA160A6fA45Eb793D19Ef54f5062F20f33f;
+    address public UNI_USD_FEED = 0x553303d460EE0afB37EdFf9bE42922D8FF63220e;
+    address public COMP_USD_FEED = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
+    address public MKR_USD_FEED = 0xec1D1B3b0443256cc3860e24a46F108e699484Aa;
 
     // Registry Positions.
     // uint32 public eUsdcPosition = 1;
