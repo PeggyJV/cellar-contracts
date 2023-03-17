@@ -233,6 +233,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
     // TODO add in percent so that HWM can be set some percent between current share price and old HWM
     // TODO reset feeEarned when we reset HWM.
+    // TODO make sure input is logical
     /**
      * @notice Allows owner to reset a Cellar's Share Price High Watermark.
      * @dev Resetting HWM will zero out all fees owed.

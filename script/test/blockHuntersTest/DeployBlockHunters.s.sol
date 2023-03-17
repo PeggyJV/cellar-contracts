@@ -75,6 +75,8 @@ contract DeployBlockHuntersScript is Script, TEnv {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, MKR_USD_FEED);
         priceRouter.addAsset(MKR, settings, abi.encode(stor), price);
 
+        // registry.trustAdaptor(address(erc20Adaptor), 0, 0);
+
         positions[0] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aUSDCV3)), 0, 0);
         positions[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(AAVE)), 0, 0);
         positions[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(CRV)), 0, 0);
