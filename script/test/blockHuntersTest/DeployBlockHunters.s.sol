@@ -31,10 +31,10 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/test/realYieldEthTest/DeployRealYieldEth.s.sol:DeployRealYieldEthScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/test/blockHuntersTest/DeployBlockHunters.s.sol:DeployBlockHuntersScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
-contract DeployRealYieldEthScript is Script, TEnv {
+contract DeployBlockHuntersScript is Script, TEnv {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 

@@ -315,18 +315,18 @@ contract CellarAaveV3Test is Test {
         cellar.callOnAdaptor(data);
 
         uint256 maxAssets = cellar.maxWithdraw(address(this));
-        // cellar.withdraw(maxAssets, address(this), address(this));
+        cellar.withdraw(maxAssets, address(this), address(this));
 
-        // assertEq(USDC.balanceOf(address(this)), maxAssets, "Should have withdraw max assets possible.");
+        assertEq(USDC.balanceOf(address(this)), maxAssets, "Should have withdraw max assets possible.");
 
-        // maxAssets = cellar.maxWithdraw(address(this));
-        // cellar.withdraw(maxAssets, address(this), address(this));
+        maxAssets = cellar.maxWithdraw(address(this));
+        cellar.withdraw(maxAssets, address(this), address(this));
 
-        // assertEq(
-        //     cellar.totalAssetsWithdrawable(),
-        //     0,
-        //     "Cellar should have remaining assets locked until strategist rebalances."
-        // );
+        assertEq(
+            cellar.totalAssetsWithdrawable(),
+            0,
+            "Cellar should have remaining assets locked until strategist rebalances."
+        );
     }
 
     function testWithdrawableFromaWETH() external checkBlockNumber {

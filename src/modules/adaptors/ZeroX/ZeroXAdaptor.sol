@@ -42,10 +42,6 @@ contract ZeroXAdaptor is PositionlessAdaptor {
         return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     }
 
-    function slippage() public pure returns (uint32) {
-        return 0.95e4;
-    }
-
     //============================================ Strategist Functions ===========================================
 
     /**
@@ -58,7 +54,7 @@ contract ZeroXAdaptor is PositionlessAdaptor {
 
         if (priceRouter.isSupported(tokenIn)) {
             // If the asset in is supported, than require that asset out is also supported.
-            if (!priceRouter.isSupported(tokenOut)) revert("Unsupported asset out.");
+            if (!priceRouter.isSupported(tokenOut)) revert BaseAdaptor__PricingNotSupported(address(tokenOut));
             // Save token balances.
             uint256 tokenInBalance = tokenIn.balanceOf(address(this));
             uint256 tokenOutBalance = tokenOut.balanceOf(address(this));
@@ -71,9 +67,9 @@ contract ZeroXAdaptor is PositionlessAdaptor {
 
             uint256 tokenInValueOut = priceRouter.getValue(tokenOut, tokenOutAmountOut, tokenIn);
 
-            if (tokenInValueOut < tokenInAmountIn.mulDivDown(slippage(), 1e4)) revert("Slippage Revert");
+            if (tokenInValueOut < tokenInAmountIn.mulDivDown(slippage(), 1e4)) revert BaseAdaptor__Slippage();
         } else {
-            // Token In is not supported by price router, so we know it is atleast not the Cellars Reserves,
+            // Token In is not supported by price router, so we know it is at least not the Cellars Reserves,
             // or a prominent asset, so skip value in vs value out check.
             target().functionCall(swapCallData);
         }

@@ -235,8 +235,12 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     // TODO reset feeEarned when we reset HWM.
     /**
      * @notice Allows owner to reset a Cellar's Share Price High Watermark.
+     * @dev Resetting HWM will zero out all fees owed.
+     * @param resetPercent Number between 0 bps and 10,000 bps.
+     *                     0 - HWM does not change at all
+     *                10,000 - HWM is fully reset to current share price
      */
-    function resetHWM(Cellar cellar) external onlyOwner {
+    function resetHWM(Cellar cellar, uint32 resetPercent) external onlyOwner {
         MetaData storage data = metaData[cellar];
 
         uint256 totalAssets = cellar.totalAssets();
@@ -248,7 +252,12 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             totalSupply
         );
 
-        data.exactHighWatermark = exactSharePrice;
+        data.exactHighWatermark =
+            data.exactHighWatermark -
+            (data.exactHighWatermark - exactSharePrice).mulDivDown(resetPercent, 10 ** BPS_DECIMALS);
+
+        // Reset fees earned.
+        data.feesOwed = 0;
 
         emit HighWatermarkReset(address(cellar));
     }

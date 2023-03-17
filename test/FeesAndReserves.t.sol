@@ -43,12 +43,7 @@ contract FeesAndReservesTest is Test {
     function feeData()
         public
         view
-        returns (
-            uint64 strategistPlatformCut,
-            uint64 platformFee,
-            uint64 lastAccrual,
-            address strategistPayoutAddress
-        )
+        returns (uint64 strategistPlatformCut, uint64 platformFee, uint64 lastAccrual, address strategistPayoutAddress)
     {
         return (0.8e18, 0, 0, strategist);
     }
@@ -118,11 +113,7 @@ contract FeesAndReservesTest is Test {
 
     // Since this contract is set as the Gravity Bridge, this will be called by
     // the Cellar's `sendFees` function to send funds Cosmos.
-    function sendToCosmos(
-        address asset,
-        bytes32,
-        uint256 assets
-    ) external {
-        ERC20(asset).transferFrom(msg.sender, cosmos, assets);
+    function sendToCosmos(address token, bytes32, uint256 tokens) external {
+        ERC20(token).transferFrom(msg.sender, cosmos, tokens);
     }
 }
