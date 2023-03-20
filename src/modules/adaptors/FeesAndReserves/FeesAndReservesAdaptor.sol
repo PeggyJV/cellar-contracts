@@ -35,8 +35,10 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
         return keccak256(abi.encode("Fees And Reserves Adaptor V 1.0"));
     }
 
-    // TODO update this with the real value once deployed.
-    function feesAndReserves() public pure returns (FeesAndReserves) {
+    /**
+     * @notice FeesAndReserves on ETH Mainnet.
+     */
+    function feesAndReserves() public pure virtual returns (FeesAndReserves) {
         return FeesAndReserves(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
     }
 

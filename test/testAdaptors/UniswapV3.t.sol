@@ -650,14 +650,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
     event Collect(uint256 indexed tokenId, address recipient, uint256 amount0, uint256 amount1);
 
     function testIntegration() external {
-        // Manage positions to reflect the following
-        // 0) USDC
-        // 1) USDC/WETH Uniswap V3 LP
-        // 2) DAI/USDC Uniswap V3 LP
-        cellar.swapPositions(1, 4, false); // Swap DAI with USDC/WETH Uniswap V3 LP
-        cellar.removePosition(2, false); // Remove WETH position
-        cellar.removePosition(3, false); // Remove DAI position
-
         // Have whale join the cellar with 10M USDC.
         uint256 assets = 10_000_000e6;
         address whale = vm.addr(777);
@@ -797,9 +789,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         }
-        // Add DAI and WETH as positions, so withdrawn liquidity is accounted for.
-        cellar.addPosition(3, daiPosition, abi.encode(0), false);
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
 
         // Change rebalance deviation, so the rebalance check passes. Normally any yield would be sent to a vesting contract,
         // but for simplicity this test is not doing that.

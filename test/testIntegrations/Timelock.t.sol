@@ -61,9 +61,6 @@ contract TimelockTest is Test {
         registry = cellar.registry();
         priceRouter = PriceRouter(registry.getAddress(2));
 
-        vm.prank(multisig);
-        registry.transferOwnership(address(controller));
-
         vm.startPrank(devOwner);
         controller.schedule(
             address(registry),

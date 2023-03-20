@@ -35,6 +35,8 @@ contract USCUniswapAdaptorTest is Test {
     Registry private registry;
     UniswapV3Adaptor private uniswapV3Adaptor = UniswapV3Adaptor(0xDbd750F72a00d01f209FFc6C75e80301eFc789C1);
 
+    address private timelock = 0xaDa78a5E01325B91Bc7879a63c309F7D54d42950;
+
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
@@ -52,19 +54,6 @@ contract USCUniswapAdaptorTest is Test {
 
         registry = cellar.registry();
         priceRouter = PriceRouter(registry.getAddress(2));
-
-        // Get the registry.
-        vm.startPrank(multisig);
-        registry.trustAdaptor(address(uniswapV3Adaptor), 0, 0);
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC), 0, 0);
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, USDT), 0, 0);
-        vm.stopPrank();
-
-        vm.startPrank(gravityBridge);
-        cellar.addPosition(5, 13, abi.encode(0), false);
-        cellar.addPosition(5, 14, abi.encode(0), false);
-        cellar.setupAdaptor(address(uniswapV3Adaptor));
-        vm.stopPrank();
 
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(USDT), address(cellar), 1_000_000e6);

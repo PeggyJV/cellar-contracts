@@ -59,6 +59,7 @@ contract FeesAndReservesTest is Test {
     function testMaliciousCallerChangingReserveAsset() external {
         feesAndReserves.setupMetaData(0.05e4, 0.2e4);
         feesAndReserves.changeUpkeepMaxGas(100e9);
+        feesAndReserves.changeUpkeepFrequency(3_600);
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = Cellar(address(this));
@@ -66,6 +67,8 @@ contract FeesAndReservesTest is Test {
         totalSupply = 100e18;
         (bool upkeepNeeded, bytes memory performData) = feesAndReserves.checkUpkeep(abi.encode(cellars));
         feesAndReserves.performUpkeep(performData);
+
+        vm.warp(block.timestamp + 3_600);
 
         // Add assets to reserves.
         deal(address(USDC), address(this), 100e6);

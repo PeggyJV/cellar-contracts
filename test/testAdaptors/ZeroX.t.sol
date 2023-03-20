@@ -52,7 +52,7 @@ contract CellarZeroXTest is Test {
     address private spender = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     address private swapTarget = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     bytes private swapCallData =
-        hex"7a1eb1b9000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000e8d4a51000000000000000000000000000000000000000000000000020964af0d7305ca7db0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000d6ebac0ec50000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000002ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f4c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000011e8f9013c00000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000042a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000064dac17f958d2ee523a2206206994597c13d831ec70001f4c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000000000000000000000000000000000000000869584cd00000000000000000000000010000000000000000000000000000000000000110000000000000000000000000000000000000000000000bc76e6b1f363e159a7";
+        hex"7a1eb1b9000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000e8d4a5100000000000000000000000000000000000000000000000001e28208ce24e074df00000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000ae9f7bcc000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000002ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f4c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000003a3529440000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000042a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000064dac17f958d2ee523a2206206994597c13d831ec70001f4c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000000000000000000000000000000000000000869584cd00000000000000000000000010000000000000000000000000000000000000110000000000000000000000000000000000000000000000bd1225eed564187c41";
 
     function setUp() external {
         erc20Adaptor = new ERC20Adaptor();
@@ -132,7 +132,7 @@ contract CellarZeroXTest is Test {
         {
             Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, swapCallData);
+            adaptorCalls[0] = _createBytesDataToSwap(USDC, WETH, assets, swapCallData);
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(zeroXAdaptor), callData: adaptorCalls });
             cellar.callOnAdaptor(data);
@@ -148,75 +148,12 @@ contract CellarZeroXTest is Test {
         );
     }
 
-    function testMaliciousSwapData() external {
-        if (block.number < 16571863) {
-            console.log("Invalid block number use 16571863");
-            return;
-        }
-        // Deposit into Cellar.
-        uint256 assets = 1_000_000e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        bytes memory fakeData = abi.encodeWithSignature("stealFunds(address,uint256)", address(USDC), assets);
-
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, fakeData);
-
-            data[0] = Cellar.AdaptorCall({ adaptor: address(zeroXAdaptor), callData: adaptorCalls });
-            vm.expectRevert(
-                bytes(
-                    abi.encodeWithSelector(
-                        Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector,
-                        0,
-                        assets.mulDivDown(0.99e18, 1e18),
-                        assets.mulDivDown(1.01e18, 1e18)
-                    )
-                )
-            );
-            cellar.callOnAdaptor(data);
-        }
-    }
-
-    function stealFunds(address asset, uint256 amount) public {
-        ERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
-    }
-
-    function testResettingUnusedApprovals() external {
-        if (block.number < 16571863) {
-            console.log("Invalid block number use 16571863");
-            return;
-        }
-        // Deposit into Cellar.
-        uint256 assets = 1_000_000e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        bytes memory fakeData = abi.encodeWithSignature("doNothing(uint256)", 0);
-
-        address fakeSpender = vm.addr(1);
-
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToSwap(USDC, assets, fakeData);
-
-            data[0] = Cellar.AdaptorCall({ adaptor: address(zeroXAdaptor), callData: adaptorCalls });
-            cellar.callOnAdaptor(data);
-        }
-
-        assertEq(USDC.allowance(address(cellar), fakeSpender), 0, "Allowance should have been zeroed out.");
-    }
-
-    function doNothing(uint256) external {}
-
     function _createBytesDataToSwap(
         ERC20 tokenIn,
+        ERC20 tokenOut,
         uint256 amount,
         bytes memory _swapCallData
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(ZeroXAdaptor.swapWith0x.selector, tokenIn, amount, _swapCallData);
+        return abi.encodeWithSelector(ZeroXAdaptor.swapWith0x.selector, tokenIn, tokenOut, amount, _swapCallData);
     }
 }

@@ -6,8 +6,6 @@ import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/int
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
-import { console } from "@forge-std/Test.sol"; //TODO remove this
-
 /**
  * @title Fees And Reserves
  * @notice Allows strategists to move yield in/out of reserves in order to better manage their strategy.
@@ -185,6 +183,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     error FeesAndReserves__InvalidReserveAsset();
     error FeesAndReserves__InvalidUpkeep();
     error FeesAndReserves__UpkeepTimeCheckFailed();
+    error FeesAndReserves__InvalidResetPercent();
 
     //============================== IMMUTABLES ===============================
 
@@ -231,9 +230,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         ETH_FAST_GAS_FEED = gasFeed;
     }
 
-    // TODO add in percent so that HWM can be set some percent between current share price and old HWM
-    // TODO reset feeEarned when we reset HWM.
-    // TODO make sure input is logical
     /**
      * @notice Allows owner to reset a Cellar's Share Price High Watermark.
      * @dev Resetting HWM will zero out all fees owed.
@@ -242,6 +238,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
      *                10,000 - HWM is fully reset to current share price
      */
     function resetHWM(Cellar cellar, uint32 resetPercent) external onlyOwner {
+        if (resetPercent == 0 || resetPercent > 10 ** BPS_DECIMALS) revert FeesAndReserves__InvalidResetPercent();
         MetaData storage data = metaData[cellar];
 
         uint256 totalAssets = cellar.totalAssets();
@@ -298,10 +295,15 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         pendingMetaData[cellar].pendingPerformanceFee = performanceFee;
     }
 
+    uint64 public constant MINIMUM_UPKEEP_FREQUENCY = 3_600;
+
+    error FeesAndReserves__MinimumUpkeepFrequencyNotMet();
+
     /**
      * @notice Strategist callable, value is immediately used.
      */
     function changeUpkeepFrequency(uint64 newFrequency) external nonReentrant {
+        if (newFrequency < MINIMUM_UPKEEP_FREQUENCY) revert FeesAndReserves__MinimumUpkeepFrequencyNotMet();
         Cellar cellar = Cellar(msg.sender);
 
         cellarToUpkeepData[cellar].frequency = newFrequency;
@@ -432,7 +434,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         emit FeesSent(address(cellar));
     }
 
-    // TODO skip upkeep is frequency is zero.
     /**
      * @notice CheckUpkeep runs several checks on proposed cellars.
      *         - Checks that the Cellar has called setup function.
@@ -451,6 +452,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
             if (address(metaData[cellars[i]].reserveAsset) == address(0)) continue;
 
             UpkeepData memory data = cellarToUpkeepData[cellars[i]];
+
+            // Skip cellars that have not set an upkeep frequency.
+            if (data.frequency == 0) continue;
+
             // Skip cellar if gas is too high.
             if (currentGasPrice > data.maxGas) continue;
 

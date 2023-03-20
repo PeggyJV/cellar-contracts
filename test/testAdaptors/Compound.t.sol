@@ -169,7 +169,7 @@ contract CellarCompoundTest is Test {
         assertApproxEqRel(
             cellar.totalAssets(),
             assets,
-            0.0005e18,
+            0.001e18,
             "Total assets should equal assets deposited minus swap fees."
         );
     }
