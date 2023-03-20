@@ -220,7 +220,7 @@ contract CellarAaveV3Test is Test {
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    AaveV3DebtTokenAdaptor.AaveDebtTokenAdaptor__DebtPositionsMustBeTracked.selector,
+                    AaveV3DebtTokenAdaptor.AaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked.selector,
                     address(dWETH)
                 )
             )
@@ -503,7 +503,7 @@ contract CellarAaveV3Test is Test {
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    AaveV3DebtTokenAdaptor.AaveDebtTokenAdaptor__DebtPositionsMustBeTracked.selector,
+                    AaveV3DebtTokenAdaptor.AaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked.selector,
                     address(dWETH)
                 )
             )

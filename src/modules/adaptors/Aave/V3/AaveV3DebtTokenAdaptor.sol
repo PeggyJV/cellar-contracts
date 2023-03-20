@@ -26,6 +26,12 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
      */
     error AaveV3DebtTokenAdaptor__HealthFactorTooLow();
 
+    /**
+     * @notice Strategist attempted to open an untracked Aave loan.
+     * @param untrackedDebtPosition the address of the untracked loan
+     */
+    error AaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -49,7 +55,7 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
      * @notice Overwrites strategist set minimums if they are lower.
      */
     function HFMIN() internal pure returns (uint256) {
-        return 1.04e18;
+        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -100,11 +106,6 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
     }
 
     //============================================ Strategist Functions ===========================================
-    /**
-     * @notice Strategist attempted to open an untracked Aave loan.
-     * @param untrackedDebtPosition the address of the untracked loan
-     */
-    error AaveDebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
 
     /**
      * @notice Allows strategists to borrow assets from Aave.
@@ -117,7 +118,7 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(address(debtTokenToBorrow))));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert AaveDebtTokenAdaptor__DebtPositionsMustBeTracked(address(debtTokenToBorrow));
+            revert AaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address(debtTokenToBorrow));
 
         // Open up new variable debt position on Aave.
         pool().borrow(
