@@ -15,8 +15,7 @@ import { EulerETokenAdaptor } from "src/modules/adaptors/Euler/EulerETokenAdapto
 import { EulerDebtTokenAdaptor } from "src/modules/adaptors/Euler/EulerDebtTokenAdaptor.sol";
 
 // Import Compound helpers.
-import { CErc20 } from "@compound/CErc20.sol";
-import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 
 // Import Aave helpers.
 import { IPool } from "src/interfaces/external/IPool.sol";

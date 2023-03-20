@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
+import { ERC20, SafeTransferLib, Cellar, PriceRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { PositionlessAdaptor } from "src/modules/adaptors/PositionlessAdaptor.sol";
 
 /**
  * @title 0x Adaptor
  * @notice Allows Cellars to swap with 0x.
  * @author crispymangoes
  */
-contract ZeroXAdaptor is BaseAdaptor {
+contract ZeroXAdaptor is PositionlessAdaptor {
     using SafeTransferLib for ERC20;
+    using Math for uint256;
     using Address for address;
 
     //==================== Adaptor Data Specification ====================
@@ -22,11 +24,6 @@ contract ZeroXAdaptor is BaseAdaptor {
     // expose the swap function to strategists during rebalances.
     //====================================================================
 
-    /**
-     * @notice Attempted to pass in the Cellar Address as the spender or swapTarget.
-     */
-    error ZeroXAdaptor__InvalidAddressArgument();
-
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -35,60 +32,14 @@ contract ZeroXAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("0x Adaptor V 0.0"));
-    }
-
-    //============================================ Implement Base Functions ===========================================
-
-    /**
-     * @notice User deposits are NOT allowed.
-     */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
-        revert BaseAdaptor__UserDepositsNotAllowed();
+        return keccak256(abi.encode("0x Adaptor V 1.0"));
     }
 
     /**
-     * @notice User withdraws are NOT allowed.
+     * @notice Address of the current 0x swap target on Mainnet ETH.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
-        revert BaseAdaptor__UserWithdrawsNotAllowed();
-    }
-
-    /**
-     * @notice There is no underlying position so return zero.
-     */
-    function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
-        return 0;
-    }
-
-    /**
-     * @notice There is no underlying position so return zero.
-     */
-    function balanceOf(bytes memory) public pure override returns (uint256) {
-        return 0;
-    }
-
-    /**
-     * @notice There is no underlying position so return zero address.
-     */
-    function assetOf(bytes memory) public pure override returns (ERC20) {
-        return ERC20(address(0));
-    }
-
-    /**
-     * @notice There is no underlying position so return false.
-     */
-    function isDebt() public pure override returns (bool) {
-        return false;
+    function target() public pure returns (address) {
+        return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     }
 
     //============================================ Strategist Functions ===========================================
@@ -96,20 +47,34 @@ contract ZeroXAdaptor is BaseAdaptor {
     /**
      * @notice Allows strategists to make ERC20 swaps using 0x.
      */
-    function swapWith0x(
-        ERC20 tokenIn,
-        uint256 amount,
-        address spender,
-        address swapTarget,
-        bytes memory swapCallData
-    ) public {
-        // Revert if address inputs are the Cellar.
-        if (spender == address(this) || swapTarget == address(this)) revert ZeroXAdaptor__InvalidAddressArgument();
-        tokenIn.safeApprove(spender, amount);
+    function swapWith0x(ERC20 tokenIn, ERC20 tokenOut, uint256 amount, bytes memory swapCallData) public {
+        PriceRouter priceRouter = PriceRouter(Cellar(address(this)).registry().getAddress(2));
 
-        swapTarget.functionCall(swapCallData);
+        tokenIn.safeApprove(target(), amount);
+
+        if (priceRouter.isSupported(tokenIn)) {
+            // If the asset in is supported, than require that asset out is also supported.
+            if (!priceRouter.isSupported(tokenOut)) revert BaseAdaptor__PricingNotSupported(address(tokenOut));
+            // Save token balances.
+            uint256 tokenInBalance = tokenIn.balanceOf(address(this));
+            uint256 tokenOutBalance = tokenOut.balanceOf(address(this));
+
+            // Perform Swap.
+            target().functionCall(swapCallData);
+
+            uint256 tokenInAmountIn = tokenInBalance - tokenIn.balanceOf(address(this));
+            uint256 tokenOutAmountOut = tokenOut.balanceOf(address(this)) - tokenOutBalance;
+
+            uint256 tokenInValueOut = priceRouter.getValue(tokenOut, tokenOutAmountOut, tokenIn);
+
+            if (tokenInValueOut < tokenInAmountIn.mulDivDown(slippage(), 1e4)) revert BaseAdaptor__Slippage();
+        } else {
+            // Token In is not supported by price router, so we know it is at least not the Cellars Reserves,
+            // or a prominent asset, so skip value in vs value out check.
+            target().functionCall(swapCallData);
+        }
 
         // Insure spender has zero approval.
-        if (tokenIn.allowance(address(this), spender) > 0) tokenIn.safeApprove(spender, 0);
+        _revokeExternalApproval(tokenIn, target());
     }
 }

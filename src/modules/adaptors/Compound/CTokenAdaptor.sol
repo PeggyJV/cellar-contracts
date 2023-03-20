@@ -2,8 +2,7 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Math, SwapRouter } from "src/modules/adaptors/BaseAdaptor.sol";
-import { CErc20 } from "@compound/CErc20.sol";
-import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 
 /**
  * @title Compound CToken Adaptor
@@ -28,6 +27,16 @@ contract CTokenAdaptor is BaseAdaptor {
     // Aave aToken adaptor.
     //====================================================================
 
+    /**
+     @notice Compound action returned a non zero error code.
+     */
+    error CTokenAdaptor__NonZeroCompoundErrorCode(uint256 errorCode);
+
+    /**
+     * @notice Strategist attempted to interact with a market that is not listed.
+     */
+    error CTokenAdaptor__MarketNotListed(address market);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -36,7 +45,7 @@ contract CTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Compound cToken Adaptor V 0.0"));
+        return keccak256(abi.encode("Compound cToken Adaptor V 1.0"));
     }
 
     /**
@@ -60,16 +69,19 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param adaptorData adaptor data containing the abi encoded cToken
      * @dev configurationData is NOT used
      */
-    function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Compound.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
+        _validateMarketInput(address(cToken));
         ERC20 token = ERC20(cToken.underlying());
         token.safeApprove(address(cToken), assets);
-        cToken.mint(assets);
+        uint256 errorCode = cToken.mint(assets);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
+
+        // Zero out approvals if necessary.
+        _revokeExternalApproval(token, address(cToken));
     }
 
     /**
@@ -83,18 +95,17 @@ contract CTokenAdaptor is BaseAdaptor {
      *      If cellars ever take on Compound Debt it is crucial these checks are added,
      *      see "IMPORTANT" above.
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
         // Withdraw assets from Compound.
         CErc20 cToken = abi.decode(adaptorData, (CErc20));
-        cToken.redeemUnderlying(assets);
+        _validateMarketInput(address(cToken));
+        uint256 errorCode = cToken.redeemUnderlying(assets);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
 
         // Transfer assets to receiver.
         ERC20(cToken.underlying()).safeTransfer(receiver, assets);
@@ -160,10 +171,18 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param amountToDeposit the amount of `tokenToDeposit` to lend on Compound.
      */
     function depositToCompound(CErc20 market, uint256 amountToDeposit) public {
+        _validateMarketInput(address(market));
+
         ERC20 tokenToDeposit = ERC20(market.underlying());
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(market), amountToDeposit);
-        market.mint(amountToDeposit);
+        uint256 errorCode = market.mint(amountToDeposit);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
+
+        // Zero out approvals if necessary.
+        _revokeExternalApproval(tokenToDeposit, address(market));
     }
 
     /**
@@ -172,7 +191,14 @@ contract CTokenAdaptor is BaseAdaptor {
      * @param amountToWithdraw the amount of `market.underlying()` to withdraw from Compound
      */
     function withdrawFromCompound(CErc20 market, uint256 amountToWithdraw) public {
-        market.redeemUnderlying(amountToWithdraw);
+        _validateMarketInput(address(market));
+
+        uint256 errorCode;
+        if (amountToWithdraw == type(uint256).max) errorCode = market.redeem(market.balanceOf(address(this)));
+        else errorCode = market.redeemUnderlying(amountToWithdraw);
+
+        // Check for errors.
+        if (errorCode != 0) revert CTokenAdaptor__NonZeroCompoundErrorCode(errorCode);
     }
 
     /**
@@ -199,5 +225,16 @@ contract CTokenAdaptor is BaseAdaptor {
         claimComp();
         balance = COMP().balanceOf(address(this)) - balance;
         oracleSwap(COMP(), assetOut, balance, exchange, params, slippage);
+    }
+
+    //============================================ Helper Functions ============================================
+
+    /**
+     * @notice Helper function that reverts if market is not listed in Comptroller.
+     */
+    function _validateMarketInput(address input) internal view {
+        (bool isListed, , ) = comptroller().markets(input);
+
+        if (!isListed) revert CTokenAdaptor__MarketNotListed(input);
     }
 }

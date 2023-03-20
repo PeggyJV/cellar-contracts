@@ -47,7 +47,7 @@ contract SwapRouterIntegrationTest is Test {
         }
         // Attacker performs a bad swap with low liquidity pool to stop cellars from rebalancing.
         SwapRouter oldRouter = SwapRouter(registry.getAddress(1));
-        uint256 assets = 100e6;
+        uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
         USDC.approve(address(oldRouter), assets);
 

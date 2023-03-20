@@ -43,12 +43,7 @@ contract FeesAndReservesTest is Test {
     function feeData()
         public
         view
-        returns (
-            uint64 strategistPlatformCut,
-            uint64 platformFee,
-            uint64 lastAccrual,
-            address strategistPayoutAddress
-        )
+        returns (uint64 strategistPlatformCut, uint64 platformFee, uint64 lastAccrual, address strategistPayoutAddress)
     {
         return (0.8e18, 0, 0, strategist);
     }
@@ -64,6 +59,7 @@ contract FeesAndReservesTest is Test {
     function testMaliciousCallerChangingReserveAsset() external {
         feesAndReserves.setupMetaData(0.05e4, 0.2e4);
         feesAndReserves.changeUpkeepMaxGas(100e9);
+        feesAndReserves.changeUpkeepFrequency(3_600);
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = Cellar(address(this));
@@ -71,6 +67,8 @@ contract FeesAndReservesTest is Test {
         totalSupply = 100e18;
         (bool upkeepNeeded, bytes memory performData) = feesAndReserves.checkUpkeep(abi.encode(cellars));
         feesAndReserves.performUpkeep(performData);
+
+        vm.warp(block.timestamp + 3_600);
 
         // Add assets to reserves.
         deal(address(USDC), address(this), 100e6);
@@ -118,11 +116,7 @@ contract FeesAndReservesTest is Test {
 
     // Since this contract is set as the Gravity Bridge, this will be called by
     // the Cellar's `sendFees` function to send funds Cosmos.
-    function sendToCosmos(
-        address asset,
-        bytes32,
-        uint256 assets
-    ) external {
-        ERC20(asset).transferFrom(msg.sender, cosmos, assets);
+    function sendToCosmos(address token, bytes32, uint256 tokens) external {
+        ERC20(token).transferFrom(msg.sender, cosmos, tokens);
     }
 }
