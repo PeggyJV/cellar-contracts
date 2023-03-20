@@ -178,11 +178,10 @@ contract AaveATokenAdaptor is BaseAdaptor {
         // If current health factor is less than the minHealthFactor + 2X cushion, return 0.
         if (healthFactor < (minHealthFactor + cushion)) return 0;
         // Calculate max amount withdrawable while preserving minimum health factor.
-        else {
-            maxBorrowableWithMin =
-                totalCollateralETH -
-                minHealthFactor.mulDivDown(totalDebtETH, (currentLiquidationThreshold * 1e14));
-        }
+        maxBorrowableWithMin =
+            totalCollateralETH -
+            minHealthFactor.mulDivDown(totalDebtETH, (currentLiquidationThreshold * 1e14));
+
         /// @dev The 1e14 comes from totalDebtETH is given in 18 decimals, so we need to divide by 1e18, but
         // currentLiquidationThreshold has 4 decimals, so by multiplying it by 1e14, the denominator has 18 decimals total.
 
