@@ -20,6 +20,3 @@
 [submodule "lib/solmate"]
 	path = lib/solmate
 	url = https://github.com/transmissions11/solmate
-[submodule "lib/compound-protocol"]
-	path = lib/compound-protocol
-	url = https://github.com/compound-finance/compound-protocol

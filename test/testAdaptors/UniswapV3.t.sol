@@ -8,6 +8,7 @@ import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
+import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/UniSwap/UniswapV3Adaptor.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
@@ -69,7 +70,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
     address private immutable cosmos = vm.addr(0xCAAA);
 
-    UniswapV3Adaptor private uniswapV3Adaptor;
+    MockUniswapV3Adaptor private uniswapV3Adaptor;
     ERC20Adaptor private erc20Adaptor;
     UniswapV3PositionTracker private tracker;
 
@@ -90,7 +91,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         gravity = new MockGravity();
-        uniswapV3Adaptor = new UniswapV3Adaptor();
+        uniswapV3Adaptor = new MockUniswapV3Adaptor();
         erc20Adaptor = new ERC20Adaptor();
         tracker = new UniswapV3PositionTracker(positionManager);
 
@@ -649,14 +650,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
     event Collect(uint256 indexed tokenId, address recipient, uint256 amount0, uint256 amount1);
 
     function testIntegration() external {
-        // Manage positions to reflect the following
-        // 0) USDC
-        // 1) USDC/WETH Uniswap V3 LP
-        // 2) DAI/USDC Uniswap V3 LP
-        cellar.swapPositions(1, 4, false); // Swap DAI with USDC/WETH Uniswap V3 LP
-        cellar.removePosition(2, false); // Remove WETH position
-        cellar.removePosition(3, false); // Remove DAI position
-
         // Have whale join the cellar with 10M USDC.
         uint256 assets = 10_000_000e6;
         address whale = vm.addr(777);
@@ -796,9 +789,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         }
-        // Add DAI and WETH as positions, so withdrawn liquidity is accounted for.
-        cellar.addPosition(3, daiPosition, abi.encode(0), false);
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
 
         // Change rebalance deviation, so the rebalance check passes. Normally any yield would be sent to a vesting contract,
         // but for simplicity this test is not doing that.

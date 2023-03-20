@@ -187,12 +187,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Internal function ise used by `addPosition` and initialize function.
      */
-    function _addPosition(
-        uint32 index,
-        uint32 positionId,
-        bytes memory configurationData,
-        bool inDebtArray
-    ) internal {
+    function _addPosition(uint32 index, uint32 positionId, bytes memory configurationData, bool inDebtArray) internal {
         // Check if position is already being used.
         if (isPositionUsed[positionId]) revert Cellar__PositionAlreadyUsed(positionId);
 
@@ -261,11 +256,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param index2 index of second position to swap
      * @param inDebtArray bool indicating to switch positions in the debt array, or the credit array.
      */
-    function swapPositions(
-        uint32 index1,
-        uint32 index2,
-        bool inDebtArray
-    ) external onlyOwner {
+    function swapPositions(uint32 index1, uint32 index2, bool inDebtArray) external onlyOwner {
         // Get the new positions that will be at each index.
         uint32 newPosition1;
         uint32 newPosition2;
@@ -469,6 +460,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     uint128 public protocolRiskTolerance;
 
+    // TODO add in check to make sure that `asset` can be priced.
+
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
      *      module to the cellars.
@@ -637,11 +630,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Override `transferFrom` to add share lock check.
      */
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public override returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
         _checkIfSharesLocked(from);
         return super.transferFrom(from, to, amount);
     }
@@ -658,11 +647,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param assets amount of assets deposited by user.
      * @param receiver address receiving the shares.
      */
-    function beforeDeposit(
-        uint256 assets,
-        uint256,
-        address receiver
-    ) internal view override whenNotShutdown {
+    function beforeDeposit(uint256 assets, uint256, address receiver) internal view override whenNotShutdown {
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
                 revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
@@ -675,11 +660,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice called at the end of deposit.
      * @param assets amount of assets deposited by user.
      */
-    function afterDeposit(
-        uint256 assets,
-        uint256,
-        address receiver
-    ) internal override {
+    function afterDeposit(uint256 assets, uint256, address receiver) internal override {
         _depositTo(holdingPosition, assets);
         userShareLockStartTime[receiver] = block.timestamp;
     }
@@ -687,21 +668,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice called at the beginning of withdraw.
      */
-    function beforeWithdraw(
-        uint256,
-        uint256,
-        address,
-        address owner
-    ) internal view override {
+    function beforeWithdraw(uint256, uint256, address, address owner) internal view override {
         // Make sure users shares are not locked.
         _checkIfSharesLocked(owner);
     }
 
-    function _enter(
-        uint256 assets,
-        uint256 shares,
-        address receiver
-    ) internal {
+    function _enter(uint256 assets, uint256 shares, address receiver) internal {
         beforeDeposit(assets, shares, receiver);
 
         // Need to transfer before minting or ERC777s could reenter.
@@ -746,12 +718,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _enter(assets, shares, receiver);
     }
 
-    function _exit(
-        uint256 assets,
-        uint256 shares,
-        address receiver,
-        address owner
-    ) internal {
+    function _exit(uint256 assets, uint256 shares, address receiver, address owner) internal {
         beforeWithdraw(assets, shares, receiver, owner);
 
         if (msg.sender != owner) {
@@ -851,7 +818,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Save asset price in USD, and decimals to reduce external calls.
         WithdrawPricing memory pricingInfo;
         pricingInfo.priceQuoteUSD = priceRouter.getPriceInUSD(asset);
-        pricingInfo.oneQuote = 10**asset.decimals();
+        pricingInfo.oneQuote = 10 ** asset.decimals();
         uint256 creditLength = creditPositions.length;
         for (uint256 i; i < creditLength; ++i) {
             uint32 position = creditPositions[i];
@@ -861,7 +828,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             ERC20 positionAsset = _assetOf(position);
 
             pricingInfo.priceBaseUSD = priceRouter.getPriceInUSD(positionAsset);
-            pricingInfo.oneBase = 10**positionAsset.decimals();
+            pricingInfo.oneBase = 10 ** positionAsset.decimals();
             uint256 totalWithdrawableBalanceInAssets;
             {
                 uint256 withdrawableBalanceInUSD = (PRECISION_MULTIPLIER * withdrawableBalance).mulDivDown(
@@ -1431,11 +1398,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param assets the amount of assets to withdraw from the position
      * @param receiver the address to sent withdrawn assets to
      */
-    function _withdrawFrom(
-        uint32 position,
-        uint256 assets,
-        address receiver
-    ) internal {
+    function _withdrawFrom(uint32 position, uint256 assets, address receiver) internal {
         address adaptor = getPositionData[position].adaptor;
         adaptor.functionDelegateCall(
             abi.encodeWithSelector(

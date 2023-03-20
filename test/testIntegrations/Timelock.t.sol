@@ -24,7 +24,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-contract USCUniswapAdaptorTest is Test {
+contract TimelockTest is Test {
     address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -50,10 +50,7 @@ contract USCUniswapAdaptorTest is Test {
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
 
-    function setUp() external {
-        registry = cellar.registry();
-        priceRouter = PriceRouter(registry.getAddress(2));
-    }
+    function setUp() external {}
 
     function testTimelock() external {
         if (block.number < 16828469) {
@@ -62,9 +59,7 @@ contract USCUniswapAdaptorTest is Test {
         }
 
         registry = cellar.registry();
-
-        vm.prank(multisig);
-        registry.transferOwnership(address(controller));
+        priceRouter = PriceRouter(registry.getAddress(2));
 
         vm.startPrank(devOwner);
         controller.schedule(

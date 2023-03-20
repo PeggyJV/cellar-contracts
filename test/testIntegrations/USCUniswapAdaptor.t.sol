@@ -35,6 +35,8 @@ contract USCUniswapAdaptorTest is Test {
     Registry private registry;
     UniswapV3Adaptor private uniswapV3Adaptor = UniswapV3Adaptor(0xDbd750F72a00d01f209FFc6C75e80301eFc789C1);
 
+    address private timelock = 0xaDa78a5E01325B91Bc7879a63c309F7D54d42950;
+
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
@@ -42,10 +44,7 @@ contract USCUniswapAdaptorTest is Test {
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
 
-    function setUp() external {
-        registry = cellar.registry();
-        priceRouter = PriceRouter(registry.getAddress(2));
-    }
+    function setUp() external {}
 
     function testAdaptor() external {
         if (block.number < 16820108) {
@@ -53,18 +52,8 @@ contract USCUniswapAdaptorTest is Test {
             return;
         }
 
-        // Get the registry.
-        vm.startPrank(multisig);
-        registry.trustAdaptor(address(uniswapV3Adaptor), 0, 0);
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC), 0, 0);
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, USDT), 0, 0);
-        vm.stopPrank();
-
-        vm.startPrank(gravityBridge);
-        cellar.addPosition(5, 13, abi.encode(0), false);
-        cellar.addPosition(5, 14, abi.encode(0), false);
-        cellar.setupAdaptor(address(uniswapV3Adaptor));
-        vm.stopPrank();
+        registry = cellar.registry();
+        priceRouter = PriceRouter(registry.getAddress(2));
 
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(USDT), address(cellar), 1_000_000e6);

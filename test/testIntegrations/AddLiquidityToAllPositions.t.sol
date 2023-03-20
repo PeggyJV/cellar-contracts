@@ -43,7 +43,6 @@ contract AddLiqquidityToAllPositionsTest is Test {
         // Deposit to make addresses warm
         uint256 gas = gasleft();
         cellar.deposit(1_000e6, address(this));
-        console.log("Gas Used", gas - gasleft());
 
         // gas = gasleft();
         // cellar.deposit(1_000e6, address(this));

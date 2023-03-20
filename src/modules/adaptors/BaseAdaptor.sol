@@ -32,6 +32,16 @@ abstract contract BaseAdaptor {
      */
     error BaseAdaptor__UserWithdrawsNotAllowed();
 
+    /**
+     * @notice Attempted swap has bad slippage.
+     */
+    error BaseAdaptor__Slippage();
+
+    /**
+     * @notice Attempted swap used unsupported output asset.
+     */
+    error BaseAdaptor__PricingNotSupported(address asset);
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -49,6 +59,13 @@ abstract contract BaseAdaptor {
 
     function PRICE_ROUTER_REGISTRY_SLOT() internal pure returns (uint256) {
         return 2;
+    }
+
+    /**
+     * @notice Max possible slippage when making a swap router swap.
+     */
+    function slippage() public pure returns (uint32) {
+        return 0.9e4;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -177,11 +194,33 @@ abstract contract BaseAdaptor {
         // Get the address of the latest swap router.
         SwapRouter swapRouter = SwapRouter(Cellar(address(this)).registry().getAddress(SWAP_ROUTER_REGISTRY_SLOT()));
 
+        // Get the address of the latest swap router.
+        PriceRouter priceRouter = PriceRouter(
+            Cellar(address(this)).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
+        );
+
         // Approve swap router to swap assets.
         assetIn.safeApprove(address(swapRouter), amountIn);
 
-        // Perform swap.
-        amountOut = swapRouter.swap(exchange, params, address(this), assetIn, assetOut);
+        if (priceRouter.isSupported(assetIn)) {
+            // If the asset in is supported, than require that asset out is also supported.
+            if (!priceRouter.isSupported(assetOut)) revert BaseAdaptor__PricingNotSupported(address(assetOut));
+
+            // Perform swap.
+            amountOut = swapRouter.swap(exchange, params, address(this), assetIn, assetOut);
+
+            uint256 assetInValueOut = priceRouter.getValue(assetOut, amountOut, assetIn);
+
+            if (assetInValueOut < amountIn.mulDivDown(slippage(), 1e4)) revert BaseAdaptor__Slippage();
+        } else {
+            // Token In is not supported by price router, so we know it is at least not the Cellars Reserves,
+            // or a prominent asset, so skip value in vs value out check.
+            // Perform swap.
+            amountOut = swapRouter.swap(exchange, params, address(this), assetIn, assetOut);
+        }
+
+        // Insure swap router has zero approval.
+        _revokeExternalApproval(assetIn, address(swapRouter));
     }
 
     /**
@@ -212,7 +251,7 @@ abstract contract BaseAdaptor {
      *                 see SwapRouter.sol
      * @param params swap params needed to perform the swap, dependent on which exchange is selected
      *               see SwapRouter.sol
-     * @param slippage number less than 1e18, defining the max swap slippage
+     * @param oracleSlippage number less than 1e18, defining the max swap slippage
      * @return amountOut the amount of `assetOut` received from the swap.
      */
     function oracleSwap(
@@ -221,7 +260,7 @@ abstract contract BaseAdaptor {
         uint256 amountIn,
         SwapRouter.Exchange exchange,
         bytes memory params,
-        uint64 slippage
+        uint64 oracleSlippage
     ) public returns (uint256 amountOut) {
         amountIn = _maxAvailable(assetIn, amountIn);
         // Copy over the path/fees then set the amount and minAmount.
@@ -249,7 +288,7 @@ abstract contract BaseAdaptor {
 
         // Make sure amountIn vs amountOut is reasonable.
         amountIn = priceRouter.getValue(assetIn, amountIn, assetOut);
-        uint256 amountInWithSlippage = amountIn.mulDivDown(slippage, 1e18);
+        uint256 amountInWithSlippage = amountIn.mulDivDown(oracleSlippage, 1e18);
         if (amountOut < amountInWithSlippage) revert BaseAdaptor__BadSlippage();
     }
 

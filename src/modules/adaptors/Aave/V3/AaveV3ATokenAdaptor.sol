@@ -2,15 +2,16 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IPool } from "src/interfaces/external/IPool.sol";
+import { IPoolV3 } from "src/interfaces/external/IPoolV3.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
+import { IAaveOracle } from "src/interfaces/external/IAaveOracle.sol";
 
 /**
  * @title Aave aToken Adaptor
  * @notice Allows Cellars to interact with Aave aToken positions.
  * @author crispymangoes
  */
-contract AaveATokenAdaptor is BaseAdaptor {
+contract AaveV3ATokenAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -37,7 +38,12 @@ contract AaveATokenAdaptor is BaseAdaptor {
     /**
      @notice Attempted withdraw would lower Cellar health factor too low.
      */
-    error AaveATokenAdaptor__HealthFactorTooLow();
+    error AaveV3ATokenAdaptor__HealthFactorTooLow();
+
+    /**
+     * @notice Aave V3 oracle uses a different base asset than this contract was designed for.
+     */
+    error AaveV3ATokenAdaptor__OracleUsesDifferentBase();
 
     //============================================ Global Functions ===========================================
     /**
@@ -47,21 +53,21 @@ contract AaveATokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Aave aToken Adaptor V 1.0"));
+        return keccak256(abi.encode("Aave V3 aToken Adaptor V 1.0"));
     }
 
     /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
+     * @notice The Aave V3 Pool contract on Ethereum Mainnet.
      */
-    function pool() internal pure returns (IPool) {
-        return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    function pool() internal pure returns (IPoolV3) {
+        return IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
     }
 
     /**
-     * @notice The WETH contract on Ethereum Mainnet.
+     * @notice The Aave V3 Oracle on Ethereum Mainnet.
      */
-    function WETH() internal pure returns (ERC20) {
-        return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    function aaveOracle() internal pure returns (IAaveOracle) {
+        return IAaveOracle(0x54586bE62E3c3580375aE3723C145253060Ca0C2);
     }
 
     /**
@@ -69,7 +75,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
      * @notice Overwrites strategist set minimums if they are lower.
      */
     function HFMIN() internal pure returns (uint256) {
-        return 1.2e18;
+        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -84,7 +90,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         IAaveToken aToken = IAaveToken(abi.decode(adaptorData, (address)));
         ERC20 token = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
         token.safeApprove(address(pool()), assets);
-        pool().deposit(address(token), assets, address(this), 0);
+        pool().supply(address(token), assets, address(this), 0);
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(token, address(pool()));
@@ -108,12 +114,15 @@ contract AaveATokenAdaptor is BaseAdaptor {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
+        // If cellar has entered an EMode, user withdraws are not allowed.
+        if (pool().getUserEMode(msg.sender) != 0) revert BaseAdaptor__UserWithdrawsNotAllowed();
+
         // Withdraw assets from Aave.
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         pool().withdraw(token.UNDERLYING_ASSET_ADDRESS(), assets, address(this));
 
-        (, uint256 totalDebtETH, , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (totalDebtETH > 0) {
+        (, uint256 totalDebtBase, , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
+        if (totalDebtBase > 0) {
             // Run minimum health factor checks.
             uint256 minHealthFactor = abi.decode(configData, (uint256));
             if (minHealthFactor == 0) {
@@ -121,7 +130,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
             }
             // Check if adaptor minimum health factor is more conservative than strategist set.
             if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
-            if (healthFactor < minHealthFactor) revert AaveATokenAdaptor__HealthFactorTooLow();
+            if (healthFactor < minHealthFactor) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
         }
 
         // Transfer assets to receiver.
@@ -148,8 +157,8 @@ contract AaveATokenAdaptor is BaseAdaptor {
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
 
         (
-            uint256 totalCollateralETH,
-            uint256 totalDebtETH,
+            uint256 totalCollateralBase,
+            uint256 totalDebtBase,
             ,
             uint256 currentLiquidationThreshold,
             ,
@@ -157,7 +166,10 @@ contract AaveATokenAdaptor is BaseAdaptor {
         ) = pool().getUserAccountData(msg.sender);
 
         // If Cellar has no Aave debt, then return the cellars balance of the aToken.
-        if (totalDebtETH == 0) return ERC20(address(token)).balanceOf(msg.sender);
+        if (totalDebtBase == 0) return ERC20(address(token)).balanceOf(msg.sender);
+
+        // Cellar has Aave debt, so if cellar is entered into a non zero emode, return 0.
+        if (pool().getUserEMode(msg.sender) != 0) return 0;
 
         // Otherwise we need to look at minimum health factor.
         uint256 minHealthFactor = abi.decode(configData, (uint256));
@@ -178,20 +190,21 @@ contract AaveATokenAdaptor is BaseAdaptor {
         // If current health factor is less than the minHealthFactor + 2X cushion, return 0.
         if (healthFactor < (minHealthFactor + cushion)) return 0;
         // Calculate max amount withdrawable while preserving minimum health factor.
-        maxBorrowableWithMin =
-            totalCollateralETH -
-            minHealthFactor.mulDivDown(totalDebtETH, (currentLiquidationThreshold * 1e14));
+        else {
+            maxBorrowableWithMin =
+                totalCollateralBase -
+                minHealthFactor.mulDivDown(totalDebtBase, (currentLiquidationThreshold * 1e14));
+        }
+        /// @dev We want right side of "-" to have 8 decimals, so we need to dviide by 18 decimals.
+        // `currentLiquidationThreshold` has 4 decimals, so multiply by 1e14 to get 18 decimals on denominator.
 
-        /// @dev The 1e14 comes from totalDebtETH is given in 18 decimals, so we need to divide by 1e18, but
-        // currentLiquidationThreshold has 4 decimals, so by multiplying it by 1e14, the denominator has 18 decimals total.
-
-        // If aToken underlying is WETH, then no Price Router conversion is needed.
+        // Need to convert Base into position underlying.
         ERC20 underlying = ERC20(token.UNDERLYING_ASSET_ADDRESS());
-        if (underlying == WETH()) return maxBorrowableWithMin;
 
-        // Else convert `maxBorrowableWithMin` from WETH to position underlying asset.
+        // Convert `maxBorrowableWithMin` from Base to position underlying asset.
         PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT()));
-        uint256 withdrawable = priceRouter.getValue(WETH(), maxBorrowableWithMin, underlying);
+        uint256 underlyingToUSD = priceRouter.getPriceInUSD(underlying);
+        uint256 withdrawable = maxBorrowableWithMin.mulDivDown(10 ** underlying.decimals(), underlyingToUSD);
         uint256 balance = ERC20(address(token)).balanceOf(msg.sender);
         // Check if withdrawable is greater than the position balance and if so return the balance instead of withdrawable.
         return withdrawable > balance ? balance : withdrawable;
@@ -213,15 +226,14 @@ contract AaveATokenAdaptor is BaseAdaptor {
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
     }
 
-    /**
-     * @notice When positions are added to the Registry, this function can be used in order to figure out
-     *         what assets this adaptor needs to price, and confirm pricing is properly setup.
-     * @dev WETH is used when determining the withdrawableBalance.
-     */
     function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
-        assets = new ERC20[](2);
+        assets = new ERC20[](1);
         assets[0] = assetOf(adaptorData);
-        assets[1] = WETH();
+
+        // Make sure Aave Oracle uses USD base asset with 8 decimals.
+        // BASE_CURRENCY and BASE_CURRENCY_UNIT are both immutable values, so only check this on initial position setup.
+        if (aaveOracle().BASE_CURRENCY() != address(0) || aaveOracle().BASE_CURRENCY_UNIT() != 1e8)
+            revert AaveV3ATokenAdaptor__OracleUsesDifferentBase();
     }
 
     /**
@@ -241,7 +253,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
     function depositToAave(ERC20 tokenToDeposit, uint256 amountToDeposit) public {
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(pool()), amountToDeposit);
-        pool().deposit(address(tokenToDeposit), amountToDeposit, address(this), 0);
+        pool().supply(address(tokenToDeposit), amountToDeposit, address(this), 0);
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(tokenToDeposit, address(pool()));
@@ -256,6 +268,26 @@ contract AaveATokenAdaptor is BaseAdaptor {
         pool().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
         // Check that health factor is above adaptor minimum.
         (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (healthFactor < HFMIN()) revert AaveATokenAdaptor__HealthFactorTooLow();
+        if (healthFactor < HFMIN()) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
+    }
+
+    /**
+     * @notice Allows strategists to adjust an asset's isolation mode.
+     */
+    function adjustIsolationModeAssetAsCollateral(ERC20 asset, bool useAsCollateral) public {
+        pool().setUserUseReserveAsCollateral(address(asset), useAsCollateral);
+        // Check that health factor is above adaptor minimum.
+        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
+        if (healthFactor < HFMIN()) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
+    }
+
+    /**
+     * @notice Allows strategists to enter different EModes.
+     */
+    function changeEMode(uint8 categoryId) public {
+        pool().setUserEMode(categoryId);
+        // Check that health factor is above adaptor minimum.
+        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
+        if (healthFactor < HFMIN()) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
     }
 }

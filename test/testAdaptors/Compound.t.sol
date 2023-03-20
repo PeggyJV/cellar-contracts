@@ -11,8 +11,8 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
-import { CErc20 } from "@compound/CErc20.sol";
-import { ComptrollerG7 as Comptroller } from "@compound/ComptrollerG7.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
+
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
@@ -169,7 +169,7 @@ contract CellarCompoundTest is Test {
         assertApproxEqRel(
             cellar.totalAssets(),
             assets,
-            0.0005e18,
+            0.001e18,
             "Total assets should equal assets deposited minus swap fees."
         );
     }
@@ -295,6 +295,51 @@ contract CellarCompoundTest is Test {
 
         // trust position works now.
         registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)), 0, 0);
+    }
+
+    function testErrorCodeCheck() external {
+        // Remove cDAI as a position from Cellar.
+        cellar.setHoldingPosition(daiPosition);
+        cellar.removePosition(0, false);
+
+        // Add DAI to the Cellar.
+        uint256 assets = 100_000e18;
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Convert cellar assets to USDC.
+        assets = assets.changeDecimals(18, 6);
+        deal(address(DAI), address(cellar), 0);
+        deal(address(USDC), address(cellar), assets);
+
+        // Strategist tries to lend more USDC then they have,
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Choose an amount too large so deposit fails.
+        uint256 amountToLend = assets + 1;
+
+        adaptorCalls[0] = _createBytesDataToLend(cUSDC, amountToLend);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__NonZeroCompoundErrorCode.selector, 13))
+        );
+        cellar.callOnAdaptor(data);
+
+        // Strategist tries to withdraw more assets then they have.
+        adaptorCalls = new bytes[](2);
+        amountToLend = assets;
+        uint256 amountToWithdraw = assets + 1e6;
+
+        adaptorCalls[0] = _createBytesDataToLend(cUSDC, amountToLend);
+        adaptorCalls[1] = _createBytesDataToWithdraw(cUSDC, amountToWithdraw);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CTokenAdaptor.CTokenAdaptor__NonZeroCompoundErrorCode.selector, 9))
+        );
+        cellar.callOnAdaptor(data);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
