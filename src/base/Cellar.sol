@@ -69,6 +69,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     event PositionSwapped(uint32 newPosition1, uint32 newPosition2, uint256 index1, uint256 index2);
 
+    // TODO
+    event PositionCatalogueAltered(uint32 positionId, bool inCatalogue);
+    event AdaptorCatalogueAltered(address adaptor, bool inCatalogue);
+
     /**
      * @notice Attempted to add a position that is already being used.
      * @param position id of the position
@@ -80,6 +84,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param position id of the position
      */
     error Cellar__PositionNotUsed(uint32 position);
+
+    /**
+     * @notice Attempted to add a position that is not in the catalogue.
+     * @param position id of the position
+     */
+    error Cellar__PositionNotInCatalogue(uint32 position);
 
     /**
      * @notice Attempted an action on a position that is required to be empty before the action can be performed.
@@ -177,6 +187,40 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     /**
+     * @notice Positions the strategist is approved to use without any governance intervention.
+     */
+    mapping(uint32 => bool) public positionCatalogue;
+
+    /**
+     * @notice Adaptors the strategist is approved to use without any governance intervention.
+     */
+    mapping(address => bool) public adaptorCatalogue;
+
+    function addPositionToCatalog(uint32 positionId) external onlyOwner {
+        // Make sure position is not paused and is trusted.
+        registry.revertIfPositionIsNotTrusted(positionId);
+        positionCatalogue[positionId] = true;
+        emit PositionCatalogueAltered(positionId, true);
+    }
+
+    function removePositionFromCatalog(uint32 positionId) external onlyOwner {
+        positionCatalogue[positionId] = false;
+        emit PositionCatalogueAltered(positionId, false);
+    }
+
+    function addAdaptorToCatalog(address adaptor) external onlyOwner {
+        // Make sure adaptor is not paused and is trusted.
+        registry.revertIfAdaptorIsNotTrusted(adaptor);
+        adaptorCatalogue[adaptor] = true;
+        emit AdaptorCatalogueAltered(adaptor, true);
+    }
+
+    function removeAdaptorFromCatalog(address adaptor) external onlyOwner {
+        adaptorCatalogue[adaptor] = false;
+        emit AdaptorCatalogueAltered(adaptor, false);
+    }
+
+    /**
      * @notice Insert a trusted position to the list of positions used by the cellar at a given index.
      * @param index index at which to insert the position
      * @param positionId id of position to add
@@ -198,8 +242,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Check if position is already being used.
         if (isPositionUsed[positionId]) revert Cellar__PositionAlreadyUsed(positionId);
 
+        // Check if position is in the position catalogue.
+        if (!positionCatalogue[positionId]) revert Cellar__PositionNotInCatalogue(positionId);
+
         // Grab position data from registry.
-        (address adaptor, bool isDebt, bytes memory adaptorData) = registry.addPositionFromCatalogue(positionId);
+        // Also checks if position is not trusted and reverts if so.
+        (address adaptor, bool isDebt, bytes memory adaptorData) = registry.addPositionToCellar(positionId);
 
         if (isDebt != inDebtArray) revert Cellar__DebtMismatch(positionId);
 
@@ -242,12 +290,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     // Function intentionally skips balance check.
-    // Called by governance through gravity bridge, or through registry.
-    function forcePositionOut(uint32 index, uint32 positionId, bool inDebtArray) external {
-        if (msg.sender != address(registry) && msg.sender != owner) revert("Only the registry or owner can call this.");
+    // Called by governance through gravity bridge.
+    function forcePositionOut(uint32 index, uint32 positionId, bool inDebtArray) external onlyOwner {
         _removePosition(index, positionId, inDebtArray);
     }
 
+    // TODO natspec
     function _removePosition(uint32 index, uint32 positionId, bool inDebtArray) internal {
         if (positionId == holdingPosition) revert Cellar__RemovingHoldingPosition();
 
@@ -359,17 +407,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     uint64 public constant MAX_FEE_CUT = 1e18;
 
-    // /**
-    //  * @notice Set the percentage of platform fees accrued over a year.
-    //  * @param newPlatformFee value out of 1e18 that represents new platform fee percentage
-    //  */
-    // function setPlatformFee(uint64 newPlatformFee) external onlyOwner {
-    //     if (newPlatformFee > MAX_PLATFORM_FEE) revert Cellar__InvalidFee();
-    //     emit PlatformFeeChanged(feeData.platformFee, newPlatformFee);
-
-    //     feeData.platformFee = newPlatformFee;
-    // }
-
     /**
      * @notice Sets the Strategists cut of platform fees
      * @param cut the platform cut for the strategist
@@ -416,10 +453,34 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     bool public isShutdown;
 
-    bool public allowRebalanceWhenShutdown;
+    /**
+     * @notice Pauses all user entry/exits, and strategist rebalances.
+     */
+    bool public ignorePause;
 
-    function toggleAllowRebalanceWhenShutdown(bool toggle) external onlyOwner {
-        allowRebalanceWhenShutdown = toggle;
+    function isPaused() external view returns (bool) {
+        if (!ignorePause) {
+            return registry.isCallerPaused(address(this));
+        }
+        return false;
+    }
+
+    error Cellar__Paused();
+
+    /**
+     * @notice Pauses all user entry/exits, and strategist rebalances.
+     */
+    function _checkIfPaused() internal view {
+        if (!ignorePause) {
+            if (registry.isCallerPaused(address(this))) revert Cellar__Paused();
+        }
+    }
+
+    /**
+     * @notice Allows governance to choose whether or not to respect a pause.
+     */
+    function toggleIgnorePause(bool toggle) external onlyOwner {
+        ignorePause = toggle;
     }
 
     /**
@@ -651,6 +712,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param receiver address receiving the shares.
      */
     function beforeDeposit(uint256 assets, uint256, address receiver) internal view override whenNotShutdown {
+        _checkIfPaused();
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
                 revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
@@ -672,6 +734,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice called at the beginning of withdraw.
      */
     function beforeWithdraw(uint256, uint256, address, address owner) internal view override {
+        _checkIfPaused();
         // Make sure users shares are not locked.
         _checkIfSharesLocked(owner);
     }
@@ -923,6 +986,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @dev Run a re-entrancy check because totalAssets can be wrong if re-entering from deposit/withdraws.
      */
     function totalAssets() public view override returns (uint256 assets) {
+        _checkIfPaused();
         require(locked == 1, "REENTRANCY");
         assets = _accounting(false);
     }
@@ -932,6 +996,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @dev Run a re-entrancy check because totalAssetsWithdrawable can be wrong if re-entering from deposit/withdraws.
      */
     function totalAssetsWithdrawable() public view returns (uint256 assets) {
+        _checkIfPaused();
         require(locked == 1, "REENTRANCY");
         assets = _accounting(true);
     }
@@ -1174,9 +1239,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
      */
-    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner nonReentrant {
-        // Block rebalance calls if shutdown AND allowRebalanceWhenShutdown is false.
-        if (isShutdown && !allowRebalanceWhenShutdown) revert Cellar__RebalancesNotAllowed();
+    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner nonReentrant whenNotShutdown {
+        _checkIfPaused();
         blockExternalReceiver = true;
 
         // Record `totalAssets` and `totalShares` before making any external calls.
@@ -1193,7 +1257,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Run all adaptor calls.
         for (uint8 i = 0; i < data.length; ++i) {
             address adaptor = data[i].adaptor;
-            if (!registry.checkIfAdaptorCanBeUsedByCaller(adaptor)) revert Cellar__CallToAdaptorNotAllowed(adaptor);
+            // Revert if adaptor not in catalogue, or adaptor is paused.
+            if (!adaptorCatalogue[adaptor]) revert Cellar__CallToAdaptorNotAllowed(adaptor);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 adaptor.functionDelegateCall(data[i].callData[j]);
             }
@@ -1227,7 +1292,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     address public aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
 
     /**
-     * @notice Allows strategist to utilize Aave V2 flashloans while rebalancing the cellar.
+     * @notice Allows strategist to utilize Aave flashloans while rebalancing the cellar.
      */
     function executeOperation(
         address[] calldata assets,
@@ -1244,7 +1309,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Run all adaptor calls.
         for (uint8 i = 0; i < data.length; ++i) {
             address adaptor = data[i].adaptor;
-            if (!registry.checkIfAdaptorCanBeUsedByCaller(adaptor)) revert Cellar__CallToAdaptorNotAllowed(adaptor);
+            // Revert if adaptor not in catalogue, or adaptor is paused.
+            if (!adaptorCatalogue[adaptor]) revert Cellar__CallToAdaptorNotAllowed(adaptor);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 adaptor.functionDelegateCall(data[i].callData[j]);
             }
@@ -1282,15 +1348,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     // ========================================== HELPER FUNCTIONS ==========================================
 
-    error Cellar__CallToPositionNotAllowed(uint32 position);
-
     /**
      * @dev Deposit into a position according to its position type and update related state.
      * @param position address to deposit funds into
      * @param assets the amount of assets to deposit into the position
      */
     function _depositTo(uint32 position, uint256 assets) internal {
-        if (!registry.checkIfPositionCanBeUsedByCaller(position)) revert Cellar__CallToPositionNotAllowed(position);
         address adaptor = getPositionData[position].adaptor;
         adaptor.functionDelegateCall(
             abi.encodeWithSelector(
@@ -1309,7 +1372,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param receiver the address to sent withdrawn assets to
      */
     function _withdrawFrom(uint32 position, uint256 assets, address receiver) internal {
-        if (!registry.checkIfPositionCanBeUsedByCaller(position)) revert Cellar__CallToPositionNotAllowed(position);
         address adaptor = getPositionData[position].adaptor;
         adaptor.functionDelegateCall(
             abi.encodeWithSelector(
@@ -1327,7 +1389,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param position position to get the withdrawable balance of
      */
     function _withdrawableFrom(uint32 position) internal view returns (uint256) {
-        if (!registry.checkIfPositionCanBeUsedByCaller(position)) revert Cellar__CallToPositionNotAllowed(position);
         // Debt positions always return 0 for their withdrawable.
         if (getPositionData[position].isDebt) return 0;
         return
@@ -1344,7 +1405,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param position position to get the balance of
      */
     function _balanceOf(uint32 position) internal view returns (uint256) {
-        if (!registry.checkIfPositionCanBeUsedByCaller(position)) revert Cellar__CallToPositionNotAllowed(position);
         address adaptor = getPositionData[position].adaptor;
         return BaseAdaptor(adaptor).balanceOf(getPositionData[position].adaptorData);
     }
@@ -1354,7 +1414,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param position to get the asset of
      */
     function _assetOf(uint32 position) internal view returns (ERC20) {
-        if (!registry.checkIfPositionCanBeUsedByCaller(position)) revert Cellar__CallToPositionNotAllowed(position);
         address adaptor = getPositionData[position].adaptor;
         return BaseAdaptor(adaptor).assetOf(getPositionData[position].adaptorData);
     }

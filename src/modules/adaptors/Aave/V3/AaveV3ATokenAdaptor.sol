@@ -114,15 +114,15 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        // If cellar has entered an EMode, user withdraws are not allowed.
-        if (pool().getUserEMode(msg.sender) != 0) revert BaseAdaptor__UserWithdrawsNotAllowed();
-
         // Withdraw assets from Aave.
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
         pool().withdraw(token.UNDERLYING_ASSET_ADDRESS(), assets, address(this));
 
         (, uint256 totalDebtBase, , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
         if (totalDebtBase > 0) {
+            // If cellar has entered an EMode, and has debt, user withdraws are not allowed.
+            if (pool().getUserEMode(msg.sender) != 0) revert BaseAdaptor__UserWithdrawsNotAllowed();
+
             // Run minimum health factor checks.
             uint256 minHealthFactor = abi.decode(configData, (uint256));
             if (minHealthFactor == 0) {

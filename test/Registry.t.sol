@@ -76,4 +76,14 @@ contract RegistryTest is Test {
         registry.setFeesDistributor(validCosmosAddress);
         assertEq(registry.feesDistributor(), validCosmosAddress, "Fee distributor should equal `validCosmosAddress`.");
     }
+
+    // TODO add test where
+    // adaptor/position is trusted and untrusted, should revert bc something needs to change to re-add it
+    // cellar tries to add distrusted position/adaptor to its catalogue
+    // cellar tries to use a distrusted position it already has in its catalogue
+    // cellar ignores the pause, and continues as normal
+    // cellar pause will stop all user interactions, and rebalances
+    // scenario where position is found with an exploit
+    // scenario where adaptor is found with an exploit
+    // re above two but change it so that strategist is cooperating.
 }

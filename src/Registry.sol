@@ -204,27 +204,27 @@ contract Registry is Ownable {
      */
     mapping(uint32 => PositionData) public getPositionIdToPositionData;
 
-    uint64 public MAX_PAUSE_DURATION = 7 days;
-    uint64 public pauseDuration = 3 days;
+    mapping(address => bool) public isCallerPaused;
 
-    // Called by governance.
-    function setPauseDuration(uint64 duration) external onlyOwner {
-        if (duration > MAX_PAUSE_DURATION) revert("Invalid duration");
-
-        pauseDuration = duration;
+    function _pauseTarget(address target) internal {
+        if (isCallerPaused[target]) revert("Target already paused");
+        isCallerPaused[target] = true;
     }
 
-    struct PauseAndTrust {
-        bool isTrusted;
-        uint64 pausedUntil;
+    function _unpauseTarget(address target) internal {
+        if (!isCallerPaused[target]) revert("Target not paused");
+        isCallerPaused[target] = false;
     }
 
-    // Global PauseAndTrust needed for them to be added to cellar catalogue.
-    mapping(uint32 => PauseAndTrust) public getPositionIdToPauseAndTrust;
-    mapping(address => PauseAndTrust) public getAdaptorAddressToPauseAndTrust;
+    function batchPause(address[] calldata targets) external onlyOwner {
+        for (uint256 i; i < targets.length; ++i) _pauseTarget(targets[i]);
+    }
 
-    mapping(address => mapping(uint32 => bool)) public cellarPositionCatalogue;
-    mapping(address => mapping(address => bool)) public cellarAdaptorCatalogue;
+    function batchUnpause(address[] calldata targets) external onlyOwner {
+        for (uint256 i; i < targets.length; ++i) _unpauseTarget(targets[i]);
+    }
+
+    mapping(uint32 => bool) public isPositionTrusted;
 
     /**
      * @notice Trust a position to be used by the cellar.
@@ -244,7 +244,7 @@ contract Registry is Ownable {
         if (adaptor == address(0) || getPositionHashToPositionId[positionHash] != 0)
             revert Registry__InvalidPositionInput();
 
-        if (!getAdaptorAddressToPauseAndTrust[adaptor].isTrusted) revert Registry__AdaptorNotTrusted();
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted();
 
         // Set position data.
         getPositionIdToPositionData[positionId] = PositionData({
@@ -255,7 +255,7 @@ contract Registry is Ownable {
         });
 
         // Globally trust the position.
-        getPositionIdToPauseAndTrust[positionId] = PauseAndTrust(true, 0);
+        isPositionTrusted[positionId] = true;
 
         getPositionHashToPositionId[positionHash] = positionId;
 
@@ -274,25 +274,8 @@ contract Registry is Ownable {
     // Global Off Switch
     // Governance called
     function distrustPosition(uint32 positionId) external onlyOwner {
-        if (!getPositionIdToPauseAndTrust[positionId].isTrusted) revert("Position not trusted");
-        getPositionIdToPauseAndTrust[positionId].isTrusted = false;
-    }
-
-    // Governance Called.
-    function addPositionToCatalogue(address cellar, uint32 positionId) external onlyOwner {
-        // Only check if position is not trusted cuz governance is calling this and that should override multisig
-        if (!getPositionIdToPauseAndTrust[positionId].isTrusted) revert("Position is not trusted");
-
-        if (cellarPositionCatalogue[cellar][positionId]) revert("Position already in Cellar catalogue.");
-
-        cellarPositionCatalogue[cellar][positionId] = true;
-    }
-
-    // Governance Called.
-    function removePositionFromCatalogue(address cellar, uint32 positionId) external onlyOwner {
-        if (!cellarPositionCatalogue[cellar][positionId]) revert("Position not in Cellar catalogue.");
-
-        cellarPositionCatalogue[cellar][positionId] = false;
+        if (!isPositionTrusted[positionId]) revert("Position not trusted");
+        isPositionTrusted[positionId] = false;
     }
 
     /**
@@ -301,37 +284,24 @@ contract Registry is Ownable {
      * @return adaptor the address of the adaptor, isDebt bool indicating whether position is
      *         debt or not, and adaptorData needed to interact with position
      */
-    function addPositionFromCatalogue(
+    function addPositionToCellar(
         uint32 positionId
     ) external view returns (address adaptor, bool isDebt, bytes memory adaptorData) {
         if (positionId > positionCount || positionId == 0) revert Registry__PositionDoesNotExist();
-        // Make sure position is still globally trusted and not paused.
-        _checkPositionIsTrustedAndNotPaused(positionId);
-        // make sure position is in the catalogue.
-        if (!cellarPositionCatalogue[msg.sender][positionId]) revert("Position not in Cellar catalogue.");
+
+        revertIfPositionIsNotTrusted(positionId);
+
         PositionData memory positionData = getPositionIdToPositionData[positionId];
         return (positionData.adaptor, positionData.isDebt, positionData.adaptorData);
     }
 
+    error Registry__PositionIsPausedOrNotTrusted(uint32 position);
+
+    function revertIfPositionIsNotTrusted(uint32 positionId) public view {
+        if (!isPositionTrusted[positionId]) revert Registry__PositionIsPausedOrNotTrusted(positionId);
+    }
+
     // ============================================ ADAPTOR LOGIC ============================================
-
-    // Governance Called.
-    // adaptor on switch on a per cellar basis.
-    function addAdaptorToCatalogue(address cellar, address adaptor) external onlyOwner {
-        if (!getAdaptorAddressToPauseAndTrust[adaptor].isTrusted) revert("Adaptor is not trusted");
-
-        if (cellarAdaptorCatalogue[cellar][adaptor]) revert("Adaptor already in Cellar catalogue.");
-
-        cellarAdaptorCatalogue[cellar][adaptor] = true;
-    }
-
-    // Governance Called.
-    // adaptor off switch on a per cellar basis.
-    function removeAdaptorFromCatalogue(address cellar, address adaptor) external onlyOwner {
-        if (!cellarAdaptorCatalogue[cellar][adaptor]) revert("Adaptor not in Cellar catalogue.");
-
-        cellarAdaptorCatalogue[cellar][adaptor] = false;
-    }
 
     /**
      * @notice Attempted to trust an adaptor with non unique identifier.
@@ -353,87 +323,30 @@ contract Registry is Ownable {
      */
     mapping(bytes32 => bool) public isIdentifierUsed;
 
-    // Global On Switch
-    // Governance called
     /**
      * @notice Trust an adaptor to be used by cellars
      * @param adaptor address of the adaptor to trust
      */
     function trustAdaptor(address adaptor) external onlyOwner {
-        if (getAdaptorAddressToPauseAndTrust[adaptor].isTrusted) revert("Adaptor already trusted");
+        if (isAdaptorTrusted[adaptor]) revert("Adaptor already trusted");
         bytes32 identifier = BaseAdaptor(adaptor).identifier();
         if (isIdentifierUsed[identifier]) revert Registry__IdentifierNotUnique();
-        getAdaptorAddressToPauseAndTrust[adaptor].isTrusted = true;
+        isAdaptorTrusted[adaptor] = true;
         isIdentifierUsed[identifier] = true;
+    }
+
+    function revertIfAdaptorIsNotTrusted(address adaptor) external view {
+        if (!isAdaptorTrusted[adaptor]) revert("Adaptor not trusted");
     }
 
     // Global Off Switch
     // Governance called
     function distrustAdaptor(address adaptor) external onlyOwner {
-        if (!getAdaptorAddressToPauseAndTrust[adaptor].isTrusted) revert("Adaptor not trusted");
-        getAdaptorAddressToPauseAndTrust[adaptor].isTrusted = false;
+        if (!isAdaptorTrusted[adaptor]) revert("Adaptor not trusted");
+        // Set trust to false.
+        isAdaptorTrusted[adaptor] = false;
 
-        // Set identifier used to false, so this adaptor can be re-added if need be.
-        bytes32 identifier = BaseAdaptor(adaptor).identifier();
-        isIdentifierUsed[identifier] = false;
+        // We are NOT resetting `isIdentifierUsed` because if this adaptor is distrusted, then something needs
+        // to change about the new one being re-trusted.
     }
-
-    function _checkPositionIsTrustedAndNotPaused(uint32 positionId) internal view returns (bool) {
-        PauseAndTrust memory pauseAndTrust = getPositionIdToPauseAndTrust[positionId];
-
-        if (!pauseAndTrust.isTrusted) return false;
-
-        if (block.timestamp < pauseAndTrust.pausedUntil) return false;
-
-        return true;
-    }
-
-    function _checkAdaptorIsTrustedAndNotPaused(address adaptor) internal view returns (bool) {
-        PauseAndTrust memory pauseAndTrust = getAdaptorAddressToPauseAndTrust[adaptor];
-
-        if (!pauseAndTrust.isTrusted) return false;
-
-        if (block.timestamp < pauseAndTrust.pausedUntil) return false;
-
-        return true;
-    }
-
-    function checkIfAdaptorCanBeUsedByCaller(address adaptor) external view returns (bool) {
-        if (!_checkAdaptorIsTrustedAndNotPaused(adaptor)) return false;
-
-        // Make sure adaptor is in callers catalogue
-        if (!cellarAdaptorCatalogue[msg.sender][adaptor]) return false;
-
-        return true;
-    }
-
-    function checkIfPositionCanBeUsedByCaller(uint32 positionId) external view returns (bool) {
-        if (!_checkPositionIsTrustedAndNotPaused(positionId)) return false;
-
-        // Make sure position is in callers catalogue
-        if (!cellarPositionCatalogue[msg.sender][positionId]) return false;
-
-        return true;
-    }
-
-    //Called by governance
-    function forceCellarOutOfPosition(Cellar cellar, uint32 positionId, bool isDebt) external onlyOwner {
-        // Find the position in the cellar.
-        uint32[] memory positions;
-        if (isDebt) {
-            positions = cellar.getDebtPositions();
-        } else {
-            positions = cellar.getCreditPositions();
-        }
-
-        for (uint32 i; i < positions.length; ++i) {
-            if (positions[i] == positionId) {
-                cellar.forcePositionOut(i, positionId, isDebt);
-                return;
-            }
-        }
-        revert("Position not found");
-    }
-
-    // TODO add pause function callable my multisig
 }

@@ -49,7 +49,9 @@ contract CellarInitializableV2_2 is Cellar, Initializable {
         owner = _owner;
         shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
         allowedRebalanceDeviation = 0.003e18;
-        aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
+        // Aave V3 pool contract on ETH Mainnet
+        aavePool = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
+
         // Initialize ERC20
         name = _name;
         symbol = _symbol;
@@ -64,8 +66,6 @@ contract CellarInitializableV2_2 is Cellar, Initializable {
         _setHoldingPosition(_holdingPosition);
 
         // Initialize remaining values.
-        // assetRiskTolerance = _assetRiskTolerance;
-        // protocolRiskTolerance = _protocolRiskTolerance;
         feeData = FeeData({
             strategistPlatformCut: 0.8e18,
             platformFee: 0.005e18,
