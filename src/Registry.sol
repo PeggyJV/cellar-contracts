@@ -131,6 +131,124 @@ contract Registry is Ownable {
         feesDistributor = newFeesDistributor;
     }
 
+    // ============================================ PAUSE LOGIC ============================================
+
+    /**
+     * @notice Emitted when a target is paused.
+     */
+    event TargetPaused(address target);
+
+    /**
+     * @notice Emitted when a target is unpaused.
+     */
+    event TargetUnpaused(address target);
+
+    /**
+     * @notice Attempted to unpause a target that was not paused.
+     */
+    error Registry__TargetNotPaused(address target);
+
+    /**
+     * @notice Attempted to pause a target that was already paused.
+     */
+    error Registry__TargetAlreadyPaused(address target);
+
+    /**
+     * @notice Mapping stores whether or not a cellar is paused.
+     */
+    mapping(address => bool) public isCallerPaused;
+
+    /**
+     * @notice Allows multisig to pause multiple cellars in a single call.
+     */
+    function batchPause(address[] calldata targets) external onlyOwner {
+        for (uint256 i; i < targets.length; ++i) _pauseTarget(targets[i]);
+    }
+
+    /**
+     * @notice Allows multisig to unpause multiple cellars in a single call.
+     */
+    function batchUnpause(address[] calldata targets) external onlyOwner {
+        for (uint256 i; i < targets.length; ++i) _unpauseTarget(targets[i]);
+    }
+
+    /**
+     * @notice Helper function to pause some target.
+     */
+    function _pauseTarget(address target) internal {
+        if (isCallerPaused[target]) revert Registry__TargetAlreadyPaused(target);
+        isCallerPaused[target] = true;
+        emit TargetPaused(target);
+    }
+
+    /**
+     * @notice Helper function to unpause some target.
+     */
+    function _unpauseTarget(address target) internal {
+        if (!isCallerPaused[target]) revert Registry__TargetNotPaused(target);
+        isCallerPaused[target] = false;
+        emit TargetUnpaused(target);
+    }
+
+    // ============================================ ADAPTOR LOGIC ============================================
+
+    /**
+     * @notice Attempted to trust an adaptor with non unique identifier.
+     */
+    error Registry__IdentifierNotUnique();
+
+    /**
+     * @notice Attempted to use an untrusted adaptor.
+     */
+    error Registry__AdaptorNotTrusted(address adaptor);
+
+    /**
+     * @notice Attempted to trust an already trusted adaptor.
+     */
+    error Registry__AdaptorAlreadyTrusted(address adaptor);
+
+    /**
+     * @notice Maps an adaptor address to bool indicating whether it has been set up in the registry.
+     */
+    mapping(address => bool) public isAdaptorTrusted;
+
+    /**
+     * @notice Maps an adaptors identier to bool, to track if the indentifier is unique wrt the registry.
+     */
+    mapping(bytes32 => bool) public isIdentifierUsed;
+
+    /**
+     * @notice Trust an adaptor to be used by cellars
+     * @param adaptor address of the adaptor to trust
+     */
+    function trustAdaptor(address adaptor) external onlyOwner {
+        if (isAdaptorTrusted[adaptor]) revert Registry__AdaptorAlreadyTrusted(adaptor);
+        bytes32 identifier = BaseAdaptor(adaptor).identifier();
+        if (isIdentifierUsed[identifier]) revert Registry__IdentifierNotUnique();
+        isAdaptorTrusted[adaptor] = true;
+        isIdentifierUsed[identifier] = true;
+    }
+
+    /**
+     * @notice Allows registry to distrust adaptors.
+     * @dev Doing so prevents Cellars from adding this adaptor to their catalogue.
+     */
+    function distrustAdaptor(address adaptor) external onlyOwner {
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted(adaptor);
+        // Set trust to false.
+        isAdaptorTrusted[adaptor] = false;
+
+        // We are NOT resetting `isIdentifierUsed` because if this adaptor is distrusted, then something needs
+        // to change about the new one being re-trusted.
+    }
+
+    /**
+     * @notice Reverts if `adaptor` is not trusted by the registry.
+     */
+    function revertIfAdaptorIsNotTrusted(address adaptor) external view {
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted(adaptor);
+    }
+
     // ============================================ POSITION LOGIC ============================================
     /**
      * @notice stores data related to Cellar positions.
@@ -167,19 +285,14 @@ contract Registry is Ownable {
     error Registry__InvalidPositionInput();
 
     /**
-     * @notice Attempted to add a position with a risky asset.
-     */
-    error Registry__AssetTooRisky();
-
-    /**
-     * @notice Attempted to add a position with a risky protocol.
-     */
-    error Registry__ProtocolTooRisky();
-
-    /**
      * @notice Attempted to add a position that does not exist.
      */
     error Registry__PositionDoesNotExist();
+
+    /**
+     * @notice Attempted to add a position that is not trusted.
+     */
+    error Registry__PositionIsNotTrusted(uint32 position);
 
     /**
      * @notice Addresses of the positions currently used by the cellar.
@@ -204,26 +317,9 @@ contract Registry is Ownable {
      */
     mapping(uint32 => PositionData) public getPositionIdToPositionData;
 
-    mapping(address => bool) public isCallerPaused;
-
-    function _pauseTarget(address target) internal {
-        if (isCallerPaused[target]) revert("Target already paused");
-        isCallerPaused[target] = true;
-    }
-
-    function _unpauseTarget(address target) internal {
-        if (!isCallerPaused[target]) revert("Target not paused");
-        isCallerPaused[target] = false;
-    }
-
-    function batchPause(address[] calldata targets) external onlyOwner {
-        for (uint256 i; i < targets.length; ++i) _pauseTarget(targets[i]);
-    }
-
-    function batchUnpause(address[] calldata targets) external onlyOwner {
-        for (uint256 i; i < targets.length; ++i) _unpauseTarget(targets[i]);
-    }
-
+    /**
+     * @notice Maps a position to a bool indicating whether or not it is trusted.
+     */
     mapping(uint32 => bool) public isPositionTrusted;
 
     /**
@@ -244,7 +340,7 @@ contract Registry is Ownable {
         if (adaptor == address(0) || getPositionHashToPositionId[positionHash] != 0)
             revert Registry__InvalidPositionInput();
 
-        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted();
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted(adaptor);
 
         // Set position data.
         getPositionIdToPositionData[positionId] = PositionData({
@@ -271,8 +367,11 @@ contract Registry is Ownable {
         emit PositionAdded(positionId, adaptor, isDebt, adaptorData);
     }
 
-    // Global Off Switch
-    // Governance called
+    /**
+     * @notice Allows registry to distrust positions.
+     * @dev Doing so prevents Cellars from adding this position to their catalogue,
+     *      and adding the position to their tracked arrays.
+     */
     function distrustPosition(uint32 positionId) external onlyOwner {
         if (!isPositionTrusted[positionId]) revert("Position not trusted");
         isPositionTrusted[positionId] = false;
@@ -295,58 +394,10 @@ contract Registry is Ownable {
         return (positionData.adaptor, positionData.isDebt, positionData.adaptorData);
     }
 
-    error Registry__PositionIsNotTrusted(uint32 position);
-
+    /**
+     * @notice Reverts if `positionId` is not trusted by the registry.
+     */
     function revertIfPositionIsNotTrusted(uint32 positionId) public view {
         if (!isPositionTrusted[positionId]) revert Registry__PositionIsNotTrusted(positionId);
-    }
-
-    // ============================================ ADAPTOR LOGIC ============================================
-
-    /**
-     * @notice Attempted to trust an adaptor with non unique identifier.
-     */
-    error Registry__IdentifierNotUnique();
-
-    /**
-     * @notice Attempted to use an untrusted adaptor.
-     */
-    error Registry__AdaptorNotTrusted();
-
-    /**
-     * @notice Maps an adaptor address to bool indicating whether it has been set up in the registry.
-     */
-    mapping(address => bool) public isAdaptorTrusted;
-
-    /**
-     * @notice Maps an adaptors identier to bool, to track if the indentifier is unique wrt the registry.
-     */
-    mapping(bytes32 => bool) public isIdentifierUsed;
-
-    /**
-     * @notice Trust an adaptor to be used by cellars
-     * @param adaptor address of the adaptor to trust
-     */
-    function trustAdaptor(address adaptor) external onlyOwner {
-        if (isAdaptorTrusted[adaptor]) revert("Adaptor already trusted");
-        bytes32 identifier = BaseAdaptor(adaptor).identifier();
-        if (isIdentifierUsed[identifier]) revert Registry__IdentifierNotUnique();
-        isAdaptorTrusted[adaptor] = true;
-        isIdentifierUsed[identifier] = true;
-    }
-
-    function revertIfAdaptorIsNotTrusted(address adaptor) external view {
-        if (!isAdaptorTrusted[adaptor]) revert("Adaptor not trusted");
-    }
-
-    // Global Off Switch
-    // Governance called
-    function distrustAdaptor(address adaptor) external onlyOwner {
-        if (!isAdaptorTrusted[adaptor]) revert("Adaptor not trusted");
-        // Set trust to false.
-        isAdaptorTrusted[adaptor] = false;
-
-        // We are NOT resetting `isIdentifierUsed` because if this adaptor is distrusted, then something needs
-        // to change about the new one being re-trusted.
     }
 }

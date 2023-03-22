@@ -196,10 +196,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     mapping(address => bool) public adaptorCatalogue;
 
+    /**
+     * @notice Allows Governance to add positions to this cellar's catalogue.
+     */
     function addPositionToCatalogue(uint32 positionId) external onlyOwner {
         _addPositionToCatalogue(positionId);
     }
 
+    /**
+     * @notice Helper function that checks the position is trusted.
+     */
     function _addPositionToCatalogue(uint32 positionId) internal {
         // Make sure position is not paused and is trusted.
         registry.revertIfPositionIsNotTrusted(positionId);
@@ -207,11 +213,17 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         emit PositionCatalogueAltered(positionId, true);
     }
 
+    /**
+     * @notice Allows Governance to remove positions from this cellar's catalogue.
+     */
     function removePositionFromCatalog(uint32 positionId) external onlyOwner {
         positionCatalogue[positionId] = false;
         emit PositionCatalogueAltered(positionId, false);
     }
 
+    /**
+     * @notice Allows Governance to add adaptors to this cellar's catalogue.
+     */
     function addAdaptorToCatalogue(address adaptor) external onlyOwner {
         // Make sure adaptor is not paused and is trusted.
         registry.revertIfAdaptorIsNotTrusted(adaptor);
@@ -219,6 +231,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         emit AdaptorCatalogueAltered(adaptor, true);
     }
 
+    /**
+     * @notice Allows Governance to remove adaptors from this cellar's catalogue.
+     */
     function removeAdaptorFromCatalog(address adaptor) external onlyOwner {
         adaptorCatalogue[adaptor] = false;
         emit AdaptorCatalogueAltered(adaptor, false);
@@ -293,13 +308,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _removePosition(index, positionId, inDebtArray);
     }
 
-    // Function intentionally skips balance check.
-    // Called by governance through gravity bridge.
+    /**
+     * @notice Allows Governance to force a cellar out of a position without making ANY external calls.
+     */
     function forcePositionOut(uint32 index, uint32 positionId, bool inDebtArray) external onlyOwner {
         _removePosition(index, positionId, inDebtArray);
     }
 
-    // TODO natspec
+    /**
+     * @notice Internal helper function to remove positions from cellars tracked arrays.
+     */
     function _removePosition(uint32 index, uint32 positionId, bool inDebtArray) internal {
         if (positionId == holdingPosition) revert Cellar__RemovingHoldingPosition();
 
