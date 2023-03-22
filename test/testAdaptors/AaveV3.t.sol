@@ -99,13 +99,13 @@ contract CellarAaveV3Test is Test {
         uint32[] memory debtPositions = new uint32[](1);
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-        registry.trustAdaptor(address(aaveATokenAdaptor), 0, 0);
-        registry.trustAdaptor(address(aaveDebtTokenAdaptor), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(aaveATokenAdaptor));
+        registry.trustAdaptor(address(aaveDebtTokenAdaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDC)), 0, 0);
-        debtUSDCPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDC)), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDC)));
+        debtUSDCPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDC)));
 
         positions[0] = aUSDCPosition;
         positions[1] = usdcPosition;
@@ -135,8 +135,8 @@ contract CellarAaveV3Test is Test {
             )
         );
 
-        cellar.setupAdaptor(address(aaveATokenAdaptor));
-        cellar.setupAdaptor(address(aaveDebtTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -265,16 +265,13 @@ contract CellarAaveV3Test is Test {
         cellar.deposit(assets, address(this));
 
         // Trust WETH as a position in the registry, then add it to the Cellar.
-        uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
+        uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
+        cellar.addPositionToCatalogue(wethPosition);
         cellar.addPosition(2, wethPosition, abi.encode(0), false);
 
         // Trust dWETH as a position in the registry, then add it to the Cellar.
-        uint32 debtWETHPosition = registry.trustPosition(
-            address(aaveDebtTokenAdaptor),
-            abi.encode(address(dWETH)),
-            0,
-            0
-        );
+        uint32 debtWETHPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dWETH)));
+        cellar.addPositionToCatalogue(debtWETHPosition);
         cellar.addPosition(1, debtWETHPosition, abi.encode(0), true);
 
         // Take out a WETH loan.
@@ -343,14 +340,12 @@ contract CellarAaveV3Test is Test {
         cellar.setRebalanceDeviation(0.005e18);
 
         // Add WETH, aWETH, and dWETH as trusted positions to the registry.
-        uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
-        uint32 aWETHPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aWETH)), 0, 0);
-        uint32 debtWETHPosition = registry.trustPosition(
-            address(aaveDebtTokenAdaptor),
-            abi.encode(address(dWETH)),
-            0,
-            0
-        );
+        uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
+        uint32 aWETHPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aWETH)));
+        uint32 debtWETHPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dWETH)));
+        cellar.addPositionToCatalogue(wethPosition);
+        cellar.addPositionToCatalogue(aWETHPosition);
+        cellar.addPositionToCatalogue(debtWETHPosition);
 
         // Remove dUSDC and aUSDC positions.
         cellar.removePosition(1, false);

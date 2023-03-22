@@ -176,28 +176,28 @@ contract UltimateStableCoinCellarTest is Test {
         uint32[] memory debtPositions = new uint32[](3);
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-        registry.trustAdaptor(address(uniswapV3Adaptor), 0, 0);
-        registry.trustAdaptor(address(aaveATokenAdaptor), 0, 0);
-        registry.trustAdaptor(address(aaveDebtTokenAdaptor), 0, 0);
-        registry.trustAdaptor(address(cTokenAdaptor), 0, 0);
-        registry.trustAdaptor(address(vestingAdaptor), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(uniswapV3Adaptor));
+        registry.trustAdaptor(address(aaveATokenAdaptor));
+        registry.trustAdaptor(address(aaveDebtTokenAdaptor));
+        registry.trustAdaptor(address(cTokenAdaptor));
+        registry.trustAdaptor(address(vestingAdaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
-        usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT), 0, 0);
-        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC), 0, 0);
-        usdcUsdtPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, USDT), 0, 0);
-        aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDC)), 0, 0);
-        dUSDCPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDC)), 0, 0);
-        aDAIPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aDAI)), 0, 0);
-        dDAIPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dDAI)), 0, 0);
-        aUSDTPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDT)), 0, 0);
-        dUSDTPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDT)), 0, 0);
-        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC), 0, 0);
-        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI), 0, 0);
-        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDT), 0, 0);
-        vUSDCPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(usdcVestor), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
+        usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
+        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC));
+        usdcUsdtPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, USDT));
+        aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDC)));
+        dUSDCPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDC)));
+        aDAIPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aDAI)));
+        dDAIPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dDAI)));
+        aUSDTPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDT)));
+        dUSDTPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dUSDT)));
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC));
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI));
+        cUSDTPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDT));
+        vUSDCPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(usdcVestor));
 
         positions[0] = usdcPosition;
         positions[1] = daiPosition;
@@ -250,11 +250,11 @@ contract UltimateStableCoinCellarTest is Test {
         vm.label(strategist, "strategist");
 
         // Setup all the adaptors the cellar will use.
-        cellar.setupAdaptor(address(uniswapV3Adaptor));
-        cellar.setupAdaptor(address(aaveATokenAdaptor));
-        cellar.setupAdaptor(address(aaveDebtTokenAdaptor));
-        cellar.setupAdaptor(address(cTokenAdaptor));
-        cellar.setupAdaptor(address(vestingAdaptor));
+        cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
+        cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(vestingAdaptor));
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);

@@ -295,10 +295,10 @@ contract Registry is Ownable {
         return (positionData.adaptor, positionData.isDebt, positionData.adaptorData);
     }
 
-    error Registry__PositionIsPausedOrNotTrusted(uint32 position);
+    error Registry__PositionIsNotTrusted(uint32 position);
 
     function revertIfPositionIsNotTrusted(uint32 positionId) public view {
-        if (!isPositionTrusted[positionId]) revert Registry__PositionIsPausedOrNotTrusted(positionId);
+        if (!isPositionTrusted[positionId]) revert Registry__PositionIsNotTrusted(positionId);
     }
 
     // ============================================ ADAPTOR LOGIC ============================================

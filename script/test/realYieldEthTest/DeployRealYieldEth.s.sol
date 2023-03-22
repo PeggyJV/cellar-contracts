@@ -61,16 +61,16 @@ contract DeployRealYieldEthScript is Script, TEnv {
         aaveV3ATokenAdaptor = new AaveV3ATokenAdaptor();
         aaveV3DebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
 
-        registry.trustAdaptor(address(aaveV3ATokenAdaptor), 0, 0);
-        registry.trustAdaptor(address(aaveV3DebtTokenAdaptor), 0, 0);
+        registry.trustAdaptor(address(aaveV3ATokenAdaptor));
+        registry.trustAdaptor(address(aaveV3DebtTokenAdaptor));
 
-        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aWETH)), 0, 0);
-        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aRETH)), 0, 0);
-        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aCBETH)), 0, 0);
+        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aWETH)));
+        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aRETH)));
+        registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aCBETH)));
 
-        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dWETH)), 0, 0);
-        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dRETH)), 0, 0);
-        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dCBETH)), 0, 0);
+        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dWETH)));
+        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dRETH)));
+        registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dCBETH)));
 
         // Deploy cellar using factory.
         // bytes memory initializeCallData = abi.encode(
@@ -97,10 +97,10 @@ contract DeployRealYieldEthScript is Script, TEnv {
         // cellar = CellarInitializableV2_1(clone);
 
         // Setup all the adaptors the cellar will use.
-        // cellar.setupAdaptor(address(feesAndReservesAdaptor));
-        // cellar.setupAdaptor(address(aaveATokenAdaptor));
-        // cellar.setupAdaptor(address(uniswapV3Adaptor));
-        // cellar.setupAdaptor(address(zeroXAdaptor));
+        // cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+        // cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+        // cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
+        // cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
 
         // cellar.transferOwnership(strategist);
 

@@ -88,10 +88,10 @@ contract FeesAndReservesTest is Test {
         uint32[] memory debtPositions;
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-        registry.trustAdaptor(address(feesAndReservesAdaptor), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(feesAndReservesAdaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
 
         positions[0] = usdcPosition;
 
@@ -115,7 +115,7 @@ contract FeesAndReservesTest is Test {
             )
         );
 
-        cellar.setupAdaptor(address(feesAndReservesAdaptor));
+        cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -833,7 +833,7 @@ contract FeesAndReservesTest is Test {
             )
         );
 
-        target.setupAdaptor(address(feesAndReservesAdaptor));
+        target.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
 
         USDC.safeApprove(address(target), type(uint256).max);
 

@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import { MockCellarImplementation, ERC4626, ERC20 } from "src/mocks/MockCellarImplementation.sol";
 import { MockCellar } from "src/mocks/MockCellar.sol";
-import { CellarInitializable } from "src/base/CellarInitializable.sol";
+import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
 import { CellarFactory, Cellar } from "src/CellarFactory.sol";
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
@@ -106,13 +106,13 @@ contract CellarTest is Test {
         // Cellar positions array.
         uint32[] memory positions = new uint32[](5);
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(cellarAdaptor), 0, 0);
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(usdcCLR), 0, 0);
-        wethCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wethCLR), 0, 0);
-        wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wbtcCLR), 0, 0);
-        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
+        registry.trustAdaptor(address(cellarAdaptor));
+        registry.trustAdaptor(address(erc20Adaptor));
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(usdcCLR));
+        wethCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wethCLR));
+        wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wbtcCLR));
+        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
         positions[0] = usdcPosition;
         positions[1] = usdcCLRPosition;
         positions[2] = wethCLRPosition;
@@ -125,28 +125,27 @@ contract CellarTest is Test {
         factory.adjustIsDeployer(address(this), true);
         implementation = new MockCellarImplementation(registry);
         bytes memory initializeCallData = abi.encode(
+            address(this),
             registry,
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(
-                positions,
-                debtPositions,
-                positionConfigs,
-                debtConfigs,
-                usdcPosition,
-                strategist,
-                type(uint128).max,
-                type(uint128).max
-            )
+            usdcPosition,
+            abi.encode(0),
+            strategist
         );
         factory.addImplementation(address(implementation), 2, 0);
         address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
         cellar = MockCellarImplementation(clone);
+
+        // Set up remaining cellar positions.
+        for (uint32 i = 1; i < 5; ++i) cellar.addPositionToCatalogue(positions[i]);
+        for (uint32 i = 1; i < 5; ++i) cellar.addPosition(i, positions[i], positionConfigs[i], false);
+
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
-        cellar.setupAdaptor(address(cellarAdaptor));
+        cellar.addAdaptorToCatalogue(address(cellarAdaptor));
         // Mint enough liquidity to swap router for swaps.
         deal(address(USDC), address(exchange), type(uint224).max);
         deal(address(WETH), address(exchange), type(uint224).max);
@@ -209,8 +208,8 @@ contract CellarTest is Test {
         );
 
         (uint64 strategistPlatformCut, uint64 platformFee, , address strategistPayoutAddress) = cellar.feeData();
-        assertEq(strategistPlatformCut, 0.75e18, "Platform cut should be set to 0.75e18.");
-        assertEq(platformFee, 0.01e18, "Platform fee should be set to 0.01e18.");
+        assertEq(strategistPlatformCut, 0.8e18, "Platform cut should be set to 0.75e18.");
+        assertEq(platformFee, 0.005e18, "Platform fee should be set to 0.01e18.");
         assertEq(strategistPayoutAddress, strategist, "Strategist payout address should be equal to strategist.");
 
         assertEq(cellar.owner(), address(this), "Should initialize owner to this contract.");
@@ -312,7 +311,8 @@ contract CellarTest is Test {
         MockERC4626 wethVault = new MockERC4626(WETH, "WETH Vault LP Token", "WETH-VLT", 18);
 
         priceRouter.supportAsset(WETH);
-        uint32 newWETHPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wethVault), 0, 0);
+        uint32 newWETHPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wethVault));
+        cellar.addPositionToCatalogue(newWETHPosition);
         cellar.addPosition(5, newWETHPosition, abi.encode(0), false);
 
         cellar.depositIntoPosition(wethCLRPosition, 1e18); // $2000
@@ -479,11 +479,11 @@ contract CellarTest is Test {
         cellar.removePosition(4, false);
 
         // Check that `addPosition` reverts if position is not trusted.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionDoesNotExist.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 0)));
         cellar.addPosition(4, 0, abi.encode(0), false);
 
         // Check that `addPosition` reverts if debt position is not trusted.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionDoesNotExist.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 0)));
         cellar.addPosition(4, 0, abi.encode(0), true);
 
         // Set Cellar WETH balance to 0.
@@ -521,11 +521,14 @@ contract CellarTest is Test {
         // Work with debt positions now.
         // Try setting holding position to a debt position.
         ERC20DebtAdaptor debtAdaptor = new ERC20DebtAdaptor();
-        registry.trustAdaptor(address(debtAdaptor), 0, 0);
-        uint32 debtWethPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WETH), 0, 0);
-        uint32 debtWbtcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WBTC), 0, 0);
+        registry.trustAdaptor(address(debtAdaptor));
+        uint32 debtWethPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WETH));
+        uint32 debtWbtcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WBTC));
 
-        uint32 debtUsdcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(USDC), 0, 0);
+        uint32 debtUsdcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(USDC));
+        cellar.addPositionToCatalogue(debtUsdcPosition);
+        cellar.addPositionToCatalogue(debtWethPosition);
+        cellar.addPositionToCatalogue(debtWbtcPosition);
         cellar.addPosition(0, debtUsdcPosition, abi.encode(0), true);
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidHoldingPosition.selector, debtUsdcPosition))
@@ -676,121 +679,21 @@ contract CellarTest is Test {
 
     function testChangingFeeData() external {
         address newStrategistAddress = vm.addr(777);
-        cellar.setPlatformFee(0.2e18);
         cellar.setStrategistPlatformCut(0.8e18);
         cellar.setStrategistPayoutAddress(newStrategistAddress);
         (uint64 strategistPlatformCut, uint64 platformFee, , address strategistPayoutAddress) = cellar.feeData();
         assertEq(strategistPlatformCut, 0.8e18, "Platform cut should be set to 0.8e18.");
-        assertEq(platformFee, 0.2e18, "Platform fee should be set to 0.2e18.");
         assertEq(
             strategistPayoutAddress,
             newStrategistAddress,
             "Strategist payout address should be set to `newStrategistAddress`."
         );
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFee.selector)));
-        cellar.setPlatformFee(0.21e18);
+        // vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFee.selector)));
+        // cellar.setPlatformFee(0.21e18);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidFeeCut.selector)));
         cellar.setStrategistPlatformCut(1.1e18);
-    }
-
-    function testPlatformFees(uint256 timePassed, uint256 deposit) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the
-        // order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 1e6, 1_000_000_000e6);
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Calculate expected platform fee.
-        (uint64 strategistPlatformCut, uint64 platformFee, , ) = cellar.feeData();
-        uint256 expectedPlatformFee = (deposit * platformFee * timePassed) / (365 days * 1e18);
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Call `sendFees` to calculate pending platform fees, and distribute
-        // them to strategist, and Cosmos.
-        cellar.sendFees();
-
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-
-        assertEq(
-            feesInAssetsSentToCosmos,
-            expectedPlatformFee.mulWadDown(1e18 - strategistPlatformCut),
-            "Platform fee sent to Cosmos should be equal to expectedPlatformFee * (1 - strategistPlatformCut)."
-        );
-
-        uint256 expectedPlatformFeeInAssetsSentToStrategist = expectedPlatformFee.mulWadDown(strategistPlatformCut);
-
-        // It is okay for actual fees sent to strategist to be equal to or 1 wei less than expected.
-        assertTrue(
-            feesInAssetsSentToStrategist == expectedPlatformFeeInAssetsSentToStrategist ||
-                feesInAssetsSentToStrategist + 1 == expectedPlatformFeeInAssetsSentToStrategist,
-            "Platform fee sent to strategist should be equal to expectedPlatformFee * (strategistPlatformCut)."
-        );
-
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all performance fee shares.");
-    }
-
-    function testPlatformAndPerformanceFeesWithZeroFees(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-
-        cellar.setPlatformFee(0);
-
-        uint256 assetAmount = deposit / 2;
-        uint256 sharesAmount = assetAmount.changeDecimals(6, 18);
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        // Deposit into cellar.
-        cellar.deposit(assetAmount, address(this));
-        // Mint shares from the cellar.
-        cellar.mint(sharesAmount, address(this));
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) + yield);
-
-        cellar.sendFees();
-
-        // Redeem all shares from the cellar.
-        uint256 shares = cellar.balanceOf(address(this));
-        cellar.redeem(shares, address(this), address(this));
-
-        // Check that no fees are minted.
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-        assertEq(feesInAssetsSentToCosmos, 0, "Fees sent to Cosmos should be zero.");
-        assertEq(feesInAssetsSentToStrategist, 0, "Fees sent to strategist should be zero.");
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have zero fee shares");
-    }
-
-    function testPayoutNotSet() external {
-        cellar.setStrategistPayoutAddress(address(0));
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PayoutNotSet.selector)));
-        cellar.sendFees();
     }
 
     function testMaliciousStrategistWithUnboundForLoop() external {
@@ -805,20 +708,14 @@ contract CellarTest is Test {
             positions[0] = usdcPosition;
             bytes[] memory positionConfigs = new bytes[](1);
             bytes memory initializeCallData = abi.encode(
+                address(this),
                 registry,
                 USDC,
                 "Asset Management Cellar LP Token",
                 "assetmanagement-CLR",
-                abi.encode(
-                    positions,
-                    debtPositions,
-                    positionConfigs,
-                    debtConfigs,
-                    usdcPosition,
-                    strategist,
-                    type(uint128).max,
-                    type(uint128).max
-                )
+                usdcPosition,
+                abi.encode(0),
+                strategist
             );
             address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(0)));
             multiPositionCellar = MockCellarImplementation(clone);
@@ -833,7 +730,8 @@ contract CellarTest is Test {
         for (uint256 i = 1; i < 16; i++) {
             position = new MockERC20("Howdy", 18);
             priceRouter.supportAsset(position);
-            uint32 id = registry.trustPosition(address(erc20Adaptor), abi.encode(position), 0, 0);
+            uint32 id = registry.trustPosition(address(erc20Adaptor), abi.encode(position));
+            multiPositionCellar.addPositionToCatalogue(id);
             multiPositionCellar.addPosition(
                 uint32(multiPositionCellar.getCreditPositions().length),
                 id,
@@ -847,7 +745,8 @@ contract CellarTest is Test {
         // Adding one more position should revert.
         position = new MockERC20("Howdy", 18);
         priceRouter.supportAsset(position);
-        uint32 finalId = registry.trustPosition(address(erc20Adaptor), abi.encode(position), 0, 0);
+        uint32 finalId = registry.trustPosition(address(erc20Adaptor), abi.encode(position));
+        multiPositionCellar.addPositionToCatalogue(finalId);
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(16))));
         multiPositionCellar.addPosition(16, finalId, abi.encode(0), false);
 
@@ -905,159 +804,11 @@ contract CellarTest is Test {
         );
     }
 
-    function testAllFeesToStrategist(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the
-        // order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-
-        cellar.setStrategistPlatformCut(1e18);
-
-        (uint64 strategistPlatformCut, uint64 platformFee, , ) = cellar.feeData();
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        deal(address(USDC), address(cosmos), 0);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
-        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
-
-        // Call `sendFees` to calculate pending performance and platform fees,
-        // and distribute them to strategist, and Cosmos.
-        cellar.sendFees();
-
-        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
-
-        uint256 expectedTotalFeesAdjustedForDilution = expectedPlatformFees;
-
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
-            expectedTotalFeesAdjustedForDilution,
-            2,
-            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToStrategist,
-            expectedPlatformFees.mulWadDown(strategistPlatformCut),
-            2,
-            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut)."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos,
-            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut),
-            2,
-            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut))."
-        );
-
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
-
-        vm.startPrank(strategist);
-        cellar.redeem(cellar.balanceOf(strategist), strategist, strategist);
-        vm.stopPrank();
-    }
-
-    function testAllFeesToPlatform(
-        uint256 timePassed,
-        uint256 deposit,
-        uint256 yield
-    ) external {
-        // Cap time passed to 1 year. Platform fees will be collected on the
-        // order of weeks possibly months.
-        timePassed = bound(timePassed, 1 days, 365 days);
-        deposit = bound(deposit, 100e6, 1_000_000_000e6);
-
-        // Cap yield to 10,000% APR
-        {
-            uint256 yieldUpperBound = (100 * deposit * timePassed) / 365 days;
-            // Floor yield above 0.01% APR
-            uint256 yieldLowerBound = ((deposit * timePassed) / 365 days) / 10_000;
-            yield = bound(yield, yieldLowerBound, yieldUpperBound);
-        }
-
-        cellar.setStrategistPlatformCut(0);
-
-        (uint64 strategistPlatformCut, uint64 platformFee, , ) = cellar.feeData();
-
-        // Give this address enough USDC to cover deposits.
-        deal(address(USDC), address(this), deposit);
-
-        deal(address(USDC), address(cosmos), 0);
-
-        // Deposit into cellar.
-        cellar.deposit(deposit, address(this));
-
-        // Advance time by `timePassed` seconds.
-        skip(timePassed);
-
-        // Simulate Cellar earning yield.
-        uint256 totalAssetsBeforeSendFees = USDC.balanceOf(address(cellar)) + yield;
-        deal(address(USDC), address(cellar), totalAssetsBeforeSendFees);
-
-        // Call `sendFees` to calculate pending performance and platform fees,
-        // and distribute them to strategist, and Cosmos.
-        cellar.sendFees();
-
-        uint256 expectedPlatformFees = ((deposit + yield) * platformFee * timePassed) / (365 days * 1e18);
-
-        uint256 expectedTotalFeesAdjustedForDilution = expectedPlatformFees;
-
-        uint256 feesInAssetsSentToCosmos = USDC.balanceOf(cosmos);
-        uint256 feesInAssetsSentToStrategist = cellar.previewRedeem(cellar.balanceOf(strategist));
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos + feesInAssetsSentToStrategist,
-            expectedTotalFeesAdjustedForDilution,
-            2,
-            "Fees in assets sent to Cosmos + fees in shares sent to strategist should equal the expected total fees after dilution."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToStrategist,
-            expectedPlatformFees.mulWadDown(strategistPlatformCut),
-            2,
-            "Shares converted to assets sent to strategist should be equal to (total platform fees * strategistPlatformCut)."
-        );
-
-        assertApproxEqAbs(
-            feesInAssetsSentToCosmos,
-            expectedPlatformFees.mulWadDown(1e18 - strategistPlatformCut),
-            2,
-            "Assets sent to Cosmos should be equal to (total platform fees * (1-strategistPlatformCut))."
-        );
-
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Cellar should have burned all fee shares.");
-    }
-
     function testDebtTokensInCellars() external {
         ERC20DebtAdaptor debtAdaptor = new ERC20DebtAdaptor();
-        registry.trustAdaptor(address(debtAdaptor), 0, 0);
-        uint32 debtWethPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WETH), 0, 0);
-        uint32 debtWbtcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WBTC), 0, 0);
+        registry.trustAdaptor(address(debtAdaptor));
+        uint32 debtWethPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WETH));
+        uint32 debtWbtcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WBTC));
 
         // Setup Cellar with debt positions:
         uint32[] memory positions = new uint32[](1);
@@ -1072,23 +823,21 @@ contract CellarTest is Test {
         bytes[] memory debtConfigs = new bytes[](1);
 
         bytes memory initializeCallData = abi.encode(
+            address(this),
             registry,
             USDC,
             "Multiposition Cellar LP Token",
             "multiposition-CLR",
-            abi.encode(
-                positions,
-                debtPositions,
-                positionConfigs,
-                debtConfigs,
-                usdcPosition,
-                strategist,
-                type(uint128).max,
-                type(uint128).max
-            )
+            usdcPosition,
+            abi.encode(0),
+            strategist
         );
         address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(10)));
         MockCellarImplementation debtCellar = MockCellarImplementation(clone);
+
+        debtCellar.addPositionToCatalogue(debtWethPosition);
+        debtCellar.addPositionToCatalogue(debtWbtcPosition);
+        debtCellar.addPosition(0, debtWethPosition, abi.encode(0), true);
 
         //constructor should set isDebt
         (, bool isDebt, , ) = debtCellar.getPositionData(debtWethPosition);
@@ -1159,7 +908,7 @@ contract CellarTest is Test {
 
         stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
 
-        uint32 cellarBPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(cellarB), 0, 0);
+        uint32 cellarBPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(cellarB));
         positions[0] = cellarBPosition;
 
         cellarA = new MockCellar(
@@ -1201,7 +950,8 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         priceRouter.supportAsset(USDT);
-        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT), 0, 0);
+        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
+        cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPosition(5, usdtPosition, abi.encode(0), false);
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1226,7 +976,8 @@ contract CellarTest is Test {
 
         // Add asset that will be depegged.
         priceRouter.supportAsset(USDT);
-        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT), 0, 0);
+        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
+        cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPosition(5, usdtPosition, abi.encode(0), false);
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1302,7 +1053,8 @@ contract CellarTest is Test {
         // from the safety contract.
 
         priceRouter.supportAsset(USDT);
-        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT), 0, 0);
+        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
+        cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPosition(5, usdtPosition, abi.encode(0), false);
         priceRouter.setExchangeRate(USDT, USDC, 1e6);
         priceRouter.setExchangeRate(USDC, USDT, 1e6);
@@ -1324,9 +1076,6 @@ contract CellarTest is Test {
         deal(address(USDC), address(cellar), 0);
         deal(address(USDT), address(cellar), 90e6);
 
-        // Important to set fees to zero, else performance fees are minted as
-        // the cellars asset depeggs further.
-        cellar.setPlatformFee(0);
         cellar.initiateShutdown();
 
         // Attacker tries to join with depegged asset.
@@ -1392,11 +1141,7 @@ contract CellarTest is Test {
 
     // Since this contract is set as the Gravity Bridge, this will be called by
     // the Cellar's `sendFees` function to send funds Cosmos.
-    function sendToCosmos(
-        address asset,
-        bytes32,
-        uint256 assets
-    ) external {
+    function sendToCosmos(address asset, bytes32, uint256 assets) external {
         ERC20(asset).transferFrom(msg.sender, cosmos, assets);
     }
 
@@ -1412,7 +1157,8 @@ contract CellarTest is Test {
         // True means this cellar tries to re-enter caller on deposit calls.
         ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", true);
 
-        uint32 maliciousPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(maliciousCellar), 0, 0);
+        uint32 maliciousPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(maliciousCellar));
+        cellar.addPositionToCatalogue(maliciousPosition);
         cellar.addPosition(5, maliciousPosition, abi.encode(0), false);
 
         cellar.setHoldingPosition(maliciousPosition);
@@ -1470,7 +1216,7 @@ contract CellarTest is Test {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(USDT)))
         );
-        registry.trustPosition(address(erc20Adaptor), abi.encode(USDT), 0, 0);
+        registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
     }
 
     //H-1

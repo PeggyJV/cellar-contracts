@@ -135,18 +135,18 @@ contract DeployV2Script is Script {
         priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(eulerETokenAdaptor), 0, 0);
-        registry.trustAdaptor(address(eulerDebtTokenAdaptor), 0, 0);
+        registry.trustAdaptor(address(eulerETokenAdaptor));
+        registry.trustAdaptor(address(eulerDebtTokenAdaptor));
 
-        eUsdcPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 0), 0, 0);
-        eDaiPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eDAI, 0), 0, 0);
-        eUsdtPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 0), 0, 0);
-        eUsdcLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 1), 0, 0);
-        eDaiLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eDAI, 1), 0, 0);
-        eUsdtLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 1), 0, 0);
-        debtUsdcPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDC, 0), 0, 0);
-        debtDaiPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dDAI, 0), 0, 0);
-        debtUsdtPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDT, 0), 0, 0);
+        eUsdcPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 0));
+        eDaiPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eDAI, 0));
+        eUsdtPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 0));
+        eUsdcLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 1));
+        eDaiLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eDAI, 1));
+        eUsdtLiquidPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDT, 1));
+        debtUsdcPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDC, 0));
+        debtDaiPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dDAI, 0));
+        debtUsdtPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDT, 0));
 
         // Deploy cellar using factory.
         factory.adjustIsDeployer(devOwner, true);

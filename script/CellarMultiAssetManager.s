@@ -40,9 +40,9 @@ contract CellarMultiAssetManagerScript is Script {
         registry = new Registry(gravityBridge, address(swapRouter), address(priceRouter));
 
         erc20Adaptor = new ERC20Adaptor();
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC), 0, 0);
-        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH), 0, 0);
-        wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(USDC));
+        wethPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WETH));
+        wbtcPosition = registry.trustPosition(address(erc20Adaptor), false, abi.encode(WBTC));
 
         priceRouter.addAsset(WETH, 0, 0, false, 0);
         priceRouter.addAsset(WBTC, 0, 0, false, 0);

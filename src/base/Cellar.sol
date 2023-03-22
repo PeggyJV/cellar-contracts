@@ -196,7 +196,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     mapping(address => bool) public adaptorCatalogue;
 
-    function addPositionToCatalog(uint32 positionId) external onlyOwner {
+    function addPositionToCatalogue(uint32 positionId) external onlyOwner {
+        _addPositionToCatalogue(positionId);
+    }
+
+    function _addPositionToCatalogue(uint32 positionId) internal {
         // Make sure position is not paused and is trusted.
         registry.revertIfPositionIsNotTrusted(positionId);
         positionCatalogue[positionId] = true;
@@ -208,7 +212,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         emit PositionCatalogueAltered(positionId, false);
     }
 
-    function addAdaptorToCatalog(address adaptor) external onlyOwner {
+    function addAdaptorToCatalogue(address adaptor) external onlyOwner {
         // Make sure adaptor is not paused and is trusted.
         registry.revertIfAdaptorIsNotTrusted(adaptor);
         adaptorCatalogue[adaptor] = true;
@@ -568,9 +572,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
             // Initialize positions.
             for (uint32 i; i < _creditPositions.length; ++i) {
+                _addPositionToCatalogue(_creditPositions[i]);
                 _addPosition(i, _creditPositions[i], _creditConfigurationData[i], false);
             }
             for (uint32 i; i < _debtPositions.length; ++i) {
+                _addPositionToCatalogue(_debtPositions[i]);
                 _addPosition(i, _debtPositions[i], _debtConfigurationData[i], true);
             }
             // This check allows us to deploy an implementation contract.

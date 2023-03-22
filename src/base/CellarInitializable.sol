@@ -69,10 +69,14 @@ contract CellarInitializable is Cellar, Initializable {
 
         ) = abi.decode(_params, (uint32[], uint32[], bytes[], bytes[], uint32, address, uint128, uint128));
 
-        for (uint32 i; i < _creditPositions.length; i++)
+        for (uint32 i; i < _creditPositions.length; i++) {
+            _addPositionToCatalogue(_creditPositions[i]);
             _addPosition(i, _creditPositions[i], _creditConfigurationData[i], false);
-        for (uint32 i; i < _debtPositions.length; i++)
+        }
+        for (uint32 i; i < _debtPositions.length; i++) {
+            _addPositionToCatalogue(_debtPositions[i]);
             _addPosition(i, _debtPositions[i], _debtConfigurationData[i], true);
+        }
         _setHoldingPosition(_holdingPosition);
 
         // Initialize remaining values.

@@ -76,12 +76,12 @@ contract DeployTestLeveragedEulerCellarScript is Script, TEnv {
     feesAndReservesAdaptor = new FeesAndReservesAdaptor();
 
     // Setup new registry positions.
-    registry.trustAdaptor(address(eulerETokenAdaptor), 0, 0);
-    registry.trustAdaptor(address(eulerDebtTokenAdaptor), 0, 0);
-    registry.trustAdaptor(address(feesAndReservesAdaptor), 0, 0);
-    uint32 eWethPositionV2 = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eWETH, 0), 0, 0);
-    uint32 eWethLiquidPositionV2 = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eWETH, 1), 0, 0);
-    uint32 debtWethPositionV2 = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dWETH, 0), 0, 0);
+    registry.trustAdaptor(address(eulerETokenAdaptor));
+    registry.trustAdaptor(address(eulerDebtTokenAdaptor));
+    registry.trustAdaptor(address(feesAndReservesAdaptor));
+    uint32 eWethPositionV2 = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eWETH, 0));
+    uint32 eWethLiquidPositionV2 = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eWETH, 1));
+    uint32 debtWethPositionV2 = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dWETH, 0));
 
     // Cellar positions array.
     positions[0] = eWethLiquidPositionV2;
@@ -113,9 +113,9 @@ contract DeployTestLeveragedEulerCellarScript is Script, TEnv {
     cellar = CellarInitializableV2_1(clone);
 
     // Setup all the adaptors the cellar will use.
-    cellar.setupAdaptor(address(eulerETokenAdaptor));
-    cellar.setupAdaptor(address(eulerDebtTokenAdaptor));
-    cellar.setupAdaptor(address(feesAndReservesAdaptor));
+    cellar.addAdaptorToCatalogue(address(eulerETokenAdaptor));
+    cellar.addAdaptorToCatalogue(address(eulerDebtTokenAdaptor));
+    cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
 
     cellar.transferOwnership(strategist);
 

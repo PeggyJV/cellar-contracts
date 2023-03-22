@@ -62,6 +62,7 @@ contract CellarInitializableV2_2 is Cellar, Initializable {
         locked = 1;
 
         // Initialzie Holding Position.
+        _addPositionToCatalogue(_holdingPosition);
         _addPosition(0, _holdingPosition, _holdingPositionConfig, false);
         _setHoldingPosition(_holdingPosition);
 

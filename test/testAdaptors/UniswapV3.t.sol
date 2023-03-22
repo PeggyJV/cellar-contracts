@@ -124,14 +124,14 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         uint32[] memory debtPositions;
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(uniswapV3Adaptor), 0, 0);
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
+        registry.trustAdaptor(address(uniswapV3Adaptor));
+        registry.trustAdaptor(address(erc20Adaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
-        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
-        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC), 0, 0);
-        usdcWethPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, WETH), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
+        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
+        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC));
+        usdcWethPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, WETH));
 
         positions[0] = usdcPosition;
         positions[1] = daiPosition;
@@ -153,7 +153,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.label(strategist, "strategist");
 
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
-        cellar.setupAdaptor(address(uniswapV3Adaptor));
+        cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
 
         cellar.setRebalanceDeviation(0.003e18);
 
@@ -584,7 +584,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(WBTC)))
         );
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT), 0, 0);
+        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
     }
 
     function testAddingPositionWithUnsupportedToken1Reverts() external {
@@ -598,7 +598,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(USDT)))
         );
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT), 0, 0);
+        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
     }
 
     function testUsingLPTokensNotOwnedByCellarOrTokensThatDoNotExist() external {
