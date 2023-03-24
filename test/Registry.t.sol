@@ -2,6 +2,9 @@
 pragma solidity 0.8.16;
 
 import { Registry } from "src/Registry.sol";
+import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { ERC20, Cellar, PriceRouter } from "src/base/Cellar.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -9,12 +12,26 @@ import { Math } from "src/utils/Math.sol";
 contract RegistryTest is Test {
     Registry public registry;
 
+    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+
     address public gravityBridge = vm.addr(1);
     address public swapRouter = vm.addr(2);
-    address public priceRouter = vm.addr(3);
+    PriceRouter public priceRouter;
+
+    uint8 private constant CHAINLINK_DERIVATIVE = 1;
+    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
 
     function setUp() external {
-        registry = new Registry(gravityBridge, swapRouter, priceRouter);
+        priceRouter = new PriceRouter();
+        registry = new Registry(gravityBridge, swapRouter, address(priceRouter));
+
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+
+        PriceRouter.AssetSettings memory settings;
+
+        uint256 price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
     }
 
     // ========================================= INITIALIZATION TEST =========================================
@@ -22,7 +39,7 @@ contract RegistryTest is Test {
     function testInitialization() external {
         assertEq(registry.getAddress(0), gravityBridge, "Should initialize gravity bridge");
         assertEq(registry.getAddress(1), swapRouter, "Should initialize swap router");
-        assertEq(registry.getAddress(2), priceRouter, "Should initialize price router");
+        assertEq(registry.getAddress(2), address(priceRouter), "Should initialize price router");
         assertEq(registry.nextId(), 3, "Should have incremented ID");
     }
 
@@ -77,12 +94,34 @@ contract RegistryTest is Test {
         assertEq(registry.feesDistributor(), validCosmosAddress, "Fee distributor should equal `validCosmosAddress`.");
     }
 
-    // TODO add test where
-    // adaptor/position is trusted and untrusted, should revert bc something needs to change to re-add it
-    // cellar tries to add distrusted position/adaptor to its catalogue
-    // cellar tries to use a distrusted position it already has in its catalogue
-    // cellar ignores the pause, and continues as normal
-    // cellar pause will stop all user interactions, and rebalances
+    function testTrustingAndDistrustingAdaptor() external {
+        ERC20Adaptor adaptor = new ERC20Adaptor();
+
+        registry.trustAdaptor(address(adaptor));
+
+        registry.distrustAdaptor(address(adaptor));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__IdentifierNotUnique.selector)));
+        registry.trustAdaptor(address(adaptor));
+    }
+
+    function testTrustingAndDistrustingPosition() external {
+        ERC20Adaptor adaptor = new ERC20Adaptor();
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__AdaptorNotTrusted.selector, address(adaptor))));
+        registry.trustPosition(address(adaptor), abi.encode(USDC));
+
+        registry.trustAdaptor(address(adaptor));
+
+        uint32 id = registry.trustPosition(address(adaptor), abi.encode(USDC));
+
+        registry.distrustPosition(id);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__InvalidPositionInput.selector)));
+        registry.trustPosition(address(adaptor), abi.encode(USDC));
+    }
+
+    // TODO add these to a real yield eth test?
     // scenario where position is found with an exploit
     // scenario where adaptor is found with an exploit
     // re above two but change it so that strategist is cooperating.

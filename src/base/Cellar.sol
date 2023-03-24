@@ -216,7 +216,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Allows Governance to remove positions from this cellar's catalogue.
      */
-    function removePositionFromCatalog(uint32 positionId) external onlyOwner {
+    function removePositionFromCatalogue(uint32 positionId) external onlyOwner {
         positionCatalogue[positionId] = false;
         emit PositionCatalogueAltered(positionId, false);
     }
@@ -234,7 +234,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Allows Governance to remove adaptors from this cellar's catalogue.
      */
-    function removeAdaptorFromCatalog(address adaptor) external onlyOwner {
+    function removeAdaptorFromCatalogue(address adaptor) external onlyOwner {
         adaptorCatalogue[adaptor] = false;
         emit AdaptorCatalogueAltered(adaptor, false);
     }
@@ -463,12 +463,15 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     error Cellar__ContractShutdown();
 
-    error Cellar__RebalancesNotAllowed();
-
     /**
      * @notice Attempted action was prevented due to contract not being shutdown.
      */
     error Cellar__ContractNotShutdown();
+
+    /**
+     * @notice Attempted to interact with the cellar when it is paused.
+     */
+    error Cellar__Paused();
 
     /**
      * @notice Whether or not the contract is shutdown in case of an emergency.
@@ -480,14 +483,15 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     bool public ignorePause;
 
+    /**
+     * @notice View function external contracts can use to see if the cellar is paused.
+     */
     function isPaused() external view returns (bool) {
         if (!ignorePause) {
             return registry.isCallerPaused(address(this));
         }
         return false;
     }
-
-    error Cellar__Paused();
 
     /**
      * @notice Pauses all user entry/exits, and strategist rebalances.
@@ -1090,6 +1094,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *                 if true then returns value in terms of shares
      */
     function _findMax(address owner, bool inShares) internal view returns (uint256 maxOut) {
+        _checkIfPaused();
         // Check if owner shares are locked, return 0 if so.
         uint256 lockTime = userShareLockStartTime[owner];
         if (lockTime != 0) {
@@ -1252,6 +1257,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         bytes[] callData;
     }
 
+    event AdaptorCalled(address adaptor, bytes data);
+
     /**
      * @notice Allows strategists to manage their Cellar using arbitrary logic calls to adaptors.
      * @dev There are several safety checks in this function to prevent strategists from abusing it.
@@ -1285,6 +1292,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             if (!adaptorCatalogue[adaptor]) revert Cellar__CallToAdaptorNotAllowed(adaptor);
             for (uint8 j = 0; j < data[i].callData.length; j++) {
                 adaptor.functionDelegateCall(data[i].callData[j]);
+                emit AdaptorCalled(adaptor, data[i].callData[j]);
             }
         }
 

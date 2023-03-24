@@ -19,6 +19,8 @@ import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test
 import { Math } from "src/utils/Math.sol";
 
 /// note all flash loan tests have been commented out because core cellar code does not support changing flash loan target
+// TODO could upgfrade to cellar v2.2 then flash loans would work
+// TODO add tests where we make sure withdrawal logic works with emode
 contract CellarAaveV3Test is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;

@@ -428,6 +428,72 @@ contract CellarTest is Test {
     }
 
     // ========================================== POSITIONS TEST ==========================================
+
+    function testInteractingWithDistrustedPositions() external {
+        cellar.removePosition(4, false);
+        cellar.removePositionFromCatalogue(5); // Removes WETH position from catalogue.
+
+        // Cellar should not be able to add position to tracked array until it is in the catalogue.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 5)));
+        cellar.addPosition(4, 5, abi.encode(0), false);
+
+        // Since WETH position is trusted, cellar should be able to add it to the catalogue, and to the tracked array.
+        cellar.addPositionToCatalogue(5);
+        cellar.addPosition(4, 5, abi.encode(0), false);
+
+        // Registry distrusts weth position.
+        registry.distrustPosition(5);
+
+        // Even though position is distrusted Cellar can still operate normally.
+        cellar.totalAssets();
+
+        // Distrusted position is still in tracked array, but strategist/governance can remove it.
+        cellar.removePosition(4, false);
+
+        // If strategist tries adding it back it reverts.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 5)));
+        cellar.addPosition(4, 5, abi.encode(0), false);
+
+        // Governance removes position from cellars catalogue.
+        cellar.removePositionFromCatalogue(5); // Removes WETH position from catalogue.
+
+        // But tries to add it back later which reverts.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 5)));
+        cellar.addPositionToCatalogue(5);
+    }
+
+    function testInteractingWithDistrustedAdaptors() external {
+        cellar.removeAdaptorFromCatalogue(address(cellarAdaptor));
+
+        // With adaptor removed, rebalance calls to it revert.
+        bytes[] memory emptyCall;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: emptyCall });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__CallToAdaptorNotAllowed.selector, address(cellarAdaptor)))
+        );
+        cellar.callOnAdaptor(data);
+
+        // Add the adaptor back to the catalogue.
+        cellar.addAdaptorToCatalogue(address(cellarAdaptor));
+
+        // Calls to it now work.
+        cellar.callOnAdaptor(data);
+
+        // Registry distrusts the adaptor, but cellar can still use it.
+        registry.distrustAdaptor(address(cellarAdaptor));
+        cellar.callOnAdaptor(data);
+
+        // But now if adaptor is removed from the catalogue it can not be re-added.
+        cellar.removeAdaptorFromCatalogue(address(cellarAdaptor));
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Registry__AdaptorNotTrusted.selector, address(cellarAdaptor)))
+        );
+        cellar.addAdaptorToCatalogue(address(cellarAdaptor));
+    }
+
     function testManagingPositions() external {
         uint256 positionLength = cellar.getCreditPositions().length;
 
@@ -578,6 +644,124 @@ contract CellarTest is Test {
     }
 
     // ======================================== EMERGENCY TESTS ========================================
+
+    // TODO tests for pausing!
+    // cellar pause will stop all user interactions, and rebalances
+    function testRegistryPauseStoppingAllCellarActions() external {
+        // Empty call on adaptor argument.
+        bytes[] memory emptyCall;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: emptyCall });
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(cellar);
+
+        registry.batchPause(targets);
+
+        assertEq(cellar.isPaused(), true, "Cellar should be paused.");
+
+        // Cellar is fully paused.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.deposit(1e6, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.mint(1e18, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.withdraw(1e6, address(this), address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.redeem(1e18, address(this), address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.totalAssets();
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.totalAssetsWithdrawable();
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.maxWithdraw(address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.maxRedeem(address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.callOnAdaptor(data);
+
+        // Once cellar is unpaused all actions resume as normal.
+        registry.batchUnpause(targets);
+        assertEq(cellar.isPaused(), false, "Cellar should not be paused.");
+        deal(address(USDC), address(this), 100e6);
+        cellar.deposit(1e6, address(this));
+        cellar.mint(1e18, address(this));
+        cellar.withdraw(1e6, address(this), address(this));
+        cellar.redeem(1e18, address(this), address(this));
+        cellar.totalAssets();
+        cellar.totalAssetsWithdrawable();
+        cellar.maxWithdraw(address(this));
+        cellar.maxRedeem(address(this));
+        cellar.callOnAdaptor(data);
+    }
+
+    function testRegistryPauseButCellarIgnoringIt() external {
+        // Empty call on adaptor argument.
+        bytes[] memory emptyCall;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: emptyCall });
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(cellar);
+
+        registry.batchPause(targets);
+
+        // Cellar is fully paused, but governance chooses to ignore it.
+        cellar.toggleIgnorePause(true);
+        assertEq(cellar.isPaused(), false, "Cellar should not be paused.");
+
+        deal(address(USDC), address(this), 100e6);
+        cellar.deposit(1e6, address(this));
+        cellar.mint(1e18, address(this));
+        cellar.withdraw(1e6, address(this), address(this));
+        cellar.redeem(1e18, address(this), address(this));
+        cellar.totalAssets();
+        cellar.totalAssetsWithdrawable();
+        cellar.maxWithdraw(address(this));
+        cellar.maxRedeem(address(this));
+        cellar.callOnAdaptor(data);
+
+        // Governance chooses to accept the pause.
+        cellar.toggleIgnorePause(false);
+        assertEq(cellar.isPaused(), true, "Cellar should be paused.");
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.deposit(1e6, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.mint(1e18, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.withdraw(1e6, address(this), address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.redeem(1e18, address(this), address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.totalAssets();
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.totalAssetsWithdrawable();
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.maxWithdraw(address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.maxRedeem(address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
+    // cellar ignores the pause, and continues as normal
 
     function testShutdown() external {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractNotShutdown.selector)));
