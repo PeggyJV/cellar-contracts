@@ -645,8 +645,6 @@ contract CellarTest is Test {
 
     // ======================================== EMERGENCY TESTS ========================================
 
-    // TODO tests for pausing!
-    // cellar pause will stop all user interactions, and rebalances
     function testRegistryPauseStoppingAllCellarActions() external {
         // Empty call on adaptor argument.
         bytes[] memory emptyCall;
@@ -760,8 +758,6 @@ contract CellarTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
         cellar.callOnAdaptor(data);
     }
-
-    // cellar ignores the pause, and continues as normal
 
     function testShutdown() external {
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ContractNotShutdown.selector)));

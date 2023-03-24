@@ -276,6 +276,75 @@ contract FeesAndReservesTest is Test {
         _simulateYieldAndCheckTotalFeesEarned(cellar, totalAssets.mulDivDown(1, 100), 0);
     }
 
+    function testResetHWM() external {
+        uint256 totalAssets = 1_000_000e6;
+        uint256 yield = 0;
+        uint32 performanceFee = 0.25e4;
+        // Add assets to the cellar.
+        deal(address(USDC), address(this), totalAssets);
+        cellar.deposit(totalAssets, address(this));
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+        bytes memory performData;
+
+        // Strategist calls fees and reserves setup.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, performanceFee);
+            adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+            adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(3_600);
+
+            data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        (, performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        deal(address(USDC), address(cellar), totalAssets.mulDivDown(99, 100));
+
+        _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
+
+        // Management fees are zero, so cellar should only earn yield * performance fee.
+        uint256 expectedFee = 0;
+
+        FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+
+        // Owner of fees and reserves tries resetting cellars HWM with illogical percents.
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__InvalidResetPercent.selector)));
+        far.resetHWM(cellar, 0);
+
+        // Owner of fees and reserves tries resetting cellars HWM with illogical percents.
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__InvalidResetPercent.selector)));
+        far.resetHWM(cellar, 1.0001e4);
+
+        uint256 currentHWM = metaData.exactHighWatermark;
+
+        uint256 totalSupply = cellar.totalSupply();
+        // Calculate Share price normalized to 27 decimals.
+        uint256 currentSharePrice = cellar.totalAssets().changeDecimals(6, 27).mulDivDown(10 ** 18, totalSupply);
+
+        // Reset HWM halfway.
+        uint256 expectedHWM = currentSharePrice + ((currentHWM - currentSharePrice) / 2);
+        far.resetHWM(cellar, 0.5e4);
+
+        metaData = far.getMetaData(cellar);
+
+        assertEq(metaData.exactHighWatermark, expectedHWM, "Stored HWM should equal expected.");
+
+        // Make sure Cellars fees owed are reset.
+        assertEq(metaData.feesOwed, 0, "Fees owed should have been reset.");
+
+        // Now fully reset the HWM.
+        far.resetHWM(cellar, 1e4);
+        metaData = far.getMetaData(cellar);
+        assertEq(metaData.exactHighWatermark, currentSharePrice, "Stored HWM should equal current share price.");
+    }
+
     function testPerformanceFeeAccrual() external {
         uint256 totalAssets = 1_000_000e6;
         // Add assets to the cellar.

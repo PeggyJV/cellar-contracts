@@ -120,9 +120,4 @@ contract RegistryTest is Test {
         vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__InvalidPositionInput.selector)));
         registry.trustPosition(address(adaptor), abi.encode(USDC));
     }
-
-    // TODO add these to a real yield eth test?
-    // scenario where position is found with an exploit
-    // scenario where adaptor is found with an exploit
-    // re above two but change it so that strategist is cooperating.
 }

@@ -69,8 +69,14 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     event PositionSwapped(uint32 newPosition1, uint32 newPosition2, uint256 index1, uint256 index2);
 
-    // TODO
+    /**
+     * @notice Emitted when Governance adds/removes a position to/from the cellars catalogue.
+     */
     event PositionCatalogueAltered(uint32 positionId, bool inCatalogue);
+
+    /**
+     * @notice Emitted when Governance adds/removes an adaptor to/from the cellars catalogue.
+     */
     event AdaptorCatalogueAltered(address adaptor, bool inCatalogue);
 
     /**

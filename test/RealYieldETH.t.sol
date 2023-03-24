@@ -23,6 +23,7 @@ import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.
 
 // Import Aave helpers.
 import { IPool } from "src/interfaces/external/IPool.sol";
+import { IPoolV3 } from "src/interfaces/external/IPoolV3.sol";
 
 // Import UniV3 helpers.
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
@@ -65,6 +66,7 @@ contract RealYieldETHTest is Test {
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    IPoolV3 private poolV3 = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
 
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 public cbETH = ERC20(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
@@ -79,6 +81,9 @@ contract RealYieldETHTest is Test {
     address private immutable strategist = vm.addr(0xBEEF);
 
     address private immutable cosmos = vm.addr(0xCAAA);
+
+    // Whale has supplied about 3k cbETH on Aave V3.
+    address private aCBETHWhale = 0x42d0ed91b55065fABCfB9ab3516437D01430C0E6;
 
     // Define Adaptors.
     ERC20Adaptor private erc20Adaptor;
@@ -224,19 +229,15 @@ contract RealYieldETHTest is Test {
         cellar.addPosition(2, cbEthPosition, abi.encode(0), false);
         cellar.addPosition(3, aCbEthPosition, abi.encode(1.05e18), false);
         cellar.addPosition(4, cbEthWethPosition, abi.encode(0), false);
-
         cellar.addPosition(0, dWethPosition, abi.encode(0), true);
 
-        bytes
-            memory swapCallData = hex"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005f5e1000000000000000000000000000000000000000000000000000000002405c122390000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000180000000000000003b6d03407f8f7dd53d1f3ac1052565e3ff451d7fe666a311cfee7c08";
-        (address token, uint256 amount, uint256 min, uint256[] memory pools) = abi.decode(
-            swapCallData,
-            (address, uint256, uint256, uint256[])
-        );
-        console.log("token", token);
-        console.log("amount", amount);
-        console.log("min", min);
-        console.log("0th", pools[0]);
+        // Force whale out of their aCBETH position to make room for our cellar.
+        deal(address(WETH), aCBETHWhale, 1_000_000e18);
+        vm.startPrank(aCBETHWhale);
+        WETH.approve(address(poolV3), type(uint256).max);
+        poolV3.supply(address(WETH), 1_000_000e18, aCBETHWhale, 0);
+        poolV3.withdraw(address(cbETH), type(uint256).max, aCBETHWhale);
+        vm.stopPrank();
     }
 
     function testREthStrategy() external {
@@ -249,6 +250,4 @@ contract RealYieldETHTest is Test {
     }
 
     // TODO add tests where we handle bad adaptors, and bad positions with and without cooperating strategists
-
-    // TODO helper functions to generate uniswapV3 fees
 }
