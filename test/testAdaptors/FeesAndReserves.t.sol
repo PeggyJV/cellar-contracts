@@ -345,6 +345,63 @@ contract FeesAndReservesTest is Test {
         assertEq(metaData.exactHighWatermark, currentSharePrice, "Stored HWM should equal current share price.");
     }
 
+    function testInvalidUpkeepFrequency() external {
+        cellar.setRebalanceDeviation(0.05e18);
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Strategist calls fees and reserves setup but uses an upkeep frequency that is too small.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](3);
+        adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, 0.2e4);
+        adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+        adaptorCalls[2] = _createBytesDataToChangeUpkeepFrequency(600);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__MinimumUpkeepFrequencyNotMet.selector))
+        );
+        cellar.callOnAdaptor(data);
+
+        // Strategist now tries to set everything but the upkeep frequency.
+        adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataToSetupFeesAndReserves(0, 0.2e4);
+        adaptorCalls[1] = _createBytesDataToChangeUpkeepMaxGas(1_000e9);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+
+        // Call works, but checkUpkeep returns false, and performUpkeep reverts.
+        cellar.callOnAdaptor(data);
+
+        // Upkeep should not be needed.
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = cellar;
+
+        (bool upkeepNeeded, bytes memory performData) = far.checkUpkeep(abi.encode(cellars));
+
+        assertEq(upkeepNeeded, false, "Upkeep should not be needed because frequency is not set.");
+
+        // Try calling performUpkeep anyways.
+        FeesAndReserves.PerformInput memory performInput;
+        performInput.cellar = cellar;
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__UpkeepTimeCheckFailed.selector)));
+        far.performUpkeep(abi.encode(performInput));
+
+        // Strategist properly sets frequency.
+        adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToChangeUpkeepFrequency(1 days);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+
+        assertEq(upkeepNeeded, true, "Upkeep should be needed to finish setup.");
+
+        far.performUpkeep(performData);
+    }
+
     function testPerformanceFeeAccrual() external {
         uint256 totalAssets = 1_000_000e6;
         // Add assets to the cellar.
