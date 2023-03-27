@@ -52,7 +52,7 @@ contract CellarOneInchTest is Test {
     address private spender = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     address private swapTarget = 0x1111111254EEB25477B68fb85Ed929f73A960582;
     bytes private swapCallData =
-        hex"0502b1c500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005f5e10000000000000000000000000000000000000000000000000000000025cb40772d0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000180000000000000003b6d0340819f3450da6f110ba6ea52195b3beafa246062decfee7c08";
+        hex"0502b1c5000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000989680000000000000000000000000000000000000000000000000001483d59a9bcf1b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000100000000000000003b5dc1003926a168c11a816e10c13977f75f488bfffe88e4cfee7c08";
 
     function setUp() external {
         erc20Adaptor = new ERC20Adaptor();
@@ -120,12 +120,12 @@ contract CellarOneInchTest is Test {
     }
 
     function testOneInchSwap() external {
-        if (block.number < 16920641) {
-            console.log("Invalid block number. use 16920641");
+        if (block.number < 16921343) {
+            console.log("Invalid block number. use 16921343");
             return;
         }
         // Deposit into Cellar.
-        uint256 assets = 1_000_000e6;
+        uint256 assets = 10_000_000;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
@@ -159,7 +159,7 @@ contract CellarOneInchTest is Test {
     }
 }
 
-// OneInch swap calldata at block 16920641
+// OneInch swap calldata at block 16921343
 
 // {
 //   "fromToken": {
@@ -204,5 +204,55 @@ contract CellarOneInchTest is Test {
 //     "value": "100000000",
 //     "gas": 133099,
 //     "gasPrice": "29584025240"
+//   }
+// }
+
+// {
+//   "fromToken": {
+//     "symbol": "USDC",
+//     "name": "USD Coin",
+//     "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+//     "decimals": 6,
+//     "logoURI": "https://tokens.1inch.io/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.png",
+//     "eip2612": true,
+//     "domainVersion": "2",
+//     "tags": [
+//       "tokens",
+//       "PEG:USD"
+//     ]
+//   },
+//   "toToken": {
+//     "symbol": "WETH",
+//     "name": "Wrapped Ether",
+//     "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+//     "decimals": 18,
+//     "logoURI": "https://tokens.1inch.io/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2.png",
+//     "wrappedNative": "true",
+//     "tags": [
+//       "tokens",
+//       "PEG:ETH"
+//     ]
+//   },
+//   "toTokenAmount": "5832780787260795",
+//   "fromTokenAmount": "10000000",
+//   "protocols": [
+//     [
+//       [
+//         {
+//           "name": "LUASWAP",
+//           "part": 100,
+//           "fromTokenAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+//           "toTokenAddress": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+//         }
+//       ]
+//     ]
+//   ],
+//   "tx": {
+//     "from": "0xB6631E52E513eEE0b8c932d7c76F8ccfA607a28e",
+//     "to": "0x1111111254eeb25477b68fb85ed929f73a960582",
+//     "data": "0x0502b1c5000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000989680000000000000000000000000000000000000000000000000001483d59a9bcf1b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000100000000000000003b5dc1003926a168c11a816e10c13977f75f488bfffe88e4cfee7c08",
+//     "value": "0",
+//     "gas": 157684,
+//     "gasPrice": "30694393265"
 //   }
 // }
