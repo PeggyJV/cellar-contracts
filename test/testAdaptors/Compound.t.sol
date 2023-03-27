@@ -93,14 +93,14 @@ contract CellarCompoundTest is Test {
         uint32[] memory positions = new uint32[](5);
         uint32[] memory debtPositions;
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-        registry.trustAdaptor(address(cTokenAdaptor), 0, 0);
-        registry.trustAdaptor(address(vestingAdaptor), 0, 0);
-        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
-        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI), 0, 0);
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC), 0, 0);
-        daiVestingPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(vesting), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(cTokenAdaptor));
+        registry.trustAdaptor(address(vestingAdaptor));
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
+        cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI));
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        cUSDCPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC));
+        daiVestingPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(vesting));
         positions[0] = cDAIPosition;
         positions[1] = daiPosition;
         positions[2] = cUSDCPosition;
@@ -116,8 +116,8 @@ contract CellarCompoundTest is Test {
             abi.encode(positions, debtPositions, positionConfigs, debtConfigs, cDAIPosition, address(0))
         );
         cellar.setRebalanceDeviation(0.003e18);
-        cellar.setupAdaptor(address(cTokenAdaptor));
-        cellar.setupAdaptor(address(vestingAdaptor));
+        cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(vestingAdaptor));
         DAI.safeApprove(address(cellar), type(uint256).max);
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
@@ -284,7 +284,7 @@ contract CellarCompoundTest is Test {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(TUSD)))
         );
-        registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)), 0, 0);
+        registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)));
 
         // Add TUSD.
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -294,7 +294,7 @@ contract CellarCompoundTest is Test {
         priceRouter.addAsset(TUSD, settings, abi.encode(stor), price);
 
         // trust position works now.
-        registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)), 0, 0);
+        registry.trustPosition(address(cTokenAdaptor), abi.encode(address(cTUSD)));
     }
 
     function testErrorCodeCheck() external {

@@ -63,10 +63,10 @@ contract CellarVestingTest is Test {
         vesting = new VestingSimple(USDC, vestingPeriod, 1e6);
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-        registry.trustAdaptor(address(vestingAdaptor), 0, 0);
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        vestingPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(vesting), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(vestingAdaptor));
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        vestingPosition = registry.trustPosition(address(vestingAdaptor), abi.encode(vesting));
 
         // Cellar positions array
         uint32[] memory positions = new uint32[](2);
@@ -89,8 +89,8 @@ contract CellarVestingTest is Test {
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
 
-        cellar.setupAdaptor(address(erc20Adaptor));
-        cellar.setupAdaptor(address(vestingAdaptor));
+        cellar.addAdaptorToCatalogue(address(erc20Adaptor));
+        cellar.addAdaptorToCatalogue(address(vestingAdaptor));
 
         // Set up share lock period, make approvals, and set larger rebalance
         USDC.approve(address(cellar), type(uint256).max);
@@ -445,13 +445,11 @@ contract CellarVestingTest is Test {
             );
     }
 
-    function _createBytesDataToWithdrawAny(VestingSimple _vesting, uint256 amount)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return
-            abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAnyFromVesting.selector, address(_vesting), amount);
+    function _createBytesDataToWithdrawAny(
+        VestingSimple _vesting,
+        uint256 amount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAnyFromVesting.selector, address(_vesting), amount);
     }
 
     function _createBytesDataToWithdrawAll(VestingSimple _vesting) internal pure returns (bytes memory) {

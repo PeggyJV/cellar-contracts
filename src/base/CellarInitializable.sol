@@ -9,7 +9,9 @@ contract CellarInitializable is Cellar, Initializable {
      * @notice Constructor is only called for the implementation contract,
      *         so it can be safely filled with mostly zero inputs.
      */
-    constructor(Registry _registry)
+    constructor(
+        Registry _registry
+    )
         Cellar(
             _registry,
             ERC20(address(0)),
@@ -63,19 +65,23 @@ contract CellarInitializable is Cellar, Initializable {
             bytes[] memory _debtConfigurationData,
             uint32 _holdingPosition,
             address _strategistPayout,
-            uint128 _assetRiskTolerance,
-            uint128 _protocolRiskTolerance
+            ,
+
         ) = abi.decode(_params, (uint32[], uint32[], bytes[], bytes[], uint32, address, uint128, uint128));
 
-        for (uint32 i; i < _creditPositions.length; i++)
+        for (uint32 i; i < _creditPositions.length; i++) {
+            _addPositionToCatalogue(_creditPositions[i]);
             _addPosition(i, _creditPositions[i], _creditConfigurationData[i], false);
-        for (uint32 i; i < _debtPositions.length; i++)
+        }
+        for (uint32 i; i < _debtPositions.length; i++) {
+            _addPositionToCatalogue(_debtPositions[i]);
             _addPosition(i, _debtPositions[i], _debtConfigurationData[i], true);
+        }
         _setHoldingPosition(_holdingPosition);
 
         // Initialize remaining values.
-        assetRiskTolerance = _assetRiskTolerance;
-        protocolRiskTolerance = _protocolRiskTolerance;
+        // assetRiskTolerance = _assetRiskTolerance;
+        // protocolRiskTolerance = _protocolRiskTolerance;
         feeData = FeeData({
             strategistPlatformCut: 0.75e18,
             platformFee: 0.01e18,

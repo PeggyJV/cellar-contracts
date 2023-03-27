@@ -4,7 +4,7 @@ pragma solidity 0.8.16;
 import { Cellar, Registry, ERC20 } from "src/base/Cellar.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-contract CellarInitializableV2_1 is Cellar, Initializable {
+contract CellarInitializableV2_2 is Cellar, Initializable {
     /**
      * @notice Constructor is only called for the implementation contract,
      *         so it can be safely filled with mostly zero inputs.
@@ -28,32 +28,30 @@ contract CellarInitializableV2_1 is Cellar, Initializable {
      *               - ERC20 cellar asset
      *               - String name of cellar
      *               - String symbol of cellar
-     *               - bytes abi encoded parameter containing
-     *                 - uint32[] array of credit positions
-     *                 - uint32[] array of debt positions
-     *                 - bytes[] array of credit config data
-     *                 - bytes[] array of debt config data
-     *                 - uint32 holding position id
-     *                 - address strategist payout address
-     *                 - uint128 asset risk tolerance
-     *                 - uint128 protocol risk tolerance
+     *               - uint32 holding position
+     *               - bytes holding position config
+     *               - address strategist payout address
      */
     function initialize(bytes calldata params) external initializer {
         (
-            address tmpOwner,
+            address _owner,
             Registry _registry,
             ERC20 _asset,
             string memory _name,
             string memory _symbol,
-            bytes memory _params
-        ) = abi.decode(params, (address, Registry, ERC20, string, string, bytes));
+            uint32 _holdingPosition,
+            bytes memory _holdingPositionConfig,
+            address _strategistPayout
+        ) = abi.decode(params, (address, Registry, ERC20, string, string, uint32, bytes, address));
         // Initialize Cellar
         registry = _registry;
         asset = _asset;
-        owner = tmpOwner;
+        owner = _owner;
         shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
         allowedRebalanceDeviation = 0.003e18;
-        aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
+        // Aave V3 pool contract on ETH Mainnet
+        aavePool = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
+
         // Initialize ERC20
         name = _name;
         symbol = _symbol;
@@ -63,27 +61,12 @@ contract CellarInitializableV2_1 is Cellar, Initializable {
         // Initialize Reentrancy Guard
         locked = 1;
 
-        // Initialize positions.
-        (
-            uint32[] memory _creditPositions,
-            uint32[] memory _debtPositions,
-            bytes[] memory _creditConfigurationData,
-            bytes[] memory _debtConfigurationData,
-            uint32 _holdingPosition,
-            address _strategistPayout,
-            ,
-
-        ) = abi.decode(_params, (uint32[], uint32[], bytes[], bytes[], uint32, address, uint128, uint128));
-
-        for (uint32 i; i < _creditPositions.length; i++)
-            _addPosition(i, _creditPositions[i], _creditConfigurationData[i], false);
-        for (uint32 i; i < _debtPositions.length; i++)
-            _addPosition(i, _debtPositions[i], _debtConfigurationData[i], true);
+        // Initialzie Holding Position.
+        _addPositionToCatalogue(_holdingPosition);
+        _addPosition(0, _holdingPosition, _holdingPositionConfig, false);
         _setHoldingPosition(_holdingPosition);
 
         // Initialize remaining values.
-        // assetRiskTolerance = _assetRiskTolerance;
-        // protocolRiskTolerance = _protocolRiskTolerance;
         feeData = FeeData({
             strategistPlatformCut: 0.8e18,
             platformFee: 0.005e18,

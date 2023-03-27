@@ -497,7 +497,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
         MetaData storage data = metaData[performInput.cellar];
         // If not enough time has passed since the last upkeep, revert.
-        if (block.timestamp < (upkeepData.lastUpkeepTime + upkeepData.frequency))
+        if (upkeepData.frequency == 0 || block.timestamp < (upkeepData.lastUpkeepTime + upkeepData.frequency))
             revert FeesAndReserves__UpkeepTimeCheckFailed();
         // Check if fees were earned and update data if so.
         if (performInput.feeEarned > 0) {

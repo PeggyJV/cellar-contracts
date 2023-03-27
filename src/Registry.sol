@@ -72,11 +72,7 @@ contract Registry is Ownable {
      * @param swapRouter address of SwapRouter contract
      * @param priceRouter address of PriceRouter contract
      */
-    constructor(
-        address gravityBridge,
-        address swapRouter,
-        address priceRouter
-    ) Ownable() {
+    constructor(address gravityBridge, address swapRouter, address priceRouter) Ownable() {
         _register(gravityBridge);
         _register(swapRouter);
         _register(priceRouter);
@@ -135,6 +131,124 @@ contract Registry is Ownable {
         feesDistributor = newFeesDistributor;
     }
 
+    // ============================================ PAUSE LOGIC ============================================
+
+    /**
+     * @notice Emitted when a target is paused.
+     */
+    event TargetPaused(address target);
+
+    /**
+     * @notice Emitted when a target is unpaused.
+     */
+    event TargetUnpaused(address target);
+
+    /**
+     * @notice Attempted to unpause a target that was not paused.
+     */
+    error Registry__TargetNotPaused(address target);
+
+    /**
+     * @notice Attempted to pause a target that was already paused.
+     */
+    error Registry__TargetAlreadyPaused(address target);
+
+    /**
+     * @notice Mapping stores whether or not a cellar is paused.
+     */
+    mapping(address => bool) public isCallerPaused;
+
+    /**
+     * @notice Allows multisig to pause multiple cellars in a single call.
+     */
+    function batchPause(address[] calldata targets) external onlyOwner {
+        for (uint256 i; i < targets.length; ++i) _pauseTarget(targets[i]);
+    }
+
+    /**
+     * @notice Allows multisig to unpause multiple cellars in a single call.
+     */
+    function batchUnpause(address[] calldata targets) external onlyOwner {
+        for (uint256 i; i < targets.length; ++i) _unpauseTarget(targets[i]);
+    }
+
+    /**
+     * @notice Helper function to pause some target.
+     */
+    function _pauseTarget(address target) internal {
+        if (isCallerPaused[target]) revert Registry__TargetAlreadyPaused(target);
+        isCallerPaused[target] = true;
+        emit TargetPaused(target);
+    }
+
+    /**
+     * @notice Helper function to unpause some target.
+     */
+    function _unpauseTarget(address target) internal {
+        if (!isCallerPaused[target]) revert Registry__TargetNotPaused(target);
+        isCallerPaused[target] = false;
+        emit TargetUnpaused(target);
+    }
+
+    // ============================================ ADAPTOR LOGIC ============================================
+
+    /**
+     * @notice Attempted to trust an adaptor with non unique identifier.
+     */
+    error Registry__IdentifierNotUnique();
+
+    /**
+     * @notice Attempted to use an untrusted adaptor.
+     */
+    error Registry__AdaptorNotTrusted(address adaptor);
+
+    /**
+     * @notice Attempted to trust an already trusted adaptor.
+     */
+    error Registry__AdaptorAlreadyTrusted(address adaptor);
+
+    /**
+     * @notice Maps an adaptor address to bool indicating whether it has been set up in the registry.
+     */
+    mapping(address => bool) public isAdaptorTrusted;
+
+    /**
+     * @notice Maps an adaptors identier to bool, to track if the indentifier is unique wrt the registry.
+     */
+    mapping(bytes32 => bool) public isIdentifierUsed;
+
+    /**
+     * @notice Trust an adaptor to be used by cellars
+     * @param adaptor address of the adaptor to trust
+     */
+    function trustAdaptor(address adaptor) external onlyOwner {
+        if (isAdaptorTrusted[adaptor]) revert Registry__AdaptorAlreadyTrusted(adaptor);
+        bytes32 identifier = BaseAdaptor(adaptor).identifier();
+        if (isIdentifierUsed[identifier]) revert Registry__IdentifierNotUnique();
+        isAdaptorTrusted[adaptor] = true;
+        isIdentifierUsed[identifier] = true;
+    }
+
+    /**
+     * @notice Allows registry to distrust adaptors.
+     * @dev Doing so prevents Cellars from adding this adaptor to their catalogue.
+     */
+    function distrustAdaptor(address adaptor) external onlyOwner {
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted(adaptor);
+        // Set trust to false.
+        isAdaptorTrusted[adaptor] = false;
+
+        // We are NOT resetting `isIdentifierUsed` because if this adaptor is distrusted, then something needs
+        // to change about the new one being re-trusted.
+    }
+
+    /**
+     * @notice Reverts if `adaptor` is not trusted by the registry.
+     */
+    function revertIfAdaptorIsNotTrusted(address adaptor) external view {
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted(adaptor);
+    }
+
     // ============================================ POSITION LOGIC ============================================
     /**
      * @notice stores data related to Cellar positions.
@@ -148,20 +262,6 @@ contract Registry is Ownable {
         bool isDebt;
         bytes adaptorData;
         bytes configurationData;
-    }
-
-    /**
-     * @notice stores data to help cellars manage their risk.
-     * @param assetRisk number 0 -> type(uint128).max indicating how risky a cellars assets can be
-     *                  0: Safest
-     *                  1: Riskiest
-     * @param protocolRisk number 0 -> type(uint128).max indicating how risky a cellars position protocol can be
-     *                     0: Safest
-     *                     1: Riskiest
-     */
-    struct RiskData {
-        uint128 assetRisk;
-        uint128 protocolRisk;
     }
 
     /**
@@ -185,34 +285,19 @@ contract Registry is Ownable {
     error Registry__InvalidPositionInput();
 
     /**
-     * @notice Attempted to add a position with a risky asset.
-     */
-    error Registry__AssetTooRisky();
-
-    /**
-     * @notice Attempted to add a position with a risky protocol.
-     */
-    error Registry__ProtocolTooRisky();
-
-    /**
      * @notice Attempted to add a position that does not exist.
      */
     error Registry__PositionDoesNotExist();
 
     /**
+     * @notice Attempted to add a position that is not trusted.
+     */
+    error Registry__PositionIsNotTrusted(uint32 position);
+
+    /**
      * @notice Addresses of the positions currently used by the cellar.
      */
     uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
-
-    /**
-     * @notice Maps a position Id to its risk data.
-     */
-    mapping(uint32 => RiskData) public getRiskData;
-
-    /**
-     * @notice Maps an adaptor to its risk data.
-     */
-    mapping(address => RiskData) public getAdaptorRiskData;
 
     /**
      * @notice Stores the number of positions that have been added to the registry.
@@ -233,19 +318,17 @@ contract Registry is Ownable {
     mapping(uint32 => PositionData) public getPositionIdToPositionData;
 
     /**
+     * @notice Maps a position to a bool indicating whether or not it is trusted.
+     */
+    mapping(uint32 => bool) public isPositionTrusted;
+
+    /**
      * @notice Trust a position to be used by the cellar.
      * @param adaptor the adaptor address this position uses
      * @param adaptorData arbitrary bytes used to configure this position
-     * @param assetRisk the risk rating of this positions asset
-     * @param protocolRisk the risk rating of this positions underlying protocol
      * @return positionId the position id of the newly added position
      */
-    function trustPosition(
-        address adaptor,
-        bytes memory adaptorData,
-        uint128 assetRisk,
-        uint128 protocolRisk
-    ) external onlyOwner returns (uint32 positionId) {
+    function trustPosition(address adaptor, bytes memory adaptorData) external onlyOwner returns (uint32 positionId) {
         bytes32 identifier = BaseAdaptor(adaptor).identifier();
         bool isDebt = BaseAdaptor(adaptor).isDebt();
         bytes32 positionHash = keccak256(abi.encode(identifier, isDebt, adaptorData));
@@ -257,7 +340,7 @@ contract Registry is Ownable {
         if (adaptor == address(0) || getPositionHashToPositionId[positionHash] != 0)
             revert Registry__InvalidPositionInput();
 
-        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted();
+        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted(adaptor);
 
         // Set position data.
         getPositionIdToPositionData[positionId] = PositionData({
@@ -267,7 +350,8 @@ contract Registry is Ownable {
             configurationData: abi.encode(0)
         });
 
-        getRiskData[positionId] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
+        // Globally trust the position.
+        isPositionTrusted[positionId] = true;
 
         getPositionHashToPositionId[positionHash] = positionId;
 
@@ -284,88 +368,36 @@ contract Registry is Ownable {
     }
 
     /**
+     * @notice Allows registry to distrust positions.
+     * @dev Doing so prevents Cellars from adding this position to their catalogue,
+     *      and adding the position to their tracked arrays.
+     */
+    function distrustPosition(uint32 positionId) external onlyOwner {
+        if (!isPositionTrusted[positionId]) revert("Position not trusted");
+        isPositionTrusted[positionId] = false;
+    }
+
+    /**
      * @notice Called by Cellars to add a new position to themselves.
      * @param positionId the id of the position the cellar wants to add
-     * @param assetRiskTolerance the cellars risk tolerance for assets
-     * @param protocolRiskTolerance the cellars risk tolerance for protocols
      * @return adaptor the address of the adaptor, isDebt bool indicating whether position is
      *         debt or not, and adaptorData needed to interact with position
      */
-    function cellarAddPosition(
-        uint32 positionId,
-        uint128 assetRiskTolerance,
-        uint128 protocolRiskTolerance
-    )
-        external
-        view
-        returns (
-            address adaptor,
-            bool isDebt,
-            bytes memory adaptorData
-        )
-    {
+    function addPositionToCellar(
+        uint32 positionId
+    ) external view returns (address adaptor, bool isDebt, bytes memory adaptorData) {
         if (positionId > positionCount || positionId == 0) revert Registry__PositionDoesNotExist();
-        RiskData memory data = getRiskData[positionId];
-        if (assetRiskTolerance < data.assetRisk) revert Registry__AssetTooRisky();
-        if (protocolRiskTolerance < data.protocolRisk) revert Registry__ProtocolTooRisky();
+
+        revertIfPositionIsNotTrusted(positionId);
+
         PositionData memory positionData = getPositionIdToPositionData[positionId];
         return (positionData.adaptor, positionData.isDebt, positionData.adaptorData);
     }
 
-    // ============================================ ADAPTOR LOGIC ============================================
-
     /**
-     * @notice Attempted to trust an adaptor with non unique identifier.
+     * @notice Reverts if `positionId` is not trusted by the registry.
      */
-    error Registry__IdentifierNotUnique();
-
-    /**
-     * @notice Attempted to use an untrusted adaptor.
-     */
-    error Registry__AdaptorNotTrusted();
-
-    /**
-     * @notice Maps an adaptor address to bool indicating whether it has been set up in the registry.
-     */
-    mapping(address => bool) public isAdaptorTrusted;
-
-    /**
-     * @notice Maps an adaptors identier to bool, to track if the indentifier is unique wrt the registry.
-     */
-    mapping(bytes32 => bool) public isIdentifierUsed;
-
-    /**
-     * @notice Trust an adaptor to be used by cellars
-     * @param adaptor address of the adaptor to trust
-     * @param assetRisk the asset risk level associated with this adaptor
-     * @param protocolRisk the protocol risk level associated with this adaptor
-     */
-    function trustAdaptor(
-        address adaptor,
-        uint128 assetRisk,
-        uint128 protocolRisk
-    ) external onlyOwner {
-        bytes32 identifier = BaseAdaptor(adaptor).identifier();
-        if (isIdentifierUsed[identifier]) revert Registry__IdentifierNotUnique();
-        isAdaptorTrusted[adaptor] = true;
-        isIdentifierUsed[identifier] = true;
-        getAdaptorRiskData[adaptor] = RiskData({ assetRisk: assetRisk, protocolRisk: protocolRisk });
-    }
-
-    /**
-     * @notice Called by Cellars to allow them to use new adaptors.
-     * @param adaptor address of the adaptor to use
-     * @param assetRiskTolerance asset risk tolerance of the caller
-     * @param protocolRiskTolerance protocol risk tolerance of the cellar
-     */
-    function cellarSetupAdaptor(
-        address adaptor,
-        uint128 assetRiskTolerance,
-        uint128 protocolRiskTolerance
-    ) external view {
-        RiskData memory data = getAdaptorRiskData[adaptor];
-        if (assetRiskTolerance < data.assetRisk) revert Registry__AssetTooRisky();
-        if (protocolRiskTolerance < data.protocolRisk) revert Registry__ProtocolTooRisky();
-        if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted();
+    function revertIfPositionIsNotTrusted(uint32 positionId) public view {
+        if (!isPositionTrusted[positionId]) revert Registry__PositionIsNotTrusted(positionId);
     }
 }

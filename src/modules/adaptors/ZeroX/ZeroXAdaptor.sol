@@ -31,14 +31,14 @@ contract ZeroXAdaptor is PositionlessAdaptor {
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
      * of the adaptor is more difficult.
      */
-    function identifier() public pure override returns (bytes32) {
+    function identifier() public pure virtual override returns (bytes32) {
         return keccak256(abi.encode("0x Adaptor V 1.0"));
     }
 
     /**
      * @notice Address of the current 0x swap target on Mainnet ETH.
      */
-    function target() public pure returns (address) {
+    function target() public pure virtual returns (address) {
         return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     }
 

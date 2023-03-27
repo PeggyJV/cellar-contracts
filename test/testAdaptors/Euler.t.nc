@@ -125,13 +125,13 @@ contract CellarEulerTest is Test {
     uint32[] memory debtPositions = new uint32[](1);
 
     // Add adaptors and positions to the registry.
-    registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-    registry.trustAdaptor(address(eulerETokenAdaptor), 0, 0);
-    registry.trustAdaptor(address(eulerDebtTokenAdaptor), 0, 0);
+    registry.trustAdaptor(address(erc20Adaptor));
+    registry.trustAdaptor(address(eulerETokenAdaptor));
+    registry.trustAdaptor(address(eulerDebtTokenAdaptor));
 
-    usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-    eUSDCPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 0), 0, 0);
-    debtUSDCPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDC, 0), 0, 0);
+    usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+    eUSDCPosition = registry.trustPosition(address(eulerETokenAdaptor), abi.encode(eUSDC, 0));
+    debtUSDCPosition = registry.trustPosition(address(eulerDebtTokenAdaptor), abi.encode(dUSDC, 0));
 
     positions[0] = eUSDCPosition;
     positions[1] = usdcPosition;
@@ -158,8 +158,8 @@ contract CellarEulerTest is Test {
       )
     );
 
-    cellar.setupAdaptor(address(eulerETokenAdaptor));
-    cellar.setupAdaptor(address(eulerDebtTokenAdaptor));
+    cellar.addAdaptorToCatalogue(address(eulerETokenAdaptor));
+    cellar.addAdaptorToCatalogue(address(eulerDebtTokenAdaptor));
 
     USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -537,8 +537,8 @@ contract CellarEulerTest is Test {
       )
     );
 
-    leveragedCellar.setupAdaptor(address(eulerETokenAdaptor));
-    leveragedCellar.setupAdaptor(address(eulerDebtTokenAdaptor));
+    leveragedCellar.addAdaptorToCatalogue(address(eulerETokenAdaptor));
+    leveragedCellar.addAdaptorToCatalogue(address(eulerDebtTokenAdaptor));
 
     // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
     stdstore.target(address(leveragedCellar)).sig(leveragedCellar.shareLockPeriod.selector).checked_write(uint256(0));

@@ -3,15 +3,15 @@ pragma solidity 0.8.16;
 
 import { Registry, PriceRouter, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import { CellarInitializable } from "src/base/CellarInitializable.sol";
+import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 
-contract MockCellarImplementation is CellarInitializable, Test {
+contract MockCellarImplementation is CellarInitializableV2_2, Test {
     using SafeCast for uint256;
     using SafeCast for int256;
     using stdStorage for StdStorage;
 
-    constructor(Registry _registry) CellarInitializable(_registry) {}
+    constructor(Registry _registry) CellarInitializableV2_2(_registry) {}
 
     function depositIntoPosition(
         uint32 position,

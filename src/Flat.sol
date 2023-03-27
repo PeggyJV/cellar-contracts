@@ -4536,9 +4536,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Allows owner to add new adaptors for the cellar to use.
      */
-    function setupAdaptor(address _adaptor) external onlyOwner {
+    function addAdaptorToCatalogue(address _adaptor) external onlyOwner {
         // Following call reverts if adaptor does not exist, or if it does not meet cellars risk appetite.
-        registry.cellarSetupAdaptor(_adaptor, assetRiskTolerance, protocolRiskTolerance);
+        registry.cellaraddAdaptorToCatalogue(_adaptor, assetRiskTolerance, protocolRiskTolerance);
         isAdaptorSetup[_adaptor] = true;
     }
 
@@ -5198,7 +5198,7 @@ contract Registry is Ownable {
      * @param assetRiskTolerance asset risk tolerance of the caller
      * @param protocolRiskTolerance protocol risk tolerance of the cellar
      */
-    function cellarSetupAdaptor(
+    function cellaraddAdaptorToCatalogue(
         address adaptor,
         uint128 assetRiskTolerance,
         uint128 protocolRiskTolerance

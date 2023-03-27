@@ -98,12 +98,12 @@ contract CellarRouterTest is Test {
         priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI), 0, 0);
-        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
-        wbtcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WBTC), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
+        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
+        wbtcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WBTC));
 
         uint32[] memory positions = new uint32[](4);
         positions[0] = usdcPosition;

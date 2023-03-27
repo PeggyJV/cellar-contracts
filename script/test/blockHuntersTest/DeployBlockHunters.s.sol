@@ -77,12 +77,12 @@ contract DeployBlockHuntersScript is Script, TEnv {
 
         // registry.trustAdaptor(address(erc20Adaptor), 0, 0);
 
-        positions[0] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aUSDCV3)), 0, 0);
-        positions[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(AAVE)), 0, 0);
-        positions[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(CRV)), 0, 0);
-        positions[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(UNI)), 0, 0);
-        positions[4] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(COMP)), 0, 0);
-        positions[5] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(MKR)), 0, 0);
+        positions[0] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aUSDCV3)));
+        positions[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(AAVE)));
+        positions[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(CRV)));
+        positions[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(UNI)));
+        positions[4] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(COMP)));
+        positions[5] = registry.trustPosition(address(erc20Adaptor), abi.encode(address(MKR)));
 
         positionConfigs[0] = abi.encode(1.1e18);
 
@@ -111,9 +111,9 @@ contract DeployBlockHuntersScript is Script, TEnv {
         cellar = CellarInitializableV2_1(clone);
 
         // Setup all the adaptors the cellar will use.
-        cellar.setupAdaptor(address(aaveV3ATokenAdaptor));
-        cellar.setupAdaptor(address(feesAndReservesAdaptor));
-        cellar.setupAdaptor(address(zeroXAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+        cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
 
         cellar.transferOwnership(strategist);
 
