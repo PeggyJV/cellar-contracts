@@ -8,7 +8,7 @@ import { PositionlessAdaptor } from "src/modules/adaptors/PositionlessAdaptor.so
 /**
  * @title 1inch Adaptor
  * @notice Allows Cellars to swap with 1Inch.
- * @author crispymangoes
+ * @author Lucky Odisetti
  */
 contract OneInchAdaptor is PositionlessAdaptor {
     using SafeTransferLib for ERC20;
@@ -31,14 +31,14 @@ contract OneInchAdaptor is PositionlessAdaptor {
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
      * of the adaptor is more difficult.
      */
-    function identifier() public pure override returns (bytes32) {
+    function identifier() public pure virtual override returns (bytes32) {
         return keccak256(abi.encode("1Inch Adaptor V 1.0"));
     }
 
     /**
      * @notice Address of the current 1Inch swap target on Mainnet ETH.
      */
-    function target() public pure returns (address) {
+    function target() public pure virtual returns (address) {
         return 0x1111111254EEB25477B68fb85Ed929f73A960582;
     }
 
