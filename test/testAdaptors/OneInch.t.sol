@@ -80,11 +80,11 @@ contract CellarOneInchTest is Test {
         uint32[] memory debtPositions;
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(erc20Adaptor), 0, 0);
-        registry.trustAdaptor(address(oneInchAdaptor), 0, 0);
+        registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(oneInchAdaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC), 0, 0);
-        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH), 0, 0);
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
 
         positions[0] = usdcPosition;
         positions[1] = wethPosition;
@@ -109,7 +109,7 @@ contract CellarOneInchTest is Test {
             )
         );
 
-        cellar.setupAdaptor(address(oneInchAdaptor));
+        cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
 
         cellar.setRebalanceDeviation(0.01e18);
 
