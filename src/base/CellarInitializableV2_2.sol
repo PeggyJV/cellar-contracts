@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { Cellar, Registry, ERC20 } from "src/base/Cellar.sol";
+import { Cellar, Registry, ERC20, PriceRouter } from "src/base/Cellar.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 contract CellarInitializableV2_2 is Cellar, Initializable {
@@ -49,6 +49,7 @@ contract CellarInitializableV2_2 is Cellar, Initializable {
         owner = _owner;
         shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
         allowedRebalanceDeviation = 0.003e18;
+        priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         // Aave V3 pool contract on ETH Mainnet
         aavePool = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
 

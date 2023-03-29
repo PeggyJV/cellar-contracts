@@ -44,6 +44,21 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
         locked = 1;
     }
+
+    PriceRouter public priceRouter;
+
+    function cachePriceRouter(bool checkTotalAssets) external onlyOwner {
+        if (checkTotalAssets) {
+            uint256 assetsBefore = totalAssets();
+            priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+            uint256 assetsAfter = totalAssets();
+            if (assetsBefore != assetsAfter) revert("oh no");
+        } else {
+            priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+            totalAssets();
+        }
+    }
+
     // ========================================= POSITIONS CONFIG =========================================
 
     /**
@@ -913,8 +928,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @dev Only loop through credit array because debt can not be withdraw by users.
      */
     function _withdrawInOrder(uint256 assets, address receiver) internal {
-        // Get the price router.
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         // Save asset price in USD, and decimals to reduce external calls.
         WithdrawPricing memory pricingInfo;
         pricingInfo.priceQuoteUSD = priceRouter.getPriceInUSD(asset);
@@ -980,7 +993,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         uint256 numOfCreditPositions = creditPositions.length;
         ERC20[] memory creditAssets = new ERC20[](numOfCreditPositions);
         uint256[] memory creditBalances = new uint256[](numOfCreditPositions);
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         // If we just need the withdrawable, then query credit array value.
         if (reportWithdrawable) {
             for (uint256 i; i < numOfCreditPositions; ++i) {
