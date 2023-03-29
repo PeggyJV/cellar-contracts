@@ -30,6 +30,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     // ========================================= REENTRANCY GUARD =========================================
+
     /**
      * @notice `locked` is public, so that the state can be checked even during view function calls.
      */
@@ -48,14 +49,22 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     PriceRouter public priceRouter;
 
     function cachePriceRouter(bool checkTotalAssets) external onlyOwner {
+        uint256 assetsBefore;
+        uint256 minAssets;
+        uint256 maxAssets;
+
         if (checkTotalAssets) {
-            uint256 assetsBefore = totalAssets();
-            priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-            uint256 assetsAfter = totalAssets();
-            if (assetsBefore != assetsAfter) revert("oh no");
-        } else {
-            priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-            totalAssets();
+            assetsBefore = totalAssets();
+            minAssets = assetsBefore.mulDivDown(0.95e4, 1e4);
+            maxAssets = assetsBefore.mulDivDown(1.05e4, 1e4);
+        }
+
+        priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+        uint256 assetsAfter = totalAssets();
+
+        if (checkTotalAssets) {
+            if (assetsAfter < minAssets || assetsAfter > maxAssets)
+                revert Cellar__TotalAssetDeviatedOutsideRange(assetsAfter, minAssets, maxAssets);
         }
     }
 
@@ -271,7 +280,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         uint32 positionId,
         bytes memory configurationData,
         bool inDebtArray
-    ) external onlyOwner whenNotShutdown {
+    ) external onlyOwner {
+        _whenNotShutdown();
         _addPosition(index, positionId, configurationData, inDebtArray);
     }
 
@@ -533,17 +543,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Prevent a function from being called during a shutdown.
      */
-    modifier whenNotShutdown() {
+    function _whenNotShutdown() internal view {
         if (isShutdown) revert Cellar__ContractShutdown();
-
-        _;
     }
 
     /**
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @dev In the case where
      */
-    function initiateShutdown() external whenNotShutdown onlyOwner {
+    function initiateShutdown() external onlyOwner {
+        _whenNotShutdown();
         isShutdown = true;
 
         emit ShutdownChanged(true);
@@ -603,6 +612,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         bytes memory params
     ) ERC4626(_asset, _name, _symbol, 18) Owned(_registry.getAddress(GRAVITY_BRIDGE_REGISTRY_SLOT)) {
         registry = _registry;
+        priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
 
         {
             (
@@ -760,7 +770,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param assets amount of assets deposited by user.
      * @param receiver address receiving the shares.
      */
-    function beforeDeposit(uint256 assets, uint256, address receiver) internal view override whenNotShutdown {
+    function beforeDeposit(uint256 assets, uint256, address receiver) internal view override {
+        _whenNotShutdown();
         _checkIfPaused();
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
@@ -1288,7 +1299,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
      */
-    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner nonReentrant whenNotShutdown {
+    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner nonReentrant {
+        _whenNotShutdown();
         _checkIfPaused();
         blockExternalReceiver = true;
 

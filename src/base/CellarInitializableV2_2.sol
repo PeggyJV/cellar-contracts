@@ -43,6 +43,7 @@ contract CellarInitializableV2_2 is Cellar, Initializable {
             bytes memory _holdingPositionConfig,
             address _strategistPayout
         ) = abi.decode(params, (address, Registry, ERC20, string, string, uint32, bytes, address));
+
         // Initialize Cellar
         registry = _registry;
         asset = _asset;
@@ -50,6 +51,7 @@ contract CellarInitializableV2_2 is Cellar, Initializable {
         shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
         allowedRebalanceDeviation = 0.003e18;
         priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+
         // Aave V3 pool contract on ETH Mainnet
         aavePool = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
 
@@ -59,20 +61,23 @@ contract CellarInitializableV2_2 is Cellar, Initializable {
         decimals = 18;
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
+
         // Initialize Reentrancy Guard
         locked = 1;
 
-        // Initialzie Holding Position.
+        // Initialize Holding Position.
         _addPositionToCatalogue(_holdingPosition);
         _addPosition(0, _holdingPosition, _holdingPositionConfig, false);
         _setHoldingPosition(_holdingPosition);
 
         // Initialize remaining values.
-        feeData = FeeData({
-            strategistPlatformCut: 0.8e18,
-            platformFee: 0.005e18,
-            lastAccrual: uint64(block.timestamp),
-            strategistPayoutAddress: _strategistPayout
-        });
+        feeData.strategistPlatformCut = 0.8e18;
+        feeData.strategistPayoutAddress = _strategistPayout;
+        // feeData = FeeData({
+        //     strategistPlatformCut: 0.8e18,
+        //     platformFee: 0.005e18,
+        //     lastAccrual: uint64(block.timestamp),
+        //     strategistPayoutAddress: _strategistPayout
+        // });
     }
 }
