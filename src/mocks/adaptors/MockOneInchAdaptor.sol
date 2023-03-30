@@ -15,6 +15,6 @@ contract MockOneInchAdaptor is OneInchAdaptor {
      * @notice Returns address of the testing contract in Foundry.
      */
     function target() public pure override returns (address) {
-        return 0x1111111254EEB25477B68fb85Ed929f73A960582;
+        return 0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496;
     }
 }
