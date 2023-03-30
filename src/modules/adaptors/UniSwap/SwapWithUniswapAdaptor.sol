@@ -8,7 +8,7 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 
 /**
- * @title 0x Adaptor
+ * @title Swap with Uniswap Adaptor
  * @notice Allows Cellars to swap with 0x.
  * @author crispymangoes
  */
