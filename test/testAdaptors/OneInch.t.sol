@@ -114,6 +114,7 @@ contract CellarOneInchTest is Test {
         );
 
         cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
+        cellar.addAdaptorToCatalogue(address(mockOneInchAdaptor));
 
         cellar.setRebalanceDeviation(0.01e18);
 
