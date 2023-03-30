@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
 import { CellarInitializableV2_1 } from "src/base/CellarInitializableV2_1.sol";
-import { UniswapV3Adaptor } from "src/modules/adaptors/UniSwap/UniswapV3Adaptor.sol";
+import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
 import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 

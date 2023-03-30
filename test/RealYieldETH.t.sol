@@ -14,7 +14,7 @@ import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
-import { UniswapV3Adaptor } from "src/modules/adaptors/UniSwap/UniswapV3Adaptor.sol";
+import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
 import { MockFeesAndReservesAdaptor } from "src/mocks/adaptors/MockFeesAndReservesAdaptor.sol";
 import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
