@@ -84,16 +84,6 @@ contract RegistryTest is Test {
         assertTrue(!registry.approvedForDepositOnBehalf(router), "Router should not be set up as a depositor.");
     }
 
-    function testSetFeeDistributor() external {
-        bytes32 validCosmosAddress = hex"000000000000000000000000ffffffffffffffffffffffffffffffffffffffff";
-        // Try setting an invalid fee distributor.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__InvalidCosmosAddress.selector)));
-        registry.setFeesDistributor(hex"0000000000000000000000010000000000000000000000000000000000000000");
-
-        registry.setFeesDistributor(validCosmosAddress);
-        assertEq(registry.feesDistributor(), validCosmosAddress, "Fee distributor should equal `validCosmosAddress`.");
-    }
-
     function testTrustingAndDistrustingAdaptor() external {
         ERC20Adaptor adaptor = new ERC20Adaptor();
 

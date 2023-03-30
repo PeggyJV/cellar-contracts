@@ -50,7 +50,7 @@ contract FeesAndReservesTest is Test {
 
     function setUp() external {
         registry = new Registry(address(this), address(this), address(this));
-        feesAndReserves = new FeesAndReserves(registry);
+        feesAndReserves = new FeesAndReserves(address(this));
 
         // Set this testing contracts `asset` to be USDC.
         asset = USDC;

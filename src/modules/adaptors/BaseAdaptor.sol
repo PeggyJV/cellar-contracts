@@ -290,6 +290,9 @@ abstract contract BaseAdaptor {
         amountIn = priceRouter.getValue(assetIn, amountIn, assetOut);
         uint256 amountInWithSlippage = amountIn.mulDivDown(oracleSlippage, 1e18);
         if (amountOut < amountInWithSlippage) revert BaseAdaptor__BadSlippage();
+
+        // Insure swap router has zero approval.
+        _revokeExternalApproval(assetIn, address(swapRouter));
     }
 
     /**

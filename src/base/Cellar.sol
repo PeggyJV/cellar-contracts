@@ -10,7 +10,6 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
-import { Multicall } from "src/base/Multicall.sol";
 
 /**
  * @title Sommelier Cellar
@@ -25,6 +24,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     // ========================================= MULTICALL =========================================
 
+    /**
+     * @notice Allows caller to call multiple functions in a single TX.
+     * @dev Does NOT return the function return values.
+     */
     function multicall(bytes[] calldata data) external {
         for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
     }
@@ -46,8 +49,20 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         locked = 1;
     }
 
+    // ========================================= PRICE ROUTER CACHE =========================================
+
+    /**
+     * @notice Cached price router contract.
+     * @dev This way cellar has to "opt in" to price router changes.
+     */
     PriceRouter public priceRouter;
 
+    /**
+     * @notice Updates the cellar to use the lastest price router in the registry.
+     * @param checkTotalAssets If true totalAssets is checked before and after updating the price router,
+     *        and is verified to be withing a +- 5% envelope.
+     *        If false totalAssets is only called after updating the price router.
+     */
     function cachePriceRouter(bool checkTotalAssets) external onlyOwner {
         uint256 assetsBefore;
         uint256 minAssets;

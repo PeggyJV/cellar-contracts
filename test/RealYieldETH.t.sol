@@ -130,7 +130,7 @@ contract RealYieldETHTest is Test {
             address(swapRouter),
             address(priceRouter)
         );
-        feesAndReserves = new FeesAndReserves(registry);
+        feesAndReserves = new FeesAndReserves(address(this));
 
         tracker = new UniswapV3PositionTracker(positionManager);
         erc20Adaptor = new ERC20Adaptor();

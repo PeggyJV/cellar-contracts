@@ -63,7 +63,7 @@ contract FeesAndReservesTest is Test {
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
-        far = new FeesAndReserves(registry);
+        far = new FeesAndReserves(address(this));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage({
             max: 0,

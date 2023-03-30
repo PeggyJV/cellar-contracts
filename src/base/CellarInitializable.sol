@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { Cellar, Registry, ERC20 } from "src/base/Cellar.sol";
+import { Cellar, Registry, ERC20, PriceRouter } from "src/base/Cellar.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 contract CellarInitializable is Cellar, Initializable {
@@ -48,6 +48,8 @@ contract CellarInitializable is Cellar, Initializable {
         shareLockPeriod = MAXIMUM_SHARE_LOCK_PERIOD;
         allowedRebalanceDeviation = 0.003e18;
         aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
+        priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+
         // Initialize ERC20
         name = _name;
         symbol = _symbol;
