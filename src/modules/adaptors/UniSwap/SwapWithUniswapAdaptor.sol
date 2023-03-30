@@ -49,12 +49,15 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
 
     /**
      * @notice Perform a swap using Uniswap V2.
+     * @dev Allows for a blind swap, if type(uint256).max is used for the amount.
      */
     function swapWithUniV2(address[] memory path, uint256 amount, uint256 amountOutMin) public {
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
 
         ERC20 tokenIn = ERC20(path[0]);
         ERC20 tokenOut = ERC20(path[path.length - 1]);
+
+        amount = _maxAvailable(tokenIn, amount);
 
         // Approve assets to be swapped through the router.
         tokenIn.safeApprove(address(uniswapV2Router()), amount);
@@ -93,6 +96,7 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
 
     /**
      * @notice Perform a swap using Uniswap V3.
+     * @dev Allows for a blind swap, if type(uint256).max is used for the amount.
      */
     function swapWithUniV3(
         address[] memory path,
@@ -104,6 +108,8 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
 
         ERC20 tokenIn = ERC20(path[0]);
         ERC20 tokenOut = ERC20(path[path.length - 1]);
+
+        amount = _maxAvailable(tokenIn, amount);
 
         // Approve assets to be swapped through the router.
         tokenIn.safeApprove(address(uniswapV3Router()), amount);
