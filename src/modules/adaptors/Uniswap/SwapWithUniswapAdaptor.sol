@@ -8,8 +8,8 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 
 /**
- * @title Swap with Uniswap Adaptor
- * @notice Allows Cellars to swap with 0x.
+ * @title SwapWithUniswapAdaptor
+ * @notice Allows Cellars to swap using Uniswap V2, or V3.
  * @author crispymangoes
  */
 contract SwapWithUniswapAdaptor is PositionlessAdaptor {
@@ -26,9 +26,6 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
     // expose the swap functions to strategists during rebalances.
     //====================================================================
 
-    error SwapWithUniswapAdaptor__AssetInMisMatch(address actual, address expected);
-    error SwapWithUniswapAdaptor__AssetOutMisMatch(address actual, address expected);
-
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -37,14 +34,7 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Swap With Uniswap Adaptor V 1.0"));
-    }
-
-    /**
-     * @notice Address of the current 0x swap target on Mainnet ETH.
-     */
-    function target() public pure virtual returns (address) {
-        return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+        return keccak256(abi.encode("Swap With Uniswap Adaptor V 0.0"));
     }
 
     function uniswapV2Router() public pure virtual returns (IUniswapV2Router) {
