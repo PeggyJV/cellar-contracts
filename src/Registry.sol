@@ -54,6 +54,9 @@ contract Registry is Ownable {
         emit DepositorOnBehalfChanged(depositor, state);
     }
 
+    // TODO make this not able to set the gravity bridge
+    // TODO add a pending owner that is under a timelock
+    // Could null out current owner so comprimised multisig has no power
     /**
      * @notice Set the address of the contract at a given id.
      */
