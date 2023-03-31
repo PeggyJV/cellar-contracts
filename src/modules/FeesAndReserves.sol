@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { Cellar, Registry, Owned, ERC20, SafeTransferLib, Math, Address, IGravity } from "src/base/Cellar.sol";
+import { Cellar, Owned, ERC20, SafeTransferLib, Math, Address, IGravity } from "src/base/Cellar.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
@@ -101,6 +101,11 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     uint256 public constant MAX_MANAGEMENT_FEE = 1 * 10 ** (BPS_DECIMALS - 1); // 10%
 
     /**
+     * @notice Cosmos address where protocol fees are sent.
+     */
+    bytes32 public constant FEES_DISTRIBUTOR = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+
+    /**
      * @notice Maps a cellar to its pending meta data.
      */
     mapping(Cellar => PendingMetaData) public pendingMetaData;
@@ -187,10 +192,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
     //============================== IMMUTABLES ===============================
 
-    Registry public registry;
+    IGravity public immutable gravityBridge;
 
-    constructor(Registry _registry) Owned(msg.sender) {
-        registry = _registry;
+    constructor(address _gravityBridge) Owned(msg.sender) {
+        gravityBridge = IGravity(_gravityBridge);
     }
 
     //============================================ onlyOwner Functions ===========================================
@@ -428,9 +433,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         // Send assets to strategist.
         data.reserveAsset.safeTransfer(strategistPayout, strategistCut);
 
-        IGravity gravityBridge = IGravity(registry.getAddress(0));
         data.reserveAsset.safeApprove(address(gravityBridge), sommCut);
-        gravityBridge.sendToCosmos(address(data.reserveAsset), registry.feesDistributor(), sommCut);
+        gravityBridge.sendToCosmos(address(data.reserveAsset), FEES_DISTRIBUTOR, sommCut);
         emit FeesSent(address(cellar));
     }
 
