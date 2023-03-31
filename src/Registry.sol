@@ -57,6 +57,7 @@ contract Registry is Ownable {
     // TODO make this not able to set the gravity bridge
     // TODO add a pending owner that is under a timelock
     // Could null out current owner so comprimised multisig has no power
+    // TODO Make it so that address 0, is only changeable by address 0, also address 0 can change the owner of this contract
     /**
      * @notice Set the address of the contract at a given id.
      */

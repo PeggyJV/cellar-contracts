@@ -64,12 +64,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *        If false totalAssets is only called after updating the price router.
      */
     function cachePriceRouter(bool checkTotalAssets) external onlyOwner {
-        uint256 assetsBefore;
         uint256 minAssets;
         uint256 maxAssets;
 
         if (checkTotalAssets) {
-            assetsBefore = totalAssets();
+            uint256 assetsBefore = totalAssets();
+            // TODO see if I can pass in the percents
             minAssets = assetsBefore.mulDivDown(0.95e4, 1e4);
             maxAssets = assetsBefore.mulDivDown(1.05e4, 1e4);
         }
