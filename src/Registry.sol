@@ -54,8 +54,6 @@ contract Registry is Ownable {
         emit DepositorOnBehalfChanged(depositor, state);
     }
 
-    // TODO make this not able to set the gravity bridge
-    // TODO add a pending owner that is under a timelock
     // Could null out current owner so comprimised multisig has no power
     // TODO Make it so that address 0, is only changeable by address 0, also address 0 can change the owner of this contract
     /**
@@ -63,6 +61,8 @@ contract Registry is Ownable {
      */
     function setAddress(uint256 id, address newAddress) external onlyOwner {
         if (id >= nextId) revert Registry__ContractNotRegistered(id);
+
+        if (id == 0 && msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
 
         emit AddressChanged(id, getAddress[id], newAddress);
 
@@ -105,6 +105,62 @@ contract Registry is Ownable {
         emit Registered(nextId, newContract);
 
         nextId++;
+    }
+
+    // ============================================= ADDRESS 0 LOGIC =============================================
+    /**
+     * Address 0 is the address of the gravity bridge, and special abilities that the owner does not have.
+     * - It can change what address is stored at address 0.
+     * - It can change the owner of this contract.
+     */
+
+    error Registry__OnlyCallableByZeroId();
+    error Registry__NewOwnerCanNotBeZero();
+
+    error Registry__TransitionPending();
+    error Registry__TransitionNotPending();
+    error Registry__OnlyCallableByPendingOwner();
+
+    uint256 public constant TRANSITION_PERIOD = 7 days;
+
+    address public pendingOwner;
+    uint256 public transitionStart;
+
+    // TODO natspec
+    function transitionOwner(address newOwner) external {
+        if (msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
+        if (pendingOwner != address(0)) revert Registry__TransitionPending();
+        if (newOwner == address(0)) revert Registry__NewOwnerCanNotBeZero();
+
+        pendingOwner = newOwner;
+        transitionStart = block.timestamp;
+    }
+
+    function cancelTransition() external {
+        if (msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
+        if (pendingOwner == address(0)) revert Registry__TransitionNotPending();
+
+        pendingOwner = address(0);
+        transitionStart = 0;
+    }
+
+    function completeTransition() external {
+        if (pendingOwner == address(0)) revert Registry__TransitionNotPending();
+        if (msg.sender != pendingOwner) revert Registry__OnlyCallableByPendingOwner();
+        if (block.timestamp < transitionStart + TRANSITION_PERIOD) revert Registry__TransitionPending();
+
+        _transferOwnership(pendingOwner);
+
+        pendingOwner = address(0);
+        transitionStart = 0;
+    }
+
+    /**
+     * @notice Block old owner calls.
+     */
+    function _checkOwner() internal view override {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+        if (transitionStart != 0) revert Registry__TransitionPending();
     }
 
     // ============================================ PAUSE LOGIC ============================================
@@ -189,7 +245,7 @@ contract Registry is Ownable {
     mapping(address => bool) public isAdaptorTrusted;
 
     /**
-     * @notice Maps an adaptors identier to bool, to track if the indentifier is unique wrt the registry.
+     * @notice Maps an adaptors identfier to bool, to track if the identifier is unique wrt the registry.
      */
     mapping(bytes32 => bool) public isIdentifierUsed;
 

@@ -128,7 +128,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     /**
      * @notice Chainlink's Automation Registry contract address.
      */
-    address public automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+    address public constant AUTOMATION_REGISTRY = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
 
     /**
      * @notice Chainlink Fast Gas Feed for ETH Mainnet.
@@ -217,14 +217,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         isShutdown = false;
 
         emit ShutdownChanged(false);
-    }
-
-    /**
-     * @notice Allows owner to update the Automation Registry.
-     * @dev In rare cases, Chainlink's registry CAN change.
-     */
-    function setAutomationRegistry(address newRegistry) external onlyOwner {
-        automationRegistry = newRegistry;
     }
 
     /**
@@ -477,7 +469,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     }
 
     /**
-     * @notice PerformUpkeep will trust `performData` input if the caller is `automationRegistry` otherwise the input is recalcualted.
+     * @notice PerformUpkeep will trust `performData` input if the caller is `AUTOMATION_REGISTRY` otherwise the input is recalcualted.
      * @dev If cellar is not setup, this function reverts.
      * @dev If not enough time has passed, the cellar does not have its fees calculated.
      * @dev If cellar has pending values that differ from current stored values, they are updated.
@@ -486,7 +478,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     function performUpkeep(bytes calldata performData) external whenNotShutdown nonReentrant {
         PerformInput memory performInput = abi.decode(performData, (PerformInput));
         UpkeepData storage upkeepData = cellarToUpkeepData[performInput.cellar];
-        if (msg.sender != automationRegistry) {
+        if (msg.sender != AUTOMATION_REGISTRY) {
             // Do not trust callers perform input data.
             Cellar target = performInput.cellar;
 
