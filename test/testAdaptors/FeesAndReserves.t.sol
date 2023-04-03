@@ -209,12 +209,17 @@ contract FeesAndReservesTest is Test {
 
         // Leave expected yield in contract so that strategist earns full performance fees.
         // Strategist swaps WETH yield into USDC, then adds it to reserves.
-        adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
-        adaptorCalls[1] = _createBytesDataToAddToReserves(amountOfUsdcToAddToReserves);
+        data = new Cellar.AdaptorCall[](2);
+        bytes[] memory adaptorCalls0 = new bytes[](1);
+        adaptorCalls0[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls0 });
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        bytes[] memory adaptorCalls1 = new bytes[](1);
+        adaptorCalls1[0] = _createBytesDataToAddToReserves(amountOfUsdcToAddToReserves);
+        data[1] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls1 });
         cellar.callOnAdaptor(data);
+
+        data = new Cellar.AdaptorCall[](1);
 
         // Strategist calls prepareFees.
         adaptorCalls = new bytes[](1);

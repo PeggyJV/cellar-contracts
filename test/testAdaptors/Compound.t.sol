@@ -161,13 +161,23 @@ contract CellarCompoundTest is Test {
         assertApproxEqRel(cellar.totalAssets(), assets, 0.0002e18, "Total assets should equal assets deposited.");
 
         // Swap from DAI to USDC and lend USDC on Compound.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](3);
-        adaptorCalls[0] = _createBytesDataToWithdraw(cDAI, assets / 2);
-        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 100, assets / 2);
-        adaptorCalls[2] = _createBytesDataToLend(cUSDC, type(uint256).max);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdraw(cDAI, assets / 2);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(DAI, USDC, 100, assets / 2);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(cUSDC, type(uint256).max);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Account for 0.1% Swap Fee.

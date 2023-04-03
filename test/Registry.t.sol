@@ -60,9 +60,9 @@ contract RegistryTest is Test {
     function testSetAddress() external {
         address newAddress = vm.addr(4);
 
-        registry.setAddress(0, newAddress);
+        registry.setAddress(1, newAddress);
 
-        assertEq(registry.getAddress(0), newAddress, "Should set to new address");
+        assertEq(registry.getAddress(1), newAddress, "Should set to new address");
     }
 
     function testSetAddressOfInvalidId() external {
