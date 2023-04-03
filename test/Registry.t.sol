@@ -63,6 +63,14 @@ contract RegistryTest is Test {
         registry.setAddress(1, newAddress);
 
         assertEq(registry.getAddress(1), newAddress, "Should set to new address");
+
+        // Setting address id Zero should revert unless caller is address id Zero.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__OnlyCallableByZeroId.selector)));
+        registry.setAddress(0, address(this));
+
+        // But it can be set by the current Zero Id.
+        vm.prank(gravityBridge);
+        registry.setAddress(0, address(this));
     }
 
     function testSetAddressOfInvalidId() external {
@@ -109,5 +117,98 @@ contract RegistryTest is Test {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__InvalidPositionInput.selector)));
         registry.trustPosition(address(adaptor), abi.encode(USDC));
+    }
+
+    // ============================================= OWNERSHIP TRANSITION TEST =============================================
+
+    function testTransitioningOwner() external {
+        address newOwner = vm.addr(777);
+        // Current owner has been misbehaving, so governance wants to kick them out.
+
+        // Governance accidentally passes in zero address for new owner.
+        vm.startPrank(gravityBridge);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__NewOwnerCanNotBeZero.selector)));
+        registry.transitionOwner(address(0));
+        vm.stopPrank();
+
+        // Governance actually uses the right address.
+        vm.prank(gravityBridge);
+        registry.transitionOwner(newOwner);
+
+        // Old owner tries to call onlyOwner functions.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__TransitionPending.selector)));
+        registry.setAddress(1, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__TransitionPending.selector)));
+        registry.setApprovedForDepositOnBehalf(address(this), true);
+
+        // New owner tries claiming ownership before transition period is over.
+        vm.startPrank(newOwner);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__TransitionPending.selector)));
+        registry.completeTransition();
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + registry.TRANSITION_PERIOD());
+
+        vm.prank(newOwner);
+        registry.completeTransition();
+
+        assertEq(registry.owner(), newOwner, "Registry should be owned by new owner.");
+
+        // New owner renounces ownership.
+        vm.prank(newOwner);
+        registry.renounceOwnership();
+
+        address doug = vm.addr(13);
+        // Governance decides to recover ownership and transfer it to doug.
+        vm.prank(gravityBridge);
+        registry.transitionOwner(doug);
+
+        // Half way through transition governance learns doug is evil, so they cancel the transition.
+        vm.warp(block.timestamp + registry.TRANSITION_PERIOD() / 2);
+        vm.prank(gravityBridge);
+        registry.cancelTransition();
+
+        // doug still tries to claim ownership.
+        vm.warp(block.timestamp + registry.TRANSITION_PERIOD() / 2);
+        vm.startPrank(doug);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__TransitionNotPending.selector)));
+        registry.completeTransition();
+        vm.stopPrank();
+
+        // Governance accidentally calls cancel transition again, but call reverts.
+        vm.startPrank(gravityBridge);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__TransitionNotPending.selector)));
+        registry.cancelTransition();
+        vm.stopPrank();
+
+        // Governance finds the best owner and starts the process.
+        address bestOwner = vm.addr(7777);
+        vm.prank(gravityBridge);
+        registry.transitionOwner(bestOwner);
+
+        // New owner waits an extra week.
+        vm.warp(block.timestamp + 2 * registry.TRANSITION_PERIOD());
+
+        vm.prank(bestOwner);
+        registry.completeTransition();
+
+        assertEq(registry.owner(), bestOwner, "Registry should be owned by best owner.");
+
+        // Governance starts another ownership transfer back to doug.
+        vm.prank(gravityBridge);
+        registry.transitionOwner(doug);
+
+        vm.warp(block.timestamp + 2 * registry.TRANSITION_PERIOD());
+
+        // Doug still has not completed the transfer, so Governance decides to cancel it.
+        vm.prank(gravityBridge);
+        registry.cancelTransition();
+
+        // Doug tries completing it.
+        vm.startPrank(doug);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__TransitionNotPending.selector)));
+        registry.completeTransition();
+        vm.stopPrank();
     }
 }

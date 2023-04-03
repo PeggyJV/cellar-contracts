@@ -54,15 +54,16 @@ contract Registry is Ownable {
         emit DepositorOnBehalfChanged(depositor, state);
     }
 
-    // Could null out current owner so comprimised multisig has no power
-    // TODO Make it so that address 0, is only changeable by address 0, also address 0 can change the owner of this contract
     /**
      * @notice Set the address of the contract at a given id.
      */
-    function setAddress(uint256 id, address newAddress) external onlyOwner {
-        if (id >= nextId) revert Registry__ContractNotRegistered(id);
-
-        if (id == 0 && msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
+    function setAddress(uint256 id, address newAddress) external {
+        if (id > 0) {
+            _checkOwner();
+            if (id >= nextId) revert Registry__ContractNotRegistered(id);
+        } else {
+            if (id == 0 && msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
+        }
 
         emit AddressChanged(id, getAddress[id], newAddress);
 
@@ -114,19 +115,64 @@ contract Registry is Ownable {
      * - It can change the owner of this contract.
      */
 
+    /**
+     * @notice Emitted when an ownership transition is started.
+     */
+    event OwnerTransitionStarted(address newOwner, uint256 startTime);
+
+    /**
+     * @notice Emitted when an ownership transition is cancelled.
+     */
+    event OwnerTransitionCancelled();
+
+    /**
+     * @notice Emitted when an ownership transition is completed.
+     */
+    event OwnerTransitionComplete(address newOwner);
+
+    /**
+     * @notice Attempted to call a function intended for Zero Id address.
+     */
     error Registry__OnlyCallableByZeroId();
+
+    /**
+     * @notice Attempted to transition owner to the zero address.
+     */
     error Registry__NewOwnerCanNotBeZero();
 
+    /**
+     * @notice Attempted to perform a restricted action while ownership transition is pending.
+     */
     error Registry__TransitionPending();
+
+    /**
+     * @notice Attempted to cancel or complete a transition when one is not active.
+     */
     error Registry__TransitionNotPending();
+
+    /**
+     * @notice Attempted to call `completeTransition` from an address that is not the pending owner.
+     */
     error Registry__OnlyCallableByPendingOwner();
 
+    /**
+     * @notice The amount of time it takes for an ownership transition to work.
+     */
     uint256 public constant TRANSITION_PERIOD = 7 days;
 
+    /**
+     * @notice The Pending Owner, that becomes the owner after the transition period, and they call `completeTransition`.
+     */
     address public pendingOwner;
+
+    /**
+     * @notice The starting time stamp of the transition.
+     */
     uint256 public transitionStart;
 
-    // TODO natspec
+    /**
+     * @notice Allows Zero Id address to set a new owner, after the transition period is up.
+     */
     function transitionOwner(address newOwner) external {
         if (msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
         if (pendingOwner != address(0)) revert Registry__TransitionPending();
@@ -136,6 +182,9 @@ contract Registry is Ownable {
         transitionStart = block.timestamp;
     }
 
+    /**
+     * @notice Allows Zero Id address to cancel an ongoing owner transition.
+     */
     function cancelTransition() external {
         if (msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
         if (pendingOwner == address(0)) revert Registry__TransitionNotPending();
@@ -144,6 +193,9 @@ contract Registry is Ownable {
         transitionStart = 0;
     }
 
+    /**
+     * @notice Allows pending owner to complete the ownership transition.
+     */
     function completeTransition() external {
         if (pendingOwner == address(0)) revert Registry__TransitionNotPending();
         if (msg.sender != pendingOwner) revert Registry__OnlyCallableByPendingOwner();
@@ -156,7 +208,7 @@ contract Registry is Ownable {
     }
 
     /**
-     * @notice Block old owner calls.
+     * @notice Extends OZ Ownable `_checkOwner` function to block owner calls, if there is an ongoing transition.
      */
     function _checkOwner() internal view override {
         require(owner() == _msgSender(), "Ownable: caller is not the owner");

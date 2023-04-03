@@ -812,6 +812,57 @@ contract CellarTest is Test {
 
     // =========================================== TOTAL ASSETS TEST ===========================================
 
+    function testCachePriceRouter() external {
+        uint256 assets = 100e6;
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), assets);
+
+        // Deposit USDC into Cellar.
+        cellar.deposit(assets, address(this));
+        assertEq(
+            address(cellar.priceRouter()),
+            address(priceRouter),
+            "Price Router saved in cellar should equal current."
+        );
+
+        // Manipulate state so that stored price router reverts with pricing calls.
+        stdstore.target(address(cellar)).sig(cellar.priceRouter.selector).checked_write(address(0));
+        vm.expectRevert();
+        cellar.totalAssets();
+
+        // Governance can recover cellar by calling `cachePriceRouter(false)`.
+        cellar.cachePriceRouter(false, 0.05e4);
+        assertEq(
+            address(cellar.priceRouter()),
+            address(priceRouter),
+            "Price Router saved in cellar should equal current."
+        );
+
+        // Now that price router is correct, calling it again should succeed even though it doesn't set anything.
+        cellar.cachePriceRouter(true, 0.05e4);
+
+        // Registry sets a malicious price router.
+        registry.setAddress(2, address(this));
+
+        // Try to set it as the cellars price router.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector, 50e6, 95e6, 105e6))
+        );
+        cellar.cachePriceRouter(true, 0.05e4);
+    }
+
+    // Used to act like malicious price router nuder reporting assets.
+    function getValuesDelta(
+        ERC20[] calldata,
+        uint256[] calldata,
+        ERC20[] calldata,
+        uint256[] calldata,
+        ERC20
+    ) external view returns (uint256) {
+        return 50e6;
+    }
+
     function testTotalAssets(
         uint256 usdcAmount,
         uint256 usdcCLRAmount,

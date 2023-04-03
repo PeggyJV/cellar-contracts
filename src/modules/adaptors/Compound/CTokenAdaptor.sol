@@ -208,26 +208,6 @@ contract CTokenAdaptor is BaseAdaptor {
         comptroller().claimComp(address(this));
     }
 
-    // TODO
-    // /**
-    //  * @notice Allows strategists to claim COMP and immediately swap it using oracleSwap.
-    //  * @param assetOut the ERC20 asset to get out of the swap
-    //  * @param exchange UniV2 or UniV3 exchange to make the swap on
-    //  * @param params swap params containing path and poolFees(if UniV3)
-    //  * @param slippage number less than 1e18, defining the max swap slippage
-    //  */
-    // function claimCompAndSwap(
-    //     ERC20 assetOut,
-    //     SwapRouter.Exchange exchange,
-    //     bytes memory params,
-    //     uint64 slippage
-    // ) public {
-    //     uint256 balance = COMP().balanceOf(address(this));
-    //     claimComp();
-    //     balance = COMP().balanceOf(address(this)) - balance;
-    //     oracleSwap(COMP(), assetOut, balance, exchange, params, slippage);
-    // }
-
     //============================================ Helper Functions ============================================
 
     /**

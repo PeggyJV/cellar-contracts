@@ -148,22 +148,6 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
         _revokeExternalApproval(tokenToRepay, address(pool()));
     }
 
-    // TODO
-    // /**
-    //  * @notice Allows strategists to swap assets and repay loans in one call.
-    //  * @dev see `repayAaveDebt`, and BaseAdaptor.sol `swap`
-    //  */
-    // function swapAndRepay(
-    //     ERC20 tokenIn,
-    //     ERC20 tokenToRepay,
-    //     uint256 amountIn,
-    //     SwapRouter.Exchange exchange,
-    //     bytes memory params
-    // ) public {
-    //     uint256 amountToRepay = swap(tokenIn, tokenToRepay, amountIn, exchange, params);
-    //     repayAaveDebt(tokenToRepay, amountToRepay);
-    // }
-
     /**
      * @notice Allows strategist to use aTokens to repay debt tokens with the same underlying.
      */

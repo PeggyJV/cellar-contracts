@@ -61,17 +61,21 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Updates the cellar to use the lastest price router in the registry.
      * @param checkTotalAssets If true totalAssets is checked before and after updating the price router,
      *        and is verified to be withing a +- 5% envelope.
-     *        If false totalAssets is only called after updating the price router.
+     *        If false totalAssets is only called after updating the price router.]
+     * @param allowableRange The +- range the total assets may deviate between the old and new price router.
+     *                       - 1_000 == 10%
+     *                       - 500 == 5%
+     * @dev `allowableRange` reverts from arithmetic underflow if it is greater than 10_000, this is
+     *      desired behavior.
      */
-    function cachePriceRouter(bool checkTotalAssets) external onlyOwner {
+    function cachePriceRouter(bool checkTotalAssets, uint16 allowableRange) external onlyOwner {
         uint256 minAssets;
         uint256 maxAssets;
 
         if (checkTotalAssets) {
             uint256 assetsBefore = totalAssets();
-            // TODO see if I can pass in the percents
-            minAssets = assetsBefore.mulDivDown(0.95e4, 1e4);
-            maxAssets = assetsBefore.mulDivDown(1.05e4, 1e4);
+            minAssets = assetsBefore.mulDivDown(1e4 - allowableRange, 1e4);
+            maxAssets = assetsBefore.mulDivDown(1e4 + allowableRange, 1e4);
         }
 
         priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
