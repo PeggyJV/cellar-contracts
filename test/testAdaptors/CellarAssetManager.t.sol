@@ -15,6 +15,7 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -31,6 +32,8 @@ contract CellarAssetManagerTest is Test {
     MockExchange private exchange;
     MockPriceRouter private priceRouter;
     SwapRouter private swapRouter;
+
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
 
     Registry private registry;
 
@@ -77,6 +80,7 @@ contract CellarAssetManagerTest is Test {
         gravity = new MockGravity();
         cellarAdaptor = new CellarAdaptor();
         erc20Adaptor = new ERC20Adaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -118,6 +122,7 @@ contract CellarAssetManagerTest is Test {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(cellarAdaptor));
         registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
         usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(usdcCLR));
@@ -149,6 +154,7 @@ contract CellarAssetManagerTest is Test {
 
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
         cellar.addAdaptorToCatalogue(address(cellarAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         cellar.setRebalanceDeviation(0.003e18);
 
@@ -188,14 +194,7 @@ contract CellarAssetManagerTest is Test {
         path[0] = address(USDC);
         path[1] = address(WETH);
         bytes memory swapParams = abi.encode(path, assets, 0);
-        adaptorCalls[1] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            WETH,
-            assets,
-            SwapRouter.Exchange.UNIV2,
-            swapParams
-        );
+        adaptorCalls[1] = abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV2.selector, path, assets, 0);
 
         // Deposit new WETH assets into wethCLR.
         adaptorCalls[2] = abi.encodeWithSelector(CellarAdaptor.depositToCellar.selector, wethCLR, type(uint256).max);
@@ -231,14 +230,7 @@ contract CellarAssetManagerTest is Test {
         path[0] = address(USDC);
         path[1] = address(WETH);
         bytes memory swapParams = abi.encode(path, assets, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            WETH,
-            assets,
-            SwapRouter.Exchange.UNIV2,
-            swapParams
-        );
+        adaptorCalls[0] = abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV2.selector, path, assets, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -265,14 +257,7 @@ contract CellarAssetManagerTest is Test {
         path[0] = address(USDC);
         path[1] = address(WBTC); // WBTC is an untracked position.
         bytes memory swapParams = abi.encode(path, assets, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            WBTC,
-            assets,
-            SwapRouter.Exchange.UNIV2,
-            swapParams
-        );
+        adaptorCalls[0] = abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV2.selector, path, assets, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
 
@@ -345,14 +330,7 @@ contract CellarAssetManagerTest is Test {
         path[0] = address(USDC);
         path[1] = address(WETH);
         bytes memory swapParams = abi.encode(path, assets, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            WETH,
-            assets,
-            SwapRouter.Exchange.UNIV2,
-            swapParams
-        );
+        adaptorCalls[0] = abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV2.selector, path, assets, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
 
@@ -447,14 +425,7 @@ contract CellarAssetManagerTest is Test {
         uint256 amount = 500_000e6;
 
         bytes memory swapParams = abi.encode(path, amount, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            USDC,
-            WETH,
-            amount,
-            SwapRouter.Exchange.UNIV2,
-            swapParams
-        );
+        adaptorCalls[0] = abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV2.selector, path, amount, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
 
@@ -758,14 +729,7 @@ contract CellarAssetManagerTest is Test {
         path[0] = address(from);
         path[1] = address(to);
         bytes memory swapParams = abi.encode(path, amount, 0);
-        adaptorCalls[0] = abi.encodeWithSelector(
-            BaseAdaptor.swap.selector,
-            from,
-            to,
-            amount,
-            SwapRouter.Exchange.UNIV2,
-            swapParams
-        );
+        adaptorCalls[0] = abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV2.selector, path, amount, 0);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
         uint256 toBalance = to.balanceOf(address(target));
@@ -895,472 +859,6 @@ contract CellarAssetManagerTest is Test {
             }
         }
     }
-
-    // function testMultipleMintDepositRedeemWithdrawWithGainsLossAndSendFees(uint8 salt) external {
-    //     // Initialize users.
-    //     address alice = vm.addr(1);
-    //     address bob = vm.addr(2);
-    //     address sam = vm.addr(3);
-    //     address mary = vm.addr(4);
-
-    //     // Initialize test Cellar.
-    //     MockCellar assetManagementCellar;
-    //     {
-    //         // Add wBTC position to registry.
-    //         uint32 wbtcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WBTC));
-
-    //         // Create new cellar with WETH, USDC, and WBTC positions.
-    //         uint32[] memory positions = new uint32[](3);
-    //         positions[0] = usdcPosition;
-    //         positions[1] = wethPosition;
-    //         positions[2] = wbtcPosition;
-
-    //         uint32[] memory debtPositions;
-
-    //         bytes[] memory positionConfigs = new bytes[](3);
-    //         bytes[] memory debtConfigs;
-
-    //         assetManagementCellar = new MockCellar(
-    //             registry,
-    //             USDC,
-    //             "Asset Management Cellar LP Token",
-    //             "assetmanagement-CLR",
-    //             abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
-    //         );
-    //     }
-
-    //     // Update allowed rebalance deviation to work with mock swap router.
-    //     assetManagementCellar.setRebalanceDeviation(0.05e18);
-
-    //     stdstore
-    //         .target(address(assetManagementCellar))
-    //         .sig(assetManagementCellar.shareLockPeriod.selector)
-    //         .checked_write(uint256(0));
-
-    //     assetManagementCellar.addAdaptorToCatalogue(address(cellarAdaptor));
-
-    //     // Give users USDC to interact with the Cellar.
-    //     deal(address(USDC), alice, type(uint256).max);
-    //     deal(address(USDC), bob, type(uint256).max);
-    //     deal(address(USDC), sam, type(uint256).max);
-    //     deal(address(USDC), mary, type(uint256).max);
-
-    //     // Approve cellar to send user assets.
-    //     vm.prank(alice);
-    //     USDC.approve(address(assetManagementCellar), type(uint256).max);
-
-    //     vm.prank(bob);
-    //     USDC.approve(address(assetManagementCellar), type(uint256).max);
-
-    //     vm.prank(sam);
-    //     USDC.approve(address(assetManagementCellar), type(uint256).max);
-
-    //     vm.prank(mary);
-    //     USDC.approve(address(assetManagementCellar), type(uint256).max);
-
-    //     // ====================== BEGIN SCENERIO ======================
-
-    //     // Users join  cellar, cellar rebalances into WETH and WBTC positions, and sendFees is called.
-    //     {
-    //         uint256 amount = _mutate(salt) * 1e6;
-    //         uint256 shares;
-    //         uint256 assets;
-
-    //         // Alice joins cellar using deposit.
-    //         (assets, shares) = _userAction(assetManagementCellar, alice, Action.DEPOSIT, amount, 0);
-    //         assertEq(shares, assetManagementCellar.balanceOf(alice), "Alice should have got shares out from deposit.");
-
-    //         // Bob joins cellar using Mint.
-    //         uint256 bobAssets = USDC.balanceOf(bob);
-    //         (assets, shares) = _userAction(assetManagementCellar, bob, Action.MINT, 0, shares);
-    //         assertEq(
-    //             assets,
-    //             bobAssets - USDC.balanceOf(bob),
-    //             "Bob should have `amount` of assets taken from his address."
-    //         );
-
-    //         // Sam joins cellar with deposit, withdraws half his assets, then adds them back in using mint.
-    //         (assets, shares) = _userAction(assetManagementCellar, sam, Action.DEPOSIT, amount, 0);
-    //         (assets, shares) = _userAction(assetManagementCellar, sam, Action.WITHDRAW, amount / 2, 0);
-    //         (assets, shares) = _userAction(assetManagementCellar, sam, Action.MINT, 0, shares);
-    //     }
-    //     {
-    //         // Strategy providers swaps into WETH and WBTC using USDC, targeting a 20/40/40 split(USDC/WETH/WBTC).
-    //         uint256 totalAssets = assetManagementCellar.totalAssets();
-
-    //         // Swap 40% of Cellars USDC for WETH.
-    //         uint256 usdcToSell = totalAssets.mulDivDown(4, 10);
-    //         _rebalance(assetManagementCellar, USDC, WETH, usdcToSell);
-
-    //         // Swap 40% of Cellars USDC for WBTC.
-    //         _rebalance(assetManagementCellar, USDC, WBTC, usdcToSell);
-    //     }
-
-    //     _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, WETH);
-    //     _checkSendFees(assetManagementCellar, 7 days);
-
-    //     // WBTC price increases enough to create yield, Mary joins the cellar, and sendFees is called.
-    //     {
-    //         // WBTC price goes up.
-
-    //         ERC20[] memory assetsToAdjust = new ERC20[](3);
-    //         uint256[] memory prices = new uint256[](3);
-    //         assetsToAdjust[0] = USDC;
-    //         assetsToAdjust[1] = WETH;
-    //         assetsToAdjust[2] = WBTC;
-    //         prices[0] = 1e8;
-    //         prices[1] = 2_000e8;
-    //         prices[2] = 45_000e8;
-    //         _changeMarketPrices(assetsToAdjust, prices);
-    //     }
-    //     {
-    //         uint256 amount = _mutate(salt) * 1e6;
-    //         uint256 shares;
-    //         uint256 assets;
-
-    //         // Mary joins cellar using deposit.
-    //         (assets, shares) = _userAction(assetManagementCellar, mary, Action.DEPOSIT, amount, 0);
-    //     }
-    //     _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, WETH);
-    //     _checkSendFees(assetManagementCellar, 7 days);
-
-    //     // Adjust fee variables, lower WBTC price but raise WETH price enough to
-    //     // create yield, rebalance all positions into WETH, Bob and Sam join
-    //     // cellar, and sendFees is called.
-    //     {
-    //         // Set platform fee to 2%.
-    //         // assetManagementCellar.setPlatformFee(0.02e18);
-
-    //         // Set strategist platform cut to 80%.
-    //         assetManagementCellar.setStrategistPlatformCut(0.8e18);
-
-    //         // Strategist rebalances all positions to only WETH
-    //         uint256 assetBalanceToRemove = USDC.balanceOf(address(assetManagementCellar));
-    //         _rebalance(assetManagementCellar, USDC, WETH, assetBalanceToRemove);
-
-    //         assetBalanceToRemove = WBTC.balanceOf(address(assetManagementCellar));
-    //         _rebalance(assetManagementCellar, WBTC, WETH, assetBalanceToRemove);
-
-    //         // WBTC price goes down. WETH price goes up enough to create yield.
-    //         {
-    //             ERC20[] memory assetsToAdjust = new ERC20[](3);
-    //             uint256[] memory prices = new uint256[](3);
-    //             assetsToAdjust[0] = USDC;
-    //             assetsToAdjust[1] = WETH;
-    //             assetsToAdjust[2] = WBTC;
-    //             prices[0] = 1e8;
-    //             prices[1] = 4_000e8;
-    //             prices[2] = 30_000e8;
-    //             _changeMarketPrices(assetsToAdjust, prices);
-    //         }
-    //     }
-    //     {
-    //         // Bob enters cellar via `mint`.
-    //         uint256 shares = _mutate(salt) * 1e18;
-
-    //         deal(address(USDC), bob, type(uint256).max);
-    //         (, shares) = _userAction(assetManagementCellar, bob, Action.MINT, 0, shares);
-    //         deal(address(USDC), bob, 0);
-    //         deal(address(USDC), sam, type(uint256).max);
-    //         (, shares) = _userAction(assetManagementCellar, sam, Action.MINT, 0, shares);
-    //         deal(address(USDC), sam, 0);
-
-    //         _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 21 days, WETH);
-    //         _checkSendFees(assetManagementCellar, 21 days);
-    //     }
-
-    //     // No yield was earned, and 28 days pass.
-    //     _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 28 days, WETH);
-    //     _checkSendFees(assetManagementCellar, 28 days);
-
-    //     // WETH price decreases, rebalance cellar so that USDC in Cellar can not
-    //     // cover Alice's redeem. Alice redeems shares, and call sendFees.
-    //     {
-    //         //===== Start Bear Market ====
-    //         // ETH price goes down.
-    //         {
-    //             ERC20[] memory assetsToAdjust = new ERC20[](3);
-    //             uint256[] memory prices = new uint256[](3);
-    //             assetsToAdjust[0] = USDC;
-    //             assetsToAdjust[1] = WETH;
-    //             assetsToAdjust[2] = WBTC;
-    //             prices[0] = 1e8;
-    //             prices[1] = 3_000e8;
-    //             prices[2] = 30_000e8;
-    //             _changeMarketPrices(assetsToAdjust, prices);
-    //         }
-
-    //         // Cellar has liquidity in USDC and WETH, rebalance cellar so it
-    //         // must take from USDC, and WETH position to cover Alice's redeem.
-    //         uint256 shares = assetManagementCellar.balanceOf(alice);
-    //         uint256 assets = assetManagementCellar.previewRedeem(shares);
-
-    //         // Manually rebalance Cellar so that it only has 10% of assets needed for Alice's Redeem.
-    //         {
-    //             uint256 targetUSDCBalance = assets / 10;
-    //             uint256 currentUSDCBalance = USDC.balanceOf(address(assetManagementCellar));
-    //             uint256 totalAssets = assetManagementCellar.totalAssets();
-    //             deal(address(USDC), address(assetManagementCellar), 0);
-    //             if (targetUSDCBalance > currentUSDCBalance) {
-    //                 // Need to move assets too USDC.
-    //                 uint256 wethToRemove = priceRouter.getValue(USDC, (targetUSDCBalance - currentUSDCBalance), WETH);
-    //                 deal(
-    //                     address(WETH),
-    //                     address(assetManagementCellar),
-    //                     WETH.balanceOf(address(assetManagementCellar)) - wethToRemove
-    //                 );
-    //             } else if (targetUSDCBalance < currentUSDCBalance) {
-    //                 // Need to move assets from USDC.
-    //                 uint256 wethToAdd = priceRouter.getValue(USDC, (currentUSDCBalance - targetUSDCBalance), WETH);
-    //                 deal(
-    //                     address(WETH),
-    //                     address(assetManagementCellar),
-    //                     WETH.balanceOf(address(assetManagementCellar)) + wethToAdd
-    //                 );
-    //             }
-    //             // Give cellar target USDC Balance such that total assets remains unchanged.
-    //             deal(address(USDC), address(assetManagementCellar), totalAssets - assetManagementCellar.totalAssets());
-
-    //             assertEq(
-    //                 assetManagementCellar.totalAssets(),
-    //                 totalAssets,
-    //                 "Cellar total assets should not be changed."
-    //             );
-    //         }
-
-    //         uint256 assetsForShares = assetManagementCellar.convertToAssets(shares);
-
-    //         // Set Alice's USDC balance to zero to avoid overflow on transfer.
-    //         deal(address(USDC), alice, 0);
-
-    //         // Alice redeems her shares.
-    //         (assets, shares) = _userAction(assetManagementCellar, alice, Action.REDEEM, 0, shares);
-    //         assertEq(assetsForShares, assets, "Assets out should be worth assetsForShares.");
-    //         assertTrue(USDC.balanceOf(alice) > 0, "Alice should have gotten USDC.");
-    //         assertTrue(WETH.balanceOf(alice) > 0, "Alice should have gotten WETH.");
-    //         assertEq(WBTC.balanceOf(alice), 0, "Alice should not have gotten WBTC.");
-    //         uint256 WETHworth = priceRouter.getValue(WETH, WETH.balanceOf(alice), USDC);
-    //         assertApproxEqAbs(USDC.balanceOf(alice) + WETHworth, assets, 1, "Value of assets out should equal assets.");
-    //     }
-
-    //     _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, WETH);
-    //     _checkSendFees(assetManagementCellar, 7 days);
-
-    //     // Alice rejoins cellar, call sendFees.
-    //     {
-    //         // Alice rejoins via mint.
-    //         uint256 sharesToMint = _mutate(salt) * 1e18;
-    //         deal(address(USDC), alice, assetManagementCellar.previewMint(sharesToMint));
-    //         _userAction(assetManagementCellar, alice, Action.MINT, 0, sharesToMint);
-    //     }
-
-    //     _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 1 days, WETH);
-    //     _checkSendFees(assetManagementCellar, 1 days);
-
-    //     // Rebalance cellar to move assets from WETH to WBTC.
-    //     _rebalance(assetManagementCellar, WETH, WBTC, WETH.balanceOf(address(assetManagementCellar)) / 2);
-
-    //     {
-    //         // WBTC goes up a little, USDC depeggs to 0.95.
-
-    //         ERC20[] memory assetsToAdjust = new ERC20[](3);
-    //         uint256[] memory prices = new uint256[](3);
-    //         assetsToAdjust[0] = USDC;
-    //         assetsToAdjust[1] = WETH;
-    //         assetsToAdjust[2] = WBTC;
-    //         prices[0] = 0.95e8;
-    //         prices[1] = 2_700e8;
-    //         prices[2] = 45_000e8;
-    //         _changeMarketPrices(assetsToAdjust, prices);
-
-    //         _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 14 days, WETH);
-    //         _checkSendFees(assetManagementCellar, 14 days);
-
-    //         // Strategists trusts LINK, and then adds it as a position.
-    //         // No need to set LINK price since its assets will always be zero.
-    //         priceRouter.supportAsset(LINK);
-    //         uint32 linkPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(LINK));
-    //         assetManagementCellar.addPositionToCatalogue(linkPosition);
-    //         assetManagementCellar.addPosition(3, linkPosition, abi.encode(0), false);
-
-    //         // Swap LINK position with WETH position.
-    //         assetManagementCellar.swapPositions(3, 1, false);
-
-    //         // Adjust asset prices such that the cellar's TVL drops below the high watermark.
-
-    //         assetsToAdjust = new ERC20[](3);
-    //         prices = new uint256[](3);
-    //         assetsToAdjust[0] = USDC;
-    //         assetsToAdjust[1] = WETH;
-    //         assetsToAdjust[2] = WBTC;
-    //         prices[0] = 0.97e8;
-    //         prices[1] = 2_900e8;
-    //         prices[2] = 30_000e8;
-    //         _changeMarketPrices(assetsToAdjust, prices);
-
-    //         _ensureEnoughAssetsToCoverSendFees(assetManagementCellar, 7 days, WETH);
-    //         _checkSendFees(assetManagementCellar, 7 days);
-    //     }
-    //     {
-    //         // Change price of assets to make manual rebalances easier.
-    //         ERC20[] memory assetsToAdjust = new ERC20[](3);
-    //         uint256[] memory prices = new uint256[](3);
-    //         assetsToAdjust[0] = USDC;
-    //         assetsToAdjust[1] = WETH;
-    //         assetsToAdjust[2] = WBTC;
-    //         prices[0] = 1e8;
-    //         prices[1] = 1_000e8;
-    //         prices[2] = 10_000e8;
-    //         _changeMarketPrices(assetsToAdjust, prices);
-    //     }
-
-    //     // Have everyone completely exit cellar.
-    //     _userAction(assetManagementCellar, alice, Action.REDEEM, 0, assetManagementCellar.balanceOf(alice));
-    //     _userAction(assetManagementCellar, bob, Action.REDEEM, 0, assetManagementCellar.balanceOf(bob));
-    //     _userAction(assetManagementCellar, sam, Action.REDEEM, 0, assetManagementCellar.balanceOf(sam));
-
-    //     // Mary has a ton of USDC from the initial deal, zero out her balance so
-    //     // she can redeem her shares.
-    //     deal(address(USDC), mary, 0);
-    //     _userAction(assetManagementCellar, mary, Action.REDEEM, 0, assetManagementCellar.balanceOf(mary));
-    //     _userAction(assetManagementCellar, strategist, Action.REDEEM, 0, assetManagementCellar.balanceOf(strategist));
-
-    //     assertEq(assetManagementCellar.totalSupply(), 0, "All cellar shares should be burned.");
-    //     assertEq(assetManagementCellar.totalAssets(), 0, "All cellar assets should be removed.");
-
-    //     //Have everyone join with the same amount of assets.
-    //     uint256 assetsNeeded = _mutate(salt) * 1e6;
-    //     uint256 sharesToJoinWith = assetManagementCellar.convertToShares(assetsNeeded);
-
-    //     deal(address(USDC), alice, assetsNeeded);
-    //     deal(address(WETH), alice, 0);
-    //     deal(address(WBTC), alice, 0);
-    //     _userAction(assetManagementCellar, alice, Action.DEPOSIT, assetsNeeded, 0);
-
-    //     deal(address(USDC), bob, assetsNeeded);
-    //     deal(address(WBTC), bob, 0);
-    //     deal(address(WETH), bob, 0);
-    //     _userAction(assetManagementCellar, bob, Action.DEPOSIT, assetsNeeded, 0);
-
-    //     deal(address(USDC), sam, assetsNeeded);
-    //     deal(address(WBTC), sam, 0);
-    //     deal(address(WETH), sam, 0);
-    //     _userAction(assetManagementCellar, sam, Action.DEPOSIT, assetsNeeded, 0);
-
-    //     deal(address(USDC), mary, assetsNeeded);
-    //     deal(address(WBTC), mary, 0);
-    //     deal(address(WETH), mary, 0);
-    //     _userAction(assetManagementCellar, mary, Action.DEPOSIT, assetsNeeded, 0);
-
-    //     // Shutdown the cellar.
-    //     assetManagementCellar.initiateShutdown();
-
-    //     // At this point we know all 4 cellar users have 25% of the shares each.
-
-    //     // Manually rebalance assets like so LINK/WETH/WBTC/USDC 0/10/0/90.
-    //     deal(address(LINK), address(assetManagementCellar), 0);
-    //     deal(address(WBTC), address(assetManagementCellar), 0);
-    //     deal(address(USDC), address(assetManagementCellar), (4 * assetsNeeded).mulDivDown(9, 10));
-    //     deal(address(WETH), address(assetManagementCellar), ((4 * assetsNeeded) / 10000).changeDecimals(6, 18));
-
-    //     // Have Alice exit using withdraw.
-    //     _userAction(assetManagementCellar, alice, Action.WITHDRAW, assetsNeeded, 0);
-
-    //     // Have Bob exit using redeem.
-    //     _userAction(assetManagementCellar, bob, Action.REDEEM, 0, sharesToJoinWith);
-
-    //     // Rebalance asses like so LINK/WETH/WBTC/USDC 0/10/45/45
-    //     deal(address(LINK), address(assetManagementCellar), 0);
-
-    //     // Set WBTC balance in cellar to equal 45% of the cellars total assets.
-    //     deal(address(WBTC), address(assetManagementCellar), ((2 * assetsNeeded * 45) / 1000000).changeDecimals(6, 8));
-    //     deal(address(USDC), address(assetManagementCellar), (2 * assetsNeeded).mulDivDown(1, 10));
-
-    //     // Set WETH balance in cellar to equal 45% of the cellars total assets.
-    //     deal(address(WETH), address(assetManagementCellar), ((2 * assetsNeeded * 45) / 100000).changeDecimals(6, 18));
-
-    //     // Have Sam exit using withdraw.
-    //     _userAction(assetManagementCellar, sam, Action.WITHDRAW, assetsNeeded, 0);
-
-    //     // Have Mary exit using redeem.
-    //     _userAction(assetManagementCellar, mary, Action.REDEEM, 0, sharesToJoinWith);
-
-    //     // The total value we expect each user to have after redeeming their shares.
-    //     uint256 expectedValue = assetsNeeded;
-
-    //     // Alice should have some WETH and USDC.
-    //     {
-    //         uint256 aliceUSDCBalance = USDC.balanceOf(alice);
-    //         uint256 aliceWETHBalance = WETH.balanceOf(alice);
-
-    //         assertTrue(aliceUSDCBalance > 0, "Alice should have some USDC.");
-    //         assertEq(aliceWETHBalance, 0, "Alice should have zero WETH.");
-    //         assertEq(WBTC.balanceOf(alice), 0, "Alice should have zero WBTC.");
-    //         assertEq(LINK.balanceOf(alice), 0, "Alice should have zero LINK.");
-
-    //         assertApproxEqAbs(
-    //             aliceUSDCBalance + priceRouter.getValue(WETH, aliceWETHBalance, USDC),
-    //             expectedValue,
-    //             0,
-    //             "Alice's USDC and WETH worth should equal expectedValue."
-    //         );
-    //     }
-
-    //     // Bob should only have USDC.
-    //     {
-    //         uint256 bobUSDCBalance = USDC.balanceOf(bob);
-    //         uint256 bobWETHBalance = WETH.balanceOf(bob);
-
-    //         assertTrue(bobUSDCBalance > 0, "Bob should have some USDC.");
-    //         assertEq(bobWETHBalance, 0, "Bob should have zero WETH.");
-    //         assertEq(WBTC.balanceOf(bob), 0, "Bob should have zero WBTC.");
-    //         assertEq(LINK.balanceOf(bob), 0, "Bob should have zero LINK.");
-
-    //         assertApproxEqAbs(bobUSDCBalance, expectedValue, 0, "Bob's USDC worth should equal expectedValue.");
-    //     }
-
-    //     //Sam should have WETH, and WBTC.
-    //     {
-    //         uint256 samUSDCBalance = USDC.balanceOf(sam);
-    //         uint256 samWETHBalance = WETH.balanceOf(sam);
-    //         uint256 samWBTCBalance = WBTC.balanceOf(sam);
-
-    //         assertTrue(samUSDCBalance > 0, "Sam should have some USDC.");
-    //         assertEq(samWETHBalance, 0, "Sam should have some WETH.");
-    //         assertTrue(samWBTCBalance > 0, "Sam should have some WBTC.");
-    //         assertEq(LINK.balanceOf(sam), 0, "Sam should have zero LINK.");
-
-    //         assertApproxEqAbs(
-    //             samUSDCBalance +
-    //                 priceRouter.getValue(WETH, samWETHBalance, USDC) +
-    //                 priceRouter.getValue(WBTC, samWBTCBalance, USDC),
-    //             expectedValue,
-    //             0,
-    //             "Sam's USDC, WETH, and WBTC worth should equal expectedValue."
-    //         );
-    //     }
-
-    //     //Mary should have USDC, and WBTC.
-    //     {
-    //         uint256 maryUSDCBalance = USDC.balanceOf(mary);
-    //         uint256 maryWETHBalance = WETH.balanceOf(mary);
-    //         uint256 maryWBTCBalance = WBTC.balanceOf(mary);
-
-    //         assertEq(maryUSDCBalance, 0, "Mary should have zero USDC.");
-    //         assertTrue(maryWETHBalance > 0, "Mary should have some WETH.");
-    //         assertTrue(maryWBTCBalance > 0, "Mary should have some WBTC.");
-    //         assertEq(LINK.balanceOf(mary), 0, "Mary should have zero LINK.");
-
-    //         assertApproxEqAbs(
-    //             maryUSDCBalance +
-    //                 priceRouter.getValue(WETH, maryWETHBalance, USDC) +
-    //                 priceRouter.getValue(WBTC, maryWBTCBalance, USDC),
-    //             expectedValue,
-    //             0,
-    //             "Mary's USDC, WETH, and WBTC worth should equal expectedValue."
-    //         );
-    //     }
-    // }
 
     function testWETHAsCellarAsset(uint8 salt) external {
         // Initialize users.

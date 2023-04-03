@@ -26,6 +26,7 @@ import "@uniswapV3C/libraries/FullMath.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -71,6 +72,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
     address private immutable cosmos = vm.addr(0xCAAA);
 
     MockUniswapV3Adaptor private uniswapV3Adaptor;
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
     ERC20Adaptor private erc20Adaptor;
     UniswapV3PositionTracker private tracker;
 
@@ -90,6 +92,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // Setup Registry and modules:
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
         gravity = new MockGravity();
         uniswapV3Adaptor = new MockUniswapV3Adaptor();
         erc20Adaptor = new ERC20Adaptor();
@@ -126,6 +129,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(uniswapV3Adaptor));
         registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
@@ -154,6 +158,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
         cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         cellar.setRebalanceDeviation(0.003e18);
 
@@ -1323,8 +1328,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
         bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToOpenLP(

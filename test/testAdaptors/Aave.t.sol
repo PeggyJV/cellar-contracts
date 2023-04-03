@@ -14,6 +14,7 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -26,6 +27,7 @@ contract CellarAaveTest is Test {
     AaveATokenAdaptor private aaveATokenAdaptor;
     AaveDebtTokenAdaptor private aaveDebtTokenAdaptor;
     ERC20Adaptor private erc20Adaptor;
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
     Cellar private cellar;
     PriceRouter private priceRouter;
     Registry private registry;
@@ -66,6 +68,7 @@ contract CellarAaveTest is Test {
         aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
         erc20Adaptor = new ERC20Adaptor();
         priceRouter = new PriceRouter();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
@@ -96,6 +99,7 @@ contract CellarAaveTest is Test {
         registry.trustAdaptor(address(erc20Adaptor));
         registry.trustAdaptor(address(aaveATokenAdaptor));
         registry.trustAdaptor(address(aaveDebtTokenAdaptor));
+        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
         aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDC)));
@@ -131,6 +135,7 @@ contract CellarAaveTest is Test {
 
         cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
         cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -245,50 +250,6 @@ contract CellarAaveTest is Test {
         cellar.callOnAdaptor(data);
 
         assertApproxEqAbs(dUSDC.balanceOf(address(cellar)), 0, 1, "Cellar should have no dUSDC left.");
-    }
-
-    function testSwapAndRepay() external {
-        // Deposit into the cellar(which deposits into Aave).
-        uint256 assets = 10_000e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        // Trust WETH as a position in the registry, then add it to the Cellar.
-        uint32 wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
-        cellar.addPositionToCatalogue(wethPosition);
-        cellar.addPosition(2, wethPosition, abi.encode(0), false);
-
-        // Trust dWETH as a position in the registry, then add it to the Cellar.
-        uint32 debtWETHPosition = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dWETH)));
-        cellar.addPositionToCatalogue(debtWETHPosition);
-        cellar.addPosition(1, debtWETHPosition, abi.encode(0), true);
-
-        // Take out a WETH loan.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        uint256 amount = priceRouter.getValue(USDC, assets / 4, WETH);
-        adaptorCalls[0] = _createBytesDataToBorrow(dWETH, amount);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(aaveDebtTokenAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-
-        assertApproxEqAbs(dWETH.balanceOf(address(cellar)), amount, 1, "Cellar should have `amount` WETH debt.");
-
-        // Repay loan using collateral.
-        data = new Cellar.AdaptorCall[](2);
-        bytes[] memory adaptorCallsForFirstAdaptor = new bytes[](1);
-        bytes[] memory adaptorCallsForSecondAdaptor = new bytes[](1);
-        adaptorCallsForFirstAdaptor[0] = _createBytesDataToWithdraw(USDC, assets / 4);
-        adaptorCallsForSecondAdaptor[0] = _createBytesDataToSwapAndRepay(USDC, WETH, 500, assets / 4);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCallsForFirstAdaptor });
-        data[1] = Cellar.AdaptorCall({
-            adaptor: address(aaveDebtTokenAdaptor),
-            callData: adaptorCallsForSecondAdaptor
-        });
-        cellar.callOnAdaptor(data);
-
-        // Relative accounts for swap fees.
-        assertLt(dWETH.balanceOf(address(cellar)), amount, "Cellar should have repaid some WETH debt.");
     }
 
     function testWithdrawableFromaUSDC() external {
@@ -756,9 +717,7 @@ contract CellarAaveTest is Test {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToLend(ERC20 tokenToLend, uint256 amountToLend) internal pure returns (bytes memory) {
@@ -778,29 +737,6 @@ contract CellarAaveTest is Test {
 
     function _createBytesDataToRepay(ERC20 tokenToRepay, uint256 amountToRepay) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveDebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
-    }
-
-    function _createBytesDataToSwapAndRepay(
-        ERC20 from,
-        ERC20 to,
-        uint24 fee,
-        uint256 amount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = fee;
-        bytes memory params = abi.encode(path, poolFees, amount, 0);
-        return
-            abi.encodeWithSelector(
-                AaveDebtTokenAdaptor.swapAndRepay.selector,
-                from,
-                to,
-                amount,
-                SwapRouter.Exchange.UNIV3,
-                params
-            );
     }
 
     function _createBytesDataToFlashLoan(

@@ -14,6 +14,7 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
 import { AaveDebtTokenAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
 import { CTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
@@ -94,6 +95,7 @@ contract UltimateStableCoinCellarTest is Test {
     AaveDebtTokenAdaptor private aaveDebtTokenAdaptor;
     CTokenAdaptor private cTokenAdaptor;
     VestingSimpleAdaptor private vestingAdaptor;
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
 
     // Chainlink PriceFeeds
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
@@ -131,6 +133,7 @@ contract UltimateStableCoinCellarTest is Test {
         // Setup Registry, modules, and adaptors.
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
         factory = new CellarFactory();
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -182,6 +185,7 @@ contract UltimateStableCoinCellarTest is Test {
         registry.trustAdaptor(address(aaveDebtTokenAdaptor));
         registry.trustAdaptor(address(cTokenAdaptor));
         registry.trustAdaptor(address(vestingAdaptor));
+        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
@@ -255,6 +259,7 @@ contract UltimateStableCoinCellarTest is Test {
         cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(vestingAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
@@ -359,7 +364,7 @@ contract UltimateStableCoinCellarTest is Test {
         // ~30% Uniswap V3 DAI/USDC 0.01% and 0.05% LP
         // ~30% Uniswap V3 USDC/USDT 0.01% and 0.05% LP
 
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](5);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](6);
         // Create data to withdraw 80% of assets from compound.
         {
             uint256 amountToWithdraw = assets.mulDivDown(8, 10);
@@ -436,13 +441,18 @@ contract UltimateStableCoinCellarTest is Test {
                 callData: adaptorCallsForFlashLoan
             });
         }
-        // Swap remaining DAI and USDT for USDC and lend it on Compound.
+        // Swap remaining DAI and USDT for USDC
         {
-            bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataForOracleSwap(USDT, USDC, 100, type(uint256).max);
-            adaptorCalls[1] = _createBytesDataForOracleSwap(DAI, USDC, 500, type(uint256).max);
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataForSwap(USDT, USDC, 100, type(uint256).max);
+            adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 500, type(uint256).max);
+            data[4] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        //Lend USDC on Compound.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
             adaptorCalls[2] = _createBytesDataToLendOnCompound(cUSDC, type(uint256).max);
-            data[4] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+            data[5] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
 
         // Perform all adaptor operations to move into desired positions.
@@ -588,9 +598,7 @@ contract UltimateStableCoinCellarTest is Test {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToOpenLP(
@@ -705,59 +713,12 @@ contract UltimateStableCoinCellarTest is Test {
         return abi.encodeWithSelector(AaveDebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
     }
 
-    function _createBytesDataToSwapAndRepay(
-        ERC20 from,
-        ERC20 to,
-        uint24 fee,
-        uint256 amount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = fee;
-        bytes memory params = abi.encode(path, poolFees, amount, 0);
-        return
-            abi.encodeWithSelector(
-                AaveDebtTokenAdaptor.swapAndRepay.selector,
-                from,
-                to,
-                amount,
-                SwapRouter.Exchange.UNIV3,
-                params
-            );
-    }
-
     function _createBytesDataToFlashLoan(
         address[] memory loanToken,
         uint256[] memory loanAmount,
         bytes memory params
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveDebtTokenAdaptor.flashLoan.selector, loanToken, loanAmount, params);
-    }
-
-    function _createBytesDataForOracleSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee,
-        uint256 fromAmount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(
-                BaseAdaptor.oracleSwap.selector,
-                from,
-                to,
-                type(uint256).max,
-                SwapRouter.Exchange.UNIV3,
-                params,
-                0.99e18
-            );
     }
 
     function _createBytesDataToLendOnCompound(
@@ -776,26 +737,5 @@ contract UltimateStableCoinCellarTest is Test {
 
     function _createBytesDataToClaimComp() internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.claimComp.selector);
-    }
-
-    function _createBytesDataForClaimCompAndSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, 0, 0);
-        return
-            abi.encodeWithSelector(
-                CTokenAdaptor.claimCompAndSwap.selector,
-                to,
-                SwapRouter.Exchange.UNIV3,
-                params,
-                0.99e18
-            );
     }
 }
