@@ -424,18 +424,18 @@ contract CellarTest is Test {
 
     function testInteractingWithDistrustedPositions() external {
         cellar.removePosition(4, false);
-        cellar.removePositionFromCatalogue(5); // Removes WETH position from catalogue.
+        cellar.removePositionFromCatalogue(105); // Removes WETH position from catalogue.
 
         // Cellar should not be able to add position to tracked array until it is in the catalogue.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 5)));
-        cellar.addPosition(4, 5, abi.encode(0), false);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 105)));
+        cellar.addPosition(4, 105, abi.encode(0), false);
 
         // Since WETH position is trusted, cellar should be able to add it to the catalogue, and to the tracked array.
-        cellar.addPositionToCatalogue(5);
-        cellar.addPosition(4, 5, abi.encode(0), false);
+        cellar.addPositionToCatalogue(105);
+        cellar.addPosition(4, 105, abi.encode(0), false);
 
         // Registry distrusts weth position.
-        registry.distrustPosition(5);
+        registry.distrustPosition(105);
 
         // Even though position is distrusted Cellar can still operate normally.
         cellar.totalAssets();
@@ -444,15 +444,15 @@ contract CellarTest is Test {
         cellar.removePosition(4, false);
 
         // If strategist tries adding it back it reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 5)));
-        cellar.addPosition(4, 5, abi.encode(0), false);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 105)));
+        cellar.addPosition(4, 105, abi.encode(0), false);
 
         // Governance removes position from cellars catalogue.
-        cellar.removePositionFromCatalogue(5); // Removes WETH position from catalogue.
+        cellar.removePositionFromCatalogue(105); // Removes WETH position from catalogue.
 
         // But tries to add it back later which reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 5)));
-        cellar.addPositionToCatalogue(5);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 105)));
+        cellar.addPositionToCatalogue(105);
     }
 
     function testInteractingWithDistrustedAdaptors() external {

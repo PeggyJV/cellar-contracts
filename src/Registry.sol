@@ -385,9 +385,9 @@ contract Registry is Ownable {
 
     /**
      * @notice Stores the number of positions that have been added to the registry.
-     *         Starts at 1.
+     *         Starts at 101.
      */
-    uint32 public positionCount;
+    uint32 public positionCount = 100;
 
     /**
      * @notice Maps a position hash to a position Id.
