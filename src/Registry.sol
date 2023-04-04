@@ -62,7 +62,7 @@ contract Registry is Ownable {
             _checkOwner();
             if (id >= nextId) revert Registry__ContractNotRegistered(id);
         } else {
-            if (id == 0 && msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
+            if (msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
         }
 
         emit AddressChanged(id, getAddress[id], newAddress);
