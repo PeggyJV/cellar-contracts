@@ -124,7 +124,7 @@ contract UniswapV3PositionTracker {
         return callerToToken0ToToken1ToHoldings[caller][token0][token1];
     }
 
-    //============================== Internal View Functions ===============================
+    //============================== Internal Functions ===============================
 
     /**
      * @notice Iterates over a user holdings, and removes targetId if found.
