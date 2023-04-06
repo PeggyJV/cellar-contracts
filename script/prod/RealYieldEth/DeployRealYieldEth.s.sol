@@ -100,134 +100,136 @@ contract DeployRealYieldEthScript is Script {
     function run() external {
         vm.startBroadcast();
 
-        // Deploy Supporting contracts
-        wethVestor = new VestingSimple(WETH, 3 days, 0.001e18);
+        cTokenAdaptor = new CTokenAdaptor();
 
-        // Deploy adaptors.
-        uniswapV3Adaptor = new UniswapV3Adaptor();
-        feesAndReservesAdaptor = new FeesAndReservesAdaptor();
+        // // Deploy Supporting contracts
+        // wethVestor = new VestingSimple(WETH, 3 days, 0.001e18);
 
-        erc20Adaptor = new ERC20Adaptor();
-        aaveATokenAdaptor = new AaveATokenAdaptor();
-        aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
-        aaveV3ATokenAdaptor = new AaveV3ATokenAdaptor();
-        aaveV3DebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
-        zeroXAdaptor = new ZeroXAdaptor();
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
-        oneInchAdaptor = new OneInchAdaptor();
-        vestingSimpleAdaptor = new VestingSimpleAdaptor();
+        // // Deploy adaptors.
+        // uniswapV3Adaptor = new UniswapV3Adaptor();
+        // feesAndReservesAdaptor = new FeesAndReservesAdaptor();
 
-        // Trust all adaptors.
-        registry.trustAdaptor(address(uniswapV3Adaptor));
-        registry.trustAdaptor(address(feesAndReservesAdaptor));
-        registry.trustAdaptor(address(erc20Adaptor));
-        registry.trustAdaptor(address(aaveATokenAdaptor));
-        registry.trustAdaptor(address(aaveDebtTokenAdaptor));
-        registry.trustAdaptor(address(aaveV3ATokenAdaptor));
-        registry.trustAdaptor(address(aaveV3DebtTokenAdaptor));
-        registry.trustAdaptor(address(zeroXAdaptor));
-        registry.trustAdaptor(address(swapWithUniswapAdaptor));
-        registry.trustAdaptor(address(oneInchAdaptor));
-        registry.trustAdaptor(address(vestingSimpleAdaptor));
+        // erc20Adaptor = new ERC20Adaptor();
+        // aaveATokenAdaptor = new AaveATokenAdaptor();
+        // aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
+        // aaveV3ATokenAdaptor = new AaveV3ATokenAdaptor();
+        // aaveV3DebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
+        // zeroXAdaptor = new ZeroXAdaptor();
+        // swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        // oneInchAdaptor = new OneInchAdaptor();
+        // vestingSimpleAdaptor = new VestingSimpleAdaptor();
 
-        uint32[] memory positionIds = new uint32[](16);
+        // // Trust all adaptors.
+        // registry.trustAdaptor(address(uniswapV3Adaptor));
+        // registry.trustAdaptor(address(feesAndReservesAdaptor));
+        // registry.trustAdaptor(address(erc20Adaptor));
+        // registry.trustAdaptor(address(aaveATokenAdaptor));
+        // registry.trustAdaptor(address(aaveDebtTokenAdaptor));
+        // registry.trustAdaptor(address(aaveV3ATokenAdaptor));
+        // registry.trustAdaptor(address(aaveV3DebtTokenAdaptor));
+        // registry.trustAdaptor(address(zeroXAdaptor));
+        // registry.trustAdaptor(address(swapWithUniswapAdaptor));
+        // registry.trustAdaptor(address(oneInchAdaptor));
+        // registry.trustAdaptor(address(vestingSimpleAdaptor));
 
-        // Add Positions to registry.
-        // credit positions
-        positionIds[0] = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
-        positionIds[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(cbETH));
-        positionIds[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(rETH));
-        positionIds[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(stETH));
-        positionIds[4] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2WETH)));
-        positionIds[5] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2STETH)));
-        positionIds[6] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3WETH)));
-        positionIds[7] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3RETH)));
-        positionIds[8] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3CBETH)));
-        positionIds[9] = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(cbETH, WETH));
-        positionIds[10] = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(rETH, WETH));
-        positionIds[11] = registry.trustPosition(address(vestingSimpleAdaptor), abi.encode(wethVestor));
+        // uint32[] memory positionIds = new uint32[](16);
 
-        // debt positions
-        positionIds[12] = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dV2WETH)));
-        positionIds[13] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3WETH)));
-        positionIds[14] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3RETH)));
-        positionIds[15] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3CBETH)));
+        // // Add Positions to registry.
+        // // credit positions
+        // positionIds[0] = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
+        // positionIds[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(cbETH));
+        // positionIds[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(rETH));
+        // positionIds[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(stETH));
+        // positionIds[4] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2WETH)));
+        // positionIds[5] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2STETH)));
+        // positionIds[6] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3WETH)));
+        // positionIds[7] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3RETH)));
+        // positionIds[8] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3CBETH)));
+        // positionIds[9] = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(cbETH, WETH));
+        // positionIds[10] = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(rETH, WETH));
+        // positionIds[11] = registry.trustPosition(address(vestingSimpleAdaptor), abi.encode(wethVestor));
 
-        // Deploy new Cellar implementation.
-        CellarInitializableV2_2 implementation = new CellarInitializableV2_2(registry);
+        // // debt positions
+        // positionIds[12] = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dV2WETH)));
+        // positionIds[13] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3WETH)));
+        // positionIds[14] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3RETH)));
+        // positionIds[15] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3CBETH)));
 
-        bytes memory params = abi.encode(
-            address(0),
-            registry,
-            WETH,
-            "Production Implementation",
-            "Prod Imp",
-            positionIds[0],
-            abi.encode(0),
-            address(0)
-        );
+        // // Deploy new Cellar implementation.
+        // CellarInitializableV2_2 implementation = new CellarInitializableV2_2(registry);
 
-        // Initialize Implementation.
-        implementation.initialize(params);
+        // bytes memory params = abi.encode(
+        //     address(0),
+        //     registry,
+        //     WETH,
+        //     "Production Implementation",
+        //     "Prod Imp",
+        //     positionIds[0],
+        //     abi.encode(0),
+        //     address(0)
+        // );
 
-        factory.addImplementation(address(implementation), 2, 2);
+        // // Initialize Implementation.
+        // implementation.initialize(params);
 
-        // Deploy cellar using factory.
-        bytes memory initializeCallData = abi.encode(
-            devOwner,
-            registry,
-            WETH,
-            "Real Yield ETH",
-            "YieldETH",
-            positionIds[6],
-            abi.encode(1.05e18),
-            strategist
-        );
-        address imp = factory.getImplementation(2, 2);
-        require(imp != address(0), "Invalid implementation");
+        // factory.addImplementation(address(implementation), 2, 2);
 
-        uint256 initialDeposit = 0.001e18;
-        WETH.approve(address(factory), initialDeposit);
-        address clone = factory.deploy(
-            2,
-            2,
-            initializeCallData,
-            WETH,
-            initialDeposit,
-            keccak256(abi.encode(block.timestamp))
-        );
-        cellar = CellarInitializableV2_2(clone);
+        // // Deploy cellar using factory.
+        // bytes memory initializeCallData = abi.encode(
+        //     devOwner,
+        //     registry,
+        //     WETH,
+        //     "Real Yield ETH",
+        //     "YieldETH",
+        //     positionIds[6],
+        //     abi.encode(1.05e18),
+        //     strategist
+        // );
+        // address imp = factory.getImplementation(2, 2);
+        // require(imp != address(0), "Invalid implementation");
 
-        // Setup all the adaptors the cellar will use.
-        cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
-        cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
-        cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
-        cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
-        cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
-        cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
-        cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
-        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
-        cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
-        cellar.addAdaptorToCatalogue(address(vestingSimpleAdaptor));
+        // uint256 initialDeposit = 0.001e18;
+        // WETH.approve(address(factory), initialDeposit);
+        // address clone = factory.deploy(
+        //     2,
+        //     2,
+        //     initializeCallData,
+        //     WETH,
+        //     initialDeposit,
+        //     keccak256(abi.encode(block.timestamp))
+        // );
+        // cellar = CellarInitializableV2_2(clone);
 
-        // Setup all the positions the cellar will use.
-        cellar.addPositionToCatalogue(positionIds[0]);
-        cellar.addPositionToCatalogue(positionIds[1]);
-        cellar.addPositionToCatalogue(positionIds[2]);
-        cellar.addPositionToCatalogue(positionIds[3]);
-        cellar.addPositionToCatalogue(positionIds[4]);
-        cellar.addPositionToCatalogue(positionIds[5]);
-        cellar.addPositionToCatalogue(positionIds[7]);
-        cellar.addPositionToCatalogue(positionIds[8]);
-        cellar.addPositionToCatalogue(positionIds[9]);
-        cellar.addPositionToCatalogue(positionIds[10]);
-        cellar.addPositionToCatalogue(positionIds[11]);
-        cellar.addPositionToCatalogue(positionIds[12]);
-        cellar.addPositionToCatalogue(positionIds[13]);
-        cellar.addPositionToCatalogue(positionIds[14]);
-        cellar.addPositionToCatalogue(positionIds[15]);
+        // // Setup all the adaptors the cellar will use.
+        // cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
+        // cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+        // cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+        // cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+        // cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+        // cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
+        // cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
+        // cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+        // cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
+        // cellar.addAdaptorToCatalogue(address(vestingSimpleAdaptor));
 
-        cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        // // Setup all the positions the cellar will use.
+        // cellar.addPositionToCatalogue(positionIds[0]);
+        // cellar.addPositionToCatalogue(positionIds[1]);
+        // cellar.addPositionToCatalogue(positionIds[2]);
+        // cellar.addPositionToCatalogue(positionIds[3]);
+        // cellar.addPositionToCatalogue(positionIds[4]);
+        // cellar.addPositionToCatalogue(positionIds[5]);
+        // cellar.addPositionToCatalogue(positionIds[7]);
+        // cellar.addPositionToCatalogue(positionIds[8]);
+        // cellar.addPositionToCatalogue(positionIds[9]);
+        // cellar.addPositionToCatalogue(positionIds[10]);
+        // cellar.addPositionToCatalogue(positionIds[11]);
+        // cellar.addPositionToCatalogue(positionIds[12]);
+        // cellar.addPositionToCatalogue(positionIds[13]);
+        // cellar.addPositionToCatalogue(positionIds[14]);
+        // cellar.addPositionToCatalogue(positionIds[15]);
+
+        // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
 
         vm.stopBroadcast();
     }
