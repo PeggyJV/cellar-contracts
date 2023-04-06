@@ -45,30 +45,9 @@ interface ICellar {
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract UpdateRealYieldUsdScript is Script {
-    address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
-    address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-
-    address private strategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
-    address private devOwner = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
-    address private otherDevAddress = 0xF3De89fAD937c11e770Bc6291cb5E04d8784aE0C;
-    address private multisig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
-
     TimelockController private controller = TimelockController(payable(0xaDa78a5E01325B91Bc7879a63c309F7D54d42950));
 
-    IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
-
-    CellarInitializableV2_1 private cellar = CellarInitializableV2_1(0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E);
-    PriceRouter private priceRouter;
     IRegistry private registry = IRegistry(0x2Cbd27E034FEE53f79b607430dA7771B22050741);
-    UniswapV3Adaptor private uniswapV3Adaptor = UniswapV3Adaptor(0xDbd750F72a00d01f209FFc6C75e80301eFc789C1);
-
-    INonfungiblePositionManager internal positionManager =
-        INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
-
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
 
     address public vestingSimpleAdaptor = 0x508E6aE090eA92Cb90571e4269B799257CD78CA1;
     address public oneInchAdaptor = 0xB8952ce4010CFF3C74586d712a4402285A3a3AFb;
@@ -89,9 +68,10 @@ contract UpdateRealYieldUsdScript is Script {
     address private aV3USDC = 0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c;
     address private aV3DAI = 0x018008bfb33d285247A21d44E50697654f754e63;
     address private aV3USDT = 0x23878914EFE38d27C4D67Ab83ed1b93A74D4086a;
-    address private cUSDC = 0x39AA39c021dfbaE8faC545936693aC917d5E7563;
-    address private cDAI = 0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643;
-    address private cUSDT = 0xf650C3d88D12dB855b8bf7D11Be6C55A4e07dCC9;
+
+    // address private cUSDC = 0x39AA39c021dfbaE8faC545936693aC917d5E7563;
+    // address private cDAI = 0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643;
+    // address private cUSDT = 0xf650C3d88D12dB855b8bf7D11Be6C55A4e07dCC9;
 
     function run() external {
         uint256 numberOfCalls = 15;
