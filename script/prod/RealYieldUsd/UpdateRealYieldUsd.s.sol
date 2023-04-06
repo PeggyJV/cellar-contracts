@@ -81,10 +81,6 @@ contract UpdateRealYieldUsdScript is Script {
     address public feesAndReservesAdaptor = 0x647d264d800A2461E594796af61a39b7735d8933;
     address public cTokenAdaptor = 0x9a384Df333588428843D128120Becd72434ec078;
 
-    // Current one
-    address public uniV3Adaptor = 0xDbd750F72a00d01f209FFc6C75e80301eFc789C1;
-    address public oldCTokenAdaptor = 0x26DbA82495f6189DDe7648Ae88bEAd46C402F078;
-
     // Values needed to make positions.
     address public usdcVestor = 0xd944D0e62de2ae742C4CA085e80222f58B69b231;
     address private aV2USDC = 0xBcca60bB61934080951369a648Fb03DF4F96263C;
