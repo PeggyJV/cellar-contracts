@@ -86,7 +86,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @notice Uniswap V3 Tracker on ETH Mainnet.
      */
     function tracker() internal pure virtual returns (UniswapV3PositionTracker) {
-        return UniswapV3PositionTracker(0x0D2ca1DBA6B3245B259949a256974dD3461C5b05);
+        return UniswapV3PositionTracker(0xf2854d84D9Dd27eCcD6aB20b3F66111a51bb56d2);
     }
 
     //============================================ Implement Base Functions ===========================================

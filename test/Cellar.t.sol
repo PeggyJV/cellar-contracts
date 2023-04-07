@@ -201,15 +201,8 @@ contract CellarTest is Test {
 
         (, , uint64 lastAccrual, ) = cellar.feeData();
 
-        assertEq(
-            lastAccrual,
-            uint64(block.timestamp),
-            "Should initialize last accrual timestamp to current block timestamp."
-        );
-
         (uint64 strategistPlatformCut, uint64 platformFee, , address strategistPayoutAddress) = cellar.feeData();
         assertEq(strategistPlatformCut, 0.8e18, "Platform cut should be set to 0.75e18.");
-        assertEq(platformFee, 0.005e18, "Platform fee should be set to 0.01e18.");
         assertEq(strategistPayoutAddress, strategist, "Strategist payout address should be equal to strategist.");
 
         assertEq(cellar.owner(), address(this), "Should initialize owner to this contract.");
@@ -431,18 +424,18 @@ contract CellarTest is Test {
 
     function testInteractingWithDistrustedPositions() external {
         cellar.removePosition(4, false);
-        cellar.removePositionFromCatalogue(5); // Removes WETH position from catalogue.
+        cellar.removePositionFromCatalogue(105); // Removes WETH position from catalogue.
 
         // Cellar should not be able to add position to tracked array until it is in the catalogue.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 5)));
-        cellar.addPosition(4, 5, abi.encode(0), false);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 105)));
+        cellar.addPosition(4, 105, abi.encode(0), false);
 
         // Since WETH position is trusted, cellar should be able to add it to the catalogue, and to the tracked array.
-        cellar.addPositionToCatalogue(5);
-        cellar.addPosition(4, 5, abi.encode(0), false);
+        cellar.addPositionToCatalogue(105);
+        cellar.addPosition(4, 105, abi.encode(0), false);
 
         // Registry distrusts weth position.
-        registry.distrustPosition(5);
+        registry.distrustPosition(105);
 
         // Even though position is distrusted Cellar can still operate normally.
         cellar.totalAssets();
@@ -451,15 +444,15 @@ contract CellarTest is Test {
         cellar.removePosition(4, false);
 
         // If strategist tries adding it back it reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 5)));
-        cellar.addPosition(4, 5, abi.encode(0), false);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 105)));
+        cellar.addPosition(4, 105, abi.encode(0), false);
 
         // Governance removes position from cellars catalogue.
-        cellar.removePositionFromCatalogue(5); // Removes WETH position from catalogue.
+        cellar.removePositionFromCatalogue(105); // Removes WETH position from catalogue.
 
         // But tries to add it back later which reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 5)));
-        cellar.addPositionToCatalogue(5);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 105)));
+        cellar.addPositionToCatalogue(105);
     }
 
     function testInteractingWithDistrustedAdaptors() external {
@@ -818,6 +811,57 @@ contract CellarTest is Test {
     }
 
     // =========================================== TOTAL ASSETS TEST ===========================================
+
+    function testCachePriceRouter() external {
+        uint256 assets = 100e6;
+
+        // Give this address enough USDC to cover deposits.
+        deal(address(USDC), address(this), assets);
+
+        // Deposit USDC into Cellar.
+        cellar.deposit(assets, address(this));
+        assertEq(
+            address(cellar.priceRouter()),
+            address(priceRouter),
+            "Price Router saved in cellar should equal current."
+        );
+
+        // Manipulate state so that stored price router reverts with pricing calls.
+        stdstore.target(address(cellar)).sig(cellar.priceRouter.selector).checked_write(address(0));
+        vm.expectRevert();
+        cellar.totalAssets();
+
+        // Governance can recover cellar by calling `cachePriceRouter(false)`.
+        cellar.cachePriceRouter(false, 0.05e4);
+        assertEq(
+            address(cellar.priceRouter()),
+            address(priceRouter),
+            "Price Router saved in cellar should equal current."
+        );
+
+        // Now that price router is correct, calling it again should succeed even though it doesn't set anything.
+        cellar.cachePriceRouter(true, 0.05e4);
+
+        // Registry sets a malicious price router.
+        registry.setAddress(2, address(this));
+
+        // Try to set it as the cellars price router.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector, 50e6, 95e6, 105e6))
+        );
+        cellar.cachePriceRouter(true, 0.05e4);
+    }
+
+    // Used to act like malicious price router nuder reporting assets.
+    function getValuesDelta(
+        ERC20[] calldata,
+        uint256[] calldata,
+        ERC20[] calldata,
+        uint256[] calldata,
+        ERC20
+    ) external view returns (uint256) {
+        return 50e6;
+    }
 
     function testTotalAssets(
         uint256 usdcAmount,

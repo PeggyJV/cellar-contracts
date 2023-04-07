@@ -14,6 +14,7 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
 import { AaveDebtTokenAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
 import { CTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
@@ -94,6 +95,7 @@ contract UltimateStableCoinCellarTest is Test {
     AaveDebtTokenAdaptor private aaveDebtTokenAdaptor;
     CTokenAdaptor private cTokenAdaptor;
     VestingSimpleAdaptor private vestingAdaptor;
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
 
     // Chainlink PriceFeeds
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
@@ -147,6 +149,7 @@ contract UltimateStableCoinCellarTest is Test {
         aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
         cTokenAdaptor = new CTokenAdaptor();
         vestingAdaptor = new VestingSimpleAdaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
 
         // Setup price feeds.
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -182,6 +185,7 @@ contract UltimateStableCoinCellarTest is Test {
         registry.trustAdaptor(address(aaveDebtTokenAdaptor));
         registry.trustAdaptor(address(cTokenAdaptor));
         registry.trustAdaptor(address(vestingAdaptor));
+        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
@@ -255,6 +259,7 @@ contract UltimateStableCoinCellarTest is Test {
         cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(vestingAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
@@ -270,16 +275,21 @@ contract UltimateStableCoinCellarTest is Test {
         cellar.deposit(assets, address(this));
 
         // Use `callOnAdaptor` to swap and enter 2 different UniV3 positions.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](4);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
+            adaptorCalls[1] = _createBytesDataForSwap(USDC, USDT, 100, assets / 4);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
-        adaptorCalls[1] = _createBytesDataForSwap(USDC, USDT, 100, assets / 4);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
+            adaptorCalls[1] = _createBytesDataToOpenLP(USDC, USDT, 100, 50_000e6, 50_000e6, 200);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
-        adaptorCalls[3] = _createBytesDataToOpenLP(USDC, USDT, 100, 50_000e6, 50_000e6, 200);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Create positions on Aave.
@@ -303,7 +313,7 @@ contract UltimateStableCoinCellarTest is Test {
         deal(address(DAI), address(cellar), 2e18);
         deal(address(USDT), address(cellar), 2e6);
         data = new Cellar.AdaptorCall[](1);
-        adaptorCalls = new bytes[](3);
+        bytes[] memory adaptorCalls = new bytes[](3);
         adaptorCalls[0] = _createBytesDataToLendOnCompound(cUSDC, 1e6);
         adaptorCalls[1] = _createBytesDataToLendOnCompound(cDAI, 1e18);
         adaptorCalls[2] = _createBytesDataToLendOnCompound(cUSDT, 1e6);
@@ -324,7 +334,6 @@ contract UltimateStableCoinCellarTest is Test {
         // 4) Uniswap V3 USDC/USDT LP
         // debt positions
         // 0) Aave debt USDT
-
         // Swap cUSDC and DAI position.
         cellar.swapPositions(1, 8, false);
         // Change holding position to index 1
@@ -336,11 +345,9 @@ contract UltimateStableCoinCellarTest is Test {
         // Uniswap V3 positions are already in their correct spot.
         // Remove unused credit positions.
         for (uint256 i; i < 7; i++) cellar.removePosition(5, false);
-
         // Remove unused debt positions.
         cellar.removePosition(0, true); // Removes dUSDC
         cellar.removePosition(0, true); // Removes dDAI
-
         // Have whale join the cellar with 10M USDC.
         uint256 assets = 10_000_000e6;
         address whale = vm.addr(777);
@@ -349,17 +356,13 @@ contract UltimateStableCoinCellarTest is Test {
         USDC.approve(address(cellar), assets);
         cellar.deposit(assets, whale);
         vm.stopPrank();
-
         // Change rebalance deviation to 1% so we can do more stuff during the rebalance.
         cellar.setRebalanceDeviation(0.01e18);
-
         // Strategist manages cellar in order to achieve the following portfolio.
-        // ~20% in cUSDC.
-        // ~20% in aUSDC/dUSDT with a 5x USDT short
+        // ~40% in cUSDC.
         // ~30% Uniswap V3 DAI/USDC 0.01% and 0.05% LP
         // ~30% Uniswap V3 USDC/USDT 0.01% and 0.05% LP
-
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](5);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](6);
         // Create data to withdraw 80% of assets from compound.
         {
             uint256 amountToWithdraw = assets.mulDivDown(8, 10);
@@ -367,7 +370,6 @@ contract UltimateStableCoinCellarTest is Test {
             adaptorCalls[0] = _createBytesDataToWithdrawFromCompound(cUSDC, amountToWithdraw);
             data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
-
         // Create data to lend 20% of assets on Aave.
         {
             uint256 amountToLend = assets.mulDivDown(2, 10);
@@ -375,120 +377,81 @@ contract UltimateStableCoinCellarTest is Test {
             adaptorCalls[0] = _createBytesDataToLendOnAave(USDC, amountToLend);
             data[1] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls });
         }
-
-        // Create data to add liquidity to Uniswap V3.
+        // Create data to swap and add liquidity to Uniswap V3.
         {
-            bytes[] memory adaptorCalls = new bytes[](6);
             uint256 usdcToUse = assets.mulDivDown(15, 100);
-
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
-            adaptorCalls[1] = _createBytesDataForSwap(USDC, USDT, 100, usdcToUse);
-
+            {
+                bytes[] memory adaptorCalls = new bytes[](2);
+                adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwap(USDC, USDT, 100, usdcToUse);
+                data[2] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+            }
             // Since we are dividing the USDC into 2 LP positions each, cut it in half.
             usdcToUse = usdcToUse / 2;
-
-            adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, usdcToUse, 30);
-            adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 500, type(uint256).max, usdcToUse, 40);
-
-            adaptorCalls[4] = _createBytesDataToOpenLP(USDC, USDT, 100, usdcToUse, type(uint256).max, 20);
-            adaptorCalls[5] = _createBytesDataToOpenLP(USDC, USDT, 500, usdcToUse, type(uint256).max, 80);
-
-            data[2] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            {
+                bytes[] memory adaptorCalls = new bytes[](4);
+                adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, usdcToUse, 30);
+                adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 500, type(uint256).max, usdcToUse, 40);
+                adaptorCalls[2] = _createBytesDataToOpenLP(USDC, USDT, 100, usdcToUse, type(uint256).max, 20);
+                adaptorCalls[3] = _createBytesDataToOpenLP(USDC, USDT, 500, usdcToUse, type(uint256).max, 80);
+                data[3] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            }
         }
-
-        // Create data to short USDT for USDC at 5x leverage on Aave.
-        // Note any remaining USDC dust from prior calls will be lent on Aave.
+        // Swap remaining DAI and USDT for USDC
         {
-            // divide by 5 to use 20% of assets.
-            // multiply by 2 to use 3x leverage.
-            uint256 USDTtoFlashLoan = assets.mulDivDown(2, 5);
-            // Borrow the flash loan amount + premium.
-            uint256 USDTtoBorrow = USDTtoFlashLoan.mulDivDown(1e3 + pool.FLASHLOAN_PREMIUM_TOTAL(), 1e3);
-
-            bytes[] memory adaptorCallsForFlashLoan = new bytes[](1);
-            Cellar.AdaptorCall[] memory dataInsideFlashLoan = new Cellar.AdaptorCall[](2);
-            bytes[] memory adaptorCallsInsideFlashLoanFirstAdaptor = new bytes[](2);
-            bytes[] memory adaptorCallsInsideFlashLoanSecondAdaptor = new bytes[](1);
-            // Swap all the USDT for USDC.
-            adaptorCallsInsideFlashLoanFirstAdaptor[0] = _createBytesDataForSwap(USDT, USDC, 100, USDTtoFlashLoan);
-            // Lend USDC on Aave specifying to use the max amount available.
-            adaptorCallsInsideFlashLoanFirstAdaptor[1] = _createBytesDataToLendOnAave(USDC, type(uint256).max);
-            adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToBorrow(dUSDT, USDTtoBorrow);
-            dataInsideFlashLoan[0] = Cellar.AdaptorCall({
-                adaptor: address(aaveATokenAdaptor),
-                callData: adaptorCallsInsideFlashLoanFirstAdaptor
-            });
-            dataInsideFlashLoan[1] = Cellar.AdaptorCall({
-                adaptor: address(aaveDebtTokenAdaptor),
-                callData: adaptorCallsInsideFlashLoanSecondAdaptor
-            });
-            address[] memory loanToken = new address[](1);
-            loanToken[0] = address(USDT);
-            uint256[] memory loanAmount = new uint256[](1);
-            loanAmount[0] = USDTtoFlashLoan;
-            adaptorCallsForFlashLoan[0] = _createBytesDataToFlashLoan(
-                loanToken,
-                loanAmount,
-                abi.encode(dataInsideFlashLoan)
-            );
-            data[3] = Cellar.AdaptorCall({
-                adaptor: address(aaveDebtTokenAdaptor),
-                callData: adaptorCallsForFlashLoan
-            });
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataForSwap(USDT, USDC, 100, type(uint256).max);
+            adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 500, type(uint256).max);
+            data[4] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
-        // Swap remaining DAI and USDT for USDC and lend it on Compound.
+        //Lend USDC on Compound.
         {
-            bytes[] memory adaptorCalls = new bytes[](3);
-            adaptorCalls[0] = _createBytesDataForOracleSwap(USDT, USDC, 100, type(uint256).max);
-            adaptorCalls[1] = _createBytesDataForOracleSwap(DAI, USDC, 500, type(uint256).max);
-            adaptorCalls[2] = _createBytesDataToLendOnCompound(cUSDC, type(uint256).max);
-            data[4] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLendOnCompound(cUSDC, type(uint256).max);
+            data[5] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
-
         // Perform all adaptor operations to move into desired positions.
         cellar.callOnAdaptor(data);
-
         // Generate some Compound, and Uniswap V3 earnings.
         // Manipulate Comptroller storage to give Cellar some pending COMP.
-        uint256 compReward = 100e18;
-        stdstore
-            .target(address(comptroller))
-            .sig(comptroller.compAccrued.selector)
-            .with_key(address(cellar))
-            .checked_write(compReward);
-        // Have test contract perform a ton of swaps in Uniswap V3 DAI/USDC and USDC/USDT pools.
-        uint256 assetsToSwap = 100_000_000e6;
-        deal(address(USDC), address(this), assetsToSwap);
-        address[] memory path0 = new address[](2);
-        path0[0] = address(USDC);
-        path0[1] = address(DAI);
-        address[] memory path1 = new address[](2);
-        path1[0] = address(USDC);
-        path1[1] = address(USDT);
-        address[] memory path2 = new address[](2);
-        path2[0] = address(DAI);
-        path2[1] = address(USDC);
-        address[] memory path3 = new address[](2);
-        path3[0] = address(USDT);
-        path3[1] = address(USDC);
-        uint24[] memory poolFees = new uint24[](1);
-        bytes memory swapData;
-        poolFees[0] = 100;
-        USDC.safeApprove(address(swapRouter), type(uint256).max);
-        DAI.safeApprove(address(swapRouter), type(uint256).max);
-        USDT.safeApprove(address(swapRouter), type(uint256).max);
-        for (uint256 i = 0; i < 10; i++) {
-            uint256 swapAmount = assetsToSwap / 2;
-            swapData = abi.encode(path0, poolFees, swapAmount, 0);
-            uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
-            swapData = abi.encode(path1, poolFees, swapAmount, 0);
-            uint256 usdtAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, USDT);
-            swapData = abi.encode(path2, poolFees, daiAmount, 0);
-            assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
-            swapData = abi.encode(path3, poolFees, usdtAmount, 0);
-            assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), USDT, USDC);
-        }
-
+        // uint256 compReward = 100e18;
+        // stdstore
+        //     .target(address(comptroller))
+        //     .sig(comptroller.compAccrued.selector)
+        //     .with_key(address(cellar))
+        //     .checked_write(compReward);
+        // // Have test contract perform a ton of swaps in Uniswap V3 DAI/USDC and USDC/USDT pools.
+        // uint256 assetsToSwap = 100_000_000e6;
+        // deal(address(USDC), address(this), assetsToSwap);
+        // address[] memory path0 = new address[](2);
+        // path0[0] = address(USDC);
+        // path0[1] = address(DAI);
+        // address[] memory path1 = new address[](2);
+        // path1[0] = address(USDC);
+        // path1[1] = address(USDT);
+        // address[] memory path2 = new address[](2);
+        // path2[0] = address(DAI);
+        // path2[1] = address(USDC);
+        // address[] memory path3 = new address[](2);
+        // path3[0] = address(USDT);
+        // path3[1] = address(USDC);
+        // uint24[] memory poolFees = new uint24[](1);
+        // bytes memory swapData;
+        // poolFees[0] = 100;
+        // USDC.safeApprove(address(swapRouter), type(uint256).max);
+        // DAI.safeApprove(address(swapRouter), type(uint256).max);
+        // USDT.safeApprove(address(swapRouter), type(uint256).max);
+        // for (uint256 i = 0; i < 10; i++) {
+        //     uint256 swapAmount = assetsToSwap / 2;
+        //     swapData = abi.encode(path0, poolFees, swapAmount, 0);
+        //     uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+        //     swapData = abi.encode(path1, poolFees, swapAmount, 0);
+        //     uint256 usdtAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, USDT);
+        //     swapData = abi.encode(path2, poolFees, daiAmount, 0);
+        //     assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+        //     swapData = abi.encode(path3, poolFees, usdtAmount, 0);
+        //     assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), USDT, USDC);
+        // }
         // data = new Cellar.AdaptorCall[](3);
         // // Create data to claim COMP rewards.
         // {
@@ -530,10 +493,8 @@ contract UltimateStableCoinCellarTest is Test {
         //     );
         //     data[2] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
         // }
-
         // Perform all adaptor operations to claim rewards/fees, and vest them.
         // cellar.callOnAdaptor(data);
-
         // vm.warp(block.timestamp + 1 days / 4);
     }
 
@@ -588,9 +549,7 @@ contract UltimateStableCoinCellarTest is Test {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToOpenLP(
@@ -705,59 +664,12 @@ contract UltimateStableCoinCellarTest is Test {
         return abi.encodeWithSelector(AaveDebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
     }
 
-    function _createBytesDataToSwapAndRepay(
-        ERC20 from,
-        ERC20 to,
-        uint24 fee,
-        uint256 amount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = fee;
-        bytes memory params = abi.encode(path, poolFees, amount, 0);
-        return
-            abi.encodeWithSelector(
-                AaveDebtTokenAdaptor.swapAndRepay.selector,
-                from,
-                to,
-                amount,
-                SwapRouter.Exchange.UNIV3,
-                params
-            );
-    }
-
     function _createBytesDataToFlashLoan(
         address[] memory loanToken,
         uint256[] memory loanAmount,
         bytes memory params
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveDebtTokenAdaptor.flashLoan.selector, loanToken, loanAmount, params);
-    }
-
-    function _createBytesDataForOracleSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee,
-        uint256 fromAmount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(
-                BaseAdaptor.oracleSwap.selector,
-                from,
-                to,
-                type(uint256).max,
-                SwapRouter.Exchange.UNIV3,
-                params,
-                0.99e18
-            );
     }
 
     function _createBytesDataToLendOnCompound(
@@ -776,26 +688,5 @@ contract UltimateStableCoinCellarTest is Test {
 
     function _createBytesDataToClaimComp() internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.claimComp.selector);
-    }
-
-    function _createBytesDataForClaimCompAndSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, 0, 0);
-        return
-            abi.encodeWithSelector(
-                CTokenAdaptor.claimCompAndSwap.selector,
-                to,
-                SwapRouter.Exchange.UNIV3,
-                params,
-                0.99e18
-            );
     }
 }

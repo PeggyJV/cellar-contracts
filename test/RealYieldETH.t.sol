@@ -15,6 +15,7 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
 import { MockFeesAndReservesAdaptor } from "src/mocks/adaptors/MockFeesAndReservesAdaptor.sol";
 import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
@@ -94,6 +95,7 @@ contract RealYieldETHTest is Test {
     VestingSimpleAdaptor private vestingAdaptor;
     FeesAndReservesAdaptor private feesAndReservesAdaptor;
     MockZeroXAdaptor private mockZeroXAdaptor;
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -122,6 +124,7 @@ contract RealYieldETHTest is Test {
         // Setup Registry, modules, and adaptors.
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
         factory = new CellarFactory();
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -130,7 +133,7 @@ contract RealYieldETHTest is Test {
             address(swapRouter),
             address(priceRouter)
         );
-        feesAndReserves = new FeesAndReserves(registry);
+        feesAndReserves = new FeesAndReserves(address(this));
 
         tracker = new UniswapV3PositionTracker(positionManager);
         erc20Adaptor = new ERC20Adaptor();
@@ -610,9 +613,7 @@ contract RealYieldETHTest is Test {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToOpenLP(
@@ -760,29 +761,6 @@ contract RealYieldETHTest is Test {
 
     function _createBytesDataToRepay(ERC20 tokenToRepay, uint256 amountToRepay) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveV3DebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
-    }
-
-    function _createBytesDataToSwapAndRepay(
-        ERC20 from,
-        ERC20 to,
-        uint24 fee,
-        uint256 amount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = fee;
-        bytes memory params = abi.encode(path, poolFees, amount, 0);
-        return
-            abi.encodeWithSelector(
-                AaveV3DebtTokenAdaptor.swapAndRepay.selector,
-                from,
-                to,
-                amount,
-                SwapRouter.Exchange.UNIV3,
-                params
-            );
     }
 
     function _createBytesDataToFlashLoan(

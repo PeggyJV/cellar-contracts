@@ -12,6 +12,7 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.sol";
@@ -33,6 +34,7 @@ contract CellarCompoundTest is Test {
     PriceRouter private priceRouter;
     Registry private registry;
     SwapRouter private swapRouter;
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
 
     address private immutable strategist = vm.addr(0xBEEF);
 
@@ -71,6 +73,7 @@ contract CellarCompoundTest is Test {
         vestingAdaptor = new VestingSimpleAdaptor();
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -96,6 +99,8 @@ contract CellarCompoundTest is Test {
         registry.trustAdaptor(address(erc20Adaptor));
         registry.trustAdaptor(address(cTokenAdaptor));
         registry.trustAdaptor(address(vestingAdaptor));
+        registry.trustAdaptor(address(swapWithUniswapAdaptor));
+
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
         cDAIPosition = registry.trustPosition(address(cTokenAdaptor), abi.encode(cDAI));
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
@@ -118,6 +123,8 @@ contract CellarCompoundTest is Test {
         cellar.setRebalanceDeviation(0.003e18);
         cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(vestingAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+
         DAI.safeApprove(address(cellar), type(uint256).max);
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
@@ -154,13 +161,23 @@ contract CellarCompoundTest is Test {
         assertApproxEqRel(cellar.totalAssets(), assets, 0.0002e18, "Total assets should equal assets deposited.");
 
         // Swap from DAI to USDC and lend USDC on Compound.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](3);
-        adaptorCalls[0] = _createBytesDataToWithdraw(cDAI, assets / 2);
-        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 100, assets / 2);
-        adaptorCalls[2] = _createBytesDataToLend(cUSDC, type(uint256).max);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdraw(cDAI, assets / 2);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(DAI, USDC, 100, assets / 2);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(cUSDC, type(uint256).max);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Account for 0.1% Swap Fee.
@@ -187,9 +204,8 @@ contract CellarCompoundTest is Test {
             .with_key(address(cellar))
             .checked_write(compReward);
 
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
         // Create data to claim COMP and swap it for USDC.
-        bytes[] memory adaptorCalls = new bytes[](1);
         address[] memory path = new address[](3);
         path[0] = address(COMP);
         path[1] = address(WETH);
@@ -198,24 +214,34 @@ contract CellarCompoundTest is Test {
         poolFees[0] = 3000;
         poolFees[1] = 500;
         bytes memory params = abi.encode(path, poolFees, 0, 0);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = abi.encodeWithSelector(CTokenAdaptor.claimComp.selector);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[0] = abi.encodeWithSelector(
-            CTokenAdaptor.claimCompAndSwap.selector,
-            USDC,
-            SwapRouter.Exchange.UNIV3,
-            params,
-            0.98e18
-        );
-        // Create data to vest USDC.
-        bytes[] memory adaptorCalls0 = new bytes[](1);
-        adaptorCalls0[0] = abi.encodeWithSelector(
-            VestingSimpleAdaptor.depositToVesting.selector,
-            vesting,
-            type(uint256).max
-        );
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = abi.encodeWithSelector(
+                SwapWithUniswapAdaptor.swapWithUniV3.selector,
+                path,
+                poolFees,
+                type(uint256).max,
+                0
+            );
+            data[1] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            // Create data to vest USDC.
+            adaptorCalls[0] = abi.encodeWithSelector(
+                VestingSimpleAdaptor.depositToVesting.selector,
+                vesting,
+                type(uint256).max
+            );
+            data[2] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
-        data[1] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls0 });
         cellar.callOnAdaptor(data);
 
         uint256 totalAssets = cellar.totalAssets();
@@ -354,33 +380,7 @@ contract CellarCompoundTest is Test {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
-    }
-
-    function _createBytesDataForOracleSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee,
-        uint256 fromAmount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(
-                BaseAdaptor.oracleSwap.selector,
-                from,
-                to,
-                type(uint256).max,
-                SwapRouter.Exchange.UNIV3,
-                params,
-                0.99e18
-            );
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToLend(CErc20 market, uint256 amountToLend) internal pure returns (bytes memory) {
@@ -393,26 +393,5 @@ contract CellarCompoundTest is Test {
 
     function _createBytesDataToClaimComp() internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.claimComp.selector);
-    }
-
-    function _createBytesDataForClaimCompAndSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, 0, 0);
-        return
-            abi.encodeWithSelector(
-                CTokenAdaptor.claimCompAndSwap.selector,
-                to,
-                SwapRouter.Exchange.UNIV3,
-                params,
-                0.99e18
-            );
     }
 }

@@ -48,7 +48,7 @@ contract ZeroXAdaptor is PositionlessAdaptor {
      * @notice Allows strategists to make ERC20 swaps using 0x.
      */
     function swapWith0x(ERC20 tokenIn, ERC20 tokenOut, uint256 amount, bytes memory swapCallData) public {
-        PriceRouter priceRouter = PriceRouter(Cellar(address(this)).registry().getAddress(2));
+        PriceRouter priceRouter = Cellar(address(this)).priceRouter();
 
         tokenIn.safeApprove(target(), amount);
 

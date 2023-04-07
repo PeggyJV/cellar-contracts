@@ -39,7 +39,7 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
      * @notice FeesAndReserves on ETH Mainnet.
      */
     function feesAndReserves() public pure virtual returns (FeesAndReserves) {
-        return FeesAndReserves(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
+        return FeesAndReserves(0xF4279E93a06F9d4b5d0625b1F471AA99Ef9B686b);
     }
 
     //============================================ Strategist Functions ===========================================

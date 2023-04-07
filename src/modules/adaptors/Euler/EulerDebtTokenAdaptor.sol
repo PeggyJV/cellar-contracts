@@ -174,21 +174,21 @@ contract EulerDebtTokenAdaptor is BaseAdaptor, EulerBaseAdaptor {
         _revokeExternalApproval(underlying, address(euler()));
     }
 
-    /**
-     * @notice Allows strategists to swap assets and repay loans in one call.
-     * @dev see `repayEulerDebt`, and BaseAdaptor.sol `swap`
-     */
-    function swapAndRepay(
-        ERC20 tokenIn,
-        uint256 subAccountId,
-        ERC20 underlying,
-        uint256 amountIn,
-        SwapRouter.Exchange exchange,
-        bytes memory params
-    ) public {
-        uint256 amountToRepay = swap(tokenIn, underlying, amountIn, exchange, params);
-        repayEulerDebt(underlying, subAccountId, amountToRepay);
-    }
+    // /**
+    //  * @notice Allows strategists to swap assets and repay loans in one call.
+    //  * @dev see `repayEulerDebt`, and BaseAdaptor.sol `swap`
+    //  */
+    // function swapAndRepay(
+    //     ERC20 tokenIn,
+    //     uint256 subAccountId,
+    //     ERC20 underlying,
+    //     uint256 amountIn,
+    //     SwapRouter.Exchange exchange,
+    //     bytes memory params
+    // ) public {
+    //     uint256 amountToRepay = swap(tokenIn, underlying, amountIn, exchange, params);
+    //     repayEulerDebt(underlying, subAccountId, amountToRepay);
+    // }
 
     /**
      * @notice Allows strategist to enter leveraged positions where the collateral and debt are the same token.

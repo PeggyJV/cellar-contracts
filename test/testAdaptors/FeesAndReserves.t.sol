@@ -18,6 +18,7 @@ import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { FakeFeesAndReserves } from "src/mocks/FakeFeesAndReserves.sol";
 import { MockFeesAndReservesAdaptor } from "src/mocks/adaptors/MockFeesAndReservesAdaptor.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -34,6 +35,7 @@ contract FeesAndReservesTest is Test {
     Registry private registry;
     SwapRouter private swapRouter;
     FeesAndReserves private far;
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
 
     address private immutable strategist = vm.addr(0xBEEF);
     address private immutable cosmos = vm.addr(0xCAAA);
@@ -63,7 +65,8 @@ contract FeesAndReservesTest is Test {
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
-        far = new FeesAndReserves(registry);
+        far = new FeesAndReserves(address(this));
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
 
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage({
             max: 0,
@@ -90,6 +93,7 @@ contract FeesAndReservesTest is Test {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(erc20Adaptor));
         registry.trustAdaptor(address(feesAndReservesAdaptor));
+        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
 
@@ -116,6 +120,7 @@ contract FeesAndReservesTest is Test {
         );
 
         cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -204,12 +209,17 @@ contract FeesAndReservesTest is Test {
 
         // Leave expected yield in contract so that strategist earns full performance fees.
         // Strategist swaps WETH yield into USDC, then adds it to reserves.
-        adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
-        adaptorCalls[1] = _createBytesDataToAddToReserves(amountOfUsdcToAddToReserves);
+        data = new Cellar.AdaptorCall[](2);
+        bytes[] memory adaptorCalls0 = new bytes[](1);
+        adaptorCalls0[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls0 });
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls });
+        bytes[] memory adaptorCalls1 = new bytes[](1);
+        adaptorCalls1[0] = _createBytesDataToAddToReserves(amountOfUsdcToAddToReserves);
+        data[1] = Cellar.AdaptorCall({ adaptor: address(feesAndReservesAdaptor), callData: adaptorCalls1 });
         cellar.callOnAdaptor(data);
+
+        data = new Cellar.AdaptorCall[](1);
 
         // Strategist calls prepareFees.
         adaptorCalls = new bytes[](1);
@@ -1049,8 +1059,7 @@ contract FeesAndReservesTest is Test {
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
         bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     // Make sure that if a strategists makes a huge deposit before calling log fees, it doesn't affect fee pay out

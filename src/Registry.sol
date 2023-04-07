@@ -57,8 +57,13 @@ contract Registry is Ownable {
     /**
      * @notice Set the address of the contract at a given id.
      */
-    function setAddress(uint256 id, address newAddress) external onlyOwner {
-        if (id >= nextId) revert Registry__ContractNotRegistered(id);
+    function setAddress(uint256 id, address newAddress) external {
+        if (id > 0) {
+            _checkOwner();
+            if (id >= nextId) revert Registry__ContractNotRegistered(id);
+        } else {
+            if (msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
+        }
 
         emit AddressChanged(id, getAddress[id], newAddress);
 
@@ -103,32 +108,111 @@ contract Registry is Ownable {
         nextId++;
     }
 
-    // ============================================ FEE DISTRIBUTOR LOGIC ============================================
+    // ============================================= ADDRESS 0 LOGIC =============================================
     /**
-     * @notice Emitted when fees distributor is changed.
-     * @param oldFeesDistributor address of fee distributor was changed from
-     * @param newFeesDistributor address of fee distributor was changed to
+     * Address 0 is the address of the gravity bridge, and special abilities that the owner does not have.
+     * - It can change what address is stored at address 0.
+     * - It can change the owner of this contract.
      */
-    event FeesDistributorChanged(bytes32 oldFeesDistributor, bytes32 newFeesDistributor);
-
-    /**
-     * @notice Attempted to use an invalid cosmos address.
-     */
-    error Registry__InvalidCosmosAddress();
-
-    bytes32 public feesDistributor = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
 
     /**
-     * @notice Set the address of the fee distributor on the Sommelier chain.
-     * @dev IMPORTANT: Ensure that the address is formatted in the specific way that the Gravity contract
-     *      expects it to be.
-     * @param newFeesDistributor formatted address of the new fee distributor module
+     * @notice Emitted when an ownership transition is started.
      */
-    function setFeesDistributor(bytes32 newFeesDistributor) external onlyOwner {
-        if (uint256(newFeesDistributor) > type(uint160).max) revert Registry__InvalidCosmosAddress();
-        emit FeesDistributorChanged(feesDistributor, newFeesDistributor);
+    event OwnerTransitionStarted(address newOwner, uint256 startTime);
 
-        feesDistributor = newFeesDistributor;
+    /**
+     * @notice Emitted when an ownership transition is cancelled.
+     */
+    event OwnerTransitionCancelled();
+
+    /**
+     * @notice Emitted when an ownership transition is completed.
+     */
+    event OwnerTransitionComplete(address newOwner);
+
+    /**
+     * @notice Attempted to call a function intended for Zero Id address.
+     */
+    error Registry__OnlyCallableByZeroId();
+
+    /**
+     * @notice Attempted to transition owner to the zero address.
+     */
+    error Registry__NewOwnerCanNotBeZero();
+
+    /**
+     * @notice Attempted to perform a restricted action while ownership transition is pending.
+     */
+    error Registry__TransitionPending();
+
+    /**
+     * @notice Attempted to cancel or complete a transition when one is not active.
+     */
+    error Registry__TransitionNotPending();
+
+    /**
+     * @notice Attempted to call `completeTransition` from an address that is not the pending owner.
+     */
+    error Registry__OnlyCallableByPendingOwner();
+
+    /**
+     * @notice The amount of time it takes for an ownership transition to work.
+     */
+    uint256 public constant TRANSITION_PERIOD = 7 days;
+
+    /**
+     * @notice The Pending Owner, that becomes the owner after the transition period, and they call `completeTransition`.
+     */
+    address public pendingOwner;
+
+    /**
+     * @notice The starting time stamp of the transition.
+     */
+    uint256 public transitionStart;
+
+    /**
+     * @notice Allows Zero Id address to set a new owner, after the transition period is up.
+     */
+    function transitionOwner(address newOwner) external {
+        if (msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
+        if (pendingOwner != address(0)) revert Registry__TransitionPending();
+        if (newOwner == address(0)) revert Registry__NewOwnerCanNotBeZero();
+
+        pendingOwner = newOwner;
+        transitionStart = block.timestamp;
+    }
+
+    /**
+     * @notice Allows Zero Id address to cancel an ongoing owner transition.
+     */
+    function cancelTransition() external {
+        if (msg.sender != getAddress[0]) revert Registry__OnlyCallableByZeroId();
+        if (pendingOwner == address(0)) revert Registry__TransitionNotPending();
+
+        pendingOwner = address(0);
+        transitionStart = 0;
+    }
+
+    /**
+     * @notice Allows pending owner to complete the ownership transition.
+     */
+    function completeTransition() external {
+        if (pendingOwner == address(0)) revert Registry__TransitionNotPending();
+        if (msg.sender != pendingOwner) revert Registry__OnlyCallableByPendingOwner();
+        if (block.timestamp < transitionStart + TRANSITION_PERIOD) revert Registry__TransitionPending();
+
+        _transferOwnership(pendingOwner);
+
+        pendingOwner = address(0);
+        transitionStart = 0;
+    }
+
+    /**
+     * @notice Extends OZ Ownable `_checkOwner` function to block owner calls, if there is an ongoing transition.
+     */
+    function _checkOwner() internal view override {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+        if (transitionStart != 0) revert Registry__TransitionPending();
     }
 
     // ============================================ PAUSE LOGIC ============================================
@@ -213,7 +297,7 @@ contract Registry is Ownable {
     mapping(address => bool) public isAdaptorTrusted;
 
     /**
-     * @notice Maps an adaptors identier to bool, to track if the indentifier is unique wrt the registry.
+     * @notice Maps an adaptors identfier to bool, to track if the identifier is unique wrt the registry.
      */
     mapping(bytes32 => bool) public isIdentifierUsed;
 
@@ -301,9 +385,9 @@ contract Registry is Ownable {
 
     /**
      * @notice Stores the number of positions that have been added to the registry.
-     *         Starts at 1.
+     *         Starts at 101.
      */
-    uint32 public positionCount;
+    uint32 public positionCount = 100;
 
     /**
      * @notice Maps a position hash to a position Id.

@@ -26,6 +26,7 @@ import "@uniswapV3C/libraries/FullMath.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -71,6 +72,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
     address private immutable cosmos = vm.addr(0xCAAA);
 
     MockUniswapV3Adaptor private uniswapV3Adaptor;
+    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
     ERC20Adaptor private erc20Adaptor;
     UniswapV3PositionTracker private tracker;
 
@@ -90,10 +92,11 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // Setup Registry and modules:
         priceRouter = new PriceRouter();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
         gravity = new MockGravity();
         uniswapV3Adaptor = new MockUniswapV3Adaptor();
-        erc20Adaptor = new ERC20Adaptor();
         tracker = new UniswapV3PositionTracker(positionManager);
+        erc20Adaptor = new ERC20Adaptor();
 
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -126,6 +129,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(uniswapV3Adaptor));
         registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
@@ -154,6 +158,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
         // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
         cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         cellar.setRebalanceDeviation(0.003e18);
 
@@ -170,13 +175,19 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
@@ -194,13 +205,19 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         uint24 fee = 500;
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, fee, 50_500e6);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, fee, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
         uint256 wethOut = priceRouter.getValue(USDC, 50_000e6, WETH);
-        adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, fee, 50_000e6, wethOut, 222);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(USDC, WETH, fee, 50_000e6, wethOut, 222);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
         cellar.callOnAdaptor(data);
 
         uint256[] memory positions = tracker.getTokens(address(cellar), USDC, WETH);
@@ -218,16 +235,23 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 2);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        adaptorCalls = new bytes[](1);
+        data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -241,13 +265,19 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(201_000e6, address(this));
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 100_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 100_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 100_000);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 100_000);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
@@ -259,8 +289,9 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
             "Tracker should be tracking cellars first Uni NFT."
         );
 
-        adaptorCalls = new bytes[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
+        data = new Cellar.AdaptorCall[](1);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -274,16 +305,22 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        adaptorCalls = new bytes[](1);
+        data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18, true);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -298,22 +335,30 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Add liquidity to low liquidity DAI/USDC 0.3% fee pool.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 3000, 50_000e18, 50_000e6, 100);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 3000, 50_000e18, 50_000e6, 100);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
+        data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
         // Have Cellar make several terrible swaps
         cellar.setRebalanceDeviation(0.1e18);
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
         adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 10_000e6);
         adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 10_000e18);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Check that cellar did receive some fees.
@@ -350,21 +395,26 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(assets, address(this));
 
         // Use `callOnAdaptor` to swap and enter 6 different UniV3 positions.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](8);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, assets / 4);
+            adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, assets / 4);
-        adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
+        {
+            bytes[] memory adaptorCalls = new bytes[](6);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
+            adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 500, 50_000e18, 50_000e6, 40);
+            adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 100);
 
-        adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 30);
-        adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 500, 50_000e18, 50_000e6, 40);
-        adaptorCalls[4] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 100);
+            adaptorCalls[3] = _createBytesDataToOpenLP(USDC, WETH, 500, 50_000e6, 36e18, 20);
+            adaptorCalls[4] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 18);
+            adaptorCalls[5] = _createBytesDataToOpenLP(USDC, WETH, 500, 50_000e6, 36e18, 200);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[5] = _createBytesDataToOpenLP(USDC, WETH, 500, 50_000e6, 36e18, 20);
-        adaptorCalls[6] = _createBytesDataToOpenLP(USDC, WETH, 3000, 50_000e6, 36e18, 18);
-        adaptorCalls[7] = _createBytesDataToOpenLP(USDC, WETH, 500, 50_000e6, 36e18, 200);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
@@ -478,22 +528,31 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Add liquidity to low liquidity DAI/USDC 0.3% fee pool.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 3000, 50_000e18, 50_000e6, 100);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 3000, 50_000e18, 50_000e6, 100);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        data = new Cellar.AdaptorCall[](1);
 
         // Have Cellar make several terrible swaps
         cellar.setRebalanceDeviation(0.1e18);
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
+        bytes[] memory adaptorCalls = new bytes[](2);
         adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 10_000e6);
         adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 10_000e18);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // First try to get rid of a token with liquidity + fees
@@ -664,49 +723,59 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // ~30% Uniswap V3 USDC/WETH 0.05%, 0.3%, and 1% LP
         // ~30% Uniswap V3 DAI/USDC 0.01% and 0.05% LP
 
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         // Create data to add liquidity to Uniswap V3.
         {
-            bytes[] memory adaptorCalls = new bytes[](7);
             uint256 usdcToUse = assets.mulDivDown(15, 100);
 
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-            adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+            {
+                bytes[] memory adaptorCalls = new bytes[](2);
+                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+            }
 
             // Since we are dividing the USDC into 2 LP positions each, cut it in half.
             usdcToUse = usdcToUse / 2;
 
-            adaptorCalls[2] = _createBytesDataToOpenLP(USDC, WETH, 500, usdcToUse, type(uint256).max, 20);
-            adaptorCalls[3] = _createBytesDataToOpenLP(USDC, WETH, 3000, usdcToUse, type(uint256).max, 80);
-            adaptorCalls[4] = _createBytesDataToOpenLP(USDC, WETH, 10000, usdcToUse, type(uint256).max, 10);
+            bytes[] memory adaptorCalls = new bytes[](5);
+            adaptorCalls[0] = _createBytesDataToOpenLP(USDC, WETH, 500, usdcToUse, type(uint256).max, 20);
+            adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, 3000, usdcToUse, type(uint256).max, 80);
+            adaptorCalls[2] = _createBytesDataToOpenLP(USDC, WETH, 10000, usdcToUse, type(uint256).max, 10);
 
-            adaptorCalls[5] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, usdcToUse, 30);
-            adaptorCalls[6] = _createBytesDataToOpenLP(DAI, USDC, 500, type(uint256).max, usdcToUse, 40);
+            adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, usdcToUse, 30);
+            adaptorCalls[4] = _createBytesDataToOpenLP(DAI, USDC, 500, type(uint256).max, usdcToUse, 40);
 
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
 
         // Strategist opens more Uniswap V3 positions.
         // Create data to add more liquidity to Uniswap V3.
         {
-            bytes[] memory adaptorCalls = new bytes[](7);
             uint256 usdcToUse = assets.mulDivDown(6, 1000);
 
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-            adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+            {
+                bytes[] memory adaptorCalls = new bytes[](2);
+                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+            }
 
             // Since we are dividing the USDC into 2 LP positions each, cut it in half.
             usdcToUse = usdcToUse / 2;
 
-            adaptorCalls[2] = _createBytesDataToOpenLP(USDC, WETH, 500, usdcToUse, type(uint256).max, 120);
-            adaptorCalls[3] = _createBytesDataToOpenLP(USDC, WETH, 3000, usdcToUse, type(uint256).max, 44);
-            adaptorCalls[4] = _createBytesDataToOpenLP(USDC, WETH, 10000, usdcToUse, type(uint256).max, 8);
+            {
+                bytes[] memory adaptorCalls = new bytes[](5);
+                adaptorCalls[0] = _createBytesDataToOpenLP(USDC, WETH, 500, usdcToUse, type(uint256).max, 120);
+                adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, 3000, usdcToUse, type(uint256).max, 44);
+                adaptorCalls[2] = _createBytesDataToOpenLP(USDC, WETH, 10000, usdcToUse, type(uint256).max, 8);
 
-            adaptorCalls[5] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, usdcToUse, 32);
-            adaptorCalls[6] = _createBytesDataToOpenLP(DAI, USDC, 500, type(uint256).max, usdcToUse, 72);
+                adaptorCalls[3] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, usdcToUse, 32);
+                adaptorCalls[4] = _createBytesDataToOpenLP(DAI, USDC, 500, type(uint256).max, usdcToUse, 72);
 
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+                data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            }
         }
         cellar.callOnAdaptor(data);
 
@@ -767,7 +836,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
                 assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
             }
         }
-
+        data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](10);
 
@@ -819,23 +888,30 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.stopPrank();
 
         // Add to some LP positions.
+        data = new Cellar.AdaptorCall[](2);
         {
-            bytes[] memory adaptorCalls = new bytes[](5);
             uint256 usdcToUse = assets.mulDivDown(25, 100);
 
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-            adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+            {
+                bytes[] memory adaptorCalls = new bytes[](2);
+                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+            }
 
             // Since we are dividing the USDC into 2 LP positions each, cut it in half.
             usdcToUse = usdcToUse / 2;
 
             // Add liquidity to DAI/USDC positions.
-            adaptorCalls[2] = _createBytesDataToAddLP(address(cellar), 3, type(uint256).max, usdcToUse);
-            adaptorCalls[3] = _createBytesDataToAddLP(address(cellar), 4, type(uint256).max, usdcToUse);
+            {
+                bytes[] memory adaptorCalls = new bytes[](3);
+                adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 3, type(uint256).max, usdcToUse);
+                adaptorCalls[1] = _createBytesDataToAddLP(address(cellar), 4, type(uint256).max, usdcToUse);
 
-            // Add liquidity to USDC/WETH position.
-            adaptorCalls[4] = _createBytesDataToAddLP(address(cellar), 4, 2 * usdcToUse, type(uint256).max);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+                // Add liquidity to USDC/WETH position.
+                adaptorCalls[2] = _createBytesDataToAddLP(address(cellar), 4, 2 * usdcToUse, type(uint256).max);
+                data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            }
         }
         cellar.callOnAdaptor(data);
 
@@ -899,6 +975,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         }
 
         // Close all positions.
+        data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](6);
 
@@ -930,7 +1007,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
             adaptorCalls[0] = _createBytesDataForSwap(DAI, USDC, 100, DAI.balanceOf(address(cellar)));
             adaptorCalls[1] = _createBytesDataForSwap(WETH, USDC, 500, WETH.balanceOf(address(cellar)));
 
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
 
@@ -1085,13 +1162,19 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Try to have the cellar add a position it does not own.
@@ -1173,13 +1256,19 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 50_000e18, 50_000e6, 10);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         uint256 gas = gasleft();
@@ -1212,14 +1301,20 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.deposit(101_000e6, address(this));
 
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](3);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
 
-        adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 1_000);
-        adaptorCalls[2] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 1_000);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 1_000);
+            adaptorCalls[1] = _createBytesDataToOpenLP(DAI, USDC, 100, 25_000e18, 25_000e6, 1_000);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+        }
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Save total assets.
@@ -1245,8 +1340,9 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         );
 
         // Strategist can remove the unowned tracked position.
-        adaptorCalls = new bytes[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToRemoveTrackedPositionNotOwned(idToRemove, DAI, USDC);
+        data = new Cellar.AdaptorCall[](1);
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -1322,9 +1418,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         path[1] = address(to);
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return
-            abi.encodeWithSelector(BaseAdaptor.swap.selector, from, to, fromAmount, SwapRouter.Exchange.UNIV3, params);
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToOpenLP(

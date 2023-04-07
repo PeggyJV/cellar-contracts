@@ -10,7 +10,6 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
-import { Multicall } from "src/base/Multicall.sol";
 
 /**
  * @title Sommelier Cellar
@@ -25,11 +24,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     // ========================================= MULTICALL =========================================
 
+    /**
+     * @notice Allows caller to call multiple functions in a single TX.
+     * @dev Does NOT return the function return values.
+     */
     function multicall(bytes[] calldata data) external {
         for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
     }
 
     // ========================================= REENTRANCY GUARD =========================================
+
     /**
      * @notice `locked` is public, so that the state can be checked even during view function calls.
      */
@@ -44,6 +48,45 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
         locked = 1;
     }
+
+    // ========================================= PRICE ROUTER CACHE =========================================
+
+    /**
+     * @notice Cached price router contract.
+     * @dev This way cellar has to "opt in" to price router changes.
+     */
+    PriceRouter public priceRouter;
+
+    /**
+     * @notice Updates the cellar to use the lastest price router in the registry.
+     * @param checkTotalAssets If true totalAssets is checked before and after updating the price router,
+     *        and is verified to be withing a +- 5% envelope.
+     *        If false totalAssets is only called after updating the price router.]
+     * @param allowableRange The +- range the total assets may deviate between the old and new price router.
+     *                       - 1_000 == 10%
+     *                       - 500 == 5%
+     * @dev `allowableRange` reverts from arithmetic underflow if it is greater than 10_000, this is
+     *      desired behavior.
+     */
+    function cachePriceRouter(bool checkTotalAssets, uint16 allowableRange) external onlyOwner {
+        uint256 minAssets;
+        uint256 maxAssets;
+
+        if (checkTotalAssets) {
+            uint256 assetsBefore = totalAssets();
+            minAssets = assetsBefore.mulDivDown(1e4 - allowableRange, 1e4);
+            maxAssets = assetsBefore.mulDivDown(1e4 + allowableRange, 1e4);
+        }
+
+        priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+        uint256 assetsAfter = totalAssets();
+
+        if (checkTotalAssets) {
+            if (assetsAfter < minAssets || assetsAfter > maxAssets)
+                revert Cellar__TotalAssetDeviatedOutsideRange(assetsAfter, minAssets, maxAssets);
+        }
+    }
+
     // ========================================= POSITIONS CONFIG =========================================
 
     /**
@@ -256,7 +299,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         uint32 positionId,
         bytes memory configurationData,
         bool inDebtArray
-    ) external onlyOwner whenNotShutdown {
+    ) external onlyOwner {
+        _whenNotShutdown();
         _addPosition(index, positionId, configurationData, inDebtArray);
     }
 
@@ -518,17 +562,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Prevent a function from being called during a shutdown.
      */
-    modifier whenNotShutdown() {
+    function _whenNotShutdown() internal view {
         if (isShutdown) revert Cellar__ContractShutdown();
-
-        _;
     }
 
     /**
      * @notice Shutdown the cellar. Used in an emergency or if the cellar has been deprecated.
      * @dev In the case where
      */
-    function initiateShutdown() external whenNotShutdown onlyOwner {
+    function initiateShutdown() external onlyOwner {
+        _whenNotShutdown();
         isShutdown = true;
 
         emit ShutdownChanged(true);
@@ -588,6 +631,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         bytes memory params
     ) ERC4626(_asset, _name, _symbol, 18) Owned(_registry.getAddress(GRAVITY_BRIDGE_REGISTRY_SLOT)) {
         registry = _registry;
+        priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
 
         {
             (
@@ -745,7 +789,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param assets amount of assets deposited by user.
      * @param receiver address receiving the shares.
      */
-    function beforeDeposit(uint256 assets, uint256, address receiver) internal view override whenNotShutdown {
+    function beforeDeposit(uint256 assets, uint256, address receiver) internal view override {
+        _whenNotShutdown();
         _checkIfPaused();
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
@@ -913,8 +958,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @dev Only loop through credit array because debt can not be withdraw by users.
      */
     function _withdrawInOrder(uint256 assets, address receiver) internal {
-        // Get the price router.
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         // Save asset price in USD, and decimals to reduce external calls.
         WithdrawPricing memory pricingInfo;
         pricingInfo.priceQuoteUSD = priceRouter.getPriceInUSD(asset);
@@ -980,7 +1023,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         uint256 numOfCreditPositions = creditPositions.length;
         ERC20[] memory creditAssets = new ERC20[](numOfCreditPositions);
         uint256[] memory creditBalances = new uint256[](numOfCreditPositions);
-        PriceRouter priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
         // If we just need the withdrawable, then query credit array value.
         if (reportWithdrawable) {
             for (uint256 i; i < numOfCreditPositions; ++i) {
@@ -1276,7 +1318,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
      */
-    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner nonReentrant whenNotShutdown {
+    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner nonReentrant {
+        _whenNotShutdown();
         _checkIfPaused();
         blockExternalReceiver = true;
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { Cellar, Registry, Owned, ERC20, SafeTransferLib, Math, Address, IGravity } from "src/base/Cellar.sol";
+import { Cellar, Owned, ERC20, SafeTransferLib, Math, Address, IGravity } from "src/base/Cellar.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
@@ -101,6 +101,11 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     uint256 public constant MAX_MANAGEMENT_FEE = 1 * 10 ** (BPS_DECIMALS - 1); // 10%
 
     /**
+     * @notice Cosmos address where protocol fees are sent.
+     */
+    bytes32 public constant FEES_DISTRIBUTOR = hex"000000000000000000000000b813554b423266bbd4c16c32fa383394868c1f55";
+
+    /**
      * @notice Maps a cellar to its pending meta data.
      */
     mapping(Cellar => PendingMetaData) public pendingMetaData;
@@ -123,7 +128,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     /**
      * @notice Chainlink's Automation Registry contract address.
      */
-    address public automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+    address public constant AUTOMATION_REGISTRY = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
 
     /**
      * @notice Chainlink Fast Gas Feed for ETH Mainnet.
@@ -187,10 +192,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
     //============================== IMMUTABLES ===============================
 
-    Registry public registry;
+    IGravity public immutable gravityBridge;
 
-    constructor(Registry _registry) Owned(msg.sender) {
-        registry = _registry;
+    constructor(address _gravityBridge) Owned(msg.sender) {
+        gravityBridge = IGravity(_gravityBridge);
     }
 
     //============================================ onlyOwner Functions ===========================================
@@ -212,14 +217,6 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         isShutdown = false;
 
         emit ShutdownChanged(false);
-    }
-
-    /**
-     * @notice Allows owner to update the Automation Registry.
-     * @dev In rare cases, Chainlink's registry CAN change.
-     */
-    function setAutomationRegistry(address newRegistry) external onlyOwner {
-        automationRegistry = newRegistry;
     }
 
     /**
@@ -428,9 +425,8 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
         // Send assets to strategist.
         data.reserveAsset.safeTransfer(strategistPayout, strategistCut);
 
-        IGravity gravityBridge = IGravity(registry.getAddress(0));
         data.reserveAsset.safeApprove(address(gravityBridge), sommCut);
-        gravityBridge.sendToCosmos(address(data.reserveAsset), registry.feesDistributor(), sommCut);
+        gravityBridge.sendToCosmos(address(data.reserveAsset), FEES_DISTRIBUTOR, sommCut);
         emit FeesSent(address(cellar));
     }
 
@@ -473,7 +469,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     }
 
     /**
-     * @notice PerformUpkeep will trust `performData` input if the caller is `automationRegistry` otherwise the input is recalcualted.
+     * @notice PerformUpkeep will trust `performData` input if the caller is `AUTOMATION_REGISTRY` otherwise the input is recalcualted.
      * @dev If cellar is not setup, this function reverts.
      * @dev If not enough time has passed, the cellar does not have its fees calculated.
      * @dev If cellar has pending values that differ from current stored values, they are updated.
@@ -482,7 +478,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     function performUpkeep(bytes calldata performData) external whenNotShutdown nonReentrant {
         PerformInput memory performInput = abi.decode(performData, (PerformInput));
         UpkeepData storage upkeepData = cellarToUpkeepData[performInput.cellar];
-        if (msg.sender != automationRegistry) {
+        if (msg.sender != AUTOMATION_REGISTRY) {
             // Do not trust callers perform input data.
             Cellar target = performInput.cellar;
 
