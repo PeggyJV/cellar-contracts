@@ -97,10 +97,13 @@ contract DeployRealYieldEthScript is Script {
     OneInchAdaptor private oneInchAdaptor;
     VestingSimpleAdaptor private vestingSimpleAdaptor;
 
+    address public oldATokenAdaptor = 0x25570a77dCA06fda89C1ef41FAb6eE48a2377E81;
+    address public oldDebtTokenAdaptor = 0x5F4e81E1BC9D7074Fc30aa697855bE4e1AA16F0b;
+
     function run() external {
         vm.startBroadcast();
 
-        cTokenAdaptor = new CTokenAdaptor();
+        // cTokenAdaptor = new CTokenAdaptor();
 
         // // Deploy Supporting contracts
         // wethVestor = new VestingSimple(WETH, 3 days, 0.001e18);
@@ -110,8 +113,8 @@ contract DeployRealYieldEthScript is Script {
         // feesAndReservesAdaptor = new FeesAndReservesAdaptor();
 
         // erc20Adaptor = new ERC20Adaptor();
-        // aaveATokenAdaptor = new AaveATokenAdaptor();
-        // aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
+        aaveATokenAdaptor = new AaveATokenAdaptor();
+        aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
         // aaveV3ATokenAdaptor = new AaveV3ATokenAdaptor();
         // aaveV3DebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
         // zeroXAdaptor = new ZeroXAdaptor();
@@ -123,8 +126,8 @@ contract DeployRealYieldEthScript is Script {
         // registry.trustAdaptor(address(uniswapV3Adaptor));
         // registry.trustAdaptor(address(feesAndReservesAdaptor));
         // registry.trustAdaptor(address(erc20Adaptor));
-        // registry.trustAdaptor(address(aaveATokenAdaptor));
-        // registry.trustAdaptor(address(aaveDebtTokenAdaptor));
+        registry.trustAdaptor(address(aaveATokenAdaptor));
+        registry.trustAdaptor(address(aaveDebtTokenAdaptor));
         // registry.trustAdaptor(address(aaveV3ATokenAdaptor));
         // registry.trustAdaptor(address(aaveV3DebtTokenAdaptor));
         // registry.trustAdaptor(address(zeroXAdaptor));
@@ -132,7 +135,14 @@ contract DeployRealYieldEthScript is Script {
         // registry.trustAdaptor(address(oneInchAdaptor));
         // registry.trustAdaptor(address(vestingSimpleAdaptor));
 
-        // uint32[] memory positionIds = new uint32[](16);
+        // Distrust old positions and adaptors.
+        registry.distrustAdaptor(oldATokenAdaptor);
+        registry.distrustAdaptor(oldDebtTokenAdaptor);
+        registry.distrustPosition(105);
+        registry.distrustPosition(106);
+        registry.distrustPosition(113);
+
+        uint32[] memory positionIds = new uint32[](16);
 
         // // Add Positions to registry.
         // // credit positions
@@ -140,8 +150,8 @@ contract DeployRealYieldEthScript is Script {
         // positionIds[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(cbETH));
         // positionIds[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(rETH));
         // positionIds[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(stETH));
-        // positionIds[4] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2WETH)));
-        // positionIds[5] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2STETH)));
+        positionIds[4] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2WETH)));
+        positionIds[5] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2STETH)));
         // positionIds[6] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3WETH)));
         // positionIds[7] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3RETH)));
         // positionIds[8] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3CBETH)));
@@ -150,7 +160,7 @@ contract DeployRealYieldEthScript is Script {
         // positionIds[11] = registry.trustPosition(address(vestingSimpleAdaptor), abi.encode(wethVestor));
 
         // // debt positions
-        // positionIds[12] = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dV2WETH)));
+        positionIds[12] = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dV2WETH)));
         // positionIds[13] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3WETH)));
         // positionIds[14] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3RETH)));
         // positionIds[15] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3CBETH)));

@@ -34,7 +34,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Aave debtToken Adaptor V 1.0"));
+        return keccak256(abi.encode("Aave debtToken Adaptor V 1.1"));
     }
 
     /**
@@ -49,7 +49,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      * @notice Overwrites strategist set minimums if they are lower.
      */
     function HFMIN() internal pure returns (uint256) {
-        return 1.2e18;
+        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
