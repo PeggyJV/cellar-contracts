@@ -39,7 +39,7 @@ interface ICellar {
     function setupAdaptor(address adaptor) external;
 }
 
-contract TimelockTest is Test {
+contract UpgradeRealYieldUsdTest is Test {
     address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -95,6 +95,10 @@ contract TimelockTest is Test {
     function setUp() external {}
 
     function testAddingNewPositions() external {
+        if (block.number < 16998288) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16998288.");
+            return;
+        }
         vm.startPrank(address(controller));
 
         // Need to trustAdaptors
