@@ -6,6 +6,7 @@ broadcast/
 # Environment variables!
 .env
 .env.prod
+.vscode/
 
 # JS
 node_modules/
