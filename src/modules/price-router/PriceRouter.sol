@@ -13,6 +13,8 @@ import { Extension } from "src/modules/price-router/Extensions/Extension.sol";
 import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
 import { OracleLibrary } from "@uniswapV3P/libraries/OracleLibrary.sol";
 
+// TODO so we could have some external watch dog contract that can freeze assets if there are issues detected
+// but this adds some centralization risk
 /**
  * @title Sommelier Price Router
  * @notice Provides a universal interface allowing Sommelier contracts to retrieve secure pricing
@@ -122,6 +124,10 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint256 _expectedAnswer
     ) external onlyOwner {
         if (address(_asset) == address(0)) revert PriceRouter__InvalidAsset(address(_asset));
+
+        // TODO
+        // if (getAssetSettings[_asset].derivative > 0) revert("Asset already added");
+
         // Zero is an invalid derivative.
         if (_settings.derivative == 0) revert PriceRouter__UnkownDerivative(_settings.derivative);
 
@@ -145,6 +151,8 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
 
         emit AddAsset(address(_asset));
     }
+
+    function editAsset() external onlyOwner {}
 
     /**
      * @notice return bool indicating whether or not an asset has been set up.
