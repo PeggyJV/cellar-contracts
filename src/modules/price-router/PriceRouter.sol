@@ -8,7 +8,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
-import { IExtension } from "src/modules/price-router/Extensions/IExtension.sol";
+import { Extension } from "src/modules/price-router/Extensions/Extension.sol";
 
 import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
 import { OracleLibrary } from "@uniswapV3P/libraries/OracleLibrary.sol";
@@ -131,7 +131,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         } else if (_settings.derivative == 2) {
             _setupPriceForTwapDerivative(_asset, _settings.source, _storage);
         } else if (_settings.derivative == 3) {
-            IExtension(_settings.source).setupSource(_asset, _storage);
+            Extension(_settings.source).setupSource(_asset, _storage);
         } else revert PriceRouter__UnkownDerivative(_settings.derivative);
 
         // Check `_getPriceInUSD` against `_expectedAnswer`.
@@ -369,7 +369,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         } else if (settings.derivative == 2) {
             price = _getPriceForTwapDerivative(asset, settings.source, cache);
         } else if (settings.derivative == 3) {
-            price = IExtension(settings.source).getPriceInUSD(asset, cache);
+            price = Extension(settings.source).getPriceInUSD(asset, cache);
             // TODO might need this to return the cache so we can save it here? Or do a comparison? I guess see if it added any to the end.
         } else revert PriceRouter__UnkownDerivative(settings.derivative);
 
@@ -638,10 +638,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         PriceCache[PRICE_CACHE_SIZE] memory cache
     ) internal view returns (uint256) {
         TwapSourceStorage memory parameters = getTwapDerivativeStorage[asset];
-        (int24 arithmeticMeanTick, uint128 harmonicMeanLiquidity) = OracleLibrary.consult(
-            _source,
-            parameters.secondsAgo
-        );
+        (int24 arithmeticMeanTick, ) = OracleLibrary.consult(_source, parameters.secondsAgo);
         // Get the amount of quote token each base token is worth.
         uint256 quoteAmount = OracleLibrary.getQuoteAtTick(
             arithmeticMeanTick,
@@ -649,7 +646,11 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             parameters.baseToken,
             parameters.quoteToken
         );
-        uint256 quotePrice = _getPriceInUSD(parameters.quoteToken, getAssetSettings[parameters.quoteToken], cache);
+        uint256 quotePrice = _getPriceInUSD(
+            ERC20(parameters.quoteToken),
+            getAssetSettings[ERC20(parameters.quoteToken)],
+            cache
+        );
         return quoteAmount.mulDivDown(quotePrice, 10 ** parameters.quoteDecimals);
     }
 }

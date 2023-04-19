@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { IExtension, PriceRouter, ERC20 } from "src/modules/price-router/Extensions/IExtension.sol";
+import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Extensions/Extension.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract CurveV2Extension is IExtension, Ownable {
-    PriceRouter public immutable priceRouter;
+contract CurveV2Extension is Extension, Ownable {
+    using Math for uint256;
 
-    constructor(PriceRouter _priceRouter) {
-        priceRouter = _priceRouter;
-    }
+    constructor(PriceRouter _priceRouter) Extension(_priceRouter) {}
 
     struct CurveV2DerivativeStorage {
         address curvePool;
@@ -22,9 +20,7 @@ contract CurveV2Extension is IExtension, Ownable {
      */
     mapping(ERC20 => CurveV2DerivativeStorage) public getCurveDerivativeStorage;
 
-    function setupSource(ERC20 asset, bytes memory sourceData) external {
-        if (msg.sender != priceRouter) revert("Only the price router can call this");
-
+    function setupSource(ERC20 asset, bytes memory sourceData) external override onlyPriceRouter {
         CurveV2DerivativeStorage memory parameters = abi.decode(sourceData, (CurveV2DerivativeStorage));
 
         getCurveDerivativeStorage[asset] = parameters;
@@ -46,8 +42,8 @@ contract CurveV2Extension is IExtension, Ownable {
     // TODO this might need to return the cache
     function getPriceInUSD(
         ERC20 asset,
-        PriceRouter.PriceCache[PriceRouter.PRICE_CACHE_SIZE()] memory cache
-    ) external view returns (uint256) {
+        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
+    ) external view override returns (uint256) {
         CurveV2DerivativeStorage memory parameters = getCurveDerivativeStorage[asset];
 
         ICurvePool pool = ICurvePool(parameters.curvePool);
