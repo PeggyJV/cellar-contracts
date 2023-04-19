@@ -20,3 +20,6 @@
 [submodule "lib/v3-periphery"]
 	path = lib/v3-periphery
 	url = https://github.com/Uniswap/v3-periphery
+[submodule "lib/balancer-v2-monorepo"]
+	path = lib/balancer-v2-monorepo
+	url = https://github.com/balancer/balancer-v2-monorepo
