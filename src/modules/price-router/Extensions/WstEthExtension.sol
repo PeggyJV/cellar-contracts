@@ -10,7 +10,6 @@ interface STETH {
     function decimals() external view returns (uint8);
 }
 
-// TODO this could probs base caluculations solely using stETH, like get stEth decimals and get the conversion the same way aave does.
 contract WstEthExtension is Extension {
     using Math for uint256;
 
@@ -24,11 +23,6 @@ contract WstEthExtension is Extension {
      * @dev https://data.chain.link/ethereum/mainnet/crypto-eth/steth-eth
      */
     IChainlinkAggregator public STETH_ETH = IChainlinkAggregator(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
-
-    /**
-     * @notice Aave Derivative Storage
-     */
-    mapping(ERC20 => ERC20) public getAaveDerivativeStorage;
 
     function setupSource(ERC20 asset, bytes memory) external view override onlyPriceRouter {
         require(address(asset) == wstEth, "Wrong asset");

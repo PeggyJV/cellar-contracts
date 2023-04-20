@@ -621,8 +621,8 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint32 secondsAgo;
         uint8 baseDecimals;
         uint8 quoteDecimals;
-        address baseToken;
-        address quoteToken;
+        ERC20 baseToken;
+        ERC20 quoteToken;
     }
 
     mapping(ERC20 => TwapSourceStorage) public getTwapDerivativeStorage;
@@ -633,6 +633,9 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         UniswapV3Pool pool = UniswapV3Pool(_source);
 
         pool.token0();
+        // TODO so we can verify the obersvation is setup by calling pool.observations(SECONDS_AGO);
+        (, , , bool isInitialized) = pool.observations(parameters.secondsAgo);
+        // if (!isInitialized) revert("Call Increase Observations.");
 
         // Verify seconds ago is reasonable
         // Also if I add in asset to this I could do a sanity check to make sure asset is token0 or token1
@@ -651,14 +654,10 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint256 quoteAmount = OracleLibrary.getQuoteAtTick(
             arithmeticMeanTick,
             uint128(10 ** parameters.baseDecimals),
-            parameters.baseToken,
-            parameters.quoteToken
+            address(parameters.baseToken),
+            address(parameters.quoteToken)
         );
-        uint256 quotePrice = _getPriceInUSD(
-            ERC20(parameters.quoteToken),
-            getAssetSettings[ERC20(parameters.quoteToken)],
-            cache
-        );
+        uint256 quotePrice = _getPriceInUSD(parameters.quoteToken, getAssetSettings[parameters.quoteToken], cache);
         return quoteAmount.mulDivDown(quotePrice, 10 ** parameters.quoteDecimals);
     }
 }
