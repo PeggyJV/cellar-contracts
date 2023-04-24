@@ -2,6 +2,10 @@
 pragma solidity >=0.8.0;
 
 interface IBalancerPool {
+    function getMainToken() external view returns (address);
+
+    function getRate() external view returns (uint256);
+
     function getInvariant() external view returns (uint256);
 
     function getLastInvariant() external view returns (uint256);
