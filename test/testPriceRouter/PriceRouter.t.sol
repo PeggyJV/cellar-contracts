@@ -403,6 +403,8 @@ contract PriceRouterTest is Test {
         );
         priceRouter.completeEditAsset(ERC20(address(777)), settings, abi.encode(0), 1e8);
 
+        vm.warp(block.timestamp + priceRouter.EDIT_ASSET_DELAY() / 2);
+
         // Owner calling `completeEditAsset` early should revert.
         vm.expectRevert(
             bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__AssetNotEditable.selector, address(USDC)))
