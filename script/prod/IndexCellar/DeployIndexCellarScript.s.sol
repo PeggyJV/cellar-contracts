@@ -55,6 +55,7 @@ contract DeployIndexCellarScript is Script {
     ERC20 public UNI = ERC20(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
     ERC20 public COMP = ERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
     ERC20 public MKR = ERC20(0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2);
+    ERC20 public LDO = ERC20(0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32);
 
     // Compound positions
     CErc20 public cUSDC = CErc20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
@@ -73,6 +74,7 @@ contract DeployIndexCellarScript is Script {
     ERC20 public aV3CRV = ERC20(0x7B95Ec873268a6BFC6427e7a28e396Db9D0ebc65);
     ERC20 public aV3UNI = ERC20(0xF6D2224916DDFbbab6e6bd0D1B7034f4Ae0CaB18);
     ERC20 public aV3MKR = ERC20(0x8A458A9dc9048e005d22849F470891b840296619);
+    ERC20 public aV3LDO = ERC20(0x9A44fd41566876A39655f74971a3A6eA0a17a454);
 
     CellarInitializableV2_2 private cellar;
 
@@ -97,7 +99,7 @@ contract DeployIndexCellarScript is Script {
     function run() external {
         vm.startBroadcast();
 
-        uint32[] memory positionIds = new uint32[](18);
+        uint32[] memory positionIds = new uint32[](20);
 
         // Add Positions to registry.
         // TODO add these with the multisig
@@ -107,18 +109,20 @@ contract DeployIndexCellarScript is Script {
         positionIds[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(UNI));
         positionIds[4] = registry.trustPosition(address(erc20Adaptor), abi.encode(COMP));
         positionIds[5] = registry.trustPosition(address(erc20Adaptor), abi.encode(MKR));
-        positionIds[6] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2USDC)));
-        positionIds[7] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2CRV)));
-        positionIds[8] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2MKR)));
-        positionIds[9] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2UNI)));
-        positionIds[10] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3USDC)));
-        positionIds[11] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3CRV)));
-        positionIds[12] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3UNI)));
-        positionIds[13] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3MKR)));
-        positionIds[14] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC));
-        positionIds[15] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cAAVE));
-        positionIds[16] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUNI));
-        positionIds[17] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cCOMP));
+        positionIds[6] = registry.trustPosition(address(erc20Adaptor), abi.encode(LDO));
+        positionIds[7] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2USDC)));
+        positionIds[8] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2CRV)));
+        positionIds[9] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2MKR)));
+        positionIds[10] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2UNI)));
+        positionIds[11] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3USDC)));
+        positionIds[12] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3CRV)));
+        positionIds[13] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3UNI)));
+        positionIds[14] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3MKR)));
+        positionIds[15] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3LDO)));
+        positionIds[16] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC));
+        positionIds[17] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cAAVE));
+        positionIds[18] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUNI));
+        positionIds[19] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cCOMP));
 
         // Deploy cellar using factory.
         bytes memory initializeCallData = abi.encode(
