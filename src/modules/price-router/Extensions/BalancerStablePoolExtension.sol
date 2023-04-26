@@ -35,10 +35,7 @@ contract BalancerStablePoolExtension is Extension {
         getBalancerWeightedPoolDerivativeStorage[asset] = poolId;
     }
 
-    function getPriceInUSD(
-        ERC20 asset,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view override returns (uint256) {
+    function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         _ensureNotInVaultContext(balancerVault);
         IBalancerPool pool = IBalancerPool(address(asset));
 
@@ -48,7 +45,7 @@ contract BalancerStablePoolExtension is Extension {
         // Find the minimum price of all the pool tokens.
         uint256 minPrice = type(uint256).max;
         for (uint256 i; i < tokens.length; ++i) {
-            uint256 price = priceRouter.extensionGetPriceInUSD(ERC20(address(tokens[i])), cache);
+            uint256 price = priceRouter.getPriceInUSD(ERC20(address(tokens[i])));
             if (price < minPrice) minPrice = price;
         }
 

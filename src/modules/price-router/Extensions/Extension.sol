@@ -6,8 +6,6 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Math } from "src/utils/Math.sol";
 
 abstract contract Extension {
-    uint8 public constant PRICE_CACHE_SIZE = 8;
-
     modifier onlyPriceRouter() {
         if (msg.sender != address(priceRouter)) revert("Only the price router can call this");
         _;
@@ -22,8 +20,5 @@ abstract contract Extension {
     // Only callable by pricerouter.
     function setupSource(ERC20 asset, bytes memory sourceData) external virtual;
 
-    function getPriceInUSD(
-        ERC20 asset,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view virtual returns (uint256);
+    function getPriceInUSD(ERC20 asset) external view virtual returns (uint256);
 }

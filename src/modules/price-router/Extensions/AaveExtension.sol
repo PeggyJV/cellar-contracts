@@ -19,11 +19,8 @@ contract AaveExtension is Extension {
     }
 
     // TODO this might need to return the cache
-    function getPriceInUSD(
-        ERC20 asset,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view override returns (uint256) {
+    function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         // TODO this needs to run its own price cache check code, and maybe it just returns an array of new prices it got
-        return priceRouter.extensionGetPriceInUSD(asset, cache);
+        return priceRouter.getPriceInUSD(asset);
     }
 }

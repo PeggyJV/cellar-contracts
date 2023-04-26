@@ -32,19 +32,13 @@ contract BalancerStablePoolExtension is Extension {
         // TODO we could save the poolId and tokens in this contract for less state reads
     }
 
-    function getPriceInUSD(
-        ERC20 asset,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view override returns (uint256) {
+    function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         _ensureNotInVaultContext(balancerVault);
         IBalancerPool pool = IBalancerPool(address(asset));
 
         ERC20 mainToken = ERC20(pool.getMainToken());
 
-        uint256 priceBpt = priceRouter.extensionGetPriceInUSD(mainToken, cache).mulDivDown(
-            pool.getRate(),
-            10 ** pool.decimals()
-        );
+        uint256 priceBpt = priceRouter.getPriceInUSD(mainToken).mulDivDown(pool.getRate(), 10 ** pool.decimals());
         return priceBpt;
     }
 

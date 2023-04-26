@@ -35,11 +35,7 @@ contract BalancerWeightedPoolExtension is Extension {
         getBalancerWeightedPoolDerivativeStorage[asset] = poolId;
     }
 
-    // TODO this might need to return the cache
-    function getPriceInUSD(
-        ERC20 asset,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view override returns (uint256) {
+    function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         _ensureNotInVaultContext(balancerVault);
         IBalancerPool pool = IBalancerPool(address(asset));
 
@@ -57,7 +53,7 @@ contract BalancerWeightedPoolExtension is Extension {
         for (uint256 i; i < tokenLength; ++i) {
             ERC20 token = ERC20(address(tokens[i]));
             // Get price from price router.
-            uint256 price = priceRouter.extensionGetPriceInUSD(token, cache);
+            uint256 price = priceRouter.getPriceInUSD(token);
             console.log("Price", price);
             console.log("Weights", weights[i]);
             priceBpt = priceBpt * (price.mulDivDown(1e18, weights[i])) ** weights[i];

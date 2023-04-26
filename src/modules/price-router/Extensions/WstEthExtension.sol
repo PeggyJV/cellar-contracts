@@ -29,15 +29,10 @@ contract WstEthExtension is Extension {
         if (!priceRouter.isSupported(ERC20(address(stEth)))) revert("stEth must be supported.");
     }
 
-    // TODO this might need to return the cache
-    function getPriceInUSD(
-        ERC20,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view override returns (uint256) {
-        // TODO this needs to run its own price cache check code, and maybe it just returns an array of new prices it got
+    function getPriceInUSD(ERC20) external view override returns (uint256) {
         return
             stEth.getPooledEthByShares(1e18).mulDivDown(
-                priceRouter.extensionGetPriceInUSD(ERC20(address(stEth)), cache),
+                priceRouter.getPriceInUSD(ERC20(address(stEth))),
                 10 ** stEth.decimals()
             );
     }

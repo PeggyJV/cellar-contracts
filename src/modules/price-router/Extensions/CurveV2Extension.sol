@@ -40,10 +40,7 @@ contract CurveV2Extension is Extension, Ownable {
     }
 
     // TODO this might need to return the cache
-    function getPriceInUSD(
-        ERC20 asset,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view override returns (uint256) {
+    function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         CurveV2DerivativeStorage memory parameters = getCurveDerivativeStorage[asset];
 
         ICurvePool pool = ICurvePool(parameters.curvePool);
@@ -58,7 +55,7 @@ contract CurveV2Extension is Extension, Ownable {
 
         ERC20 token0 = ERC20(parameters.poolCoins[0]);
         if (parameters.poolCoins[2] == address(0)) {
-            return pool.lp_price().mulDivDown(priceRouter.extensionGetPriceInUSD(token0, cache), 1e18);
+            return pool.lp_price().mulDivDown(priceRouter.getPriceInUSD(token0), 1e18);
         } else {
             uint256 t1Price = pool.price_oracle(0);
             uint256 t2Price = pool.price_oracle(1);
@@ -73,7 +70,7 @@ contract CurveV2Extension is Extension, Ownable {
 
                 maxPrice -= maxPrice.mulDivDown(discount, 1e18);
             }
-            return maxPrice.mulDivDown(priceRouter.extensionGetPriceInUSD(token0, cache), 1e18);
+            return maxPrice.mulDivDown(priceRouter.getPriceInUSD(token0), 1e18);
         }
         // TODO this needs to run its own price cache check code, and maybe it just returns an array of new prices it got
     }

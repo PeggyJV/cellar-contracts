@@ -3,7 +3,6 @@ pragma solidity 0.8.16;
 
 import { ERC20, SafeTransferLib } from "src/base/ERC4626.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
@@ -13,21 +12,31 @@ import { Extension } from "src/modules/price-router/Extensions/Extension.sol";
 import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
 import { OracleLibrary } from "@uniswapV3P/libraries/OracleLibrary.sol";
 
-// TODO so we could have some external watch dog contract that can freeze assets if there are issues detected
-// but this adds some centralization risk
 /**
  * @title Sommelier Price Router
  * @notice Provides a universal interface allowing Sommelier contracts to retrieve secure pricing
  *         data from Chainlink.
  * @author crispymangoes, Brian Le
  */
-contract PriceRouter is Ownable, AutomationCompatibleInterface {
+contract PriceRouter is Ownable {
     using SafeTransferLib for ERC20;
     using SafeCast for int256;
     using Math for uint256;
     using Address for address;
 
     event AddAsset(address indexed asset);
+
+    event IntentToEditAsset(
+        address asset,
+        AssetSettings _settings,
+        bytes _storage,
+        bytes32 editHash,
+        uint256 assetEditableAt
+    );
+
+    event EditAssetCancelled(address asset, bytes32 editHash);
+
+    event EditAssetComplete(address asset, bytes32 editHash);
 
     // =========================================== ASSETS CONFIG ===========================================
     /**
@@ -66,6 +75,11 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      * @param asset address of the invalid asset
      */
     error PriceRouter__InvalidAsset(address asset);
+    // TODO
+    error PriceRouter__AssetAlreadyAdded(address asset);
+    error PriceRouter__AssetNotAdded(address asset);
+    error PriceRouter__AssetNotEditable(address asset);
+    error PriceRouter__AssetNotPendingEdit(address asset);
 
     /**
      * @notice Attempted to add an asset, but actual answer was outside range of expectedAnswer.
@@ -90,22 +104,14 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     uint256 public constant EXPECTED_ANSWER_DEVIATION = 0.02e18;
 
     /**
-     * @notice Stores pricing information during calls.
-     * @param asset the address of the asset
-     * @param price the USD price of the asset
-     * @dev If the price does not fit into a uint96, the asset is NOT added to the cache.
+     * @notice The amount of time that must pass between owner calling `startEditAsset`, and `completeEditAsset`.
      */
-    struct PriceCache {
-        address asset;
-        uint96 price;
-    }
+    uint64 public constant EDIT_ASSET_DELAY = 14 days;
 
     /**
-     * @notice The size of the price cache. A larger cache can hold more values,
-     *         but incurs a larger gas cost overhead. A smaller cache has a
-     *         smaller gas overhead but caches less prices.
+     * @notice Stores the timestamp when an asset can be editted.
      */
-    uint8 public constant PRICE_CACHE_SIZE = 8;
+    mapping(bytes32 => uint256) public assetEditableTimestamp;
 
     /**
      * @notice Allows owner to add assets to the price router.
@@ -123,10 +129,66 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         bytes memory _storage,
         uint256 _expectedAnswer
     ) external onlyOwner {
-        if (address(_asset) == address(0)) revert PriceRouter__InvalidAsset(address(_asset));
+        // Check that asset is not already added.
+        if (getAssetSettings[_asset].derivative > 0) revert PriceRouter__AssetAlreadyAdded(address(_asset));
 
-        // TODO
-        // if (getAssetSettings[_asset].derivative > 0) revert("Asset already added");
+        _updateAsset(_asset, _settings, _storage, _expectedAnswer);
+
+        emit AddAsset(address(_asset));
+    }
+
+    function startEditAsset(ERC20 _asset, AssetSettings memory _settings, bytes memory _storage) external onlyOwner {
+        // Make sure the asset has been added.
+        if (getAssetSettings[_asset].derivative == 0) revert PriceRouter__AssetNotAdded(address(_asset));
+        bytes32 editHash = keccak256(abi.encode(_asset, _settings, _storage));
+
+        uint256 assetEditableAt = block.timestamp + EDIT_ASSET_DELAY;
+        assetEditableTimestamp[editHash] = assetEditableAt;
+
+        emit IntentToEditAsset(address(_asset), _settings, _storage, editHash, assetEditableAt);
+    }
+
+    function completeEditAsset(
+        ERC20 _asset,
+        AssetSettings memory _settings,
+        bytes memory _storage,
+        uint256 _expectedAnswer
+    ) external onlyOwner {
+        bytes32 editHash = keccak256(abi.encode(_asset, _settings, _storage));
+
+        // Make sure asset can be edited.
+        uint256 assetEditableAt = assetEditableTimestamp[editHash];
+        if (assetEditableAt == 0 || block.timestamp < assetEditableAt)
+            revert PriceRouter__AssetNotEditable(address(_asset));
+
+        // Reset edit timestamp.
+        assetEditableTimestamp[editHash] = 0;
+
+        // Edit the asset.
+        _updateAsset(_asset, _settings, _storage, _expectedAnswer);
+
+        emit EditAssetComplete(address(_asset), editHash);
+    }
+
+    function cancelEditAsset(ERC20 _asset, AssetSettings memory _settings, bytes memory _storage) external onlyOwner {
+        bytes32 editHash = keccak256(abi.encode(_asset, _settings, _storage));
+
+        // Make sure asset is pending edit.
+        uint256 assetEditableAt = assetEditableTimestamp[editHash];
+        if (assetEditableAt == 0) revert PriceRouter__AssetNotPendingEdit(address(_asset));
+
+        assetEditableTimestamp[editHash] = 0;
+
+        emit EditAssetCancelled(address(_asset), editHash);
+    }
+
+    function _updateAsset(
+        ERC20 _asset,
+        AssetSettings memory _settings,
+        bytes memory _storage,
+        uint256 _expectedAnswer
+    ) internal {
+        if (address(_asset) == address(0)) revert PriceRouter__InvalidAsset(address(_asset));
 
         // Zero is an invalid derivative.
         if (_settings.derivative == 0) revert PriceRouter__UnkownDerivative(_settings.derivative);
@@ -143,16 +205,11 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         // Check `_getPriceInUSD` against `_expectedAnswer`.
         uint256 minAnswer = _expectedAnswer.mulWadDown((1e18 - EXPECTED_ANSWER_DEVIATION));
         uint256 maxAnswer = _expectedAnswer.mulWadDown((1e18 + EXPECTED_ANSWER_DEVIATION));
-        // Create an empty Price Cache.
-        PriceCache[PRICE_CACHE_SIZE] memory cache;
+
         getAssetSettings[_asset] = _settings;
-        uint256 answer = _getPriceInUSD(_asset, _settings, cache);
+        uint256 answer = _getPriceInUSD(_asset, _settings);
         if (answer < minAnswer || answer > maxAnswer) revert PriceRouter__BadAnswer(answer, _expectedAnswer);
-
-        emit AddAsset(address(_asset));
     }
-
-    function editAsset() external onlyOwner {}
 
     /**
      * @notice return bool indicating whether or not an asset has been set up.
@@ -163,41 +220,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         return getAssetSettings[asset].derivative > 0;
     }
 
-    // ======================================= CHAINLINK AUTOMATION =======================================
-    /**
-     * @notice `checkUpkeep` is set up to allow for multiple derivatives to use Chainlink Automation.
-     */
-    function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData) {
-        // (uint8 derivative, bytes memory derivativeCheckData) = abi.decode(checkData, (uint8, bytes));
-        // if (derivative == 2) {
-        //     (upkeepNeeded, performData) = _checkVirtualPriceBound(derivativeCheckData);
-        // } else if (derivative == 3) {
-        //     (upkeepNeeded, performData) = _checkVirtualPriceBound(derivativeCheckData);
-        // } else revert PriceRouter__UnkownDerivative(derivative);
-    }
-
-    /**
-     * @notice `performUpkeep` is set up to allow for multiple derivatives to use Chainlink Automation.
-     */
-    function performUpkeep(bytes calldata performData) external {
-        // (uint8 derivative, bytes memory derivativePerformData) = abi.decode(performData, (uint8, bytes));
-        // if (derivative == 2) {
-        //     _updateVirtualPriceBound(derivativePerformData);
-        // } else if (derivative == 3) {
-        //     _updateVirtualPriceBound(derivativePerformData);
-        // } else revert PriceRouter__UnkownDerivative(derivative);
-    }
-
     // ======================================= PRICING OPERATIONS =======================================
-
-    function extensionGetPriceInUSD(
-        ERC20 asset,
-        PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view returns (uint256) {
-        AssetSettings memory assetSettings = getAssetSettings[asset];
-        // TODO require caller is an extension contract.
-        return _getPriceInUSD(asset, assetSettings, cache);
-    }
 
     /**
      * @notice Get `asset` price in USD.
@@ -205,9 +228,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
      */
     function getPriceInUSD(ERC20 asset) external view returns (uint256) {
         AssetSettings memory assetSettings = getAssetSettings[asset];
-        // Create an empty Price Cache.
-        PriceCache[PRICE_CACHE_SIZE] memory cache;
-        return _getPriceInUSD(asset, assetSettings, cache);
+        return _getPriceInUSD(asset, assetSettings);
     }
 
     /**
@@ -222,9 +243,8 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
         if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
         if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
-        PriceCache[PRICE_CACHE_SIZE] memory cache;
-        uint256 priceBaseUSD = _getPriceInUSD(baseAsset, baseSettings, cache);
-        uint256 priceQuoteUSD = _getPriceInUSD(quoteAsset, quoteSettings, cache);
+        uint256 priceBaseUSD = _getPriceInUSD(baseAsset, baseSettings);
+        uint256 priceQuoteUSD = _getPriceInUSD(quoteAsset, quoteSettings);
         value = _getValueInQuote(priceBaseUSD, priceQuoteUSD, baseAsset.decimals(), quoteAsset.decimals(), amount);
     }
 
@@ -238,11 +258,8 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint256[] calldata amounts1,
         ERC20 quoteAsset
     ) external view returns (uint256) {
-        // Create an empty Price Cache.
-        PriceCache[PRICE_CACHE_SIZE] memory cache;
-
-        uint256 value0 = _getValues(baseAssets0, amounts0, quoteAsset, cache);
-        uint256 value1 = _getValues(baseAssets1, amounts1, quoteAsset, cache);
+        uint256 value0 = _getValues(baseAssets0, amounts0, quoteAsset);
+        uint256 value1 = _getValues(baseAssets1, amounts1, quoteAsset);
         return value0 - value1;
     }
 
@@ -254,10 +271,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         uint256[] calldata amounts,
         ERC20 quoteAsset
     ) external view returns (uint256) {
-        // Create an empty Price Cache.
-        PriceCache[PRICE_CACHE_SIZE] memory cache;
-
-        return _getValues(baseAssets, amounts, quoteAsset, cache);
+        return _getValues(baseAssets, amounts, quoteAsset);
     }
 
     /**
@@ -272,17 +286,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
         if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
 
-        // Create an empty Price Cache.
-        PriceCache[PRICE_CACHE_SIZE] memory cache;
-        // Pass in zero for ethToUsd, since it has not been set yet.
-        exchangeRate = _getExchangeRate(
-            baseAsset,
-            baseSettings,
-            quoteAsset,
-            quoteSettings,
-            quoteAsset.decimals(),
-            cache
-        );
+        exchangeRate = _getExchangeRate(baseAsset, baseSettings, quoteAsset, quoteSettings, quoteAsset.decimals());
     }
 
     /**
@@ -299,9 +303,6 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
         if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
 
-        // Create an empty Price Cache.
-        PriceCache[PRICE_CACHE_SIZE] memory cache;
-
         uint256 numOfAssets = baseAssets.length;
         exchangeRates = new uint256[](numOfAssets);
         for (uint256 i; i < numOfAssets; i++) {
@@ -312,8 +313,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
                 baseSettings,
                 quoteAsset,
                 quoteSettings,
-                quoteAssetDecimals,
-                cache
+                quoteAssetDecimals
             );
         }
     }
@@ -338,11 +338,10 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         AssetSettings memory baseSettings,
         ERC20 quoteAsset,
         AssetSettings memory quoteSettings,
-        uint8 quoteAssetDecimals,
-        PriceCache[PRICE_CACHE_SIZE] memory cache
+        uint8 quoteAssetDecimals
     ) internal view returns (uint256) {
-        uint256 basePrice = _getPriceInUSD(baseAsset, baseSettings, cache);
-        uint256 quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
+        uint256 basePrice = _getPriceInUSD(baseAsset, baseSettings);
+        uint256 quotePrice = _getPriceInUSD(quoteAsset, quoteSettings);
         uint256 exchangeRate = basePrice.mulDivDown(10 ** quoteAssetDecimals, quotePrice);
         return exchangeRate;
     }
@@ -350,47 +349,17 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     /**
      * @notice Helper function to get an assets price in USD.
      * @dev Returns price in USD with 8 decimals.
-     * @dev Favors using cached prices if available.
      */
-    function _getPriceInUSD(
-        ERC20 asset,
-        AssetSettings memory settings,
-        PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) internal view returns (uint256) {
-        // First check if the price is in the price cache.
-        uint8 lastIndex = PRICE_CACHE_SIZE;
-        for (uint8 i; i < PRICE_CACHE_SIZE; ++i) {
-            // Did not find our price in the cache.
-            if (cache[i].asset == address(0)) {
-                // Save the last index.
-                lastIndex = i;
-                break;
-            }
-            // Did find our price in the cache.
-            if (cache[i].asset == address(asset)) return cache[i].price;
-        }
-
+    function _getPriceInUSD(ERC20 asset, AssetSettings memory settings) internal view returns (uint256) {
         // Call get price function using appropriate derivative.
         uint256 price;
         if (settings.derivative == 1) {
-            price = _getPriceForChainlinkDerivative(asset, settings.source, cache);
+            price = _getPriceForChainlinkDerivative(asset, settings.source);
         } else if (settings.derivative == 2) {
-            price = _getPriceForTwapDerivative(asset, settings.source, cache);
+            price = _getPriceForTwapDerivative(asset, settings.source);
         } else if (settings.derivative == 3) {
-            price = Extension(settings.source).getPriceInUSD(asset, cache);
-            // TODO might need this to return the cache so we can save it here? Or do a comparison? I guess see if it added any to the end.
+            price = Extension(settings.source).getPriceInUSD(asset);
         } else revert PriceRouter__UnkownDerivative(settings.derivative);
-
-        // If there is room in the cache, the price fits in a uint96, then find the next spot available.
-        if (lastIndex < PRICE_CACHE_SIZE && price <= type(uint96).max) {
-            for (uint8 i = lastIndex; i < PRICE_CACHE_SIZE; ++i) {
-                // Found an empty cache slot, so fill it.
-                if (cache[i].asset == address(0)) {
-                    cache[i] = PriceCache(address(asset), uint96(price));
-                    break;
-                }
-            }
-        }
 
         return price;
     }
@@ -435,15 +404,14 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     function _getValues(
         ERC20[] calldata baseAssets,
         uint256[] calldata amounts,
-        ERC20 quoteAsset,
-        PriceCache[PRICE_CACHE_SIZE] memory cache
+        ERC20 quoteAsset
     ) internal view returns (uint256) {
         if (baseAssets.length != amounts.length) revert PriceRouter__LengthMismatch();
         uint256 quotePrice;
         {
             AssetSettings memory quoteSettings = getAssetSettings[quoteAsset];
             if (quoteSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(quoteAsset));
-            quotePrice = _getPriceInUSD(quoteAsset, quoteSettings, cache);
+            quotePrice = _getPriceInUSD(quoteAsset, quoteSettings);
         }
         uint256 valueInQuote;
         // uint256 price;
@@ -459,7 +427,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
                 {
                     AssetSettings memory baseSettings = getAssetSettings[baseAsset];
                     if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAsset));
-                    basePrice = _getPriceInUSD(baseAsset, baseSettings, cache);
+                    basePrice = _getPriceInUSD(baseAsset, baseSettings);
                 }
                 valueInQuote += _getValueInQuote(
                     basePrice,
@@ -548,11 +516,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
     /**
      * @notice Get the price of a Chainlink derivative in terms of USD.
      */
-    function _getPriceForChainlinkDerivative(
-        ERC20 _asset,
-        address _source,
-        PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) internal view returns (uint256) {
+    function _getPriceForChainlinkDerivative(ERC20 _asset, address _source) internal view returns (uint256) {
         ChainlinkDerivativeStorage memory parameters = getChainlinkDerivativeStorage[_asset];
         IChainlinkAggregator aggregator = IChainlinkAggregator(_source);
         (, int256 _price, , uint256 _timestamp, ) = aggregator.latestRoundData();
@@ -560,7 +524,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         _checkPriceFeed(address(_asset), price, _timestamp, parameters.max, parameters.min, parameters.heartbeat);
         // If price is in ETH, then convert price into USD.
         if (parameters.inETH) {
-            uint256 _ethToUsd = _getPriceInUSD(WETH, getAssetSettings[WETH], cache);
+            uint256 _ethToUsd = _getPriceInUSD(WETH, getAssetSettings[WETH]);
             price = price.mulWadDown(_ethToUsd);
         }
         return price;
@@ -643,11 +607,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         getTwapDerivativeStorage[_asset] = parameters;
     }
 
-    function _getPriceForTwapDerivative(
-        ERC20 asset,
-        address _source,
-        PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) internal view returns (uint256) {
+    function _getPriceForTwapDerivative(ERC20 asset, address _source) internal view returns (uint256) {
         TwapSourceStorage memory parameters = getTwapDerivativeStorage[asset];
         (int24 arithmeticMeanTick, ) = OracleLibrary.consult(_source, parameters.secondsAgo);
         // Get the amount of quote token each base token is worth.
@@ -657,7 +617,7 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
             address(parameters.baseToken),
             address(parameters.quoteToken)
         );
-        uint256 quotePrice = _getPriceInUSD(parameters.quoteToken, getAssetSettings[parameters.quoteToken], cache);
+        uint256 quotePrice = _getPriceInUSD(parameters.quoteToken, getAssetSettings[parameters.quoteToken]);
         return quoteAmount.mulDivDown(quotePrice, 10 ** parameters.quoteDecimals);
     }
 }
