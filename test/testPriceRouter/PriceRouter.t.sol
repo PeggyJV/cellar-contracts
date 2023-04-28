@@ -9,6 +9,8 @@ import { IPool } from "src/interfaces/external/IPool.sol";
 import { MockGasFeed } from "src/mocks/MockGasFeed.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
+import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
+import { Registry } from "src/Registry.sol";
 
 import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
 
@@ -22,7 +24,7 @@ contract PriceRouterTest is Test {
     event AddAsset(address indexed asset);
     event RemoveAsset(address indexed asset);
 
-    PriceRouter private immutable priceRouter = new PriceRouter();
+    PriceRouter private priceRouter;
 
     address private immutable sender = vm.addr(0xABCD);
     address private immutable receiver = vm.addr(0xBEEF);
@@ -42,6 +44,7 @@ contract PriceRouterTest is Test {
     ERC20 private constant FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
     ERC20 private constant STETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
     ERC20 private constant WSTETH = ERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+    ERC20 private constant RPL = ERC20(0xD33526068D116cE69F19A9ee46F0bd304F21A51f);
 
     IUniswapV2Router private constant uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
@@ -75,9 +78,18 @@ contract PriceRouterTest is Test {
     address private STETH_USD_FEED = 0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8;
     address private ETH_FAST_GAS_FEED = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
 
+    // UniV3 WETH/RPL Pool
+    address private WETH_RPL_03_POOL = 0xe42318eA3b998e8355a3Da364EB9D48eC725Eb45;
+
+    Registry private registry;
+
     function setUp() external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
+
+        registry = new Registry(address(this), address(this), address(this));
+
+        priceRouter = new PriceRouter(registry);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -364,6 +376,26 @@ contract PriceRouterTest is Test {
         );
         priceRouter.getValue(BOND, 1e18, USDC);
     }
+
+    function testAddingATwapAsset() external {
+        UniswapV3Pool pool = UniswapV3Pool(WETH_RPL_03_POOL);
+
+        pool.increaseObservationCardinalityNext(900);
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        stor.inETH = true;
+
+        settings = PriceRouter.AssetSettings(TWAP_DERIVATIVE, WETH_RPL_03_POOL);
+        PriceRouter.TwapSourceStorage memory twapStor = PriceRouter.TwapSourceStorage({
+            secondsAgo: 900,
+            baseDecimals: 18,
+            quoteDecimals: 18,
+            quoteToken: WETH
+        });
+        priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
+    }
+
+    // TODO add test changing owner.
 
     // ======================================= EDITING ASSET TESTS =======================================
 

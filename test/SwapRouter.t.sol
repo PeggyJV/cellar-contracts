@@ -8,6 +8,7 @@ import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
 import { IUniswapV3Router as UniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { IUniswapV2Router02 as UniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+import { Registry } from "src/Registry.sol";
 
 import { Test, console } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -17,6 +18,7 @@ abstract contract SwapRouterTest is Test {
 
     SwapRouter internal swapRouter;
     PriceRouter internal priceRouter;
+    Registry internal registry;
 
     uint256 internal constant privateKey0 = 0xABCD;
     uint256 internal constant privateKey1 = 0xBEEF;
@@ -41,8 +43,10 @@ abstract contract SwapRouterTest is Test {
         ///      sure to update this.
         swapRouter = new SwapRouter(UniswapV2Router(uniV2Router), UniswapV3Router(uniV3Router));
 
+        registry = new Registry(address(this), address(this), address(this));
+
         // Used to estimate the amount that should be received from swaps.
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 

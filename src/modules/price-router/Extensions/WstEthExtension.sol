@@ -15,20 +15,18 @@ contract WstEthExtension is Extension {
 
     constructor(PriceRouter _priceRouter) Extension(_priceRouter) {}
 
+    error WstEthExtension__STETH_NOT_SUPPORTED();
+    error WstEthExtension__ASSET_NOT_WSTETH();
+
     STETH public stEth = STETH(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
     address public wstEth = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
 
-    /**
-     * @notice STETH to ETH Chainlink datafeed.
-     * @dev https://data.chain.link/ethereum/mainnet/crypto-eth/steth-eth
-     */
-    IChainlinkAggregator public STETH_ETH = IChainlinkAggregator(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
-
     function setupSource(ERC20 asset, bytes memory) external view override onlyPriceRouter {
-        require(address(asset) == wstEth, "Wrong asset");
-        if (!priceRouter.isSupported(ERC20(address(stEth)))) revert("stEth must be supported.");
+        if (address(asset) != wstEth) revert WstEthExtension__ASSET_NOT_WSTETH();
+        if (!priceRouter.isSupported(ERC20(address(stEth)))) revert WstEthExtension__STETH_NOT_SUPPORTED();
     }
 
+    // TODO nitpick think this needs to divide by wsteth decimals not steth(eventhough they are the same)
     function getPriceInUSD(ERC20) external view override returns (uint256) {
         return
             stEth.getPooledEthByShares(1e18).mulDivDown(

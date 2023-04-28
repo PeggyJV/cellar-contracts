@@ -22,7 +22,7 @@ contract CurveV1ExtensionTest is Test {
     event AddAsset(address indexed asset);
     event RemoveAsset(address indexed asset);
 
-    PriceRouter private immutable priceRouter = new PriceRouter();
+    PriceRouter private immutable priceRouter = new PriceRouter(registry);
 
     address private immutable sender = vm.addr(0xABCD);
     address private immutable receiver = vm.addr(0xBEEF);

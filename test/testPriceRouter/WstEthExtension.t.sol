@@ -4,6 +4,7 @@ pragma solidity 0.8.16;
 import { ERC20 } from "src/base/ERC20.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
+import { Registry } from "src/Registry.sol";
 
 import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
 
@@ -42,11 +43,15 @@ contract WstEthExtensionTest is Test {
     address private USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
     address private STETH_USD_FEED = 0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8;
 
+    Registry private registry;
+
     function setUp() external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        priceRouter = new PriceRouter();
+        registry = new Registry(address(this), address(this), address(this));
+
+        priceRouter = new PriceRouter(registry);
         wstethExtension = new WstEthExtension(priceRouter);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -65,17 +70,16 @@ contract WstEthExtensionTest is Test {
 
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
         priceRouter.addAsset(USDT, settings, abi.encode(stor), 1e8);
-
-        price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, STETH_USD_FEED);
-        priceRouter.addAsset(STETH, settings, abi.encode(stor), price);
     }
 
     // ======================================= HAPPY PATH =======================================
     function testWstEthExtension() external {
         // Setup dependent price feeds.
         PriceRouter.AssetSettings memory settings;
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
         uint256 price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, STETH_USD_FEED);
+        priceRouter.addAsset(STETH, settings, abi.encode(stor), price);
 
         // Add wstEth.
         uint256 wstethToStethConversion = wstethExtension.stEth().getPooledEthByShares(1e18);
@@ -92,7 +96,29 @@ contract WstEthExtensionTest is Test {
     }
 
     // ======================================= REVERTS =======================================
-    function testUsingExtensionWithWrongAsset() external {}
+    function testUsingExtensionWithWrongAsset() external {
+        // Add wstEth.
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
 
-    function testAddingWstethWithoutPricingSteth() external {}
+        uint256 wstethToStethConversion = wstethExtension.stEth().getPooledEthByShares(1e18);
+        price = price.mulDivDown(wstethToStethConversion, 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstethExtension));
+
+        address notWSTETH = vm.addr(123);
+        vm.expectRevert(bytes(abi.encodeWithSelector(WstEthExtension.WstEthExtension__ASSET_NOT_WSTETH.selector)));
+        priceRouter.addAsset(ERC20(notWSTETH), settings, abi.encode(0), price);
+    }
+
+    function testAddingWstethWithoutPricingSteth() external {
+        // Add wstEth.
+        PriceRouter.AssetSettings memory settings;
+        uint256 price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
+
+        uint256 wstethToStethConversion = wstethExtension.stEth().getPooledEthByShares(1e18);
+        price = price.mulDivDown(wstethToStethConversion, 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstethExtension));
+        vm.expectRevert(bytes(abi.encodeWithSelector(WstEthExtension.WstEthExtension__STETH_NOT_SUPPORTED.selector)));
+        priceRouter.addAsset(WSTETH, settings, abi.encode(0), price);
+    }
 }

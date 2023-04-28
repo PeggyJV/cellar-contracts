@@ -8,9 +8,13 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "src/utils/Math.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Extension } from "src/modules/price-router/Extensions/Extension.sol";
+import { Registry } from "src/Registry.sol";
 
 import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
 import { OracleLibrary } from "@uniswapV3P/libraries/OracleLibrary.sol";
+
+// TODO remove this
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Price Router
@@ -38,6 +42,12 @@ contract PriceRouter is Ownable {
 
     event EditAssetComplete(address asset, bytes32 editHash);
 
+    Registry public immutable registry;
+
+    constructor(Registry _registry) {
+        registry = _registry;
+    }
+
     // =========================================== ASSETS CONFIG ===========================================
     /**
      * @notice Bare minimum settings all derivatives support.
@@ -53,6 +63,108 @@ contract PriceRouter is Ownable {
      * @notice Mapping between an asset to price and its `AssetSettings`.
      */
     mapping(ERC20 => AssetSettings) public getAssetSettings;
+
+    // ======================================= OWNERSHIP TRANSISITION =======================================
+
+    /**
+     * @notice Emitted when an ownership transition is started.
+     */
+    event OwnerTransitionStarted(address newOwner, uint256 startTime);
+
+    /**
+     * @notice Emitted when an ownership transition is cancelled.
+     */
+    event OwnerTransitionCancelled();
+
+    /**
+     * @notice Emitted when an ownership transition is completed.
+     */
+    event OwnerTransitionComplete(address newOwner);
+
+    /**
+     * @notice Attempted to call a function intended for Zero Id address.
+     */
+    error PriceRouter__OnlyCallableByZeroId();
+
+    /**
+     * @notice Attempted to transition owner to the zero address.
+     */
+    error PriceRouter__NewOwnerCanNotBeZero();
+
+    /**
+     * @notice Attempted to perform a restricted action while ownership transition is pending.
+     */
+    error PriceRouter__TransitionPending();
+
+    /**
+     * @notice Attempted to cancel or complete a transition when one is not active.
+     */
+    error PriceRouter__TransitionNotPending();
+
+    /**
+     * @notice Attempted to call `completeTransition` from an address that is not the pending owner.
+     */
+    error PriceRouter__OnlyCallableByPendingOwner();
+
+    /**
+     * @notice The amount of time it takes for an ownership transition to work.
+     */
+    uint256 public constant TRANSITION_PERIOD = 7 days;
+
+    /**
+     * @notice The Pending Owner, that becomes the owner after the transition period, and they call `completeTransition`.
+     */
+    address public pendingOwner;
+
+    /**
+     * @notice The starting time stamp of the transition.
+     */
+    uint256 public transitionStart;
+
+    /**
+     * @notice Allows Zero Id address to set a new owner, after the transition period is up.
+     */
+    function transitionOwner(address newOwner) external {
+        if (msg.sender != registry.getAddress(0)) revert PriceRouter__OnlyCallableByZeroId();
+        if (pendingOwner != address(0)) revert PriceRouter__TransitionPending();
+        if (newOwner == address(0)) revert PriceRouter__NewOwnerCanNotBeZero();
+
+        pendingOwner = newOwner;
+        transitionStart = block.timestamp;
+    }
+
+    /**
+     * @notice Allows Zero Id address to cancel an ongoing owner transition.
+     */
+    function cancelTransition() external {
+        if (msg.sender != registry.getAddress(0)) revert PriceRouter__OnlyCallableByZeroId();
+        if (pendingOwner == address(0)) revert PriceRouter__TransitionNotPending();
+
+        pendingOwner = address(0);
+        transitionStart = 0;
+    }
+
+    /**
+     * @notice Allows pending owner to complete the ownership transition.
+     */
+    function completeTransition() external {
+        if (pendingOwner == address(0)) revert PriceRouter__TransitionNotPending();
+        if (msg.sender != pendingOwner) revert PriceRouter__OnlyCallableByPendingOwner();
+        if (block.timestamp < transitionStart + TRANSITION_PERIOD) revert PriceRouter__TransitionPending();
+
+        _transferOwnership(pendingOwner);
+
+        pendingOwner = address(0);
+        transitionStart = 0;
+    }
+
+    /**
+     * @notice Extends OZ Ownable `_checkOwner` function to block owner calls, if there is an ongoing transition.
+     */
+    function _checkOwner() internal view override {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+        if (transitionStart != 0) revert PriceRouter__TransitionPending();
+    }
 
     // ======================================= ADAPTOR OPERATIONS =======================================
 
@@ -581,11 +693,12 @@ contract PriceRouter is Ownable {
     }
 
     // =========================================== TWAP PRICE DERIVATIVE ===========================================
+    // TODO we have 48 bits left in each slot
+    // Could use it store a min liquidity amount
     struct TwapSourceStorage {
         uint32 secondsAgo;
         uint8 baseDecimals;
         uint8 quoteDecimals;
-        ERC20 baseToken;
         ERC20 quoteToken;
     }
 
@@ -596,10 +709,25 @@ contract PriceRouter is Ownable {
 
         UniswapV3Pool pool = UniswapV3Pool(_source);
 
-        pool.token0();
-        // TODO so we can verify the obersvation is setup by calling pool.observations(SECONDS_AGO);
-        (, , , bool isInitialized) = pool.observations(parameters.secondsAgo);
-        // if (!isInitialized) revert("Call Increase Observations.");
+        ERC20 token0 = ERC20(pool.token0());
+        ERC20 token1 = ERC20(pool.token1());
+        if (token0 == _asset) {
+            parameters.baseDecimals = _asset.decimals();
+            parameters.quoteDecimals = token1.decimals();
+            parameters.quoteToken = token1;
+        } else if (token1 == _asset) {
+            parameters.baseDecimals = _asset.decimals();
+            parameters.quoteDecimals = token0.decimals();
+            parameters.quoteToken = token0;
+        } else revert("asset is not in pool");
+
+        // Verify token0 and token1, and set decimals, and quote values
+        // Quote token must be pricable
+
+        // TODO currently this does not work
+        // (, , , uint16 maxObservations, , , ) = pool.slot0();
+        // console.log("Current Max", maxObservations);
+        // if (parameters.secondsAgo > maxObservations) revert("Call Increase Observations.");
 
         // Verify seconds ago is reasonable
         // Also if I add in asset to this I could do a sanity check to make sure asset is token0 or token1
@@ -607,6 +735,7 @@ contract PriceRouter is Ownable {
         getTwapDerivativeStorage[_asset] = parameters;
     }
 
+    // TODO min liquidity check?
     function _getPriceForTwapDerivative(ERC20 asset, address _source) internal view returns (uint256) {
         TwapSourceStorage memory parameters = getTwapDerivativeStorage[asset];
         (int24 arithmeticMeanTick, ) = OracleLibrary.consult(_source, parameters.secondsAgo);
@@ -614,7 +743,7 @@ contract PriceRouter is Ownable {
         uint256 quoteAmount = OracleLibrary.getQuoteAtTick(
             arithmeticMeanTick,
             uint128(10 ** parameters.baseDecimals),
-            address(parameters.baseToken),
+            address(asset),
             address(parameters.quoteToken)
         );
         uint256 quotePrice = _getPriceInUSD(parameters.quoteToken, getAssetSettings[parameters.quoteToken]);

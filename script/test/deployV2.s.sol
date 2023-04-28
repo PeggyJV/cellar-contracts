@@ -103,7 +103,7 @@ contract DeployV2Script is Script {
     function run() external {
         vm.startBroadcast();
         // Setup Registry, modules, and adaptors.
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         factory = new CellarFactory();
         registry = new Registry(devOwner, address(swapRouter), address(priceRouter));
