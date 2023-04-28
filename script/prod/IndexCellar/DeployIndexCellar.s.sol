@@ -158,7 +158,7 @@ contract DeployIndexCellarScript is Script {
         cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
 
         // Setup all the positions the cellar will use.
-        for (uint32 i = 120; i < 140; ++i) cellar.addPositionToCatalogue(i);
+        for (uint32 i = 121; i < 140; ++i) cellar.addPositionToCatalogue(i);
 
         cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
 
