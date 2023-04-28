@@ -35,7 +35,6 @@ contract DeployWstEthOracleScript is Script {
 
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
 
-
     PriceRouter private priceRouter = PriceRouter(0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA);
     Registry private registry = Registry(0x3051e76a62da91D4aD6Be6bD98D8Ab26fdaF9D08);
     TimelockController private controller = TimelockController(payable(0xaDa78a5E01325B91Bc7879a63c309F7D54d42950));
@@ -48,10 +47,7 @@ contract DeployWstEthOracleScript is Script {
         // Deploy WstEth pricing contract.
         extension = new WstEthExtension();
 
-        PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(
-            CHAINLINK_DERIVATIVE,
-            address(extension)
-        );
+        PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(extension));
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage(
             80e18,
             0.1e18,
@@ -60,17 +56,29 @@ contract DeployWstEthOracleScript is Script {
         );
 
         // Create timelock TXs to add wsteth pricing to the price router.
-        bytes[] memory addWstEthData = new bytes[](10);
         // Encompasses price ranges
-        /*
-        1632: 1600 -> 1664
-        1697: 1664 -> 1730
-        1765: 1730 -> 1800
-        
-        */ 
-        uint256 startingPrice = 1632e9
-        for (uint256 i; i<10; ++i) {
-            addWstEthData[i] = abi.encodeWithSelector(PriceRouter.addAsset.selector, wstETH, settings, abi.encode(stor), );
+        uint256[] memory prices = new uint256[](10);
+        // Multiply by the wsteth to steth exchange rate
+        prices[0] = (1.1209e4 * 1632e8) / 1e4;
+        prices[1] = (1.1209e4 * 1697e8) / 1e4;
+        prices[2] = (1.1209e4 * 1765e8) / 1e4;
+        prices[3] = (1.1209e4 * 1836e8) / 1e4;
+        prices[4] = (1.1209e4 * 1910e8) / 1e4;
+        prices[5] = (1.1209e4 * 1987e8) / 1e4;
+        prices[6] = (1.1209e4 * 2067e8) / 1e4;
+        prices[7] = (1.1209e4 * 2151e8) / 1e4;
+        prices[8] = (1.1209e4 * 2238e8) / 1e4;
+        prices[9] = (1.1209e4 * 2328e8) / 1e4;
+
+        for (uint256 i; i < 10; ++i) {
+            bytes memory priceData = abi.encodeWithSelector(
+                PriceRouter.addAsset.selector,
+                wstETH,
+                settings,
+                abi.encode(stor),
+                prices[i]
+            );
+            controller.schedule(address(priceRouter), 0, priceData, hex"", hex"", 3 days);
         }
 
         vm.stopBroadcast();
