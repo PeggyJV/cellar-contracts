@@ -37,7 +37,7 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/prod/DeployIndexCellar/DeployIndexCellar.s.sol:DeployIndexCellarScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/prod/IndexCellar/DeployIndexCellar.s.sol:DeployIndexCellarScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployIndexCellarScript is Script {
@@ -99,39 +99,37 @@ contract DeployIndexCellarScript is Script {
     function run() external {
         vm.startBroadcast();
 
-        uint32[] memory positionIds = new uint32[](20);
-
         // Add Positions to registry.
         // TODO add these with the multisig
-        positionIds[0] = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
-        positionIds[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(CRV));
-        positionIds[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(AAVE));
-        positionIds[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(UNI));
-        positionIds[4] = registry.trustPosition(address(erc20Adaptor), abi.encode(COMP));
-        positionIds[5] = registry.trustPosition(address(erc20Adaptor), abi.encode(MKR));
-        positionIds[6] = registry.trustPosition(address(erc20Adaptor), abi.encode(LDO));
-        positionIds[7] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2USDC)));
-        positionIds[8] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2CRV)));
-        positionIds[9] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2MKR)));
-        positionIds[10] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2UNI)));
-        positionIds[11] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3USDC)));
-        positionIds[12] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3CRV)));
-        positionIds[13] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3UNI)));
-        positionIds[14] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3MKR)));
-        positionIds[15] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3LDO)));
-        positionIds[16] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC));
-        positionIds[17] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cAAVE));
-        positionIds[18] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUNI));
-        positionIds[19] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cCOMP));
+        // positionIds[0] = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        // positionIds[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(CRV));
+        // positionIds[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(AAVE));
+        // positionIds[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(UNI));
+        // positionIds[4] = registry.trustPosition(address(erc20Adaptor), abi.encode(COMP));
+        // positionIds[5] = registry.trustPosition(address(erc20Adaptor), abi.encode(MKR));
+        // positionIds[6] = registry.trustPosition(address(erc20Adaptor), abi.encode(LDO));
+        // positionIds[7] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2USDC)));
+        // positionIds[8] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2CRV)));
+        // positionIds[9] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2MKR)));
+        // positionIds[10] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2UNI)));
+        // positionIds[11] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3USDC)));
+        // positionIds[12] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3CRV)));
+        // positionIds[13] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3UNI)));
+        // positionIds[14] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3MKR)));
+        // positionIds[15] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3LDO)));
+        // positionIds[16] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUSDC));
+        // positionIds[17] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cAAVE));
+        // positionIds[18] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cUNI));
+        // positionIds[19] = registry.trustPosition(address(cTokenAdaptor), abi.encode(cCOMP));
 
         // Deploy cellar using factory.
         bytes memory initializeCallData = abi.encode(
             devOwner,
             registry,
             USDC,
-            "BH TODO",
-            "TODO",
-            positionIds[0],
+            "DeFi Stars",
+            "STARS",
+            120,
             abi.encode(0),
             strategist
         );
@@ -160,25 +158,9 @@ contract DeployIndexCellarScript is Script {
         cellar.addAdaptorToCatalogue(address(cTokenAdaptor));
 
         // Setup all the positions the cellar will use.
-        cellar.addPositionToCatalogue(positionIds[0]);
-        cellar.addPositionToCatalogue(positionIds[1]);
-        cellar.addPositionToCatalogue(positionIds[2]);
-        cellar.addPositionToCatalogue(positionIds[3]);
-        cellar.addPositionToCatalogue(positionIds[4]);
-        cellar.addPositionToCatalogue(positionIds[5]);
-        cellar.addPositionToCatalogue(positionIds[7]);
-        cellar.addPositionToCatalogue(positionIds[8]);
-        cellar.addPositionToCatalogue(positionIds[9]);
-        cellar.addPositionToCatalogue(positionIds[10]);
-        cellar.addPositionToCatalogue(positionIds[11]);
-        cellar.addPositionToCatalogue(positionIds[12]);
-        cellar.addPositionToCatalogue(positionIds[13]);
-        cellar.addPositionToCatalogue(positionIds[14]);
-        cellar.addPositionToCatalogue(positionIds[15]);
-        cellar.addPositionToCatalogue(positionIds[16]);
-        cellar.addPositionToCatalogue(positionIds[17]);
+        for (uint32 i = 120; i < 140; ++i) cellar.addPositionToCatalogue(i);
 
-        // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
 
         vm.stopBroadcast();
     }
