@@ -25,6 +25,7 @@ contract PriceRouterTest is Test {
     event RemoveAsset(address indexed asset);
 
     PriceRouter private priceRouter;
+    address public gravityBridge = vm.addr(1);
 
     address private immutable sender = vm.addr(0xABCD);
     address private immutable receiver = vm.addr(0xBEEF);
@@ -87,7 +88,7 @@ contract PriceRouterTest is Test {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
 
-        registry = new Registry(address(this), address(this), address(this));
+        registry = new Registry(gravityBridge, address(this), address(this));
 
         priceRouter = new PriceRouter(registry);
 
@@ -395,7 +396,97 @@ contract PriceRouterTest is Test {
         priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
     }
 
-    // TODO add test changing owner.
+    // ======================================= TRANSITIONING OWNER TESTS =======================================
+
+    function testTransitioningOwner() external {
+        address newOwner = vm.addr(777);
+        // Current owner has been misbehaving, so governance wants to kick them out.
+
+        // Governance accidentally passes in zero address for new owner.
+        vm.startPrank(gravityBridge);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__NewOwnerCanNotBeZero.selector)));
+        priceRouter.transitionOwner(address(0));
+        vm.stopPrank();
+
+        // Governance actually uses the right address.
+        vm.prank(gravityBridge);
+        priceRouter.transitionOwner(newOwner);
+
+        // Old owner tries to call onlyOwner functions.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionPending.selector)));
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
+
+        // New owner tries claiming ownership before transition period is over.
+        vm.startPrank(newOwner);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionPending.selector)));
+        priceRouter.completeTransition();
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + priceRouter.TRANSITION_PERIOD());
+
+        vm.prank(newOwner);
+        priceRouter.completeTransition();
+
+        assertEq(priceRouter.owner(), newOwner, "PriceRouter should be owned by new owner.");
+
+        // New owner renounces ownership.
+        vm.prank(newOwner);
+        priceRouter.renounceOwnership();
+
+        address doug = vm.addr(13);
+        // Governance decides to recover ownership and transfer it to doug.
+        vm.prank(gravityBridge);
+        priceRouter.transitionOwner(doug);
+
+        // Half way through transition governance learns doug is evil, so they cancel the transition.
+        vm.warp(block.timestamp + priceRouter.TRANSITION_PERIOD() / 2);
+        vm.prank(gravityBridge);
+        priceRouter.cancelTransition();
+
+        // doug still tries to claim ownership.
+        vm.warp(block.timestamp + priceRouter.TRANSITION_PERIOD() / 2);
+        vm.startPrank(doug);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionNotPending.selector)));
+        priceRouter.completeTransition();
+        vm.stopPrank();
+
+        // Governance accidentally calls cancel transition again, but call reverts.
+        vm.startPrank(gravityBridge);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionNotPending.selector)));
+        priceRouter.cancelTransition();
+        vm.stopPrank();
+
+        // Governance finds the best owner and starts the process.
+        address bestOwner = vm.addr(7777);
+        vm.prank(gravityBridge);
+        priceRouter.transitionOwner(bestOwner);
+
+        // New owner waits an extra week.
+        vm.warp(block.timestamp + 2 * priceRouter.TRANSITION_PERIOD());
+
+        vm.prank(bestOwner);
+        priceRouter.completeTransition();
+
+        assertEq(priceRouter.owner(), bestOwner, "PriceRouter should be owned by best owner.");
+
+        // Governance starts another ownership transfer back to doug.
+        vm.prank(gravityBridge);
+        priceRouter.transitionOwner(doug);
+
+        vm.warp(block.timestamp + 2 * priceRouter.TRANSITION_PERIOD());
+
+        // Doug still has not completed the transfer, so Governance decides to cancel it.
+        vm.prank(gravityBridge);
+        priceRouter.cancelTransition();
+
+        // Doug tries completing it.
+        vm.startPrank(doug);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionNotPending.selector)));
+        priceRouter.completeTransition();
+        vm.stopPrank();
+    }
 
     // ======================================= EDITING ASSET TESTS =======================================
 

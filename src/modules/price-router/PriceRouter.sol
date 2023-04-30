@@ -218,7 +218,7 @@ contract PriceRouter is Ownable {
     /**
      * @notice The amount of time that must pass between owner calling `startEditAsset`, and `completeEditAsset`.
      */
-    uint64 public constant EDIT_ASSET_DELAY = 14 days;
+    uint64 public constant EDIT_ASSET_DELAY = 7 days;
 
     /**
      * @notice Stores the timestamp when an asset can be editted.
@@ -736,6 +736,8 @@ contract PriceRouter is Ownable {
     }
 
     // TODO min liquidity check?
+    // This check is pretty hard to quantify what a minimum liquiditty should be. And given how hard
+    // it is to change this its probs not worth it.
     function _getPriceForTwapDerivative(ERC20 asset, address _source) internal view returns (uint256) {
         TwapSourceStorage memory parameters = getTwapDerivativeStorage[asset];
         (int24 arithmeticMeanTick, ) = OracleLibrary.consult(_source, parameters.secondsAgo);
