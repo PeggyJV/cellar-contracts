@@ -386,6 +386,18 @@ contract PriceRouter is Ownable {
     }
 
     /**
+     * @notice Get multiple `asset` prices in USD.
+     * @dev Returns array of prices in USD with 8 decimals.
+     */
+    function getPricesInUSD(ERC20[] calldata assets) external view returns (uint256[] memory prices) {
+        prices = new uint256[](assets.length);
+        for (uint256 i; i < assets.length; ++i) {
+            AssetSettings memory assetSettings = getAssetSettings[assets[i]];
+            prices[i] = _getPriceInUSD(assets[i], assetSettings);
+        }
+    }
+
+    /**
      * @notice Get the value of an asset in terms of another asset.
      * @param baseAsset address of the asset to get the price of in terms of the quote asset
      * @param amount amount of the base asset to price
