@@ -10,16 +10,25 @@ import { console } from "@forge-std/Test.sol";
 contract BalancerStablePoolExtension is Extension {
     using Math for uint256;
 
+    error BalancerStablePoolExtension__PoolTokensMustBeSupported();
+    error BalancerStablePoolExtension__MinimumPriceNotFound();
+    error BalancerStablePoolExtension__Reentrancy();
+
     IVault public immutable balancerVault;
 
     constructor(PriceRouter _priceRouter, IVault _balancerVault) Extension(_priceRouter) {
         balancerVault = _balancerVault;
     }
 
+    struct ExtensionStorage {
+        bytes32 poolId;
+        uint8 poolDecimals;
+    }
+
     /**
-     * @notice Aave Derivative Storage
+     * @notice Balancer Stable Pool Extension Storage
      */
-    mapping(ERC20 => bytes32) public getBalancerWeightedPoolDerivativeStorage;
+    mapping(ERC20 => ExtensionStorage) public extensionStorage;
 
     function setupSource(ERC20 asset, bytes memory) external override onlyPriceRouter {
         // asset is a balancer LP token
@@ -29,18 +38,19 @@ contract BalancerStablePoolExtension is Extension {
 
         // Make sure we can price all underlying tokens.
         for (uint256 i; i < tokens.length; ++i)
-            if (!priceRouter.isSupported(ERC20(address(tokens[i])))) revert("tokens must be supported.");
+            if (!priceRouter.isSupported(ERC20(address(tokens[i]))))
+                revert BalancerStablePoolExtension__PoolTokensMustBeSupported();
 
-        // TODO we could save the poolId and tokens in this contract for less state reads
-        getBalancerWeightedPoolDerivativeStorage[asset] = poolId;
+        extensionStorage[asset].poolId = poolId;
+        extensionStorage[asset].poolDecimals = pool.decimals();
     }
 
     function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         _ensureNotInVaultContext(balancerVault);
         IBalancerPool pool = IBalancerPool(address(asset));
 
-        bytes32 poolId = getBalancerWeightedPoolDerivativeStorage[asset];
-        (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(poolId);
+        ExtensionStorage memory stor = extensionStorage[asset];
+        (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(stor.poolId);
 
         // Find the minimum price of all the pool tokens.
         uint256 minPrice = type(uint256).max;
@@ -49,9 +59,9 @@ contract BalancerStablePoolExtension is Extension {
             if (price < minPrice) minPrice = price;
         }
 
-        if (minPrice == type(uint256).max) revert("Min price not found.");
+        if (minPrice == type(uint256).max) revert BalancerStablePoolExtension__MinimumPriceNotFound();
 
-        uint256 priceBpt = minPrice.mulDivDown(pool.getRate(), 10 ** pool.decimals());
+        uint256 priceBpt = minPrice.mulDivDown(pool.getRate(), 10 ** stor.poolDecimals);
         return priceBpt;
     }
 
@@ -88,6 +98,6 @@ contract BalancerStablePoolExtension is Extension {
             abi.encodeWithSelector(vault.manageUserBalance.selector, new address[](0))
         );
 
-        if (keccak256(revertData) == REENTRANCY_ERROR_HASH) revert("Reentrancy");
+        if (keccak256(revertData) == REENTRANCY_ERROR_HASH) revert BalancerStablePoolExtension__Reentrancy();
     }
 }

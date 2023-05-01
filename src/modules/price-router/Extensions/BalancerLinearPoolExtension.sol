@@ -7,8 +7,11 @@ import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
 
 import { console } from "@forge-std/Test.sol";
 
-contract BalancerStablePoolExtension is Extension {
+contract BalancerLinearPoolExtension is Extension {
     using Math for uint256;
+
+    error BalancerLinearPoolExtension__MainTokenMustBeSupported();
+    error BalancerLinearPoolExtension__Reentrancy();
 
     IVault public immutable balancerVault;
 
@@ -16,10 +19,15 @@ contract BalancerStablePoolExtension is Extension {
         balancerVault = _balancerVault;
     }
 
+    struct ExtensionStorage {
+        ERC20 mainToken;
+        uint8 poolDecimals;
+    }
+
     /**
-     * @notice Aave Derivative Storage
+     * @notice Balancer Lineaer Pool Extension Storage
      */
-    mapping(ERC20 => bytes32) public getBalancerWeightedPoolDerivativeStorage;
+    mapping(ERC20 => ExtensionStorage) public extensionStorage;
 
     function setupSource(ERC20 asset, bytes memory) external override onlyPriceRouter {
         // asset is a balancer LP token
@@ -27,18 +35,22 @@ contract BalancerStablePoolExtension is Extension {
 
         ERC20 mainToken = ERC20(pool.getMainToken());
         // Make sure we can price all underlying tokens.
-        if (!priceRouter.isSupported(mainToken)) revert("tokens must be supported.");
+        if (!priceRouter.isSupported(mainToken)) revert BalancerLinearPoolExtension__MainTokenMustBeSupported();
 
-        // TODO we could save the poolId and tokens in this contract for less state reads
+        extensionStorage[asset].mainToken = mainToken;
+        extensionStorage[asset].poolDecimals = pool.decimals();
     }
 
     function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         _ensureNotInVaultContext(balancerVault);
         IBalancerPool pool = IBalancerPool(address(asset));
 
-        ERC20 mainToken = ERC20(pool.getMainToken());
+        ExtensionStorage memory stor = extensionStorage[asset];
 
-        uint256 priceBpt = priceRouter.getPriceInUSD(mainToken).mulDivDown(pool.getRate(), 10 ** pool.decimals());
+        uint256 priceBpt = priceRouter.getPriceInUSD(stor.mainToken).mulDivDown(
+            pool.getRate(),
+            10 ** stor.poolDecimals
+        );
         return priceBpt;
     }
 
@@ -75,6 +87,6 @@ contract BalancerStablePoolExtension is Extension {
             abi.encodeWithSelector(vault.manageUserBalance.selector, new address[](0))
         );
 
-        if (keccak256(revertData) == REENTRANCY_ERROR_HASH) revert("Reentrancy");
+        if (keccak256(revertData) == REENTRANCY_ERROR_HASH) revert BalancerLinearPoolExtension__Reentrancy();
     }
 }
