@@ -107,7 +107,7 @@ contract BalancerStableAndLinearPoolTest is Test {
     // console.log("Token Amount 1", vals[1]);
     // console.log("Token Amount 2", vals[2]);
     // console.log("Min out", minAmountOut);
-    function testPricing3PoolBpt(uint256 valueIn) external {
+    function testPricingUSDC_DAI_USDT_Bpt(uint256 valueIn) external {
         valueIn = bound(valueIn, 1e6, 1_000_000e6);
         // Add required pricing.
         _addChainlinkAsset(USDC, USDC_USD_FEED, false);
@@ -125,6 +125,51 @@ contract BalancerStableAndLinearPoolTest is Test {
         assertApproxEqRel(valueOut, valueIn, 0.001e18, "Value out should approximately equal value in.");
     }
 
+    function testPricingRETH_WETH_Bpt(uint256 valueIn) external {
+        valueIn = bound(valueIn, 0.1e18, 10_000e18);
+
+        // Add required pricing.
+        _addChainlinkAsset(USDC, USDC_USD_FEED, false);
+        _addChainlinkAsset(WETH, WETH_USD_FEED, false);
+        _addChainlinkAsset(rETH, RETH_ETH_FEED, true);
+
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+
+        priceRouter.addAsset(rETH_wETH_BPT, settings, abi.encode(0), 1915e8);
+
+        uint256 bptOut = _joinPool(address(WETH), valueIn, IBalancerPool(address(rETH_wETH_BPT)));
+
+        uint256 valueOut = priceRouter.getValue(rETH_wETH_BPT, bptOut, WETH);
+        assertApproxEqRel(valueOut, valueIn, 0.004e18, "Value out should approximately equal value in.");
+    }
+
+    function testPricingWstETH_WETH_Bpt(uint256 valueIn) external {
+        valueIn = bound(valueIn, 0.1e18, 100_000e18);
+        // valueIn = 1e18;
+
+        // Add required pricing.
+        _addChainlinkAsset(USDC, USDC_USD_FEED, false);
+        _addChainlinkAsset(WETH, WETH_USD_FEED, false);
+        _addChainlinkAsset(STETH, STETH_USD_FEED, false);
+
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstEthExtension));
+
+        priceRouter.addAsset(WSTETH, settings, abi.encode(0), 2_100e8);
+
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+
+        priceRouter.addAsset(wstETH_wETH_BPT, settings, abi.encode(0), 1915e8);
+
+        uint256 bptOut = _joinPool(address(WETH), valueIn, IBalancerPool(address(wstETH_wETH_BPT)));
+
+        uint256 valueOut = priceRouter.getValue(wstETH_wETH_BPT, bptOut, WETH);
+        assertApproxEqRel(valueOut, valueIn, 0.004e18, "Value out should approximately equal value in.");
+    }
+
+    // ======================================= HELPER FUNCTIONS =======================================
+
     enum WeightedJoinKind {
         INIT,
         EXACT_TOKENS_IN_FOR_BPT_OUT,
@@ -138,41 +183,79 @@ contract BalancerStableAndLinearPoolTest is Test {
         TOKEN_IN_FOR_EXACT_BPT_OUT
     }
 
+    // TODO create a batch swap function for linear/boosted pools
+
     function _joinPool(address asset, uint256 amount, IBalancerPool pool) internal returns (uint256 bptOut) {
+        // So the assets, and maxAmounts must include the BPT in their array,
+        // but joinAmounts must NOT, and it needs to be in order of the tokens array - the BPT address.
         (IERC20[] memory tokens, , ) = vault.getPoolTokens(pool.getPoolId());
-        // Remove the BPT token from the tokens object.
-        uint256 lengthToUse = tokens.length - 1;
-
-        IAsset[] memory assets = new IAsset[](lengthToUse + 1);
-        uint256[] memory maxAmounts = new uint256[](lengthToUse + 1);
-        uint256[] memory joinAmounts = new uint256[](lengthToUse);
-
-        uint256 targetIndex;
-        uint256 currentIndex;
+        bool includesBpt;
         for (uint256 i; i < tokens.length; ++i) {
-            assets[i] = IAsset(address(tokens[i]));
-            if (address(tokens[i]) == address(asset)) {
-                maxAmounts[i] = amount;
-                targetIndex = currentIndex;
+            if (address(tokens[i]) == address(pool)) {
+                includesBpt = true;
+                break;
             }
-            if (address(tokens[i]) == address(pool)) continue;
-            currentIndex++;
         }
+        if (includesBpt) {
+            uint256 lengthToUse = tokens.length - 1;
+            IAsset[] memory assets = new IAsset[](lengthToUse + 1);
+            uint256[] memory maxAmounts = new uint256[](lengthToUse + 1);
+            uint256[] memory joinAmounts = new uint256[](lengthToUse);
 
-        joinAmounts[targetIndex] = amount;
-        bytes memory userData = abi.encode(StableJoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT, joinAmounts, 0);
+            uint256 targetIndex;
+            uint256 currentIndex;
+            for (uint256 i; i < tokens.length; ++i) {
+                assets[i] = IAsset(address(tokens[i]));
+                if (address(tokens[i]) == address(asset)) {
+                    maxAmounts[i] = amount;
+                    targetIndex = currentIndex;
+                }
+                if (address(tokens[i]) == address(pool)) continue;
+                currentIndex++;
+            }
 
-        deal(asset, address(this), amount);
-        ERC20(asset).approve(address(vault), amount);
+            joinAmounts[targetIndex] = amount;
+            bytes memory userData = abi.encode(StableJoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT, joinAmounts, 0);
 
-        uint256 balanceBefore = ERC20(address(pool)).balanceOf(address(this));
-        vault.joinPool(
-            pool.getPoolId(),
-            address(this),
-            address(this),
-            IVault.JoinPoolRequest(assets, maxAmounts, userData, false)
-        );
-        return ERC20(address(pool)).balanceOf(address(this)) - balanceBefore;
+            deal(asset, address(this), amount);
+            ERC20(asset).approve(address(vault), amount);
+
+            uint256 balanceBefore = ERC20(address(pool)).balanceOf(address(this));
+            vault.joinPool(
+                pool.getPoolId(),
+                address(this),
+                address(this),
+                IVault.JoinPoolRequest(assets, maxAmounts, userData, false)
+            );
+            return ERC20(address(pool)).balanceOf(address(this)) - balanceBefore;
+        } else {
+            uint256 lengthToUse = tokens.length;
+            IAsset[] memory assets = new IAsset[](lengthToUse);
+            uint256[] memory maxAmounts = new uint256[](lengthToUse);
+            uint256[] memory joinAmounts = new uint256[](lengthToUse);
+
+            for (uint256 i; i < tokens.length; ++i) {
+                assets[i] = IAsset(address(tokens[i]));
+                if (address(tokens[i]) == address(asset)) {
+                    maxAmounts[i] = amount;
+                    joinAmounts[i] = amount;
+                }
+            }
+
+            bytes memory userData = abi.encode(StableJoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT, joinAmounts, 0);
+
+            deal(asset, address(this), amount);
+            ERC20(asset).approve(address(vault), amount);
+
+            uint256 balanceBefore = ERC20(address(pool)).balanceOf(address(this));
+            vault.joinPool(
+                pool.getPoolId(),
+                address(this),
+                address(this),
+                IVault.JoinPoolRequest(assets, maxAmounts, userData, false)
+            );
+            return ERC20(address(pool)).balanceOf(address(this)) - balanceBefore;
+        }
     }
 
     function _addChainlinkAsset(ERC20 asset, address priceFeed, bool inEth) internal {

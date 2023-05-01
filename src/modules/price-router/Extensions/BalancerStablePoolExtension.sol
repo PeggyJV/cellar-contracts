@@ -33,14 +33,9 @@ contract BalancerStablePoolExtension is Extension {
 
     function setupSource(ERC20 asset, bytes memory) external override onlyPriceRouter {
         // asset is a balancer LP token
-        console.log("asset", address(asset));
         IBalancerPool pool = IBalancerPool(address(asset));
-        console.log("Here");
-        // bytes32 poolId = pool.getPoolId();
-        bytes32 poolId = hex"79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7";
-        // console.log("Pool Id", uint256(poolId));
+        bytes32 poolId = pool.getPoolId();
         (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(poolId);
-        console.log("Made it");
 
         // Make sure we can price all underlying tokens.
         for (uint256 i; i < tokens.length; ++i) {
