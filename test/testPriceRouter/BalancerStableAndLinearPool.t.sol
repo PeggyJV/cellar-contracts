@@ -94,7 +94,21 @@ contract BalancerStableAndLinearPoolTest is Test {
     // assets put into the pool.
     // https://docs.balancer.fi/reference/joins-and-exits/pool-joins.html
 
-    function testPricing3PoolBpt() external {
+    // TODO remove below is for decoding userData
+    // bytes
+    //     memory userData = hex"000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000013f6f7ff3df11603b0130000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000e070816e3fb9df55b4000000000000000000000000000000000000000000000000000000008fa3258f50000000000000000000000000000000000000000000000000000000000000000";
+    // (uint256 kind, uint256[] memory vals, uint256 minAmountOut) = abi.decode(
+    //     userData,
+    //     (uint256, uint256[], uint256)
+    // );
+    // console.log("Kind", kind);
+    // console.log("Token Length", vals.length);
+    // console.log("Token Amount 0", vals[0]);
+    // console.log("Token Amount 1", vals[1]);
+    // console.log("Token Amount 2", vals[2]);
+    // console.log("Min out", minAmountOut);
+    function testPricing3PoolBpt(uint256 valueIn) external {
+        valueIn = bound(valueIn, 1e6, 1_000_000e6);
         // Add required pricing.
         _addChainlinkAsset(USDC, USDC_USD_FEED, false);
         _addChainlinkAsset(DAI, DAI_USD_FEED, false);
@@ -105,7 +119,10 @@ contract BalancerStableAndLinearPoolTest is Test {
 
         priceRouter.addAsset(USDC_DAI_USDT_BPT, settings, abi.encode(0), 1e8);
 
-        _joinPool(address(USDC), 1e6, IBalancerPool(address(USDC_DAI_USDT_BPT)));
+        uint256 bptOut = _joinPool(address(USDC), valueIn, IBalancerPool(address(USDC_DAI_USDT_BPT)));
+
+        uint256 valueOut = priceRouter.getValue(USDC_DAI_USDT_BPT, bptOut, USDC);
+        assertApproxEqRel(valueOut, valueIn, 0.001e18, "Value out should approximately equal value in.");
     }
 
     enum WeightedJoinKind {
@@ -121,36 +138,41 @@ contract BalancerStableAndLinearPoolTest is Test {
         TOKEN_IN_FOR_EXACT_BPT_OUT
     }
 
-    function _joinPool(address asset, uint256 amount, IBalancerPool pool) internal {
+    function _joinPool(address asset, uint256 amount, IBalancerPool pool) internal returns (uint256 bptOut) {
         (IERC20[] memory tokens, , ) = vault.getPoolTokens(pool.getPoolId());
+        // Remove the BPT token from the tokens object.
+        uint256 lengthToUse = tokens.length - 1;
 
-        IAsset[] memory assets = new IAsset[](tokens.length);
-        uint256[] memory maxAmounts = new uint256[](tokens.length);
-        uint256[] memory joinAmounts = new uint256[](tokens.length);
-        if (
-            assets.length != maxAmounts.length || assets.length != joinAmounts.length || assets.length != tokens.length
-        ) {
-            console.log("WTF");
-        } else {
-            console.log("Thats what I thought");
-        }
+        IAsset[] memory assets = new IAsset[](lengthToUse + 1);
+        uint256[] memory maxAmounts = new uint256[](lengthToUse + 1);
+        uint256[] memory joinAmounts = new uint256[](lengthToUse);
 
         uint256 targetIndex;
+        uint256 currentIndex;
         for (uint256 i; i < tokens.length; ++i) {
-            if (address(tokens[i]) == address(asset)) targetIndex = i;
             assets[i] = IAsset(address(tokens[i]));
+            if (address(tokens[i]) == address(asset)) {
+                maxAmounts[i] = amount;
+                targetIndex = currentIndex;
+            }
+            if (address(tokens[i]) == address(pool)) continue;
+            currentIndex++;
         }
+
         joinAmounts[targetIndex] = amount;
-        maxAmounts[targetIndex] = amount;
         bytes memory userData = abi.encode(StableJoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT, joinAmounts, 0);
+
         deal(asset, address(this), amount);
         ERC20(asset).approve(address(vault), amount);
+
+        uint256 balanceBefore = ERC20(address(pool)).balanceOf(address(this));
         vault.joinPool(
             pool.getPoolId(),
             address(this),
             address(this),
             IVault.JoinPoolRequest(assets, maxAmounts, userData, false)
         );
+        return ERC20(address(pool)).balanceOf(address(this)) - balanceBefore;
     }
 
     function _addChainlinkAsset(ERC20 asset, address priceFeed, bool inEth) internal {
