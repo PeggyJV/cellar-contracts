@@ -7,8 +7,10 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
 import { Registry } from "src/Registry.sol";
-import { IVault } from "@balancer/interfaces/contracts/vault/IVault.sol";
-import { PoolBalances } from "@balancer/vault/contracts/PoolBalances.sol";
+import { IBasePool } from "@balancer/interfaces/contracts/vault/IBasePool.sol";
+import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
+
+// import { PoolBalances } from "@balancer/vault/contracts/PoolBalances.sol";
 // So I think the userData is an abi.encode min amount of BPTs, or maybe max amount(for exits)?
 
 import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/BalancerStablePoolExtension.sol";
@@ -16,7 +18,7 @@ import { BalancerLinearPoolExtension } from "src/modules/price-router/Extensions
 import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
 
 // import { IVault, VaultReentrancyLib } from "@balancer/pool-utils/contracts/lib/VaultReentrancyLib.sol";
-import { IVault } from "@balancer/interfaces/contracts/vault/IVault.sol";
+import { IVault, IAsset, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -61,11 +63,11 @@ contract BalancerStableAndLinearPoolTest is Test {
 
     // Balancer BPTs
     // Stable
-    ERC20 private bb_a_USD_BPT = ERC20(0xA13a9247ea42D743238089903570127DdA72fE44);
     ERC20 private USDC_DAI_USDT_BPT = ERC20(0x79c58f70905F734641735BC61e45c19dD9Ad60bC);
     ERC20 private rETH_wETH_BPT = ERC20(0x1E19CF2D73a72Ef1332C882F20534B6519Be0276);
     ERC20 private wstETH_wETH_BPT = ERC20(0x32296969Ef14EB0c6d29669C550D4a0449130230);
     ERC20 private wstETH_cbETH_BPT = ERC20(0x9c6d47Ff73e0F5E51BE5FD53236e3F595C5793F2);
+    ERC20 private bb_a_USD_BPT = ERC20(0xA13a9247ea42D743238089903570127DdA72fE44);
     // Linear
     ERC20 private bb_a_USDC_BPT = ERC20(0x82698aeCc9E28e9Bb27608Bd52cF57f704BD1B83);
     ERC20 private bb_a_DAI_BPT = ERC20(0xae37D54Ae477268B9997d4161B96b8200755935c);
@@ -77,8 +79,12 @@ contract BalancerStableAndLinearPoolTest is Test {
 
     function setUp() external {
         registry = new Registry(address(this), address(this), address(this));
-
         priceRouter = new PriceRouter(registry);
+
+        // Deploy Required Extensions.
+        balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, vault);
+        balancerLinearPoolExtension = new BalancerLinearPoolExtension(priceRouter, vault);
+        wstEthExtension = new WstEthExtension(priceRouter);
     }
 
     // ======================================= HAPPY PATH =======================================
@@ -86,4 +92,79 @@ contract BalancerStableAndLinearPoolTest is Test {
     // Add the BPT
     // Join the BPT pool, and confirm that the BPT I got out is similair in value to the
     // assets put into the pool.
+    // https://docs.balancer.fi/reference/joins-and-exits/pool-joins.html
+
+    function testPricing3PoolBpt() external {
+        // Add required pricing.
+        _addChainlinkAsset(USDC, USDC_USD_FEED, false);
+        _addChainlinkAsset(DAI, DAI_USD_FEED, false);
+        _addChainlinkAsset(USDT, USDT_USD_FEED, false);
+
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+
+        priceRouter.addAsset(USDC_DAI_USDT_BPT, settings, abi.encode(0), 1e8);
+
+        _joinPool(address(USDC), 1e6, IBalancerPool(address(USDC_DAI_USDT_BPT)));
+    }
+
+    enum WeightedJoinKind {
+        INIT,
+        EXACT_TOKENS_IN_FOR_BPT_OUT,
+        TOKEN_IN_FOR_EXACT_BPT_OUT,
+        ALL_TOKENS_IN_FOR_EXACT_BPT_OUT
+    }
+
+    enum StableJoinKind {
+        INIT,
+        EXACT_TOKENS_IN_FOR_BPT_OUT,
+        TOKEN_IN_FOR_EXACT_BPT_OUT
+    }
+
+    function _joinPool(address asset, uint256 amount, IBalancerPool pool) internal {
+        (IERC20[] memory tokens, , ) = vault.getPoolTokens(pool.getPoolId());
+
+        IAsset[] memory assets = new IAsset[](tokens.length);
+        uint256[] memory maxAmounts = new uint256[](tokens.length);
+        uint256[] memory joinAmounts = new uint256[](tokens.length);
+        if (
+            assets.length != maxAmounts.length || assets.length != joinAmounts.length || assets.length != tokens.length
+        ) {
+            console.log("WTF");
+        } else {
+            console.log("Thats what I thought");
+        }
+
+        uint256 targetIndex;
+        for (uint256 i; i < tokens.length; ++i) {
+            if (address(tokens[i]) == address(asset)) targetIndex = i;
+            assets[i] = IAsset(address(tokens[i]));
+        }
+        joinAmounts[targetIndex] = amount;
+        maxAmounts[targetIndex] = amount;
+        bytes memory userData = abi.encode(StableJoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT, joinAmounts, 0);
+        deal(asset, address(this), amount);
+        ERC20(asset).approve(address(vault), amount);
+        vault.joinPool(
+            pool.getPoolId(),
+            address(this),
+            address(this),
+            IVault.JoinPoolRequest(assets, maxAmounts, userData, false)
+        );
+    }
+
+    function _addChainlinkAsset(ERC20 asset, address priceFeed, bool inEth) internal {
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        stor.inETH = inEth;
+
+        uint256 price = uint256(IChainlinkAggregator(priceFeed).latestAnswer());
+        if (inEth) {
+            price = priceRouter.getValue(WETH, price, USDC);
+            price = price.changeDecimals(6, 8);
+        }
+
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, priceFeed);
+        priceRouter.addAsset(asset, settings, abi.encode(stor), price);
+    }
 }

@@ -4,6 +4,7 @@ pragma solidity 0.8.16;
 import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Extensions/Extension.sol";
 import { IVault, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
 import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
+// import { IBasePool } from "@balancer/interfaces/contracts/vault/IBasePool.sol";
 
 import { console } from "@forge-std/Test.sol";
 
@@ -32,14 +33,22 @@ contract BalancerStablePoolExtension is Extension {
 
     function setupSource(ERC20 asset, bytes memory) external override onlyPriceRouter {
         // asset is a balancer LP token
+        console.log("asset", address(asset));
         IBalancerPool pool = IBalancerPool(address(asset));
-        bytes32 poolId = pool.getPoolId();
+        console.log("Here");
+        // bytes32 poolId = pool.getPoolId();
+        bytes32 poolId = hex"79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7";
+        // console.log("Pool Id", uint256(poolId));
         (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(poolId);
+        console.log("Made it");
 
         // Make sure we can price all underlying tokens.
-        for (uint256 i; i < tokens.length; ++i)
+        for (uint256 i; i < tokens.length; ++i) {
+            // TODO is this gucci?
+            if (address(tokens[i]) == address(asset)) continue;
             if (!priceRouter.isSupported(ERC20(address(tokens[i]))))
                 revert BalancerStablePoolExtension__PoolTokensMustBeSupported();
+        }
 
         extensionStorage[asset].poolId = poolId;
         extensionStorage[asset].poolDecimals = pool.decimals();
@@ -55,6 +64,7 @@ contract BalancerStablePoolExtension is Extension {
         // Find the minimum price of all the pool tokens.
         uint256 minPrice = type(uint256).max;
         for (uint256 i; i < tokens.length; ++i) {
+            if (address(tokens[i]) == address(asset)) continue;
             uint256 price = priceRouter.getPriceInUSD(ERC20(address(tokens[i])));
             if (price < minPrice) minPrice = price;
         }
