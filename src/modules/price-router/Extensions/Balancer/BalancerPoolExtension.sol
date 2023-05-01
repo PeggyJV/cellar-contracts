@@ -3,55 +3,25 @@ pragma solidity 0.8.16;
 
 import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Extensions/Extension.sol";
 import { IVault, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
-import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
 
-import { console } from "@forge-std/Test.sol";
+/**
+ * @title Sommelier Price Router Balancer Linear Pool Extension
+ * @notice Allows the Price Router to price Balancer Linear pool BPTs.
+ * @author crispymangoes
+ */
+abstract contract BalancerPoolExtension is Extension {
+    /**
+     * @notice Attempted to price BPTs while in the Balancer Vault.
+     */
+    error BalancerPoolExtension__Reentrancy();
 
-contract BalancerLinearPoolExtension is Extension {
-    using Math for uint256;
-
-    error BalancerLinearPoolExtension__MainTokenMustBeSupported();
-    error BalancerLinearPoolExtension__Reentrancy();
-
+    /**
+     * @notice The Balancer Vault
+     */
     IVault public immutable balancerVault;
 
     constructor(PriceRouter _priceRouter, IVault _balancerVault) Extension(_priceRouter) {
         balancerVault = _balancerVault;
-    }
-
-    struct ExtensionStorage {
-        ERC20 mainToken;
-        uint8 poolDecimals;
-    }
-
-    /**
-     * @notice Balancer Lineaer Pool Extension Storage
-     */
-    mapping(ERC20 => ExtensionStorage) public extensionStorage;
-
-    function setupSource(ERC20 asset, bytes memory) external override onlyPriceRouter {
-        // asset is a balancer LP token
-        IBalancerPool pool = IBalancerPool(address(asset));
-
-        ERC20 mainToken = ERC20(pool.getMainToken());
-        // Make sure we can price all underlying tokens.
-        if (!priceRouter.isSupported(mainToken)) revert BalancerLinearPoolExtension__MainTokenMustBeSupported();
-
-        extensionStorage[asset].mainToken = mainToken;
-        extensionStorage[asset].poolDecimals = pool.decimals();
-    }
-
-    function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
-        _ensureNotInVaultContext(balancerVault);
-        IBalancerPool pool = IBalancerPool(address(asset));
-
-        ExtensionStorage memory stor = extensionStorage[asset];
-
-        uint256 priceBpt = priceRouter.getPriceInUSD(stor.mainToken).mulDivDown(
-            pool.getRate(),
-            10 ** stor.poolDecimals
-        );
-        return priceBpt;
     }
 
     /**
@@ -87,6 +57,6 @@ contract BalancerLinearPoolExtension is Extension {
             abi.encodeWithSelector(vault.manageUserBalance.selector, new address[](0))
         );
 
-        if (keccak256(revertData) == REENTRANCY_ERROR_HASH) revert BalancerLinearPoolExtension__Reentrancy();
+        if (keccak256(revertData) == REENTRANCY_ERROR_HASH) revert BalancerPoolExtension__Reentrancy();
     }
 }

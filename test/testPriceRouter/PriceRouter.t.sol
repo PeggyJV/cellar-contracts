@@ -12,7 +12,7 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
 import { Registry } from "src/Registry.sol";
 
-import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
+import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -387,7 +387,7 @@ contract PriceRouterTest is Test {
         stor.inETH = true;
 
         settings = PriceRouter.AssetSettings(TWAP_DERIVATIVE, WETH_RPL_03_POOL);
-        PriceRouter.TwapSourceStorage memory twapStor = PriceRouter.TwapSourceStorage({
+        PriceRouter.TwapDerivativeStorage memory twapStor = PriceRouter.TwapDerivativeStorage({
             secondsAgo: 900,
             baseDecimals: 18,
             quoteDecimals: 18,

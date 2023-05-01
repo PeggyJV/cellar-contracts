@@ -13,9 +13,6 @@ import { Registry } from "src/Registry.sol";
 import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
 import { OracleLibrary } from "@uniswapV3P/libraries/OracleLibrary.sol";
 
-// TODO remove this
-import { console } from "@forge-std/Test.sol";
-
 /**
  * @title Sommelier Price Router
  * @notice Provides a universal interface allowing Sommelier contracts to retrieve secure pricing
@@ -187,10 +184,25 @@ contract PriceRouter is Ownable {
      * @param asset address of the invalid asset
      */
     error PriceRouter__InvalidAsset(address asset);
-    // TODO
+
+    /**
+     * @notice Attempted to add an asset that is already supported.
+     */
     error PriceRouter__AssetAlreadyAdded(address asset);
+
+    /**
+     * @notice Attempted to edit an asset that is not supported.
+     */
     error PriceRouter__AssetNotAdded(address asset);
+
+    /**
+     * @notice Attempted to edit an asset that is not editable.
+     */
     error PriceRouter__AssetNotEditable(address asset);
+
+    /**
+     * @notice Attempted to cancel the editing of an asset that is not pending edit.
+     */
     error PriceRouter__AssetNotPendingEdit(address asset);
 
     /**
@@ -249,6 +261,14 @@ contract PriceRouter is Ownable {
         emit AddAsset(address(_asset));
     }
 
+    /**
+     * @notice Allows owner to start the edit asset process.
+     * @dev Saves a hash of the inputs, and maps it to the timestamp when `_asset` is editable.
+     * @param _asset the asset to edit in the pricing router
+     * @param _settings the settings for `_asset`
+     *        @dev The `derivative` value in settings MUST be non zero.
+     * @param _storage arbitrary bytes data used to configure `_asset` pricing
+     */
     function startEditAsset(ERC20 _asset, AssetSettings memory _settings, bytes memory _storage) external onlyOwner {
         // Make sure the asset has been added.
         if (getAssetSettings[_asset].derivative == 0) revert PriceRouter__AssetNotAdded(address(_asset));
@@ -260,6 +280,14 @@ contract PriceRouter is Ownable {
         emit IntentToEditAsset(address(_asset), _settings, _storage, editHash, assetEditableAt);
     }
 
+    /**
+     * @notice Once `EDIT_ASSET_DELAY` has passed, `_asset` is now editable using the
+     *         same inputs given to `startEditAsset`.
+     * @param _asset the asset to finish editing in the pricing router
+     * @param _settings the settings for `_asset`
+     *        @dev The `derivative` value in settings MUST be non zero.
+     * @param _storage arbitrary bytes data used to configure `_asset` pricing
+     */
     function completeEditAsset(
         ERC20 _asset,
         AssetSettings memory _settings,
@@ -282,6 +310,13 @@ contract PriceRouter is Ownable {
         emit EditAssetComplete(address(_asset), editHash);
     }
 
+    /**
+     * @notice Cancel a pending edit for `_asset`.
+     * @param _asset the asset to cancel editing of in the pricing router
+     * @param _settings the settings for `_asset`
+     *        @dev The `derivative` value in settings MUST be non zero.
+     * @param _storage arbitrary bytes data used to configure `_asset` pricing
+     */
     function cancelEditAsset(ERC20 _asset, AssetSettings memory _settings, bytes memory _storage) external onlyOwner {
         bytes32 editHash = keccak256(abi.encode(_asset, _settings, _storage));
 
@@ -294,6 +329,13 @@ contract PriceRouter is Ownable {
         emit EditAssetCancelled(address(_asset), editHash);
     }
 
+    /**
+     * @notice Helper function to update an `_asset`s configuration.
+     * @param _asset the asset to update in the pricing router
+     * @param _settings the settings for `_asset`
+     *        @dev The `derivative` value in settings MUST be non zero.
+     * @param _storage arbitrary bytes data used to configure `_asset` pricing
+     */
     function _updateAsset(
         ERC20 _asset,
         AssetSettings memory _settings,
@@ -570,6 +612,12 @@ contract PriceRouter is Ownable {
         uint24 heartbeat;
         bool inETH;
     }
+
+    /**
+     * @notice Buffered min price exceedes 80 bits of data.
+     */
+    error PriceRouter__BufferedMinOverflow();
+
     /**
      * @notice Returns Chainlink Derivative Storage
      */
@@ -602,7 +650,7 @@ contract PriceRouter is Ownable {
             // Revert if bufferedMinPrice overflows because uint80 is too small to hold the minimum price,
             // and lowering it to uint80 is not safe because the price feed can stop being updated before
             // it actually gets to that lower price.
-            if (bufferedMinPrice > type(uint80).max) revert("Buffered Min Overflow");
+            if (bufferedMinPrice > type(uint80).max) revert PriceRouter__BufferedMinOverflow();
             parameters.min = uint80(bufferedMinPrice);
         } else {
             if (parameters.min < bufferedMinPrice)
@@ -693,19 +741,51 @@ contract PriceRouter is Ownable {
     }
 
     // =========================================== TWAP PRICE DERIVATIVE ===========================================
-    // TODO we have 48 bits left in each slot
-    // Could use it store a min liquidity amount
-    struct TwapSourceStorage {
+
+    /**
+     * @notice Stores data for Twap derivative assets.
+     * @param secondsAgo the twap duration
+     * @param baseDecimals the base assets decimals
+     * @param quoteDecimals the quote assets decimals
+     * @param quoteToken the asset the twap quotes in
+     */
+    struct TwapDerivativeStorage {
         uint32 secondsAgo;
         uint8 baseDecimals;
         uint8 quoteDecimals;
         ERC20 quoteToken;
     }
 
-    mapping(ERC20 => TwapSourceStorage) public getTwapDerivativeStorage;
+    /**
+     * @notice Tried setting up a Twap for an asset where the underlying pools does not use the asset.
+     */
+    error PriceRouter__TwapAssetNotInPool();
 
+    /**
+     * @notice Provided secondsAgo does not meet minimum,
+     */
+    error PriceRouter__SecondsAgoDoesNotMeetMinimum();
+
+    /**
+     * @notice Returns Twap Derivative Storage
+     */
+    mapping(ERC20 => TwapDerivativeStorage) public getTwapDerivativeStorage;
+
+    /**
+     * @notice The smallest possible TWAP that can be used.
+     */
+    uint32 public constant MINIMUM_SECONDS_AGO = 900;
+
+    /**
+     * @notice Setup function for pricing Twap derivative assets.
+     * @dev _source The address of the Uniswap V3 pool.
+     * @dev _storage A TwapDerivativeStorage value defining valid prices.
+     */
     function _setupPriceForTwapDerivative(ERC20 _asset, address _source, bytes memory _storage) internal {
-        TwapSourceStorage memory parameters = abi.decode(_storage, (TwapSourceStorage));
+        TwapDerivativeStorage memory parameters = abi.decode(_storage, (TwapDerivativeStorage));
+
+        // Verify seconds ago is reasonable.
+        if (parameters.secondsAgo < MINIMUM_SECONDS_AGO) revert PriceRouter__SecondsAgoDoesNotMeetMinimum();
 
         UniswapV3Pool pool = UniswapV3Pool(_source);
 
@@ -719,27 +799,18 @@ contract PriceRouter is Ownable {
             parameters.baseDecimals = _asset.decimals();
             parameters.quoteDecimals = token0.decimals();
             parameters.quoteToken = token0;
-        } else revert("asset is not in pool");
-
-        // Verify token0 and token1, and set decimals, and quote values
-        // Quote token must be pricable
+        } else revert PriceRouter__TwapAssetNotInPool();
 
         // TODO currently this does not work
         // (, , , uint16 maxObservations, , , ) = pool.slot0();
         // console.log("Current Max", maxObservations);
         // if (parameters.secondsAgo > maxObservations) revert("Call Increase Observations.");
 
-        // Verify seconds ago is reasonable
-        // Also if I add in asset to this I could do a sanity check to make sure asset is token0 or token1
-
         getTwapDerivativeStorage[_asset] = parameters;
     }
 
-    // TODO min liquidity check?
-    // This check is pretty hard to quantify what a minimum liquiditty should be. And given how hard
-    // it is to change this its probs not worth it.
     function _getPriceForTwapDerivative(ERC20 asset, address _source) internal view returns (uint256) {
-        TwapSourceStorage memory parameters = getTwapDerivativeStorage[asset];
+        TwapDerivativeStorage memory parameters = getTwapDerivativeStorage[asset];
         (int24 arithmeticMeanTick, ) = OracleLibrary.consult(_source, parameters.secondsAgo);
         // Get the amount of quote token each base token is worth.
         uint256 quoteAmount = OracleLibrary.getQuoteAtTick(

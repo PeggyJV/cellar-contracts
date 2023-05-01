@@ -13,9 +13,9 @@ import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
 // import { PoolBalances } from "@balancer/vault/contracts/PoolBalances.sol";
 // So I think the userData is an abi.encode min amount of BPTs, or maybe max amount(for exits)?
 
-import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/BalancerStablePoolExtension.sol";
-import { BalancerLinearPoolExtension } from "src/modules/price-router/Extensions/BalancerLinearPoolExtension.sol";
-import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
+import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
+import { BalancerLinearPoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerLinearPoolExtension.sol";
+import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 // import { IVault, VaultReentrancyLib } from "@balancer/pool-utils/contracts/lib/VaultReentrancyLib.sol";
 import { IVault, IAsset, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
@@ -77,7 +77,15 @@ contract BalancerStableAndLinearPoolTest is Test {
 
     Registry private registry;
 
-    function setUp() external {
+    modifier checkBlockNumber() {
+        if (block.number < 16990614) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16990614.");
+            return;
+        }
+        _;
+    }
+
+    function setUp() external checkBlockNumber {
         registry = new Registry(address(this), address(this), address(this));
         priceRouter = new PriceRouter(registry);
 
@@ -107,7 +115,7 @@ contract BalancerStableAndLinearPoolTest is Test {
     // console.log("Token Amount 1", vals[1]);
     // console.log("Token Amount 2", vals[2]);
     // console.log("Min out", minAmountOut);
-    function testPricingUSDC_DAI_USDT_Bpt(uint256 valueIn) external {
+    function testPricingUSDC_DAI_USDT_Bpt(uint256 valueIn) external checkBlockNumber {
         valueIn = bound(valueIn, 1e6, 1_000_000e6);
         // Add required pricing.
         _addChainlinkAsset(USDC, USDC_USD_FEED, false);
@@ -125,7 +133,7 @@ contract BalancerStableAndLinearPoolTest is Test {
         assertApproxEqRel(valueOut, valueIn, 0.001e18, "Value out should approximately equal value in.");
     }
 
-    function testPricingRETH_WETH_Bpt(uint256 valueIn) external {
+    function testPricingRETH_WETH_Bpt(uint256 valueIn) external checkBlockNumber {
         valueIn = bound(valueIn, 0.1e18, 10_000e18);
 
         // Add required pricing.
@@ -144,7 +152,7 @@ contract BalancerStableAndLinearPoolTest is Test {
         assertApproxEqRel(valueOut, valueIn, 0.004e18, "Value out should approximately equal value in.");
     }
 
-    function testPricingWstETH_WETH_Bpt(uint256 valueIn) external {
+    function testPricingWstETH_WETH_Bpt(uint256 valueIn) external checkBlockNumber {
         valueIn = bound(valueIn, 0.1e18, 100_000e18);
         // valueIn = 1e18;
 
@@ -168,7 +176,7 @@ contract BalancerStableAndLinearPoolTest is Test {
         assertApproxEqRel(valueOut, valueIn, 0.004e18, "Value out should approximately equal value in.");
     }
 
-    function testPricingCBETH_WETH_Bpt(uint256 valueIn) external {
+    function testPricingCBETH_WETH_Bpt(uint256 valueIn) external checkBlockNumber {
         valueIn = bound(valueIn, 0.1e18, 1_000e18);
         // valueIn = 1e18;
 

@@ -6,7 +6,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Registry } from "src/Registry.sol";
 
-import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
+import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
