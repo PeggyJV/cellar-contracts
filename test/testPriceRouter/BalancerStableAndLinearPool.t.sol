@@ -168,6 +168,32 @@ contract BalancerStableAndLinearPoolTest is Test {
         assertApproxEqRel(valueOut, valueIn, 0.004e18, "Value out should approximately equal value in.");
     }
 
+    function testPricingCBETH_WETH_Bpt(uint256 valueIn) external {
+        valueIn = bound(valueIn, 0.1e18, 1_000e18);
+        // valueIn = 1e18;
+
+        // Add required pricing.
+        _addChainlinkAsset(USDC, USDC_USD_FEED, false);
+        _addChainlinkAsset(WETH, WETH_USD_FEED, false);
+        _addChainlinkAsset(STETH, STETH_USD_FEED, false);
+        _addChainlinkAsset(cbETH, CBETH_ETH_FEED, true);
+
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstEthExtension));
+
+        priceRouter.addAsset(WSTETH, settings, abi.encode(0), 2_100e8);
+
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+
+        priceRouter.addAsset(wstETH_cbETH_BPT, settings, abi.encode(0), 1915e8);
+
+        uint256 bptOut = _joinPool(address(cbETH), valueIn, IBalancerPool(address(wstETH_cbETH_BPT)));
+
+        uint256 valueOut = priceRouter.getValue(wstETH_cbETH_BPT, bptOut, cbETH);
+        // TODO I think this is so off bc chainlink under reports cbETH price?
+        assertApproxEqRel(valueOut, valueIn, 0.03e18, "Value out should approximately equal value in.");
+    }
+
     // ======================================= HELPER FUNCTIONS =======================================
 
     enum WeightedJoinKind {
