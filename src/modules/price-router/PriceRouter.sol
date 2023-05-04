@@ -163,7 +163,7 @@ contract PriceRouter is Ownable {
         if (transitionStart != 0) revert PriceRouter__TransitionPending();
     }
 
-    // ======================================= ADAPTOR OPERATIONS =======================================
+    // ======================================= ASSET OPERATIONS =======================================
 
     /**
      * @notice Attempted to set a minimum price below the Chainlink minimum price (with buffer).
@@ -580,7 +580,6 @@ contract PriceRouter is Ownable {
             quotePrice = _getPriceInUSD(quoteAsset, quoteSettings);
         }
         uint256 valueInQuote;
-        // uint256 price;
         uint8 quoteDecimals = quoteAsset.decimals();
 
         for (uint8 i = 0; i < baseAssets.length; i++) {
@@ -602,8 +601,6 @@ contract PriceRouter is Ownable {
                     quoteDecimals,
                     amounts[i]
                 );
-                // uint256 valueInUSD = (amounts[i].mulDivDown(price, 10**baseAsset.decimals()));
-                // valueInQuote += valueInUSD.mulDivDown(10**quoteDecimals, quotePrice);
             }
         }
         return valueInQuote;
@@ -790,6 +787,7 @@ contract PriceRouter is Ownable {
 
     /**
      * @notice Setup function for pricing Twap derivative assets.
+     * @dev Make sure that TWAP assets have sufficient observations, and increase them if not before adding.
      * @dev _source The address of the Uniswap V3 pool.
      * @dev _storage A TwapDerivativeStorage value defining valid prices.
      */
@@ -813,14 +811,12 @@ contract PriceRouter is Ownable {
             parameters.quoteToken = token0;
         } else revert PriceRouter__TwapAssetNotInPool();
 
-        // TODO currently this does not work
-        // (, , , uint16 maxObservations, , , ) = pool.slot0();
-        // console.log("Current Max", maxObservations);
-        // if (parameters.secondsAgo > maxObservations) revert("Call Increase Observations.");
-
         getTwapDerivativeStorage[_asset] = parameters;
     }
 
+    /**
+     * @notice Get the price of a Twap derivative in terms of USD.
+     */
     function _getPriceForTwapDerivative(ERC20 asset, address _source) internal view returns (uint256) {
         TwapDerivativeStorage memory parameters = getTwapDerivativeStorage[asset];
         (int24 arithmeticMeanTick, ) = OracleLibrary.consult(_source, parameters.secondsAgo);

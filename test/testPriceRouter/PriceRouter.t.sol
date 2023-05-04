@@ -81,6 +81,7 @@ contract PriceRouterTest is Test {
 
     // UniV3 WETH/RPL Pool
     address private WETH_RPL_03_POOL = 0xe42318eA3b998e8355a3Da364EB9D48eC725Eb45;
+    address private WETH_USDC_005_POOL = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640;
 
     Registry private registry;
 
@@ -386,13 +387,25 @@ contract PriceRouterTest is Test {
         PriceRouter.AssetSettings memory settings;
         stor.inETH = true;
 
-        settings = PriceRouter.AssetSettings(TWAP_DERIVATIVE, WETH_RPL_03_POOL);
+        // Try adding a twap asset with the wrong pool.
+        settings = PriceRouter.AssetSettings(TWAP_DERIVATIVE, WETH_USDC_005_POOL);
         PriceRouter.TwapDerivativeStorage memory twapStor = PriceRouter.TwapDerivativeStorage({
             secondsAgo: 900,
             baseDecimals: 18,
             quoteDecimals: 18,
             quoteToken: WETH
         });
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TwapAssetNotInPool.selector)));
+        priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
+
+        // Now fix the pool but use a very small TWAP period.
+        settings = PriceRouter.AssetSettings(TWAP_DERIVATIVE, WETH_RPL_03_POOL);
+        twapStor.secondsAgo = 300;
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__SecondsAgoDoesNotMeetMinimum.selector)));
+        priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
+
+        // Fix seconds ago to add the asset.
+        twapStor.secondsAgo = 900;
         priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
     }
 
@@ -771,11 +784,5 @@ contract PriceRouterTest is Test {
         uint256 totalValue = priceRouter.getValues(baseAssets, amounts2, USDC);
 
         assertEq(totalValue, inputAmountWorth, "Values should be equal.");
-    }
-
-    // ======================================= HELPER FUNCTIONS =======================================
-    function _adjustVirtualPrice(ERC20 token, uint256 multiplier) internal {
-        uint256 targetSupply = token.totalSupply().mulDivDown(multiplier, 1e18);
-        stdstore.target(address(token)).sig("totalSupply()").checked_write(targetSupply);
     }
 }
