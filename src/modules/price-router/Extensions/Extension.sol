@@ -6,8 +6,9 @@ import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Math } from "src/utils/Math.sol";
 
 abstract contract Extension {
+    error Extension__OnlyPriceRouter();
     modifier onlyPriceRouter() {
-        if (msg.sender != address(priceRouter)) revert("Only the price router can call this");
+        if (msg.sender != address(priceRouter)) revert Extension__OnlyPriceRouter();
         _;
     }
 
