@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IPool } from "src/interfaces/external/IPool.sol";
+import { IPoolV3 } from "src/interfaces/external/IPoolV3.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
 /**
@@ -44,10 +44,13 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
+     * @notice The Aave V3 Pool contract on current network.
      */
-    function pool() internal pure returns (IPool) {
-        return IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+    function pool() internal view returns (IPoolV3) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+        if (chainId == ARBITRUM) return IPoolV3(0x794a61358D6845594F94dc1DB02A252b5b4814aD);
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     /**

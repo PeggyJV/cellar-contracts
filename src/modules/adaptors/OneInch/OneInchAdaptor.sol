@@ -38,8 +38,11 @@ contract OneInchAdaptor is PositionlessAdaptor {
     /**
      * @notice Address of the current 1Inch swap target on Mainnet ETH.
      */
-    function target() public pure virtual returns (address) {
-        return 0x1111111254EEB25477B68fb85Ed929f73A960582;
+    function target() public view virtual returns (address) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return 0x1111111254EEB25477B68fb85Ed929f73A960582;
+        if (chainId == ARBITRUM) return 0x1111111254EEB25477B68fb85Ed929f73A960582;
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     //============================================ Strategist Functions ===========================================

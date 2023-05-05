@@ -38,8 +38,11 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
     /**
      * @notice FeesAndReserves on ETH Mainnet.
      */
-    function feesAndReserves() public pure virtual returns (FeesAndReserves) {
-        return FeesAndReserves(0xF4279E93a06F9d4b5d0625b1F471AA99Ef9B686b);
+    function feesAndReserves() public view virtual returns (FeesAndReserves) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return FeesAndReserves(0xF4279E93a06F9d4b5d0625b1F471AA99Ef9B686b);
+        if (chainId == ARBITRUM) return FeesAndReserves(address(0));
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     //============================================ Strategist Functions ===========================================

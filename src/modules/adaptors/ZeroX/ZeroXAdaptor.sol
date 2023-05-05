@@ -38,8 +38,11 @@ contract ZeroXAdaptor is PositionlessAdaptor {
     /**
      * @notice Address of the current 0x swap target on Mainnet ETH.
      */
-    function target() public pure virtual returns (address) {
-        return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+    function target() public view virtual returns (address) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+        if (chainId == ARBITRUM) return 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     //============================================ Strategist Functions ===========================================

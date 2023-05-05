@@ -42,6 +42,15 @@ abstract contract BaseAdaptor {
      */
     error BaseAdaptor__PricingNotSupported(address asset);
 
+    /**
+     * @notice Attempted to use an adaptor on an unsupported chain.
+     */
+    error BaseAdaptor__ChainNotSupported(uint256 unsupportedChainId);
+
+    //============================================ ChainIds ===========================================
+    uint256 public constant ETHEREUM = 1;
+    uint256 public constant ARBITRUM = 42161;
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.

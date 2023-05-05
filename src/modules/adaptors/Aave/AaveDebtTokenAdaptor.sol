@@ -40,8 +40,10 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     /**
      * @notice The Aave V2 Pool contract on Ethereum Mainnet.
      */
-    function pool() internal pure returns (IPool) {
-        return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    function pool() internal view returns (IPool) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     /**

@@ -57,17 +57,23 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The Aave V3 Pool contract on Ethereum Mainnet.
+     * @notice The Aave V3 Pool contract on current network.
      */
-    function pool() internal pure returns (IPoolV3) {
-        return IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+    function pool() internal view returns (IPoolV3) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+        if (chainId == ARBITRUM) return IPoolV3(0x794a61358D6845594F94dc1DB02A252b5b4814aD);
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     /**
-     * @notice The Aave V3 Oracle on Ethereum Mainnet.
+     * @notice The Aave V3 Oracle on current network.
      */
-    function aaveOracle() internal pure returns (IAaveOracle) {
-        return IAaveOracle(0x54586bE62E3c3580375aE3723C145253060Ca0C2);
+    function aaveOracle() internal view returns (IAaveOracle) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return IAaveOracle(0x54586bE62E3c3580375aE3723C145253060Ca0C2);
+        if (chainId == ARBITRUM) return IAaveOracle(0xb56c2F0B653B2e0b10C9b928C8580Ac5Df02C7C7);
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     /**

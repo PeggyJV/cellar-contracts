@@ -85,8 +85,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
     /**
      * @notice Uniswap V3 Tracker on ETH Mainnet.
      */
-    function tracker() internal pure virtual returns (UniswapV3PositionTracker) {
-        return UniswapV3PositionTracker(0xf2854d84D9Dd27eCcD6aB20b3F66111a51bb56d2);
+    function tracker() internal view virtual returns (UniswapV3PositionTracker) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return UniswapV3PositionTracker(0xf2854d84D9Dd27eCcD6aB20b3F66111a51bb56d2);
+        if (chainId == ARBITRUM) return UniswapV3PositionTracker(0xB5C3bF7050465aE66233983D7cb1F14eEB2508a1);
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     //============================================ Implement Base Functions ===========================================

@@ -53,15 +53,19 @@ contract AaveATokenAdaptor is BaseAdaptor {
     /**
      * @notice The Aave V2 Pool contract on Ethereum Mainnet.
      */
-    function pool() internal pure returns (IPool) {
-        return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+    function pool() internal view returns (IPool) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     /**
-     * @notice The WETH contract on Ethereum Mainnet.
+     * @notice The WETH contract on current network.
      */
-    function WETH() internal pure returns (ERC20) {
-        return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    function WETH() internal view returns (ERC20) {
+        uint256 chainId = block.chainid;
+        if (chainId == ETHEREUM) return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+        revert BaseAdaptor__ChainNotSupported(chainId);
     }
 
     /**
