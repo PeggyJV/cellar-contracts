@@ -220,6 +220,38 @@ contract BalancerStableAndLinearPoolTest is Test {
 
     // ======================================= REVERTS =======================================
     // TODO
+    function testPricingStablePoolWithUnsupportedUnderlying() external checkBlockNumber {
+        // Add required pricing.
+        _addChainlinkAsset(USDC, USDC_USD_FEED, false);
+        _addChainlinkAsset(WETH, WETH_USD_FEED, false);
+
+        PriceRouter.AssetSettings memory settings;
+
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    BalancerStablePoolExtension.BalancerStablePoolExtension__PoolTokensMustBeSupported.selector,
+                    address(WSTETH)
+                )
+            )
+        );
+        priceRouter.addAsset(wstETH_wETH_BPT, settings, abi.encode(0), 1915e8);
+    }
+
+    function testPricingLinearPoolWithUnsupportedMainToken() external checkBlockNumber {
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerLinearPoolExtension));
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    BalancerLinearPoolExtension.BalancerLinearPoolExtension__MainTokenMustBeSupported.selector
+                )
+            )
+        );
+        priceRouter.addAsset(bb_a_USDC_BPT, settings, abi.encode(0), 1e8);
+    }
 
     // ======================================= HELPER FUNCTIONS =======================================
 

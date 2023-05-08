@@ -15,7 +15,7 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
     /**
      * @notice Atleast one of the pools underlying tokens is not supported by the Price Router.
      */
-    error BalancerStablePoolExtension__PoolTokensMustBeSupported();
+    error BalancerStablePoolExtension__PoolTokensMustBeSupported(address unsupportedAsset);
 
     /**
      * @notice Failed to find a minimum price for the pool tokens.
@@ -58,7 +58,7 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
             // TODO is this gucci?
             if (address(tokens[i]) == address(asset)) continue;
             if (!priceRouter.isSupported(ERC20(address(tokens[i]))))
-                revert BalancerStablePoolExtension__PoolTokensMustBeSupported();
+                revert BalancerStablePoolExtension__PoolTokensMustBeSupported(address(tokens[i]));
         }
 
         // Save values in extension storage.
