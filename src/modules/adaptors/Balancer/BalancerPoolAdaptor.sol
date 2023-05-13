@@ -21,7 +21,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(ERC20 _bpt, address _poolId, JoinPoolRequest _request)
+    // adaptorData = abi.encode(ERC20 _bpt)
     // Where:
     // `_bpt` is the Balancer pool token of the Balancer LP market this adaptor is working with
     // `_poolId` is the pool identifier used within the Balancer vault system
@@ -148,12 +148,32 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the positions debtToken underlying asset.
+     * @notice Returns the positions underlying assets.
+     * @param adaptorData specified bpt of interest
+     * @return constituent assets making up the respective bpt
+     * NOTE: From looking through the Registry, when setting up an adaptorPosition, we will need to make sure that pricing for all assets involved is set up. 
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        IERC20 token = IERC20(abi.decode(adaptorData, (address))); // TODO: sort out this decoding and the adaptorData contents
+        IERC20 token = IERC20(abi.decode(adaptorData, (address))); // TODO: not sure if bpts have special ERC20 like cERC20 for compound
 
         return ERC20(token); // TODO: confirm if this should be all underlying assets or just the bpt.
+        // TODO: I think we actually use vault.getPoolTokens(bytes32 poolId) to get the addresses of constituent tokens involved. 
+        // TODO: Trickier situations where we want to enter boosted pools, or other pools w/ nested pools, are resolved by using the relayer() w/ multicall and calldata. So in the registry, we'd register the position where we state the boosted pool address, and the PriceRouter would have to know how to break it into constituent parts... vault.getPoolTokens() gives linear pool tokens I think, not all the underlying tokens. If that's the case, then we need to go deeper into the constituent tokens to get the base tokens, or use a CSP-specific extension for the priceRouter.
+
+        // _accounting() is called via totalAssets() during rebalance calls and whatnot on the cellar. 
+
+        // TODO: Hmm, this raises the question of how bpts are being priced. CSPs consist of linear pool tokens, which have underlying tokens themselves. So will we need an extension to calculate the constituents of a CSP? I guess we'd pass in the 1st layer constituents (linear pool tokens) of a CSP to the priceRouter and go from there?
+    }
+
+    /**
+     * @notice When positions are added to the Registry, this function can be used in order to figure out
+     *         what assets this adaptor needs to price, and confirm pricing is properly setup.
+     * @dev COMP is used when claiming COMP and swapping.
+     */
+    function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
+        assets = new ERC20[](2);
+        assets[0] = assetOf(adaptorData);
+        assets[1] = COMP();
     }
 
     /**
@@ -182,7 +202,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         ERC20 bptOut,
         bytes[] memory callData
     ) public {
-        for (uint256 i; i < tokensIn.length; ++i) tokensIn[i].approve(relayer(), amountsIn[i]); // TODO: this may be obsolete based on approval steps necessary for relayer functionality (see TODO below)
+        for (uint256 i; i < tokensIn.length; ++i) tokensIn[i].approve(vault(), amountsIn[i]); // TODO: this may be obsolete based on approval steps necessary for relayer functionality (see TODO below)
 
         uint256 startingBpt = BPTout.balanceOf(address(this));
 
@@ -194,10 +214,10 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
         uint256 amountBptOut = endingBpt - startingBpt;
 
-        uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut); // TODO: not 100% sure how this math all works out. I think this roughly calcs the BPTValue In, it depends on the source of its priceData cause it has to know how much slippage to account for.
+        uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut);
 
         // check value in vs value out
-        if (amountBptOut < amountBptIn.mulDivDown(0.9e4, 1e4)) revert("Slippage");
+        if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage");
 
         // revoke token in approval
         for (uint256 i; i < tokensIn.length; ++i) _revokeExternalApproval(tokensIn[i], relayer());
@@ -218,18 +238,12 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         ILiquidityGaugev3Custom poolGauge = ILiquidityGaugev3Custom(_poolGauge);
         IERC20 bpt = IERC20(poolGauge.lp_token());
 
-        if (bpt.balanceOf(address(this)) <= _amountIn) {
-            revert BalancerPoolAdaptor__NotEnoughToDeposit();
-        }
+        uint256 amountIn = _maxAvailable(address(bpt), _amountIn);
         uint256 amountStakedBefore = poolGauge.balanceOf(address(this));
 
-        uint256 amountIn = _maxAvailable(address(bpt), _amountIn);
         bpt.approve(_poolGauge, amountIn);
         poolGauge.deposit(amountIn, address(this), _claim_rewards); // address(this) is cellar address bc delegateCall
         uint256 actualAmountStaked = poolGauge.balanceOf(address(this)) - amountStakedBefore;
-        if (actualAmountStaked >= amountIn) {
-            revert BalancerPoolAdaptor__MaxSlippageExceeded();
-        } // TODO: not sure about this error message or implementation
 
         _revokeExternalApproval(address(bpt), _poolGauge);
     }
@@ -241,30 +255,33 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
      * @dev 1.) Interface custom as Balancer/Curve do not provide for liquidityGauges.
      * @dev 2.) Strategists to provide _poolGauge (which they can get via off-chain querying methods)
+     * NOTE: poolGauge.balanceOf() is not the same as balanceOf() call from ERC20 contracts. 
      */
     function withdrawBPT(address _poolGauge, uint256 _amountOut, bool _claim_rewards) external {
         ILiquidityGaugev3Custom poolGauge = ILiquidityGaugev3Custom(_poolGauge);
 
-        if (poolGauge.balanceOf(address(this)) >= _amountOut) {
-            revert BalancerPoolAdaptor__NotEnoughToWithdraw();
-        }
-
-        IERC20 bpt = IERC20(poolGauge.lp_token());
-        uint256 unstakedBPTBefore = bpt.balanceOf(address(this));
+        uint256 stakedBefore = poolGauge.balanceOf(address(this));
 
         uint256 amountOut;
         if (_amountOut == type(uint256).max) {
-            amountOut = stakedBefore; // deposited (staked) bpt at this point
+            amountOut = stakedBefore; // max deposited (staked) bpt at this point
         } else {
             amountOut = _amountOut;
         }
+
+        if (stakedBefore <= amountOut) {
+            revert BalancerPoolAdaptor__NotEnoughToWithdraw();
+        } // TODO: not sure if we need this
+
+        IERC20 bpt = IERC20(poolGauge.lp_token());
+        uint256 unstakedBPTBefore = bpt.balanceOf(address(this));
 
         bpt.approve(_poolGauge, amountOut);
         poolGauge.withdraw(amountOut, _claim_rewards); // msg.sender should be cellar address bc delegateCall. TODO: see issue # <> and confirm address.
 
         uint256 actualWithdrawn = bpt.balanceOf(address(this)) - unstakedBPTBefore;
 
-        if (actualWithdrawn <= _amountOut) {
+        if (actualWithdrawn <= amountOut) {
             revert BalancerPoolAdaptor__MaxSlippageExceeded();
         } // TODO: not sure about this error message or implementation
 
