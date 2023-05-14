@@ -19,7 +19,16 @@ import "./ILiquidityGauge.sol";
 
 interface ILiquidityGaugeFactory {
     /**
-     * @notice Returns true if `gauge` was created by this factory.
+     * @notice Checks if gauge was created from this factory contract
+     * @return bool where true indicates `gauge` was created by this factory.
      */
     function isGaugeFromFactory(address gauge) external view returns (bool);
+
+    /**
+     * @notice Returns the address of the gauge belonging to `pool`.
+     * NOTE: Function call getPoolGauge(address) is not in the original ILiquidityGaugeFactory
+     * @return ILiquidityGauge(_poolGauge[pool]
+     */
+    function getPoolGauge(address pool) external view returns (ILiquidityGauge) {
+    }
 }

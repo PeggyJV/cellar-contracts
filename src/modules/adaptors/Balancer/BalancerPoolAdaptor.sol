@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IBalancerQueries } from "src/interfaces/external/Balancer/IBalancerQueries.sol";
-import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
-import { IBalancerRelayer } from "src/interfaces/external/Balancer/solidity-utils/IBalancerRelayer.sol";
-import { IStakingLiquidityGauge } from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
-import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
-import { ILiquidityGaugeFactory } from "src/interfaces/external/Balancer/ILiquidityGaugeFactory.sol";
-import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
+import {BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry} from "src/modules/adaptors/BaseAdaptor.sol";
+import {IBalancerQueries} from "src/interfaces/external/Balancer/IBalancerQueries.sol";
+import {IVault} from "src/interfaces/external/Balancer/IVault.sol";
+import {IBalancerRelayer} from "src/interfaces/external/Balancer/solidity-utils/IBalancerRelayer.sol";
+import {IStakingLiquidityGauge} from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
+import {IBalancerRelayer} from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
+import {ILiquidityGaugeFactory} from "src/interfaces/external/Balancer/ILiquidityGaugeFactory.sol";
+import {ILiquidityGaugev3Custom} from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
 
 /**
  * @title Balancer Pool Adaptor
@@ -76,12 +76,12 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     //====================================================================
 
     /**
-     @notice bptOut lower than desired
+     * @notice bptOut lower than desired
      */
     error BalancerPoolAdaptor__BPTOutTooLow();
 
     /**
-     @notice no claimable reward tokens
+     * @notice no claimable reward tokens
      */
     error BalancerPoolAdaptor__ZeroClaimableRewards();
 
@@ -141,7 +141,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         // TODO: decode adaptorData for poolGauge address
         address bpt = abi.decode(adaptorData, (address));
 
-        // ILiquidityGaugev3Custom poolGauge = ILiquidityGaugev3Custom(_poolGauge); // TODO: usually poolGauge address is provided, but in this case we'll have to decode.
+        ILiquidityGauge poolGauge = gaugeFactory().getPoolGauge(bpt);
 
         uint256 stakedBPT = poolGauge.balanceOf(address(this));
         return ERC20(token).balanceOf(msg.sender) + stakedBPT;
@@ -151,16 +151,17 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice Returns the positions underlying assets.
      * @param adaptorData specified bpt of interest
      * @return constituent assets making up the respective bpt
-     * NOTE: From looking through the Registry, when setting up an adaptorPosition, we will need to make sure that pricing for all assets involved is set up. 
+     * NOTE: From looking through the Registry, when setting up an adaptorPosition, we will need to make sure that pricing for all assets involved is set up.
+     * TODO: Resolve the longer comments in this function within draft PR #112
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        IERC20 token = IERC20(abi.decode(adaptorData, (address))); // TODO: not sure if bpts have special ERC20 like cERC20 for compound
+        IERC20 bpt = IERC20(abi.decode(adaptorData, (address))); // TODO: not sure if bpts have special ERC20 like cERC20 for compound
 
-        return ERC20(token); // TODO: confirm if this should be all underlying assets or just the bpt.
-        // TODO: I think we actually use vault.getPoolTokens(bytes32 poolId) to get the addresses of constituent tokens involved. 
-        // TODO: Trickier situations where we want to enter boosted pools, or other pools w/ nested pools, are resolved by using the relayer() w/ multicall and calldata. So in the registry, we'd register the position where we state the boosted pool address, and the PriceRouter would have to know how to break it into constituent parts... vault.getPoolTokens() gives linear pool tokens I think, not all the underlying tokens. If that's the case, then we need to go deeper into the constituent tokens to get the base tokens, or use a CSP-specific extension for the priceRouter.
+        return ERC20(bpt); // TODO: confirm if this should be all underlying assets or just the bpt.
+            // TODO: I think we actually use vault.getPoolTokens(bytes32 poolId) to get the addresses of constituent tokens involved.
+            // TODO: Trickier situations where we want to enter boosted pools, or other pools w/ nested pools, are resolved by using the relayer() w/ multicall and calldata. So in the registry, we'd register the position where we state the boosted pool address, and the PriceRouter would have to know how to break it into constituent parts... vault.getPoolTokens() gives linear pool tokens I think, not all the underlying tokens. If that's the case, then we need to go deeper into the constituent tokens to get the base tokens, or use a CSP-specific extension for the priceRouter.
 
-        // _accounting() is called via totalAssets() during rebalance calls and whatnot on the cellar. 
+        // _accounting() is called via totalAssets() during rebalance calls and whatnot on the cellar.
 
         // TODO: Hmm, this raises the question of how bpts are being priced. CSPs consist of linear pool tokens, which have underlying tokens themselves. So will we need an extension to calculate the constituents of a CSP? I guess we'd pass in the 1st layer constituents (linear pool tokens) of a CSP to the priceRouter and go from there?
     }
@@ -195,14 +196,14 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * NOTE: The difference btw what Balancer outlines to do and what we want to do is that we want the txs to be carried out by the vault. Whereas we could just end up connecting to the relayer and have it carry out multi-txs which would be bad cause we need to confirm each step of the multi-call.
      * TODO: rename params and possibly include others for `exit()` function. ex.) bptOut needs to be renamed to be agnostic.
      * TODO: see issue for strategist callData
+     * TODO: see discussion in draft PR #112 about `approve()` details
      */
-    function useRelayer(
-        ERC20[] memory tokensIn,
-        uint256[] memory amountsIn,
-        ERC20 bptOut,
-        bytes[] memory callData
-    ) public {
-        for (uint256 i; i < tokensIn.length; ++i) tokensIn[i].approve(vault(), amountsIn[i]); // TODO: this may be obsolete based on approval steps necessary for relayer functionality (see TODO below)
+    function useRelayer(ERC20[] memory tokensIn, uint256[] memory amountsIn, ERC20 bptOut, bytes[] memory callData)
+        public
+    {
+        for (uint256 i; i < tokensIn.length; ++i) {
+            tokensIn[i].approve(vault(), amountsIn[i]);
+        } // TODO: this may be obsolete based on approval steps necessary for relayer functionality (see TODO below)
 
         uint256 startingBpt = BPTout.balanceOf(address(this));
 
@@ -220,7 +221,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage");
 
         // revoke token in approval
-        for (uint256 i; i < tokensIn.length; ++i) _revokeExternalApproval(tokensIn[i], relayer());
+        for (uint256 i; i < tokensIn.length; ++i) {
+            _revokeExternalApproval(tokensIn[i], relayer());
+        }
 
         // TODO: see if special revocation is required or necessary with bespoke Relayer approval sequences
     }
@@ -255,23 +258,17 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
      * @dev 1.) Interface custom as Balancer/Curve do not provide for liquidityGauges.
      * @dev 2.) Strategists to provide _poolGauge (which they can get via off-chain querying methods)
-     * NOTE: poolGauge.balanceOf() is not the same as balanceOf() call from ERC20 contracts. 
+     * TODO: Use the implementation in balanceOf like this:
+     * address bpt = abi.decode(adaptorData, (address));
+     * 
+     *     ILiquidityGauge poolGauge = gaugeFactory().getPoolGauge(bpt);
+     * 
+     *     uint256 stakedBPT = poolGauge.balanceOf(address(this));
      */
     function withdrawBPT(address _poolGauge, uint256 _amountOut, bool _claim_rewards) external {
         ILiquidityGaugev3Custom poolGauge = ILiquidityGaugev3Custom(_poolGauge);
 
-        uint256 stakedBefore = poolGauge.balanceOf(address(this));
-
-        uint256 amountOut;
-        if (_amountOut == type(uint256).max) {
-            amountOut = stakedBefore; // max deposited (staked) bpt at this point
-        } else {
-            amountOut = _amountOut;
-        }
-
-        if (stakedBefore <= amountOut) {
-            revert BalancerPoolAdaptor__NotEnoughToWithdraw();
-        } // TODO: not sure if we need this
+        uint256 amountOut = _maxAvailable(_poolGauge, _amountOut); // get the total amount of bpt staked by the cellar essentially (bc it's represented by the amount of gauge tokens the Cellar has)
 
         IERC20 bpt = IERC20(poolGauge.lp_token());
         uint256 unstakedBPTBefore = bpt.balanceOf(address(this));
@@ -280,10 +277,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         poolGauge.withdraw(amountOut, _claim_rewards); // msg.sender should be cellar address bc delegateCall. TODO: see issue # <> and confirm address.
 
         uint256 actualWithdrawn = bpt.balanceOf(address(this)) - unstakedBPTBefore;
-
-        if (actualWithdrawn <= amountOut) {
-            revert BalancerPoolAdaptor__MaxSlippageExceeded();
-        } // TODO: not sure about this error message or implementation
 
         _revokeExternalApproval(bpt, _poolGauge);
     }
@@ -294,7 +287,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @dev rewards are only accrue for staked positions
      * @param _poolGauge address of rewards gauge
      * @param _rewardToken address of reward token, if not $BAL, that strategist is claiming
-     * TODO: make all verbose text here into github issues
+     * TODO: make all verbose text here into github issues or remove them after discussion w/ Crispy
      * TODO: add checks throughout function
      */
     function claimRewards(address _poolGauge, address _rewardToken) public {
