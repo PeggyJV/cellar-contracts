@@ -229,19 +229,18 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice deposit (stake) BPT into respective pool gauge
-     * @param _poolGauge address of rewards gauge
-     * @param _amountIn number of bpts to deposit
+     * @notice deposit (stake) BPTs into respective pool gauge
+     * @param _bpt address of BPTs to deposit
+     * @param _amountIn number of BPTs to deposit
      * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
-     * @dev 1.) Interface custom as Balancer/Curve do not provide for liquidityGauges.
-     * @dev 2.) Strategists to provide _poolGauge (which they can get via off-chain querying methods)
+     * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      * TODO: Finalize interface details when beginning to do unit testing
      */
-    function depositBPT(address _poolGauge, uint256 _amountIn, bool _claim_rewards) external {
-        ILiquidityGaugev3Custom poolGauge = ILiquidityGaugev3Custom(_poolGauge);
-        IERC20 bpt = IERC20(poolGauge.lp_token());
-
+    function depositBPT(address _bpt, uint256 _amountIn, bool _claim_rewards) external {
+        IERC20 bpt = IERC20(_bpt);
         uint256 amountIn = _maxAvailable(address(bpt), _amountIn);
+
+        ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(_bpt);
         uint256 amountStakedBefore = poolGauge.balanceOf(address(this));
 
         bpt.approve(_poolGauge, amountIn);
@@ -253,24 +252,17 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     /**
      * @notice withdraw (unstake) BPT from respective pool gauge
-     * @param _poolGauge address of rewards gauge
-     * @param _amountOut number of bpts to withdraw
+     * @param _bpt address of BPTs to withdraw
+     * @param _amountOut number of BPTs to withdraw
      * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
-     * @dev 1.) Interface custom as Balancer/Curve do not provide for liquidityGauges.
-     * @dev 2.) Strategists to provide _poolGauge (which they can get via off-chain querying methods)
-     * TODO: Use the implementation in balanceOf like this:
-     * address bpt = abi.decode(adaptorData, (address));
-     * 
-     *     ILiquidityGauge poolGauge = gaugeFactory().getPoolGauge(bpt);
-     * 
-     *     uint256 stakedBPT = poolGauge.balanceOf(address(this));
+     * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
-    function withdrawBPT(address _poolGauge, uint256 _amountOut, bool _claim_rewards) external {
-        ILiquidityGaugev3Custom poolGauge = ILiquidityGaugev3Custom(_poolGauge);
+    function withdrawBPT(address _bpt, uint256 _amountOut, bool _claim_rewards) external {
 
-        uint256 amountOut = _maxAvailable(_poolGauge, _amountOut); // get the total amount of bpt staked by the cellar essentially (bc it's represented by the amount of gauge tokens the Cellar has)
+        ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(_bpt);
+        uint256 amountOut = _maxAvailable(ERC20(address(poolGauge)), _amountOut); // get the total amount of bpt staked by the cellar essentially (bc it's represented by the amount of gauge tokens the Cellar has)
 
-        IERC20 bpt = IERC20(poolGauge.lp_token());
+        IERC20 bpt = IERC20(_bpt);
         uint256 unstakedBPTBefore = bpt.balanceOf(address(this));
 
         bpt.approve(_poolGauge, amountOut);
@@ -285,13 +277,13 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice claim rewards ($BAL and/or other tokens) from LP position
      * @notice Have the strategist provide the address for the pool gauge
      * @dev rewards are only accrue for staked positions
-     * @param _poolGauge address of rewards gauge
+     * @param _bpt associated BPTs for respective reward gauge
      * @param _rewardToken address of reward token, if not $BAL, that strategist is claiming
      * TODO: make all verbose text here into github issues or remove them after discussion w/ Crispy
      * TODO: add checks throughout function
      */
-    function claimRewards(address _poolGauge, address _rewardToken) public {
-        ILiquidityGaugev3Custom poolGauge = ILiquidityGaugev3Custom(_poolGauge);
+    function claimRewards(address _bpt, address _rewardToken) public {
+        ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(bpt);
 
         // TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
 
