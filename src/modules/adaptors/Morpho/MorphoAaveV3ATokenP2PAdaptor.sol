@@ -81,7 +81,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
      * @param assets the amount of assets to withdraw from Aave
      * @param receiver the address to send withdrawn assets to
      * @param adaptorData adaptor data containining the abi encoded aToken
-     * @param configData abi encoded minimum health factor, if zero user withdraws are not allowed.
+     * @param configurationData abi encoded maximum iterations.
      */
     function withdraw(
         uint256 assets,
@@ -134,17 +134,6 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice When positions are added to the Registry, this function can be used in order to figure out
-     *         what assets this adaptor needs to price, and confirm pricing is properly setup.
-     * @dev WETH is used when determining the withdrawableBalance.
-     */
-    function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
-        assets = new ERC20[](2);
-        assets[0] = assetOf(adaptorData);
-        assets[1] = WETH();
-    }
-
-    /**
      * @notice This adaptor returns collateral, and not debt.
      */
     function isDebt() public pure override returns (bool) {
@@ -158,13 +147,14 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
      * @param tokenToDeposit the token to lend on Aave
      * @param amountToDeposit the amount of `tokenToDeposit` to lend on Aave.
      */
-    function depositToAave(ERC20 tokenToDeposit, uint256 amountToDeposit) public {
+    function depositToAaveV3Morpho(ERC20 tokenToDeposit, uint256 amountToDeposit, uint256 maxIterations) public {
+        // TODO should we sanitize maxIterations? I feel like strategists could gas grief our relayer
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
-        tokenToDeposit.safeApprove(address(pool()), amountToDeposit);
-        pool().deposit(address(tokenToDeposit), amountToDeposit, address(this), 0);
+        tokenToDeposit.safeApprove(address(morpho()), amountToDeposit);
+        morpho().supply(address(tokenToDeposit), amountToDeposit, address(this), maxIterations);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(tokenToDeposit, address(pool()));
+        _revokeExternalApproval(tokenToDeposit, address(morpho()));
     }
 
     /**
@@ -172,10 +162,8 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
      * @param tokenToWithdraw the token to withdraw from Aave.
      * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
      */
-    function withdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
-        pool().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
-        // Check that health factor is above adaptor minimum.
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (healthFactor < HFMIN()) revert AaveATokenAdaptor__HealthFactorTooLow();
+    function withdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw, uint256 maxIterations) public {
+        // TODO should we sanitize maxIterations? I feel like strategists could gas grief our relayer
+        morpho().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this), address(this), maxIterations);
     }
 }
