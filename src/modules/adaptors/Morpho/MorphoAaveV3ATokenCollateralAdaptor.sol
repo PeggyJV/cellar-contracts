@@ -29,7 +29,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V3 aToken Adaptor V 1.1"));
+        return keccak256(abi.encode("Morpho Aave V3 aToken Collateral Adaptor V 1.1"));
     }
 
     /**
@@ -53,7 +53,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
      * @param adaptorData adaptor data containining the abi encoded aToken
      * @dev configurationData is NOT used because this action will only increase the health factor
      */
-    function deposit(uint256 assets, bytes memory adaptorData, bytes memory configurationData) public override {
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Morpho.
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
         underlying.safeApprove(address(morpho()), assets);

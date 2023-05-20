@@ -4,6 +4,8 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
 
+import { console } from "@forge-std/Test.sol"; //TODO remove
+
 /**
  * @title Morpho Aave V3 aToken Adaptor
  * @notice Allows Cellars to interact with Morpho Aave V3 positions.
@@ -36,7 +38,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V3 aToken Adaptor V 1.1"));
+        return keccak256(abi.encode("Morpho Aave V3 aToken P2P Adaptor V 1.1"));
     }
 
     /**
@@ -162,7 +164,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
      * @param tokenToWithdraw the token to withdraw from Aave.
      * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
      */
-    function withdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw, uint256 maxIterations) public {
+    function withdrawFromAaveV3Morpho(ERC20 tokenToWithdraw, uint256 amountToWithdraw, uint256 maxIterations) public {
         // TODO should we sanitize maxIterations? I feel like strategists could gas grief our relayer
         morpho().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this), address(this), maxIterations);
     }
