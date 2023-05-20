@@ -14,6 +14,7 @@ import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol"
 import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
 import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
 import { CTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 
 // Import adaptors.
@@ -37,9 +38,15 @@ interface IRealYieldUsd {
 
 interface ICellar {
     function setupAdaptor(address adaptor) external;
+
+    function setPlatformFee(uint64 newFee) external;
+
+    function sendFees() external;
 }
 
 contract UpgradeRealYieldUsdTest is Test {
+    using Math for uint256;
+
     address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -54,8 +61,8 @@ contract UpgradeRealYieldUsdTest is Test {
     IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
 
     CellarInitializableV2_1 private cellar = CellarInitializableV2_1(0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E);
-    PriceRouter private priceRouter;
     IRegistry private registry = IRegistry(0x2Cbd27E034FEE53f79b607430dA7771B22050741);
+    PriceRouter private priceRouter = PriceRouter(0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA);
     UniswapV3Adaptor private uniswapV3Adaptor = UniswapV3Adaptor(0xDbd750F72a00d01f209FFc6C75e80301eFc789C1);
 
     INonfungiblePositionManager internal positionManager =
@@ -130,6 +137,9 @@ contract UpgradeRealYieldUsdTest is Test {
         // Strategist updates holding position to be vanilla USDC.
         cellar.setHoldingPosition(1);
 
+        // Strategist calls sendFees
+        ICellar(address(cellar)).sendFees();
+
         // Strategist could change withdrawal array so that compound is withdraw from first
         // Now rebalance cellar so that money is only in USDC, USDT, DAI
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -139,7 +149,7 @@ contract UpgradeRealYieldUsdTest is Test {
             data[0] = Cellar.AdaptorCall({ adaptor: uniV3Adaptor, callData: adaptorCalls });
         }
 
-        // cellar.callOnAdaptor(data);
+        cellar.callOnAdaptor(data);
 
         // Remove old Aave positions, and old vesting position. Remove index 4,5,6,7 or index 4(x4 times)
         cellar.removePosition(4, false);
@@ -158,6 +168,8 @@ contract UpgradeRealYieldUsdTest is Test {
         ICellar(address(cellar)).setupAdaptor(aaveATokenAdaptor);
         ICellar(address(cellar)).setupAdaptor(feesAndReservesAdaptor);
         ICellar(address(cellar)).setupAdaptor(cTokenAdaptor);
+
+        ICellar(address(cellar)).setPlatformFee(0);
 
         // Strategist can now rebalance out of compound positions.
         {
@@ -220,13 +232,150 @@ contract UpgradeRealYieldUsdTest is Test {
 
         cellar.deposit(10e6, address(this));
 
-        console.log("Total Assets now", cellar.totalAssets());
-        console.log("Total Assets before", totalAssetsBeforeChanges);
+        uint256 assets = cellar.totalAssets();
+
+        // Strategist rebalances, moving assets into Compound, and uniswap V3
+        // Deal Cellar assets in all 3 tokens to simulate swapping.
+        deal(address(USDC), address(cellar), assets / 2);
+        deal(address(USDT), address(cellar), assets / 4);
+        deal(address(DAI), address(cellar), (assets / 4).changeDecimals(6, 18));
+
+        data = new Cellar.AdaptorCall[](2);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI, USDC, 100, type(uint256).max, type(uint256).max, 10);
+            adaptorCalls[1] = _createBytesDataToOpenLP(USDC, USDT, 100, type(uint256).max, type(uint256).max, 10);
+            data[0] = Cellar.AdaptorCall({ adaptor: uniV3Adaptor, callData: adaptorCalls });
+        }
+
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(cUSDC, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: cTokenAdaptor, callData: adaptorCalls });
+        }
+
+        vm.prank(gravityBridge);
+        cellar.callOnAdaptor(data);
+
+        // Strategist decides to move all assets into Compound.
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 3);
+            adaptorCalls[1] = _createBytesDataToCloseLP(address(cellar), 4);
+            data[0] = Cellar.AdaptorCall({ adaptor: uniV3Adaptor, callData: adaptorCalls });
+        }
+
+        {
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToLend(cUSDC, type(uint256).max);
+            adaptorCalls[1] = _createBytesDataToLend(cDAI, type(uint256).max);
+            adaptorCalls[2] = _createBytesDataToLend(cUSDT, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: cTokenAdaptor, callData: adaptorCalls });
+        }
+
+        vm.prank(gravityBridge);
+        cellar.callOnAdaptor(data);
+
+        // Strategist decides to move all assets into AaveV3
+        data = new Cellar.AdaptorCall[](2);
+
+        {
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromCompound(cUSDC, type(uint256).max);
+            adaptorCalls[1] = _createBytesDataToWithdrawFromCompound(cDAI, type(uint256).max);
+            adaptorCalls[2] = _createBytesDataToWithdrawFromCompound(cUSDT, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: cTokenAdaptor, callData: adaptorCalls });
+        }
+
+        {
+            bytes[] memory adaptorCalls = new bytes[](3);
+            adaptorCalls[0] = _createBytesDataToLendAaveV3(address(USDC), type(uint256).max);
+            adaptorCalls[1] = _createBytesDataToLendAaveV3(address(DAI), type(uint256).max);
+            adaptorCalls[2] = _createBytesDataToLendAaveV3(address(USDT), type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: aaveV3AtokenAdaptor, callData: adaptorCalls });
+        }
+
+        vm.prank(gravityBridge);
+        cellar.callOnAdaptor(data);
+    }
+
+    function _sqrt(uint256 _x) internal pure returns (uint256 y) {
+        uint256 z = (_x + 1) / 2;
+        y = _x;
+        while (z < y) {
+            y = z;
+            z = (_x / z + z) / 2;
+        }
+    }
+
+    /**
+     * @notice Get the upper and lower tick around token0, token1.
+     * @param token0 The 0th Token in the UniV3 Pair
+     * @param token1 The 1st Token in the UniV3 Pair
+     * @param fee The desired fee pool
+     * @param size Dictates the amount of ticks liquidity will cover
+     *             @dev Must be an even number
+     * @param shift Allows the upper and lower tick to be moved up or down relative
+     *              to current price. Useful for range orders.
+     */
+    function _getUpperAndLowerTick(
+        ERC20 token0,
+        ERC20 token1,
+        uint24 fee,
+        int24 size,
+        int24 shift
+    ) internal view returns (int24 lower, int24 upper) {
+        uint256 price = priceRouter.getExchangeRate(token1, token0);
+        uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (price);
+        uint160 sqrtPriceX96 = SafeCast.toUint160(_sqrt(ratioX192));
+        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+        tick = tick + shift;
+
+        IUniswapV3Pool pool = IUniswapV3Pool(factory.getPool(address(token0), address(token1), fee));
+        int24 spacing = pool.tickSpacing();
+        lower = tick - (tick % spacing);
+        lower = lower - ((spacing * size) / 2);
+        upper = lower + spacing * size;
+    }
+
+    function _createBytesDataToOpenLP(
+        ERC20 token0,
+        ERC20 token1,
+        uint24 poolFee,
+        uint256 amount0,
+        uint256 amount1,
+        int24 size
+    ) internal view returns (bytes memory) {
+        (int24 lower, int24 upper) = _getUpperAndLowerTick(token0, token1, poolFee, size, 0);
+        return
+            abi.encodeWithSelector(
+                UniswapV3Adaptor.openPosition.selector,
+                token0,
+                token1,
+                poolFee,
+                amount0,
+                amount1,
+                0,
+                0,
+                lower,
+                upper
+            );
     }
 
     function _createBytesDataToCloseLP(address owner, uint256 index) internal view returns (bytes memory) {
         uint256 tokenId = positionManager.tokenOfOwnerByIndex(owner, index);
         return abi.encodeWithSelector(UniswapV3Adaptor.closePosition.selector, tokenId, 0, 0);
+    }
+
+    function _createBytesDataToLendAaveV3(
+        address tokenToLend,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveV3ATokenAdaptor.depositToAave.selector, tokenToLend, amountToLend);
+    }
+
+    function _createBytesDataToLend(address market, uint256 amountToLend) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CTokenAdaptor.depositToCompound.selector, market, amountToLend);
     }
 
     function _createBytesDataToWithdrawFromCompound(
