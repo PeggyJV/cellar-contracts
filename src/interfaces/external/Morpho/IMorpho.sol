@@ -2,6 +2,14 @@
 pragma solidity 0.8.16;
 
 interface IMorpho {
+    struct LiquidityData {
+        uint256 borrowable; // The maximum debt value allowed to borrow (in base currency).
+        uint256 maxDebt; // The maximum debt value allowed before being liquidatable (in base currency).
+        uint256 debt; // The debt value (in base currency).
+    }
+
+    function liquidityData(address user) external view returns (LiquidityData memory);
+
     function userBorrows(address user) external view returns (address[] memory);
 
     function collateralBalance(address underlying, address user) external view returns (uint256);

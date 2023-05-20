@@ -40,7 +40,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The Morpho Aave V2 contract on Ethereum Mainnet.
+     * @notice The Morpho Aave V3 contract on Ethereum Mainnet.
      */
     function morpho() internal pure returns (IMorpho) {
         return IMorpho(0x33333aea097c193e66081E930c33020272b33333);
@@ -128,7 +128,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     /**
      * @notice Returns the positions aToken underlying asset.
      */
-    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+    function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
         return underlying;
     }

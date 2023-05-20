@@ -33,7 +33,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The Morpho Aave V2 contract on Ethereum Mainnet.
+     * @notice The Morpho Aave V3 contract on Ethereum Mainnet.
      */
     function morpho() internal pure returns (IMorpho) {
         return IMorpho(0x33333aea097c193e66081E930c33020272b33333);
