@@ -538,6 +538,14 @@ contract CellarAaveV3MorphoTest is Test {
             0.0025e18,
             "Morpho health factor should equal target."
         );
+
+        // Make sure that morpho Health factor is the same as ours.
+        assertApproxEqAbs(
+            _getUserHealthFactor(address(cellar)),
+            morphoHealthFactor,
+            1,
+            "Our health factor should equal morphos."
+        );
     }
 
     // ========================================== INTEGRATION TEST ==========================================
@@ -545,6 +553,24 @@ contract CellarAaveV3MorphoTest is Test {
     function testIntegration() external {}
 
     // ========================================= HELPER FUNCTIONS =========================================
+    uint256 internal constant WAD = 1e18;
+
+    function wadDiv(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        // to avoid overflow, a <= (type(uint256).max - halfB) / WAD
+        assembly {
+            if or(iszero(b), iszero(iszero(gt(a, div(sub(not(0), div(b, 2)), WAD))))) {
+                revert(0, 0)
+            }
+
+            c := div(add(mul(a, WAD), div(b, 2)), b)
+        }
+    }
+
+    function _getUserHealthFactor(address user) internal view returns (uint256) {
+        IMorpho.LiquidityData memory liquidityData = morpho.liquidityData(user);
+
+        return liquidityData.debt > 0 ? wadDiv(liquidityData.maxDebt, liquidityData.debt) : type(uint256).max;
+    }
 
     function _setupCellarForBorrowing(Cellar target) internal {
         // Add required positions.
