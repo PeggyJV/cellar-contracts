@@ -4,6 +4,8 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
 
+import { console } from "@forge-std/Test.sol"; //TODO remove
+
 /**
  * @title Aave debtToken Adaptor
  * @notice Allows Cellars to interact with Aave debtToken positions.
@@ -24,13 +26,13 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
     /**
      @notice Attempted borrow would lower Cellar health factor too low.
      */
-    error AaveV3DebtTokenAdaptor__HealthFactorTooLow();
+    error MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
 
     /**
      * @notice Strategist attempted to open an untracked Aave loan.
      * @param untrackedDebtPosition the address of the untracked loan
      */
-    error AaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
+    error MorphoAaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
 
     //============================================ Global Functions ===========================================
     /**
@@ -118,14 +120,15 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(underlying)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert AaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(underlying);
+            revert MorphoAaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(underlying);
 
         // Borrow from morpho.
         morpho().borrow(underlying, amountToBorrow, address(this), address(this), maxIterations);
 
         // Check that health factor is above adaptor minimum.
         uint256 healthFactor = _getUserHealthFactor(address(this));
-        if (healthFactor < HFMIN()) revert AaveV3DebtTokenAdaptor__HealthFactorTooLow();
+        console.log("Health Factor", healthFactor);
+        if (healthFactor < HFMIN()) revert MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -141,6 +144,10 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
         _revokeExternalApproval(tokenToRepay, address(morpho()));
     }
 
+    /**
+     * @notice Code pulled directly from Morpho Position Manager.
+     * https://etherscan.io/address/0x4592e45e0c5DbEe94a135720cCfF2e4353dAc6De#code
+     */
     function _getUserHealthFactor(address user) internal view returns (uint256) {
         IMorpho.LiquidityData memory liquidityData = morpho().liquidityData(user);
 

@@ -4,6 +4,8 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
 
+import { console } from "@forge-std/Test.sol"; //TODO remove
+
 /**
  * @title Morpho Aave V3 aToken Adaptor
  * @notice Allows Cellars to interact with Morpho Aave V3 positions.
@@ -100,7 +102,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
      *      doing so lowers the withdrawable from amount which in turn raises the health factor.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        address[] memory borrows = morpho().userBorrows(address(this));
+        address[] memory borrows = morpho().userBorrows(msg.sender);
         if (borrows.length > 0) return 0;
         else {
             ERC20 underlying = abi.decode(adaptorData, (ERC20));
