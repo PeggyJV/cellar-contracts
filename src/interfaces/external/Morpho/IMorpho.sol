@@ -2,6 +2,7 @@
 pragma solidity 0.8.16;
 
 interface IMorpho {
+    // For Aave V3.
     struct LiquidityData {
         uint256 borrowable; // The maximum debt value allowed to borrow (in base currency).
         uint256 maxDebt; // The maximum debt value allowed before being liquidatable (in base currency).
@@ -51,4 +52,19 @@ interface IMorpho {
         address onBehalf,
         address receiver
     ) external returns (uint256);
+
+    // For Aave V2.
+    function userMarkets(address user) external view returns (bytes32);
+
+    function borrowBalanceInOf(address poolToken, address user) external view returns (uint256 inP2P, uint256 onPool);
+
+    function supplyBalanceInOf(address poolToken, address user) external view returns (uint256 inP2P, uint256 onPool);
+
+    function supply(address poolToken, uint256 amount) external;
+
+    function borrow(address poolToken, uint256 amount) external;
+
+    function repay(address poolToken, uint256 amount) external;
+
+    function withdraw(address poolToken, uint256 amount, address receiver) external;
 }

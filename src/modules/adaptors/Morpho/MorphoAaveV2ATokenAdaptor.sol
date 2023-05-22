@@ -1,0 +1,175 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity 0.8.16;
+
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
+import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
+
+import { console } from "@forge-std/Test.sol"; //TODO remove
+
+/**
+ * @title Morpho Aave V3 aToken Adaptor
+ * @notice Allows Cellars to interact with Morpho Aave V3 positions.
+ * @author crispymangoes
+ */
+contract MorphoAaveV2ATokenAdaptor is BaseAdaptor {
+    using SafeTransferLib for ERC20;
+    using Math for uint256;
+
+    //==================== Adaptor Data Specification ====================
+    // adaptorData = abi.encode(address aToken)
+    // Where:
+    // `aToken` is the AaveV2 A Token position this adaptor is working with
+    //================= Configuration Data Specification =================
+    // NA
+    //====================================================================
+
+    bytes32 public constant BORROWING_MASK = hex"5555555555555555555555555555555555555555555555555555555555555555";
+
+    //============================================ Global Functions ===========================================
+    /**
+     * @dev Identifier unique to this adaptor for a shared registry.
+     * Normally the identifier would just be the address of this contract, but this
+     * Identifier is needed during Cellar Delegate Call Operations, so getting the address
+     * of the adaptor is more difficult.
+     */
+    function identifier() public pure override returns (bytes32) {
+        return keccak256(abi.encode("Morpho Aave V2 aToken Adaptor V 1.1"));
+    }
+
+    /**
+     * @notice The Morpho Aave V2 contract on Ethereum Mainnet.
+     */
+    function morpho() internal pure returns (IMorpho) {
+        return IMorpho(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
+    }
+
+    /**
+     * @notice The WETH contract on Ethereum Mainnet.
+     */
+    function WETH() internal pure returns (ERC20) {
+        return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    }
+
+    //============================================ Implement Base Functions ===========================================
+    /**
+     * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
+     * @param assets the amount of assets to lend on Aave
+     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @dev configurationData is NOT used because this action will only increase the health factor
+     */
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
+        // Deposit assets to Morpho.
+        IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
+        ERC20 underlying = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
+        underlying.safeApprove(address(morpho()), assets);
+
+        morpho().supply(address(aToken), assets);
+
+        // Zero out approvals if necessary.
+        _revokeExternalApproval(underlying, address(morpho()));
+    }
+
+    /**
+     @notice Cellars must withdraw from Aave, check if a minimum health factor is specified
+     *       then transfer assets to receiver.
+     * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
+     * @param assets the amount of assets to withdraw from Aave
+     * @param receiver the address to send withdrawn assets to
+     * @param adaptorData adaptor data containining the abi encoded aToken
+     */
+    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
+        // Run external receiver check.
+        _externalReceiverCheck(receiver);
+
+        // Make sure there are no active borrows.
+        if (_isBorrowingAny(address(this))) revert BaseAdaptor__UserWithdrawsNotAllowed();
+
+        IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
+
+        // Withdraw assets from Morpho.
+        morpho().withdraw(address(aToken), assets, receiver);
+    }
+
+    /**
+     * @notice Uses configurartion data minimum health factor to calculate withdrawable assets from Aave.
+     * @dev Applies a `cushion` value to the health factor checks and calculation.
+     *      The goal of this is to minimize scenarios where users are withdrawing a very small amount of
+     *      assets from Aave. This function returns zero if
+     *      -minimum health factor is NOT set.
+     *      -the current health factor is less than the minimum health factor + 2x `cushion`
+     *      Otherwise this function calculates the withdrawable amount using
+     *      minimum health factor + `cushion` for its calcualtions.
+     * @dev It is possible for the math below to lose a small amount of precision since it is only
+     *      maintaining 18 decimals during the calculation, but this is desired since
+     *      doing so lowers the withdrawable from amount which in turn raises the health factor.
+     */
+    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
+        if (_isBorrowingAny(msg.sender)) return 0;
+        else {
+            address aToken = abi.decode(adaptorData, (address));
+            (uint256 inP2P, uint256 onPool) = morpho().supplyBalanceInOf(address(aToken), msg.sender);
+            // TODO I THINK you add these together
+            return (inP2P + onPool);
+        }
+    }
+
+    /**
+     * @notice Returns the cellars balance of the positions aToken.
+     */
+    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
+        address aToken = abi.decode(adaptorData, (address));
+        (uint256 inP2P, uint256 onPool) = morpho().supplyBalanceInOf(address(aToken), msg.sender);
+        // TODO I THINK you add these together
+        return (inP2P + onPool);
+    }
+
+    /**
+     * @notice Returns the positions aToken underlying asset.
+     */
+    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        return ERC20(token.UNDERLYING_ASSET_ADDRESS());
+    }
+
+    /**
+     * @notice This adaptor returns collateral, and not debt.
+     */
+    function isDebt() public pure override returns (bool) {
+        return false;
+    }
+
+    //============================================ Strategist Functions ===========================================
+    /**
+     * @notice Allows strategists to lend assets on Aave.
+     * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
+     * @param aToken the aToken to lend on Aave
+     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Aave.
+     */
+    function depositToAaveV2Morpho(IAaveToken aToken, uint256 amountToDeposit) public {
+        ERC20 underlying = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
+        amountToDeposit = _maxAvailable(underlying, amountToDeposit);
+        underlying.safeApprove(address(morpho()), amountToDeposit);
+        morpho().supply(address(aToken), amountToDeposit);
+
+        // Zero out approvals if necessary.
+        _revokeExternalApproval(underlying, address(morpho()));
+    }
+
+    /**
+     * @notice Allows strategists to withdraw assets from Aave.
+     * @param aToken the atoken to withdraw from Aave.
+     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
+     */
+    function withdrawFromAaveV2Morpho(IAaveToken aToken, uint256 amountToWithdraw) public {
+        morpho().withdraw(address(aToken), amountToWithdraw, address(this));
+    }
+
+    /// @dev Returns if a user has been borrowing from any market.
+    /// @param user User address.
+    /// @return True if the user has been borrowing on any market, false otherwise.
+    function _isBorrowingAny(address user) internal view returns (bool) {
+        bytes32 userMarkets = morpho().userMarkets(user);
+        return userMarkets & BORROWING_MASK != 0;
+    }
+}
