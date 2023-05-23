@@ -21,7 +21,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor {
     // Where:
     // `aToken` is the AaveV2 A Token position this adaptor is working with
     //================= Configuration Data Specification =================
-    // NA
+    // isLiquid bool indicating whether user withdraws are allowed from this position.
     //====================================================================
 
     bytes32 public constant BORROWING_MASK = hex"5555555555555555555555555555555555555555555555555555555555555555";
@@ -108,9 +108,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor {
         if (_isBorrowingAny(msg.sender)) return 0;
         else {
             address aToken = abi.decode(adaptorData, (address));
-            (uint256 inP2P, uint256 onPool) = morpho().supplyBalanceInOf(address(aToken), msg.sender);
-            // TODO I THINK you add these together
-            return (inP2P + onPool);
+            return _balanceOfInUnderlying(aToken, msg.sender);
         }
     }
 
@@ -119,9 +117,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address aToken = abi.decode(adaptorData, (address));
-        (uint256 inP2P, uint256 onPool) = morpho().supplyBalanceInOf(address(aToken), msg.sender);
-        // TODO I THINK you add these together
-        return (inP2P + onPool);
+        return _balanceOfInUnderlying(aToken, msg.sender);
     }
 
     /**
@@ -171,5 +167,14 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor {
     function _isBorrowingAny(address user) internal view returns (bool) {
         bytes32 userMarkets = morpho().userMarkets(user);
         return userMarkets & BORROWING_MASK != 0;
+    }
+
+    function _balanceOfInUnderlying(address poolToken, address user) internal view returns (uint256) {
+        (uint256 inP2P, uint256 onPool) = morpho().supplyBalanceInOf(poolToken, user);
+
+        uint256 balanceInUnderlying;
+        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho().p2pSupplyIndex(poolToken), 1e27);
+        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho().poolIndexes(poolToken).poolSupplyIndex, 1e27);
+        return balanceInUnderlying;
     }
 }

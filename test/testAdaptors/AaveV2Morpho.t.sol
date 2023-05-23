@@ -53,7 +53,7 @@ contract CellarAaveV2MorphoTest is Test {
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     IPoolV3 private pool = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
 
-    IMorpho private morpho = IMorpho(0x33333aea097c193e66081E930c33020272b33333);
+    IMorpho private morpho = IMorpho(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
     WstEthExtension private wstEthOracle;
 
     // Chainlink PriceFeeds
@@ -116,7 +116,7 @@ contract CellarAaveV2MorphoTest is Test {
         stethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(STETH));
         morphoAWethPosition = registry.trustPosition(address(aTokenAdaptor), abi.encode(aWETH));
         morphoAStEthPosition = registry.trustPosition(address(aTokenAdaptor), abi.encode(aSTETH));
-        morphoDebtWethPosition = registry.trustPosition(address(debtTokenAdaptor), abi.encode(dWETH));
+        morphoDebtWethPosition = registry.trustPosition(address(debtTokenAdaptor), abi.encode(aWETH));
 
         cellar = new CellarInitializableV2_2(registry);
         cellar.initialize(
@@ -147,7 +147,8 @@ contract CellarAaveV2MorphoTest is Test {
 
         WETH.safeApprove(address(cellar), type(uint256).max);
 
-        cellar.setRebalanceDeviation(0.005e18);
+        // UniV2 WETH/STETH slippage is turbo bad, so set a large rebalance deviation.
+        cellar.setRebalanceDeviation(0.1e18);
 
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
@@ -163,208 +164,185 @@ contract CellarAaveV2MorphoTest is Test {
         cellar.deposit(assets, address(this));
     }
 
-    // function testWithdraw(uint256 assets) external checkBlockNumber {
-    //     assets = bound(assets, 0.01e18, 10_000e18);
-    //     deal(address(WETH), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+    function testWithdraw(uint256 assets) external checkBlockNumber {
+        assets = bound(assets, 0.01e18, 10_000e18);
+        deal(address(WETH), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // Pass a little bit of time so that we can withdraw the full amount.
-    //     // Morpho deposit rounds down.
-    //     vm.warp(block.timestamp + 300);
-
-    //     cellar.withdraw(assets, address(this), address(this));
-    // }
+        // Only withdraw assets - 1 because p2pSupplyIndex is not updated, so it is possible
+        // for totalAssets to equal assets - 1.
+        cellar.withdraw(assets - 1, address(this), address(this));
+    }
 
     function testTotalAssets(uint256 assets) external checkBlockNumber {
         assets = bound(assets, 0.01e18, 10_000e18);
         deal(address(WETH), address(this), assets);
         cellar.deposit(assets, address(this));
-        assertApproxEqAbs(cellar.totalAssets(), assets, 2, "Total assets should equal assets deposited.");
+        assertApproxEqAbs(cellar.totalAssets(), assets, 1, "Total assets should equal assets deposited.");
     }
 
-    // function testTakingOutLoans(uint256 assets) external checkBlockNumber {
-    //     _setupCellarForBorrowing(cellar);
+    function testTakingOutLoans(uint256 assets) external checkBlockNumber {
+        _setupCellarForBorrowing(cellar);
 
-    //     assets = bound(assets, 0.01e18, 1_000e18);
-    //     deal(address(WETH), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+        assets = bound(assets, 0.01e18, 100e18);
+        deal(address(WETH), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // Rebalance Cellar to take on debt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
-    //     // Swap WETH for WSTETH.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataForSwap(WETH, WSTETH, 500, assets);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
-    //     }
-    //     // Supply WSTETH as collateral on Morpho.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataToLend(WSTETH, type(uint256).max);
-    //         data[1] = Cellar.AdaptorCall({ adaptor: address(collateralATokenAdaptor), callData: adaptorCalls });
-    //     }
-    //     // Borrow WETH from Morpho.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         uint256 wethToBorrow = assets / 4;
-    //         adaptorCalls[0] = _createBytesDataToBorrow(WETH, wethToBorrow, 4);
-    //         data[2] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
-    //     }
+        // Rebalance Cellar to take on debt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
+        // Swap WETH for WSTETH.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(WETH, STETH, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(aSTETH, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(aTokenAdaptor), callData: adaptorCalls });
+        }
+        // Borrow WETH from Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            uint256 wethToBorrow = assets / 3;
+            adaptorCalls[0] = _createBytesDataToBorrow(aWETH, wethToBorrow);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
 
-    //     // Perform callOnAdaptor.
-    //     cellar.callOnAdaptor(data);
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
 
-    //     uint256 wethDebt = morpho.borrowBalance(address(WETH), address(cellar));
+        uint256 balanceInUnderlying = getMorphoDebt(aWETH, address(cellar));
 
-    //     assertApproxEqAbs(wethDebt, assets / 4, 1, "WETH debt should equal assets / 4.");
-    //     assertApproxEqRel(cellar.totalAssets(), assets, 0.997e18, "Total assets should equal assets.");
-    // }
+        assertApproxEqAbs(balanceInUnderlying, assets / 3, 1, "WETH debt should equal assets / 3.");
+        // Below assert uses such a large range bc of uniV2 slippage.
+        assertApproxEqRel(cellar.totalAssets(), assets, 0.90e18, "Total assets should equal assets.");
+    }
 
-    // function testRepayingLoans(uint256 assets) external checkBlockNumber {
-    //     _setupCellarForBorrowing(cellar);
+    function testRepayingLoans(uint256 assets) external checkBlockNumber {
+        _setupCellarForBorrowing(cellar);
 
-    //     assets = bound(assets, 0.01e18, 1_000e18);
-    //     deal(address(WETH), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+        assets = bound(assets, 0.01e18, 100e18);
+        deal(address(WETH), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // Rebalance Cellar to take on debt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
-    //     // Swap WETH for WSTETH.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataForSwap(WETH, WSTETH, 500, assets);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
-    //     }
-    //     // Supply WSTETH as collateral on Morpho.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataToLend(WSTETH, type(uint256).max);
-    //         data[1] = Cellar.AdaptorCall({ adaptor: address(collateralATokenAdaptor), callData: adaptorCalls });
-    //     }
-    //     // Borrow WETH from Morpho.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         uint256 wethToBorrow = assets / 4;
-    //         adaptorCalls[0] = _createBytesDataToBorrow(WETH, wethToBorrow, 4);
-    //         data[2] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
-    //     }
+        // Rebalance Cellar to take on debt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
+        // Swap WETH for WSTETH.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(WETH, STETH, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(aSTETH, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(aTokenAdaptor), callData: adaptorCalls });
+        }
+        // Borrow WETH from Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            uint256 wethToBorrow = assets / 4;
+            adaptorCalls[0] = _createBytesDataToBorrow(aWETH, wethToBorrow);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
 
-    //     // Perform callOnAdaptor.
-    //     cellar.callOnAdaptor(data);
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
 
-    //     uint256 wethDebt = morpho.borrowBalance(address(WETH), address(cellar));
+        uint256 wethDebt = getMorphoDebt(aWETH, address(cellar));
 
-    //     assertApproxEqAbs(wethDebt, assets / 4, 1, "WETH debt should equal assets / 4.");
-    //     assertApproxEqRel(cellar.totalAssets(), assets, 0.997e18, "Total assets should equal assets.");
+        assertApproxEqAbs(wethDebt, assets / 4, 1, "WETH debt should equal assets / 4.");
 
-    //     // Now repay half the debt.
-    //     data = new Cellar.AdaptorCall[](1);
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         uint256 wethToRepay = wethDebt / 2;
-    //         adaptorCalls[0] = _createBytesDataToRepay(WETH, wethToRepay);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
-    //     }
+        // Now repay half the debt.
+        data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            uint256 wethToRepay = wethDebt / 2;
+            adaptorCalls[0] = _createBytesDataToRepay(aWETH, wethToRepay);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
 
-    //     // Perform callOnAdaptor.
-    //     cellar.callOnAdaptor(data);
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
 
-    //     wethDebt = morpho.borrowBalance(address(WETH), address(cellar));
+        wethDebt = getMorphoDebt(aWETH, address(cellar));
 
-    //     assertApproxEqAbs(wethDebt, assets / 8, 1, "WETH debt should equal assets / 8.");
-    //     assertApproxEqRel(cellar.totalAssets(), assets, 0.997e18, "Total assets should equal assets.");
-    // }
+        assertApproxEqAbs(wethDebt, assets / 8, 1, "WETH debt should equal assets / 8.");
+    }
 
-    // function testWithdrawalLogic(uint256 assets) external checkBlockNumber {
-    //     _setupCellarForBorrowing(cellar);
+    function testWithdrawalLogic(uint256 assets) external checkBlockNumber {
+        _setupCellarForBorrowing(cellar);
 
-    //     assets = bound(assets, 0.01e18, 400e18);
-    //     deal(address(WETH), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+        assets = bound(assets, 0.01e18, 100e18);
+        deal(address(WETH), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // Rebalance Cellar to take on debt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](4);
-    //     // Swap WETH for WSTETH.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataForSwap(WETH, WSTETH, 500, assets);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
-    //     }
-    //     // Supply WSTETH as collateral on Morpho.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataToLend(WSTETH, type(uint256).max);
-    //         data[1] = Cellar.AdaptorCall({ adaptor: address(collateralATokenAdaptor), callData: adaptorCalls });
-    //     }
-    //     // Borrow WETH from Morpho.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         uint256 wethToBorrow = assets / 4;
-    //         adaptorCalls[0] = _createBytesDataToBorrow(WETH, wethToBorrow, 4);
-    //         data[2] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
-    //     }
-    //     // Supply WETH as collateral p2p on Morpho.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataToLendP2P(WETH, type(uint256).max, 4);
-    //         data[3] = Cellar.AdaptorCall({ adaptor: address(p2pATokenAdaptor), callData: adaptorCalls });
-    //     }
+        // Rebalance Cellar to take on debt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
+        // Swap WETH for WSTETH.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(WETH, STETH, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(aSTETH, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(aTokenAdaptor), callData: adaptorCalls });
+        }
+        // Borrow WETH from Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            uint256 wethToBorrow = assets / 4;
+            adaptorCalls[0] = _createBytesDataToBorrow(aWETH, wethToBorrow);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
 
-    //     // Perform callOnAdaptor.
-    //     cellar.callOnAdaptor(data);
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
 
-    //     // The only assets withdrawable from the cellar should be the WETH lent P2P.
-    //     uint256 wethP2PLend = morpho.supplyBalance(address(WETH), address(cellar));
+        uint256 totalAssets = cellar.totalAssets();
 
-    //     uint256 assetsWithdrawable = cellar.totalAssetsWithdrawable();
-    //     assertEq(wethP2PLend, assetsWithdrawable, "Only assets withdrawable should be in P2P Lending.");
+        // Cellar now has debt so withdrawable assets should be zero.
+        uint256 withdrawable = cellar.totalAssetsWithdrawable();
+        assertApproxEqAbs(withdrawable, assets / 4, 1, "Cellar should only have borrowed WETH withdrawable.");
 
-    //     // User withdraws as much as possible.
-    //     uint256 maxAssets = cellar.maxWithdraw(address(this));
-    //     cellar.withdraw(maxAssets, address(this), address(this));
-    //     assertEq(WETH.balanceOf(address(this)), wethP2PLend, "Withdraw should have sent P2P assets to user.");
-    //     assertEq(morpho.supplyBalance(address(WETH), address(cellar)), 0, "There should be no more WETH supplied.");
+        // Cellar must repay ALL of its WETH debt before WSTETH collateral can be withdrawn.
+        uint256 wethDebt = getMorphoDebt(aWETH, address(cellar));
 
-    //     assertEq(cellar.totalAssetsWithdrawable(), 0, "There should be no more assets withdrawable.");
+        // Give the cellar enough WETH to pay off the debt.
+        deal(address(WETH), address(cellar), wethDebt);
 
-    //     // Cellar must repay ALL of its WETH debt before WSTETH collateral can be withdrawn.
-    //     uint256 wethDebt = morpho.borrowBalance(address(WETH), address(cellar));
+        data = new Cellar.AdaptorCall[](1);
+        // Repay the debt.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRepay(aWETH, wethDebt);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
 
-    //     // Give the cellar enough WETH to pay off the debt.
-    //     deal(address(WETH), address(cellar), wethDebt);
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
 
-    //     data = new Cellar.AdaptorCall[](1);
-    //     // Repay the debt.
-    //     {
-    //         bytes[] memory adaptorCalls = new bytes[](1);
-    //         adaptorCalls[0] = _createBytesDataToRepay(WETH, type(uint256).max);
-    //         data[0] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
-    //     }
+        assertApproxEqRel(cellar.totalAssets(), totalAssets, 0.01e18, "Withdrawable assets should equal assets in.");
 
-    //     // Perform callOnAdaptor.
-    //     cellar.callOnAdaptor(data);
+        console.log("Total Assets Withdrawable", cellar.totalAssetsWithdrawable());
 
-    //     // Note 0.1% deviation happens because of swap fees and slippage.
-    //     assertApproxEqRel(
-    //         cellar.totalAssetsWithdrawable(),
-    //         assets,
-    //         0.01e18,
-    //         "Withdrawable assets should equal assets in."
-    //     );
-
-    //     assertEq(morpho.borrowBalance(address(WETH), address(cellar)), 0, "Borrow balance should be zero.");
-    //     assertEq(morpho.userBorrows(address(cellar)).length, 0, "User borrows array should be empty.");
-
-    //     maxAssets = cellar.maxWithdraw(address(this));
-    //     cellar.withdraw(maxAssets, address(this), address(this));
-    //     uint256 expectedOut = priceRouter.getValue(WETH, maxAssets, WSTETH);
-    //     assertApproxEqAbs(
-    //         WSTETH.balanceOf(address(this)),
-    //         expectedOut,
-    //         1,
-    //         "Withdraw should have sent collateral assets to user."
-    //     );
-    // }
+        assertEq(getMorphoDebt(aWETH, address(cellar)), 0, "Borrow balance should be zero.");
+        // maxAssets = cellar.maxWithdraw(address(this));
+        // cellar.withdraw(maxAssets, address(this), address(this));
+        // uint256 expectedOut = priceRouter.getValue(WETH, maxAssets, WSTETH);
+        // assertApproxEqAbs(
+        //     STETH.balanceOf(address(this)),
+        //     expectedOut,
+        //     1,
+        //     "Withdraw should have sent collateral assets to user."
+        // );
+    }
 
     // function testTakingOutLoansInUntrackedPosition(uint256 assets) external checkBlockNumber {
     //     _setupCellarForBorrowing(cellar);
@@ -580,6 +558,15 @@ contract CellarAaveV2MorphoTest is Test {
         target.setHoldingPosition(wethPosition);
     }
 
+    function getMorphoDebt(address aToken, address user) public view returns (uint256) {
+        (uint256 inP2P, uint256 onPool) = morpho.borrowBalanceInOf(aWETH, address(cellar));
+
+        uint256 balanceInUnderlying;
+        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho.p2pBorrowIndex(aWETH), 1e27);
+        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho.poolIndexes(aWETH).poolBorrowIndex, 1e27);
+        return balanceInUnderlying;
+    }
+
     function _createBytesDataForSwap(
         ERC20 from,
         ERC20 to,
@@ -592,6 +579,13 @@ contract CellarAaveV2MorphoTest is Test {
         uint24[] memory poolFees = new uint24[](1);
         poolFees[0] = poolFee;
         return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
+    }
+
+    function _createBytesDataForSwap(ERC20 from, ERC20 to, uint256 fromAmount) internal pure returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV2.selector, path, fromAmount, 0);
     }
 
     function _createBytesDataToLend(address aToken, uint256 amountToLend) internal pure returns (bytes memory) {

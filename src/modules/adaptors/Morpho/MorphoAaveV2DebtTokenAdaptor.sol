@@ -90,9 +90,7 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address debtToken = abi.decode(adaptorData, (address));
-        (uint256 inP2P, uint256 onPool) = morpho().borrowBalanceInOf(address(debtToken), msg.sender);
-        // TODO I THINK you add these together
-        return (inP2P + onPool);
+        return _balanceOfInUnderlying(debtToken, msg.sender);
     }
 
     /**
@@ -128,10 +126,11 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
         // Borrow from morpho.
         morpho().borrow(debtToken, amountToBorrow);
 
+        // TODO so morpho does not provide a liquidity data method so how do we do a HF check?
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _getUserHealthFactor(address(this));
-        console.log("Health Factor", healthFactor);
-        if (healthFactor < HFMIN()) revert MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
+        // uint256 healthFactor = _getUserHealthFactor(address(this));
+        // console.log("Health Factor", healthFactor);
+        // if (healthFactor < HFMIN()) revert MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -141,8 +140,13 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      */
     function repayAaveV2MorphoDebt(IAaveToken debtToken, uint256 amountToRepay) public {
         ERC20 underlying = ERC20(debtToken.UNDERLYING_ASSET_ADDRESS());
+        if (amountToRepay == type(uint256).max) {
+            uint256 availableUnderlying = underlying.balanceOf(address(this));
+            uint256 debt = _balanceOfInUnderlying(address(debtToken), address(this));
+            amountToRepay = availableUnderlying > debt ? debt : availableUnderlying;
+        }
         underlying.safeApprove(address(morpho()), amountToRepay);
-        morpho().repay(address(debtToken), amountToRepay, address(this));
+        morpho().repay(address(debtToken), amountToRepay);
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(underlying, address(morpho()));
@@ -159,5 +163,14 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
             liquidityData.debt > 0
                 ? uint256(1e18).mulDivDown(liquidityData.maxDebt, liquidityData.debt)
                 : type(uint256).max;
+    }
+
+    function _balanceOfInUnderlying(address poolToken, address user) internal view returns (uint256) {
+        (uint256 inP2P, uint256 onPool) = morpho().borrowBalanceInOf(poolToken, user);
+
+        uint256 balanceInUnderlying;
+        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho().p2pBorrowIndex(poolToken), 1e27);
+        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho().poolIndexes(poolToken).poolBorrowIndex, 1e27);
+        return balanceInUnderlying;
     }
 }
