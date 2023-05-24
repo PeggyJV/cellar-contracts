@@ -18,6 +18,7 @@ import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
 import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
+import { AaveV2EnableAssetAsCollateralAdaptor } from "src/modules/adaptors/Aave/AaveV2EnableAssetAsCollateralAdaptor.sol";
 import { AaveDebtTokenAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
 import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
 import { AaveV3DebtTokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3DebtTokenAdaptor.sol";
@@ -38,10 +39,10 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/prod/RealYieldEth/DeployRealYieldEth.s.sol:DeployRealYieldEthScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/prod/RealYieldGov/DeployRealYieldGovCellars.s.sol:DeployRealYieldGovCellarsScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
-contract DeployRealYieldEthScript is Script {
+contract DeployRealYieldGovCellarsScript is Script {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -89,7 +90,7 @@ contract DeployRealYieldEthScript is Script {
     UniswapV3PositionTracker private tracker = UniswapV3PositionTracker(0xf2854d84D9Dd27eCcD6aB20b3F66111a51bb56d2);
     CellarInitializableV2_2 private rye = CellarInitializableV2_2(0xb5b29320d2Dde5BA5BAFA1EbcD270052070483ec);
 
-    CellarAdaptor private cellarAdaptor;
+    CellarAdaptor private cellarAdaptor = CellarAdaptor(0x24EEAa1111DAc1c0fE0Cf3c03bBa03ADde1e7Fe4);
 
     // Define Adaptors.
     ERC20Adaptor private erc20Adaptor = ERC20Adaptor(0xB1d08c5a1A67A34d9dC6E9F2C5fAb797BA4cbbaE);
@@ -106,131 +107,328 @@ contract DeployRealYieldEthScript is Script {
     SwapWithUniswapAdaptor private swapWithUniswapAdaptor =
         SwapWithUniswapAdaptor(0xd6BC6Df1ed43e3101bC27a4254593a06598a3fDD);
     OneInchAdaptor private oneInchAdaptor = OneInchAdaptor(0xB8952ce4010CFF3C74586d712a4402285A3a3AFb);
+    AaveV2EnableAssetAsCollateralAdaptor private aaveV2EnableAssetAsCollateralAdaptor =
+        AaveV2EnableAssetAsCollateralAdaptor(0x724FEb5819D1717Aec5ADBc0974a655a498b2614);
 
     function run() external {
         vm.startBroadcast();
 
-        // // Deploy adaptors.
-        cellarAdaptor = new CellarAdaptor();
+        uint32[] memory positionIds = new uint32[](17);
 
-        // // Trust all adaptors.
-        registry.trustAdaptor(address(cellarAdaptor));
-
-        uint32[] memory positionIds = new uint32[](16);
-
-        // Add Positions to registry.
         // credit positions
-        positionIds[0] = registry.trustPosition(address(cellarAdaptor), abi.encode(address(rye)));
-        positionIds[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(WBTC));
-        positionIds[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(LINK));
-        positionIds[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(ONEINCH));
-        positionIds[4] = registry.trustPosition(address(erc20Adaptor), abi.encode(UNI));
-        positionIds[5] = registry.trustPosition(address(erc20Adaptor), abi.encode(SNX));
-        positionIds[6] = registry.trustPosition(address(erc20Adaptor), abi.encode(ENS));
-        positionIds[7] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2WBTC));
-        positionIds[8] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2ONEINCH));
-        positionIds[9] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2LINK));
-        positionIds[10] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2UNI));
-        positionIds[11] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2SNX));
-        positionIds[12] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2ENS));
-        positionIds[13] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(aV3WBTC));
-        positionIds[14] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(aV3SNX));
-        positionIds[15] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(aV3UNI));
-        positionIds[16] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(aV3LINK));
-        // positionIds[0] = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
-        // positionIds[1] = registry.trustPosition(address(erc20Adaptor), abi.encode(cbETH));
-        // positionIds[2] = registry.trustPosition(address(erc20Adaptor), abi.encode(rETH));
-        // positionIds[3] = registry.trustPosition(address(erc20Adaptor), abi.encode(stETH));
-        positionIds[4] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2WETH)));
-        positionIds[5] = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aV2STETH)));
-        // positionIds[6] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3WETH)));
-        // positionIds[7] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3RETH)));
-        // positionIds[8] = registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(address(aV3CBETH)));
-        // positionIds[9] = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(cbETH, WETH));
-        // positionIds[10] = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(rETH, WETH));
-        // positionIds[11] = registry.trustPosition(address(vestingSimpleAdaptor), abi.encode(wethVestor));
+        positionIds[0] = 143; // registry.trustPosition(address(cellarAdaptor), abi.encode(address(rye)));
+        positionIds[1] = 144; // registry.trustPosition(address(erc20Adaptor), abi.encode(WBTC));
+        positionIds[2] = 145; // registry.trustPosition(address(erc20Adaptor), abi.encode(LINK));
+        positionIds[3] = 146; // registry.trustPosition(address(erc20Adaptor), abi.encode(ONEINCH));
+        positionIds[4] = 147; // registry.trustPosition(address(erc20Adaptor), abi.encode(UNI));
+        positionIds[5] = 148; // registry.trustPosition(address(erc20Adaptor), abi.encode(SNX));
+        positionIds[6] = 149; // registry.trustPosition(address(erc20Adaptor), abi.encode(ENS));
+        positionIds[7] = 150; // registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2WBTC));
+        positionIds[8] = 151; // registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2ONEINCH));
+        positionIds[9] = 152; // registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2LINK));
+        positionIds[10] = 153; // registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2UNI));
+        positionIds[11] = 154; // registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2SNX));
+        positionIds[12] = 155; // registry.trustPosition(address(aaveATokenAdaptor), abi.encode(aV2ENS));
+        positionIds[13] = 156; // registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(aV3WBTC));
+        positionIds[14] = 157; // registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(aV3SNX));
+        positionIds[15] = 158; // registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(aV3UNI));
+        positionIds[16] = 159; // registry.trustPosition(address(aaveV3ATokenAdaptor), abi.encode(aV3LINK));
 
-        // // debt positions
-        positionIds[12] = registry.trustPosition(address(aaveDebtTokenAdaptor), abi.encode(address(dV2WETH)));
-        // positionIds[13] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3WETH)));
-        // positionIds[14] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3RETH)));
-        // positionIds[15] = registry.trustPosition(address(aaveV3DebtTokenAdaptor), abi.encode(address(dV3CBETH)));
+        uint32 aV3dWETH = 114;
+        uint32 aV2dWETH = 119;
+        uint32 WETHposition = 101;
+        uint32 STETHPosition = 104;
+        uint32 aV2STETHPosition = 118;
 
-        // // Deploy new Cellar implementation.
-        // CellarInitializableV2_2 implementation = new CellarInitializableV2_2(registry);
+        {
+            // Deploy cellar using factory.
+            bytes memory initializeCallData = abi.encode(
+                devOwner,
+                registry,
+                LINK,
+                "Real Yield LINK",
+                "RYLINK",
+                positionIds[2],
+                abi.encode(0),
+                strategist
+            );
+            address imp = factory.getImplementation(2, 2);
+            require(imp != address(0), "Invalid implementation");
 
-        // bytes memory params = abi.encode(
-        //     address(0),
-        //     registry,
-        //     WETH,
-        //     "Production Implementation",
-        //     "Prod Imp",
-        //     positionIds[0],
-        //     abi.encode(0),
-        //     address(0)
-        // );
+            uint256 initialDeposit = 0;
+            address clone = factory.deploy(
+                2,
+                2,
+                initializeCallData,
+                LINK,
+                initialDeposit,
+                keccak256(abi.encode(block.timestamp))
+            );
+            cellar = CellarInitializableV2_2(clone);
 
-        // // Initialize Implementation.
-        // implementation.initialize(params);
+            // Setup all the adaptors the cellar will use.
+            cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
+            cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+            cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV2EnableAssetAsCollateralAdaptor));
 
-        // factory.addImplementation(address(implementation), 2, 2);
+            // Setup all the positions the cellar will use.
+            cellar.addPositionToCatalogue(positionIds[9]);
+            cellar.addPositionToCatalogue(positionIds[16]);
+            cellar.addPositionToCatalogue(aV3dWETH);
+            cellar.addPositionToCatalogue(aV2dWETH);
+            cellar.addPositionToCatalogue(WETHposition);
+            cellar.addPositionToCatalogue(STETHPosition);
+            cellar.addPositionToCatalogue(aV2STETHPosition);
 
-        // // Deploy cellar using factory.
-        // bytes memory initializeCallData = abi.encode(
-        //     devOwner,
-        //     registry,
-        //     WETH,
-        //     "Real Yield ETH",
-        //     "YieldETH",
-        //     positionIds[6],
-        //     abi.encode(1.05e18),
-        //     strategist
-        // );
-        // address imp = factory.getImplementation(2, 2);
-        // require(imp != address(0), "Invalid implementation");
+            // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        }
 
-        // uint256 initialDeposit = 0.001e18;
-        // WETH.approve(address(factory), initialDeposit);
-        // address clone = factory.deploy(
-        //     2,
-        //     2,
-        //     initializeCallData,
-        //     WETH,
-        //     initialDeposit,
-        //     keccak256(abi.encode(block.timestamp))
-        // );
-        // cellar = CellarInitializableV2_2(clone);
+        {
+            // Deploy cellar using factory.
+            bytes memory initializeCallData = abi.encode(
+                devOwner,
+                registry,
+                ONEINCH,
+                "Real Yield 1INCH",
+                "RY1INCH",
+                positionIds[3],
+                abi.encode(0),
+                strategist
+            );
+            address imp = factory.getImplementation(2, 2);
+            require(imp != address(0), "Invalid implementation");
 
-        // // Setup all the adaptors the cellar will use.
-        // cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
-        // cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
-        // cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
-        // cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
-        // cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
-        // cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
-        // cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
-        // cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
-        // cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
-        // cellar.addAdaptorToCatalogue(address(vestingSimpleAdaptor));
+            uint256 initialDeposit = 0;
+            address clone = factory.deploy(
+                2,
+                2,
+                initializeCallData,
+                ONEINCH,
+                initialDeposit,
+                keccak256(abi.encode(block.timestamp))
+            );
+            cellar = CellarInitializableV2_2(clone);
 
-        // // Setup all the positions the cellar will use.
-        // cellar.addPositionToCatalogue(positionIds[0]);
-        // cellar.addPositionToCatalogue(positionIds[1]);
-        // cellar.addPositionToCatalogue(positionIds[2]);
-        // cellar.addPositionToCatalogue(positionIds[3]);
-        // cellar.addPositionToCatalogue(positionIds[4]);
-        // cellar.addPositionToCatalogue(positionIds[5]);
-        // cellar.addPositionToCatalogue(positionIds[7]);
-        // cellar.addPositionToCatalogue(positionIds[8]);
-        // cellar.addPositionToCatalogue(positionIds[9]);
-        // cellar.addPositionToCatalogue(positionIds[10]);
-        // cellar.addPositionToCatalogue(positionIds[11]);
-        // cellar.addPositionToCatalogue(positionIds[12]);
-        // cellar.addPositionToCatalogue(positionIds[13]);
-        // cellar.addPositionToCatalogue(positionIds[14]);
-        // cellar.addPositionToCatalogue(positionIds[15]);
+            // Setup all the adaptors the cellar will use.
+            cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
+            cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV2EnableAssetAsCollateralAdaptor));
+            cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
 
-        // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+            // Setup all the positions the cellar will use.
+            cellar.addPositionToCatalogue(positionIds[8]);
+            cellar.addPositionToCatalogue(aV2dWETH);
+            cellar.addPositionToCatalogue(WETHposition);
+            cellar.addPositionToCatalogue(STETHPosition);
+            cellar.addPositionToCatalogue(aV2STETHPosition);
+
+            // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        }
+
+        {
+            // Deploy cellar using factory.
+            bytes memory initializeCallData = abi.encode(
+                devOwner,
+                registry,
+                UNI,
+                "Real Yield UNI",
+                "RYUNI",
+                positionIds[4],
+                abi.encode(0),
+                strategist
+            );
+            address imp = factory.getImplementation(2, 2);
+            require(imp != address(0), "Invalid implementation");
+
+            uint256 initialDeposit = 0;
+            address clone = factory.deploy(
+                2,
+                2,
+                initializeCallData,
+                UNI,
+                initialDeposit,
+                keccak256(abi.encode(block.timestamp))
+            );
+            cellar = CellarInitializableV2_2(clone);
+
+            // Setup all the adaptors the cellar will use.
+            cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
+            cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV2EnableAssetAsCollateralAdaptor));
+            cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
+
+            // Setup all the positions the cellar will use.
+            cellar.addPositionToCatalogue(positionIds[10]);
+            cellar.addPositionToCatalogue(positionIds[15]);
+            cellar.addPositionToCatalogue(aV2dWETH);
+            cellar.addPositionToCatalogue(aV3dWETH);
+            cellar.addPositionToCatalogue(WETHposition);
+            cellar.addPositionToCatalogue(STETHPosition);
+            cellar.addPositionToCatalogue(aV2STETHPosition);
+
+            // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        }
+
+        {
+            // Deploy cellar using factory.
+            bytes memory initializeCallData = abi.encode(
+                devOwner,
+                registry,
+                SNX,
+                "Real Yield SNX",
+                "RYSNX",
+                positionIds[5],
+                abi.encode(0),
+                strategist
+            );
+            address imp = factory.getImplementation(2, 2);
+            require(imp != address(0), "Invalid implementation");
+
+            uint256 initialDeposit = 0;
+            address clone = factory.deploy(
+                2,
+                2,
+                initializeCallData,
+                SNX,
+                initialDeposit,
+                keccak256(abi.encode(block.timestamp))
+            );
+            cellar = CellarInitializableV2_2(clone);
+
+            // Setup all the adaptors the cellar will use.
+            cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
+            cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV2EnableAssetAsCollateralAdaptor));
+            cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
+
+            // Setup all the positions the cellar will use.
+            cellar.addPositionToCatalogue(positionIds[11]);
+            cellar.addPositionToCatalogue(positionIds[14]);
+            cellar.addPositionToCatalogue(aV2dWETH);
+            cellar.addPositionToCatalogue(aV3dWETH);
+            cellar.addPositionToCatalogue(WETHposition);
+            cellar.addPositionToCatalogue(STETHPosition);
+            cellar.addPositionToCatalogue(aV2STETHPosition);
+
+            // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        }
+
+        {
+            // Deploy cellar using factory.
+            bytes memory initializeCallData = abi.encode(
+                devOwner,
+                registry,
+                ENS,
+                "Real Yield ENS",
+                "RYENS",
+                positionIds[6],
+                abi.encode(0),
+                strategist
+            );
+            address imp = factory.getImplementation(2, 2);
+            require(imp != address(0), "Invalid implementation");
+
+            uint256 initialDeposit = 0;
+            address clone = factory.deploy(
+                2,
+                2,
+                initializeCallData,
+                ENS,
+                initialDeposit,
+                keccak256(abi.encode(block.timestamp))
+            );
+            cellar = CellarInitializableV2_2(clone);
+
+            // Setup all the adaptors the cellar will use.
+            cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
+            cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV2EnableAssetAsCollateralAdaptor));
+            cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
+
+            // Setup all the positions the cellar will use.
+            cellar.addPositionToCatalogue(positionIds[12]);
+            cellar.addPositionToCatalogue(aV2dWETH);
+            cellar.addPositionToCatalogue(WETHposition);
+            cellar.addPositionToCatalogue(STETHPosition);
+            cellar.addPositionToCatalogue(aV2STETHPosition);
+
+            // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        }
+
+        {
+            // Deploy cellar using factory.
+            bytes memory initializeCallData = abi.encode(
+                devOwner,
+                registry,
+                WBTC,
+                "Real Yield BTC",
+                "RYBTC",
+                positionIds[1],
+                abi.encode(0),
+                strategist
+            );
+            address imp = factory.getImplementation(2, 2);
+            require(imp != address(0), "Invalid implementation");
+
+            uint256 initialDeposit = 0;
+            address clone = factory.deploy(
+                2,
+                2,
+                initializeCallData,
+                BTC,
+                initialDeposit,
+                keccak256(abi.encode(block.timestamp))
+            );
+            cellar = CellarInitializableV2_2(clone);
+
+            // Setup all the adaptors the cellar will use.
+            cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
+            cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
+            cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+            cellar.addAdaptorToCatalogue(address(aaveV2EnableAssetAsCollateralAdaptor));
+            cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
+
+            // Setup all the positions the cellar will use.
+            cellar.addPositionToCatalogue(positionIds[7]);
+            cellar.addPositionToCatalogue(positionIds[13]);
+            cellar.addPositionToCatalogue(aV2dWETH);
+            cellar.addPositionToCatalogue(aV3dWETH);
+            cellar.addPositionToCatalogue(WETHposition);
+            cellar.addPositionToCatalogue(STETHPosition);
+            cellar.addPositionToCatalogue(aV2STETHPosition);
+
+            // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        }
 
         vm.stopBroadcast();
     }
