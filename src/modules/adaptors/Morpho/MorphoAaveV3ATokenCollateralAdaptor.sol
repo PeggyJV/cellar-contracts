@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
-
-import { console } from "@forge-std/Test.sol"; //TODO remove
 
 /**
  * @title Morpho Aave V3 aToken Adaptor
@@ -13,7 +11,6 @@ import { console } from "@forge-std/Test.sol"; //TODO remove
  */
 contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
-    using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(address underlying)
@@ -41,19 +38,12 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
         return IMorpho(0x33333aea097c193e66081E930c33020272b33333);
     }
 
-    /**
-     * @notice The WETH contract on Ethereum Mainnet.
-     */
-    function WETH() internal pure returns (ERC20) {
-        return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    }
-
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
-     * @param assets the amount of assets to lend on Aave
-     * @param adaptorData adaptor data containining the abi encoded aToken
-     * @dev configurationData is NOT used because this action will only increase the health factor
+     * @notice Cellar must approve Morpho to spend its assets, then call supplyCollateral to lend its assets.
+     * @param assets the amount of assets to lend on Morpho
+     * @param adaptorData adaptor data containing the abi encoded ERC20 token
+     * @dev configurationData is NOT used
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Morpho.
@@ -67,12 +57,12 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
     }
 
     /**
-     @notice Cellars must withdraw from Aave, check if a minimum health factor is specified
-     *       then transfer assets to receiver.
+     @notice Cellars must withdraw from Morpho, check if collateral is backing any loans
+     *       and prevent withdraws if so.
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
-     * @param assets the amount of assets to withdraw from Aave
+     * @param assets the amount of assets to withdraw from Morpho
      * @param receiver the address to send withdrawn assets to
-     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @param adaptorData adaptor data containing the abi encoded aToken
      */
     function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         // Run external receiver check.
@@ -89,17 +79,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Uses configurartion data minimum health factor to calculate withdrawable assets from Aave.
-     * @dev Applies a `cushion` value to the health factor checks and calculation.
-     *      The goal of this is to minimize scenarios where users are withdrawing a very small amount of
-     *      assets from Aave. This function returns zero if
-     *      -minimum health factor is NOT set.
-     *      -the current health factor is less than the minimum health factor + 2x `cushion`
-     *      Otherwise this function calculates the withdrawable amount using
-     *      minimum health factor + `cushion` for its calcualtions.
-     * @dev It is possible for the math below to lose a small amount of precision since it is only
-     *      maintaining 18 decimals during the calculation, but this is desired since
-     *      doing so lowers the withdrawable from amount which in turn raises the health factor.
+     * @notice Checks that cellar has no active borrows, and if so reverts.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         address[] memory borrows = morpho().userBorrows(msg.sender);
@@ -111,7 +91,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the cellars balance of the positions aToken.
+     * @notice Returns the cellars balance of the position in terms of underlying asset.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
@@ -119,7 +99,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the positions aToken underlying asset.
+     * @notice Returns the positions underlying asset.
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
@@ -135,10 +115,10 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
     /**
-     * @notice Allows strategists to lend assets on Aave.
+     * @notice Allows strategists to lend assets on Morpho.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * @param tokenToDeposit the token to lend on Aave
-     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Aave.
+     * @param tokenToDeposit the token to lend on Morpho
+     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Morpho.
      */
     function depositToAaveV3Morpho(ERC20 tokenToDeposit, uint256 amountToDeposit) public {
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
@@ -150,9 +130,9 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Allows strategists to withdraw assets from Aave.
-     * @param tokenToWithdraw the token to withdraw from Aave.
-     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
+     * @notice Allows strategists to withdraw assets from Morpho.
+     * @param tokenToWithdraw the token to withdraw from Morpho.
+     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Morpho
      */
     function withdrawFromAaveV3Morpho(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
         morpho().withdrawCollateral(address(tokenToWithdraw), amountToWithdraw, address(this), address(this));

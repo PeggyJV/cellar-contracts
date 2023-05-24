@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
 
-import { console } from "@forge-std/Test.sol"; //TODO remove
-
 /**
- * @title Aave debtToken Adaptor
- * @notice Allows Cellars to interact with Aave debtToken positions.
+ * @title Morpho Aave V3 debtToken Adaptor
+ * @notice Allows Cellars to interact with Morpho Aave V3 debtToken positions.
  * @author crispymangoes
  */
 contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
@@ -29,7 +27,7 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
     error MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
 
     /**
-     * @notice Strategist attempted to open an untracked Aave loan.
+     * @notice Strategist attempted to open an untracked Morpho loan.
      * @param untrackedDebtPosition the address of the untracked loan
      */
     error MorphoAaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
@@ -85,7 +83,7 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the cellars balance of the positions debtToken.
+     * @notice Returns the cellars balance of the positions debt.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address underlying = abi.decode(adaptorData, (address));
@@ -93,7 +91,7 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the positions debtToken underlying asset.
+     * @notice Returns the positions underlying asset.
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
@@ -110,10 +108,10 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
     //============================================ Strategist Functions ===========================================
 
     /**
-     * @notice Allows strategists to borrow assets from Aave.
+     * @notice Allows strategists to borrow assets from Morpho.
      * @notice `debtTokenToBorrow` must be the debtToken, NOT the underlying ERC20.
-     * @param underlying the debtToken to borrow on Aave
-     * @param amountToBorrow the amount of `debtTokenToBorrow` to borrow on Aave.
+     * @param underlying the debtToken to borrow on Morpho
+     * @param amountToBorrow the amount of `debtTokenToBorrow` to borrow on Morpho.
      */
     function borrowFromAaveV3Morpho(address underlying, uint256 amountToBorrow, uint256 maxIterations) public {
         // Check that debt position is properly set up to be tracked in the Cellar.
@@ -127,12 +125,11 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
 
         // Check that health factor is above adaptor minimum.
         uint256 healthFactor = _getUserHealthFactor(address(this));
-        console.log("Health Factor", healthFactor);
         if (healthFactor < HFMIN()) revert MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
-     * @notice Allows strategists to repay loan debt on Aave.
+     * @notice Allows strategists to repay loan debt on Morpho.
      * @param tokenToRepay the underlying ERC20 token you want to repay, NOT the debtToken.
      * @param amountToRepay the amount of `tokenToRepay` to repay with.
      */

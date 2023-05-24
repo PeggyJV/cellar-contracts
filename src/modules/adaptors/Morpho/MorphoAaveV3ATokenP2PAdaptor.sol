@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
-
-import { console } from "@forge-std/Test.sol"; //TODO remove
 
 /**
  * @title Morpho Aave V3 aToken Adaptor
@@ -13,7 +11,6 @@ import { console } from "@forge-std/Test.sol"; //TODO remove
  */
 contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
-    using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(address underlying)
@@ -22,9 +19,8 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     //================= Configuration Data Specification =================
     // configurationData = abi.encode(uint256 maxIterations);
     // Where:
-    // `maxIterations` can be zero to supply assets that CAN be used as collateral
-    // or some number greater than 0 but less than MAX_ITERATIONS, allows assets
-    // to be P2P matched.
+    // `maxIterations` is some number greater than 0 but less than MAX_ITERATIONS,
+    // allows assets to be P2P matched.
     //====================================================================
 
     uint256 internal constant MAX_ITERATIONS = 10;
@@ -48,19 +44,12 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
         return IMorpho(0x33333aea097c193e66081E930c33020272b33333);
     }
 
-    /**
-     * @notice The WETH contract on Ethereum Mainnet.
-     */
-    function WETH() internal pure returns (ERC20) {
-        return ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    }
-
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice Cellar must approve Pool to spend its assets, then call deposit to lend its assets.
-     * @param assets the amount of assets to lend on Aave
+     * @notice Cellar must approve Morpho to spend its assets, then call supply to lend its assets.
+     * @param assets the amount of assets to lend on Morpho
      * @param adaptorData adaptor data containining the abi encoded aToken
-     * @dev configurationData is NOT used because this action will only increase the health factor
+     * @param configurationData abi encoded maxIterations
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory configurationData) public override {
         // Deposit assets to Morpho.
@@ -68,21 +57,19 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
         underlying.safeApprove(address(morpho()), assets);
 
         uint256 iterations = abi.decode(configurationData, (uint256));
-        if (iterations == 0 || iterations > MAX_ITERATIONS)
-            morpho().supply(address(underlying), assets, address(this), OPTIMAL_ITERATIONS);
-        else morpho().supply(address(underlying), assets, address(this), iterations);
+        if (iterations == 0 || iterations > MAX_ITERATIONS) iterations = OPTIMAL_ITERATIONS;
+        morpho().supply(address(underlying), assets, address(this), iterations);
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(underlying, address(morpho()));
     }
 
     /**
-     @notice Cellars must withdraw from Aave, check if a minimum health factor is specified
-     *       then transfer assets to receiver.
+     @notice Allows cellars to withdraw Morpho.
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
-     * @param assets the amount of assets to withdraw from Aave
+     * @param assets the amount of assets to withdraw from Morpho
      * @param receiver the address to send withdrawn assets to
-     * @param adaptorData adaptor data containining the abi encoded aToken
+     * @param adaptorData adaptor data containining the abi encoded ERC20 token
      * @param configurationData abi encoded maximum iterations.
      */
     function withdraw(
@@ -102,17 +89,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Uses configurartion data minimum health factor to calculate withdrawable assets from Aave.
-     * @dev Applies a `cushion` value to the health factor checks and calculation.
-     *      The goal of this is to minimize scenarios where users are withdrawing a very small amount of
-     *      assets from Aave. This function returns zero if
-     *      -minimum health factor is NOT set.
-     *      -the current health factor is less than the minimum health factor + 2x `cushion`
-     *      Otherwise this function calculates the withdrawable amount using
-     *      minimum health factor + `cushion` for its calcualtions.
-     * @dev It is possible for the math below to lose a small amount of precision since it is only
-     *      maintaining 18 decimals during the calculation, but this is desired since
-     *      doing so lowers the withdrawable from amount which in turn raises the health factor.
+     * @notice Returns the p2p balance of the cellar.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
@@ -120,7 +97,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the cellars balance of the positions aToken.
+     * @notice Returns the cellars p2p balance.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
@@ -128,7 +105,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the positions aToken underlying asset.
+     * @notice Returns the positions underlying asset.
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
@@ -144,13 +121,16 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
     /**
-     * @notice Allows strategists to lend assets on Aave.
+     * @notice Allows strategists to lend assets on Morpho.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * @param tokenToDeposit the token to lend on Aave
-     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Aave.
+     * @param tokenToDeposit the token to lend on Morpho
+     * @param amountToDeposit the amount of `tokenToDeposit` to lend on Morpho.
+     * @param maxIterations maximum number of iterations for Morphos p2p matching engine
      */
     function depositToAaveV3Morpho(ERC20 tokenToDeposit, uint256 amountToDeposit, uint256 maxIterations) public {
-        // TODO should we sanitize maxIterations? I feel like strategists could gas grief our relayer
+        // Sanitize maxIterations to prevent strategists from gas griefing Somm relayer.
+        if (maxIterations == 0 || maxIterations > MAX_ITERATIONS) maxIterations = OPTIMAL_ITERATIONS;
+
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
         tokenToDeposit.safeApprove(address(morpho()), amountToDeposit);
         morpho().supply(address(tokenToDeposit), amountToDeposit, address(this), maxIterations);
@@ -160,12 +140,14 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Allows strategists to withdraw assets from Aave.
-     * @param tokenToWithdraw the token to withdraw from Aave.
-     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
+     * @notice Allows strategists to withdraw assets from Morpho.
+     * @param tokenToWithdraw the token to withdraw from Morpho.
+     * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Morpho
+     * @param maxIterations maximum number of iterations for Morphos p2p matching engine
      */
     function withdrawFromAaveV3Morpho(ERC20 tokenToWithdraw, uint256 amountToWithdraw, uint256 maxIterations) public {
-        // TODO should we sanitize maxIterations? I feel like strategists could gas grief our relayer
+        /// Sanitize maxIterations to prevent strategists from gas griefing Somm relayer.
+        if (maxIterations == 0 || maxIterations > MAX_ITERATIONS) maxIterations = OPTIMAL_ITERATIONS;
         morpho().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this), address(this), maxIterations);
     }
 }

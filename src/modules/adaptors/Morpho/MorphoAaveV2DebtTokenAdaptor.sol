@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
-import { console } from "@forge-std/Test.sol"; //TODO remove
-
 /**
- * @title Aave debtToken Adaptor
- * @notice Allows Cellars to interact with Aave debtToken positions.
+ * @title Morpho Aave V2 debtToken Adaptor
+ * @notice Allows Cellars to interact with Morpho Aave V2 debtToken positions.
  * @author crispymangoes
  */
 contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
@@ -17,20 +15,15 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address debtToken)
+    // adaptorData = abi.encode(address aToken)
     // Where:
-    // `debtToken` is the debt token address this adaptor is working with
+    // `aToken` is the Aave V2 pool token address this adaptor is borrowing.
     //================= Configuration Data Specification =================
     // NOT USED
     //====================================================================
 
     /**
-     @notice Attempted borrow would lower Cellar health factor too low.
-     */
-    error MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
-
-    /**
-     * @notice Strategist attempted to open an untracked Aave loan.
+     * @notice Strategist attempted to open an untracked Morpho loan.
      * @param untrackedDebtPosition the address of the untracked loan
      */
     error MorphoAaveV2DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
@@ -47,18 +40,10 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The Morpho Aave V3 contract on Ethereum Mainnet.
+     * @notice The Morpho Aave V2 contract on Ethereum Mainnet.
      */
     function morpho() internal pure returns (IMorpho) {
         return IMorpho(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced after every borrow.
-     * @notice Overwrites strategist set minimums if they are lower.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -89,16 +74,16 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      * @notice Returns the cellars balance of the positions debtToken.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        address debtToken = abi.decode(adaptorData, (address));
-        return _balanceOfInUnderlying(debtToken, msg.sender);
+        address aToken = abi.decode(adaptorData, (address));
+        return _balanceOfInUnderlying(aToken, msg.sender);
     }
 
     /**
-     * @notice Returns the positions debtToken underlying asset.
+     * @notice Returns the positions aToken underlying asset.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        IAaveToken debtToken = abi.decode(adaptorData, (IAaveToken));
-        return ERC20(debtToken.UNDERLYING_ASSET_ADDRESS());
+        IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
+        return ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
     }
 
     /**
@@ -112,40 +97,45 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
 
     /**
      * @notice Allows strategists to borrow assets from Aave.
-     * @notice `debtTokenToBorrow` must be the debtToken, NOT the underlying ERC20.
-     * @param debtToken the debtToken to borrow on Aave
-     * @param amountToBorrow the amount of `debtTokenToBorrow` to borrow on Aave.
+     * @notice `aToken` must be the aToken not the debtToken.
+     * @param aToken the aToken to borrow on Aave
+     * @param amountToBorrow the amount of `aTokenToBorrow` to borrow on Morpho.
      */
-    function borrowFromAaveV2Morpho(address debtToken, uint256 amountToBorrow) public {
+    function borrowFromAaveV2Morpho(address aToken, uint256 amountToBorrow) public {
         // Check that debt position is properly set up to be tracked in the Cellar.
-        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(debtToken)));
+        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(aToken)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert MorphoAaveV2DebtTokenAdaptor__DebtPositionsMustBeTracked(debtToken);
+            revert MorphoAaveV2DebtTokenAdaptor__DebtPositionsMustBeTracked(aToken);
 
         // Borrow from morpho.
-        morpho().borrow(debtToken, amountToBorrow);
+        morpho().borrow(aToken, amountToBorrow);
     }
 
     /**
      * @notice Allows strategists to repay loan debt on Aave.
-     * @param debtToken the debtToken you want to repay.
+     * @param aToken the aToken you want to repay.
      * @param amountToRepay the amount of `tokenToRepay` to repay with.
      */
-    function repayAaveV2MorphoDebt(IAaveToken debtToken, uint256 amountToRepay) public {
-        ERC20 underlying = ERC20(debtToken.UNDERLYING_ASSET_ADDRESS());
+    function repayAaveV2MorphoDebt(IAaveToken aToken, uint256 amountToRepay) public {
+        ERC20 underlying = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
         if (amountToRepay == type(uint256).max) {
             uint256 availableUnderlying = underlying.balanceOf(address(this));
-            uint256 debt = _balanceOfInUnderlying(address(debtToken), address(this));
+            uint256 debt = _balanceOfInUnderlying(address(aToken), address(this));
             amountToRepay = availableUnderlying > debt ? debt : availableUnderlying;
         }
         underlying.safeApprove(address(morpho()), amountToRepay);
-        morpho().repay(address(debtToken), amountToRepay);
+        morpho().repay(address(aToken), amountToRepay);
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(underlying, address(morpho()));
     }
 
+    /**
+     * @notice Returns the balance in underlying of debt owed.
+     * @param poolToken the Aave V2 a Token user has debt in
+     * @param user the address of the user to query their debt balance of.
+     */
     function _balanceOfInUnderlying(address poolToken, address user) internal view returns (uint256) {
         (uint256 inP2P, uint256 onPool) = morpho().borrowBalanceInOf(poolToken, user);
 
