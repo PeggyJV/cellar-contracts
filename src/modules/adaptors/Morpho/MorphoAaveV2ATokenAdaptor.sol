@@ -22,6 +22,10 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor {
     // `aToken` is the AaveV2 A Token position this adaptor is working with
     //================= Configuration Data Specification =================
     // isLiquid bool indicating whether user withdraws are allowed from this position.
+    // IMPORTANT: It is possible for a strategist to misconfigure their positions,
+    // and allow user withdraws from aToken positions that are backing loans.
+    // This will be mitigated by only allowing trusted strategists to use this adaptor,
+    // educating them teh dangers of misconfiguring their position.
     //====================================================================
 
     bytes32 public constant BORROWING_MASK = hex"5555555555555555555555555555555555555555555555555555555555555555";
@@ -78,12 +82,18 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor {
      * @param receiver the address to send withdrawn assets to
      * @param adaptorData adaptor data containining the abi encoded aToken
      */
-    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData,
+        bytes memory configData
+    ) public override {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        // Make sure there are no active borrows.
-        if (_isBorrowingAny(address(this))) revert BaseAdaptor__UserWithdrawsNotAllowed();
+        // Make sure position is setup to be liquid.
+        bool isLiquid = abi.decode(configData, (bool));
+        if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
         IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
 
@@ -104,8 +114,12 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor {
      *      maintaining 18 decimals during the calculation, but this is desired since
      *      doing so lowers the withdrawable from amount which in turn raises the health factor.
      */
-    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        if (_isBorrowingAny(msg.sender)) return 0;
+    function withdrawableFrom(
+        bytes memory adaptorData,
+        bytes memory configData
+    ) public view override returns (uint256) {
+        bool isLiquid = abi.decode(configData, (bool));
+        if (!isLiquid) return 0;
         else {
             address aToken = abi.decode(adaptorData, (address));
             return _balanceOfInUnderlying(aToken, msg.sender);

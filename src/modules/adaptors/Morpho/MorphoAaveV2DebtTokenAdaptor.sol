@@ -33,7 +33,7 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      * @notice Strategist attempted to open an untracked Aave loan.
      * @param untrackedDebtPosition the address of the untracked loan
      */
-    error MorphoAaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
+    error MorphoAaveV2DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
 
     //============================================ Global Functions ===========================================
     /**
@@ -121,16 +121,10 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(debtToken)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert MorphoAaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(debtToken);
+            revert MorphoAaveV2DebtTokenAdaptor__DebtPositionsMustBeTracked(debtToken);
 
         // Borrow from morpho.
         morpho().borrow(debtToken, amountToBorrow);
-
-        // TODO so morpho does not provide a liquidity data method so how do we do a HF check?
-        // Check that health factor is above adaptor minimum.
-        // uint256 healthFactor = _getUserHealthFactor(address(this));
-        // console.log("Health Factor", healthFactor);
-        // if (healthFactor < HFMIN()) revert MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -150,19 +144,6 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(underlying, address(morpho()));
-    }
-
-    /**
-     * @notice Code pulled directly from Morpho Position Manager.
-     * https://etherscan.io/address/0x4592e45e0c5DbEe94a135720cCfF2e4353dAc6De#code
-     */
-    function _getUserHealthFactor(address user) internal view returns (uint256) {
-        IMorpho.LiquidityData memory liquidityData = morpho().liquidityData(user);
-
-        return
-            liquidityData.debt > 0
-                ? uint256(1e18).mulDivDown(liquidityData.maxDebt, liquidityData.debt)
-                : type(uint256).max;
     }
 
     function _balanceOfInUnderlying(address poolToken, address user) internal view returns (uint256) {
