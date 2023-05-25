@@ -550,12 +550,65 @@ contract CellarAaveV3MorphoTest is Test {
 
     // ========================================== INTEGRATION TEST ==========================================
 
-    function testIntegration() external {
-        // TODO this test can just test RYEs use case.
-        // - Add WSTETH as collateral, and borrow WETH, repeat.
-        // Could also check the assumptions that if a borrow is initially done from the pool,
-        // a new p2p deposit will fill that borrow.
-        // Use the scaled balances to do this.
+    function testIntegrationRealYieldEth(uint256 assets) external {
+        // Setup cellar so that aSTETH is illiquid.
+        // Then have strategist loop into STETH.
+        // -Deposit STETH as collateral, and borrow WETH, repeat.
+        cellar.addPosition(0, wethPosition, abi.encode(0), false);
+        cellar.addPosition(0, wstethPosition, abi.encode(0), false);
+        cellar.addPosition(0, morphoAWstEthPosition, abi.encode(false), false);
+        cellar.addPosition(0, morphoDebtWethPosition, abi.encode(0), true);
+
+        // Change holding position to vanilla WETH.
+        cellar.setHoldingPosition(wethPosition);
+
+        // Remove unused aWETH Morpho position from the cellar.
+        cellar.removePosition(3, false);
+
+        // assets = bound(assets, 1e18, 400e18);
+        assets = 400e18;
+        address user = vm.addr(7654);
+        deal(address(WETH), user, assets);
+        vm.startPrank(user);
+        WETH.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        vm.stopPrank();
+
+        // Rebalance Cellar to leverage into STETH.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](5);
+        // Swap WETH for WSTETH.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(WETH, WSTETH, 500, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(WSTETH, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(collateralATokenAdaptor), callData: adaptorCalls });
+        }
+        // Borrow WETH from Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            uint256 wethToBorrow = assets / 3;
+            adaptorCalls[0] = _createBytesDataToBorrow(WETH, wethToBorrow, 4);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(WETH, WSTETH, 500, type(uint256).max);
+            data[3] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(WSTETH, type(uint256).max);
+            data[4] = Cellar.AdaptorCall({ adaptor: address(collateralATokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
