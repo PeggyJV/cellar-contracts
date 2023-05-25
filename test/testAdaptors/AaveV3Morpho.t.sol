@@ -550,7 +550,13 @@ contract CellarAaveV3MorphoTest is Test {
 
     // ========================================== INTEGRATION TEST ==========================================
 
-    function testIntegration() external {}
+    function testIntegration() external {
+        // TODO this test can just test RYEs use case.
+        // - Add WSTETH as collateral, and borrow WETH, repeat.
+        // Could also check the assumptions that if a borrow is initially done from the pool,
+        // a new p2p deposit will fill that borrow.
+        // Use the scaled balances to do this.
+    }
 
     // ========================================= HELPER FUNCTIONS =========================================
     uint256 internal constant WAD = 1e18;

@@ -19,6 +19,14 @@ interface IMorpho {
 
     function borrowBalance(address underlying, address user) external view returns (uint256);
 
+    function scaledP2PBorrowBalance(address underlying, address user) external view returns (uint256);
+
+    function scaledP2PSupplyBalance(address underlying, address user) external view returns (uint256);
+
+    function scaledPoolBorrowBalance(address underlying, address user) external view returns (uint256);
+
+    function scaledPoolSupplyBalance(address underlying, address user) external view returns (uint256);
+
     function borrow(
         address underlying,
         uint256 amount,

@@ -17,6 +17,8 @@ import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUni
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
 import { IPoolV3 } from "src/interfaces/external/IPoolV3.sol";
+import { OneInchAdaptor } from "src/modules/adaptors/OneInch/OneInchAdaptor.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -25,11 +27,13 @@ contract CellarAaveV2MorphoTest is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
+    using Address for address;
 
     MorphoAaveV2ATokenAdaptor private aTokenAdaptor;
     MorphoAaveV2DebtTokenAdaptor private debtTokenAdaptor;
     ERC20Adaptor private erc20Adaptor;
     SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
+    OneInchAdaptor private oneInchAdaptor;
     CellarInitializableV2_2 private cellar;
     PriceRouter private priceRouter;
     Registry private registry;
@@ -41,12 +45,15 @@ contract CellarAaveV2MorphoTest is Test {
 
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 public USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    ERC20 public DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     ERC20 private WSTETH = ERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
     ERC20 public STETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
 
     // Aave V2 positions.
     address public aSTETH = 0x1982b2F5814301d4e9a8b0201555376e62F82428;
     address public aWETH = 0x030bA81f1c18d280636F32af80b9AAd02Cf0854e;
+    address public aUSDC = 0xBcca60bB61934080951369a648Fb03DF4F96263C;
+    address public aDAI = 0x028171bCA77440897B824Ca71D1c56caC55b68A3;
     address public dWETH = 0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf;
 
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -64,10 +71,15 @@ contract CellarAaveV2MorphoTest is Test {
     address private aWstEthWhale = 0xAF06acFD1BD492B913d5807d562e4FC3A6343C4E;
 
     uint32 private wethPosition;
+    uint32 private usdcPosition;
     uint32 private stethPosition;
     uint32 private morphoAWethPosition;
+    uint32 private morphoAUsdcPosition;
     uint32 private morphoAStEthPosition;
     uint32 private morphoDebtWethPosition;
+
+    bytes swapWethToStEth =
+        hex"d805a657000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000ae7ab96520de3a18e5e111b5eaab095312d7fe8400000000000000000000000000000000000000000000002c73c937742c5000000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000026812aa3caf0000000000000000000000001136b25047e142fa3018184793aec68fbb173ce4000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000ae7ab96520de3a18e5e111b5eaab095312d7fe840000000000000000000000001136b25047e142fa3018184793aec68fbb173ce400000000000000000000000003A6a84cD762D9707A21605b548aaaB891562aAb00000000000000000000000000000000000000000000002c73c937742c50000000000000000000000000000000000000000000000000002c01fcf6e6361bffff000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000001400000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000dc0000000000000000000000000000000000000000be00009000007600003c4101c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200042e1a7d4d00000000000000000000000000000000000000000000000000000000000000004060ae7ab96520de3a18e5e111b5eaab095312d7fe84a1903eab00000000000000000000000042f527f50f16a103b6ccab48bccca214500c10210020d6bdbf78ae7ab96520de3a18e5e111b5eaab095312d7fe8480a06c4eca27ae7ab96520de3a18e5e111b5eaab095312d7fe841111111254eeb25477b68fb85ed929f73a96058200000000cfee7c08000000000000000000000000000000000000000000000000";
 
     modifier checkBlockNumber() {
         if (block.number < 16869780) {
@@ -82,6 +94,7 @@ contract CellarAaveV2MorphoTest is Test {
         debtTokenAdaptor = new MorphoAaveV2DebtTokenAdaptor();
         erc20Adaptor = new ERC20Adaptor();
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        oneInchAdaptor = new OneInchAdaptor();
         priceRouter = new PriceRouter();
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
@@ -111,10 +124,13 @@ contract CellarAaveV2MorphoTest is Test {
         registry.trustAdaptor(address(aTokenAdaptor));
         registry.trustAdaptor(address(debtTokenAdaptor));
         registry.trustAdaptor(address(swapWithUniswapAdaptor));
+        registry.trustAdaptor(address(oneInchAdaptor));
 
         wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
         stethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(STETH));
         morphoAWethPosition = registry.trustPosition(address(aTokenAdaptor), abi.encode(aWETH));
+        morphoAUsdcPosition = registry.trustPosition(address(aTokenAdaptor), abi.encode(aUSDC));
         morphoAStEthPosition = registry.trustPosition(address(aTokenAdaptor), abi.encode(aSTETH));
         morphoDebtWethPosition = registry.trustPosition(address(debtTokenAdaptor), abi.encode(aWETH));
 
@@ -135,6 +151,7 @@ contract CellarAaveV2MorphoTest is Test {
         cellar.addAdaptorToCatalogue(address(aTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(debtTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+        cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
 
         cellar.addPositionToCatalogue(wethPosition);
         cellar.addPositionToCatalogue(stethPosition);
@@ -152,10 +169,6 @@ contract CellarAaveV2MorphoTest is Test {
 
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
-
-        // Force whale out of their WSTETH position.
-        vm.prank(aWstEthWhale);
-        pool.withdraw(address(WSTETH), 1_000e18, aWstEthWhale);
     }
 
     function testDeposit(uint256 assets) external checkBlockNumber {
@@ -343,13 +356,13 @@ contract CellarAaveV2MorphoTest is Test {
 
         // Rebalance Cellar to take on debt.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
-        // Swap WETH for WSTETH.
+        // Swap WETH for STETH.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
             adaptorCalls[0] = _createBytesDataForSwap(WETH, STETH, assets);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
-        // Supply WSTETH as collateral on Morpho.
+        // Supply STETH as collateral on Morpho.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
             adaptorCalls[0] = _createBytesDataToLend(aSTETH, type(uint256).max);
@@ -432,7 +445,155 @@ contract CellarAaveV2MorphoTest is Test {
 
     // ========================================== INTEGRATION TEST ==========================================
 
-    function testIntegration() external {}
+    function testIntegrationRealYieldUsd(uint256 assets) external {
+        // Create a new cellar that runs the following strategy.
+        // Allows for user direct deposit to morpho.
+        // Allows for user direct withdraw form morpho.
+        // Allows for strategist deposit to morpho.
+        // Allows for strategist withdraw form morpho.
+        cellar = new CellarInitializableV2_2(registry);
+        cellar.initialize(
+            abi.encode(
+                address(this),
+                registry,
+                USDC,
+                "MORPHO P2P Cellar",
+                "MORPHO-CLR",
+                morphoAUsdcPosition,
+                abi.encode(true),
+                strategist
+            )
+        );
+
+        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+
+        cellar.addAdaptorToCatalogue(address(aTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+        cellar.addPositionToCatalogue(usdcPosition);
+        cellar.addPosition(0, usdcPosition, abi.encode(0), false);
+
+        // assets = 100_000e6;
+        assets = bound(assets, 1e6, 1_000_000e6);
+
+        address user = vm.addr(7654);
+        deal(address(USDC), user, assets);
+        vm.startPrank(user);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        vm.stopPrank();
+
+        // Check that users funds where deposited into morpho.
+        uint256 assetsInMorpho = getMorphoBalance(aUSDC, address(cellar));
+        assertApproxEqAbs(assetsInMorpho, assets, 1, "Assets should have been deposited into Morpho.");
+
+        // Now make sure users can withdraw from morpho.
+        deal(address(USDC), user, 0);
+        vm.prank(user);
+        cellar.withdraw(assetsInMorpho, user, user);
+
+        assertEq(USDC.balanceOf(user), assetsInMorpho, "User should have received assets in morpho.");
+
+        assetsInMorpho = getMorphoBalance(aUSDC, address(cellar));
+        assertApproxEqAbs(assetsInMorpho, 0, 1, "Assets should have been withdrawn from morpho.");
+
+        // Strategist changes holding position to be vanilla USDC, so they can try depositing into morpho.
+        cellar.setHoldingPosition(usdcPosition);
+
+        // User deposits again.
+        deal(address(USDC), user, assets);
+        vm.startPrank(user);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        vm.stopPrank();
+
+        assertApproxEqAbs(USDC.balanceOf(address(cellar)), assets, 1, "Cellar should be holding assets in USDC.");
+
+        // Strategist rebalances assets into morpho.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // Supply USDC as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(aUSDC, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(aTokenAdaptor), callData: adaptorCalls });
+        }
+
+        cellar.callOnAdaptor(data);
+
+        // Strategist rebalances assets out of morpho.
+        data = new Cellar.AdaptorCall[](1);
+        // Supply USDC as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdraw(aUSDC, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(aTokenAdaptor), callData: adaptorCalls });
+        }
+
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqAbs(USDC.balanceOf(address(cellar)), assets, 1, "Cellar should be holding USDC.");
+    }
+
+    function testIntegrationRealYieldEth(uint256 assets) external {
+        // Setup cellar so that aSTETH is illiquid.
+        // Then have strategist loop into STETH.
+        // -Deposit STETH as collateral, and borrow WETH, repeat.
+        cellar.addPosition(0, wethPosition, abi.encode(0), false);
+        cellar.addPosition(0, stethPosition, abi.encode(0), false);
+        cellar.addPosition(0, morphoAStEthPosition, abi.encode(false), false);
+        cellar.addPosition(0, morphoDebtWethPosition, abi.encode(0), true);
+
+        // Change holding position to vanilla WETH.
+        cellar.setHoldingPosition(wethPosition);
+
+        // Remove unused aWETH Morpho position from the cellar.
+        cellar.removePosition(3, false);
+
+        assets = 10e18;
+        // assets = bound(assets, 1e18, 100e18);
+
+        address user = vm.addr(7654);
+        deal(address(WETH), user, assets);
+        vm.startPrank(user);
+        WETH.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        vm.stopPrank();
+
+        // Rebalance Cellar to leverage into STETH.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](5);
+        // Swap WETH for WSTETH.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(WETH, STETH, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(aSTETH, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(aTokenAdaptor), callData: adaptorCalls });
+        }
+        // Borrow WETH from Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            uint256 wethToBorrow = assets / 3;
+            adaptorCalls[0] = _createBytesDataToBorrow(aWETH, wethToBorrow);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataForSwap(WETH, STETH, type(uint256).max);
+            data[3] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+        }
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(aSTETH, type(uint256).max);
+            data[4] = Cellar.AdaptorCall({ adaptor: address(aTokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
+    }
 
     // ========================================= HELPER FUNCTIONS =========================================
 
@@ -447,12 +608,21 @@ contract CellarAaveV2MorphoTest is Test {
         target.setHoldingPosition(wethPosition);
     }
 
-    function getMorphoDebt(address aToken, address user) public view returns (uint256) {
-        (uint256 inP2P, uint256 onPool) = morpho.borrowBalanceInOf(aWETH, address(cellar));
+    function getMorphoBalance(address poolToken, address user) internal view returns (uint256) {
+        (uint256 inP2P, uint256 onPool) = morpho.supplyBalanceInOf(poolToken, user);
 
         uint256 balanceInUnderlying;
-        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho.p2pBorrowIndex(aWETH), 1e27);
-        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho.poolIndexes(aWETH).poolBorrowIndex, 1e27);
+        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho.p2pSupplyIndex(poolToken), 1e27);
+        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho.poolIndexes(poolToken).poolSupplyIndex, 1e27);
+        return balanceInUnderlying;
+    }
+
+    function getMorphoDebt(address aToken, address user) public view returns (uint256) {
+        (uint256 inP2P, uint256 onPool) = morpho.borrowBalanceInOf(aToken, user);
+
+        uint256 balanceInUnderlying;
+        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho.p2pBorrowIndex(aToken), 1e27);
+        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho.poolIndexes(aToken).poolBorrowIndex, 1e27);
         return balanceInUnderlying;
     }
 
