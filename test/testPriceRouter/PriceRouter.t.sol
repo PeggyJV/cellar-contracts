@@ -9,8 +9,10 @@ import { IPool } from "src/interfaces/external/IPool.sol";
 import { MockGasFeed } from "src/mocks/MockGasFeed.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
+import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
+import { Registry } from "src/Registry.sol";
 
-import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
+import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -22,7 +24,8 @@ contract PriceRouterTest is Test {
     event AddAsset(address indexed asset);
     event RemoveAsset(address indexed asset);
 
-    PriceRouter private immutable priceRouter = new PriceRouter();
+    PriceRouter private priceRouter;
+    address public gravityBridge = vm.addr(1);
 
     address private immutable sender = vm.addr(0xABCD);
     address private immutable receiver = vm.addr(0xBEEF);
@@ -42,6 +45,7 @@ contract PriceRouterTest is Test {
     ERC20 private constant FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
     ERC20 private constant STETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
     ERC20 private constant WSTETH = ERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+    ERC20 private constant RPL = ERC20(0xD33526068D116cE69F19A9ee46F0bd304F21A51f);
 
     IUniswapV2Router private constant uniV2Router = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
@@ -75,9 +79,19 @@ contract PriceRouterTest is Test {
     address private STETH_USD_FEED = 0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8;
     address private ETH_FAST_GAS_FEED = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
 
+    // UniV3 WETH/RPL Pool
+    address private WETH_RPL_03_POOL = 0xe42318eA3b998e8355a3Da364EB9D48eC725Eb45;
+    address private WETH_USDC_005_POOL = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640;
+
+    Registry private registry;
+
     function setUp() external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
+
+        registry = new Registry(gravityBridge, address(this), address(this));
+
+        priceRouter = new PriceRouter(registry);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -121,7 +135,16 @@ contract PriceRouterTest is Test {
         uint256 price = uint256(IChainlinkAggregator(BOND_ETH_FEED).latestAnswer());
         price = priceRouter.getValue(WETH, price, USDC);
         price = price.changeDecimals(6, 8);
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), price);
+
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(BOND, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
+        priceRouter.completeEditAsset(BOND, settings, abi.encode(stor), price);
 
         (uint144 maxPrice, uint80 minPrice, uint24 heartbeat, bool isETH) = priceRouter.getChainlinkDerivativeStorage(
             BOND
@@ -146,10 +169,18 @@ contract PriceRouterTest is Test {
             false
         );
 
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(USDC, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
         vm.expectRevert(
             abi.encodeWithSelector(PriceRouter.PriceRouter__MinPriceGreaterThanMaxPrice.selector, minPrice, maxPrice)
         );
-        priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
+        priceRouter.completeEditAsset(USDC, settings, abi.encode(stor), 1e8);
     }
 
     function testAddInvalidAsset() external {
@@ -158,19 +189,20 @@ contract PriceRouterTest is Test {
         priceRouter.addAsset(ERC20(address(0)), settings, abi.encode(0), 0);
     }
 
-    function testAddAssetEmit() external {
-        PriceRouter.ChainlinkDerivativeStorage memory stor;
-        PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
-        vm.expectEmit(true, false, false, false);
-        emit AddAsset(address(USDT));
-        priceRouter.addAsset(USDT, settings, abi.encode(stor), 1e8);
-    }
-
     function testAddAssetWithInvalidMinPrice() external {
         PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage(0, 1, 0, false);
+
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(USDC, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
         vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__InvalidMinPrice.selector, 1, 1100000)));
-        priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
+        priceRouter.completeEditAsset(USDC, settings, abi.encode(stor), 1e8);
     }
 
     function testAddAssetWithInvalidMaxPrice() external {
@@ -181,10 +213,19 @@ contract PriceRouterTest is Test {
             0,
             false
         );
+
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(USDC, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
         vm.expectRevert(
             bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__InvalidMaxPrice.selector, 999e18, 90000000000))
         );
-        priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
+        priceRouter.completeEditAsset(USDC, settings, abi.encode(stor), 1e8);
     }
 
     /**
@@ -203,6 +244,15 @@ contract PriceRouterTest is Test {
             0,
             false
         );
+
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(USDC, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
@@ -213,7 +263,7 @@ contract PriceRouterTest is Test {
                 )
             )
         );
-        priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
+        priceRouter.completeEditAsset(USDC, settings, abi.encode(stor), 1e8);
     }
 
     /**
@@ -232,6 +282,15 @@ contract PriceRouterTest is Test {
             0,
             false
         );
+
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(USDC, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
@@ -242,7 +301,7 @@ contract PriceRouterTest is Test {
                 )
             )
         );
-        priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
+        priceRouter.completeEditAsset(USDC, settings, abi.encode(stor), 1e8);
     }
 
     function testAssetStalePrice() external {
@@ -277,12 +336,29 @@ contract PriceRouterTest is Test {
             true
         );
 
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), 4.18e8);
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(BOND, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
+        priceRouter.completeEditAsset(BOND, settings, abi.encode(stor), 4.18e8);
 
         // Re-add WETH, but shorten the heartbeat.
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
         stor = PriceRouter.ChainlinkDerivativeStorage(0, 0.0, 3600, false);
-        priceRouter.addAsset(WETH, settings, abi.encode(stor), 1_775e8);
+
+        // Simulate calling startEditAsset.
+        editHash = keccak256(abi.encode(WETH, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
+        priceRouter.completeEditAsset(WETH, settings, abi.encode(stor), 1_775e8);
 
         uint256 timestamp = uint256(IChainlinkAggregator(WETH_USD_FEED).latestTimestamp());
         timestamp = block.timestamp - timestamp;
@@ -303,13 +379,207 @@ contract PriceRouterTest is Test {
         priceRouter.getValue(BOND, 1e18, USDC);
     }
 
+    function testAddingATwapAsset() external {
+        UniswapV3Pool pool = UniswapV3Pool(WETH_RPL_03_POOL);
+
+        pool.increaseObservationCardinalityNext(900);
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        stor.inETH = true;
+
+        // Try adding a twap asset with the wrong pool.
+        settings = PriceRouter.AssetSettings(TWAP_DERIVATIVE, WETH_USDC_005_POOL);
+        PriceRouter.TwapDerivativeStorage memory twapStor = PriceRouter.TwapDerivativeStorage({
+            secondsAgo: 900,
+            baseDecimals: 18,
+            quoteDecimals: 18,
+            quoteToken: WETH
+        });
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TwapAssetNotInPool.selector)));
+        priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
+
+        // Now fix the pool but use a very small TWAP period.
+        settings = PriceRouter.AssetSettings(TWAP_DERIVATIVE, WETH_RPL_03_POOL);
+        twapStor.secondsAgo = 300;
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__SecondsAgoDoesNotMeetMinimum.selector)));
+        priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
+
+        // Fix seconds ago to add the asset.
+        twapStor.secondsAgo = 900;
+        priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
+    }
+
+    // ======================================= TRANSITIONING OWNER TESTS =======================================
+
+    function testTransitioningOwner() external {
+        address newOwner = vm.addr(777);
+        // Current owner has been misbehaving, so governance wants to kick them out.
+
+        // Governance accidentally passes in zero address for new owner.
+        vm.startPrank(gravityBridge);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__NewOwnerCanNotBeZero.selector)));
+        priceRouter.transitionOwner(address(0));
+        vm.stopPrank();
+
+        // Governance actually uses the right address.
+        vm.prank(gravityBridge);
+        priceRouter.transitionOwner(newOwner);
+
+        // Old owner tries to call onlyOwner functions.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionPending.selector)));
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), 1e8);
+
+        // New owner tries claiming ownership before transition period is over.
+        vm.startPrank(newOwner);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionPending.selector)));
+        priceRouter.completeTransition();
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + priceRouter.TRANSITION_PERIOD());
+
+        vm.prank(newOwner);
+        priceRouter.completeTransition();
+
+        assertEq(priceRouter.owner(), newOwner, "PriceRouter should be owned by new owner.");
+
+        // New owner renounces ownership.
+        vm.prank(newOwner);
+        priceRouter.renounceOwnership();
+
+        address doug = vm.addr(13);
+        // Governance decides to recover ownership and transfer it to doug.
+        vm.prank(gravityBridge);
+        priceRouter.transitionOwner(doug);
+
+        // Half way through transition governance learns doug is evil, so they cancel the transition.
+        vm.warp(block.timestamp + priceRouter.TRANSITION_PERIOD() / 2);
+        vm.prank(gravityBridge);
+        priceRouter.cancelTransition();
+
+        // doug still tries to claim ownership.
+        vm.warp(block.timestamp + priceRouter.TRANSITION_PERIOD() / 2);
+        vm.startPrank(doug);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionNotPending.selector)));
+        priceRouter.completeTransition();
+        vm.stopPrank();
+
+        // Governance accidentally calls cancel transition again, but call reverts.
+        vm.startPrank(gravityBridge);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionNotPending.selector)));
+        priceRouter.cancelTransition();
+        vm.stopPrank();
+
+        // Governance finds the best owner and starts the process.
+        address bestOwner = vm.addr(7777);
+        vm.prank(gravityBridge);
+        priceRouter.transitionOwner(bestOwner);
+
+        // New owner waits an extra week.
+        vm.warp(block.timestamp + 2 * priceRouter.TRANSITION_PERIOD());
+
+        vm.prank(bestOwner);
+        priceRouter.completeTransition();
+
+        assertEq(priceRouter.owner(), bestOwner, "PriceRouter should be owned by best owner.");
+
+        // Governance starts another ownership transfer back to doug.
+        vm.prank(gravityBridge);
+        priceRouter.transitionOwner(doug);
+
+        vm.warp(block.timestamp + 2 * priceRouter.TRANSITION_PERIOD());
+
+        // Doug still has not completed the transfer, so Governance decides to cancel it.
+        vm.prank(gravityBridge);
+        priceRouter.cancelTransition();
+
+        // Doug tries completing it.
+        vm.startPrank(doug);
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__TransitionNotPending.selector)));
+        priceRouter.completeTransition();
+        vm.stopPrank();
+    }
+
+    // ======================================= EDITING ASSET TESTS =======================================
+
+    // Create a dummy asset that uses this test contract as a mock extension.
+    function setupSource(ERC20, bytes memory) external {}
+
+    function getPriceInUSD(ERC20) external view virtual returns (uint256) {
+        return 1e8;
+    }
+
+    function testEditAsset() external {
+        PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(this));
+
+        // Trying to add an existing asset should revert.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__AssetAlreadyAdded.selector, address(USDC)))
+        );
+        priceRouter.addAsset(USDC, settings, abi.encode(0), 1e8);
+
+        // Trying to edit some new asset should revert.
+        vm.expectRevert(bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__AssetNotAdded.selector, address(777))));
+        priceRouter.startEditAsset(ERC20(address(777)), settings, abi.encode(0));
+
+        // USDC is already added, edit it to use this contract as an extension.
+        bytes32 editHash = keccak256(abi.encode(USDC, settings, abi.encode(0)));
+        priceRouter.startEditAsset(USDC, settings, abi.encode(0));
+
+        assertEq(
+            priceRouter.assetEditableTimestamp(editHash),
+            block.timestamp + priceRouter.EDIT_ASSET_DELAY(),
+            "Asset editable timestamp should be current time plus edit delay."
+        );
+
+        // Owner calling `completeEditAsset` with an asset not pending edit should revert.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__AssetNotEditable.selector, address(777)))
+        );
+        priceRouter.completeEditAsset(ERC20(address(777)), settings, abi.encode(0), 1e8);
+
+        vm.warp(block.timestamp + priceRouter.EDIT_ASSET_DELAY() / 2);
+
+        // Owner calling `completeEditAsset` early should revert.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__AssetNotEditable.selector, address(USDC)))
+        );
+        priceRouter.completeEditAsset(USDC, settings, abi.encode(0), 1e8);
+
+        // Once enough time has passed, then `completeEditAsset` will work.
+        vm.warp(block.timestamp + priceRouter.EDIT_ASSET_DELAY());
+        priceRouter.completeEditAsset(USDC, settings, abi.encode(0), 1e8);
+
+        assertEq(priceRouter.assetEditableTimestamp(editHash), 0, "Asset editable timestamp should be zero.");
+
+        // Trying to cancel an edit asset when no edit is pending reverts.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__AssetNotPendingEdit.selector, address(USDC)))
+        );
+        priceRouter.cancelEditAsset(USDC, settings, abi.encode(0));
+
+        // If an asset is pending edit, it can be cancelled.
+        priceRouter.startEditAsset(USDC, settings, abi.encode(0));
+
+        priceRouter.cancelEditAsset(USDC, settings, abi.encode(0));
+    }
+
     // ======================================= PRICING TESTS =======================================
 
     function testExchangeRate() external {
         PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BOND_ETH_FEED);
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage(0, 0, 0, true);
 
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), 4.18e8);
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(BOND, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
+        priceRouter.completeEditAsset(BOND, settings, abi.encode(stor), 4.18e8);
         uint256 exchangeRate;
 
         // Test exchange rates work when quote is same as base.
@@ -380,7 +650,15 @@ contract PriceRouterTest is Test {
         PriceRouter.AssetSettings memory settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BOND_ETH_FEED);
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage(0, 0, 0, true);
 
-        priceRouter.addAsset(BOND, settings, abi.encode(stor), 4.18e8);
+        // Simulate calling startEditAsset.
+        bytes32 editHash = keccak256(abi.encode(BOND, settings, abi.encode(stor)));
+        stdstore
+            .target(address(priceRouter))
+            .sig(priceRouter.assetEditableTimestamp.selector)
+            .with_key(editHash)
+            .checked_write(uint256(1));
+
+        priceRouter.completeEditAsset(BOND, settings, abi.encode(stor), 4.18e8);
 
         // Check if `getValues` reverts if assets array and amount array lengths differ
         ERC20[] memory baseAssets = new ERC20[](3);
@@ -506,11 +784,5 @@ contract PriceRouterTest is Test {
         uint256 totalValue = priceRouter.getValues(baseAssets, amounts2, USDC);
 
         assertEq(totalValue, inputAmountWorth, "Values should be equal.");
-    }
-
-    // ======================================= HELPER FUNCTIONS =======================================
-    function _adjustVirtualPrice(ERC20 token, uint256 multiplier) internal {
-        uint256 targetSupply = token.totalSupply().mulDivDown(multiplier, 1e18);
-        stdstore.target(address(token)).sig("totalSupply()").checked_write(targetSupply);
     }
 }

@@ -60,7 +60,7 @@ contract CellarZeroXTest is Test {
         erc20Adaptor = new ERC20Adaptor();
         zeroXAdaptor = new ZeroXAdaptor();
         mockZeroXAdaptor = new MockZeroXAdaptor();
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));

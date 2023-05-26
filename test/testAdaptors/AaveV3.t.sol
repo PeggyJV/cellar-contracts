@@ -77,7 +77,7 @@ contract CellarAaveV3Test is Test {
         aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
         erc20Adaptor = new ERC20Adaptor();
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 

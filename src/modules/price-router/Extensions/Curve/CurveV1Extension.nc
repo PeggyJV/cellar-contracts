@@ -39,10 +39,7 @@ contract CurveV1Extension is Extension, Ownable {
     }
 
     // TODO this might need to return the cache
-    function getPriceInUSD(
-        ERC20 asset,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view override returns (uint256) {
+    function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         CurveV1DerivativeStorage memory parameters = getCurveDerivativeStorage[asset];
 
         ICurvePool pool = ICurvePool(parameters.curvePool);
@@ -51,7 +48,7 @@ contract CurveV1Extension is Extension, Ownable {
         for (uint256 i = 0; i < 3; ++i) {
             if (parameters.poolCoins[i] == address(0)) break;
             ERC20 poolAsset = ERC20(parameters.poolCoins[i]);
-            uint256 tokenPrice = priceRouter.extensionGetPriceInUSD(poolAsset, cache);
+            uint256 tokenPrice = priceRouter.getPriceInUSD(poolAsset);
             if (tokenPrice < minPrice) minPrice = tokenPrice;
         }
 

@@ -6,6 +6,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3Pool } from "src/interfaces/external/UniswapV3Pool.sol";
+import { Registry } from "src/Registry.sol";
 
 import { BalancerWeightedPoolExtension } from "src/modules/price-router/Extensions/BalancerWeightedPoolExtension.sol";
 
@@ -15,7 +16,7 @@ import { IVault } from "@balancer/interfaces/contracts/vault/IVault.sol";
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
-contract BalancerExtensionTest is Test {
+contract BalancerWeightedPoolExtensionTest is Test {
     using Math for uint256;
     using stdStorage for StdStorage;
     using Address for address;
@@ -52,8 +53,12 @@ contract BalancerExtensionTest is Test {
 
     IVault private vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
+    Registry private registry;
+
     function setUp() external {
-        priceRouter = new PriceRouter();
+        registry = new Registry(address(this), address(this), address(this));
+
+        priceRouter = new PriceRouter(registry);
 
         balancerWeightedPoolExtension = new BalancerWeightedPoolExtension(priceRouter, vault);
 
@@ -79,7 +84,6 @@ contract BalancerExtensionTest is Test {
             secondsAgo: 900,
             baseDecimals: 18,
             quoteDecimals: 18,
-            baseToken: RPL,
             quoteToken: WETH
         });
         priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);

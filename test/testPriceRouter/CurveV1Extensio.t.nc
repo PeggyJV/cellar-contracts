@@ -10,7 +10,7 @@ import { MockGasFeed } from "src/mocks/MockGasFeed.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 
-import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
+import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -22,7 +22,7 @@ contract CurveV1ExtensionTest is Test {
     event AddAsset(address indexed asset);
     event RemoveAsset(address indexed asset);
 
-    PriceRouter private immutable priceRouter = new PriceRouter();
+    PriceRouter private immutable priceRouter = new PriceRouter(registry);
 
     address private immutable sender = vm.addr(0xABCD);
     address private immutable receiver = vm.addr(0xBEEF);

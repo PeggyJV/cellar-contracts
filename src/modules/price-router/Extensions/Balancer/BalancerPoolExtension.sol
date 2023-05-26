@@ -3,49 +3,25 @@ pragma solidity 0.8.16;
 
 import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Extensions/Extension.sol";
 import { IVault, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
-import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
 
-import { console } from "@forge-std/Test.sol";
+/**
+ * @title Sommelier Price Router Balancer Linear Pool Extension
+ * @notice Allows the Price Router to price Balancer Linear pool BPTs.
+ * @author crispymangoes
+ */
+abstract contract BalancerPoolExtension is Extension {
+    /**
+     * @notice Attempted to price BPTs while in the Balancer Vault.
+     */
+    error BalancerPoolExtension__Reentrancy();
 
-contract BalancerStablePoolExtension is Extension {
-    using Math for uint256;
-
+    /**
+     * @notice The Balancer Vault
+     */
     IVault public immutable balancerVault;
 
     constructor(PriceRouter _priceRouter, IVault _balancerVault) Extension(_priceRouter) {
         balancerVault = _balancerVault;
-    }
-
-    /**
-     * @notice Aave Derivative Storage
-     */
-    mapping(ERC20 => bytes32) public getBalancerWeightedPoolDerivativeStorage;
-
-    function setupSource(ERC20 asset, bytes memory) external override onlyPriceRouter {
-        // asset is a balancer LP token
-        IBalancerPool pool = IBalancerPool(address(asset));
-
-        ERC20 mainToken = ERC20(pool.getMainToken());
-        // Make sure we can price all underlying tokens.
-        if (!priceRouter.isSupported(mainToken)) revert("tokens must be supported.");
-
-        // TODO we could save the poolId and tokens in this contract for less state reads
-    }
-
-    function getPriceInUSD(
-        ERC20 asset,
-        PriceRouter.PriceCache[PRICE_CACHE_SIZE] memory cache
-    ) external view override returns (uint256) {
-        _ensureNotInVaultContext(balancerVault);
-        IBalancerPool pool = IBalancerPool(address(asset));
-
-        ERC20 mainToken = ERC20(pool.getMainToken());
-
-        uint256 priceBpt = priceRouter.extensionGetPriceInUSD(mainToken, cache).mulDivDown(
-            pool.getRate(),
-            10 ** pool.decimals()
-        );
-        return priceBpt;
     }
 
     /**
@@ -77,10 +53,12 @@ contract BalancerStablePoolExtension is Extension {
 
         // read-only re-entrancy protection - this call is always unsuccessful but we need to make sure
         // it didn't fail due to a re-entrancy attack
+        // TODO do we need to send the staticall with a gas limit? Like staticcall{ gas: 100_000 }
+        // This might just look like an issue in foundry. Running a testnet test does not use an insane amount of gas.
         (, bytes memory revertData) = address(vault).staticcall(
             abi.encodeWithSelector(vault.manageUserBalance.selector, new address[](0))
         );
 
-        if (keccak256(revertData) == REENTRANCY_ERROR_HASH) revert("Reentrancy");
+        if (keccak256(revertData) == REENTRANCY_ERROR_HASH) revert BalancerPoolExtension__Reentrancy();
     }
 }

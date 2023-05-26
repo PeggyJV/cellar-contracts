@@ -22,7 +22,7 @@ contract RegistryTest is Test {
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
 
     function setUp() external {
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
         registry = new Registry(gravityBridge, swapRouter, address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

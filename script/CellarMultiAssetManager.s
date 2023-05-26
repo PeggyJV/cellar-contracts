@@ -35,7 +35,7 @@ contract CellarMultiAssetManagerScript is Script {
 
     function run() external {
         vm.startBroadcast();
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniswapV2Router), IUniswapV3Router(uniswapV3Router));
         registry = new Registry(gravityBridge, address(swapRouter), address(priceRouter));
 
