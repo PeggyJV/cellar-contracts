@@ -24,8 +24,6 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
 
     constructor(PriceRouter _priceRouter, IVault _balancerVault) BalancerPoolExtension(_priceRouter, _balancerVault) {}
 
-    // TODO so we could store the pools tokens in this contract to reduce external calls
-    // but do the pool tokens change?
     /**
      * @notice Extension storage
      * @param poolId the pool id of the BPT being priced
@@ -55,7 +53,7 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
 
         // Make sure we can price all underlying tokens.
         for (uint256 i; i < tokens.length; ++i) {
-            // TODO is this gucci?
+            // Skip the asset if tokens[i] is the BPT.
             if (address(tokens[i]) == address(asset)) continue;
             if (!priceRouter.isSupported(ERC20(address(tokens[i]))))
                 revert BalancerStablePoolExtension__PoolTokensMustBeSupported(address(tokens[i]));

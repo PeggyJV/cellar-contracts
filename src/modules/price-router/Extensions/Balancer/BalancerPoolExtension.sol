@@ -53,7 +53,6 @@ abstract contract BalancerPoolExtension is Extension {
 
         // read-only re-entrancy protection - this call is always unsuccessful but we need to make sure
         // it didn't fail due to a re-entrancy attack
-        // TODO do we need to send the staticall with a gas limit? Like staticcall{ gas: 100_000 }
         // This might just look like an issue in foundry. Running a testnet test does not use an insane amount of gas.
         (, bytes memory revertData) = address(vault).staticcall(
             abi.encodeWithSelector(vault.manageUserBalance.selector, new address[](0))
