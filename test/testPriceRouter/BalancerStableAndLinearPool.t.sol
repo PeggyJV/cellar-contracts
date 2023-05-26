@@ -188,7 +188,7 @@ contract BalancerStableAndLinearPoolTest is Test {
         assertApproxEqRel(valueOut, valueIn, 0.03e18, "Value out should approximately equal value in.");
     }
 
-    function testPricingBb_a_Usd() external {
+    function testPricingBb_a_Usd() external checkBlockNumber {
         // Add required pricing.
         _addChainlinkAsset(USDC, USDC_USD_FEED, false);
         _addChainlinkAsset(DAI, DAI_USD_FEED, false);
@@ -219,7 +219,7 @@ contract BalancerStableAndLinearPoolTest is Test {
     }
 
     // ======================================= REVERTS =======================================
-    // TODO
+
     function testPricingStablePoolWithUnsupportedUnderlying() external checkBlockNumber {
         // Add required pricing.
         _addChainlinkAsset(USDC, USDC_USD_FEED, false);
