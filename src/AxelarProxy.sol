@@ -15,7 +15,7 @@ contract AxelarProxy is AxelarExecutable {
 
     bytes32 public immutable sourceChainHash;
     bytes32 public immutable sourceAddressHash;
-    bytes32 public constant SOMMELIER_CHAIN_HASH = keccak256(bytes("Sommelier"));
+    bytes32 public constant SOMMELIER_CHAIN_HASH = keccak256(bytes("sommelier"));
 
     constructor(address gateway_, string memory sourceChain, string memory sourceAddress) AxelarExecutable(gateway_) {
         sourceChainHash = keccak256(bytes(sourceChain));
