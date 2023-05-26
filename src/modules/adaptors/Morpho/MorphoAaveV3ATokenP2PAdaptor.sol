@@ -3,13 +3,14 @@ pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
+import { MorphoRewardHandler } from "src/modules/adaptors/Morpho/MorphoRewardHandler.sol";
 
 /**
  * @title Morpho Aave V3 aToken Adaptor
  * @notice Allows Cellars to interact with Morpho Aave V3 positions.
  * @author crispymangoes
  */
-contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor {
+contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
     using SafeTransferLib for ERC20;
 
     //==================== Adaptor Data Specification ====================
