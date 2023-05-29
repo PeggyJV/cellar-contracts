@@ -65,6 +65,13 @@ contract AddWstEthToRYETest is Test {
         wstEthOracle = new WstEthExtension();
     }
 
+    function testHunch() external {
+        vm.prank(multisig);
+        registry.setAddress(2, address(priceRouter));
+        uint256 totalAssets = rye.totalAssets();
+        console.log("TA", totalAssets);
+    }
+
     function testAddingWstEthSupport() external {
         if (block.number < 16999774) {
             console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16999774.");
