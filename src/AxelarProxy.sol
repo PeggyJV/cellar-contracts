@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { AxelarExecutable } from "src/base/AxelarExecutable.sol";
+import { AxelarExecutable } from "lib/axelar-gmp-sdk-solidity/contracts/executable/AxelarExecutable.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 contract AxelarProxy is AxelarExecutable {
