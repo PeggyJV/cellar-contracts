@@ -126,9 +126,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
 
         uint256 precisionPrice;
         {
-            PriceRouter priceRouter = PriceRouter(
-                Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
-            );
+            PriceRouter priceRouter = Cellar(msg.sender).priceRouter();
             uint256 baseToUSD = priceRouter.getPriceInUSD(token1);
             uint256 quoteToUSD = priceRouter.getPriceInUSD(token0);
             baseToUSD = baseToUSD * 1e18; // Multiply by 1e18 to keep some precision.
