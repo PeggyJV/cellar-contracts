@@ -3,23 +3,32 @@ pragma solidity 0.8.16;
 
 import { AxelarExecutable } from "lib/axelar-gmp-sdk-solidity/contracts/executable/AxelarExecutable.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { Owned } from "@solmate/auth/Owned.sol";
 
-contract AxelarProxy is AxelarExecutable {
+contract AxelarProxy is AxelarExecutable, Owned {
     using Address for address;
 
     event LogicCallEvent(address target, bytes callData);
 
-    error AxelarProxy__NoTokens();
     error AxelarProxy__WrongSource();
-    error AxelarProxy__WrongSender();
+    error AxelarProxy__NoTokens();
+    error AxelarProxy__ExecutionStopped();
 
     bytes32 public constant SOMMELIER_CHAIN_HASH = keccak256(bytes("sommelier"));
 
-    constructor(address gateway_) AxelarExecutable(gateway_) {}
+    bool public stopExecute;
+
+    constructor(address gateway_, address owner) AxelarExecutable(gateway_) Owned(owner) {}
+
+    function toggleExecution() external onlyOwner {
+        stopExecute = stopExecute ? false : true;
+    }
 
     function _execute(string calldata sourceChain, string calldata, bytes calldata payload) internal override {
+        // Make sure executions are still allowed.
+        if (stopExecute) revert AxelarProxy__ExecutionStopped();
+
         // Validate Source Chain
-        bytes32 _sourceChainHash = sourceChainHash;
         if (keccak256(bytes(sourceChain)) != SOMMELIER_CHAIN_HASH) revert AxelarProxy__WrongSource();
 
         // Execute function call.

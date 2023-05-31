@@ -22,7 +22,7 @@ contract DeployProxyScript is Script {
     function run() external {
         vm.startBroadcast();
 
-        AxelarProxy proxy = new AxelarProxy(gateway, sourceChain, sourceAddress);
+        AxelarProxy proxy = new AxelarProxy(gateway, address(0));
 
         vm.stopBroadcast();
     }
