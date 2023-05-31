@@ -3,6 +3,7 @@ pragma solidity 0.8.16;
 
 import { ERC20 } from "src/base/Cellar.sol";
 import { AxelarProxy } from "src/AxelarProxy.sol";
+import { MockSommelier } from "src/mocks/MockSommelier.sol";
 
 import "forge-std/Script.sol";
 import { Math } from "src/utils/Math.sol";
@@ -22,17 +23,18 @@ contract SendMessageToArbitrumScript is Script {
     Gateway private gateway = Gateway(0x6f015F16De9fC8791b234eF68D486d2bF203FBA8);
 
     string private destChain = "arbitrum";
-    string private destAddress = "0xf399BfA0b50aFb6B2880eCe84671b03c665036AA";
+    string private destAddress = "0x2aF45D06C3d06af1E6B8Bc3f90c5a8DB0E5aa729";
 
     address private usdcOnArb = 0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8;
+
+    MockSommelier private mockSomm;
 
     function run() external {
         vm.startBroadcast();
 
-        bytes memory payload = abi.encodeWithSelector(ERC20.approve.selector, devOwner, 777);
-        payload = abi.encode(usdcOnArb, payload);
+        mockSomm = new MockSommelier();
 
-        gateway.callContract(destChain, destAddress, payload);
+        mockSomm.sendMessage{ value: 10 ether }(destAddress, usdcOnArb, devOwner, 777);
 
         vm.stopBroadcast();
     }
