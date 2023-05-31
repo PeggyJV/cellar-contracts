@@ -10,7 +10,6 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
-import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 
 /**
  * @title Sommelier Cellar
@@ -1347,7 +1346,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             }
         }
 
-        console.log("mangoesssssss");
         // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
         uint256 assets = _accounting(false);
         if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {

@@ -1,21 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import {BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, PriceRouter} from "src/modules/adaptors/BaseAdaptor.sol";
-import {IBalancerQueries} from "src/interfaces/external/Balancer/IBalancerQueries.sol";
-import {IVault} from "src/interfaces/external/Balancer/IVault.sol";
-import {IBalancerRelayer} from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
-import {IStakingLiquidityGauge} from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
-import {IBalancerRelayer} from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
-import {ILiquidityGaugeFactory} from "src/interfaces/external/Balancer/ILiquidityGaugeFactory.sol";
-import {ILiquidityGaugev3Custom} from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
-import {IBasePool} from "src/interfaces/external/Balancer/typically-npm/IBasePool.sol";
-import {ILiquidityGauge} from "src/interfaces/external/Balancer/ILiquidityGauge.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
+import { IBalancerQueries } from "src/interfaces/external/Balancer/IBalancerQueries.sol";
+import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
+import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
+import { IStakingLiquidityGauge } from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
+import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
+import { ILiquidityGaugeFactory } from "src/interfaces/external/Balancer/ILiquidityGaugeFactory.sol";
+import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
+import { IBasePool } from "src/interfaces/external/Balancer/typically-npm/IBasePool.sol";
+import { ILiquidityGauge } from "src/interfaces/external/Balancer/ILiquidityGauge.sol";
 import { Math } from "src/utils/Math.sol";
-import {console} from "@forge-std/Test.sol";
-
-
-
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Balancer Pool Adaptor
@@ -30,12 +27,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(ERC20 _bpt)
     // Where:
     // `_bpt` is the Balancer pool token of the Balancer LP market this adaptor is working with
-    // See 1-pager made to assist constructing queries: TODO: layout 1 pager example in the docs as a ChangeRequest. 
+    // See 1-pager made to assist constructing queries: TODO: layout 1 pager example in the docs as a ChangeRequest.
     //================= Configuration Data Specification =================
     // NOT USED
     // **************************** IMPORTANT ****************************
@@ -48,7 +44,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     //====================================================================
 
     //============================================ Error Statements ===========================================
-    
+
     /**
      * @notice bptOut lower than desired
      */
@@ -73,7 +69,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice bpt amount to unstake/withdraw requested exceeds amount actuall staked/deposited in liquidity gauge
      */
     error BalancerPoolAdaptor__NotEnoughToDeposit();
-
 
     //============================================ Global Vars && Specific Adaptor Constants ===========================================
 
@@ -156,8 +151,8 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         // ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(bpt); // TODO: there are no getters to access in the latest gauge factory to check what the poolGauge address is associated to a respective BPT.
         // TODO: might have to put conditional logic here that:
         // 1. First checks that the returned poolgauge isn't zeroAddress
-        // 2. If it is, it exits the if statement conditions and skips checking for stakedBPT. If it isn't it goes through and calculates total BPT. 
-        // ** the challenge is that the most recent pool gauge factories do not have getters exposing poolGauge addresses for specific BPTs. 
+        // 2. If it is, it exits the if statement conditions and skips checking for stakedBPT. If it isn't it goes through and calculates total BPT.
+        // ** the challenge is that the most recent pool gauge factories do not have getters exposing poolGauge addresses for specific BPTs.
 
         // ERC20 poolGaugeToken = ERC20(address(poolGauge));
         // uint256 stakedBPT = poolGaugeToken.balanceOf(address(this));
@@ -208,9 +203,12 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * TODO: see issue for strategist callData
      * TODO: see discussion in draft PR #112 about `approve()` details
      */
-    function useRelayer(ERC20[] memory tokensIn, uint256[] memory amountsIn, ERC20 bptOut, bytes[] memory callData)
-        public
-    {
+    function useRelayer(
+        ERC20[] memory tokensIn,
+        uint256[] memory amountsIn,
+        ERC20 bptOut,
+        bytes[] memory callData
+    ) public {
         for (uint256 i; i < tokensIn.length; ++i) {
             tokensIn[i].approve(address(vault()), amountsIn[i]);
         } // TODO: this may be obsolete based on approval steps necessary for relayer functionality (see TODO below)
@@ -221,21 +219,23 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
         relayer().multicall(callData);
 
-        // uint256 endingBpt = bptOut.balanceOf(address(this));
+        uint256 endingBpt = bptOut.balanceOf(address(this));
 
-        // uint256 amountBptOut = endingBpt - startingBpt;
-        
-        // PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())); // TODO: I don't think this is set up right.
+        uint256 amountBptOut = endingBpt - startingBpt;
 
-        // uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut);
+        PriceRouter priceRouter = PriceRouter(
+            Cellar(address(this)).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
+        ); // TODO: I don't think this is set up right.
 
-        // // check value in vs value out
-        // if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage");
+        uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut);
 
-        // // revoke token in approval
-        // for (uint256 i; i < tokensIn.length; ++i) {
-        //     _revokeExternalApproval(tokensIn[i],address(relayer()));
-        // }
+        // check value in vs value out
+        if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage");
+
+        // revoke token in approval
+        for (uint256 i; i < tokensIn.length; ++i) {
+            _revokeExternalApproval(tokensIn[i], address(relayer()));
+        }
 
         // TODO: see if special revocation is required or necessary with bespoke Relayer approval sequences
     }
@@ -244,9 +244,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice TEMPORARY function to help with troubleshooting tests.
      * TODO: Delete this function and replace any use of it with `useRelayer()` in tests
      */
-    function useRelayer2(bytes[] memory callData)
-        public
-    {
+    function useRelayer2(bytes[] memory callData) public {
         relayer().multicall(callData);
     }
 
@@ -286,7 +284,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
     function withdrawBPT(address _bpt, uint256 _amountOut, bool _claim_rewards) external {
-
         ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(_bpt);
         uint256 amountOut = _maxAvailable(ERC20(address(poolGauge)), _amountOut); // get the total amount of bpt staked by the cellar essentially (bc it's represented by the amount of gauge tokens the Cellar has)
 
@@ -316,7 +313,10 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         // TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
 
         // TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
-        if ((poolGauge.claimable_reward(address(this), _rewardToken) == 0) && (poolGauge.claimable_tokens(address(this)) == 0)) {
+        if (
+            (poolGauge.claimable_reward(address(this), _rewardToken) == 0) &&
+            (poolGauge.claimable_tokens(address(this)) == 0)
+        ) {
             revert BalancerPoolAdaptor__ZeroClaimableRewards();
         }
 
@@ -333,7 +333,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     //     return 0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5;
     // }
 
-     // NOTE from balancer docs: JoinPoolRequest is what strategists will need to provide
+    // NOTE from balancer docs: JoinPoolRequest is what strategists will need to provide
     // When providing your assets, you must ensure that the tokens are sorted numerically by token address. It's also important to note that the values in maxAmountsIn correspond to the same index value in assets, so these arrays must be made in parallel after sorting.
     // NOTE: different JoinKinds for different pool types: to start, we'll focus on WeightedPools & StablePools. The idea: Strategists pass in the JoinKinds within their calls, so they need to know what type of pool they are joining. Alt: we could query to see what kind of pool it is, but strategist still needs to specify the type of tx this is.
 

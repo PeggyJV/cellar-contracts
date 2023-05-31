@@ -238,24 +238,22 @@ contract BalancerPoolAdaptorTest is Test {
      * NOTE: it would take multiple tokens and amounts in and a single bpt out
      */
     function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 slippage) public {
-        // if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
-        //     // Figure out value in, quoted in `to`.
-        //     uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
-        //     uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
-        //     // Deal caller new balances.
-        //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-        //     deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
-        // } else {
-        //     // Pricing is not supported, so just assume exchange rate is 1:1.
-        //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-        //     deal(
-        //         address(to),
-        //         msg.sender,
-        //         to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
-        //     );
-        // }
-
-        console.log("howdy");
+        if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
+            // Figure out value in, quoted in `to`.
+            uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
+            uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
+            // Deal caller new balances.
+            deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
+            deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
+        } else {
+            // Pricing is not supported, so just assume exchange rate is 1:1.
+            deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
+            deal(
+                address(to),
+                msg.sender,
+                to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
+            );
+        }
     }
 
     // call balancerRelayer.selector
@@ -272,11 +270,11 @@ contract BalancerPoolAdaptorTest is Test {
 
     /// Code related to tests to be carried out in the future for next phase checking likely used scenarios of specific encoded relayer action calls
 
-    // function multicall(bytes[] calldata data) external {
-    //     for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
-    // }
+    function multicall(bytes[] calldata data) external returns (bytes[] memory results) {
+        for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
+    }
 
-    // TODO: carry out tests checking 
+    // TODO: carry out tests checking
     // intentionally mess with the calldata input for the relayer. Have a test where you verify whether or not that works, or not.
     // ex. use wrong tokensIN (make sure it reverts), change BPTOut (should revert at slippage check)
 
