@@ -16,7 +16,6 @@ import {console} from "@forge-std/Test.sol";
 
 
 
-
 /**
  * @title Balancer Pool Adaptor
  * @notice Allows Cellars to interact with Weighted, Stable, and Linear Balancer Pools (BPs).
@@ -337,27 +336,27 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     // When providing your assets, you must ensure that the tokens are sorted numerically by token address. It's also important to note that the values in maxAmountsIn correspond to the same index value in assets, so these arrays must be made in parallel after sorting.
     // NOTE: different JoinKinds for different pool types: to start, we'll focus on WeightedPools & StablePools. The idea: Strategists pass in the JoinKinds within their calls, so they need to know what type of pool they are joining. Alt: we could query to see what kind of pool it is, but strategist still needs to specify the type of tx this is.
 
-    /**
-     * NOTE: it would take multiple tokens and amounts in and a single bpt out
-     */
-    function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 slippage) public virtual {
-        // if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
-        //     // Figure out value in, quoted in `to`.
-        //     uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
-        //     uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
-        //     // Deal caller new balances.
-        //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-        //     deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
-        // } else {
-        //     // Pricing is not supported, so just assume exchange rate is 1:1.
-        //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-        //     deal(
-        //         address(to),
-        //         msg.sender,
-        //         to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
-        //     );
-        // }
+    // /**
+    //  * NOTE: it would take multiple tokens and amounts in and a single bpt out
+    //  */
+    // function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 slippage) public virtual {
+    //     // if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
+    //     //     // Figure out value in, quoted in `to`.
+    //     //     uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
+    //     //     uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
+    //     //     // Deal caller new balances.
+    //     //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
+    //     //     deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
+    //     // } else {
+    //     //     // Pricing is not supported, so just assume exchange rate is 1:1.
+    //     //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
+    //     //     deal(
+    //     //         address(to),
+    //     //         msg.sender,
+    //     //         to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
+    //     //     );
+    //     // }
 
-        console.log("howdy");
-    }
+    //     console.log("howdy");
+    // }
 }

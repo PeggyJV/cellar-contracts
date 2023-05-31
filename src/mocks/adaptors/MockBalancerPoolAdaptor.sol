@@ -36,27 +36,27 @@ contract MockBalancerPoolAdaptor is BalancerPoolAdaptor {
         return IVault(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     }
 
-    /**
-     * NOTE: it would take multiple tokens and amounts in and a single bpt out
-     */
-    function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 slippage) public override {
-        // if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
-        //     // Figure out value in, quoted in `to`.
-        //     uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
-        //     uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
-        //     // Deal caller new balances.
-        //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-        //     deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
-        // } else {
-        //     // Pricing is not supported, so just assume exchange rate is 1:1.
-        //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-        //     deal(
-        //         address(to),
-        //         msg.sender,
-        //         to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
-        //     );
-        // }
+    // /**
+    //  * NOTE: it would take multiple tokens and amounts in and a single bpt out
+    //  */
+    // function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 slippage) public override {
+    //     // if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
+    //     //     // Figure out value in, quoted in `to`.
+    //     //     uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
+    //     //     uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
+    //     //     // Deal caller new balances.
+    //     //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
+    //     //     deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
+    //     // } else {
+    //     //     // Pricing is not supported, so just assume exchange rate is 1:1.
+    //     //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
+    //     //     deal(
+    //     //         address(to),
+    //     //         msg.sender,
+    //     //         to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
+    //     //     );
+    //     // }
 
-        console.log("howdy");
-    }
+    //     console.log("howdy");
+    // }
 }
