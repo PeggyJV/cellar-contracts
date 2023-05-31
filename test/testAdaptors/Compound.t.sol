@@ -289,7 +289,7 @@ contract CellarCompoundTest is Test {
         );
 
         // Somm Governance sees suspicious rebalances, and temporarily shuts down the cellar.
-        cellar.initiateShutdown();
+        cellar.initiateShutdown(); 
 
         // Somm Governance revokes old strategists privilages and puts in new strategist.
 

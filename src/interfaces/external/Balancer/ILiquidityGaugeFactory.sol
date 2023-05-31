@@ -16,6 +16,7 @@ pragma solidity >=0.7.0 <0.9.0;
 pragma experimental ABIEncoderV2;
 
 import "./ILiquidityGauge.sol";
+import "./ILiquidityGaugev3Custom.sol";
 
 interface ILiquidityGaugeFactory {
     /**
@@ -29,6 +30,5 @@ interface ILiquidityGaugeFactory {
      * NOTE: Function call getPoolGauge(address) is not in the original ILiquidityGaugeFactory
      * @return ILiquidityGauge(_poolGauge[pool]
      */
-    function getPoolGauge(address pool) external view returns (ILiquidityGauge) {
-    }
+    function getPoolGauge(address pool) external view returns (ILiquidityGaugev3Custom);
 }

@@ -15,7 +15,7 @@
 pragma solidity >=0.7.0 <0.9.0;
 pragma experimental ABIEncoderV2;
 
-import "../vault/IVault.sol";
+import "./IVault.sol";
 
 /**
  * @dev Provides a way to perform queries on swaps, joins and exits, simulating these operations and returning the exact

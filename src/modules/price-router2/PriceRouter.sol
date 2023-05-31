@@ -233,8 +233,6 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
 
     /**
      * @notice Helper function that determines the value of assets using `_getValues`.
-     * @param baseAssets EIN - ERC20[] corresponding to decoded `adaptorData` consisting of singular ERC20s typically (I think they have to be singular)
-     * @dev EIN - called during basically every mutative strategist call. Context of call is through a `for` loop within `_accounting()` from  `Cellar.sol`
      */
     function getValues(
         ERC20[] calldata baseAssets,
@@ -542,7 +540,6 @@ contract PriceRouter is Ownable, AutomationCompatibleInterface {
         PriceCache[PRICE_CACHE_SIZE] memory cache
     ) internal view returns (uint256) {
         ChainlinkDerivativeStorage memory parameters = getChainlinkDerivativeStorage[_asset];
-        // EIN TODO: CHECK IChainlinkAggregator interface and create the DUMMY_BB_A_USD_PRICEFEED abiding by it. In it, have a setter and a getter for the price with respect to the required function calls: `latestRoundData()`
         IChainlinkAggregator aggregator = IChainlinkAggregator(_source);
         (, int256 _price, , uint256 _timestamp, ) = aggregator.latestRoundData();
         uint256 price = _price.toUint256();

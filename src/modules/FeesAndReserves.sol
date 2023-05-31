@@ -469,7 +469,7 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     }
 
     /**
-     * @notice PerformUpkeep will trust `performData` input if the caller is `AUTOMATION_REGISTRY` otherwise the input is recalcualted.
+     * @notice PerformUpkeep will trust `performData` input if the caller is `f` otherwise the input is recalcualted.
      * @dev If cellar is not setup, this function reverts.
      * @dev If not enough time has passed, the cellar does not have its fees calculated.
      * @dev If cellar has pending values that differ from current stored values, they are updated.
