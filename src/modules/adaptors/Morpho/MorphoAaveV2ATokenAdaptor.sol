@@ -8,7 +8,7 @@ import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
 /**
  * @title Morpho Aave V2 aToken Adaptor
- * @notice Allows Cellars to interact with Morpho Aave V3 positions.
+ * @notice Allows Cellars to interact with Morpho Aave V2 positions.
  * @author crispymangoes
  */
 contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
@@ -24,7 +24,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     // IMPORTANT: It is possible for a strategist to misconfigure their positions,
     // and allow user withdraws from aToken positions that are backing loans.
     // This will be mitigated by only allowing trusted strategists to use this adaptor,
-    // educating them teh dangers of misconfiguring their position.
+    // and educating them the dangers of misconfiguring their position.
     //====================================================================
 
     //============================================ Global Functions ===========================================
