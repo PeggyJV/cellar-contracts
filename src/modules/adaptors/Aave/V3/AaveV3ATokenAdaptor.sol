@@ -53,7 +53,7 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Aave V3 aToken Adaptor V 1.0"));
+        return keccak256(abi.encode("Aave V3 aToken Adaptor V 1.1"));
     }
 
     /**
