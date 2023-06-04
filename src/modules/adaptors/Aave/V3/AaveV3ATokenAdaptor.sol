@@ -53,7 +53,7 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Aave V3 aToken Adaptor V 1.0"));
+        return keccak256(abi.encode("Aave V3 aToken Adaptor V 1.1"));
     }
 
     /**
@@ -202,7 +202,7 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
         ERC20 underlying = ERC20(token.UNDERLYING_ASSET_ADDRESS());
 
         // Convert `maxBorrowableWithMin` from Base to position underlying asset.
-        PriceRouter priceRouter = PriceRouter(Cellar(msg.sender).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT()));
+        PriceRouter priceRouter = Cellar(msg.sender).priceRouter();
         uint256 underlyingToUSD = priceRouter.getPriceInUSD(underlying);
         uint256 withdrawable = maxBorrowableWithMin.mulDivDown(10 ** underlying.decimals(), underlyingToUSD);
         uint256 balance = ERC20(address(token)).balanceOf(msg.sender);
