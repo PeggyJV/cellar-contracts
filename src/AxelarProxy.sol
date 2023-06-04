@@ -4,6 +4,13 @@ pragma solidity 0.8.16;
 import { AxelarExecutable } from "lib/axelar-gmp-sdk-solidity/contracts/executable/AxelarExecutable.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
+/**
+ * @title Axelar Proxy
+ * @notice Allows for Cellars deployed on L2s to be controlled by the Sommelier Chain using Axelar messages.
+ * @dev This contract will be deployed on some L2, then to run a Cellar on that L2,
+ *      deploy the Cellar, and make this contract the owner.
+ * @author crispymangoes
+ */
 contract AxelarProxy is AxelarExecutable {
     using Address for address;
 
@@ -32,8 +39,7 @@ contract AxelarProxy is AxelarExecutable {
     }
 
     /**
-     * @notice Execution with token logic.
-     * @dev Not supported.
+     * @notice This contract is not setup to handle ERC20 tokens, so execution with token calls will revert.
      */
     function _executeWithToken(
         string calldata,
