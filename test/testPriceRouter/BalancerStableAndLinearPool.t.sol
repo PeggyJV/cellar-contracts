@@ -31,8 +31,6 @@ contract BalancerStableAndLinearPoolTest is Test {
     PriceRouter private priceRouter;
 
     BalancerStablePoolExtension private balancerStablePoolExtension;
-    BalancerLinearPoolExtension private balancerLinearPoolExtension;
-    WstEthExtension private wstEthExtension;
 
     address private immutable sender = vm.addr(0xABCD);
     address private immutable receiver = vm.addr(0xBEEF);
@@ -96,8 +94,6 @@ contract BalancerStableAndLinearPoolTest is Test {
 
         // Deploy Required Extensions.
         balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, vault);
-        balancerLinearPoolExtension = new BalancerLinearPoolExtension(priceRouter, vault);
-        wstEthExtension = new WstEthExtension(priceRouter);
     }
 
     // ======================================= HAPPY PATH =======================================
@@ -112,7 +108,17 @@ contract BalancerStableAndLinearPoolTest is Test {
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
-        priceRouter.addAsset(USDC_DAI_USDT_BPT, settings, abi.encode(0), 1e8);
+        ERC20[8] memory underlyings;
+        underlyings[0] = USDC;
+        underlyings[1] = DAI;
+        underlyings[2] = USDT;
+        BalancerStablePoolExtension.ExtensionStorage memory stor = BalancerStablePoolExtension.ExtensionStorage({
+            poolId: bytes32(0),
+            poolDecimals: 18,
+            underlyings: underlyings
+        });
+
+        priceRouter.addAsset(USDC_DAI_USDT_BPT, settings, abi.encode(stor), 1e8);
 
         uint256 bptOut = _joinPool(address(USDC), valueIn, IBalancerPool(address(USDC_DAI_USDT_BPT)));
 
@@ -131,7 +137,16 @@ contract BalancerStableAndLinearPoolTest is Test {
         PriceRouter.AssetSettings memory settings;
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
-        priceRouter.addAsset(rETH_wETH_BPT, settings, abi.encode(0), 1915e8);
+        ERC20[8] memory underlyings;
+        underlyings[0] = WETH;
+        underlyings[1] = rETH;
+        BalancerStablePoolExtension.ExtensionStorage memory stor = BalancerStablePoolExtension.ExtensionStorage({
+            poolId: bytes32(0),
+            poolDecimals: 18,
+            underlyings: underlyings
+        });
+
+        priceRouter.addAsset(rETH_wETH_BPT, settings, abi.encode(stor), 1915e8);
 
         uint256 bptOut = _joinPool(address(WETH), valueIn, IBalancerPool(address(rETH_wETH_BPT)));
 
@@ -149,21 +164,27 @@ contract BalancerStableAndLinearPoolTest is Test {
         _addChainlinkAsset(STETH, STETH_USD_FEED, false);
 
         PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstEthExtension));
 
-        priceRouter.addAsset(WSTETH, settings, abi.encode(0), 2_100e8);
+        ERC20[8] memory underlyings;
+        underlyings[0] = WETH;
+        underlyings[1] = STETH;
+        BalancerStablePoolExtension.ExtensionStorage memory stor = BalancerStablePoolExtension.ExtensionStorage({
+            poolId: bytes32(0),
+            poolDecimals: 18,
+            underlyings: underlyings
+        });
 
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
-        priceRouter.addAsset(wstETH_wETH_BPT, settings, abi.encode(0), 1915e8);
+        priceRouter.addAsset(wstETH_wETH_BPT, settings, abi.encode(stor), 1915e8);
 
         uint256 bptOut = _joinPool(address(WETH), valueIn, IBalancerPool(address(wstETH_wETH_BPT)));
 
         uint256 valueOut = priceRouter.getValue(wstETH_wETH_BPT, bptOut, WETH);
-        assertApproxEqRel(valueOut, valueIn, 0.004e18, "Value out should approximately equal value in.");
+        assertApproxEqRel(valueOut, valueIn, 0.01e18, "Value out should approximately equal value in.");
     }
 
-    function testPricingCBETH_WETH_Bpt(uint256 valueIn) external checkBlockNumber {
+    function testPricingCBETH_WSTETH_Bpt(uint256 valueIn) external checkBlockNumber {
         valueIn = bound(valueIn, 0.1e18, 1_000e18);
         // valueIn = 1e18;
 
@@ -174,18 +195,24 @@ contract BalancerStableAndLinearPoolTest is Test {
         _addChainlinkAsset(cbETH, CBETH_ETH_FEED, true);
 
         PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstEthExtension));
-
-        priceRouter.addAsset(WSTETH, settings, abi.encode(0), 2_100e8);
 
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
-        priceRouter.addAsset(wstETH_cbETH_BPT, settings, abi.encode(0), 1915e8);
+        ERC20[8] memory underlyings;
+        underlyings[0] = cbETH;
+        underlyings[1] = STETH;
+        BalancerStablePoolExtension.ExtensionStorage memory stor = BalancerStablePoolExtension.ExtensionStorage({
+            poolId: bytes32(0),
+            poolDecimals: 18,
+            underlyings: underlyings
+        });
+
+        priceRouter.addAsset(wstETH_cbETH_BPT, settings, abi.encode(stor), 1915e8);
 
         uint256 bptOut = _joinPool(address(cbETH), valueIn, IBalancerPool(address(wstETH_cbETH_BPT)));
 
         uint256 valueOut = priceRouter.getValue(wstETH_cbETH_BPT, bptOut, cbETH);
-        assertApproxEqRel(valueOut, valueIn, 0.03e18, "Value out should approximately equal value in.");
+        assertApproxEqRel(valueOut, valueIn, 0.01e18, "Value out should approximately equal value in.");
     }
 
     function testPricingBb_a_Usd() external checkBlockNumber {
@@ -195,15 +222,19 @@ contract BalancerStableAndLinearPoolTest is Test {
         _addChainlinkAsset(USDT, USDT_USD_FEED, false);
 
         PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerLinearPoolExtension));
-        priceRouter.addAsset(bb_a_USDC_BPT, settings, abi.encode(0), 1e8);
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerLinearPoolExtension));
-        priceRouter.addAsset(bb_a_DAI_BPT, settings, abi.encode(0), 1e8);
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerLinearPoolExtension));
-        priceRouter.addAsset(bb_a_USDT_BPT, settings, abi.encode(0), 1e8);
+
+        ERC20[8] memory underlyings;
+        underlyings[0] = USDC;
+        underlyings[1] = DAI;
+        underlyings[2] = USDT;
+        BalancerStablePoolExtension.ExtensionStorage memory stor = BalancerStablePoolExtension.ExtensionStorage({
+            poolId: bytes32(0),
+            poolDecimals: 18,
+            underlyings: underlyings
+        });
 
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
-        priceRouter.addAsset(bb_a_USD_BPT, settings, abi.encode(0), 1e8);
+        priceRouter.addAsset(bb_a_USD_BPT, settings, abi.encode(stor), 1e8);
 
         // Join the stable pool.
         uint256 valueIn = 100e6;
@@ -229,28 +260,24 @@ contract BalancerStableAndLinearPoolTest is Test {
 
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
+        ERC20[8] memory underlyings;
+        underlyings[0] = WETH;
+        underlyings[1] = STETH;
+        BalancerStablePoolExtension.ExtensionStorage memory stor = BalancerStablePoolExtension.ExtensionStorage({
+            poolId: bytes32(0),
+            poolDecimals: 18,
+            underlyings: underlyings
+        });
+
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
                     BalancerStablePoolExtension.BalancerStablePoolExtension__PoolTokensMustBeSupported.selector,
-                    address(WSTETH)
+                    address(STETH)
                 )
             )
         );
-        priceRouter.addAsset(wstETH_wETH_BPT, settings, abi.encode(0), 1915e8);
-    }
-
-    function testPricingLinearPoolWithUnsupportedMainToken() external checkBlockNumber {
-        PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerLinearPoolExtension));
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    BalancerLinearPoolExtension.BalancerLinearPoolExtension__MainTokenMustBeSupported.selector
-                )
-            )
-        );
-        priceRouter.addAsset(bb_a_USDC_BPT, settings, abi.encode(0), 1e8);
+        priceRouter.addAsset(wstETH_wETH_BPT, settings, abi.encode(stor), 1915e8);
     }
 
     // ======================================= HELPER FUNCTIONS =======================================

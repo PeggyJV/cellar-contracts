@@ -32,6 +32,7 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
     struct ExtensionStorage {
         bytes32 poolId;
         uint8 poolDecimals;
+        ERC20[8] underlyings;
     }
 
     /**
@@ -42,26 +43,25 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
     /**
      * @notice Called by the price router during `_updateAsset` calls.
      * @param asset the BPT token
-     * @dev bytes input is not used
      */
-    function setupSource(ERC20 asset, bytes memory) external override onlyPriceRouter {
+    function setupSource(ERC20 asset, bytes memory _storage) external override onlyPriceRouter {
         IBalancerPool pool = IBalancerPool(address(asset));
+        ExtensionStorage memory stor = abi.decode(_storage, (ExtensionStorage));
 
-        // Grab the poolId and tokens.
-        bytes32 poolId = pool.getPoolId();
-        (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(poolId);
+        // Grab the poolId and decimals.
+        stor.poolId = pool.getPoolId();
+        stor.poolDecimals = pool.decimals();
 
         // Make sure we can price all underlying tokens.
-        for (uint256 i; i < tokens.length; ++i) {
-            // Skip the asset if tokens[i] is the BPT.
-            if (address(tokens[i]) == address(asset)) continue;
-            if (!priceRouter.isSupported(ERC20(address(tokens[i]))))
-                revert BalancerStablePoolExtension__PoolTokensMustBeSupported(address(tokens[i]));
+        for (uint256 i; i < stor.underlyings.length; ++i) {
+            // Break when a zero address is found.
+            if (address(stor.underlyings[i]) == address(0)) break;
+            if (!priceRouter.isSupported(stor.underlyings[i]))
+                revert BalancerStablePoolExtension__PoolTokensMustBeSupported(address(stor.underlyings[i]));
         }
 
         // Save values in extension storage.
-        extensionStorage[asset].poolId = poolId;
-        extensionStorage[asset].poolDecimals = pool.decimals();
+        extensionStorage[asset] = stor;
     }
 
     /**
@@ -74,13 +74,13 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
 
         // Read extension storage and grab pool tokens
         ExtensionStorage memory stor = extensionStorage[asset];
-        (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(stor.poolId);
 
         // Find the minimum price of all the pool tokens.
         uint256 minPrice = type(uint256).max;
-        for (uint256 i; i < tokens.length; ++i) {
-            if (address(tokens[i]) == address(asset)) continue;
-            uint256 price = priceRouter.getPriceInUSD(ERC20(address(tokens[i])));
+        for (uint256 i; i < stor.underlyings.length; ++i) {
+            // Break when a zero address is found.
+            if (address(stor.underlyings[i]) == address(0)) break;
+            uint256 price = priceRouter.getPriceInUSD(stor.underlyings[i]);
             if (price < minPrice) minPrice = price;
         }
 
