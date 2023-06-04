@@ -28,6 +28,7 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
      * @notice Extension storage
      * @param poolId the pool id of the BPT being priced
      * @param poolDecimals the decimals of the BPT being priced
+     * @param underlyings the ERC20 underlying asset for each constituent in the pool
      */
     struct ExtensionStorage {
         bytes32 poolId;

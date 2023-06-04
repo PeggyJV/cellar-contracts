@@ -582,9 +582,24 @@ contract PriceRouterTest is Test {
         priceRouter.completeEditAsset(BOND, settings, abi.encode(stor), 4.18e8);
         uint256 exchangeRate;
 
+        UniswapV3Pool pool = UniswapV3Pool(WETH_RPL_03_POOL);
+
+        pool.increaseObservationCardinalityNext(900);
+        settings = PriceRouter.AssetSettings(TWAP_DERIVATIVE, WETH_RPL_03_POOL);
+        PriceRouter.TwapDerivativeStorage memory twapStor = PriceRouter.TwapDerivativeStorage({
+            secondsAgo: 900,
+            baseDecimals: 18,
+            quoteDecimals: 18,
+            quoteToken: WETH
+        });
+        priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
+
         // Test exchange rates work when quote is same as base.
         exchangeRate = priceRouter.getExchangeRate(USDC, USDC);
         assertEq(exchangeRate, 1e6, "USDC -> USDC Exchange Rate Should be 1e6");
+
+        exchangeRate = priceRouter.getExchangeRate(RPL, RPL);
+        assertEq(exchangeRate, 1e18, "RPL -> RPL Exchange Rate Should be 1e6");
 
         exchangeRate = priceRouter.getExchangeRate(DAI, DAI);
         assertEq(exchangeRate, 1e18, "DAI -> DAI Exchange Rate Should be 1e18");
