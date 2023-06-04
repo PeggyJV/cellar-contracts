@@ -6,6 +6,12 @@ import { ERC20 } from "src/base/Cellar.sol";
 import { IAxelarGateway } from "lib/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGateway.sol";
 import { IAxelarGasService } from "lib/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol";
 
+/**
+ * @notice This mock contract provides a method to send an Axelar message from one chain to another.
+ *         It is called MockSommelier because it is mimicing what the Sommelier chain would do
+ *         to send an Axelar message.
+ * @dev NOTE for actual Axelar messages from Sommelier, the Cosmos to EVM messaging logic will be used, not EVM to EVM.
+ */
 contract MockSommelier {
     using Address for address;
 
