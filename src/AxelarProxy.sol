@@ -26,6 +26,8 @@ contract AxelarProxy is AxelarExecutable {
     /**
      * @notice Execution logic.
      * @dev Verifies message is from Sommelier, otherwise reverts.
+     * @dev Verifies message is a valid Axelar message, otherwise reverts.
+     *      See `AxelarExecutable.sol`.
      */
     function _execute(string calldata sourceChain, string calldata, bytes calldata payload) internal override {
         // Validate Source Chain
