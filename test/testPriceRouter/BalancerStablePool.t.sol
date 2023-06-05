@@ -309,7 +309,7 @@ contract BalancerStablePoolTest is Test {
         priceRouter.addAsset(wstETH_wETH_BPT, settings, abi.encode(stor), 1915e8);
     }
 
-    function testMisConfiguredStorageData() external {
+    function testMisConfiguredStorageData() external checkBlockNumber {
         // Add required pricing.
         _addChainlinkAsset(USDC, USDC_USD_FEED, false);
         _addChainlinkAsset(WETH, WETH_USD_FEED, false);
