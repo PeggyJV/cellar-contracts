@@ -211,9 +211,9 @@ contract PriceRouter is Ownable {
     error PriceRouter__BadAnswer(uint256 answer, uint256 expectedAnswer);
 
     /**
-     * @notice Attempted to perform an operation using an unkown derivative.
+     * @notice Attempted to perform an operation using an unknown derivative.
      */
-    error PriceRouter__UnkownDerivative(uint8 unkownDerivative);
+    error PriceRouter__UnknownDerivative(uint8 unknownDerivative);
 
     /**
      * @notice Attempted to add an asset with invalid min/max prices.
@@ -345,7 +345,7 @@ contract PriceRouter is Ownable {
         if (address(_asset) == address(0)) revert PriceRouter__InvalidAsset(address(_asset));
 
         // Zero is an invalid derivative.
-        if (_settings.derivative == 0) revert PriceRouter__UnkownDerivative(_settings.derivative);
+        if (_settings.derivative == 0) revert PriceRouter__UnknownDerivative(_settings.derivative);
 
         // Call setup function for appropriate derivative.
         if (_settings.derivative == 1) {
@@ -354,7 +354,7 @@ contract PriceRouter is Ownable {
             _setupPriceForTwapDerivative(_asset, _settings.source, _storage);
         } else if (_settings.derivative == 3) {
             Extension(_settings.source).setupSource(_asset, _storage);
-        } else revert PriceRouter__UnkownDerivative(_settings.derivative);
+        } else revert PriceRouter__UnknownDerivative(_settings.derivative);
 
         // Check `_getPriceInUSD` against `_expectedAnswer`.
         uint256 minAnswer = _expectedAnswer.mulWadDown((1e18 - EXPECTED_ANSWER_DEVIATION));
@@ -525,7 +525,7 @@ contract PriceRouter is Ownable {
             price = _getPriceForTwapDerivative(asset, settings.source);
         } else if (settings.derivative == 3) {
             price = Extension(settings.source).getPriceInUSD(asset);
-        } else revert PriceRouter__UnkownDerivative(settings.derivative);
+        } else revert PriceRouter__UnknownDerivative(settings.derivative);
 
         return price;
     }
