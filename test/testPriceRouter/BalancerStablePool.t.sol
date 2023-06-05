@@ -16,7 +16,6 @@ import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
 // So I think the userData is an abi.encode min amount of BPTs, or maybe max amount(for exits)?
 
 import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
-import { BalancerLinearPoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerLinearPoolExtension.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 // import { IVault, VaultReentrancyLib } from "@balancer/pool-utils/contracts/lib/VaultReentrancyLib.sol";
