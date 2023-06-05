@@ -62,7 +62,7 @@ contract FeesAndReservesTest is Test {
     function setUp() external {
         feesAndReservesAdaptor = new MockFeesAndReservesAdaptor();
         erc20Adaptor = new ERC20Adaptor();
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
         far = new FeesAndReserves(address(this));

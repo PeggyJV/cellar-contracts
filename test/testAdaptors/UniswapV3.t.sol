@@ -90,7 +90,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
     function setUp() external {
         // Setup Registry and modules:
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
         gravity = new MockGravity();
