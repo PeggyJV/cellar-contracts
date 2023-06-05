@@ -406,6 +406,14 @@ contract PriceRouterTest is Test {
 
         // Fix seconds ago to add the asset.
         twapStor.secondsAgo = 900;
+
+        // Provide a bad answer.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(PriceRouter.PriceRouter__BadAnswer.selector, 4186877370, 35.86e8))
+        );
+        priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 35.86e8);
+
+        // Correct the answer.
         priceRouter.addAsset(RPL, settings, abi.encode(twapStor), 41.86e8);
     }
 
@@ -599,7 +607,7 @@ contract PriceRouterTest is Test {
         assertEq(exchangeRate, 1e6, "USDC -> USDC Exchange Rate Should be 1e6");
 
         exchangeRate = priceRouter.getExchangeRate(RPL, RPL);
-        assertEq(exchangeRate, 1e18, "RPL -> RPL Exchange Rate Should be 1e6");
+        assertEq(exchangeRate, 1e18, "RPL -> RPL Exchange Rate Should be 1e18");
 
         exchangeRate = priceRouter.getExchangeRate(DAI, DAI);
         assertEq(exchangeRate, 1e18, "DAI -> DAI Exchange Rate Should be 1e18");
