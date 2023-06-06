@@ -25,6 +25,9 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     // and allow user withdraws from aToken positions that are backing loans.
     // This will be mitigated by only allowing trusted strategists to use this adaptor,
     // and educating them the dangers of misconfiguring their position.
+    // EX: If a cellar is using their aTokens to back a borrow, then strategists
+    // should make their aToken positions illiquid, so that user withdraws do not
+    // negatively affect the cellars health factor.
     //====================================================================
 
     //============================================ Global Functions ===========================================
@@ -92,7 +95,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     }
 
     /**
-     * @notice Uses configurartion data to determine if the position is liquid or not.
+     * @notice Uses configuration data to determine if the position is liquid or not.
      */
     function withdrawableFrom(
         bytes memory adaptorData,
@@ -164,6 +167,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
         (uint256 inP2P, uint256 onPool) = morpho().supplyBalanceInOf(poolToken, user);
 
         uint256 balanceInUnderlying;
+        // Morpho indexes are scaled by 27 decimals, so divide by 1e27.
         if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho().p2pSupplyIndex(poolToken), 1e27);
         if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho().poolIndexes(poolToken).poolSupplyIndex, 1e27);
         return balanceInUnderlying;
