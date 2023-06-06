@@ -74,6 +74,10 @@ contract BalancerStablePoolTest is Test {
 
     IVault private vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
+    // Rate Providers
+    address private cbethRateProvider = 0x7311E4BB8a72e7B300c5B8BDE4de6CdaA822a5b1;
+    address private rethRateProvider = 0x1a8F81c256aee9C640e14bB0453ce247ea0DFE6F;
+
     Registry private registry;
 
     address private balancerRelayer = 0xfeA793Aa415061C483D2390414275AD314B3F621;
@@ -110,7 +114,7 @@ contract BalancerStablePoolTest is Test {
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
         uint8[8] memory rateProviderDecimals;
-        bytes4[8] memory functionSelectorToGetRate;
+        address[8] memory rateProviders;
         ERC20[8] memory underlyings;
         underlyings[0] = USDC;
         underlyings[1] = DAI;
@@ -119,7 +123,7 @@ contract BalancerStablePoolTest is Test {
             poolId: bytes32(0),
             poolDecimals: 18,
             rateProviderDecimals: rateProviderDecimals,
-            functionSelectorToGetRate: functionSelectorToGetRate,
+            rateProviders: rateProviders,
             underlyingOrConstituent: underlyings
         });
 
@@ -144,8 +148,8 @@ contract BalancerStablePoolTest is Test {
 
         uint8[8] memory rateProviderDecimals;
         rateProviderDecimals[1] = 18;
-        bytes4[8] memory functionSelectorToGetRate;
-        functionSelectorToGetRate[1] = IRETH.getExchangeRate.selector;
+        address[8] memory rateProviders;
+        rateProviders[1] = rethRateProvider;
         ERC20[8] memory underlyings;
         underlyings[0] = WETH;
         underlyings[1] = rETH;
@@ -153,7 +157,7 @@ contract BalancerStablePoolTest is Test {
             poolId: bytes32(0),
             poolDecimals: 18,
             rateProviderDecimals: rateProviderDecimals,
-            functionSelectorToGetRate: functionSelectorToGetRate,
+            rateProviders: rateProviders,
             underlyingOrConstituent: underlyings
         });
 
@@ -177,7 +181,7 @@ contract BalancerStablePoolTest is Test {
         PriceRouter.AssetSettings memory settings;
 
         uint8[8] memory rateProviderDecimals;
-        bytes4[8] memory functionSelectorToGetRate;
+        address[8] memory rateProviders;
         ERC20[8] memory underlyings;
         underlyings[0] = WETH;
         underlyings[1] = STETH;
@@ -185,7 +189,7 @@ contract BalancerStablePoolTest is Test {
             poolId: bytes32(0),
             poolDecimals: 18,
             rateProviderDecimals: rateProviderDecimals,
-            functionSelectorToGetRate: functionSelectorToGetRate,
+            rateProviders: rateProviders,
             underlyingOrConstituent: underlyings
         });
 
@@ -215,8 +219,8 @@ contract BalancerStablePoolTest is Test {
 
         uint8[8] memory rateProviderDecimals;
         rateProviderDecimals[0] = 18;
-        bytes4[8] memory functionSelectorToGetRate;
-        functionSelectorToGetRate[0] = ICBETH.exchangeRate.selector;
+        address[8] memory rateProviders;
+        rateProviders[0] = cbethRateProvider;
         ERC20[8] memory underlyings;
         underlyings[0] = cbETH;
         underlyings[1] = STETH;
@@ -224,7 +228,7 @@ contract BalancerStablePoolTest is Test {
             poolId: bytes32(0),
             poolDecimals: 18,
             rateProviderDecimals: rateProviderDecimals,
-            functionSelectorToGetRate: functionSelectorToGetRate,
+            rateProviders: rateProviders,
             underlyingOrConstituent: underlyings
         });
 
@@ -245,7 +249,7 @@ contract BalancerStablePoolTest is Test {
         PriceRouter.AssetSettings memory settings;
 
         uint8[8] memory rateProviderDecimals;
-        bytes4[8] memory functionSelectorToGetRate;
+        address[8] memory rateProviders;
         ERC20[8] memory underlyings;
         underlyings[0] = USDC;
         underlyings[1] = DAI;
@@ -254,7 +258,7 @@ contract BalancerStablePoolTest is Test {
             poolId: bytes32(0),
             poolDecimals: 18,
             rateProviderDecimals: rateProviderDecimals,
-            functionSelectorToGetRate: functionSelectorToGetRate,
+            rateProviders: rateProviders,
             underlyingOrConstituent: underlyings
         });
 
@@ -286,7 +290,7 @@ contract BalancerStablePoolTest is Test {
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
         uint8[8] memory rateProviderDecimals;
-        bytes4[8] memory functionSelectorToGetRate;
+        address[8] memory rateProviders;
         ERC20[8] memory underlyings;
         underlyings[0] = WETH;
         underlyings[1] = STETH;
@@ -294,7 +298,7 @@ contract BalancerStablePoolTest is Test {
             poolId: bytes32(0),
             poolDecimals: 18,
             rateProviderDecimals: rateProviderDecimals,
-            functionSelectorToGetRate: functionSelectorToGetRate,
+            rateProviders: rateProviders,
             underlyingOrConstituent: underlyings
         });
 
@@ -319,9 +323,8 @@ contract BalancerStablePoolTest is Test {
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
         uint8[8] memory rateProviderDecimals;
-        bytes4[8] memory functionSelectorToGetRate;
-        // Use the wrong selector.
-        functionSelectorToGetRate[1] = ICBETH.exchangeRate.selector;
+        address[8] memory rateProviders;
+        rateProviders[1] = cbethRateProvider;
         ERC20[8] memory underlyings;
         underlyings[0] = WETH;
         underlyings[1] = rETH;
@@ -329,7 +332,7 @@ contract BalancerStablePoolTest is Test {
             poolId: bytes32(0),
             poolDecimals: 18,
             rateProviderDecimals: rateProviderDecimals,
-            functionSelectorToGetRate: functionSelectorToGetRate,
+            rateProviders: rateProviders,
             underlyingOrConstituent: underlyings
         });
 
@@ -345,13 +348,6 @@ contract BalancerStablePoolTest is Test {
 
         // Update so we are providing the decimals.
         stor.rateProviderDecimals[1] = 18;
-
-        // Call still fails because we used cbETHs rate provider call instead of rETH.
-        vm.expectRevert(bytes("Address: low-level static call failed"));
-        priceRouter.addAsset(rETH_wETH_BPT, settings, abi.encode(stor), 1915e8);
-
-        // Fix the function selector.
-        stor.functionSelectorToGetRate[1] = IRETH.getExchangeRate.selector;
 
         // Call is now successful.
         priceRouter.addAsset(rETH_wETH_BPT, settings, abi.encode(stor), 1915e8);
