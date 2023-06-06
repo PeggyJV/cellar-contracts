@@ -158,7 +158,7 @@ contract FTokenAdaptor is BaseAdaptor {
      * @param fToken the token to withdraw from Aave.
      * @param amountToRedeem the amount of `tokenToWithdraw` to withdraw from Aave
      */
-    function redeemfraxShare(IFToken fToken, uint256 amountToRedeem) public {
+    function redeemFraxShare(IFToken fToken, uint256 amountToRedeem) public {
         _validateFToken(fToken);
         amountToRedeem = _maxAvailable(ERC20(address(fToken)), amountToRedeem);
 
