@@ -2,6 +2,7 @@
 pragma solidity 0.8.16;
 
 import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
+import { IRateProvider } from "src/interfaces/external/IRateProvider.sol";
 import { BalancerPoolExtension, PriceRouter, ERC20, Math, IVault, IERC20 } from "./BalancerPoolExtension.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
@@ -40,8 +41,9 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
      * @notice Extension storage
      * @param poolId the pool id of the BPT being priced
      * @param poolDecimals the decimals of the BPT being priced
-     * @param functionSelectorToGetRate the function selector to be called on constituent in order
-     *        to get the Rate Provider price.
+     * @param rateProviders array of rate providers for each constituent
+     *        a zero address rate provider means we are using an underlying correlated to the
+     *        pools virtual base.
      * @param underlyingOrConstituent the ERC20 underlying asset or the constituent in the pool
      * @dev Only use the underlying asset, if the underlying is correlated to the pools virtual base.
      */
@@ -49,7 +51,7 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
         bytes32 poolId;
         uint8 poolDecimals;
         uint8[8] rateProviderDecimals;
-        bytes4[8] functionSelectorToGetRate;
+        address[8] rateProviders;
         ERC20[8] underlyingOrConstituent;
     }
 
@@ -63,7 +65,7 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
      * @param asset the BPT token
      * @param _storage the abi encoded ExtensionStorage.
      * @dev _storage will have its poolId, and poolDecimals over written, but
-     *      rateProviderDecimals, functionSelectorToGetRate, and underlyingOrConstituent
+     *      rateProviderDecimals, rateProviders, and underlyingOrConstituent
      *      MUST be correct, providing wrong values will result in inaccurate pricing.
      */
     function setupSource(ERC20 asset, bytes memory _storage) external override onlyPriceRouter {
@@ -80,17 +82,12 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
             if (address(stor.underlyingOrConstituent[i]) == address(0)) break;
             if (!priceRouter.isSupported(stor.underlyingOrConstituent[i]))
                 revert BalancerStablePoolExtension__PoolTokensMustBeSupported(address(stor.underlyingOrConstituent[i]));
-            if (stor.functionSelectorToGetRate[i] != bytes4(0)) {
+            if (stor.rateProviders[i] != address(0)) {
                 // Make sure decimals were provided.
                 if (stor.rateProviderDecimals[i] == 0)
                     revert BalancerStablePoolExtension__RateProviderDecimalsNotProvided();
                 // Make sure we can call it and get a non zero value.
-                address constituent = address(stor.underlyingOrConstituent[i]);
-                bytes memory result = constituent.functionStaticCall(
-                    abi.encodeWithSelector(stor.functionSelectorToGetRate[i])
-                );
-                if (result.length == 0) revert BalancerStablePoolExtension__RateProviderCallFailed();
-                uint256 rate = abi.decode(result, (uint256));
+                uint256 rate = IRateProvider(stor.rateProviders[i]).getRate();
                 if (rate == 0) revert BalancerStablePoolExtension__RateProviderCallFailed();
             }
         }
@@ -116,13 +113,8 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
             // Break when a zero address is found.
             if (address(stor.underlyingOrConstituent[i]) == address(0)) break;
             uint256 price = priceRouter.getPriceInUSD(stor.underlyingOrConstituent[i]);
-            if (stor.functionSelectorToGetRate[i] != bytes4(0)) {
-                address constituent = address(stor.underlyingOrConstituent[i]);
-                bytes memory result = constituent.functionStaticCall(
-                    abi.encodeWithSelector(stor.functionSelectorToGetRate[i])
-                );
-                if (result.length == 0) revert BalancerStablePoolExtension__RateProviderCallFailed();
-                uint256 rate = abi.decode(result, (uint256));
+            if (stor.rateProviders[i] != address(0)) {
+                uint256 rate = IRateProvider(stor.rateProviders[i]).getRate();
                 price = price.mulDivDown(10 ** stor.rateProviderDecimals[i], rate);
             }
             if (price < minPrice) minPrice = price;

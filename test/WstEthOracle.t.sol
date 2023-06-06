@@ -6,6 +6,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { IAaveOracle } from "src/interfaces/external/IAaveOracle.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
+import { Registry } from "src/Registry.sol";
 
 import { Test, console, stdStorage, StdStorage } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -14,8 +15,9 @@ contract WstEthOracleTest is Test {
     using Math for uint256;
     using stdStorage for StdStorage;
 
-    PriceRouter private immutable priceRouter = new PriceRouter();
+    PriceRouter private priceRouter;
     WstEthExtension private wstEthOracle;
+    Registry private registry;
 
     address private immutable sender = vm.addr(0xABCD);
     address private immutable receiver = vm.addr(0xBEEF);
@@ -36,6 +38,9 @@ contract WstEthOracleTest is Test {
     function setUp() external {
         // Ignore if not on mainnet.
         if (block.chainid != 1) return;
+
+        registry = new Registry(address(this), address(this), address(this));
+        priceRouter = new PriceRouter(registry);
 
         wstEthOracle = new WstEthExtension();
 
