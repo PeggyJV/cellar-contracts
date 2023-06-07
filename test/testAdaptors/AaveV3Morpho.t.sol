@@ -4,7 +4,7 @@ pragma solidity 0.8.16;
 import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
-import { MorphoAaveV3ATokenP2PAdaptor, IMorpho, BaseAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3ATokenP2PAdaptor.sol";
+import { MorphoAaveV3ATokenP2PAdaptor, IMorphoV3, BaseAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3ATokenP2PAdaptor.sol";
 import { MorphoAaveV3ATokenCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3ATokenCollateralAdaptor.sol";
 import { MorphoAaveV3DebtTokenAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3DebtTokenAdaptor.sol";
 import { Registry } from "src/Registry.sol";
@@ -48,7 +48,7 @@ contract CellarAaveV3MorphoTest is Test {
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     IPoolV3 private pool = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
 
-    IMorpho private morpho = IMorpho(0x33333aea097c193e66081E930c33020272b33333);
+    IMorphoV3 private morpho = IMorphoV3(0x33333aea097c193e66081E930c33020272b33333);
     WstEthExtension private wstEthOracle;
 
     // Chainlink PriceFeeds
@@ -530,7 +530,7 @@ contract CellarAaveV3MorphoTest is Test {
         // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
-        IMorpho.LiquidityData memory liquidityData = morpho.liquidityData(address(cellar));
+        IMorphoV3.LiquidityData memory liquidityData = morpho.liquidityData(address(cellar));
         uint256 morphoHealthFactor = uint256(1e18).mulDivDown(liquidityData.maxDebt, liquidityData.debt);
 
         assertApproxEqRel(
@@ -627,7 +627,7 @@ contract CellarAaveV3MorphoTest is Test {
     }
 
     function _getUserHealthFactor(address user) internal view returns (uint256) {
-        IMorpho.LiquidityData memory liquidityData = morpho.liquidityData(user);
+        IMorphoV3.LiquidityData memory liquidityData = morpho.liquidityData(user);
 
         return liquidityData.debt > 0 ? wadDiv(liquidityData.maxDebt, liquidityData.debt) : type(uint256).max;
     }

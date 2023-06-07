@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
+import { IMorphoV3 } from "src/interfaces/external/Morpho/IMorphoV3.sol";
 import { MorphoRewardHandler } from "src/modules/adaptors/Morpho/MorphoRewardHandler.sol";
 
 /**
@@ -41,8 +41,8 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
     /**
      * @notice The Morpho Aave V3 contract on Ethereum Mainnet.
      */
-    function morpho() internal pure returns (IMorpho) {
-        return IMorpho(0x33333aea097c193e66081E930c33020272b33333);
+    function morpho() internal pure returns (IMorphoV3) {
+        return IMorphoV3(0x33333aea097c193e66081E930c33020272b33333);
     }
 
     //============================================ Implement Base Functions ===========================================

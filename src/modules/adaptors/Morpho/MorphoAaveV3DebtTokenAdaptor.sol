@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IMorpho } from "src/interfaces/external/Morpho/IMorpho.sol";
+import { IMorphoV3 } from "src/interfaces/external/Morpho/IMorphoV3.sol";
 
 /**
  * @title Morpho Aave V3 debtToken Adaptor
@@ -46,8 +46,8 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
     /**
      * @notice The Morpho Aave V3 contract on Ethereum Mainnet.
      */
-    function morpho() internal pure returns (IMorpho) {
-        return IMorpho(0x33333aea097c193e66081E930c33020272b33333);
+    function morpho() internal pure returns (IMorphoV3) {
+        return IMorphoV3(0x33333aea097c193e66081E930c33020272b33333);
     }
 
     /**
@@ -146,7 +146,7 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
      * https://etherscan.io/address/0x4592e45e0c5DbEe94a135720cCfF2e4353dAc6De#code
      */
     function _getUserHealthFactor(address user) internal view returns (uint256) {
-        IMorpho.LiquidityData memory liquidityData = morpho().liquidityData(user);
+        IMorphoV3.LiquidityData memory liquidityData = morpho().liquidityData(user);
 
         return
             liquidityData.debt > 0

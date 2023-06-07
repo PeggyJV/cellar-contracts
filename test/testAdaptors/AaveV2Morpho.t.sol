@@ -4,7 +4,7 @@ pragma solidity 0.8.16;
 import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
-import { MorphoAaveV2ATokenAdaptor, IMorpho, BaseAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV2ATokenAdaptor.sol";
+import { MorphoAaveV2ATokenAdaptor, IMorphoV2, BaseAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV2ATokenAdaptor.sol";
 import { MorphoAaveV2DebtTokenAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV2DebtTokenAdaptor.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -60,7 +60,7 @@ contract CellarAaveV2MorphoTest is Test {
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     IPoolV3 private pool = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
 
-    IMorpho private morpho = IMorpho(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
+    IMorphoV2 private morpho = IMorphoV2(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
     WstEthExtension private wstEthOracle;
 
     // Chainlink PriceFeeds
