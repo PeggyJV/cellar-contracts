@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 interface IMorphoV3 {
-    // For Aave V3.
     struct LiquidityData {
         uint256 borrowable; // The maximum debt value allowed to borrow (in base currency).
         uint256 maxDebt; // The maximum debt value allowed before being liquidatable (in base currency).

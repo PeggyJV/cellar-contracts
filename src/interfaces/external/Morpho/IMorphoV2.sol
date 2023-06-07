@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 interface IMorphoV2 {
-    // For Aave V2.
     struct PoolIndexes {
         uint32 lastUpdateTimestamp; // The last time the local pool and peer-to-peer indexes were updated.
         uint112 poolSupplyIndex; // Last pool supply index. Note that for the stEth market, the pool supply index is tweaked to take into account the staking rewards.
