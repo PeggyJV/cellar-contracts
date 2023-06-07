@@ -79,7 +79,15 @@ contract RealYeildGovTest is Test {
 
     CellarInitializableV2_2 private cellar;
 
-    function setUp() external {
+    modifier checkBlockNumber() {
+        if (block.number < 17297048) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 17297048.");
+            return;
+        }
+        _;
+    }
+
+    function setUp() external checkBlockNumber {
         registry = new Registry(gravityBridge, address(swapRouter), address(priceRouter));
         factory = new CellarFactory();
 
@@ -145,7 +153,7 @@ contract RealYeildGovTest is Test {
         // cellar.transferOwnership(strategist);
     }
 
-    function testLinkRealYieldGov() external {
+    function testLinkRealYieldGov() external checkBlockNumber {
         if (block.number < 17034079) {
             console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 17034079.");
             return;
