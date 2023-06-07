@@ -71,7 +71,7 @@ contract CellarCompoundTest is Test {
         cTokenAdaptor = new CTokenAdaptor();
         erc20Adaptor = new ERC20Adaptor();
         vestingAdaptor = new VestingSimpleAdaptor();
-        priceRouter = new PriceRouter();
+        priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));

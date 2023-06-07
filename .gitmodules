@@ -11,12 +11,18 @@
 	branch = 0.8
 [submodule "/Users/crispymangoes/Documents/Solidity/cellar-contracts/lib/v3-core.git"]
 	branch = 0.8
-[submodule "lib/v3-core.git"]
-	path = lib/v3-core.git
-	url = https://github.com/Uniswap/v3-core.git
-[submodule "lib/v3-periphery.git"]
-	path = lib/v3-periphery.git
-	url = https://github.com/crispymangoes/v3-periphery.git
 [submodule "lib/solmate"]
 	path = lib/solmate
 	url = https://github.com/transmissions11/solmate
+[submodule "lib/v3-core"]
+	path = lib/v3-core
+	url = https://github.com/Uniswap/v3-core
+[submodule "lib/v3-periphery"]
+	path = lib/v3-periphery
+	url = https://github.com/Uniswap/v3-periphery
+[submodule "lib/balancer-v2-monorepo"]
+	path = lib/balancer-v2-monorepo
+	url = https://github.com/balancer/balancer-v2-monorepo
+[submodule "lib/axelar-gmp-sdk-solidity"]
+	path = lib/axelar-gmp-sdk-solidity
+	url = https://github.com/axelarnetwork/axelar-gmp-sdk-solidity
