@@ -79,11 +79,12 @@ contract CellarAaveV3MorphoTest is Test {
         debtTokenAdaptor = new MorphoAaveV3DebtTokenAdaptor();
         erc20Adaptor = new ERC20Adaptor();
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
-        priceRouter = new PriceRouter();
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
+        priceRouter = new PriceRouter(registry);
+        registry.setAddress(2, address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -550,7 +551,7 @@ contract CellarAaveV3MorphoTest is Test {
 
     // ========================================== INTEGRATION TEST ==========================================
 
-    function testIntegrationRealYieldEth(uint256 assets) external {
+    function testIntegrationRealYieldEth(uint256 assets) external checkBlockNumber {
         // Setup cellar so that aSTETH is illiquid.
         // Then have strategist loop into STETH.
         // -Deposit STETH as collateral, and borrow WETH, repeat.
