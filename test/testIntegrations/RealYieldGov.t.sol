@@ -154,10 +154,6 @@ contract RealYeildGovTest is Test {
     }
 
     function testLinkRealYieldGov() external checkBlockNumber {
-        if (block.number < 17034079) {
-            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 17034079.");
-            return;
-        }
         uint256 assets = 10_000e18;
         deal(address(LINK), address(this), assets);
         LINK.approve(address(cellar), assets);
