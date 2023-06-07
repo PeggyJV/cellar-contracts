@@ -26,6 +26,3 @@
 [submodule "lib/axelar-gmp-sdk-solidity"]
 	path = lib/axelar-gmp-sdk-solidity
 	url = https://github.com/axelarnetwork/axelar-gmp-sdk-solidity
-[submodule "lib/morpho-aave-v3"]
-	path = lib/morpho-aave-v3
-	url = https://github.com/morpho-org/morpho-aave-v3
