@@ -33,12 +33,14 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     // FraxLend fToken markets.
     address private FXS_FRAX_MARKET = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
+    address private FPI_FRAX_MARKET = 0x74F82Bd9D0390A4180DaaEc92D64cf0708751759;
 
     // Chainlink PriceFeeds
     address private FRAX_USD_FEED = 0xB9E1E3A9feFf48998E45Fa90847ed4D467E8BcfD;
 
     uint32 private fraxPosition;
     uint32 private fxsFraxMarketPosition;
+    uint32 private fpiFraxMarketPosition;
 
     modifier checkBlockNumber() {
         if (block.number < 16869780) {
@@ -72,6 +74,7 @@ contract FraxLendFTokenAdaptorTest is Test {
 
         fraxPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(FRAX));
         fxsFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FXS_FRAX_MARKET));
+        fpiFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FPI_FRAX_MARKET));
 
         cellar = new CellarInitializableV2_2(registry);
         cellar.initialize(
@@ -90,6 +93,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         cellar.addAdaptorToCatalogue(address(fTokenAdaptor));
 
         cellar.addPositionToCatalogue(fraxPosition);
+        cellar.addPositionToCatalogue(fpiFraxMarketPosition);
 
         FRAX.safeApprove(address(cellar), type(uint256).max);
 
@@ -182,9 +186,46 @@ contract FraxLendFTokenAdaptorTest is Test {
         );
     }
 
-    function testRebalancingBetweenMarkets() external {}
+    function testRebalancingBetweenMarkets(uint256 assets) external {
+        // Add another Frax Lend market.
+        cellar.addPosition(0, fpiFraxMarketPosition, abi.encode(0), false);
+
+        // Have user deposit into cellar.
+        assets = bound(assets, 0.01e18, 100_000_000e18);
+        deal(address(FRAX), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Strategist rebalances to withdraw FRAX, and lend in a different market.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        // Withdraw FRAX from FraxLend.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRedeem(FXS_FRAX_MARKET, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(FPI_FRAX_MARKET, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
+
+        IFToken market = IFToken(FPI_FRAX_MARKET);
+        uint256 shareBalance = market.balanceOf(address(cellar));
+        assertTrue(shareBalance > 0, "Cellar should own shares.");
+        assertApproxEqAbs(
+            market.toAssetAmount(shareBalance, false),
+            assets,
+            3,
+            "Rebalance should have lent in other market."
+        );
+    }
 
     function testUsingMarketNotSetupAsPosition() external {}
+
+    function testWhereWithdrawPullsFromMultiplePositions() external {}
 
     // ========================================= HELPER FUNCTIONS =========================================
 
