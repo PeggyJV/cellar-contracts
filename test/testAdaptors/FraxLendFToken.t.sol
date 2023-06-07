@@ -223,9 +223,19 @@ contract FraxLendFTokenAdaptorTest is Test {
         );
     }
 
-    function testUsingMarketNotSetupAsPosition() external {}
+    function testUsingMarketNotSetupAsPosition() external {
+        // try lending and redeemin with fTokens that are not positions in the cellar and check for revert.
+    }
 
-    function testWhereWithdrawPullsFromMultiplePositions() external {}
+    function testMultiplePositions() external {
+        // Check that FRAX in multiple different markets is correctly accounted for in total assets.
+        // Test that users can withdraw from multiple markets at once.
+    }
+
+    function testWithdrawableFrom() external {
+        // make sure withdrawable from behaves as expected.
+        // Will need to lend collateral and then make a huge borrow.
+    }
 
     // ========================================= HELPER FUNCTIONS =========================================
 
