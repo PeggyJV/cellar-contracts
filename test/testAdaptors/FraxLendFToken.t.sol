@@ -305,6 +305,39 @@ contract FraxLendFTokenAdaptorTest is Test {
             )
         );
         cellar.callOnAdaptor(data);
+
+        address maliciousContract = vm.addr(87345834);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRedeem(maliciousContract, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+        }
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    FTokenAdaptor.FTokenAdaptor__FTokenPositionsMustBeTracked.selector,
+                    (maliciousContract)
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdraw(maliciousContract, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+        }
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    FTokenAdaptor.FTokenAdaptor__FTokenPositionsMustBeTracked.selector,
+                    (maliciousContract)
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
     }
 
     // Check that FRAX in multiple different markets is correctly accounted for in total assets.
