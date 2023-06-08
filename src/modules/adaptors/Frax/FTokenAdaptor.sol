@@ -7,7 +7,7 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
 /**
  * @title FraxLend fToken Adaptor
  * @notice Allows Cellars to lend FRAX to FraxLend markets.
- * @author crispymangoes, eincodes
+ * @author crispymangoes, 0xEinCodes
  */
 contract FTokenAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
@@ -176,26 +176,67 @@ contract FTokenAdaptor is BaseAdaptor {
     }
 
     //============================================ Interface Helper Functions ===========================================
-    /**
-     * @notice The Frax Pair interface can slightly change between versions.
-     *         To account for this, FTokenAdaptors will use the below internal functions when
-     *         interacting with Frax Pairs, this way new pairs can be added by creating a
-     *         new contract that inherits from this one, and overrides any function it needs
-     *         so it conforms with the new Frax Pair interface.
-     */
 
+    //============================== Interface Details ==============================
+    // The Frax Pair interface can slightly change between versions.
+    // To account for this, FTokenAdaptors will use the below internal functions when
+    // interacting with Frax Pairs, this way new pairs can be added by creating a
+    // new contract that inherits from this one, and overrides any function it needs
+    // so it conforms with the new Frax Pair interface.
+
+    // Current versions in use for `FraxLendPair` include v1 and v2.
+
+    // IMPORTANT: This `FTokenAdaptor.sol` is associated to the v2 version of `FraxLendPair`
+    // whereas FTokenAdaptorV1 is actually associated to `FraxLendPairv1`. 
+    // The reasoning to name it like this was to set up the base FTokenAdaptor for the 
+    // most current version, v2. This is in anticipation that more FraxLendPairs will 
+    // be deployed following v2 in the near future. When later versions are deployed, 
+    // then the described inheritance pattern above will be used. 
+    //===============================================================================
+
+    /**
+     * @notice Deposit $FRAX into specified 'v2' FraxLendPair
+     * @dev ftoken.deposit() calls into the respective version (v2 by default) of FraxLendPair
+     * @param fToken The specified FraxLendPair
+     * @param amount The amount of $FRAX Token to transfer to Pair
+     * @param receiver The address to receive the Asset Shares (fTokens)
+     */
     function _deposit(IFToken fToken, uint256 amount, address receiver) internal virtual {
         fToken.deposit(amount, receiver);
     }
 
+    /**
+     * @notice Withdraw $FRAX from specified 'v2' FraxLendPair
+     * @dev ftoken.withdraw() calls into the respective version (v2 by default) of FraxLendPair
+     * @param fToken The specified FraxLendPair
+     * @param assets The amount to withdraw
+     * @param receiver The address to which the Asset Tokens will be transferred
+     * @param owner The owner of the Asset Shares (fTokens)
+     */
     function _withdraw(IFToken fToken, uint256 assets, address receiver, address owner) internal virtual {
         fToken.withdraw(assets, receiver, owner);
     }
 
+    /**
+     * @notice Caller redeems Asset Shares for Asset Tokens $FRAX from specified 'v2' FraxLendPair
+     * @dev ftoken.redeem() calls into the respective version (v2 by default) of FraxLendPair
+     * @param fToken The specified FraxLendPair
+     * @param shares The number of Asset Shares (fTokens) to burn for Asset Tokens
+     * @param receiver The address to which the Asset Tokens will be transferred
+     * @param owner The owner of the Asset Shares (fTokens)
+     */
     function _redeem(IFToken fToken, uint256 shares, address receiver, address owner) internal virtual {
         fToken.redeem(shares, receiver, owner);
     }
 
+    /**
+     * @notice Converts a given number of shares to $FRAX amount from specified 'v2' FraxLendPair
+     * @dev This is one of the adjusted functions from v1 to v2. ftoken.toAssetAmount() calls into the respective version (v2 by default) of FraxLendPair
+     * @param fToken The specified FraxLendPair
+     * @param shares Shares of asset (fToken)
+     * @param roundUp Whether to round up after division
+     * @param previewInterest Whether to preview interest accrual before calculation
+     */
     function _toAssetAmount(
         IFToken fToken,
         uint256 shares,
@@ -205,6 +246,14 @@ contract FTokenAdaptor is BaseAdaptor {
         return fToken.toAssetAmount(shares, roundUp, previewInterest);
     }
 
+    /**
+     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified 'v2' FraxLendPair
+     * @dev This is one of the adjusted functions from v1 to v2. ftoken.toAssetShares() calls into the respective version (v2 by default) of FraxLendPair
+     * @param fToken The specified FraxLendPair
+     * @param amount The amount of asset
+     * @param roundUp Whether to round up after division
+     * @param previewInterest Whether to preview interest accrual before calculation
+     */
     function _toAssetShares(
         IFToken fToken,
         uint256 amount,
@@ -214,10 +263,22 @@ contract FTokenAdaptor is BaseAdaptor {
         return fToken.toAssetShares(amount, roundUp, previewInterest);
     }
 
+    /**
+     * @dev Returns the amount of tokens owned by `account`.
+     */
     function _balanceOf(IFToken fToken, address user) internal view virtual returns (uint256) {
         return fToken.balanceOf(user);
     }
 
+    /**
+     * @notice gets all pair level accounting numbers from specified 'v2' FraxLendPair
+     * @param fToken The specified FraxLendPair
+     * @return totalAssetAmount Total assets deposited and interest accrued, total claims
+     * @return totalAssetShares Total fTokens
+     * @return totalBorrowAmount Total borrows
+     * @return totalBorrowShares Total borrow shares
+     * @return totalCollateral Total collateral
+     */
     function _getPairAccounting(
         IFToken fToken
     )
