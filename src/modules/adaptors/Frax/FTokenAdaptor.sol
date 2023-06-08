@@ -21,7 +21,16 @@ contract FTokenAdaptor is BaseAdaptor {
     // NA
     //====================================================================
 
+    /**
+     * @notice Attempted to interact with an fToken the Cellar is not using.
+     */
     error FTokenAdaptor__FTokenPositionsMustBeTracked(address fToken);
+
+    /**
+     * @notice Indicates whether or not we should worry about updating interest
+     *         when interacting with FraxLend.
+     */
+    bool constant ACCOUNT_FOR_INTEREST = true;
 
     //============================================ Global Functions ===========================================
     /**
@@ -72,9 +81,7 @@ contract FTokenAdaptor is BaseAdaptor {
 
         // Withdraw assets from Frax.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        // Round down to benefit protocol.
-        uint256 shares = _toAssetShares(fToken, assets, false);
-        _redeem(fToken, shares, receiver, address(this));
+        _withdraw(fToken, assets, receiver, address(this));
     }
 
     /**
@@ -90,7 +97,7 @@ contract FTokenAdaptor is BaseAdaptor {
         (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = _getPairAccounting(fToken);
         if (totalFraxBorrowed > totalFraxSupplied) return 0;
         uint256 liquidFrax = totalFraxSupplied - totalFraxBorrowed;
-        uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false);
+        uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
         withdrawableFrax = fraxBalance > liquidFrax ? liquidFrax : fraxBalance;
     }
 
@@ -99,7 +106,7 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        return _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false);
+        return _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
     }
 
     /**
@@ -134,15 +141,27 @@ contract FTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Allows strategists to withdraw FRAX from FraxLend.
-     * @param fToken the market to withdraw form on FraxLend
-     * @param amountToRedeem the amount of FRAX to withdraw from FraxLend
+     * @notice Allows strategists to redeem Frax shares from FraxLend.
+     * @param fToken the market to withdraw from on FraxLend
+     * @param amountToRedeem the amount of Frax shares to redeem from FraxLend
      */
     function redeemFraxShare(IFToken fToken, uint256 amountToRedeem) public {
         _validateFToken(fToken);
         amountToRedeem = _maxAvailable(ERC20(address(fToken)), amountToRedeem);
 
         _redeem(fToken, amountToRedeem, address(this), address(this));
+    }
+
+    /**
+     * @notice Allows strategists to withdraw FRAX from FraxLend.
+     * @dev Used to withdraw an exact amount from Frax Lend.
+     *      Use `redeemFraxShare` to withdraw all.
+     * @param fToken the market to withdraw from on FraxLend
+     * @param amountToWithdraw the amount of FRAX to withdraw from FraxLend
+     */
+    function withdrawFrax(IFToken fToken, uint256 amountToWithdraw) public {
+        _validateFToken(fToken);
+        _withdraw(fToken, amountToWithdraw, address(this), address(this));
     }
 
     /**
@@ -169,16 +188,30 @@ contract FTokenAdaptor is BaseAdaptor {
         fToken.deposit(amount, receiver);
     }
 
+    function _withdraw(IFToken fToken, uint256 assets, address receiver, address owner) internal virtual {
+        fToken.withdraw(assets, receiver, owner);
+    }
+
     function _redeem(IFToken fToken, uint256 shares, address receiver, address owner) internal virtual {
         fToken.redeem(shares, receiver, owner);
     }
 
-    function _toAssetAmount(IFToken fToken, uint256 shares, bool roundUp) internal view virtual returns (uint256) {
-        return fToken.toAssetAmount(shares, roundUp);
+    function _toAssetAmount(
+        IFToken fToken,
+        uint256 shares,
+        bool roundUp,
+        bool previewInterest
+    ) internal view virtual returns (uint256) {
+        return fToken.toAssetAmount(shares, roundUp, previewInterest);
     }
 
-    function _toAssetShares(IFToken fToken, uint256 amount, bool roundUp) internal view virtual returns (uint256) {
-        return fToken.toAssetShares(amount, roundUp);
+    function _toAssetShares(
+        IFToken fToken,
+        uint256 amount,
+        bool roundUp,
+        bool previewInterest
+    ) internal view virtual returns (uint256) {
+        return fToken.toAssetShares(amount, roundUp, previewInterest);
     }
 
     function _balanceOf(IFToken fToken, address user) internal view virtual returns (uint256) {

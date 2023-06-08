@@ -9,7 +9,7 @@ import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
-import { FTokenAdaptorV2 } from "src/modules/adaptors/Frax/FTokenAdaptorV2.sol";
+import { FTokenAdaptorV1 } from "src/modules/adaptors/Frax/FTokenAdaptorV1.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -21,8 +21,8 @@ contract FraxLendFTokenAdaptorTest is Test {
     using Address for address;
 
     ERC20Adaptor private erc20Adaptor;
-    FTokenAdaptor private fTokenAdaptor;
-    FTokenAdaptorV2 private fTokenAdaptorV2;
+    FTokenAdaptor private fTokenAdaptorV2;
+    FTokenAdaptorV1 private fTokenAdaptor;
     CellarInitializableV2_2 private cellar;
     PriceRouter private priceRouter;
     Registry private registry;
@@ -57,8 +57,8 @@ contract FraxLendFTokenAdaptorTest is Test {
     }
 
     function setUp() external {
-        fTokenAdaptor = new FTokenAdaptor();
-        fTokenAdaptorV2 = new FTokenAdaptorV2();
+        fTokenAdaptorV2 = new FTokenAdaptor();
+        fTokenAdaptor = new FTokenAdaptorV1();
         erc20Adaptor = new ERC20Adaptor();
 
         registry = new Registry(address(this), address(this), address(priceRouter));

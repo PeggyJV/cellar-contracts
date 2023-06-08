@@ -8,7 +8,7 @@ import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.
  * @notice Allows Cellars to lend FRAX to FraxLend markets.
  * @author crispymangoes, eincodes
  */
-contract FTokenAdaptorV2 is FTokenAdaptor {
+contract FTokenAdaptorV1 is FTokenAdaptor {
     //============================================ Interface Helper Functions ===========================================
     /**
      * @notice The Frax Pair interface can slightly change between versions.
@@ -25,20 +25,31 @@ contract FTokenAdaptorV2 is FTokenAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend fTokenV2 Adaptor V 0.0"));
+        return keccak256(abi.encode("FraxLend fTokenV1 Adaptor V 0.0"));
     }
 
-    function _toAssetAmount(IFToken fToken, uint256 shares, bool roundUp) internal view override returns (uint256) {
-        // Note set `previewInterest` to false.
-        // With such low interest rates on FRAX lending, the delta between the stored value,
-        // and the true value will be negligible, and it not worth the extra gas cost.
-        return fToken.toAssetAmount(shares, roundUp, false);
+    function _withdraw(IFToken fToken, uint256 assets, address receiver, address owner) internal override {
+        // If accounting for interest, call `addInterest` before calculating shares to redeem.
+        if (ACCOUNT_FOR_INTEREST) fToken.addInterest();
+        uint256 shares = _toAssetShares(fToken, assets, false, ACCOUNT_FOR_INTEREST);
+        fToken.redeem(shares, receiver, owner);
     }
 
-    function _toAssetShares(IFToken fToken, uint256 amount, bool roundUp) internal view override returns (uint256) {
-        // Note set `previewInterest` to false.
-        // With such low interest rates on FRAX lending, the delta between the stored value,
-        // and the true value will be negligible, and it not worth the extra gas cost.
-        return fToken.toAssetShares(amount, roundUp, false);
+    function _toAssetAmount(
+        IFToken fToken,
+        uint256 shares,
+        bool roundUp,
+        bool
+    ) internal view override returns (uint256) {
+        return fToken.toAssetAmount(shares, roundUp);
+    }
+
+    function _toAssetShares(
+        IFToken fToken,
+        uint256 amount,
+        bool roundUp,
+        bool
+    ) internal view override returns (uint256) {
+        return fToken.toAssetShares(amount, roundUp);
     }
 }
