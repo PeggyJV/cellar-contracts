@@ -95,7 +95,7 @@ contract FTokenAdaptor is BaseAdaptor {
     ) public view override returns (uint256 withdrawableFrax) {
         IFToken fToken = abi.decode(adaptorData, (IFToken));
         (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = _getPairAccounting(fToken);
-        if (totalFraxBorrowed > totalFraxSupplied) return 0;
+        if (totalFraxBorrowed >= totalFraxSupplied) return 0;
         uint256 liquidFrax = totalFraxSupplied - totalFraxBorrowed;
         uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
         withdrawableFrax = fraxBalance > liquidFrax ? liquidFrax : fraxBalance;

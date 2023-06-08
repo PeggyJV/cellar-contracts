@@ -28,6 +28,10 @@ interface IFToken {
             uint256 totalCollateral
         );
 
+    function borrowAsset(uint256 borrowAmount, uint256 collateralAmount, address receiver) external;
+
+    function repayAsset(uint256 shares, address borrower) external;
+
     // Changes for Frax Pair V2 interface.
     struct CurrentRateInfo {
         uint32 lastBlock;

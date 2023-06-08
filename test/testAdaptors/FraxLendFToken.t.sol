@@ -34,19 +34,23 @@ contract FraxLendFTokenAdaptorTest is Test {
     address private UNTRUSTED_sfrxETH = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
 
     ERC20 public FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
+    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     // FraxLend fToken markets.
     address private FXS_FRAX_MARKET = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
     address private FPI_FRAX_MARKET = 0x74F82Bd9D0390A4180DaaEc92D64cf0708751759;
     address private SFRXETH_FRAX_MARKET = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
+    address private WETH_FRAX_MARKET = 0x794F6B13FBd7EB7ef10d1ED205c9a416910207Ff;
 
     // Chainlink PriceFeeds
     address private FRAX_USD_FEED = 0xB9E1E3A9feFf48998E45Fa90847ed4D467E8BcfD;
+    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
 
     uint32 private fraxPosition;
     uint32 private fxsFraxMarketPosition;
     uint32 private fpiFraxMarketPosition;
     uint32 private sfrxEthFraxMarketPosition;
+    uint32 private wEthFraxMarketPosition;
 
     modifier checkBlockNumber() {
         if (block.number < 16869780) {
@@ -73,6 +77,10 @@ contract FraxLendFTokenAdaptorTest is Test {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, FRAX_USD_FEED);
         priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
 
+        price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
         // Setup Cellar:
 
         // Add adaptors and positions to the registry.
@@ -84,6 +92,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         fxsFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FXS_FRAX_MARKET));
         fpiFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FPI_FRAX_MARKET));
         sfrxEthFraxMarketPosition = registry.trustPosition(address(fTokenAdaptorV2), abi.encode(SFRXETH_FRAX_MARKET));
+        wEthFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(WETH_FRAX_MARKET));
 
         cellar = new CellarInitializableV2_2(registry);
         cellar.initialize(
@@ -105,6 +114,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         cellar.addPositionToCatalogue(fraxPosition);
         cellar.addPositionToCatalogue(fpiFraxMarketPosition);
         cellar.addPositionToCatalogue(sfrxEthFraxMarketPosition);
+        cellar.addPositionToCatalogue(wEthFraxMarketPosition);
 
         FRAX.safeApprove(address(cellar), type(uint256).max);
 
@@ -303,8 +313,51 @@ contract FraxLendFTokenAdaptorTest is Test {
     }
 
     function testWithdrawableFrom() external {
-        // make sure withdrawable from behaves as expected.
-        // Will need to lend collateral and then make a huge borrow.
+        // Make cellar deposits lend FRAX into WETH Pair.
+        cellar.addPosition(0, wEthFraxMarketPosition, abi.encode(0), false);
+        cellar.setHoldingPosition(wEthFraxMarketPosition);
+
+        uint256 assets = 10_000e18;
+        deal(address(FRAX), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        address whaleBorrower = vm.addr(777);
+
+        // Figure out how much the whale must borrow to borrow all the Frax.
+        IFToken fToken = IFToken(WETH_FRAX_MARKET);
+        (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = fToken.getPairAccounting();
+        uint256 assetsToBorrow = totalFraxSupplied > totalFraxBorrowed ? totalFraxSupplied - totalFraxBorrowed : 0;
+        // Supply 2x the value we are trying to borrow.
+        uint256 assetsToSupply = priceRouter.getValue(FRAX, 2 * assetsToBorrow, WETH);
+
+        deal(address(WETH), whaleBorrower, assetsToSupply);
+        vm.startPrank(whaleBorrower);
+        WETH.approve(WETH_FRAX_MARKET, assetsToSupply);
+        fToken.borrowAsset(assetsToBorrow, assetsToSupply, whaleBorrower);
+        vm.stopPrank();
+
+        uint256 assetsWithdrawable = cellar.totalAssetsWithdrawable();
+
+        assertEq(assetsWithdrawable, 0, "There should be no assets withdrawable.");
+
+        // Whale repays half of their debt.
+        uint256 sharesToRepay = fToken.balanceOf(whaleBorrower) / 2;
+        vm.startPrank(whaleBorrower);
+        FRAX.approve(WETH_FRAX_MARKET, assetsToBorrow);
+        fToken.repayAsset(sharesToRepay, whaleBorrower);
+        vm.stopPrank();
+
+        (totalFraxSupplied, , totalFraxBorrowed, , ) = fToken.getPairAccounting();
+        uint256 liquidFrax = totalFraxSupplied - totalFraxBorrowed;
+
+        assetsWithdrawable = cellar.totalAssetsWithdrawable();
+
+        assertEq(assetsWithdrawable, liquidFrax, "Should be able to withdraw liquid FRAX.");
+
+        // Have user withdraw the FRAX.
+        deal(address(FRAX), address(this), 0);
+        cellar.withdraw(liquidFrax, address(this), address(this));
+        assertEq(FRAX.balanceOf(address(this)), liquidFrax, "User should have received liquid FRAX.");
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
