@@ -123,8 +123,26 @@ contract FraxLendFTokenAdaptorTest is Test {
         deal(address(FRAX), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        // Only withdraw assets - 1 because p2pSupplyIndex is not updated, so it is possible
-        // for totalAssets to equal assets - 1.
+        cellar.withdraw(assets - 2, address(this), address(this));
+    }
+
+    function testDepositV2(uint256 assets) external {
+        assets = bound(assets, 0.01e18, 100_000_000e18);
+        // Adjust Cellar holding position to deposit into a Frax Pair V2.
+        cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
+        cellar.setHoldingPosition(sfrxEthFraxMarketPosition);
+        deal(address(FRAX), address(this), assets);
+        cellar.deposit(assets, address(this));
+    }
+
+    function testWithdrawV2(uint256 assets) external {
+        assets = bound(assets, 0.01e18, 100_000_000e18);
+        // Adjust Cellar holding position to withdraw from a Frax Pair V2.
+        cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
+        cellar.setHoldingPosition(sfrxEthFraxMarketPosition);
+        deal(address(FRAX), address(this), assets);
+        cellar.deposit(assets, address(this));
+
         cellar.withdraw(assets - 2, address(this), address(this));
     }
 
@@ -198,8 +216,9 @@ contract FraxLendFTokenAdaptorTest is Test {
     }
 
     function testRebalancingBetweenMarkets(uint256 assets) external {
-        // Add another Frax Lend market.
+        // Add another Frax Lend market, and vanilla FRAX.
         cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
+        cellar.addPosition(0, fraxPosition, abi.encode(0), false);
 
         // Have user deposit into cellar.
         assets = bound(assets, 0.01e18, 100_000_000e18);
@@ -232,6 +251,19 @@ contract FraxLendFTokenAdaptorTest is Test {
             10,
             "Rebalance should have lent in other market."
         );
+
+        // Withdraw half the assets from Frax Pair V2.
+        data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdraw(SFRXETH_FRAX_MARKET, assets / 2);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptorV2), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
+
+        assertEq(FRAX.balanceOf(address(cellar)), assets / 2, "Should have withdrawn half the assets from FraxLend.");
     }
 
     // try lending and redeemin with fTokens that are not positions in the cellar and check for revert.
@@ -283,5 +315,9 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     function _createBytesDataToRedeem(address fToken, uint256 amountToRedeem) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FTokenAdaptor.redeemFraxShare.selector, fToken, amountToRedeem);
+    }
+
+    function _createBytesDataToWithdraw(address fToken, uint256 amountToWithdraw) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FTokenAdaptor.withdrawFrax.selector, fToken, amountToWithdraw);
     }
 }
