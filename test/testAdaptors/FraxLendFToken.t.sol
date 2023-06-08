@@ -307,9 +307,42 @@ contract FraxLendFTokenAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testMultiplePositions() external {
-        // Check that FRAX in multiple different markets is correctly accounted for in total assets.
+    // Check that FRAX in multiple different markets is correctly accounted for in total assets.
+    function testMultiplePositionsTotalAssets(uint256 assets) external {
+        // Have user deposit into cellar
+        assets = bound(assets, 0.01e18, 100_000_000e18);
+        uint256 expectedAssets = assets;
+        uint256 dividedAssetPerMultiPair = assets / 3; // amount of FRAX to distribute between different fraxLendPairs
+        deal(address(FRAX), address(this), assets);
+        cellar.deposit(assets, address(this));
+
         // Test that users can withdraw from multiple markets at once.
+        _setupMultiplePositions(dividedAssetPerMultiPair);
+
+        assertApproxEqAbs(expectedAssets, cellar.totalAssets(), 10, "Total assets should have been lent out");
+    }
+
+    // Check that user able to withdraw from multiple lending positions outright
+    function testMultiplePositionsUserWithdraw(uint256 assets) external {
+        // Have user deposit into cellar
+        assets = bound(assets, 0.01e18, 100_000_000e18);
+        uint256 dividedAssetPerMultiPair = assets / 3; // amount of FRAX to distribute between different fraxLendPairs
+        deal(address(FRAX), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Test that users can withdraw from multiple markets at once.
+        _setupMultiplePositions(dividedAssetPerMultiPair);
+
+        deal(address(FRAX), address(this), 0);
+        uint256 toWithdraw = cellar.maxWithdraw(address(this));
+        cellar.withdraw(toWithdraw, address(this), address(this));
+
+        assertApproxEqAbs(
+            FRAX.balanceOf(address(this)),
+            toWithdraw,
+            10,
+            "User should have gotten all their FRAX (minus some dust)"
+        );
     }
 
     function testWithdrawableFrom() external {
@@ -372,5 +405,34 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     function _createBytesDataToWithdraw(address fToken, uint256 amountToWithdraw) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FTokenAdaptor.withdrawFrax.selector, fToken, amountToWithdraw);
+    }
+
+    // setup multiple lending positions
+    function _setupMultiplePositions(uint256 dividedAssetPerMultiPair) internal {
+        // add numerous frax markets atop of holdingPosition (fxs)
+        cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
+        cellar.addPosition(0, fpiFraxMarketPosition, abi.encode(0), false);
+
+        // Strategist rebalances to withdraw set amount of FRAX, and lend in a different market.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
+        // Withdraw 2/3 of cellar FRAX from FraxLend.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRedeem(FXS_FRAX_MARKET, dividedAssetPerMultiPair * 2);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(SFRXETH_FRAX_MARKET, dividedAssetPerMultiPair);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptorV2), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(FPI_FRAX_MARKET, type(uint256).max);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
     }
 }
