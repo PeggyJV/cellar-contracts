@@ -9,6 +9,7 @@ import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
+import { FTokenAdaptorV2 } from "src/modules/adaptors/Frax/FTokenAdaptorV2.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -21,6 +22,7 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     ERC20Adaptor private erc20Adaptor;
     FTokenAdaptor private fTokenAdaptor;
+    FTokenAdaptorV2 private fTokenAdaptorV2;
     CellarInitializableV2_2 private cellar;
     PriceRouter private priceRouter;
     Registry private registry;
@@ -29,11 +31,14 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
 
+    address private UNTRUSTED_sfrxETH = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
+
     ERC20 public FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
 
     // FraxLend fToken markets.
     address private FXS_FRAX_MARKET = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
     address private FPI_FRAX_MARKET = 0x74F82Bd9D0390A4180DaaEc92D64cf0708751759;
+    address private SFRXETH_FRAX_MARKET = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
 
     // Chainlink PriceFeeds
     address private FRAX_USD_FEED = 0xB9E1E3A9feFf48998E45Fa90847ed4D467E8BcfD;
@@ -41,6 +46,7 @@ contract FraxLendFTokenAdaptorTest is Test {
     uint32 private fraxPosition;
     uint32 private fxsFraxMarketPosition;
     uint32 private fpiFraxMarketPosition;
+    uint32 private sfrxEthFraxMarketPosition;
 
     modifier checkBlockNumber() {
         if (block.number < 16869780) {
@@ -52,6 +58,7 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     function setUp() external {
         fTokenAdaptor = new FTokenAdaptor();
+        fTokenAdaptorV2 = new FTokenAdaptorV2();
         erc20Adaptor = new ERC20Adaptor();
 
         registry = new Registry(address(this), address(this), address(priceRouter));
@@ -71,10 +78,12 @@ contract FraxLendFTokenAdaptorTest is Test {
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(erc20Adaptor));
         registry.trustAdaptor(address(fTokenAdaptor));
+        registry.trustAdaptor(address(fTokenAdaptorV2));
 
         fraxPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(FRAX));
         fxsFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FXS_FRAX_MARKET));
         fpiFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FPI_FRAX_MARKET));
+        sfrxEthFraxMarketPosition = registry.trustPosition(address(fTokenAdaptorV2), abi.encode(SFRXETH_FRAX_MARKET));
 
         cellar = new CellarInitializableV2_2(registry);
         cellar.initialize(
@@ -91,9 +100,11 @@ contract FraxLendFTokenAdaptorTest is Test {
         );
 
         cellar.addAdaptorToCatalogue(address(fTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(fTokenAdaptorV2));
 
         cellar.addPositionToCatalogue(fraxPosition);
         cellar.addPositionToCatalogue(fpiFraxMarketPosition);
+        cellar.addPositionToCatalogue(sfrxEthFraxMarketPosition);
 
         FRAX.safeApprove(address(cellar), type(uint256).max);
 
@@ -188,7 +199,7 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     function testRebalancingBetweenMarkets(uint256 assets) external {
         // Add another Frax Lend market.
-        cellar.addPosition(0, fpiFraxMarketPosition, abi.encode(0), false);
+        cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
 
         // Have user deposit into cellar.
         assets = bound(assets, 0.01e18, 100_000_000e18);
@@ -205,26 +216,53 @@ contract FraxLendFTokenAdaptorTest is Test {
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLend(FPI_FRAX_MARKET, type(uint256).max);
-            data[1] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+            adaptorCalls[0] = _createBytesDataToLend(SFRXETH_FRAX_MARKET, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptorV2), callData: adaptorCalls });
         }
 
         // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
-        IFToken market = IFToken(FPI_FRAX_MARKET);
+        IFToken market = IFToken(SFRXETH_FRAX_MARKET);
         uint256 shareBalance = market.balanceOf(address(cellar));
         assertTrue(shareBalance > 0, "Cellar should own shares.");
         assertApproxEqAbs(
-            market.toAssetAmount(shareBalance, false),
+            market.toAssetAmount(shareBalance, false, false),
             assets,
-            3,
+            10,
             "Rebalance should have lent in other market."
         );
     }
 
-    function testUsingMarketNotSetupAsPosition() external {
-        // try lending and redeemin with fTokens that are not positions in the cellar and check for revert.
+    // try lending and redeemin with fTokens that are not positions in the cellar and check for revert.
+    function testUsingMarketNotSetupAsPosition(uint256 assets) external {
+        // Add FRAX position and change holding position to vanilla FRAX.
+        cellar.addPosition(0, fraxPosition, abi.encode(0), false);
+        cellar.setHoldingPosition(fraxPosition);
+
+        // Have user deposit into cellar.
+        assets = bound(assets, 0.01e18, 100_000_000e18);
+        deal(address(FRAX), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Strategist rebalances to lend FRAX.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // Lend FRAX on FraxLend.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(UNTRUSTED_sfrxETH, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+        }
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    FTokenAdaptor.FTokenAdaptor__FTokenPositionsMustBeTracked.selector,
+                    (UNTRUSTED_sfrxETH)
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
     }
 
     function testMultiplePositions() external {

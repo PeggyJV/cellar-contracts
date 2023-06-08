@@ -30,7 +30,7 @@ contract FTokenAdaptor is BaseAdaptor {
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
      * of the adaptor is more difficult.
      */
-    function identifier() public pure override returns (bytes32) {
+    function identifier() public pure virtual override returns (bytes32) {
         return keccak256(abi.encode("FraxLend fToken Adaptor V 0.0"));
     }
 
@@ -52,7 +52,7 @@ contract FTokenAdaptor is BaseAdaptor {
         // Deposit assets to Frax Lend.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
         FRAX().safeApprove(address(fToken), assets);
-        fToken.deposit(assets, address(this));
+        _deposit(fToken, assets, address(this));
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(FRAX(), address(fToken));
@@ -73,8 +73,8 @@ contract FTokenAdaptor is BaseAdaptor {
         // Withdraw assets from Frax.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
         // Round down to benefit protocol.
-        uint256 shares = fToken.toAssetShares(assets, false);
-        fToken.redeem(shares, receiver, address(this));
+        uint256 shares = _toAssetShares(fToken, assets, false);
+        _redeem(fToken, shares, receiver, address(this));
     }
 
     /**
@@ -87,10 +87,10 @@ contract FTokenAdaptor is BaseAdaptor {
         bytes memory
     ) public view override returns (uint256 withdrawableFrax) {
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = fToken.getPairAccounting();
+        (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = _getPairAccounting(fToken);
         if (totalFraxBorrowed > totalFraxSupplied) return 0;
         uint256 liquidFrax = totalFraxSupplied - totalFraxBorrowed;
-        uint256 fraxBalance = fToken.toAssetAmount(fToken.balanceOf(msg.sender), false);
+        uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false);
         withdrawableFrax = fraxBalance > liquidFrax ? liquidFrax : fraxBalance;
     }
 
@@ -99,7 +99,7 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        return fToken.toAssetAmount(fToken.balanceOf(msg.sender), false);
+        return _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false);
     }
 
     /**
@@ -127,7 +127,7 @@ contract FTokenAdaptor is BaseAdaptor {
         _validateFToken(fToken);
         amountToDeposit = _maxAvailable(FRAX(), amountToDeposit);
         FRAX().safeApprove(address(fToken), amountToDeposit);
-        fToken.deposit(amountToDeposit, address(this));
+        _deposit(fToken, amountToDeposit, address(this));
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(FRAX(), address(fToken));
@@ -142,7 +142,7 @@ contract FTokenAdaptor is BaseAdaptor {
         _validateFToken(fToken);
         amountToRedeem = _maxAvailable(ERC20(address(fToken)), amountToRedeem);
 
-        fToken.redeem(amountToRedeem, address(this), address(this));
+        _redeem(fToken, amountToRedeem, address(this), address(this));
     }
 
     /**
@@ -154,5 +154,52 @@ contract FTokenAdaptor is BaseAdaptor {
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert FTokenAdaptor__FTokenPositionsMustBeTracked(address(fToken));
+    }
+
+    //============================================ Interface Helper Functions ===========================================
+    /**
+     * @notice The Frax Pair interface can slightly change between versions.
+     *         To account for this, FTokenAdaptors will use the below internal functions when
+     *         interacting with Frax Pairs, this way new pairs can be added by creating a
+     *         new contract that inherits from this one, and overrides any function it needs
+     *         so it conforms with the new Frax Pair interface.
+     */
+
+    function _deposit(IFToken fToken, uint256 amount, address receiver) internal virtual {
+        fToken.deposit(amount, receiver);
+    }
+
+    function _redeem(IFToken fToken, uint256 shares, address receiver, address owner) internal virtual {
+        fToken.redeem(shares, receiver, owner);
+    }
+
+    function _toAssetAmount(IFToken fToken, uint256 shares, bool roundUp) internal view virtual returns (uint256) {
+        return fToken.toAssetAmount(shares, roundUp);
+    }
+
+    function _toAssetShares(IFToken fToken, uint256 amount, bool roundUp) internal view virtual returns (uint256) {
+        return fToken.toAssetShares(amount, roundUp);
+    }
+
+    function _balanceOf(IFToken fToken, address user) internal view virtual returns (uint256) {
+        return fToken.balanceOf(user);
+    }
+
+    function _getPairAccounting(
+        IFToken fToken
+    )
+        internal
+        view
+        virtual
+        returns (
+            uint128 totalAssetAmount,
+            uint128 totalAssetShares,
+            uint128 totalBorrowAmount,
+            uint128 totalBorrowShares,
+            uint256 totalCollateral
+        )
+    {
+        (totalAssetAmount, totalAssetShares, totalBorrowAmount, totalBorrowShares, totalCollateral) = fToken
+            .getPairAccounting();
     }
 }

@@ -2,6 +2,7 @@
 pragma solidity 0.8.16;
 
 interface IFToken {
+    // Frax Pair V1 interface.
     function deposit(uint256 amount, address receiver) external;
 
     function redeem(uint256 shares, address receiver, address owner) external;
@@ -22,4 +23,9 @@ interface IFToken {
             uint128 totalBorrowShares,
             uint256 totalCollateral
         );
+
+    // Changes for Frax Pair V2 interface.
+    function toAssetAmount(uint256 shares, bool roundUp, bool previewInterest) external view returns (uint256);
+
+    function toAssetShares(uint256 amount, bool roundUp, bool previewInterest) external view returns (uint256);
 }
