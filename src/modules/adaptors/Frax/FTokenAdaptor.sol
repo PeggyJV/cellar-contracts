@@ -170,6 +170,19 @@ contract FTokenAdaptor is BaseAdaptor {
     }
 
     /**
+     * @notice Allows a strategist to call `addInterest` on a Frax Pair they are using.
+     * @dev A strategist might want to do this if a Frax Lend pair has not been interacted
+     *      in a while, and the strategist does not plan on interacting with it during a
+     *      rebalance.
+     * @dev Calling this can increase the share price during the rebalance,
+     *      so a strategist should consider moving some assets into reserves.
+     */
+    function callAddInterest(IFToken fToken) public {
+        _validateFToken(fToken);
+        _addInterest(fToken);
+    }
+
+    /**
      * @notice Validates that a given fToken is set up as a position in the Cellar.
      * @dev This function uses `address(this)` as the address of the Cellar.
      */
@@ -300,5 +313,10 @@ contract FTokenAdaptor is BaseAdaptor {
     {
         (totalAssetAmount, totalAssetShares, totalBorrowAmount, totalBorrowShares, totalCollateral) = fToken
             .getPairAccounting();
+    }
+
+    // TODO
+    function _addInterest(IFToken fToken) internal {
+        fToken.addInterest(false);
     }
 }
