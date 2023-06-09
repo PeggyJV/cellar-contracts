@@ -9,6 +9,14 @@ import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.
  * @author crispymangoes, 0xEinCodes
  */
 contract FTokenAdaptorV1 is FTokenAdaptor {
+    //============================================ Notice ===========================================
+    // Since there is no way to calculate pending interest for this positions balanceOf,
+    // The positions balance is only updated when accounts interact with the
+    // Frax Lend pair this position is working with.
+    // This can lead to a divergence from the Cellars share price, and its real value.
+    // This can be mitigated by calling `callAddInterest` on Frax Lend pairs
+    // that are not frequently interacted with.
+
     //============================================ Interface Helper Functions ===========================================
 
     //============================== Interface Details ==============================
@@ -90,5 +98,10 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
         bool
     ) internal view override returns (uint256) {
         return fToken.toAssetShares(amount, roundUp);
+    }
+
+    // TODO
+    function _addInterest(IFToken fToken) internal override {
+        fToken.addInterest();
     }
 }

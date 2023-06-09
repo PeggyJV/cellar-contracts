@@ -665,11 +665,11 @@ contract FraxLendFTokenAdaptorTest is Test {
         address userB = vm.addr(222);
         uint256 expectedInterestEarnedAfter7Days;
 
-        CellarInitializableV2_2 v1PositionAccountingForInterest = _createSimpleCellar(
+        CellarInitializableV2_2 v2PositionAccountingForInterest = _createSimpleCellar(
             sfrxEthFraxPairPosition,
             address(fTokenAdaptorV2)
         );
-        CellarInitializableV2_2 v1PositionNotAccountingForInterest = _createSimpleCellar(
+        CellarInitializableV2_2 v2PositionNotAccountingForInterest = _createSimpleCellar(
             mockSfrxEthFraxPairPosition,
             address(mockFTokenAdaptorV2)
         );
@@ -684,24 +684,24 @@ contract FraxLendFTokenAdaptorTest is Test {
         // Start by depositing into first cellar and saving gas values.
         vm.startPrank(userA);
         deal(address(FRAX), userA, assets);
-        FRAX.approve(address(v1PositionAccountingForInterest), assets);
+        FRAX.approve(address(v2PositionAccountingForInterest), assets);
         gasWithAccountingForInterest.depositGas = gasleft();
-        v1PositionAccountingForInterest.deposit(assets, userA);
+        v2PositionAccountingForInterest.deposit(assets, userA);
         gasWithAccountingForInterest.depositGas = gasWithAccountingForInterest.depositGas - gasleft();
         vm.stopPrank();
 
         // Save totalAssets.
         gasWithAccountingForInterest.totalAssetsGas = gasleft();
-        totalAssets = v1PositionAccountingForInterest.totalAssets();
+        totalAssets = v2PositionAccountingForInterest.totalAssets();
         gasWithAccountingForInterest.totalAssetsGas = gasWithAccountingForInterest.totalAssetsGas - gasleft();
 
         {
             // Advance time to earn interest on lent FRAX.
             vm.warp(block.timestamp + 7 days);
             mockFraxUsd.setMockUpdatedAt(block.timestamp);
-            expectedInterestEarnedAfter7Days = v1PositionAccountingForInterest.totalAssets() - totalAssets;
+            expectedInterestEarnedAfter7Days = v2PositionAccountingForInterest.totalAssets() - totalAssets;
             assertGt(
-                v1PositionAccountingForInterest.totalAssets(),
+                v2PositionAccountingForInterest.totalAssets(),
                 totalAssets,
                 "Cellar totalAssets should increase over time since we are accounting for interest."
             );
@@ -709,9 +709,9 @@ contract FraxLendFTokenAdaptorTest is Test {
 
         // User Withdraws.
         vm.startPrank(userA);
-        maxWithdraw = v1PositionAccountingForInterest.maxWithdraw(userA);
+        maxWithdraw = v2PositionAccountingForInterest.maxWithdraw(userA);
         gasWithAccountingForInterest.withdrawGas = gasleft();
-        v1PositionAccountingForInterest.withdraw(maxWithdraw, userA, userA);
+        v2PositionAccountingForInterest.withdraw(maxWithdraw, userA, userA);
         gasWithAccountingForInterest.withdrawGas = gasWithAccountingForInterest.withdrawGas - gasleft();
         vm.stopPrank();
 
@@ -723,7 +723,7 @@ contract FraxLendFTokenAdaptorTest is Test {
             "Since we are accounting for interest, the user should get their assets + interest."
         );
 
-        totalAssets = v1PositionAccountingForInterest.totalAssets();
+        totalAssets = v2PositionAccountingForInterest.totalAssets();
         assertEq(totalAssets, 0, "No Assets should be left behind.");
 
         // --------------------- Revert to state before interacting with FraxLend Pair ---------------------
@@ -732,15 +732,15 @@ contract FraxLendFTokenAdaptorTest is Test {
         // Now deposit into other cellar, saving gas values.
         vm.startPrank(userB);
         deal(address(FRAX), userB, assets);
-        FRAX.approve(address(v1PositionNotAccountingForInterest), assets);
+        FRAX.approve(address(v2PositionNotAccountingForInterest), assets);
         gasWithoutAccountingForInterest.depositGas = gasleft();
-        v1PositionNotAccountingForInterest.deposit(assets, userB);
+        v2PositionNotAccountingForInterest.deposit(assets, userB);
         gasWithoutAccountingForInterest.depositGas = gasWithoutAccountingForInterest.depositGas - gasleft();
         vm.stopPrank();
 
         // Save totalAssets.
         gasWithoutAccountingForInterest.totalAssetsGas = gasleft();
-        totalAssets = v1PositionNotAccountingForInterest.totalAssets();
+        totalAssets = v2PositionNotAccountingForInterest.totalAssets();
         gasWithoutAccountingForInterest.totalAssetsGas = gasWithoutAccountingForInterest.totalAssetsGas - gasleft();
 
         // Advance time to earn interest on lent FRAX.
@@ -748,16 +748,16 @@ contract FraxLendFTokenAdaptorTest is Test {
         mockFraxUsd.setMockUpdatedAt(block.timestamp);
 
         assertEq(
-            v1PositionNotAccountingForInterest.totalAssets(),
+            v2PositionNotAccountingForInterest.totalAssets(),
             totalAssets,
             "No users have interacted with FraxLend so totalAssets remains the same."
         );
 
         // User Withdraws.
         vm.startPrank(userB);
-        maxWithdraw = v1PositionNotAccountingForInterest.maxWithdraw(userB);
+        maxWithdraw = v2PositionNotAccountingForInterest.maxWithdraw(userB);
         gasWithoutAccountingForInterest.withdrawGas = gasleft();
-        v1PositionNotAccountingForInterest.withdraw(maxWithdraw, userB, userB);
+        v2PositionNotAccountingForInterest.withdraw(maxWithdraw, userB, userB);
         gasWithoutAccountingForInterest.withdrawGas = gasWithoutAccountingForInterest.withdrawGas - gasleft();
         vm.stopPrank();
 
@@ -766,7 +766,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         assertApproxEqAbs(FRAX.balanceOf(userB), assets, 2, "User FRAX balance should equal assets.");
 
         // The yield is left in the cellar.
-        assertGt(v1PositionNotAccountingForInterest.totalAssets(), 0, "There should be assets left.");
+        assertGt(v2PositionNotAccountingForInterest.totalAssets(), 0, "There should be assets left.");
 
         // --------------------- Compare gas values ---------------------
         assertGt(
@@ -799,14 +799,22 @@ contract FraxLendFTokenAdaptorTest is Test {
 
         assertApproxEqAbs(withdrawGasDelta, 11_400, 100, "Delta should be around 11.4k");
 
-        console.log("depositGas", gasWithoutAccountingForInterest.depositGas);
-        console.log("depositGasDelta", depositGasDelta);
-        console.log("totalAssetsGas", gasWithoutAccountingForInterest.totalAssetsGas);
-        console.log("totalAssetsGasDelta", totalAssetsGasDelta);
-        console.log("withdrawGas", gasWithoutAccountingForInterest.withdrawGas);
-        console.log("withdrawGasDelta", withdrawGasDelta);
-
         // --------------------- TLDR ---------------------
+        // When accounting for interest the following operations become X% more gas intensive.
+        // Deposits: 2%
+        // TotalAssets: 5.6%
+        // Withdraws: 8.9%
+        //
+        // The gas increase is fairly minimal in exchange for more accurate share price calculations.
+        // It is generally better to account for interest earned, so that users do not run the
+        // possibility of either getting the share price arbed(in the case of divergence between
+        // cellar share price and FraxLend pair share price, which happens when the pair is not
+        // interacted with for a long time.), or the user leaves the cellar without getting the yield
+        // their capital generated.
+        //
+        // This being said if the Cellar is rebalancing its FraxLend positions regularly (3-7 days) the
+        // divergence between the two share prices will be minimal, and cellar interactions will be cheaper.
+        // Also the strategist would be able to move assets into reserves without lowering share price.
     }
 
     // ========================================= HELPER FUNCTIONS =========================================

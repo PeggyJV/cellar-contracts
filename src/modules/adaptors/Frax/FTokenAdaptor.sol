@@ -316,7 +316,7 @@ contract FTokenAdaptor is BaseAdaptor {
     }
 
     // TODO
-    function _addInterest(IFToken fToken) internal {
+    function _addInterest(IFToken fToken) internal virtual {
         fToken.addInterest(false);
     }
 }
