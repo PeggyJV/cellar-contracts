@@ -27,6 +27,11 @@ contract MockDataFeed {
         if (mockUpdatedAt != 0) updatedAt = mockUpdatedAt;
     }
 
+    function latestAnswer() external view returns (int256 answer) {
+        answer = realFeed.latestAnswer();
+        if (mockAnswer != 0) answer = mockAnswer;
+    }
+
     function setMockAnswer(int256 ans) external {
         mockAnswer = ans;
     }
