@@ -100,7 +100,11 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
         return fToken.toAssetShares(amount, roundUp);
     }
 
-    // TODO
+    /**
+     * @notice Caller calls `addInterest` on specified 'v1' FraxLendPair
+     * @dev ftoken.addInterest() calls into the v1 FraxLendPair
+     * @param fToken The specified FraxLendPair
+     */
     function _addInterest(IFToken fToken) internal override {
         fToken.addInterest();
     }

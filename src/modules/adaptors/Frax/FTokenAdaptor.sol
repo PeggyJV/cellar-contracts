@@ -315,7 +315,11 @@ contract FTokenAdaptor is BaseAdaptor {
             .getPairAccounting();
     }
 
-    // TODO
+    /**
+     * @notice Caller calls `addInterest` on specified 'v2' FraxLendPair
+     * @dev ftoken.addInterest() calls into the respective version (v2 by default) of FraxLendPair
+     * @param fToken The specified FraxLendPair
+     */
     function _addInterest(IFToken fToken) internal virtual {
         fToken.addInterest(false);
     }
