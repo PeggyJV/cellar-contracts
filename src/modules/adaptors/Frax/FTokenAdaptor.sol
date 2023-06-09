@@ -29,6 +29,9 @@ contract FTokenAdaptor is BaseAdaptor {
     /**
      * @notice Indicates whether or not we should worry about updating interest
      *         when interacting with FraxLend.
+     * @dev True is the most accurate method, but will slightly add to gas costs.
+     *      False is less accurate, but this error is mitigated by the frequency the
+     *      FraxLend Pairs are interacted with.
      */
     bool constant ACCOUNT_FOR_INTEREST = true;
 
@@ -187,11 +190,11 @@ contract FTokenAdaptor is BaseAdaptor {
     // Current versions in use for `FraxLendPair` include v1 and v2.
 
     // IMPORTANT: This `FTokenAdaptor.sol` is associated to the v2 version of `FraxLendPair`
-    // whereas FTokenAdaptorV1 is actually associated to `FraxLendPairv1`. 
-    // The reasoning to name it like this was to set up the base FTokenAdaptor for the 
-    // most current version, v2. This is in anticipation that more FraxLendPairs will 
-    // be deployed following v2 in the near future. When later versions are deployed, 
-    // then the described inheritance pattern above will be used. 
+    // whereas FTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
+    // The reasoning to name it like this was to set up the base FTokenAdaptor for the
+    // most current version, v2. This is in anticipation that more FraxLendPairs will
+    // be deployed following v2 in the near future. When later versions are deployed,
+    // then the described inheritance pattern above will be used.
     //===============================================================================
 
     /**

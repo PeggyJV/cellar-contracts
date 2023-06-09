@@ -10,7 +10,7 @@ import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.
  */
 contract FTokenAdaptorV1 is FTokenAdaptor {
     //============================================ Interface Helper Functions ===========================================
-   
+
     //============================== Interface Details ==============================
     // The Frax Pair interface can slightly change between versions.
     // To account for this, FTokenAdaptors will use the below internal functions when
@@ -23,11 +23,11 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
     // Current versions in use for `FraxLendPair` include v1 and v2.
 
     // IMPORTANT: This `FTokenAdaptorV1.sol` is associated to the v1 version of `FraxLendPair`
-    // whereas the inherited `FTokenAdaptor.sol` is actually associated to `FraxLendPairv2`. 
-    // The reasoning to name it like this was to set up the base FTokenAdaptor for the 
-    // most current version, v2. This is in anticipation that more FraxLendPairs will 
-    // be deployed following v2 in the near future. When later versions are deployed, 
-    // then the described inheritance pattern above will be used. 
+    // whereas the inherited `FTokenAdaptor.sol` is actually associated to `FraxLendPairv2`.
+    // The reasoning to name it like this was to set up the base FTokenAdaptor for the
+    // most current version, v2. This is in anticipation that more FraxLendPairs will
+    // be deployed following v2 in the near future. When later versions are deployed,
+    // then the described inheritance pattern above will be used.
     //===============================================================================
 
     /**
@@ -41,7 +41,13 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
     }
 
     /**
-     * @notice Withdraw $FRAX from specified 'v1' FraxLendPair
+     * @notice Withdraw $FRAX from specified 'v1' FraxLendPair.
+     * @dev Since `withdrawableFrom` does NOT account for pending interest,
+     *      user withdraws from V1 positions can result in dust being left in the position.
+     * @dev If `ACCOUNT_FOR_INTEREST` is false, then _toAssetShares will use a FraxLend share price that
+     *      is slightly lower than what is used in redeem, so users can receive more assets than expected.
+     *      The extra assets are influenced by the FraxLend APR, and the time since the interest was last
+     *      added to the pair, so in practice this extra amount should be negligible.
      * @param fToken The specified FraxLendPair
      * @param assets The amount to withdraw
      * @param receiver The address to which the Asset Tokens will be transferred
