@@ -817,6 +817,28 @@ contract FraxLendFTokenAdaptorTest is Test {
         // Also the strategist would be able to move assets into reserves without lowering share price.
     }
 
+    function testAddInterest() external {
+        // Add v2 FraxLend Pair position to Cellar.
+        cellar.addPosition(0, sfrxEthFraxPairPosition, abi.encode(0), false);
+
+        // Strategist rebalances to withdraw FRAX, and lend in a different pair.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        // Withdraw FRAX from FraxLend.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToCallAddInterest(FXS_FRAX_PAIR);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
+        }
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToCallAddInterest(SFRXETH_FRAX_PAIR);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptorV2), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
+    }
+
     // ========================================= HELPER FUNCTIONS =========================================
 
     struct GasReadings {
@@ -835,6 +857,10 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     function _createBytesDataToWithdraw(address fToken, uint256 amountToWithdraw) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FTokenAdaptor.withdrawFrax.selector, fToken, amountToWithdraw);
+    }
+
+    function _createBytesDataToCallAddInterest(address fToken) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FTokenAdaptor.callAddInterest.selector, fToken);
     }
 
     // setup multiple lending positions
