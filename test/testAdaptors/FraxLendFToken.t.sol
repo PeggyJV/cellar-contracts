@@ -36,21 +36,21 @@ contract FraxLendFTokenAdaptorTest is Test {
     ERC20 public FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
-    // FraxLend fToken markets.
-    address private FXS_FRAX_MARKET = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
-    address private FPI_FRAX_MARKET = 0x74F82Bd9D0390A4180DaaEc92D64cf0708751759;
-    address private SFRXETH_FRAX_MARKET = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
-    address private WETH_FRAX_MARKET = 0x794F6B13FBd7EB7ef10d1ED205c9a416910207Ff;
+    // FraxLend fToken pairs.
+    address private FXS_FRAX_PAIR = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
+    address private FPI_FRAX_PAIR = 0x74F82Bd9D0390A4180DaaEc92D64cf0708751759;
+    address private SFRXETH_FRAX_PAIR = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
+    address private WETH_FRAX_PAIR = 0x794F6B13FBd7EB7ef10d1ED205c9a416910207Ff;
 
     // Chainlink PriceFeeds
     address private FRAX_USD_FEED = 0xB9E1E3A9feFf48998E45Fa90847ed4D467E8BcfD;
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
 
     uint32 private fraxPosition;
-    uint32 private fxsFraxMarketPosition;
-    uint32 private fpiFraxMarketPosition;
-    uint32 private sfrxEthFraxMarketPosition;
-    uint32 private wEthFraxMarketPosition;
+    uint32 private fxsFraxPairPosition;
+    uint32 private fpiFraxPairPosition;
+    uint32 private sfrxEthFraxPairPosition;
+    uint32 private wEthFraxPairPosition;
 
     modifier checkBlockNumber() {
         if (block.number < 16869780) {
@@ -89,10 +89,10 @@ contract FraxLendFTokenAdaptorTest is Test {
         registry.trustAdaptor(address(fTokenAdaptorV2));
 
         fraxPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(FRAX));
-        fxsFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FXS_FRAX_MARKET));
-        fpiFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FPI_FRAX_MARKET));
-        sfrxEthFraxMarketPosition = registry.trustPosition(address(fTokenAdaptorV2), abi.encode(SFRXETH_FRAX_MARKET));
-        wEthFraxMarketPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(WETH_FRAX_MARKET));
+        fxsFraxPairPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FXS_FRAX_PAIR));
+        fpiFraxPairPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(FPI_FRAX_PAIR));
+        sfrxEthFraxPairPosition = registry.trustPosition(address(fTokenAdaptorV2), abi.encode(SFRXETH_FRAX_PAIR));
+        wEthFraxPairPosition = registry.trustPosition(address(fTokenAdaptor), abi.encode(WETH_FRAX_PAIR));
 
         cellar = new CellarInitializableV2_2(registry);
         cellar.initialize(
@@ -102,7 +102,7 @@ contract FraxLendFTokenAdaptorTest is Test {
                 FRAX,
                 "Fraximal Cellar",
                 "oWo",
-                fxsFraxMarketPosition,
+                fxsFraxPairPosition,
                 abi.encode(0),
                 strategist
             )
@@ -112,9 +112,9 @@ contract FraxLendFTokenAdaptorTest is Test {
         cellar.addAdaptorToCatalogue(address(fTokenAdaptorV2));
 
         cellar.addPositionToCatalogue(fraxPosition);
-        cellar.addPositionToCatalogue(fpiFraxMarketPosition);
-        cellar.addPositionToCatalogue(sfrxEthFraxMarketPosition);
-        cellar.addPositionToCatalogue(wEthFraxMarketPosition);
+        cellar.addPositionToCatalogue(fpiFraxPairPosition);
+        cellar.addPositionToCatalogue(sfrxEthFraxPairPosition);
+        cellar.addPositionToCatalogue(wEthFraxPairPosition);
 
         FRAX.safeApprove(address(cellar), type(uint256).max);
 
@@ -139,8 +139,8 @@ contract FraxLendFTokenAdaptorTest is Test {
     function testDepositV2(uint256 assets) external {
         assets = bound(assets, 0.01e18, 100_000_000e18);
         // Adjust Cellar holding position to deposit into a Frax Pair V2.
-        cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
-        cellar.setHoldingPosition(sfrxEthFraxMarketPosition);
+        cellar.addPosition(0, sfrxEthFraxPairPosition, abi.encode(0), false);
+        cellar.setHoldingPosition(sfrxEthFraxPairPosition);
         deal(address(FRAX), address(this), assets);
         cellar.deposit(assets, address(this));
     }
@@ -148,8 +148,8 @@ contract FraxLendFTokenAdaptorTest is Test {
     function testWithdrawV2(uint256 assets) external {
         assets = bound(assets, 0.01e18, 100_000_000e18);
         // Adjust Cellar holding position to withdraw from a Frax Pair V2.
-        cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
-        cellar.setHoldingPosition(sfrxEthFraxMarketPosition);
+        cellar.addPosition(0, sfrxEthFraxPairPosition, abi.encode(0), false);
+        cellar.setHoldingPosition(sfrxEthFraxPairPosition);
         deal(address(FRAX), address(this), assets);
         cellar.deposit(assets, address(this));
 
@@ -178,18 +178,18 @@ contract FraxLendFTokenAdaptorTest is Test {
         // Lend FRAX on FraxLend.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLend(FXS_FRAX_MARKET, assets);
+            adaptorCalls[0] = _createBytesDataToLend(FXS_FRAX_PAIR, assets);
             data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
         }
 
         // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
-        IFToken market = IFToken(FXS_FRAX_MARKET);
-        uint256 shareBalance = market.balanceOf(address(cellar));
+        IFToken pair = IFToken(FXS_FRAX_PAIR);
+        uint256 shareBalance = pair.balanceOf(address(cellar));
         assertTrue(shareBalance > 0, "Cellar should own shares.");
         assertApproxEqAbs(
-            market.toAssetAmount(shareBalance, false),
+            pair.toAssetAmount(shareBalance, false),
             assets,
             2,
             "Rebalance should have lent all FRAX on FraxLend."
@@ -210,7 +210,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         // Withdraw FRAX from FraxLend.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToRedeem(FXS_FRAX_MARKET, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToRedeem(FXS_FRAX_PAIR, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
         }
 
@@ -225,9 +225,9 @@ contract FraxLendFTokenAdaptorTest is Test {
         );
     }
 
-    function testRebalancingBetweenMarkets(uint256 assets) external {
-        // Add another Frax Lend market, and vanilla FRAX.
-        cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
+    function testRebalancingBetweenPairs(uint256 assets) external {
+        // Add another Frax Lend pair, and vanilla FRAX.
+        cellar.addPosition(0, sfrxEthFraxPairPosition, abi.encode(0), false);
         cellar.addPosition(0, fraxPosition, abi.encode(0), false);
 
         // Have user deposit into cellar.
@@ -235,38 +235,38 @@ contract FraxLendFTokenAdaptorTest is Test {
         deal(address(FRAX), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        // Strategist rebalances to withdraw FRAX, and lend in a different market.
+        // Strategist rebalances to withdraw FRAX, and lend in a different pair.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         // Withdraw FRAX from FraxLend.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToRedeem(FXS_FRAX_MARKET, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToRedeem(FXS_FRAX_PAIR, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLend(SFRXETH_FRAX_MARKET, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToLend(SFRXETH_FRAX_PAIR, type(uint256).max);
             data[1] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptorV2), callData: adaptorCalls });
         }
 
         // Perform callOnAdaptor.
         cellar.callOnAdaptor(data);
 
-        IFToken market = IFToken(SFRXETH_FRAX_MARKET);
-        uint256 shareBalance = market.balanceOf(address(cellar));
+        IFToken pair = IFToken(SFRXETH_FRAX_PAIR);
+        uint256 shareBalance = pair.balanceOf(address(cellar));
         assertTrue(shareBalance > 0, "Cellar should own shares.");
         assertApproxEqAbs(
-            market.toAssetAmount(shareBalance, false, false),
+            pair.toAssetAmount(shareBalance, false, false),
             assets,
             10,
-            "Rebalance should have lent in other market."
+            "Rebalance should have lent in other pair."
         );
 
         // Withdraw half the assets from Frax Pair V2.
         data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToWithdraw(SFRXETH_FRAX_MARKET, assets / 2);
+            adaptorCalls[0] = _createBytesDataToWithdraw(SFRXETH_FRAX_PAIR, assets / 2);
             data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptorV2), callData: adaptorCalls });
         }
 
@@ -277,7 +277,7 @@ contract FraxLendFTokenAdaptorTest is Test {
     }
 
     // try lending and redeemin with fTokens that are not positions in the cellar and check for revert.
-    function testUsingMarketNotSetupAsPosition(uint256 assets) external {
+    function testUsingPairNotSetupAsPosition(uint256 assets) external {
         // Add FRAX position and change holding position to vanilla FRAX.
         cellar.addPosition(0, fraxPosition, abi.encode(0), false);
         cellar.setHoldingPosition(fraxPosition);
@@ -340,7 +340,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    // Check that FRAX in multiple different markets is correctly accounted for in total assets.
+    // Check that FRAX in multiple different pairs is correctly accounted for in total assets.
     function testMultiplePositionsTotalAssets(uint256 assets) external {
         // Have user deposit into cellar
         assets = bound(assets, 0.01e18, 100_000_000e18);
@@ -349,7 +349,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         deal(address(FRAX), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        // Test that users can withdraw from multiple markets at once.
+        // Test that users can withdraw from multiple pairs at once.
         _setupMultiplePositions(dividedAssetPerMultiPair);
 
         assertApproxEqAbs(expectedAssets, cellar.totalAssets(), 10, "Total assets should have been lent out");
@@ -363,7 +363,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         deal(address(FRAX), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        // Test that users can withdraw from multiple markets at once.
+        // Test that users can withdraw from multiple pairs at once.
         _setupMultiplePositions(dividedAssetPerMultiPair);
 
         deal(address(FRAX), address(this), 0);
@@ -380,8 +380,8 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     function testWithdrawableFrom() external {
         // Make cellar deposits lend FRAX into WETH Pair.
-        cellar.addPosition(0, wEthFraxMarketPosition, abi.encode(0), false);
-        cellar.setHoldingPosition(wEthFraxMarketPosition);
+        cellar.addPosition(0, wEthFraxPairPosition, abi.encode(0), false);
+        cellar.setHoldingPosition(wEthFraxPairPosition);
 
         uint256 assets = 10_000e18;
         deal(address(FRAX), address(this), assets);
@@ -390,7 +390,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         address whaleBorrower = vm.addr(777);
 
         // Figure out how much the whale must borrow to borrow all the Frax.
-        IFToken fToken = IFToken(WETH_FRAX_MARKET);
+        IFToken fToken = IFToken(WETH_FRAX_PAIR);
         (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = fToken.getPairAccounting();
         uint256 assetsToBorrow = totalFraxSupplied > totalFraxBorrowed ? totalFraxSupplied - totalFraxBorrowed : 0;
         // Supply 2x the value we are trying to borrow.
@@ -398,7 +398,7 @@ contract FraxLendFTokenAdaptorTest is Test {
 
         deal(address(WETH), whaleBorrower, assetsToSupply);
         vm.startPrank(whaleBorrower);
-        WETH.approve(WETH_FRAX_MARKET, assetsToSupply);
+        WETH.approve(WETH_FRAX_PAIR, assetsToSupply);
         fToken.borrowAsset(assetsToBorrow, assetsToSupply, whaleBorrower);
         vm.stopPrank();
 
@@ -409,7 +409,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         // Whale repays half of their debt.
         uint256 sharesToRepay = fToken.balanceOf(whaleBorrower) / 2;
         vm.startPrank(whaleBorrower);
-        FRAX.approve(WETH_FRAX_MARKET, assetsToBorrow);
+        FRAX.approve(WETH_FRAX_PAIR, assetsToBorrow);
         fToken.repayAsset(sharesToRepay, whaleBorrower);
         vm.stopPrank();
 
@@ -442,26 +442,26 @@ contract FraxLendFTokenAdaptorTest is Test {
 
     // setup multiple lending positions
     function _setupMultiplePositions(uint256 dividedAssetPerMultiPair) internal {
-        // add numerous frax markets atop of holdingPosition (fxs)
-        cellar.addPosition(0, sfrxEthFraxMarketPosition, abi.encode(0), false);
-        cellar.addPosition(0, fpiFraxMarketPosition, abi.encode(0), false);
+        // add numerous frax pairs atop of holdingPosition (fxs)
+        cellar.addPosition(0, sfrxEthFraxPairPosition, abi.encode(0), false);
+        cellar.addPosition(0, fpiFraxPairPosition, abi.encode(0), false);
 
-        // Strategist rebalances to withdraw set amount of FRAX, and lend in a different market.
+        // Strategist rebalances to withdraw set amount of FRAX, and lend in a different pair.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](3);
         // Withdraw 2/3 of cellar FRAX from FraxLend.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToRedeem(FXS_FRAX_MARKET, dividedAssetPerMultiPair * 2);
+            adaptorCalls[0] = _createBytesDataToRedeem(FXS_FRAX_PAIR, dividedAssetPerMultiPair * 2);
             data[0] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLend(SFRXETH_FRAX_MARKET, dividedAssetPerMultiPair);
+            adaptorCalls[0] = _createBytesDataToLend(SFRXETH_FRAX_PAIR, dividedAssetPerMultiPair);
             data[1] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptorV2), callData: adaptorCalls });
         }
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToLend(FPI_FRAX_MARKET, type(uint256).max);
+            adaptorCalls[0] = _createBytesDataToLend(FPI_FRAX_PAIR, type(uint256).max);
             data[2] = Cellar.AdaptorCall({ adaptor: address(fTokenAdaptor), callData: adaptorCalls });
         }
 

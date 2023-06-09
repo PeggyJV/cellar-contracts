@@ -5,7 +5,7 @@ import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.
 
 /**
  * @title FraxLend fToken Adaptor
- * @notice Allows Cellars to lend FRAX to FraxLend markets.
+ * @notice Allows Cellars to lend FRAX to FraxLend pairs.
  * @author crispymangoes, 0xEinCodes
  */
 contract FTokenAdaptorV1 is FTokenAdaptor {
