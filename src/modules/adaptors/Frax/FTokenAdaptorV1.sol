@@ -36,7 +36,7 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
      * of the adaptor is more difficult.
      */
-    function identifier() public pure override returns (bytes32) {
+    function identifier() public pure virtual override returns (bytes32) {
         return keccak256(abi.encode("FraxLend fTokenV1 Adaptor V 0.0"));
     }
 

@@ -10,6 +10,9 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
 import { FTokenAdaptorV1 } from "src/modules/adaptors/Frax/FTokenAdaptorV1.sol";
+import { MockFTokenAdaptor } from "src/mocks/adaptors/MockFTokenAdaptor.sol";
+import { MockFTokenAdaptorV1 } from "src/mocks/adaptors/MockFTokenAdaptorV1.sol";
+import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
@@ -43,6 +46,8 @@ contract FraxLendFTokenAdaptorTest is Test {
     address private WETH_FRAX_PAIR = 0x794F6B13FBd7EB7ef10d1ED205c9a416910207Ff;
 
     // Chainlink PriceFeeds
+    MockDataFeed private mockFraxUsd;
+    MockDataFeed private mockWethUsd;
     address private FRAX_USD_FEED = 0xB9E1E3A9feFf48998E45Fa90847ed4D467E8BcfD;
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
 
@@ -61,6 +66,8 @@ contract FraxLendFTokenAdaptorTest is Test {
     }
 
     function setUp() external {
+        mockFraxUsd = new MockDataFeed(FRAX_USD_FEED);
+        mockWethUsd = new MockDataFeed(WETH_USD_FEED);
         fTokenAdaptorV2 = new FTokenAdaptor();
         fTokenAdaptor = new FTokenAdaptorV1();
         erc20Adaptor = new ERC20Adaptor();
@@ -73,12 +80,12 @@ contract FraxLendFTokenAdaptorTest is Test {
 
         PriceRouter.AssetSettings memory settings;
 
-        uint256 price = uint256(IChainlinkAggregator(FRAX_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, FRAX_USD_FEED);
+        uint256 price = uint256(IChainlinkAggregator(address(mockFraxUsd)).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockFraxUsd));
         priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
 
-        price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        price = uint256(IChainlinkAggregator(address(mockWethUsd)).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockWethUsd));
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
         // Setup Cellar:
