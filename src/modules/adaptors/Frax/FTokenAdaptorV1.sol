@@ -2,6 +2,7 @@
 pragma solidity 0.8.16;
 
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
+import { IRateCalculator } from "src/interfaces/external/Frax/IRateCalculator.sol";
 
 /**
  * @title FraxLend fToken Adaptor
@@ -62,9 +63,12 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
      * @param owner The owner of the Asset Shares (fTokens)
      */
     function _withdraw(IFToken fToken, uint256 assets, address receiver, address owner) internal override {
-        // If accounting for interest, call `addInterest` before calculating shares to redeem.
-        if (ACCOUNT_FOR_INTEREST()) fToken.addInterest();
-        uint256 shares = _toAssetShares(fToken, assets, false, ACCOUNT_FOR_INTEREST());
+        // Call `addInterest` before calculating shares to redeem, so we use the most up to date share price.
+        fToken.addInterest();
+        // NOTE below `_toAssetShares` calculation intentionally has `ACCOUNT_FOR_INTEREST` hard coded to false.
+        // Since we call `addInterest` right before this, there is no point in previewing interest, because
+        // it was updated this block.
+        uint256 shares = _toAssetShares(fToken, assets, false, false);
         fToken.redeem(shares, receiver, owner);
     }
 
@@ -79,9 +83,34 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
         IFToken fToken,
         uint256 shares,
         bool roundUp,
-        bool
+        bool previewInterest
     ) internal view override returns (uint256) {
-        return fToken.toAssetAmount(shares, roundUp);
+        if (previewInterest) {
+            (
+                uint128 totalAssetAmount,
+                uint128 totalAssetShares,
+                uint128 totalBorrowAmount,
+                uint128 totalBorrowShares,
+
+            ) = fToken.getPairAccounting();
+            (totalAssetAmount, totalAssetShares) = _previewInterest(
+                fToken,
+                totalAssetAmount,
+                totalAssetShares,
+                totalBorrowAmount,
+                totalBorrowShares
+            );
+            uint256 assets;
+            if (totalAssetShares == 0) {
+                assets = shares;
+            } else {
+                assets = (shares * totalAssetAmount) / totalAssetShares;
+                if (roundUp && (assets * totalAssetShares) / totalAssetAmount < shares) {
+                    assets = assets + 1;
+                }
+            }
+            return assets;
+        } else return fToken.toAssetAmount(shares, roundUp);
     }
 
     /**
@@ -95,9 +124,34 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
         IFToken fToken,
         uint256 amount,
         bool roundUp,
-        bool
+        bool previewInterest
     ) internal view override returns (uint256) {
-        return fToken.toAssetShares(amount, roundUp);
+        if (previewInterest) {
+            (
+                uint128 totalAssetAmount,
+                uint128 totalAssetShares,
+                uint128 totalBorrowAmount,
+                uint128 totalBorrowShares,
+
+            ) = fToken.getPairAccounting();
+            (totalAssetAmount, totalAssetShares) = _previewInterest(
+                fToken,
+                totalAssetAmount,
+                totalAssetShares,
+                totalBorrowAmount,
+                totalBorrowShares
+            );
+            uint256 shares;
+            if (totalAssetAmount == 0) {
+                shares = amount;
+            } else {
+                shares = (amount * totalAssetShares) / totalAssetAmount;
+                if (roundUp && (shares * totalAssetAmount) / totalAssetShares < amount) {
+                    shares = shares + 1;
+                }
+            }
+            return shares;
+        } else return fToken.toAssetShares(amount, roundUp);
     }
 
     /**
@@ -107,5 +161,67 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
      */
     function _addInterest(IFToken fToken) internal override {
         fToken.addInterest();
+    }
+
+    // This function is essentially the Frax Lend V1 `_addInterest` function, but
+    // adjusted to be a view.
+    function _previewInterest(
+        IFToken fToken,
+        uint128 totalAssetAmount,
+        uint128 totalAssetShares,
+        uint128 totalBorrowAmount,
+        uint128 totalBorrowShares
+    ) internal view returns (uint128, uint128) {
+        IFToken.CurrentRateInfoV1 memory rateInfo = fToken.currentRateInfo();
+        // Interest was already updated this block.
+        if (rateInfo.lastTimestamp == block.timestamp) {
+            return (totalAssetAmount, totalAssetShares);
+        }
+
+        // If there are no borrows or contract is paused, no interest accrues so return current values.
+        if (totalBorrowShares == 0 || fToken.paused()) {
+            return (totalAssetAmount, totalAssetShares);
+        }
+
+        uint256 deltaTime = block.timestamp - rateInfo.lastTimestamp;
+        // 1e5 is the FraxLend V1 Contracts `UTIL_PREC` value.
+        uint256 _utilizationRate = (1e5 * totalBorrowAmount) / totalAssetAmount;
+
+        uint64 newRate;
+        uint256 maturityDate = fToken.maturityDate();
+        if (maturityDate != 0 && block.timestamp > maturityDate) {
+            newRate = uint64(fToken.penaltyRate());
+        } else {
+            bytes memory rateData = abi.encode(
+                rateInfo.ratePerSec,
+                deltaTime,
+                _utilizationRate,
+                block.number - rateInfo.lastBlock
+            );
+
+            newRate = IRateCalculator(fToken.rateContract()).getNewRate(rateData, fToken.rateInitCallData());
+        }
+
+        uint256 interestEarned = (deltaTime * totalBorrowAmount * newRate) / 1e18;
+
+        if (
+            interestEarned + totalBorrowAmount <= type(uint128).max &&
+            interestEarned + totalAssetAmount <= type(uint128).max
+        ) {
+            totalBorrowAmount += uint128(interestEarned);
+            totalAssetAmount += uint128(interestEarned);
+
+            // Check if protocol fee is setup.
+            if (rateInfo.feeToProtocolRate > 0) {
+                // 1e5 is the FraxLend V1 contracts `FEE_PRECISION`.
+                uint256 feesAmount = (interestEarned * rateInfo.feeToProtocolRate) / 1e5;
+
+                uint256 feesShare = (feesAmount * totalAssetShares) / (totalAssetAmount - feesAmount);
+
+                totalAssetShares += uint128(feesShare);
+            }
+        }
+
+        return (totalAssetAmount, totalAssetShares);
     }
 }

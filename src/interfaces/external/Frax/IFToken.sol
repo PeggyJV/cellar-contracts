@@ -3,6 +3,14 @@ pragma solidity 0.8.16;
 
 interface IFToken {
     // Frax Pair V1 interface.
+
+    struct CurrentRateInfoV1 {
+        uint64 lastBlock;
+        uint64 feeToProtocolRate; // Fee amount 1e5 precision
+        uint64 lastTimestamp;
+        uint64 ratePerSec;
+    }
+
     function deposit(uint256 amount, address receiver) external;
 
     function redeem(uint256 shares, address receiver, address owner) external;
@@ -31,6 +39,18 @@ interface IFToken {
     function borrowAsset(uint256 borrowAmount, uint256 collateralAmount, address receiver) external;
 
     function repayAsset(uint256 shares, address borrower) external;
+
+    function currentRateInfo() external view returns (CurrentRateInfoV1 memory rateInfo);
+
+    function rateInitCallData() external view returns (bytes memory);
+
+    function rateContract() external view returns (address);
+
+    function paused() external view returns (bool);
+
+    function maturityDate() external view returns (uint256);
+
+    function penaltyRate() external view returns (uint256);
 
     // Changes for Frax Pair V2 interface.
     struct CurrentRateInfo {
