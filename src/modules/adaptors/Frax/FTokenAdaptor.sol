@@ -76,7 +76,7 @@ contract FTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     @notice Cellars must withdraw from FraxLend, then transfer assets to receiver.
+     * @notice Cellars must withdraw from FraxLend, then transfer assets to receiver.
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
      * @param assets the amount of assets to withdraw from FraxLend
      * @param receiver the address to send withdrawn assets to
@@ -110,7 +110,7 @@ contract FTokenAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Returns the cellars balance of the positions FRAX.
+     * @notice Returns the cellar's balance of the FRAX position.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IFToken fToken = abi.decode(adaptorData, (IFToken));
@@ -135,7 +135,7 @@ contract FTokenAdaptor is BaseAdaptor {
     /**
      * @notice Allows strategists to lend FRAX on FraxLend.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * @param fToken the market to lend on FraxLend
+     * @param fToken the specified FraxLend Pair
      * @param amountToDeposit the amount of Frax to lend on FraxLend
      */
     function lendFrax(IFToken fToken, uint256 amountToDeposit) public {
@@ -150,7 +150,7 @@ contract FTokenAdaptor is BaseAdaptor {
 
     /**
      * @notice Allows strategists to redeem Frax shares from FraxLend.
-     * @param fToken the market to withdraw from on FraxLend
+     * @param fToken the specified FraxLend Pair
      * @param amountToRedeem the amount of Frax shares to redeem from FraxLend
      */
     function redeemFraxShare(IFToken fToken, uint256 amountToRedeem) public {
@@ -164,7 +164,7 @@ contract FTokenAdaptor is BaseAdaptor {
      * @notice Allows strategists to withdraw FRAX from FraxLend.
      * @dev Used to withdraw an exact amount from Frax Lend.
      *      Use `redeemFraxShare` to withdraw all.
-     * @param fToken the market to withdraw from on FraxLend
+     * @param fToken the specified FraxLend Pair
      * @param amountToWithdraw the amount of FRAX to withdraw from FraxLend
      */
     function withdrawFrax(IFToken fToken, uint256 amountToWithdraw) public {
