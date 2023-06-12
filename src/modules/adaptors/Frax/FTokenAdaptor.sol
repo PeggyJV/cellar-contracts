@@ -6,7 +6,10 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
 
 /**
  * @title FraxLend fToken Adaptor
- * @notice Allows Cellars to lend FRAX to FraxLend markets.
+ * @dev This adaptor is specifically for FraxLendPairV2 contracts.
+ *      To interact with a different version, inherit from this adaptor
+ *      and overrid the interface helper functions.
+ * @notice Allows Cellars to lend FRAX to FraxLend pairs.
  * @author crispymangoes, 0xEinCodes
  */
 contract FTokenAdaptor is BaseAdaptor {
@@ -59,7 +62,7 @@ contract FTokenAdaptor is BaseAdaptor {
     /**
      * @notice Cellar must approve fToken to spend its assets, then call deposit to lend its assets.
      * @param assets the amount of assets to lend on FraxLend
-     * @param adaptorData adaptor data containining the abi encoded fToken
+     * @param adaptorData adaptor data containing the abi encoded fToken
      * @dev configurationData is NOT used
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {

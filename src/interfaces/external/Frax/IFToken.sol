@@ -3,6 +3,7 @@ pragma solidity 0.8.16;
 
 interface IFToken {
     // Frax Pair V1 interface.
+    // Example Pair: https://etherscan.io/address/0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72#code
     function deposit(uint256 amount, address receiver) external;
 
     function redeem(uint256 shares, address receiver, address owner) external;
@@ -33,6 +34,7 @@ interface IFToken {
     function repayAsset(uint256 shares, address borrower) external;
 
     // Changes for Frax Pair V2 interface.
+    // Example Pair: https://etherscan.io/address/0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15#code
     struct CurrentRateInfo {
         uint32 lastBlock;
         uint32 feeToProtocolRate; // Fee amount 1e5 precision

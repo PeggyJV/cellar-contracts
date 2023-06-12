@@ -17,6 +17,10 @@ import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 
+/**
+ * @dev A lot of FraxLend operations round down, so many tests use `assertApproxEqAbs` with a
+ *      2 wei bound to account for this.
+ */
 contract FraxLendFTokenAdaptorTest is Test {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -298,7 +302,6 @@ contract FraxLendFTokenAdaptorTest is Test {
         assertEq(FRAX.balanceOf(address(cellar)), assets / 2, "Should have withdrawn half the assets from FraxLend.");
     }
 
-    // try lending and redeemin with fTokens that are not positions in the cellar and check for revert.
     function testUsingPairNotSetupAsPosition(uint256 assets) external {
         // Add FRAX position and change holding position to vanilla FRAX.
         cellar.addPosition(0, fraxPosition, abi.encode(0), false);
@@ -362,7 +365,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    // Check that FRAX in multiple different pairs is correctly accounted for in total assets.
+    // Check that FRAX in multiple different pairs is correctly accounted for in totalAssets().
     function testMultiplePositionsTotalAssets(uint256 assets) external {
         // Have user deposit into cellar
         assets = bound(assets, 0.01e18, 100_000_000e18);
