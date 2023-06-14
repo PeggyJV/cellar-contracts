@@ -678,4 +678,84 @@ contract CellarAaveV2MorphoTest is Test {
                 amountToRepay
             );
     }
+
+    function testIsBorrowingAnyFullRepay(uint256 assetsToBorrow) external checkBlockNumber {
+        assetsToBorrow = bound(assetsToBorrow, 1, 1_000e18);
+
+        uint256 morphoDebt;
+        // Add vanilla WETH to the cellar.
+        cellar.addPosition(0, wethPosition, abi.encode(0), false);
+        // Add debt position to cellar.
+        cellar.addPosition(0, morphoDebtWethPosition, abi.encode(0), true);
+
+        uint256 assetsToLend = 2 * assetsToBorrow;
+
+        deal(address(WETH), address(this), assetsToLend);
+        cellar.deposit(assetsToLend, address(this));
+
+        assertTrue(!isBorrowing(address(cellar)), "Cellar should not be borrowing.");
+
+        // Rebalance Cellar to take on debt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // Borrow WETH from Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToBorrow(aWETH, assetsToBorrow);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
+
+        assertTrue(isBorrowing(address(cellar)), "Cellar should be borrowing.");
+
+        // Advance time so that cellar takes on some debt.
+        // vm.roll(block.number + 100);
+        // vm.warp(block.timestamp + (1 days / 2));
+
+        // // Make sure debt increased.
+        // morphoDebt = getMorphoDebt(aWETH, address(cellar));
+
+        // assertGt(morphoDebt, assetsToBorrow, "Cellar should have more debt.");
+
+        // Rebalance Cellar to repay debt in full.
+        data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRepay(address(aWETH), type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
+
+        if (isBorrowing(address(cellar))) {
+            // TODO uncommenting the below line, runs the same callOnAdaptor call again.
+            // doing this seems to fix the issue of some calls leaving 1 wei of debt.
+            // cellar.callOnAdaptor(data);
+
+            morphoDebt = getMorphoDebt(aWETH, address(cellar));
+            console.log("Debt", morphoDebt);
+        }
+
+        assertTrue(!isBorrowing(address(cellar)), "Cellar should not be borrowing.");
+    }
+
+    function testIsBorrowingAnyPartialRepayThenFullRepay() external {}
+
+    function testIsBorrowingAnyRepayAllButOneWeiThenFullRepay() external {}
+
+    function isBorrowing(address user) internal view returns (bool) {
+        bytes32 userMarkets = morpho.userMarkets(user);
+        return _isBorrowingAny(userMarkets);
+    }
+
+    /// @dev Returns if a user has been borrowing from any market.
+    /// @param _userMarkets The bitmask encoding the markets entered by the user.
+    /// @return True if the user has been borrowing on any market, false otherwise.
+    function _isBorrowingAny(bytes32 _userMarkets) internal pure returns (bool) {
+        return _userMarkets & BORROWING_MASK != 0;
+    }
+
+    bytes32 public constant BORROWING_MASK = 0x5555555555555555555555555555555555555555555555555555555555555555;
 }
