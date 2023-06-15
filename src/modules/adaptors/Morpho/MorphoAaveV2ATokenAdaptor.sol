@@ -3,6 +3,7 @@ pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorphoV2 } from "src/interfaces/external/Morpho/IMorphoV2.sol";
+import { IMorphoLensV2 } from "src/interfaces/external/Morpho/IMorphoLensV2.sol";
 import { MorphoRewardHandler } from "src/modules/adaptors/Morpho/MorphoRewardHandler.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
@@ -37,6 +38,11 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      */
     bytes32 public constant BORROWING_MASK = 0x5555555555555555555555555555555555555555555555555555555555555555;
 
+    /**
+     @notice Attempted withdraw would lower Cellar health factor too low.
+     */
+    error MorphoAaveV2ATokenAdaptor__HealthFactorTooLow();
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -53,6 +59,20 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      */
     function morpho() internal pure returns (IMorphoV2) {
         return IMorphoV2(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
+    }
+
+    /**
+     * @notice The Morpho Aave V2 Lens contract on Ethereum Mainnet.
+     */
+    function morphoLens() internal pure returns (IMorphoLensV2) {
+        return IMorphoLensV2(0x507fA343d0A90786d86C7cd885f5C49263A91FF4);
+    }
+
+    /**
+     * @notice Minimum Health Factor enforced after every withdraw.
+     */
+    function HFMIN() internal pure returns (uint256) {
+        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -154,6 +174,10 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      */
     function withdrawFromAaveV2Morpho(IAaveToken aToken, uint256 amountToWithdraw) public {
         morpho().withdraw(address(aToken), amountToWithdraw, address(this));
+
+        // Check that health factor is above adaptor minimum.
+        uint256 healthFactor = morphoLens().getUserHealthFactor(address(this));
+        if (healthFactor < HFMIN()) revert MorphoAaveV2ATokenAdaptor__HealthFactorTooLow();
     }
 
     /**

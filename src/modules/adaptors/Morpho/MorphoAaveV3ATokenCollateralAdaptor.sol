@@ -23,7 +23,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
     //====================================================================
 
     /**
-     @notice Attempted borrow would lower Cellar health factor too low.
+     @notice Attempted withdraw would lower Cellar health factor too low.
      */
     error MorphoAaveV3ATokenCollateralAdaptor__HealthFactorTooLow();
 
