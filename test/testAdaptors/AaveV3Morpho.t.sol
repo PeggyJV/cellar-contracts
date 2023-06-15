@@ -549,7 +549,7 @@ contract CellarAaveV3MorphoTest is Test {
         );
     }
 
-    function testHealthFactorChecks() external {
+    function testHealthFactorChecks() external checkBlockNumber {
         // Need to borrow, and lower the health factor below 1.05, then need to withdraw to lower health factor below 1.05.
         _setupCellarForBorrowing(cellar);
 
