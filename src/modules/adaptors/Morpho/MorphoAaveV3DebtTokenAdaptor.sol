@@ -3,13 +3,14 @@ pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorphoV3 } from "src/interfaces/external/Morpho/IMorphoV3.sol";
+import { MorphoAaveV3HealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoAaveV3HealthFactorLogic.sol";
 
 /**
  * @title Morpho Aave V3 debtToken Adaptor
  * @notice Allows Cellars to interact with Morpho Aave V3 debtToken positions.
  * @author crispymangoes
  */
-contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
+contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor, MorphoAaveV3HealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -52,7 +53,6 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
 
     /**
      * @notice Minimum Health Factor enforced after every borrow.
-     * @notice Overwrites strategist set minimums if they are lower.
      */
     function HFMIN() internal pure returns (uint256) {
         return 1.05e18;
@@ -124,7 +124,7 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
         morpho().borrow(underlying, amountToBorrow, address(this), address(this), maxIterations);
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _getUserHealthFactor(address(this));
+        uint256 healthFactor = _getUserHealthFactor(morpho(), address(this));
         if (healthFactor < HFMIN()) revert MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
     }
 
@@ -139,18 +139,5 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor {
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(tokenToRepay, address(morpho()));
-    }
-
-    /**
-     * @notice Code pulled directly from Morpho Position Manager.
-     * https://etherscan.io/address/0x4592e45e0c5DbEe94a135720cCfF2e4353dAc6De#code
-     */
-    function _getUserHealthFactor(address user) internal view returns (uint256) {
-        IMorphoV3.LiquidityData memory liquidityData = morpho().liquidityData(user);
-
-        return
-            liquidityData.debt > 0
-                ? uint256(1e18).mulDivDown(liquidityData.maxDebt, liquidityData.debt)
-                : type(uint256).max;
     }
 }
