@@ -119,11 +119,6 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      */
     function repayAaveV2MorphoDebt(IAaveToken aToken, uint256 amountToRepay) public {
         ERC20 underlying = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
-        if (amountToRepay == type(uint256).max) {
-            uint256 availableUnderlying = underlying.balanceOf(address(this));
-            uint256 debt = _balanceOfInUnderlying(address(aToken), address(this));
-            amountToRepay = availableUnderlying > debt ? debt : availableUnderlying;
-        }
         underlying.safeApprove(address(morpho()), amountToRepay);
         morpho().repay(address(aToken), amountToRepay);
 
