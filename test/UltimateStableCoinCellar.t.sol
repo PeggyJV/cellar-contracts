@@ -145,8 +145,8 @@ contract UltimateStableCoinCellarTest is Test {
         tracker = new UniswapV3PositionTracker(positionManager);
         usdcVestor = new VestingSimple(USDC, 1 days / 4, 1e6);
         uniswapV3Adaptor = new MockUniswapV3Adaptor();
-        aaveATokenAdaptor = new AaveATokenAdaptor();
-        aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
+        aaveATokenAdaptor = new AaveATokenAdaptor(address(pool), address(WETH), 1.05e18);
+        aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor(address(pool), 1.05e18);
         cTokenAdaptor = new CTokenAdaptor();
         vestingAdaptor = new VestingSimpleAdaptor();
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();

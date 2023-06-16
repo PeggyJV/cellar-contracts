@@ -26,6 +26,23 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      */
     error AaveDebtTokenAdaptor__HealthFactorTooLow();
 
+    /**
+     * @notice The Aave V3 Pool contract on current network.
+     * @dev For mainnet use 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2.
+     */
+    IPool public immutable pool;
+
+    /**
+     * @notice Minimum Health Factor enforced after every borrow.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(address v2Pool, uint256 minHealthFactor) {
+        pool = IPool(v2Pool);
+        minimumHealthFactor = minHealthFactor;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -35,21 +52,6 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      */
     function identifier() public pure override returns (bytes32) {
         return keccak256(abi.encode("Aave debtToken Adaptor V 1.1"));
-    }
-
-    /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
-     */
-    function pool() internal pure returns (IPool) {
-        return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced after every borrow.
-     * @notice Overwrites strategist set minimums if they are lower.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -120,7 +122,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
             revert AaveDebtTokenAdaptor__DebtPositionsMustBeTracked(address(debtTokenToBorrow));
 
         // Open up new variable debt position on Aave.
-        pool().borrow(
+        pool.borrow(
             IAaveToken(address(debtTokenToBorrow)).UNDERLYING_ASSET_ADDRESS(),
             amountToBorrow,
             2,
@@ -129,8 +131,8 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
         ); // 2 is the interest rate mode, either 1 for stable or 2 for variable
 
         // Check that health factor is above adaptor minimum.
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (healthFactor < HFMIN()) revert AaveDebtTokenAdaptor__HealthFactorTooLow();
+        (, , , , , uint256 healthFactor) = pool.getUserAccountData(address(this));
+        if (healthFactor < minimumHealthFactor) revert AaveDebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -140,11 +142,11 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      * @param amountToRepay the amount of `tokenToRepay` to repay with.
      */
     function repayAaveDebt(ERC20 tokenToRepay, uint256 amountToRepay) public {
-        tokenToRepay.safeApprove(address(pool()), amountToRepay);
-        pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  either 1 for stable or 2 for variable
+        tokenToRepay.safeApprove(address(pool), amountToRepay);
+        pool.repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  either 1 for stable or 2 for variable
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(tokenToRepay, address(pool()));
+        _revokeExternalApproval(tokenToRepay, address(pool));
     }
 
     /**
@@ -156,6 +158,6 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
     function flashLoan(address[] memory loanToken, uint256[] memory loanAmount, bytes memory params) public {
         require(loanToken.length == loanAmount.length, "Input length mismatch.");
         uint256[] memory modes = new uint256[](loanToken.length);
-        pool().flashLoan(address(this), loanToken, loanAmount, modes, address(this), params, 0);
+        pool.flashLoan(address(this), loanToken, loanAmount, modes, address(this), params, 0);
     }
 }

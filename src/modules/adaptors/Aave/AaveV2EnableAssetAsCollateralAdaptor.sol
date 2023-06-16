@@ -25,6 +25,23 @@ contract AaveV2EnableAssetAsCollateralAdaptor is PositionlessAdaptor {
      */
     error AaveV2EnableAssetAsCollateralAdaptor__HealthFactorTooLow();
 
+    /**
+     * @notice The Aave V3 Pool contract on current network.
+     * @dev For mainnet use 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2.
+     */
+    IPool public immutable pool;
+
+    /**
+     * @notice Minimum Health Factor enforced after every borrow.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(address v2Pool, uint256 minHealthFactor) {
+        pool = IPool(v2Pool);
+        minimumHealthFactor = minHealthFactor;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -36,32 +53,18 @@ contract AaveV2EnableAssetAsCollateralAdaptor is PositionlessAdaptor {
         return keccak256(abi.encode("Aave V2 Enable Asset As Collateral Adaptor V 0.0"));
     }
 
-    /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
-     */
-    function pool() internal pure returns (IPool) {
-        return IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced when useAsCollateral is set to false.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
-    }
-
     //============================================ Strategist Functions ===========================================
 
     /**
      * @notice Allows a strategist to choose to use an asset as collateral or not.
      */
     function setUserUseReserveAsCollateral(address asset, bool useAsCollateral) external {
-        pool().setUserUseReserveAsCollateral(asset, useAsCollateral);
+        pool.setUserUseReserveAsCollateral(asset, useAsCollateral);
 
         // If useAsCollateral is false then run a health factor check.
         if (!useAsCollateral) {
-            (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-            if (healthFactor < HFMIN()) revert AaveV2EnableAssetAsCollateralAdaptor__HealthFactorTooLow();
+            (, , , , , uint256 healthFactor) = pool.getUserAccountData(address(this));
+            if (healthFactor < minimumHealthFactor) revert AaveV2EnableAssetAsCollateralAdaptor__HealthFactorTooLow();
         }
     }
 }
