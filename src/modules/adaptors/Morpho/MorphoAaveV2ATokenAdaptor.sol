@@ -108,7 +108,8 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     }
 
     /**
-     * @notice Uses configuration data to determine if the position is liquid or not.
+     * @notice Checks if Cellar has open borrows, and if so returns zero.
+     *         Otherwise returns balanceOf in underlying.
      * @param adaptorData the abi encoded aToken address
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
