@@ -17,7 +17,6 @@ import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/Fee
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { FakeFeesAndReserves } from "src/mocks/FakeFeesAndReserves.sol";
-import { MockFeesAndReservesAdaptor } from "src/mocks/adaptors/MockFeesAndReservesAdaptor.sol";
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
@@ -28,7 +27,7 @@ contract FeesAndReservesTest is Test {
     using Math for uint256;
     using stdStorage for StdStorage;
 
-    MockFeesAndReservesAdaptor private feesAndReservesAdaptor;
+    FeesAndReservesAdaptor private feesAndReservesAdaptor;
     ERC20Adaptor private erc20Adaptor;
     Cellar private cellar;
     PriceRouter private priceRouter;
@@ -60,13 +59,13 @@ contract FeesAndReservesTest is Test {
     uint32 private usdcPosition;
 
     function setUp() external {
-        feesAndReservesAdaptor = new MockFeesAndReservesAdaptor();
         erc20Adaptor = new ERC20Adaptor();
         priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
         far = new FeesAndReserves(address(this));
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        feesAndReservesAdaptor = new FeesAndReservesAdaptor(address(far));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage({
             max: 0,
