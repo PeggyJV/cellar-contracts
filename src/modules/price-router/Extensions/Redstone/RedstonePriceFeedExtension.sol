@@ -13,12 +13,12 @@ contract RedstonePriceFeedExtension is Extension {
     constructor(PriceRouter _priceRouter) Extension(_priceRouter) {}
 
     /**
-     * @notice Attempted to add wstEth support when stEth is not supported.
+     * @notice Redstone Classic price feed is stale.
      */
     error RedstonePriceFeedExtension__STALE_PRICE();
 
     /**
-     * @notice Attempted to use this extension to price something other than wstEth.
+     * @notice Redstone Classic price feed price is zero.
      */
     error RedstonePriceFeedExtension__ZERO_PRICE();
 
@@ -42,6 +42,11 @@ contract RedstonePriceFeedExtension is Extension {
      */
     mapping(ERC20 => ExtensionStorage) public extensionStorage;
 
+    /**
+     * @notice Called by the price router during `_updateAsset` calls.
+     * @param asset the asset the redstoneAdapter in `_storage` can price
+     * @param _storage the abi encoded ExtensionStorage
+     */
     function setupSource(ERC20 asset, bytes memory _storage) external override onlyPriceRouter {
         // Make sure we can get a nonzero price using the provided extension storage data.
         ExtensionStorage memory stor = abi.decode(_storage, (ExtensionStorage));
@@ -59,6 +64,11 @@ contract RedstonePriceFeedExtension is Extension {
         extensionStorage[asset] = stor;
     }
 
+    /**
+     * @notice Called during pricing operations.
+     * @param asset the ERC20 asset to price using Redstone Classic Oracle
+     * @dev Uses Redstone Classic Price Feed to price `asset`.
+     */
     function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         ExtensionStorage memory stor = extensionStorage[asset];
         return stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
