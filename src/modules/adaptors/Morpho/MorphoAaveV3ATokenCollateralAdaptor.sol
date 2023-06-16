@@ -86,21 +86,21 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
         address[] memory borrows = morpho().userBorrows(address(this));
         if (borrows.length > 0) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
-        ERC20 underlying = abi.decode(adaptorData, (ERC20));
+        address underlying = abi.decode(adaptorData, (address));
 
         // Withdraw assets from Morpho.
-        morpho().withdrawCollateral(address(underlying), assets, address(this), receiver);
+        morpho().withdrawCollateral(underlying, assets, address(this), receiver);
     }
 
     /**
-     * @notice Checks that cellar has no active borrows, and if so reverts.
+     * @notice Checks that cellar has no active borrows, and if so returns 0.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         address[] memory borrows = morpho().userBorrows(msg.sender);
         if (borrows.length > 0) return 0;
         else {
-            ERC20 underlying = abi.decode(adaptorData, (ERC20));
-            return morpho().collateralBalance(address(underlying), msg.sender);
+            address underlying = abi.decode(adaptorData, (address));
+            return morpho().collateralBalance(underlying, msg.sender);
         }
     }
 
@@ -108,8 +108,8 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
      * @notice Returns the cellars balance of the position in terms of underlying asset.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        ERC20 underlying = abi.decode(adaptorData, (ERC20));
-        return morpho().collateralBalance(address(underlying), msg.sender);
+        address underlying = abi.decode(adaptorData, (address));
+        return morpho().collateralBalance(underlying, msg.sender);
     }
 
     /**

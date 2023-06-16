@@ -8,7 +8,7 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
  * @title FraxLend fToken Adaptor
  * @dev This adaptor is specifically for FraxLendPairV2 contracts.
  *      To interact with a different version, inherit from this adaptor
- *      and overrid the interface helper functions.
+ *      and override the interface helper functions.
  * @notice Allows Cellars to lend FRAX to FraxLend pairs.
  * @author crispymangoes, 0xEinCodes
  */

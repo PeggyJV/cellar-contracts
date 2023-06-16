@@ -101,10 +101,10 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
         // Make sure position is not backing a borrow.
         if (isBorrowingAny(address(this))) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
-        IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
+        address aToken = abi.decode(adaptorData, (address));
 
         // Withdraw assets from Morpho.
-        morpho().withdraw(address(aToken), assets, receiver);
+        morpho().withdraw(aToken, assets, receiver);
     }
 
     /**
@@ -133,7 +133,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * @notice Returns the positions aToken underlying asset.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        IAaveToken token = abi.decode(adaptorData, (IAaveToken));
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
     }
 
