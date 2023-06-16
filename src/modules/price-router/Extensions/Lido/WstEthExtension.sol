@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Extensions/Extension.sol";
-import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ISTETH } from "src/interfaces/external/ISTETH.sol";
 
 /**

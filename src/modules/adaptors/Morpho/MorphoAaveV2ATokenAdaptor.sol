@@ -21,14 +21,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     // Where:
     // `aToken` is the AaveV2 A Token position this adaptor is working with
     //================= Configuration Data Specification =================
-    // isLiquid bool indicating whether user withdraws are allowed from this position.
-    // IMPORTANT: It is possible for a strategist to misconfigure their positions,
-    // and allow user withdraws from aToken positions that are backing loans.
-    // This will be mitigated by only allowing trusted strategists to use this adaptor,
-    // and educating them the dangers of misconfiguring their position.
-    // EX: If a cellar is using their aTokens to back a borrow, then strategists
-    // should make their aToken positions illiquid, so that user withdraws do not
-    // negatively affect the cellars health factor.
+    // NA
     //====================================================================
 
     /**
@@ -108,14 +101,16 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
         // Make sure position is not backing a borrow.
         if (isBorrowingAny(address(this))) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
-        IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
+        address aToken = abi.decode(adaptorData, (address));
 
         // Withdraw assets from Morpho.
-        morpho().withdraw(address(aToken), assets, receiver);
+        morpho().withdraw(aToken, assets, receiver);
     }
 
     /**
-     * @notice Uses configuration data to determine if the position is liquid or not.
+     * @notice Checks if Cellar has open borrows, and if so returns zero.
+     *         Otherwise returns balanceOf in underlying.
+     * @param adaptorData the abi encoded aToken address
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         // If position is backing a borrow, then return 0.
@@ -139,7 +134,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * @notice Returns the positions aToken underlying asset.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        IAaveToken token = abi.decode(adaptorData, (IAaveToken));
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
     }
 

@@ -82,27 +82,27 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        ERC20 underlying = abi.decode(adaptorData, (ERC20));
+        address underlying = abi.decode(adaptorData, (address));
         uint256 iterations = abi.decode(configurationData, (uint256));
 
         // Withdraw assets from Morpho.
-        morpho().withdraw(address(underlying), assets, address(this), receiver, iterations);
+        morpho().withdraw(underlying, assets, address(this), receiver, iterations);
     }
 
     /**
      * @notice Returns the p2p balance of the cellar.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        ERC20 underlying = abi.decode(adaptorData, (ERC20));
-        return morpho().supplyBalance(address(underlying), msg.sender);
+        address underlying = abi.decode(adaptorData, (address));
+        return morpho().supplyBalance(underlying, msg.sender);
     }
 
     /**
      * @notice Returns the cellars p2p balance.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        ERC20 underlying = abi.decode(adaptorData, (ERC20));
-        return morpho().supplyBalance(address(underlying), msg.sender);
+        address underlying = abi.decode(adaptorData, (address));
+        return morpho().supplyBalance(underlying, msg.sender);
     }
 
     /**

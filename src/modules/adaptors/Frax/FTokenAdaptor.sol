@@ -8,7 +8,7 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
  * @title FraxLend fToken Adaptor
  * @dev This adaptor is specifically for FraxLendPairV2 contracts.
  *      To interact with a different version, inherit from this adaptor
- *      and overrid the interface helper functions.
+ *      and override the interface helper functions.
  * @notice Allows Cellars to lend FRAX to FraxLend pairs.
  * @author crispymangoes, 0xEinCodes
  */
@@ -29,6 +29,17 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     error FTokenAdaptor__FTokenPositionsMustBeTracked(address fToken);
 
+    /**
+     * @notice This bool determines how this adaptor accounts for interest.
+     *         True: Account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
+     *         False: Do not account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
+     */
+    bool public immutable ACCOUNT_FOR_INTEREST;
+
+    constructor(bool _accountForInterest) {
+        ACCOUNT_FOR_INTEREST = _accountForInterest;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -45,17 +56,6 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     function FRAX() internal pure returns (ERC20) {
         return ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
-    }
-
-    /**
-     * @notice Indicates whether or not we should worry about updating interest
-     *         when interacting with FraxLend.
-     * @dev True is the most accurate method, but will slightly add to gas costs.
-     *      False is less accurate, but this error is mitigated by the frequency the
-     *      FraxLend Pairs are interacted with.
-     */
-    function ACCOUNT_FOR_INTEREST() internal pure virtual returns (bool) {
-        return true;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -105,7 +105,7 @@ contract FTokenAdaptor is BaseAdaptor {
         (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = _getPairAccounting(fToken);
         if (totalFraxBorrowed >= totalFraxSupplied) return 0;
         uint256 liquidFrax = totalFraxSupplied - totalFraxBorrowed;
-        uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST());
+        uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
         withdrawableFrax = fraxBalance > liquidFrax ? liquidFrax : fraxBalance;
     }
 
@@ -114,7 +114,7 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        return _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST());
+        return _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
     }
 
     /**
