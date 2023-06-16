@@ -471,7 +471,7 @@ contract PriceRouter is Ownable {
 
         uint256 numOfAssets = baseAssets.length;
         exchangeRates = new uint256[](numOfAssets);
-        for (uint256 i; i < numOfAssets; i++) {
+        for (uint256 i; i < numOfAssets; ++i) {
             AssetSettings memory baseSettings = getAssetSettings[baseAssets[i]];
             if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAssets[i]));
             exchangeRates[i] = _getExchangeRate(
@@ -582,7 +582,7 @@ contract PriceRouter is Ownable {
         uint256 valueInQuote;
         uint8 quoteDecimals = quoteAsset.decimals();
 
-        for (uint8 i = 0; i < baseAssets.length; i++) {
+        for (uint256 i = 0; i < baseAssets.length; ++i) {
             // Skip zero amount values.
             if (amounts[i] == 0) continue;
             ERC20 baseAsset = baseAssets[i];
