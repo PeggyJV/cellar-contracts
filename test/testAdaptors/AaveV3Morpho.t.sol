@@ -549,6 +549,80 @@ contract CellarAaveV3MorphoTest is Test {
         );
     }
 
+    function testHealthFactorChecks() external checkBlockNumber {
+        // Need to borrow, and lower the health factor below 1.05, then need to withdraw to lower health factor below 1.05.
+        _setupCellarForBorrowing(cellar);
+
+        uint256 assets = 100e18;
+        deal(address(WETH), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a swap by minting cellar the correct amount of WSTETH.
+        deal(address(WETH), address(cellar), 0);
+        uint256 wstEthToMint = priceRouter.getValue(WETH, assets, WSTETH);
+        deal(address(WSTETH), address(cellar), wstEthToMint);
+
+        uint256 targetHealthFactor = 1.052e18;
+        uint256 ltv = 0.93e18;
+        uint256 wethToBorrow = assets.mulDivDown(ltv, targetHealthFactor);
+        uint256 wethToBorrowToTriggerHealthFactorRevert = assets.mulDivDown(ltv, 1.04e18) - wethToBorrow;
+
+        // Rebalance Cellar to take on debt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(WSTETH, wstEthToMint);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(collateralATokenAdaptor), callData: adaptorCalls });
+        }
+        // Borrow WETH from Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToBorrow(WETH, wethToBorrow, 4);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
+
+        // Strategist tries to borrow more.
+        data = new Cellar.AdaptorCall[](1);
+        // Borrow WETH from Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToBorrow(WETH, wethToBorrowToTriggerHealthFactorRevert, 4);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(debtTokenAdaptor), callData: adaptorCalls });
+        }
+
+        // callOnAdaptor reverts because the health factor is too low.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MorphoAaveV3DebtTokenAdaptor.MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow.selector
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        // If strategist tries to withdraw some collateral, the withdraw also reverts.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            uint256 amountToWithdraw = 1e18;
+            adaptorCalls[0] = _createBytesDataToWithdraw(WSTETH, amountToWithdraw);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(collateralATokenAdaptor), callData: adaptorCalls });
+        }
+
+        // callOnAdaptor should revert because withdraw lowers Health Factor too far.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    MorphoAaveV3ATokenCollateralAdaptor.MorphoAaveV3ATokenCollateralAdaptor__HealthFactorTooLow.selector
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+    }
+
     // ========================================== INTEGRATION TEST ==========================================
 
     function testIntegrationRealYieldEth(uint256 assets) external checkBlockNumber {

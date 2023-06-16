@@ -4,13 +4,14 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorphoV3 } from "src/interfaces/external/Morpho/IMorphoV3.sol";
 import { MorphoRewardHandler } from "src/modules/adaptors/Morpho/MorphoRewardHandler.sol";
+import { MorphoAaveV3HealthFactorLogic } from "src/modules/adaptors/Morpho/MorphoAaveV3HealthFactorLogic.sol";
 
 /**
  * @title Morpho Aave V3 aToken Adaptor
  * @notice Allows Cellars to interact with Morpho Aave V3 positions.
  * @author crispymangoes
  */
-contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler {
+contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler, MorphoAaveV3HealthFactorLogic {
     using SafeTransferLib for ERC20;
 
     //==================== Adaptor Data Specification ====================
@@ -20,6 +21,11 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
+
+    /**
+     @notice Attempted withdraw would lower Cellar health factor too low.
+     */
+    error MorphoAaveV3ATokenCollateralAdaptor__HealthFactorTooLow();
 
     //============================================ Global Functions ===========================================
     /**
@@ -37,6 +43,13 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
      */
     function morpho() internal pure returns (IMorphoV3) {
         return IMorphoV3(0x33333aea097c193e66081E930c33020272b33333);
+    }
+
+    /**
+     * @notice Minimum Health Factor enforced after every withdraw.
+     */
+    function HFMIN() internal pure returns (uint256) {
+        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -137,5 +150,9 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
      */
     function withdrawFromAaveV3Morpho(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
         morpho().withdrawCollateral(address(tokenToWithdraw), amountToWithdraw, address(this), address(this));
+
+        // Check that health factor is above adaptor minimum.
+        uint256 healthFactor = _getUserHealthFactor(morpho(), address(this));
+        if (healthFactor < HFMIN()) revert MorphoAaveV3ATokenCollateralAdaptor__HealthFactorTooLow();
     }
 }

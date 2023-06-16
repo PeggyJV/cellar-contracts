@@ -3,6 +3,7 @@ pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IMorphoV2 } from "src/interfaces/external/Morpho/IMorphoV2.sol";
+import { IMorphoLensV2 } from "src/interfaces/external/Morpho/IMorphoLensV2.sol";
 import { MorphoRewardHandler } from "src/modules/adaptors/Morpho/MorphoRewardHandler.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
@@ -30,6 +31,18 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     // negatively affect the cellars health factor.
     //====================================================================
 
+    /**
+     * @notice Bit mask used to determine if a cellar has any open borrow positions
+     *         by getting the cellar's userMarkets, and performing an AND operation
+     *         with the borrow mask.
+     */
+    bytes32 public constant BORROWING_MASK = 0x5555555555555555555555555555555555555555555555555555555555555555;
+
+    /**
+     @notice Attempted withdraw would lower Cellar health factor too low.
+     */
+    error MorphoAaveV2ATokenAdaptor__HealthFactorTooLow();
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -46,6 +59,20 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      */
     function morpho() internal pure returns (IMorphoV2) {
         return IMorphoV2(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
+    }
+
+    /**
+     * @notice The Morpho Aave V2 Lens contract on Ethereum Mainnet.
+     */
+    function morphoLens() internal pure returns (IMorphoLensV2) {
+        return IMorphoLensV2(0x507fA343d0A90786d86C7cd885f5C49263A91FF4);
+    }
+
+    /**
+     * @notice Minimum Health Factor enforced after every withdraw.
+     */
+    function HFMIN() internal pure returns (uint256) {
+        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -73,20 +100,13 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * @param assets the amount of assets to withdraw from Morpho
      * @param receiver the address to send withdrawn assets to
      * @param adaptorData adaptor data containing the abi encoded aToken
-     * @param configData abi encoded bool indicating whether the position is liquid or not
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        bytes memory adaptorData,
-        bytes memory configData
-    ) public override {
+    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        // Make sure position is setup to be liquid.
-        bool isLiquid = abi.decode(configData, (bool));
-        if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
+        // Make sure position is not backing a borrow.
+        if (isBorrowingAny(address(this))) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
         IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
 
@@ -97,12 +117,10 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     /**
      * @notice Uses configuration data to determine if the position is liquid or not.
      */
-    function withdrawableFrom(
-        bytes memory adaptorData,
-        bytes memory configData
-    ) public view override returns (uint256) {
-        bool isLiquid = abi.decode(configData, (bool));
-        if (!isLiquid) return 0;
+    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
+        // If position is backing a borrow, then return 0.
+        // else return the balance of in underlying.
+        if (isBorrowingAny(msg.sender)) return 0;
         else {
             address aToken = abi.decode(adaptorData, (address));
             return _balanceOfInUnderlying(aToken, msg.sender);
@@ -156,6 +174,10 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      */
     function withdrawFromAaveV2Morpho(IAaveToken aToken, uint256 amountToWithdraw) public {
         morpho().withdraw(address(aToken), amountToWithdraw, address(this));
+
+        // Check that health factor is above adaptor minimum.
+        uint256 healthFactor = morphoLens().getUserHealthFactor(address(this));
+        if (healthFactor < HFMIN()) revert MorphoAaveV2ATokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -171,5 +193,15 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
         if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho().p2pSupplyIndex(poolToken), 1e27);
         if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho().poolIndexes(poolToken).poolSupplyIndex, 1e27);
         return balanceInUnderlying;
+    }
+
+    /**
+     * @dev Returns if a user has been borrowing from any market.
+     * @param user The address to check if it is borrowing or not.
+     * @return True if the user has been borrowing on any market, false otherwise.
+     */
+    function isBorrowingAny(address user) public view returns (bool) {
+        bytes32 userMarkets = morpho().userMarkets(user);
+        return userMarkets & BORROWING_MASK != 0;
     }
 }
