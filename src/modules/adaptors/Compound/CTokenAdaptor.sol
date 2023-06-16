@@ -37,6 +37,23 @@ contract CTokenAdaptor is BaseAdaptor {
      */
     error CTokenAdaptor__MarketNotListed(address market);
 
+    /**
+     * @notice The Compound V2 Comptroller contract on current network.
+     * @dev For mainnet use 0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B.
+     */
+    Comptroller public immutable comptroller;
+
+    /**
+     * @notice Address of the COMP token.
+     * @notice For mainnet use 0xc00e94Cb662C3520282E6f5717214004A7f26888.
+     */
+    ERC20 public immutable COMP;
+
+    constructor(address v2Comptroller, address comp) {
+        comptroller = Comptroller(v2Comptroller);
+        COMP = ERC20(comp);
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -46,20 +63,6 @@ contract CTokenAdaptor is BaseAdaptor {
      */
     function identifier() public pure override returns (bytes32) {
         return keccak256(abi.encode("Compound cToken Adaptor V 1.0"));
-    }
-
-    /**
-     * @notice The Compound V2 Comptroller contract on Ethereum Mainnet.
-     */
-    function comptroller() internal pure returns (Comptroller) {
-        return Comptroller(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
-    }
-
-    /**
-     * @notice The COMP contract on Ethereum Mainnet.
-     */
-    function COMP() internal pure returns (ERC20) {
-        return ERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -153,7 +156,7 @@ contract CTokenAdaptor is BaseAdaptor {
     function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
         assets = new ERC20[](2);
         assets[0] = assetOf(adaptorData);
-        assets[1] = COMP();
+        assets[1] = COMP;
     }
 
     /**
@@ -205,7 +208,7 @@ contract CTokenAdaptor is BaseAdaptor {
      * @notice Allows strategists to claim COMP rewards.
      */
     function claimComp() public {
-        comptroller().claimComp(address(this));
+        comptroller.claimComp(address(this));
     }
 
     //============================================ Helper Functions ============================================
@@ -214,7 +217,7 @@ contract CTokenAdaptor is BaseAdaptor {
      * @notice Helper function that reverts if market is not listed in Comptroller.
      */
     function _validateMarketInput(address input) internal view {
-        (bool isListed, , ) = comptroller().markets(input);
+        (bool isListed, , ) = comptroller.markets(input);
 
         if (!isListed) revert CTokenAdaptor__MarketNotListed(input);
     }

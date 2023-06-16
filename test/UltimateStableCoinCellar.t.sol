@@ -147,7 +147,7 @@ contract UltimateStableCoinCellarTest is Test {
         uniswapV3Adaptor = new MockUniswapV3Adaptor();
         aaveATokenAdaptor = new AaveATokenAdaptor(address(pool), address(WETH), 1.05e18);
         aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor(address(pool), 1.05e18);
-        cTokenAdaptor = new CTokenAdaptor();
+        cTokenAdaptor = new CTokenAdaptor(address(comptroller), address(COMP));
         vestingAdaptor = new VestingSimpleAdaptor();
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
 
