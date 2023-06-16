@@ -71,6 +71,11 @@ contract RedstonePriceFeedExtension is Extension {
      */
     function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
         ExtensionStorage memory stor = extensionStorage[asset];
+        (, uint128 updatedAt) = stor.redstoneAdapter.getTimestampsFromLatestUpdate();
+
+        uint256 timeSinceLastUpdate = block.timestamp - updatedAt;
+        if (timeSinceLastUpdate > stor.heartbeat) revert RedstonePriceFeedExtension__STALE_PRICE();
+
         return stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
     }
 }
