@@ -26,6 +26,3 @@
 [submodule "lib/axelar-gmp-sdk-solidity"]
 	path = lib/axelar-gmp-sdk-solidity
 	url = https://github.com/axelarnetwork/axelar-gmp-sdk-solidity
-[submodule "lib/redstone-oracles-monorepo"]
-	path = lib/redstone-oracles-monorepo
-	url = https://github.com/redstone-finance/redstone-oracles-monorepo
