@@ -17,6 +17,8 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
     // This can be mitigated by calling `callAddInterest` on Frax Lend pairs
     // that are not frequently interacted with.
 
+    constructor(bool _accountForInterest) FTokenAdaptor(_accountForInterest) {}
+
     //============================================ Interface Helper Functions ===========================================
 
     //============================== Interface Details ==============================
@@ -52,7 +54,7 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
      * @notice Withdraw $FRAX from specified 'v1' FraxLendPair.
      * @dev Since `withdrawableFrom` does NOT account for pending interest,
      *      user withdraws from V1 positions can result in dust being left in the position.
-     * @dev If `ACCOUNT_FOR_INTEREST()` is false, then _toAssetShares will use a FraxLend share price that
+     * @dev If `ACCOUNT_FOR_INTEREST` is false, then _toAssetShares will use a FraxLend share price that
      *      is slightly lower than what is used in redeem, so users can receive more assets than expected.
      *      The extra assets are influenced by the FraxLend APR, and the time since the interest was last
      *      added to the pair, so in practice this extra amount should be negligible.
@@ -63,8 +65,8 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
      */
     function _withdraw(IFToken fToken, uint256 assets, address receiver, address owner) internal override {
         // If accounting for interest, call `addInterest` before calculating shares to redeem.
-        if (ACCOUNT_FOR_INTEREST()) fToken.addInterest();
-        uint256 shares = _toAssetShares(fToken, assets, false, ACCOUNT_FOR_INTEREST());
+        if (ACCOUNT_FOR_INTEREST) fToken.addInterest();
+        uint256 shares = _toAssetShares(fToken, assets, false, ACCOUNT_FOR_INTEREST);
         fToken.redeem(shares, receiver, owner);
     }
 
