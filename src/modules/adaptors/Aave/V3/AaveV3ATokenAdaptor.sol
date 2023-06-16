@@ -45,6 +45,30 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
      */
     error AaveV3ATokenAdaptor__OracleUsesDifferentBase();
 
+    /**
+     * @notice The Aave V3 Pool contract on current network.
+     * @dev For mainnet use 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2.
+     */
+    IPoolV3 public immutable pool;
+
+    /**
+     * @notice The Aave V3 Oracle on current network.
+     * @dev For mainnet use 0x54586bE62E3c3580375aE3723C145253060Ca0C2.
+     */
+    IAaveOracle public immutable aaveOracle;
+
+    /**
+     * @notice Minimum Health Factor enforced after every aToken withdraw.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(address v3Pool, address v3Oracle, uint256 minHealthFactor) {
+        pool = IPoolV3(v3Pool);
+        aaveOracle = IAaveOracle(v3Oracle);
+        minimumHealthFactor = minHealthFactor;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -54,28 +78,6 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
      */
     function identifier() public pure override returns (bytes32) {
         return keccak256(abi.encode("Aave V3 aToken Adaptor V 1.1"));
-    }
-
-    /**
-     * @notice The Aave V3 Pool contract on Ethereum Mainnet.
-     */
-    function pool() internal pure returns (IPoolV3) {
-        return IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
-    }
-
-    /**
-     * @notice The Aave V3 Oracle on Ethereum Mainnet.
-     */
-    function aaveOracle() internal pure returns (IAaveOracle) {
-        return IAaveOracle(0x54586bE62E3c3580375aE3723C145253060Ca0C2);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced after every aToken withdraw.
-     * @notice Overwrites strategist set minimums if they are lower.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -89,11 +91,11 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
         // Deposit assets to Aave.
         IAaveToken aToken = IAaveToken(abi.decode(adaptorData, (address)));
         ERC20 token = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
-        token.safeApprove(address(pool()), assets);
-        pool().supply(address(token), assets, address(this), 0);
+        token.safeApprove(address(pool), assets);
+        pool.supply(address(token), assets, address(this), 0);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(token, address(pool()));
+        _revokeExternalApproval(token, address(pool));
     }
 
     /**
@@ -116,12 +118,12 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
 
         // Withdraw assets from Aave.
         IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
-        pool().withdraw(token.UNDERLYING_ASSET_ADDRESS(), assets, address(this));
+        pool.withdraw(token.UNDERLYING_ASSET_ADDRESS(), assets, address(this));
 
-        (, uint256 totalDebtBase, , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
+        (, uint256 totalDebtBase, , , , uint256 healthFactor) = pool.getUserAccountData(address(this));
         if (totalDebtBase > 0) {
             // If cellar has entered an EMode, and has debt, user withdraws are not allowed.
-            if (pool().getUserEMode(msg.sender) != 0) revert BaseAdaptor__UserWithdrawsNotAllowed();
+            if (pool.getUserEMode(msg.sender) != 0) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
             // Run minimum health factor checks.
             uint256 minHealthFactor = abi.decode(configData, (uint256));
@@ -129,7 +131,7 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
                 revert BaseAdaptor__UserWithdrawsNotAllowed();
             }
             // Check if adaptor minimum health factor is more conservative than strategist set.
-            if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
+            if (minHealthFactor < minimumHealthFactor) minHealthFactor = minimumHealthFactor;
             if (healthFactor < minHealthFactor) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
         }
 
@@ -163,13 +165,13 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
             uint256 currentLiquidationThreshold,
             ,
             uint256 healthFactor
-        ) = pool().getUserAccountData(msg.sender);
+        ) = pool.getUserAccountData(msg.sender);
 
         // If Cellar has no Aave debt, then return the cellars balance of the aToken.
         if (totalDebtBase == 0) return ERC20(address(token)).balanceOf(msg.sender);
 
         // Cellar has Aave debt, so if cellar is entered into a non zero emode, return 0.
-        if (pool().getUserEMode(msg.sender) != 0) return 0;
+        if (pool.getUserEMode(msg.sender) != 0) return 0;
 
         // Otherwise we need to look at minimum health factor.
         uint256 minHealthFactor = abi.decode(configData, (uint256));
@@ -177,7 +179,7 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
         // If not the strategist does not want users to withdraw from this position.
         if (minHealthFactor == 0) return 0;
         // Check if adaptor minimum health factor is more conservative than strategist set.
-        if (minHealthFactor < HFMIN()) minHealthFactor = HFMIN();
+        if (minHealthFactor < minimumHealthFactor) minHealthFactor = minimumHealthFactor;
 
         uint256 maxBorrowableWithMin;
 
@@ -232,7 +234,7 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
 
         // Make sure Aave Oracle uses USD base asset with 8 decimals.
         // BASE_CURRENCY and BASE_CURRENCY_UNIT are both immutable values, so only check this on initial position setup.
-        if (aaveOracle().BASE_CURRENCY() != address(0) || aaveOracle().BASE_CURRENCY_UNIT() != 1e8)
+        if (aaveOracle.BASE_CURRENCY() != address(0) || aaveOracle.BASE_CURRENCY_UNIT() != 1e8)
             revert AaveV3ATokenAdaptor__OracleUsesDifferentBase();
     }
 
@@ -252,11 +254,11 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
      */
     function depositToAave(ERC20 tokenToDeposit, uint256 amountToDeposit) public {
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
-        tokenToDeposit.safeApprove(address(pool()), amountToDeposit);
-        pool().supply(address(tokenToDeposit), amountToDeposit, address(this), 0);
+        tokenToDeposit.safeApprove(address(pool), amountToDeposit);
+        pool.supply(address(tokenToDeposit), amountToDeposit, address(this), 0);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(tokenToDeposit, address(pool()));
+        _revokeExternalApproval(tokenToDeposit, address(pool));
     }
 
     /**
@@ -265,29 +267,29 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
      * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Aave
      */
     function withdrawFromAave(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
-        pool().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
+        pool.withdraw(address(tokenToWithdraw), amountToWithdraw, address(this));
         // Check that health factor is above adaptor minimum.
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (healthFactor < HFMIN()) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
+        (, , , , , uint256 healthFactor) = pool.getUserAccountData(address(this));
+        if (healthFactor < minimumHealthFactor) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
     }
 
     /**
      * @notice Allows strategists to adjust an asset's isolation mode.
      */
     function adjustIsolationModeAssetAsCollateral(ERC20 asset, bool useAsCollateral) public {
-        pool().setUserUseReserveAsCollateral(address(asset), useAsCollateral);
+        pool.setUserUseReserveAsCollateral(address(asset), useAsCollateral);
         // Check that health factor is above adaptor minimum.
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (healthFactor < HFMIN()) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
+        (, , , , , uint256 healthFactor) = pool.getUserAccountData(address(this));
+        if (healthFactor < minimumHealthFactor) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
     }
 
     /**
      * @notice Allows strategists to enter different EModes.
      */
     function changeEMode(uint8 categoryId) public {
-        pool().setUserEMode(categoryId);
+        pool.setUserEMode(categoryId);
         // Check that health factor is above adaptor minimum.
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (healthFactor < HFMIN()) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
+        (, , , , , uint256 healthFactor) = pool.getUserAccountData(address(this));
+        if (healthFactor < minimumHealthFactor) revert AaveV3ATokenAdaptor__HealthFactorTooLow();
     }
 }

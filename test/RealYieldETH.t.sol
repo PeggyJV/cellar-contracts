@@ -69,6 +69,7 @@ contract RealYieldETHTest is Test {
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
     IPoolV3 private poolV3 = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+    address private aaveOracle = 0x54586bE62E3c3580375aE3723C145253060Ca0C2;
 
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 public cbETH = ERC20(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
@@ -139,8 +140,8 @@ contract RealYieldETHTest is Test {
         erc20Adaptor = new ERC20Adaptor();
         wethVestor = new VestingSimple(WETH, 1 days / 20, 1e16);
         uniswapV3Adaptor = new MockUniswapV3Adaptor();
-        aaveATokenAdaptor = new AaveV3ATokenAdaptor();
-        aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
+        aaveATokenAdaptor = new AaveV3ATokenAdaptor(address(poolV3), aaveOracle, 1.05e18);
+        aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor(address(poolV3), 1.05e18);
         vestingAdaptor = new VestingSimpleAdaptor();
         mockZeroXAdaptor = new MockZeroXAdaptor();
 
