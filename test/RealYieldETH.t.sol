@@ -101,6 +101,8 @@ contract RealYieldETHTest is Test {
     address public CBETH_ETH_FEED = 0xF017fcB346A1885194689bA23Eff2fE6fA5C483b;
     address public RETH_ETH_FEED = 0x536218f9E9Eb48863970252233c8F271f554C2d0;
 
+    address private mockSwapTarget = 0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496;
+
     // Base positions.
     uint32 private wethPosition;
     uint32 private cbEthPosition;
@@ -141,7 +143,7 @@ contract RealYieldETHTest is Test {
         aaveATokenAdaptor = new AaveV3ATokenAdaptor(address(poolV3), aaveOracle, 1.05e18);
         aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor(address(poolV3), 1.05e18);
         vestingAdaptor = new VestingSimpleAdaptor();
-        mockZeroXAdaptor = new MockZeroXAdaptor();
+        mockZeroXAdaptor = new MockZeroXAdaptor(mockSwapTarget);
 
         // Setup price feeds.
         PriceRouter.ChainlinkDerivativeStorage memory stor;
