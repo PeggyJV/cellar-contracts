@@ -53,6 +53,7 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
     uint256 public immutable minimumHealthFactor;
 
     constructor(address _morpho, address _morphoLens, uint256 minHealthFactor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
         morpho = IMorphoV2(_morpho);
         morphoLens = IMorphoLensV2(_morphoLens);
         minimumHealthFactor = minHealthFactor;

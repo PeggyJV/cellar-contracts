@@ -45,6 +45,7 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
     uint256 public immutable minimumHealthFactor;
 
     constructor(address v3Pool, uint256 minHealthFactor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
         pool = IPoolV3(v3Pool);
         minimumHealthFactor = minHealthFactor;
     }

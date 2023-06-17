@@ -60,6 +60,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
         uint256 minHealthFactor,
         address rewardDistributor
     ) MorphoRewardHandler(rewardDistributor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
         morpho = IMorphoV2(_morpho);
         morphoLens = IMorphoLensV2(_morphoLens);
         minimumHealthFactor = minHealthFactor;

@@ -64,6 +64,7 @@ contract AaveV3ATokenAdaptor is BaseAdaptor {
     uint256 public immutable minimumHealthFactor;
 
     constructor(address v3Pool, address v3Oracle, uint256 minHealthFactor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
         pool = IPoolV3(v3Pool);
         aaveOracle = IAaveOracle(v3Oracle);
         minimumHealthFactor = minHealthFactor;

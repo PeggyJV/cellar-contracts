@@ -58,6 +58,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
     uint256 public immutable minimumHealthFactor;
 
     constructor(address v2Pool, address weth, uint256 minHealthFactor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
         pool = IPool(v2Pool);
         WETH = ERC20(weth);
         minimumHealthFactor = minHealthFactor;

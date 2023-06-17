@@ -43,6 +43,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
         uint256 minHealthFactor,
         address rewardDistributor
     ) MorphoRewardHandler(rewardDistributor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
         morpho = IMorphoV3(_morpho);
         minimumHealthFactor = minHealthFactor;
     }
