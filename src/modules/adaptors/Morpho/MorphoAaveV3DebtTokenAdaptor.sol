@@ -33,6 +33,22 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor, MorphoAaveV3HealthFactorLo
      */
     error MorphoAaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
 
+    /**
+     * @notice The Morpho Aave V3 contract on current network.
+     * @notice For mainnet use 0x33333aea097c193e66081E930c33020272b33333.
+     */
+    IMorphoV3 public immutable morpho;
+
+    /**
+     * @notice Minimum Health Factor enforced after every borrow.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(address _morpho, uint256 minHealthFactor) {
+        morpho = IMorphoV3(_morpho);
+        minimumHealthFactor = minHealthFactor;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -42,20 +58,6 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor, MorphoAaveV3HealthFactorLo
      */
     function identifier() public pure override returns (bytes32) {
         return keccak256(abi.encode("Morpho Aave V3 debtToken Adaptor V 1.0"));
-    }
-
-    /**
-     * @notice The Morpho Aave V3 contract on Ethereum Mainnet.
-     */
-    function morpho() internal pure returns (IMorphoV3) {
-        return IMorphoV3(0x33333aea097c193e66081E930c33020272b33333);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced after every borrow.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -87,7 +89,7 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor, MorphoAaveV3HealthFactorLo
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address underlying = abi.decode(adaptorData, (address));
-        return morpho().borrowBalance(underlying, msg.sender);
+        return morpho.borrowBalance(underlying, msg.sender);
     }
 
     /**
@@ -121,11 +123,11 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor, MorphoAaveV3HealthFactorLo
             revert MorphoAaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(underlying);
 
         // Borrow from morpho.
-        morpho().borrow(underlying, amountToBorrow, address(this), address(this), maxIterations);
+        morpho.borrow(underlying, amountToBorrow, address(this), address(this), maxIterations);
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _getUserHealthFactor(morpho(), address(this));
-        if (healthFactor < HFMIN()) revert MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
+        uint256 healthFactor = _getUserHealthFactor(morpho, address(this));
+        if (healthFactor < minimumHealthFactor) revert MorphoAaveV3DebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -134,10 +136,10 @@ contract MorphoAaveV3DebtTokenAdaptor is BaseAdaptor, MorphoAaveV3HealthFactorLo
      * @param amountToRepay the amount of `tokenToRepay` to repay with.
      */
     function repayAaveV3MorphoDebt(ERC20 tokenToRepay, uint256 amountToRepay) public {
-        tokenToRepay.safeApprove(address(morpho()), amountToRepay);
-        morpho().repay(address(tokenToRepay), amountToRepay, address(this));
+        tokenToRepay.safeApprove(address(morpho), amountToRepay);
+        morpho.repay(address(tokenToRepay), amountToRepay, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(tokenToRepay, address(morpho()));
+        _revokeExternalApproval(tokenToRepay, address(morpho));
     }
 }

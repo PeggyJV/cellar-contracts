@@ -11,13 +11,14 @@ interface RewardsDistributor {
  * @author crispymangoes
  */
 contract MorphoRewardHandler {
-    //============================================ Global Functions ===========================================
-
     /**
-     * @notice The Morpho Rewards Distributor contract on Ethereum Mainnet.
+     * @notice The Morpho Aave V3 rewards handler contract on current network.
+     * @notice For mainnet use 0x3B14E5C73e0A56D607A8688098326fD4b4292135.
      */
-    function morphoRewardsDistributor() internal pure returns (RewardsDistributor) {
-        return RewardsDistributor(0x3B14E5C73e0A56D607A8688098326fD4b4292135);
+    RewardsDistributor public immutable morphoRewardsDistributor;
+
+    constructor(address _morphoRewardsDistributor) {
+        morphoRewardsDistributor = RewardsDistributor(_morphoRewardsDistributor);
     }
 
     //============================================ Strategist Functions ===========================================
@@ -26,6 +27,6 @@ contract MorphoRewardHandler {
      * @notice Allows cellars to claim Morpho Rewards.
      */
     function claim(uint256 claimable, bytes32[] memory proof) public {
-        morphoRewardsDistributor().claim(address(this), claimable, proof);
+        morphoRewardsDistributor.claim(address(this), claimable, proof);
     }
 }

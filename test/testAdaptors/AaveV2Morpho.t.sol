@@ -63,6 +63,7 @@ contract CellarAaveV2MorphoTest is Test {
 
     IMorphoV2 private morpho = IMorphoV2(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
     address private morphoLens = 0x507fA343d0A90786d86C7cd885f5C49263A91FF4;
+    address private rewardHandler = 0x3B14E5C73e0A56D607A8688098326fD4b4292135;
     WstEthExtension private wstEthOracle;
 
     // Chainlink PriceFeeds
@@ -92,7 +93,7 @@ contract CellarAaveV2MorphoTest is Test {
     }
 
     function setUp() external checkBlockNumber {
-        aTokenAdaptor = new MorphoAaveV2ATokenAdaptor(address(morpho), morphoLens, 1.05e18);
+        aTokenAdaptor = new MorphoAaveV2ATokenAdaptor(address(morpho), morphoLens, 1.05e18, rewardHandler);
         debtTokenAdaptor = new MorphoAaveV2DebtTokenAdaptor(address(morpho), morphoLens, 1.05e18);
         erc20Adaptor = new ERC20Adaptor();
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();

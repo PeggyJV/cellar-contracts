@@ -47,7 +47,7 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
     IMorphoLensV2 public immutable morphoLens;
 
     /**
-     * @notice Minimum Health Factor enforced after every aToken withdraw.
+     * @notice Minimum Health Factor enforced after every borrow.
      * @notice Overwrites strategist set minimums if they are lower.
      */
     uint256 public immutable minimumHealthFactor;
