@@ -36,8 +36,15 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     bool public immutable ACCOUNT_FOR_INTEREST;
 
-    constructor(bool _accountForInterest) {
+    /**
+     * @notice The FRAX contract on current network.
+     * @notice For mainnet use 0x853d955aCEf822Db058eb8505911ED77F175b99e.
+     */
+    ERC20 public immutable FRAX;
+
+    constructor(bool _accountForInterest, address frax) {
         ACCOUNT_FOR_INTEREST = _accountForInterest;
+        FRAX = ERC20(frax);
     }
 
     //============================================ Global Functions ===========================================
@@ -51,13 +58,6 @@ contract FTokenAdaptor is BaseAdaptor {
         return keccak256(abi.encode("FraxLend fToken Adaptor V 0.0"));
     }
 
-    /**
-     * @notice The FRAX contract on Ethereum Mainnet.
-     */
-    function FRAX() internal pure returns (ERC20) {
-        return ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
-    }
-
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice Cellar must approve fToken to spend its assets, then call deposit to lend its assets.
@@ -68,11 +68,11 @@ contract FTokenAdaptor is BaseAdaptor {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Frax Lend.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        FRAX().safeApprove(address(fToken), assets);
+        FRAX.safeApprove(address(fToken), assets);
         _deposit(fToken, assets, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(FRAX(), address(fToken));
+        _revokeExternalApproval(FRAX, address(fToken));
     }
 
     /**
@@ -120,8 +120,8 @@ contract FTokenAdaptor is BaseAdaptor {
     /**
      * @notice Returns FRAX.
      */
-    function assetOf(bytes memory) public pure override returns (ERC20) {
-        return FRAX();
+    function assetOf(bytes memory) public view override returns (ERC20) {
+        return FRAX;
     }
 
     /**
@@ -140,12 +140,12 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     function lendFrax(IFToken fToken, uint256 amountToDeposit) public {
         _validateFToken(fToken);
-        amountToDeposit = _maxAvailable(FRAX(), amountToDeposit);
-        FRAX().safeApprove(address(fToken), amountToDeposit);
+        amountToDeposit = _maxAvailable(FRAX, amountToDeposit);
+        FRAX.safeApprove(address(fToken), amountToDeposit);
         _deposit(fToken, amountToDeposit, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(FRAX(), address(fToken));
+        _revokeExternalApproval(FRAX, address(fToken));
     }
 
     /**

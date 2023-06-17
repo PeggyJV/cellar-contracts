@@ -78,10 +78,10 @@ contract FraxLendFTokenAdaptorTest is Test {
     function setUp() external {
         mockFraxUsd = new MockDataFeed(FRAX_USD_FEED);
         mockWethUsd = new MockDataFeed(WETH_USD_FEED);
-        fTokenAdaptorV2 = new FTokenAdaptor(true);
-        fTokenAdaptor = new FTokenAdaptorV1(true);
-        mockFTokenAdaptorV2 = new MockFTokenAdaptor(false);
-        mockFTokenAdaptor = new MockFTokenAdaptorV1(false);
+        fTokenAdaptorV2 = new FTokenAdaptor(true, address(FRAX));
+        fTokenAdaptor = new FTokenAdaptorV1(true, address(FRAX));
+        mockFTokenAdaptorV2 = new MockFTokenAdaptor(false, address(FRAX));
+        mockFTokenAdaptor = new MockFTokenAdaptorV1(false, address(FRAX));
         erc20Adaptor = new ERC20Adaptor();
 
         registry = new Registry(address(this), address(this), address(priceRouter));

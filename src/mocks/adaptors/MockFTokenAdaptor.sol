@@ -4,7 +4,7 @@ pragma solidity 0.8.16;
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
 
 contract MockFTokenAdaptor is FTokenAdaptor {
-    constructor(bool _accountForInterest) FTokenAdaptor(_accountForInterest) {}
+    constructor(bool _accountForInterest, address frax) FTokenAdaptor(_accountForInterest, frax) {}
 
     //============================================ Interface Helper Functions ===========================================
 
