@@ -61,7 +61,7 @@ contract CellarOneInchTest is Test {
         erc20Adaptor = new ERC20Adaptor();
         oneInchAdaptor = new OneInchAdaptor(swapTarget);
         mockOneInchAdaptor = new MockOneInchAdaptor(mockSwapTarget);
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));

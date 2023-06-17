@@ -103,7 +103,7 @@ contract CellarAaveV2MorphoTest is Test {
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         registry.setAddress(2, address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

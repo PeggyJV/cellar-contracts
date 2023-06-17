@@ -85,7 +85,7 @@ contract FraxLendFTokenAdaptorTest is Test {
         erc20Adaptor = new ERC20Adaptor();
 
         registry = new Registry(address(this), address(this), address(priceRouter));
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         registry.setAddress(2, address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

@@ -123,7 +123,7 @@ contract RealYieldETHTest is Test {
 
     function setUp() external {
         // Setup Registry, modules, and adaptors.
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
         factory = new CellarFactory();
