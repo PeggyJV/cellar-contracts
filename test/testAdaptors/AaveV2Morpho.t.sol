@@ -72,6 +72,7 @@ contract CellarAaveV2MorphoTest is Test {
     address private STETH_USD_FEED = 0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8;
 
     address private aWstEthWhale = 0xAF06acFD1BD492B913d5807d562e4FC3A6343C4E;
+    address private swapTarget = 0x1111111254EEB25477B68fb85Ed929f73A960582;
 
     uint32 private wethPosition;
     uint32 private usdcPosition;
@@ -97,7 +98,7 @@ contract CellarAaveV2MorphoTest is Test {
         debtTokenAdaptor = new MorphoAaveV2DebtTokenAdaptor(address(morpho), morphoLens, 1.05e18);
         erc20Adaptor = new ERC20Adaptor();
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
-        oneInchAdaptor = new OneInchAdaptor();
+        oneInchAdaptor = new OneInchAdaptor(swapTarget);
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
