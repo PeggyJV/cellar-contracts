@@ -28,9 +28,10 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(ERC20 _bpt)
+    // adaptorData = abi.encode(ERC20 _bpt, address _liquidityGauge)
     // Where:
     // `_bpt` is the Balancer pool token of the Balancer LP market this adaptor is working with
+    // `_liquidityGauge` is the balancer gauge corresponding to the specified bpt
     // See 1-pager made to assist constructing queries: TODO: layout 1 pager example in the docs as a ChangeRequest.
     //================= Configuration Data Specification =================
     // NOT USED
@@ -70,6 +71,14 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     error BalancerPoolAdaptor__NotEnoughToDeposit();
 
+    error BalancerPoolAdaptor__BptAndGaugeComboMustBeTracked(address bpt, address liquidityGauge);
+
+    error BalancerPoolAdaptor___GaugeUnderlyingBptMismatch(
+        address bptInput,
+        address liquidityGauge,
+        address correctBPT
+    );
+
     //============================================ Global Vars && Specific Adaptor Constants ===========================================
 
     // TODO: not sure if I actually need this.
@@ -102,7 +111,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     function gaugeFactory() internal pure returns (ILiquidityGaugeFactory) {
         return ILiquidityGaugeFactory(0x4E7bBd911cf1EFa442BC1b2e9Ea01ffE785412EC); // TODO: according to the docs, this is the newest version that should be used but the docs also point people to use the old one. Which one are supposed to use? "Newer one: 0xf1665E19bc105BE4EDD3739F88315cC699cc5b65"
-        // The old one actually has `getPoolGauge()`
+        // The old one actually has `getLiquidityGauge()`
     }
 
     //============================================ Global Functions ===========================================
@@ -121,7 +130,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(uint256, bytes memory, bytes memory) public pure override {
+    function deposit(
+        uint256,
+        bytes memory,
+        bytes memory
+    ) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
@@ -129,9 +142,14 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice User withdraws are NOT allowed from this position.
      * TODO: Cellar will call this if it is trying to give user assets when the cellar doesn't have enough
      * Cellar does a delegate call to this function in the unwind situation.
-     * 
+     *
      */
-    function withdraw(uint256 _amountBPTToSend, address _recipient, bytes memory _adaptorData, bytes memory _configurationData) public pure override {
+    function withdraw(
+        uint256 _amountBPTToSend,
+        address _recipient,
+        bytes memory _adaptorData,
+        bytes memory _configurationData
+    ) public pure override {
         // _externalReceiverCheck(receiver); // TODO: IMPLEMENT THIS!! if we are in the context of callOnAdapter - the receiver needs to be the cellar. That's what this check / block is doing.
         // ge
         // revert BaseAdaptor__UserWithdrawsNotAllowed();
@@ -146,46 +164,43 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     /**
      * @notice Calculates the Cellar's balance of the positions creditAsset, a specific bpt.
+     * @param _adaptorData encoded data for trusted adaptor position detailing the bpt and liquidityGauge address (if it exists)
      * @return total balance of bpt for Cellar, including liquid bpt and staked bpt
+     * NOTE: check that bpt isn't zero address. could also put in checks that it is set to true too...
      */
-    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        // TODO: decode adaptorData for poolGauge address
-        address bpt = abi.decode(adaptorData, (address));
+    function balanceOf(bytes memory _adaptorData) public view override returns (uint256) {
+        (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
+        // _validateBptAndGauge(address(bpt), liquidityGauge);
+        // _validateGaugeUnderlyingBpt(bpt, liquidityGauge); // TODO: Need to have this to ensure underlying bpt of gauge is the same as the cellar.
 
-        console.log("look here", ERC20(bpt).balanceOf(msg.sender));
+        if (liquidityGauge == address(0)) return ERC20(bpt).balanceOf(msg.sender);
 
-        // TODO: commented out for now, see comments below for gaugeFactory setup
-        // ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(bpt); // TODO: there are no getters to access in the latest gauge factory to check what the poolGauge address is associated to a respective BPT.
-        // TODO: might have to put conditional logic here that:
-        // 1. First checks that the returned poolgauge isn't zeroAddress
-        // 2. If it is, it exits the if statement conditions and skips checking for stakedBPT. If it isn't it goes through and calculates total BPT.
-        // ** the challenge is that the most recent pool gauge factories do not have getters exposing poolGauge addresses for specific BPTs.
-
-        // ERC20 poolGaugeToken = ERC20(address(poolGauge));
-        // uint256 stakedBPT = poolGaugeToken.balanceOf(address(this));
-        // return ERC20(bpt).balanceOf(msg.sender) + stakedBPT;
-        return ERC20(bpt).balanceOf(msg.sender);
+        //TODO: this is assuming 1:1 swap ratio for staked gauge tokens to bpts themselves. We may need to have checks for that.
+        ERC20 liquidityGaugeToken = ERC20(address(liquidityGauge));
+        uint256 stakedBPT = liquidityGaugeToken.balanceOf(address(this));
+        return ERC20(bpt).balanceOf(msg.sender) + stakedBPT;
     }
 
     /**
      * @notice Returns the positions underlying assets.
-     * @param adaptorData specified bpt of interest
+     * @param _adaptorData specified bpt of interest
      * @return bpt for Cellar's respective balancer pool position
+     * NOTE: bpts can comprise of nested underlying constituents. Thus proper AssetSettings will be made for each respective bpt (and their various types) that are used in PriceRouter. bpts is as 'low' as `assetOf()` needs to report
      */
-    function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
-        return ERC20(abi.decode(adaptorData, (address)));
+    function assetOf(bytes memory _adaptorData) public pure override returns (ERC20) {
+        return ERC20(abi.decode(_adaptorData, (address)));
     }
 
     /**
      * @notice When positions are added to the Registry, this function can be used in order to figure out
      *         what assets this adaptor needs to price, and confirm pricing is properly setup.
-     * @param adaptorData specified bpt of interest
+     * @param _adaptorData specified bpt of interest
      * @return assets for Cellar's respective balancer pool position
      * @dev all breakdowns of bpt pricing and its underlying assets are done through the PriceRouter extension (in accordance to PriceRouterv2 architecture)
      */
-    function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
+    function assetsUsed(bytes memory _adaptorData) public view override returns (ERC20[] memory assets) {
         assets = new ERC20[](1);
-        assets[0] = assetOf(adaptorData);
+        assets[0] = assetOf(_adaptorData);
     }
 
     /**
@@ -205,11 +220,10 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param bptOut acceptable amount of assets resulting from tx (due to slippage, etc.)
      * @param callData encoded specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()` and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `useRelayer()` as `bytes[] memory callData`.
      * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-     * NOTE: The difference btw what Balancer outlines to do and what we want to do is that we want the txs to be carried out by the vault. Whereas we could just end up connecting to the relayer and have it carry out multi-txs which would be bad cause we need to confirm each step of the multi-call.
      * TODO: rename params and possibly include others for `exit()` function. ex.) bptOut needs to be renamed to be agnostic.
      * TODO: see issue for strategist callData
-     * TODO: see discussion in draft PR #112 about `approve()` details
      * TODO: Add a param and conditional logic to sort whether the action with the Relayer is increasing or decreasing BPT
+     * TODO: Should we include _liquidityGauge in params here even though it's not used?
      */
     function useRelayer(
         ERC20[] memory tokensIn,
@@ -217,24 +231,23 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         ERC20 bptOut,
         bytes[] memory callData
     ) public {
+        // _validateBptAndGauge(address(bptOut), _liquidityGauge); // liquidityGauge not used in this function but it is part of adaptorData, so leaving it for now.
+        // TODO: NOTE: I could check if gauge corresponds to bpt, but I think that the strategist should have done that.
+
         for (uint256 i; i < tokensIn.length; ++i) {
             tokensIn[i].approve(address(vault()), amountsIn[i]);
         }
         uint256 startingBpt = bptOut.balanceOf(address(this));
+
         adjustRelayerApproval(true);
-
         relayer().multicall(callData);
-
         uint256 endingBpt = bptOut.balanceOf(address(this));
         uint256 amountBptOut = endingBpt - startingBpt;
-
         PriceRouter priceRouter = PriceRouter(
             Cellar(address(this)).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
         );
-
         uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut);
 
-        // check value in vs value out --> this also seems to act as a guard against Strategist specifying an incorrect recipient that isn't this Cellar.
         if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage");
 
         // revoke token in approval
@@ -246,14 +259,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice TEMPORARY function to help with troubleshooting tests.
-     * TODO: Delete this function and replace any use of it with `useRelayer()` in tests
-     */
-    function useRelayer2(bytes[] memory callData) public {
-        relayer().multicall(callData);
-    }
-
-    /**
      * @notice external function to help adjust whether or not the relayer has been approved by cellar
      * @param _relayerChange proposed approval setting to relayer
      * TODO: I want to have this in the setup() but it is giving me issues weirdly. It only allows tests to pass when the call is made within `useRelayer()` itself, where I think address(this) is the balancerPoolAdaptor itself. It's interesting cause iirc `setRelayerApproval()` allows relayer to act as a relayer for `sender` -->  I'd think that sender is the cellar, not the adaptor.
@@ -261,21 +266,16 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     function adjustRelayerApproval(bool _relayerChange) public virtual {
         // // if relayer is already approved, continue
-        // // if it hasn't been approved, set it to approve.abi
+        // // if it hasn't been approved, set it to set it to approved
         // bool currentStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
-        
+
         // if (currentStatus != _relayerChange) {
         //     vault().setRelayerApproval(address(this), address(relayer()), _relayerChange);
         //     // event RelayerApprovalChanged will be emitted by Balancer Vault
         // }
         vault().setRelayerApproval(address(this), address(relayer()), true);
         // bool newStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
-        // console.log("Old Approval status: %s, vs New approval status: %s", currentStatus, newStatus);
-        console.log("CHECKCHECKCHECK ADDRESS(THIS) in this CONTEXT: %s and MSG.SENDER IS: %s", address(this), msg.sender);
-
     }
-
-    /// INDIVIDUAL BALANCER ECOSYSTEM FUNCTION CALLS (LIKELY UNUSED / TO BE REMOVED SINCE RELAYER CAN DO MOST ACTIONS)
 
     /**
      * @notice deposit (stake) BPTs into respective pool gauge
@@ -285,22 +285,23 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      * TODO: Finalize interface details when beginning to do unit testing
      * TODO: See if _claim_rewards is needed in any sequences of actions when interacting with the gauges
-     * TODO: Assess if `depositBPT()`, `withdrawBPT()`, `claimRewards()`
+     * TODO: fix verification helper checks
      */
-    function depositBPT(address _bpt, uint256 _amountIn, bool _claim_rewards) external {
-        ERC20 bpt = ERC20(_bpt);
-        uint256 amountIn = _maxAvailable(bpt, _amountIn);
+    function depositBPT(
+        ERC20 _bpt,
+        address _liquidityGauge,
+        uint256 _amountIn,
+        bool _claim_rewards
+    ) external {
+        // checks
+        // _validateBptAndGauge(address(_bpt), _liquidityGauge);
+        // _validateGaugeUnderlyingBpt(_bpt, _liquidityGauge); see comment on _validateGaugeUnderlyingBpt()
 
-        ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(_bpt);
-        // uint256 amountStakedBefore = ERC20(address(poolGauge)).balanceOf(address(this));
-
-        bpt.approve(address(poolGauge), amountIn);
-        poolGauge.deposit(amountIn, address(this)); // address(this) is cellar address bc delegateCall --> TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
-        // ERC20 poolGaugeToken = ERC20(address(poolGauge));
-
-        // uint256 actualAmountStaked = poolGaugeToken.balanceOf(address(this)) - amountStakedBefore;
-
-        _revokeExternalApproval(bpt, address(poolGauge));
+        uint256 amountIn = _maxAvailable(_bpt, _amountIn);
+        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+        _bpt.approve(address(liquidityGauge), amountIn);
+        liquidityGauge.deposit(amountIn, address(this));
+        _revokeExternalApproval(_bpt, address(liquidityGauge));
     }
 
     /**
@@ -309,82 +310,79 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _amountOut number of BPTs to withdraw
      * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
+     * TODO: fix verification helper checks and see other TODOs from depositBPT()
      */
-    function withdrawBPT(address _bpt, uint256 _amountOut, bool _claim_rewards) external {
-        ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(_bpt);
-        uint256 amountOut = _maxAvailable(ERC20(address(poolGauge)), _amountOut); // get the total amount of bpt staked by the cellar essentially (bc it's represented by the amount of gauge tokens the Cellar has)
+    function withdrawBPT(
+        ERC20 _bpt,
+        address _liquidityGauge,
+        uint256 _amountOut,
+        bool _claim_rewards
+    ) external {
+        // _validateBptAndGauge(address(_bpt), _liquidityGauge);
+        // _validateGaugeUnderlyingBpt(_bpt, _liquidityGauge); see comment on _validateGaugeUnderlyingBpt()
 
-        ERC20 bpt = ERC20(_bpt);
-        // uint256 unstakedBPTBefore = bpt.balanceOf(address(this));
-
-        bpt.approve(address(poolGauge), amountOut);
-        poolGauge.withdraw(amountOut); // msg.sender should be cellar address bc delegateCall. TODO: see issue # <> and confirm address.
-
-        // uint256 actualWithdrawn = bpt.balanceOf(address(this)) - unstakedBPTBefore;
-
-        _revokeExternalApproval(bpt, address(poolGauge));
+        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+        uint256 amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
+        _bpt.approve(address(liquidityGauge), amountOut);
+        liquidityGauge.withdraw(amountOut);
+        _revokeExternalApproval(_bpt, address(liquidityGauge));
     }
 
     /**
      * @notice claim rewards ($BAL and/or other tokens) from LP position
-     * @notice Have the strategist provide the address for the pool gauge
      * @dev rewards are only accrue for staked positions
      * @param _bpt associated BPTs for respective reward gauge
      * @param _rewardToken address of reward token, if not $BAL, that strategist is claiming
-     * TODO: make all verbose text here into github issues or remove them after discussion w/ Crispy
-     * TODO: add checks throughout function
+     * TODO: fix verification helper checks and see other TODOs from depositBPT()
      */
-    function claimRewards(address _bpt, address _rewardToken) public {
-        ILiquidityGaugev3Custom poolGauge = gaugeFactory().getPoolGauge(_bpt);
+    function claimRewards(
+        address _bpt,
+        address _liquidityGauge,
+        address _rewardToken
+    ) public {
+        // _validateBptAndGauge(address(_bpt), _liquidityGauge);
+
+        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
 
         // TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
-
         // TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
         if (
-            (poolGauge.claimable_reward(address(this), _rewardToken) == 0) &&
-            (poolGauge.claimable_tokens(address(this)) == 0)
+            (liquidityGauge.claimable_reward(address(this), _rewardToken) == 0) &&
+            (liquidityGauge.claimable_tokens(address(this)) == 0)
         ) {
             revert BalancerPoolAdaptor__ZeroClaimableRewards();
         }
 
-        poolGauge.claim_rewards(address(this), address(0));
+        liquidityGauge.claim_rewards(address(this), address(0));
     }
 
-    /// Functions && Notes that may not be needed
+    //============================================ Helper Functions ===========================================
+
+    /**
+     * @notice Validates that a given bpt and liquidityGauge is set up as a position in the Cellar
+     * @dev This function uses `address(this)` as the address of the Cellar
+     * @param _bpt of interest
+     * @param _liquidityGauge corresponding to _bpt
+     * NOTE: _liquidityGauge can be zeroAddress in cases where Cellar doesn't want to stake or there are no gauges yet available for respective bpt
+     */
+    function _validateBptAndGauge(address _bpt, address _liquidityGauge) internal view {
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_bpt), _liquidityGauge)));
+        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(positionId))
+            revert BalancerPoolAdaptor__BptAndGaugeComboMustBeTracked(address(_bpt), _liquidityGauge);
+    }
 
     // /**
-    //  * @notice the BalancerQueries address on all networks
-    //  * @return address adhering to IBalancerQueries
+    //  * @notice Validates that a liquidityGauge corresponds to a given bpt
+    //  * TODO: unsure if this is needed, we may keep this function if the balancer gauges all follow a certain interface.
+    //  * @dev This function uses `address(this)` as the address of the Cellar
+    //  * @param _bpt of interest
+    //  * @param _liquidityGauge being checked if it corresponds to _bpt
+    //  * NOTE: _liquidityGauge can be zeroAddress in cases where Cellar doesn't want to stake or there are no gauges yet available for respective bpt
     //  */
-    // function balancerQueries() internal pure returns (IBalancerQueries) {
-    //     return 0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5;
-    // }
-
-    // NOTE from balancer docs: JoinPoolRequest is what strategists will need to provide
-    // When providing your assets, you must ensure that the tokens are sorted numerically by token address. It's also important to note that the values in maxAmountsIn correspond to the same index value in assets, so these arrays must be made in parallel after sorting.
-    // NOTE: different JoinKinds for different pool types: to start, we'll focus on WeightedPools & StablePools. The idea: Strategists pass in the JoinKinds within their calls, so they need to know what type of pool they are joining. Alt: we could query to see what kind of pool it is, but strategist still needs to specify the type of tx this is.
-
-    // /**
-    //  * NOTE: it would take multiple tokens and amounts in and a single bpt out
-    //  */
-    // function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 slippage) public virtual {
-    //     // if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
-    //     //     // Figure out value in, quoted in `to`.
-    //     //     uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
-    //     //     uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
-    //     //     // Deal caller new balances.
-    //     //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-    //     //     deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
-    //     // } else {
-    //     //     // Pricing is not supported, so just assume exchange rate is 1:1.
-    //     //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-    //     //     deal(
-    //     //         address(to),
-    //     //         msg.sender,
-    //     //         to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
-    //     //     );
-    //     // }
-
-    //     console.log("howdy");
+    // function _validateGaugeUnderlyingBpt(ERC20 _bpt, address _liquidityGauge) internal view {
+    //     address underlyingBPT = _liquidityGauge.staticcall(abi.encodeWithSelector(lp_token.selector));
+    //     if (address(_bpt) != underlyingBPT)
+    //         revert BalancerPoolAdaptor___GaugeUnderlyingBptMismatch(address(_bpt), _liquidityGauge, underlyingBPT);
     // }
 }

@@ -43,5 +43,4 @@ interface ILiquidityGaugev3Custom {
     // write function
     function withdraw(uint256 amount) external;
 
-
 }
