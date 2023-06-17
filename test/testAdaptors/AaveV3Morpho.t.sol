@@ -79,7 +79,7 @@ contract CellarAaveV3MorphoTest is Test {
         collateralATokenAdaptor = new MorphoAaveV3ATokenCollateralAdaptor(address(morpho), 1.05e18, rewardHandler);
         debtTokenAdaptor = new MorphoAaveV3DebtTokenAdaptor(address(morpho), 1.05e18);
         erc20Adaptor = new ERC20Adaptor();
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 

@@ -73,7 +73,7 @@ contract CellarCompoundTest is Test {
         vestingAdaptor = new VestingSimpleAdaptor();
         priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

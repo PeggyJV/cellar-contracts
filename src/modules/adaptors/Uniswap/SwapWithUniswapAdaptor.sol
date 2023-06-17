@@ -26,6 +26,23 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
     // expose the swap functions to strategists during rebalances.
     //====================================================================
 
+    /**
+     * @notice The Uniswap V2 Router contract on current network.
+     * @notice For mainnet use 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D.
+     */
+    IUniswapV2Router public immutable uniswapV2Router;
+
+    /**
+     * @notice The Uniswap V3 Router contract on current network.
+     * @notice For mainnet use 0xE592427A0AEce92De3Edee1F18E0157C05861564.
+     */
+    IUniswapV3Router public immutable uniswapV3Router;
+
+    constructor(address _v2Router, address _v3Router) {
+        uniswapV2Router = IUniswapV2Router(_v2Router);
+        uniswapV3Router = IUniswapV3Router(_v3Router);
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -35,14 +52,6 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
      */
     function identifier() public pure virtual override returns (bytes32) {
         return keccak256(abi.encode("Swap With Uniswap Adaptor V 0.0"));
-    }
-
-    function uniswapV2Router() public pure virtual returns (IUniswapV2Router) {
-        return IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-    }
-
-    function uniswapV3Router() public pure virtual returns (IUniswapV3Router) {
-        return IUniswapV3Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
     }
 
     //============================================ Strategist Functions ===========================================
@@ -60,7 +69,7 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
         amount = _maxAvailable(tokenIn, amount);
 
         // Approve assets to be swapped through the router.
-        tokenIn.safeApprove(address(uniswapV2Router()), amount);
+        tokenIn.safeApprove(address(uniswapV2Router), amount);
 
         if (priceRouter.isSupported(tokenIn)) {
             // If the asset in is supported, than require that asset out is also supported.
@@ -69,7 +78,7 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
             uint256 tokenInBalance = tokenIn.balanceOf(address(this));
 
             // Execute the swap.
-            uint256[] memory amountsOut = uniswapV2Router().swapExactTokensForTokens(
+            uint256[] memory amountsOut = uniswapV2Router.swapExactTokensForTokens(
                 amount,
                 amountOutMin,
                 path,
@@ -87,11 +96,11 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
             // Token In is not supported by price router, so we know it is at least not the Cellars Reserves,
             // or a prominent asset, so skip value in vs value out check.
             // Execute the swap.
-            uniswapV2Router().swapExactTokensForTokens(amount, amountOutMin, path, address(this), block.timestamp + 60);
+            uniswapV2Router.swapExactTokensForTokens(amount, amountOutMin, path, address(this), block.timestamp + 60);
         }
 
         // Insure spender has zero approval.
-        _revokeExternalApproval(tokenIn, address(uniswapV2Router()));
+        _revokeExternalApproval(tokenIn, address(uniswapV2Router));
     }
 
     /**
@@ -112,7 +121,7 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
         amount = _maxAvailable(tokenIn, amount);
 
         // Approve assets to be swapped through the router.
-        tokenIn.safeApprove(address(uniswapV3Router()), amount);
+        tokenIn.safeApprove(address(uniswapV3Router), amount);
 
         // Encode swap parameters.
         bytes memory encodePackedPath = abi.encodePacked(address(path[0]));
@@ -126,7 +135,7 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
             uint256 tokenInBalance = tokenIn.balanceOf(address(this));
 
             // Execute the swap.
-            uint256 tokenOutAmountOut = uniswapV3Router().exactInput(
+            uint256 tokenOutAmountOut = uniswapV3Router.exactInput(
                 IUniswapV3Router.ExactInputParams({
                     path: encodePackedPath,
                     recipient: address(this),
@@ -145,7 +154,7 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
             // Token In is not supported by price router, so we know it is at least not the Cellars Reserves,
             // or a prominent asset, so skip value in vs value out check.
             // Execute the swap.
-            uniswapV3Router().exactInput(
+            uniswapV3Router.exactInput(
                 IUniswapV3Router.ExactInputParams({
                     path: encodePackedPath,
                     recipient: address(this),
@@ -157,6 +166,6 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
         }
 
         // Insure spender has zero approval.
-        _revokeExternalApproval(tokenIn, address(uniswapV3Router()));
+        _revokeExternalApproval(tokenIn, address(uniswapV3Router));
     }
 }

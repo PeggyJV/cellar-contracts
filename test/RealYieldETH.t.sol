@@ -13,7 +13,6 @@ import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3
 // Import adaptors.
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
-import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
@@ -89,7 +88,7 @@ contract RealYieldETHTest is Test {
 
     // Define Adaptors.
     ERC20Adaptor private erc20Adaptor;
-    MockUniswapV3Adaptor private uniswapV3Adaptor;
+    UniswapV3Adaptor private uniswapV3Adaptor;
     AaveV3ATokenAdaptor private aaveATokenAdaptor;
     AaveV3DebtTokenAdaptor private aaveDebtTokenAdaptor;
     VestingSimpleAdaptor private vestingAdaptor;
@@ -124,7 +123,7 @@ contract RealYieldETHTest is Test {
         // Setup Registry, modules, and adaptors.
         priceRouter = new PriceRouter(registry);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
         factory = new CellarFactory();
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -138,7 +137,7 @@ contract RealYieldETHTest is Test {
         tracker = new UniswapV3PositionTracker(positionManager);
         erc20Adaptor = new ERC20Adaptor();
         wethVestor = new VestingSimple(WETH, 1 days / 20, 1e16);
-        uniswapV3Adaptor = new MockUniswapV3Adaptor();
+        uniswapV3Adaptor = new UniswapV3Adaptor(address(positionManager), address(tracker));
         aaveATokenAdaptor = new AaveV3ATokenAdaptor(address(poolV3), aaveOracle, 1.05e18);
         aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor(address(poolV3), 1.05e18);
         vestingAdaptor = new VestingSimpleAdaptor();

@@ -64,6 +64,23 @@ contract UniswapV3Adaptor is BaseAdaptor {
      */
     error UniswapV3Adaptor__PurgingPositionWithLiquidity(uint256 tokenId);
 
+    /**
+     * @notice The Uniswap V3 Position Manager contract on current network.
+     * @notice For mainnet use 0xC36442b4a4522E871399CD717aBDD847Ab11FE88.
+     */
+    INonfungiblePositionManager public immutable positionManager;
+
+    /**
+     * @notice The Uniswap V3 Position Tracker on current network.
+     * @notice For mainnet use 0xf2854d84D9Dd27eCcD6aB20b3F66111a51bb56d2.
+     */
+    UniswapV3PositionTracker public immutable tracker;
+
+    constructor(address _positionManager, address _tracker) {
+        positionManager = INonfungiblePositionManager(_positionManager);
+        tracker = UniswapV3PositionTracker(_tracker);
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -73,20 +90,6 @@ contract UniswapV3Adaptor is BaseAdaptor {
      */
     function identifier() public pure override returns (bytes32) {
         return keccak256(abi.encode("Uniswap V3 Adaptor V 1.3"));
-    }
-
-    /**
-     * @notice The Uniswap V3 NonfungiblePositionManager contract on Ethereum Mainnet.
-     */
-    function positionManager() internal pure returns (INonfungiblePositionManager) {
-        return INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
-    }
-
-    /**
-     * @notice Uniswap V3 Tracker on ETH Mainnet.
-     */
-    function tracker() internal pure virtual returns (UniswapV3PositionTracker) {
-        return UniswapV3PositionTracker(0xf2854d84D9Dd27eCcD6aB20b3F66111a51bb56d2);
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -119,7 +122,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         (ERC20 token0, ERC20 token1) = abi.decode(adaptorData, (ERC20, ERC20));
 
         // Grab cellars Uniswap V3 positions from tracker.
-        uint256[] memory positions = tracker().getTokens(msg.sender, token0, token1);
+        uint256[] memory positions = tracker.getTokens(msg.sender, token0, token1);
 
         // If cellar does not own any UniV3 positions it has no assets in UniV3.
         if (positions.length == 0) return 0;
@@ -145,7 +148,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
             positionDataRequest[i] = abi.encodeWithSignature("positions(uint256)", positions[i]);
         }
         positionDataRequest = abi.decode(
-            address(positionManager()).functionStaticCall(
+            address(positionManager).functionStaticCall(
                 abi.encodeWithSignature("multicall(bytes[])", (positionDataRequest))
             ),
             (bytes[])
@@ -155,7 +158,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         uint256 amount0;
         uint256 amount1;
         for (uint256 i = 0; i < positions.length; i++) {
-            if (positionManager().ownerOf(positions[i]) != msg.sender) continue;
+            if (positionManager.ownerOf(positions[i]) != msg.sender) continue;
             (, , address t0, address t1, , int24 tickLower, int24 tickUpper, uint128 liquidity, , , , ) = abi.decode(
                 positionDataRequest[i],
                 (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
@@ -242,8 +245,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         amount0 = _maxAvailable(token0, amount0);
         amount1 = _maxAvailable(token1, amount1);
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
-        token0.safeApprove(address(positionManager()), amount0);
-        token1.safeApprove(address(positionManager()), amount1);
+        token0.safeApprove(address(positionManager), amount0);
+        token1.safeApprove(address(positionManager), amount1);
 
         // Create mint params.
         INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
@@ -261,14 +264,14 @@ contract UniswapV3Adaptor is BaseAdaptor {
         });
 
         // Supply liquidity to pool.
-        (uint256 tokenId, , , ) = positionManager().mint(params);
+        (uint256 tokenId, , , ) = positionManager.mint(params);
 
         // Add new token to the array.
-        tracker().addPositionToArray(tokenId, token0, token1);
+        tracker.addPositionToArray(tokenId, token0, token1);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(token0, address(positionManager()));
-        _revokeExternalApproval(token1, address(positionManager()));
+        _revokeExternalApproval(token0, address(positionManager));
+        _revokeExternalApproval(token1, address(positionManager));
     }
 
     /**
@@ -281,7 +284,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
     function closePosition(uint256 tokenId, uint256 min0, uint256 min1) public {
         // Pass in true for `collectFees` since the token will be sent to the dead address.
         // `_takeFromPosition checks if tokenId is owned.`
-        (, , address t0, address t1, , , , uint128 currentLiquidity, , , , ) = positionManager().positions(tokenId);
+        (, , address t0, address t1, , , , uint128 currentLiquidity, , , , ) = positionManager.positions(tokenId);
 
         _takeFromPosition(tokenId, currentLiquidity, min0, min1, true);
 
@@ -301,12 +304,12 @@ contract UniswapV3Adaptor is BaseAdaptor {
         _checkTokenId(tokenId);
 
         // Read `token0` and `token1` from position manager.
-        (, , address t0, address t1, , , , , , , , ) = positionManager().positions(tokenId);
+        (, , address t0, address t1, , , , , , , , ) = positionManager.positions(tokenId);
         ERC20 token0 = ERC20(t0);
         ERC20 token1 = ERC20(t1);
 
         // Make sure position is in tracker, otherwise outside user sent it to the cellar so revert.
-        if (!tracker().checkIfPositionIsInTracker(address(this), tokenId, token0, token1))
+        if (!tracker.checkIfPositionIsInTracker(address(this), tokenId, token0, token1))
             revert UniswapV3Adaptor__TokenIdNotFoundInTracker(tokenId);
 
         // Check that Uniswap V3 position is properly set up to be tracked in the Cellar.
@@ -316,8 +319,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
         amount1 = _maxAvailable(token1, amount1);
 
         // Approve NonfungiblePositionManager to spend `token0` and `token1`.
-        token0.safeApprove(address(positionManager()), amount0);
-        token1.safeApprove(address(positionManager()), amount1);
+        token0.safeApprove(address(positionManager), amount0);
+        token1.safeApprove(address(positionManager), amount1);
 
         // Create increase liquidity params.
         INonfungiblePositionManager.IncreaseLiquidityParams memory params = INonfungiblePositionManager
@@ -331,11 +334,11 @@ contract UniswapV3Adaptor is BaseAdaptor {
             });
 
         // Increase liquidity in pool.
-        positionManager().increaseLiquidity(params);
+        positionManager.increaseLiquidity(params);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(token0, address(positionManager()));
-        _revokeExternalApproval(token1, address(positionManager()));
+        _revokeExternalApproval(token0, address(positionManager));
+        _revokeExternalApproval(token1, address(positionManager));
     }
 
     /**
@@ -349,7 +352,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      *                    or principal + fees (if true)
      */
     function takeFromPosition(uint256 tokenId, uint128 liquidity, uint256 min0, uint256 min1, bool takeFees) public {
-        (, , , , , , , uint128 currentLiquidity, , , , ) = positionManager().positions(tokenId);
+        (, , , , , , , uint128 currentLiquidity, , , , ) = positionManager.positions(tokenId);
 
         // If uint128 max is specified for liquidity, withdraw the full amount.
         if (liquidity == type(uint128).max) liquidity = currentLiquidity;
@@ -375,7 +378,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @dev Collect fees from position before purging.
      */
     function purgeSinglePosition(uint256 tokenId) public {
-        (, , address t0, address t1, , , , uint128 liquidity, , , , ) = positionManager().positions(tokenId);
+        (, , address t0, address t1, , , , uint128 liquidity, , , , ) = positionManager.positions(tokenId);
         if (liquidity == 0) {
             _collectFees(tokenId, type(uint128).max, type(uint128).max);
             _purgePosition(tokenId, ERC20(t0), ERC20(t1));
@@ -388,10 +391,10 @@ contract UniswapV3Adaptor is BaseAdaptor {
      *      Fees are collected, and position is purged.
      */
     function purgeAllZeroLiquidityPositions(ERC20 token0, ERC20 token1) public {
-        uint256[] memory positions = tracker().getTokens(address(this), token0, token1);
+        uint256[] memory positions = tracker.getTokens(address(this), token0, token1);
 
         for (uint256 i; i < positions.length; ++i) {
-            (, , address t0, address t1, , , , uint128 liquidity, , , , ) = positionManager().positions(positions[i]);
+            (, , address t0, address t1, , , , uint128 liquidity, , , , ) = positionManager.positions(positions[i]);
 
             if (liquidity == 0) {
                 _collectFees(positions[i], type(uint128).max, type(uint128).max);
@@ -407,7 +410,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * @dev Reverts if tokenId is owned by cellar, or if tokenId is not in tracked array.
      */
     function removeUnOwnedPositionFromTracker(uint256 tokenId, ERC20 token0, ERC20 token1) public {
-        tracker().removePositionFromArrayThatIsNotOwnedByCaller(tokenId, token0, token1);
+        tracker.removePositionFromArrayThatIsNotOwnedByCaller(tokenId, token0, token1);
     }
 
     //============================================ Helper Functions ============================================
@@ -428,7 +431,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      */
     function _checkTokenId(uint256 tokenId) internal view {
         // Make sure the cellar owns this tokenId. Also checks the tokenId exists.
-        if (positionManager().ownerOf(tokenId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(tokenId);
+        if (positionManager.ownerOf(tokenId) != address(this)) revert UniswapV3Adaptor__NotTheOwner(tokenId);
     }
 
     /**
@@ -455,7 +458,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
         });
 
         // Collect fees.
-        positionManager().collect(params);
+        positionManager.collect(params);
     }
 
     /**
@@ -465,8 +468,8 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * gain an unused approval.
      */
     function _purgePosition(uint256 tokenId, ERC20 token0, ERC20 token1) internal {
-        positionManager().approve(address(tracker()), tokenId);
-        tracker().removePositionFromArray(tokenId, token0, token1);
+        positionManager.approve(address(tracker), tokenId);
+        tracker.removePositionFromArray(tokenId, token0, token1);
     }
 
     /**
@@ -486,7 +489,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
             });
 
         // Decrease liquidity in pool.
-        (uint256 amount0, uint256 amount1) = positionManager().decreaseLiquidity(params);
+        (uint256 amount0, uint256 amount1) = positionManager.decreaseLiquidity(params);
 
         if (takeFees) {
             // Collect principal + fees from position.
