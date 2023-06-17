@@ -126,14 +126,10 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
     mapping(Cellar => uint256) public feesReadyForClaim;
 
     /**
-     * @notice Chainlink's Automation Registry contract address.
+     * @notice Chainlink Fast Gas Feed for current network.
+     * @notice For mainnet use 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C.
      */
-    address public constant AUTOMATION_REGISTRY = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
-
-    /**
-     * @notice Chainlink Fast Gas Feed for ETH Mainnet.
-     */
-    address public ETH_FAST_GAS_FEED = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
+    address public ETH_FAST_GAS_FEED;
 
     /**
      * @notice Whether or not the contract is shutdown in case of an emergency.
@@ -192,10 +188,23 @@ contract FeesAndReserves is Owned, AutomationCompatibleInterface, ReentrancyGuar
 
     //============================== IMMUTABLES ===============================
 
+    /**
+     * @notice For ETH Mainnet this is the actual Gravity Bridge.
+     * @notice If on another L2, this will be a fee transfer contract
+     *         that implements `sendToCosmos`.
+     */
     IGravity public immutable gravityBridge;
 
-    constructor(address _gravityBridge) Owned(msg.sender) {
+    /**
+     * @notice Chainlink's Automation Registry contract address.
+     * @notice For mainnet use 0x02777053d6764996e594c3E88AF1D58D5363a2e6.
+     */
+    address public immutable AUTOMATION_REGISTRY;
+
+    constructor(address _gravityBridge, address automationRegistry, address fastGasFeed) Owned(msg.sender) {
         gravityBridge = IGravity(_gravityBridge);
+        AUTOMATION_REGISTRY = automationRegistry;
+        ETH_FAST_GAS_FEED = fastGasFeed;
     }
 
     //============================================ onlyOwner Functions ===========================================

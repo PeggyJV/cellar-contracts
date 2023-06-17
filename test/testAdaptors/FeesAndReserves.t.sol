@@ -56,6 +56,9 @@ contract FeesAndReservesTest is Test {
     address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
     address private TUSD_USD_FEED = 0xec746eCF986E2927Abd291a2A1716c940100f8Ba;
 
+    address private automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+    address private fastGasFeed = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
+
     uint32 private usdcPosition;
 
     function setUp() external {
@@ -63,7 +66,7 @@ contract FeesAndReservesTest is Test {
         priceRouter = new PriceRouter(registry, WETH);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
-        far = new FeesAndReserves(address(this));
+        far = new FeesAndReserves(address(this), automationRegistry, fastGasFeed);
         swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
         feesAndReservesAdaptor = new FeesAndReservesAdaptor(address(far));
 

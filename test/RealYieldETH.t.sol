@@ -103,6 +103,9 @@ contract RealYieldETHTest is Test {
 
     address private mockSwapTarget = 0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496;
 
+    address private automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+    address private fastGasFeed = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
+
     // Base positions.
     uint32 private wethPosition;
     uint32 private cbEthPosition;
@@ -134,7 +137,7 @@ contract RealYieldETHTest is Test {
             address(swapRouter),
             address(priceRouter)
         );
-        feesAndReserves = new FeesAndReserves(address(this));
+        feesAndReserves = new FeesAndReserves(address(this), automationRegistry, fastGasFeed);
 
         tracker = new UniswapV3PositionTracker(positionManager);
         erc20Adaptor = new ERC20Adaptor();
