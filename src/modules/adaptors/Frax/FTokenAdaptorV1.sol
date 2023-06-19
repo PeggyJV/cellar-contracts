@@ -47,7 +47,7 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend fTokenV1 Adaptor V 0.0"));
+        return keccak256(abi.encode("FraxLend fTokenV1 Adaptor V 0.1"));
     }
 
     /**
