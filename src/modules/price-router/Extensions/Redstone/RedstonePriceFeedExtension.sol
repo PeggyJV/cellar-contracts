@@ -6,7 +6,7 @@ import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdap
 
 /**
  * @title Sommelier Price Router Redstone Classic Extension
- * @notice Allows the Price Router to price assets using Redston Classic oracles.
+ * @notice Allows the Price Router to price assets using Redstone Classic oracles.
  * @author crispymangoes
  */
 contract RedstonePriceFeedExtension is Extension {
@@ -58,7 +58,6 @@ contract RedstonePriceFeedExtension is Extension {
 
         uint256 price = stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
 
-        // TODO does redstone revert if dataFeedId is wrong?
         if (price == 0) revert RedstonePriceFeedExtension__ZERO_PRICE();
 
         extensionStorage[asset] = stor;
@@ -76,6 +75,9 @@ contract RedstonePriceFeedExtension is Extension {
         uint256 timeSinceLastUpdate = block.timestamp - updatedAt;
         if (timeSinceLastUpdate > stor.heartbeat) revert RedstonePriceFeedExtension__STALE_PRICE();
 
-        return stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
+        // TODO confirm that answer is given in USD with 8 decimals.
+        uint256 price = stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
+        if (price == 0) revert RedstonePriceFeedExtension__ZERO_PRICE();
+        return price;
     }
 }
