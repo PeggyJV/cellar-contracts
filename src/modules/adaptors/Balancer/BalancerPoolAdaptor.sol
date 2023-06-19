@@ -7,7 +7,6 @@ import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { IStakingLiquidityGauge } from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
-import { ILiquidityGaugeFactory } from "src/interfaces/external/Balancer/ILiquidityGaugeFactory.sol";
 import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
 import { IBasePool } from "src/interfaces/external/Balancer/typically-npm/IBasePool.sol";
 import { ILiquidityGauge } from "src/interfaces/external/Balancer/ILiquidityGauge.sol";
@@ -81,14 +80,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     //============================================ Global Vars && Specific Adaptor Constants ===========================================
 
-    // TODO: not sure if I actually need this.
-    struct JoinPoolRequest {
-        address[] assets;
-        uint256[] maxAmountsIn;
-        bytes userData;
-        bool fromInternalBalance;
-    }
-
     /**
      * @notice The Balancer Vault contract on Ethereum Mainnet
      * @return address adhering to `IVault`
@@ -103,15 +94,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     function relayer() internal pure virtual returns (IBalancerRelayer) {
         return IBalancerRelayer(0xfeA793Aa415061C483D2390414275AD314B3F621);
-    }
-
-    /**
-     * @notice The Liquidity Gauge Factory contract on Ethereum Mainnet
-     * @return address adhering to ILiquidityGaugeFactory
-     */
-    function gaugeFactory() internal pure returns (ILiquidityGaugeFactory) {
-        return ILiquidityGaugeFactory(0x4E7bBd911cf1EFa442BC1b2e9Ea01ffE785412EC); // TODO: according to the docs, this is the newest version that should be used but the docs also point people to use the old one. Which one are supposed to use? "Newer one: 0xf1665E19bc105BE4EDD3739F88315cC699cc5b65"
-        // The old one actually has `getLiquidityGauge()`
     }
 
     //============================================ Global Functions ===========================================
@@ -177,7 +159,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
         //TODO: this is assuming 1:1 swap ratio for staked gauge tokens to bpts themselves. We may need to have checks for that.
         ERC20 liquidityGaugeToken = ERC20(address(liquidityGauge));
-        uint256 stakedBPT = liquidityGaugeToken.balanceOf(address(this)); // TODO: this is a getter, so since cellar would be calling this directly, and not using delegateCall(), then this should be msg.sender right?
+        uint256 stakedBPT = liquidityGaugeToken.balanceOf(msg.sender); // TODO: this is a getter, so since cellar would be calling this directly, and not using delegateCall(), then this should be msg.sender right?
         return ERC20(bpt).balanceOf(msg.sender) + stakedBPT;
     }
 
@@ -218,14 +200,14 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param tokensIn specific tokens being input for tx
      * @param amountsIn amount of assets input for tx
      * @param bptOut acceptable amount of assets resulting from tx (due to slippage, etc.)
-     * @param callData encoded specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()` and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `useRelayer()` as `bytes[] memory callData`.
+     * @param callData encoded specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()` and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[] memory callData`.
      * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
      * TODO: rename params and possibly include others for `exit()` function. ex.) bptOut needs to be renamed to be agnostic.
      * TODO: see issue for strategist callData
      * TODO: Add a param and conditional logic to sort whether the action with the Relayer is increasing or decreasing BPT
      * TODO: Should we include _liquidityGauge in params here even though it's not used?
      */
-    function useRelayer(
+    function relayerJoinPool(
         ERC20[] memory tokensIn,
         uint256[] memory amountsIn,
         ERC20 bptOut,
@@ -258,10 +240,46 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         // TODO: see if special revocation is required or necessary with bespoke Relayer approval sequences
     }
 
+    // /**
+    //  * @notice call `BalancerRelayer` on mainnet to carry out txs that can incl. joins, exits, and swaps
+    //  * @param bptIn specific tokens being input for tx
+    //  * @param amountIn amount of bpts input for tx
+    //  * @param tokensOut acceptable amounts of assets out resulting from tx (due to slippage, etc.) 
+    //  * @param callData encoded specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()` and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[] memory callData`.
+    //  * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
+    //  * TODO: rename params and possibly include others for `exit()` function. ex.) bptOut needs to be renamed to be agnostic.
+    //  * TODO: see issue for strategist callData
+    //  * TODO: Should we include _liquidityGauge in params here even though it's not used?
+    //  * TODO: finish implementation
+    //  */
+    // function relayerExitPool(
+    //     ERC20 memory bptIn,
+    //     uint256 memory amountIn,
+    //     ERC20[] tokensOut,
+    //     bytes[] memory callData
+    // ) public {
+    //     // _validateBptAndGauge(address(bptOut), _liquidityGauge); // liquidityGauge not used in this function but it is part of adaptorData, so leaving it for now.
+    //     // TODO: NOTE: I could check if gauge corresponds to bpt, but I think that the strategist should have done that.
+    //     bptIn.approve(address(vault()), amountsIn[i]);
+    //     uint256 startingBpt = bptIn.balanceOf(address(this));
+    //     adjustRelayerApproval(true);
+    //     relayer().multicall(callData);
+    //     for (uint256 i; i < tokensOut.length; ++i) {
+    //         // tokensOut[i].approve(address(vault()), amountsIn[i]); // TODO: figure out what metrics to pull out when exiting...
+    //     }
+    //     PriceRouter priceRouter = PriceRouter(
+    //         Cellar(address(this)).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
+    //     );
+    //     // uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut);
+    //     // if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage"); // TODO: figure out what metrics needed to calculate proper slippage, I guess this is in the for loop? TODO: we'll need a bool in case the pools are broken and we get a bad deal no matter what.
+    //     // revoke token in approval
+    //     _revokeExternalApproval(bptIn, address(vault()));
+    // }
+
     /**
      * @notice external function to help adjust whether or not the relayer has been approved by cellar
      * @param _relayerChange proposed approval setting to relayer
-     * TODO: I want to have this in the setup() but it is giving me issues weirdly. It only allows tests to pass when the call is made within `useRelayer()` itself, where I think address(this) is the balancerPoolAdaptor itself. It's interesting cause iirc `setRelayerApproval()` allows relayer to act as a relayer for `sender` -->  I'd think that sender is the cellar, not the adaptor.
+     * TODO: I want to have this in the setup() but it is giving me issues weirdly. It only allows tests to pass when the call is made within `relayerJoinPool()` itself, where I think address(this) is the balancerPoolAdaptor itself. It's interesting cause iirc `setRelayerApproval()` allows relayer to act as a relayer for `sender` -->  I'd think that sender is the cellar, not the adaptor.
      * I tried to prank the setup() and have it so the balancerPoolAdaptor was calling `setRelayerApproval()` but then I got a BAL#401 error. I'll come back to this later.
      */
     function adjustRelayerApproval(bool _relayerChange) public virtual {
