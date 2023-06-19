@@ -177,7 +177,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
         //TODO: this is assuming 1:1 swap ratio for staked gauge tokens to bpts themselves. We may need to have checks for that.
         ERC20 liquidityGaugeToken = ERC20(address(liquidityGauge));
-        uint256 stakedBPT = liquidityGaugeToken.balanceOf(address(this));
+        uint256 stakedBPT = liquidityGaugeToken.balanceOf(address(this)); // TODO: this is a getter, so since cellar would be calling this directly, and not using delegateCall(), then this should be msg.sender right?
         return ERC20(bpt).balanceOf(msg.sender) + stakedBPT;
     }
 
