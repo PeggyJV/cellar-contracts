@@ -46,7 +46,7 @@ abstract contract SwapRouterTest is Test {
         registry = new Registry(address(this), address(this), address(this));
 
         // Used to estimate the amount that should be received from swaps.
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 

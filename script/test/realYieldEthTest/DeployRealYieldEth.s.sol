@@ -11,6 +11,7 @@ import { IEuler, IEulerMarkets, IEulerExec, IEulerEToken, IEulerDToken } from "s
 
 import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
+import { IPoolV3 } from "src/interfaces/external/IPoolV3.sol";
 
 // Import adaptors.
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
@@ -44,6 +45,9 @@ contract DeployRealYieldEthScript is Script, TEnv {
     AaveV3ATokenAdaptor private aaveV3ATokenAdaptor;
     AaveV3DebtTokenAdaptor private aaveV3DebtTokenAdaptor;
 
+    IPoolV3 private poolV3 = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+    address private aaveOracle = 0x54586bE62E3c3580375aE3723C145253060Ca0C2;
+
     function run() external {
         // uint32[] memory positions = new uint32[](3);
         // uint32[] memory debtPositions = new uint32[](3);
@@ -58,8 +62,8 @@ contract DeployRealYieldEthScript is Script, TEnv {
         // uniswapV3Adaptor = UniswapV3Adaptor(0x5038A79F9680E7Ca200EB7162CF374bce741a8f4);
         // zeroXAdaptor = ZeroXAdaptor(0x1bd161EF8EE43E72Ce8CfB156c2cA4f64E49c086);
 
-        aaveV3ATokenAdaptor = new AaveV3ATokenAdaptor();
-        aaveV3DebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
+        aaveV3ATokenAdaptor = new AaveV3ATokenAdaptor(address(poolV3), aaveOracle, 1.05e18);
+        aaveV3DebtTokenAdaptor = new AaveV3DebtTokenAdaptor(address(poolV3), 1.05e18);
 
         registry.trustAdaptor(address(aaveV3ATokenAdaptor));
         registry.trustAdaptor(address(aaveV3DebtTokenAdaptor));

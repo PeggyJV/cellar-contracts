@@ -34,6 +34,31 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      */
     error MorphoAaveV2DebtTokenAdaptor__HealthFactorTooLow();
 
+    /**
+     * @notice The Morpho Aave V2 contract on current network.
+     * @notice For mainnet use 0x777777c9898D384F785Ee44Acfe945efDFf5f3E0.
+     */
+    IMorphoV2 public immutable morpho;
+
+    /**
+     * @notice The Morpho Aave V2 Lens contract on current network.
+     * @notice For mainnet use 0x507fA343d0A90786d86C7cd885f5C49263A91FF4.
+     */
+    IMorphoLensV2 public immutable morphoLens;
+
+    /**
+     * @notice Minimum Health Factor enforced after every borrow.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(address _morpho, address _morphoLens, uint256 minHealthFactor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
+        morpho = IMorphoV2(_morpho);
+        morphoLens = IMorphoLensV2(_morphoLens);
+        minimumHealthFactor = minHealthFactor;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -42,28 +67,7 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V2 debtToken Adaptor V 1.0"));
-    }
-
-    /**
-     * @notice The Morpho Aave V2 contract on Ethereum Mainnet.
-     */
-    function morpho() internal pure returns (IMorphoV2) {
-        return IMorphoV2(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
-    }
-
-    /**
-     * @notice The Morpho Aave V2 Lens contract on Ethereum Mainnet.
-     */
-    function morphoLens() internal pure returns (IMorphoLensV2) {
-        return IMorphoLensV2(0x507fA343d0A90786d86C7cd885f5C49263A91FF4);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced after every borrow.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
+        return keccak256(abi.encode("Morpho Aave V2 debtToken Adaptor V 1.1"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -129,11 +133,11 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
             revert MorphoAaveV2DebtTokenAdaptor__DebtPositionsMustBeTracked(aToken);
 
         // Borrow from morpho.
-        morpho().borrow(aToken, amountToBorrow);
+        morpho.borrow(aToken, amountToBorrow);
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = morphoLens().getUserHealthFactor(address(this));
-        if (healthFactor < HFMIN()) revert MorphoAaveV2DebtTokenAdaptor__HealthFactorTooLow();
+        uint256 healthFactor = morphoLens.getUserHealthFactor(address(this));
+        if (healthFactor < minimumHealthFactor) revert MorphoAaveV2DebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -143,11 +147,11 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      */
     function repayAaveV2MorphoDebt(IAaveToken aToken, uint256 amountToRepay) public {
         ERC20 underlying = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
-        underlying.safeApprove(address(morpho()), amountToRepay);
-        morpho().repay(address(aToken), amountToRepay);
+        underlying.safeApprove(address(morpho), amountToRepay);
+        morpho.repay(address(aToken), amountToRepay);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(underlying, address(morpho()));
+        _revokeExternalApproval(underlying, address(morpho));
     }
 
     /**
@@ -156,11 +160,11 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      * @param user the address of the user to query their debt balance of.
      */
     function _balanceOfInUnderlying(address poolToken, address user) internal view returns (uint256) {
-        (uint256 inP2P, uint256 onPool) = morpho().borrowBalanceInOf(poolToken, user);
+        (uint256 inP2P, uint256 onPool) = morpho.borrowBalanceInOf(poolToken, user);
 
         uint256 balanceInUnderlying;
-        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho().p2pBorrowIndex(poolToken), 1e27);
-        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho().poolIndexes(poolToken).poolBorrowIndex, 1e27);
+        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho.p2pBorrowIndex(poolToken), 1e27);
+        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho.poolIndexes(poolToken).poolBorrowIndex, 1e27);
         return balanceInUnderlying;
     }
 }

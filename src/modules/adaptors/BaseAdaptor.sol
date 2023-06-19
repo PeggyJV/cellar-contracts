@@ -42,6 +42,12 @@ abstract contract BaseAdaptor {
      */
     error BaseAdaptor__PricingNotSupported(address asset);
 
+    /**
+     * @notice Attempted to set a constructor minimum health factor to a value
+     *         below `MINIMUM_CONSTRUCTOR_HEALTH_FACTOR()`.
+     */
+    error BaseAdaptor__ConstructorHealthFactorTooLow();
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -66,6 +72,14 @@ abstract contract BaseAdaptor {
      */
     function slippage() public pure returns (uint32) {
         return 0.9e4;
+    }
+
+    /**
+     * @notice The default minimum constructor health factor.
+     * @dev Adaptors can choose to override this if they need a different value.
+     */
+    function MINIMUM_CONSTRUCTOR_HEALTH_FACTOR() internal pure virtual returns (uint256) {
+        return 1.05e18;
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -179,6 +193,14 @@ abstract contract BaseAdaptor {
     function _externalReceiverCheck(address receiver) internal view {
         if (receiver != address(this) && Cellar(address(this)).blockExternalReceiver())
             revert BaseAdaptor__ExternalReceiverBlocked();
+    }
+
+    /**
+     * @notice Helper function that validates external receivers are allowed.
+     */
+    function _verifyConstructorMinimumHealthFactor(uint256 minimumHealthFactor) internal pure {
+        if (minimumHealthFactor < MINIMUM_CONSTRUCTOR_HEALTH_FACTOR())
+            revert BaseAdaptor__ConstructorHealthFactorTooLow();
     }
 
     /**

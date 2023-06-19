@@ -13,11 +13,9 @@ import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3
 // Import adaptors.
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
-import { MockUniswapV3Adaptor } from "src/mocks/adaptors/MockUniswapV3Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
-import { MockFeesAndReservesAdaptor } from "src/mocks/adaptors/MockFeesAndReservesAdaptor.sol";
 import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
 import { AaveV3DebtTokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3DebtTokenAdaptor.sol";
 import { VestingSimpleAdaptor } from "src/modules/adaptors/VestingSimpleAdaptor.sol";
@@ -69,6 +67,7 @@ contract RealYieldETHTest is Test {
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
     IPoolV3 private poolV3 = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+    address private aaveOracle = 0x54586bE62E3c3580375aE3723C145253060Ca0C2;
 
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 public cbETH = ERC20(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
@@ -89,7 +88,7 @@ contract RealYieldETHTest is Test {
 
     // Define Adaptors.
     ERC20Adaptor private erc20Adaptor;
-    MockUniswapV3Adaptor private uniswapV3Adaptor;
+    UniswapV3Adaptor private uniswapV3Adaptor;
     AaveV3ATokenAdaptor private aaveATokenAdaptor;
     AaveV3DebtTokenAdaptor private aaveDebtTokenAdaptor;
     VestingSimpleAdaptor private vestingAdaptor;
@@ -101,6 +100,11 @@ contract RealYieldETHTest is Test {
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address public CBETH_ETH_FEED = 0xF017fcB346A1885194689bA23Eff2fE6fA5C483b;
     address public RETH_ETH_FEED = 0x536218f9E9Eb48863970252233c8F271f554C2d0;
+
+    address private mockSwapTarget = 0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496;
+
+    address private automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+    address private fastGasFeed = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
 
     // Base positions.
     uint32 private wethPosition;
@@ -122,9 +126,9 @@ contract RealYieldETHTest is Test {
 
     function setUp() external {
         // Setup Registry, modules, and adaptors.
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
         factory = new CellarFactory();
         registry = new Registry(
             // Set this contract to the Gravity Bridge for testing to give the permissions usually
@@ -133,16 +137,16 @@ contract RealYieldETHTest is Test {
             address(swapRouter),
             address(priceRouter)
         );
-        feesAndReserves = new FeesAndReserves(address(this));
+        feesAndReserves = new FeesAndReserves(address(this), automationRegistry, fastGasFeed);
 
         tracker = new UniswapV3PositionTracker(positionManager);
         erc20Adaptor = new ERC20Adaptor();
         wethVestor = new VestingSimple(WETH, 1 days / 20, 1e16);
-        uniswapV3Adaptor = new MockUniswapV3Adaptor();
-        aaveATokenAdaptor = new AaveV3ATokenAdaptor();
-        aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
+        uniswapV3Adaptor = new UniswapV3Adaptor(address(positionManager), address(tracker));
+        aaveATokenAdaptor = new AaveV3ATokenAdaptor(address(poolV3), aaveOracle, 1.05e18);
+        aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor(address(poolV3), 1.05e18);
         vestingAdaptor = new VestingSimpleAdaptor();
-        mockZeroXAdaptor = new MockZeroXAdaptor();
+        mockZeroXAdaptor = new MockZeroXAdaptor(mockSwapTarget);
 
         // Setup price feeds.
         PriceRouter.ChainlinkDerivativeStorage memory stor;

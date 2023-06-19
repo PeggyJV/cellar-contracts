@@ -51,7 +51,7 @@ contract WstEthExtensionTest is Test {
 
         registry = new Registry(address(this), address(this), address(this));
 
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         wstethExtension = new WstEthExtension(priceRouter);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

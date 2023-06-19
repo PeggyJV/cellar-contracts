@@ -60,7 +60,7 @@ contract CellarRouterTest is Test {
     uint32 private wbtcPosition;
 
     function setUp() public {
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(

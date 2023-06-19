@@ -53,14 +53,15 @@ contract CellarOneInchTest is Test {
     // Swap Details
     address private spender = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
     address private swapTarget = 0x1111111254EEB25477B68fb85Ed929f73A960582;
+    address private mockSwapTarget = 0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496;
     bytes private swapCallData =
         hex"0502b1c5000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000989680000000000000000000000000000000000000000000000000001483d59a9bcf1b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000100000000000000003b5dc1003926a168c11a816e10c13977f75f488bfffe88e4cfee7c08";
 
     function setUp() external {
         erc20Adaptor = new ERC20Adaptor();
-        oneInchAdaptor = new OneInchAdaptor();
-        mockOneInchAdaptor = new MockOneInchAdaptor();
-        priceRouter = new PriceRouter(registry);
+        oneInchAdaptor = new OneInchAdaptor(swapTarget);
+        mockOneInchAdaptor = new MockOneInchAdaptor(mockSwapTarget);
+        priceRouter = new PriceRouter(registry, WETH);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
