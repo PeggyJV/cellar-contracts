@@ -384,7 +384,6 @@ contract BalancerPoolAdaptorTest is Test {
     function testRelayerExitPool() external {
         uint256 assets = 100e6;
 
-        
         // console tests to see if vm.deal works
         deal(address(BB_A_USD), address(cellar), assets);
         deal(address(BB_A_USD_GAUGE), address(cellar), assets);
@@ -431,6 +430,8 @@ contract BalancerPoolAdaptorTest is Test {
 
         // // console.log("BPTBALANCE0: %s", BB_A_USD.balanceOf(address(cellar))); // TODO: BB_A_USD should have some balance here, the above setup code was copied from testRelayerJoinPool().
     }
+
+    // repeat non-happy path tests that were done with joinPool with exitPool?
 
 
     
