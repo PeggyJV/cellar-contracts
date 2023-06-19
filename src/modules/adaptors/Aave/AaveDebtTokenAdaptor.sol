@@ -52,7 +52,7 @@ contract AaveDebtTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Aave debtToken Adaptor V 1.1"));
+        return keccak256(abi.encode("Aave debtToken Adaptor V 1.2"));
     }
 
     //============================================ Implement Base Functions ===========================================

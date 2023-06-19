@@ -89,7 +89,7 @@ contract UniswapV3Adaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Uniswap V3 Adaptor V 1.3"));
+        return keccak256(abi.encode("Uniswap V3 Adaptor V 1.4"));
     }
 
     //============================================ Implement Base Functions ===========================================

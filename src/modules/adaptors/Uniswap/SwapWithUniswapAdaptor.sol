@@ -51,7 +51,7 @@ contract SwapWithUniswapAdaptor is PositionlessAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Swap With Uniswap Adaptor V 0.0"));
+        return keccak256(abi.encode("Swap With Uniswap Adaptor V 0.1"));
     }
 
     //============================================ Strategist Functions ===========================================

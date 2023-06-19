@@ -26,7 +26,7 @@ contract CustomFastGasFeed is Owned {
     /**
      * @notice Allows owner to update this answer.
      * @dev Owner could be a multisig, bot, or EOA.
-     * @dev If owner acts malicously by setting incorrect as prices, FeesAndReserves can update
+     * @dev If owner acts maliciously by setting incorrect gas prices, FeesAndReserves can update
      *      its FastGasFeed with something else.
      */
     function setAnswer(int256 _answer) external onlyOwner {

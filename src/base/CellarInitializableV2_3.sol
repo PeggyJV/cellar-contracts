@@ -30,6 +30,7 @@ contract CellarInitializableV2_3 is Cellar, Initializable {
      *               - String symbol of cellar
      *               - uint32 holding position
      *               - bytes holding position config
+     *               - uint64 Strategist platform cut
      *               - address Aave Pool contract address
      * @dev Before calling `sendFees` in the FeesAndReserves contract INSURE that strategist payout is set!
      */
@@ -54,7 +55,7 @@ contract CellarInitializableV2_3 is Cellar, Initializable {
         allowedRebalanceDeviation = 0.003e18;
         priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
 
-        // Aave V3 pool contract on ETH Mainnet
+        // Aave V3 pool contract on current network.
         aavePool = _aavePool;
 
         // Initialize ERC20

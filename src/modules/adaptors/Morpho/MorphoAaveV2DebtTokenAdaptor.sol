@@ -67,7 +67,7 @@ contract MorphoAaveV2DebtTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V2 debtToken Adaptor V 1.0"));
+        return keccak256(abi.encode("Morpho Aave V2 debtToken Adaptor V 1.1"));
     }
 
     //============================================ Implement Base Functions ===========================================

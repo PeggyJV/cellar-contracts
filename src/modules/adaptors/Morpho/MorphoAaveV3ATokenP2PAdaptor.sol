@@ -45,7 +45,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V3 aToken P2P Adaptor V 1.1"));
+        return keccak256(abi.encode("Morpho Aave V3 aToken P2P Adaptor V 1.2"));
     }
 
     //============================================ Implement Base Functions ===========================================
