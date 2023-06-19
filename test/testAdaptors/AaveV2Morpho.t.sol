@@ -62,6 +62,8 @@ contract CellarAaveV2MorphoTest is Test {
     IPoolV3 private pool = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
 
     IMorphoV2 private morpho = IMorphoV2(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
+    address private morphoLens = 0x507fA343d0A90786d86C7cd885f5C49263A91FF4;
+    address private rewardHandler = 0x3B14E5C73e0A56D607A8688098326fD4b4292135;
     WstEthExtension private wstEthOracle;
 
     // Chainlink PriceFeeds
@@ -70,6 +72,7 @@ contract CellarAaveV2MorphoTest is Test {
     address private STETH_USD_FEED = 0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8;
 
     address private aWstEthWhale = 0xAF06acFD1BD492B913d5807d562e4FC3A6343C4E;
+    address private swapTarget = 0x1111111254EEB25477B68fb85Ed929f73A960582;
 
     uint32 private wethPosition;
     uint32 private usdcPosition;
@@ -91,16 +94,16 @@ contract CellarAaveV2MorphoTest is Test {
     }
 
     function setUp() external checkBlockNumber {
-        aTokenAdaptor = new MorphoAaveV2ATokenAdaptor();
-        debtTokenAdaptor = new MorphoAaveV2DebtTokenAdaptor();
+        aTokenAdaptor = new MorphoAaveV2ATokenAdaptor(address(morpho), morphoLens, 1.05e18, rewardHandler);
+        debtTokenAdaptor = new MorphoAaveV2DebtTokenAdaptor(address(morpho), morphoLens, 1.05e18);
         erc20Adaptor = new ERC20Adaptor();
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
-        oneInchAdaptor = new OneInchAdaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
+        oneInchAdaptor = new OneInchAdaptor(swapTarget);
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         registry.setAddress(2, address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

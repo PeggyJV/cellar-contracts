@@ -40,9 +40,11 @@ contract PriceRouter is Ownable {
     event EditAssetComplete(address asset, bytes32 editHash);
 
     Registry public immutable registry;
+    ERC20 public immutable WETH;
 
-    constructor(Registry _registry) {
+    constructor(Registry _registry, ERC20 _weth) {
         registry = _registry;
+        WETH = _weth;
     }
 
     // =========================================== ASSETS CONFIG ===========================================
@@ -485,7 +487,6 @@ contract PriceRouter is Ownable {
     }
 
     // =========================================== HELPER FUNCTIONS ===========================================
-    ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     /**
      * @notice Attempted to update the asset to one that is not supported by the platform.

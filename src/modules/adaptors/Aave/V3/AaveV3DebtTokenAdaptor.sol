@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IPool } from "src/interfaces/external/IPool.sol";
+import { IPoolV3 } from "src/interfaces/external/IPoolV3.sol";
 import { IAaveToken } from "src/interfaces/external/IAaveToken.sol";
 
 /**
@@ -32,6 +32,24 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
      */
     error AaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address untrackedDebtPosition);
 
+    /**
+     * @notice The Aave V3 Pool contract on current network.
+     * @dev For mainnet use 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2.
+     */
+    IPoolV3 public immutable pool;
+
+    /**
+     * @notice Minimum Health Factor enforced after every borrow.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(address v3Pool, uint256 minHealthFactor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
+        pool = IPoolV3(v3Pool);
+        minimumHealthFactor = minHealthFactor;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -40,22 +58,7 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Aave V3 debtToken Adaptor V 1.0"));
-    }
-
-    /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
-     */
-    function pool() internal pure returns (IPool) {
-        return IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced after every borrow.
-     * @notice Overwrites strategist set minimums if they are lower.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
+        return keccak256(abi.encode("Aave V3 debtToken Adaptor V 1.1"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -121,7 +124,7 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
             revert AaveV3DebtTokenAdaptor__DebtPositionsMustBeTracked(address(debtTokenToBorrow));
 
         // Open up new variable debt position on Aave.
-        pool().borrow(
+        pool.borrow(
             IAaveToken(address(debtTokenToBorrow)).UNDERLYING_ASSET_ADDRESS(),
             amountToBorrow,
             2,
@@ -130,8 +133,8 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
         ); // 2 is the interest rate mode, either 1 for stable or 2 for variable
 
         // Check that health factor is above adaptor minimum.
-        (, , , , , uint256 healthFactor) = pool().getUserAccountData(address(this));
-        if (healthFactor < HFMIN()) revert AaveV3DebtTokenAdaptor__HealthFactorTooLow();
+        (, , , , , uint256 healthFactor) = pool.getUserAccountData(address(this));
+        if (healthFactor < minimumHealthFactor) revert AaveV3DebtTokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -141,18 +144,18 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
      * @param amountToRepay the amount of `tokenToRepay` to repay with.
      */
     function repayAaveDebt(ERC20 tokenToRepay, uint256 amountToRepay) public {
-        tokenToRepay.safeApprove(address(pool()), amountToRepay);
-        pool().repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  either 1 for stable or 2 for variable
+        tokenToRepay.safeApprove(address(pool), amountToRepay);
+        pool.repay(address(tokenToRepay), amountToRepay, 2, address(this)); // 2 is the interest rate mode,  either 1 for stable or 2 for variable
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(tokenToRepay, address(pool()));
+        _revokeExternalApproval(tokenToRepay, address(pool));
     }
 
     /**
      * @notice Allows strategist to use aTokens to repay debt tokens with the same underlying.
      */
     function repayWithATokens(ERC20 underlying, uint256 amount) public {
-        pool().repayWithATokens(address(underlying), amount, 2);
+        pool.repayWithATokens(address(underlying), amount, 2);
     }
 
     /**
@@ -164,6 +167,6 @@ contract AaveV3DebtTokenAdaptor is BaseAdaptor {
     function flashLoan(address[] memory loanToken, uint256[] memory loanAmount, bytes memory params) public {
         require(loanToken.length == loanAmount.length, "Input length mismatch.");
         uint256[] memory modes = new uint256[](loanToken.length);
-        pool().flashLoan(address(this), loanToken, loanAmount, modes, address(this), params, 0);
+        pool.flashLoan(address(this), loanToken, loanAmount, modes, address(this), params, 0);
     }
 }

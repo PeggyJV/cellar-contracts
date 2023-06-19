@@ -45,6 +45,7 @@ contract DeployV2Script is Script {
 
     address private strategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
     address private devOwner = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
+    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     CellarFactory private factory;
     CellarInitializableV2_1 private cellar;
@@ -103,7 +104,7 @@ contract DeployV2Script is Script {
     function run() external {
         vm.startBroadcast();
         // Setup Registry, modules, and adaptors.
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         factory = new CellarFactory();
         registry = new Registry(devOwner, address(swapRouter), address(priceRouter));

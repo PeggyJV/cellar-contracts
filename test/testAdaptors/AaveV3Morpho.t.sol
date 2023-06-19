@@ -49,6 +49,7 @@ contract CellarAaveV3MorphoTest is Test {
     IPoolV3 private pool = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
 
     IMorphoV3 private morpho = IMorphoV3(0x33333aea097c193e66081E930c33020272b33333);
+    address private rewardHandler = 0x3B14E5C73e0A56D607A8688098326fD4b4292135;
     WstEthExtension private wstEthOracle;
 
     // Chainlink PriceFeeds
@@ -74,16 +75,16 @@ contract CellarAaveV3MorphoTest is Test {
     function setUp() external checkBlockNumber {
         wstEthOracle = new WstEthExtension();
 
-        p2pATokenAdaptor = new MorphoAaveV3ATokenP2PAdaptor();
-        collateralATokenAdaptor = new MorphoAaveV3ATokenCollateralAdaptor();
-        debtTokenAdaptor = new MorphoAaveV3DebtTokenAdaptor();
+        p2pATokenAdaptor = new MorphoAaveV3ATokenP2PAdaptor(address(morpho), rewardHandler);
+        collateralATokenAdaptor = new MorphoAaveV3ATokenCollateralAdaptor(address(morpho), 1.05e18, rewardHandler);
+        debtTokenAdaptor = new MorphoAaveV3DebtTokenAdaptor(address(morpho), 1.05e18);
         erc20Adaptor = new ERC20Adaptor();
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         registry.setAddress(2, address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

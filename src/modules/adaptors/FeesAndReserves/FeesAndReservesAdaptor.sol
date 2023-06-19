@@ -24,6 +24,16 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
     // expose the expose Fees And Reserves to strategists during rebalances.
     //====================================================================
 
+    /**
+     * @notice The FeesAndReserves contract on the current network.
+     * @notice For mainnet use 0xF4279E93a06F9d4b5d0625b1F471AA99Ef9B686b.
+     */
+    FeesAndReserves public immutable feesAndReserves;
+
+    constructor(address feesAndReservesContract) {
+        feesAndReserves = FeesAndReserves(feesAndReservesContract);
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -32,14 +42,7 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Fees And Reserves Adaptor V 1.0"));
-    }
-
-    /**
-     * @notice FeesAndReserves on ETH Mainnet.
-     */
-    function feesAndReserves() public pure virtual returns (FeesAndReserves) {
-        return FeesAndReserves(0xF4279E93a06F9d4b5d0625b1F471AA99Ef9B686b);
+        return keccak256(abi.encode("Fees And Reserves Adaptor V 1.1"));
     }
 
     //============================================ Strategist Functions ===========================================
@@ -50,7 +53,7 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
      *         a strategist could out perform another strategist simply because they take a smaller fee.
      */
     function updatePerformanceFee(uint32 performanceFee) public {
-        feesAndReserves().updatePerformanceFee(performanceFee);
+        feesAndReserves.updatePerformanceFee(performanceFee);
     }
 
     /**
@@ -59,28 +62,28 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
      *         a strategist could out perform another strategist simply because they take a smaller fee.
      */
     function updateManagementFee(uint32 managementFee) public {
-        feesAndReserves().updateManagementFee(managementFee);
+        feesAndReserves.updateManagementFee(managementFee);
     }
 
     /**
      * @notice Allows strategist to change how frequently they want their cellars fees calculated.
      */
     function changeUpkeepFrequency(uint64 newFrequency) public {
-        feesAndReserves().changeUpkeepFrequency(newFrequency);
+        feesAndReserves.changeUpkeepFrequency(newFrequency);
     }
 
     /**
      * @notice Allows strategist to change the max gas they are willing to pay for fee calculations..
      */
     function changeUpkeepMaxGas(uint64 newMaxGas) public {
-        feesAndReserves().changeUpkeepMaxGas(newMaxGas);
+        feesAndReserves.changeUpkeepMaxGas(newMaxGas);
     }
 
     /**
      * @notice Setup function strategist must call in order to use FeesAndReserves.
      */
     function setupMetaData(uint32 managementFee, uint32 performanceFee) public {
-        feesAndReserves().setupMetaData(managementFee, performanceFee);
+        feesAndReserves.setupMetaData(managementFee, performanceFee);
     }
 
     /**
@@ -89,13 +92,13 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
      *         during times of over performance.
      */
     function addAssetsToReserves(uint256 amount) public {
-        (ERC20 asset, , , , , , , , , ) = feesAndReserves().metaData(Cellar(address(this)));
+        (ERC20 asset, , , , , , , , , ) = feesAndReserves.metaData(Cellar(address(this)));
         amount = _maxAvailable(asset, amount);
-        asset.safeApprove(address(feesAndReserves()), amount);
-        feesAndReserves().addAssetsToReserves(amount);
+        asset.safeApprove(address(feesAndReserves), amount);
+        feesAndReserves.addAssetsToReserves(amount);
 
         // Make sure that `feesAndReserves` has zero allowance to Cellar assets.
-        _revokeExternalApproval(asset, address(feesAndReserves()));
+        _revokeExternalApproval(asset, address(feesAndReserves));
     }
 
     /**
@@ -104,13 +107,13 @@ contract FeesAndReservesAdaptor is PositionlessAdaptor {
      *         during times of over performance.
      */
     function withdrawAssetsFromReserves(uint256 amount) public {
-        feesAndReserves().withdrawAssetsFromReserves(amount);
+        feesAndReserves.withdrawAssetsFromReserves(amount);
     }
 
     /**
      * @notice Allows strategists to take pending fees owed, and set them up to be distributed using `sendFees` in FeesAndReserves contract.
      */
     function prepareFees(uint256 amount) public {
-        feesAndReserves().prepareFees(amount);
+        feesAndReserves.prepareFees(amount);
     }
 }

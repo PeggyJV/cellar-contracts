@@ -68,12 +68,12 @@ contract CellarCompoundTest is Test {
 
     function setUp() external {
         vesting = new VestingSimple(USDC, 1 days / 4, 1e6);
-        cTokenAdaptor = new CTokenAdaptor();
+        cTokenAdaptor = new CTokenAdaptor(address(comptroller), address(COMP));
         erc20Adaptor = new ERC20Adaptor();
         vestingAdaptor = new VestingSimpleAdaptor();
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

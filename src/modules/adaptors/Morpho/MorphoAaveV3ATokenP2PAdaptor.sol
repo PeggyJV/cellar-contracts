@@ -27,6 +27,16 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
     uint256 internal constant MAX_ITERATIONS = 10;
     uint256 internal constant OPTIMAL_ITERATIONS = 4;
 
+    /**
+     * @notice The Morpho Aave V3 contract on current network.
+     * @notice For mainnet use 0x33333aea097c193e66081E930c33020272b33333.
+     */
+    IMorphoV3 public immutable morpho;
+
+    constructor(address _morpho, address rewardDistributor) MorphoRewardHandler(rewardDistributor) {
+        morpho = IMorphoV3(_morpho);
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -35,14 +45,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V3 aToken P2P Adaptor V 1.1"));
-    }
-
-    /**
-     * @notice The Morpho Aave V3 contract on Ethereum Mainnet.
-     */
-    function morpho() internal pure returns (IMorphoV3) {
-        return IMorphoV3(0x33333aea097c193e66081E930c33020272b33333);
+        return keccak256(abi.encode("Morpho Aave V3 aToken P2P Adaptor V 1.2"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -55,14 +58,14 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory configurationData) public override {
         // Deposit assets to Morpho.
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
-        underlying.safeApprove(address(morpho()), assets);
+        underlying.safeApprove(address(morpho), assets);
 
         uint256 iterations = abi.decode(configurationData, (uint256));
         if (iterations == 0 || iterations > MAX_ITERATIONS) iterations = OPTIMAL_ITERATIONS;
-        morpho().supply(address(underlying), assets, address(this), iterations);
+        morpho.supply(address(underlying), assets, address(this), iterations);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(underlying, address(morpho()));
+        _revokeExternalApproval(underlying, address(morpho));
     }
 
     /**
@@ -86,7 +89,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
         uint256 iterations = abi.decode(configurationData, (uint256));
 
         // Withdraw assets from Morpho.
-        morpho().withdraw(underlying, assets, address(this), receiver, iterations);
+        morpho.withdraw(underlying, assets, address(this), receiver, iterations);
     }
 
     /**
@@ -94,7 +97,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         address underlying = abi.decode(adaptorData, (address));
-        return morpho().supplyBalance(underlying, msg.sender);
+        return morpho.supplyBalance(underlying, msg.sender);
     }
 
     /**
@@ -102,7 +105,7 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address underlying = abi.decode(adaptorData, (address));
-        return morpho().supplyBalance(underlying, msg.sender);
+        return morpho.supplyBalance(underlying, msg.sender);
     }
 
     /**
@@ -133,11 +136,11 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
         if (maxIterations == 0 || maxIterations > MAX_ITERATIONS) maxIterations = OPTIMAL_ITERATIONS;
 
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
-        tokenToDeposit.safeApprove(address(morpho()), amountToDeposit);
-        morpho().supply(address(tokenToDeposit), amountToDeposit, address(this), maxIterations);
+        tokenToDeposit.safeApprove(address(morpho), amountToDeposit);
+        morpho.supply(address(tokenToDeposit), amountToDeposit, address(this), maxIterations);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(tokenToDeposit, address(morpho()));
+        _revokeExternalApproval(tokenToDeposit, address(morpho));
     }
 
     /**
@@ -149,6 +152,6 @@ contract MorphoAaveV3ATokenP2PAdaptor is BaseAdaptor, MorphoRewardHandler {
     function withdrawFromAaveV3Morpho(ERC20 tokenToWithdraw, uint256 amountToWithdraw, uint256 maxIterations) public {
         /// Sanitize maxIterations to prevent strategists from gas griefing Somm relayer.
         if (maxIterations == 0 || maxIterations > MAX_ITERATIONS) maxIterations = OPTIMAL_ITERATIONS;
-        morpho().withdraw(address(tokenToWithdraw), amountToWithdraw, address(this), address(this), maxIterations);
+        morpho.withdraw(address(tokenToWithdraw), amountToWithdraw, address(this), address(this), maxIterations);
     }
 }

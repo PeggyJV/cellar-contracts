@@ -91,7 +91,7 @@ contract PriceRouterTest is Test {
 
         registry = new Registry(gravityBridge, address(this), address(this));
 
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 

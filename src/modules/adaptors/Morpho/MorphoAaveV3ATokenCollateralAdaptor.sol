@@ -27,6 +27,27 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
      */
     error MorphoAaveV3ATokenCollateralAdaptor__HealthFactorTooLow();
 
+    /**
+     * @notice The Morpho Aave V3 contract on current network.
+     * @notice For mainnet use 0x33333aea097c193e66081E930c33020272b33333.
+     */
+    IMorphoV3 public immutable morpho;
+
+    /**
+     * @notice Minimum Health Factor enforced after every aToken withdraw.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(
+        address _morpho,
+        uint256 minHealthFactor,
+        address rewardDistributor
+    ) MorphoRewardHandler(rewardDistributor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
+        morpho = IMorphoV3(_morpho);
+        minimumHealthFactor = minHealthFactor;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -35,21 +56,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V3 aToken Collateral Adaptor V 1.1"));
-    }
-
-    /**
-     * @notice The Morpho Aave V3 contract on Ethereum Mainnet.
-     */
-    function morpho() internal pure returns (IMorphoV3) {
-        return IMorphoV3(0x33333aea097c193e66081E930c33020272b33333);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced after every withdraw.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
+        return keccak256(abi.encode("Morpho Aave V3 aToken Collateral Adaptor V 1.2"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -62,12 +69,12 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Morpho.
         ERC20 underlying = abi.decode(adaptorData, (ERC20));
-        underlying.safeApprove(address(morpho()), assets);
+        underlying.safeApprove(address(morpho), assets);
 
-        morpho().supplyCollateral(address(underlying), assets, address(this));
+        morpho.supplyCollateral(address(underlying), assets, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(underlying, address(morpho()));
+        _revokeExternalApproval(underlying, address(morpho));
     }
 
     /**
@@ -83,24 +90,24 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
         _externalReceiverCheck(receiver);
 
         // Make sure there are no active borrows.
-        address[] memory borrows = morpho().userBorrows(address(this));
+        address[] memory borrows = morpho.userBorrows(address(this));
         if (borrows.length > 0) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
         address underlying = abi.decode(adaptorData, (address));
 
         // Withdraw assets from Morpho.
-        morpho().withdrawCollateral(underlying, assets, address(this), receiver);
+        morpho.withdrawCollateral(underlying, assets, address(this), receiver);
     }
 
     /**
      * @notice Checks that cellar has no active borrows, and if so returns 0.
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        address[] memory borrows = morpho().userBorrows(msg.sender);
+        address[] memory borrows = morpho.userBorrows(msg.sender);
         if (borrows.length > 0) return 0;
         else {
             address underlying = abi.decode(adaptorData, (address));
-            return morpho().collateralBalance(underlying, msg.sender);
+            return morpho.collateralBalance(underlying, msg.sender);
         }
     }
 
@@ -109,7 +116,7 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         address underlying = abi.decode(adaptorData, (address));
-        return morpho().collateralBalance(underlying, msg.sender);
+        return morpho.collateralBalance(underlying, msg.sender);
     }
 
     /**
@@ -136,11 +143,11 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
      */
     function depositToAaveV3Morpho(ERC20 tokenToDeposit, uint256 amountToDeposit) public {
         amountToDeposit = _maxAvailable(tokenToDeposit, amountToDeposit);
-        tokenToDeposit.safeApprove(address(morpho()), amountToDeposit);
-        morpho().supplyCollateral(address(tokenToDeposit), amountToDeposit, address(this));
+        tokenToDeposit.safeApprove(address(morpho), amountToDeposit);
+        morpho.supplyCollateral(address(tokenToDeposit), amountToDeposit, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(tokenToDeposit, address(morpho()));
+        _revokeExternalApproval(tokenToDeposit, address(morpho));
     }
 
     /**
@@ -149,10 +156,10 @@ contract MorphoAaveV3ATokenCollateralAdaptor is BaseAdaptor, MorphoRewardHandler
      * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Morpho
      */
     function withdrawFromAaveV3Morpho(ERC20 tokenToWithdraw, uint256 amountToWithdraw) public {
-        morpho().withdrawCollateral(address(tokenToWithdraw), amountToWithdraw, address(this), address(this));
+        morpho.withdrawCollateral(address(tokenToWithdraw), amountToWithdraw, address(this), address(this));
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = _getUserHealthFactor(morpho(), address(this));
-        if (healthFactor < HFMIN()) revert MorphoAaveV3ATokenCollateralAdaptor__HealthFactorTooLow();
+        uint256 healthFactor = _getUserHealthFactor(morpho, address(this));
+        if (healthFactor < minimumHealthFactor) revert MorphoAaveV3ATokenCollateralAdaptor__HealthFactorTooLow();
     }
 }
