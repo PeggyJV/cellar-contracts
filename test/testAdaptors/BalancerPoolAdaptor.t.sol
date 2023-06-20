@@ -176,15 +176,6 @@ contract BalancerPoolAdaptorTest is Test {
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
         priceRouter.addAsset(BB_A_USD, settings, abi.encode(extensionStor), 1e8);
 
-        // mockBPTETHOracle = new MockBPTPriceFeed();
-        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockBPTETHOracle));
-        // priceRouter.addAsset(BB_A_USD, settings, abi.encode(stor), 1e8);
-
-        // // setup mockLiquidityGaugeToken PriceFeed
-        // mockStakedBPTOracle = new MockBPTPriceFeed();
-        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockStakedBPTOracle));
-        // priceRouter.addAsset(BB_A_USD_GAUGE, settings, abi.encode(stor), 1e8);
-
         // Setup Cellar:
         registry.trustAdaptor(address(erc20Adaptor));
         registry.trustAdaptor(address(balancerPoolAdaptor));
@@ -471,10 +462,19 @@ contract BalancerPoolAdaptorTest is Test {
         assertEq(BB_A_USD.balanceOf(address(this)), bptAmount, "User should have received assets out.");
     }
 
-    // TODO test where you use maxavailable to stake/unstake
-    // TODO: repeat non-happy path tests that were done with joinPool with exitPool?
-    // ^^^ specifically tests where the provided inputs differ from the provided call data.
-    // TODO slippage checks
+    // TODO eincodes
+    // - Move BalancerMinter into its owns interface file
+    // - Move `minter()` function to the global functions section of the adaptor
+    // - remove `_claim_rewards` bool from stake/unstake functions
+    // - test where you use maxavailable to stake/unstake
+    //        - Take the stake and unstake bpt tests, and change the `bptAmount` in the adaptorCalls[] data, to type(uint256).max
+    //          so we can verify that functionality works.
+    // - make "Slippage" revert into a BaseAdaptor__Slippage() revert
+    // convert global functions to immutable constructor args
+    // slippage checks for exit pool
+
+    // - repeat non-happy path tests that were done with joinPool with exitPool?
+
     /**
      * @notice check that assetsUsed() works which also checks assetOf() works
      */
@@ -524,32 +524,32 @@ contract BalancerPoolAdaptorTest is Test {
      * @dev this does not test the underlying math within a respective contract like the BalancerRelayer & BalancerVault.
      */
     function testSlippageChecks() external {
-        // console.log("TEST", address(this));
-        // // Deposit into Cellar.
-        // uint256 assets = 1_000_000e6;
-        // deal(address(USDC), address(this), assets);
-        // cellar.deposit(assets, address(this));
-        // ERC20[] memory from = new ERC20[](1);
-        // ERC20 to;
-        // uint256[] memory fromAmount = new uint256[](1);
-        // bytes[] memory slippageSwapData = new bytes[](1);
-        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        // bytes[] memory adaptorCalls = new bytes[](1);
-        // // Make a swap where both assets are supported by the price router, and slippage is good.
-        // from[0] = USDC;
-        // to = BB_A_USD;
-        // fromAmount[0] = 1_000e6;
-        // slippageSwapData[0] = abi.encodeWithSignature(
-        //     "slippageSwap(address,address,uint256,uint32)",
-        //     from[0],
-        //     to,
-        //     fromAmount[0],
-        //     0.99e4
-        // );
-        // // Make the swap.
-        // adaptorCalls[0] = _createBytesDataToJoin(from, fromAmount, to, slippageSwapData);
-        // data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
-        // cellar.callOnAdaptor(data);
+        // Deposit into Cellar.
+        uint256 assets = 1_000_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+        ERC20[] memory from = new ERC20[](1);
+        ERC20 to;
+        uint256[] memory fromAmount = new uint256[](1);
+        bytes[] memory slippageSwapData = new bytes[](1);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        // Make a swap where both assets are supported by the price router, and slippage is good.
+        from[0] = USDC;
+        to = BB_A_USD;
+        fromAmount[0] = 1_000e6;
+        slippageSwapData[0] = abi.encodeWithSignature(
+            "slippageSwap(address,address,uint256,uint32)",
+            from[0],
+            to,
+            fromAmount[0],
+            0.89e4
+        );
+        // Make the swap.
+        adaptorCalls[0] = _createBytesDataToJoin(from, fromAmount, to, slippageSwapData);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
+        vm.expectRevert(bytes("Slippage"));
+        cellar.callOnAdaptor(data);
     }
 
     // ========================================= PHASE 1 - BAD JOINDATA TESTS -  =========================================
