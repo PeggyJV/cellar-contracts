@@ -13,6 +13,10 @@ import { ILiquidityGauge } from "src/interfaces/external/Balancer/ILiquidityGaug
 import { Math } from "src/utils/Math.sol";
 import { console } from "@forge-std/Test.sol";
 
+interface BalancerMinter {
+    function mint(address gauge) external;
+}
+
 /**
  * @title Balancer Pool Adaptor
  * @notice Allows Cellars to interact with Weighted, Stable, and Linear Balancer Pools (BPs).
@@ -280,13 +284,13 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * TODO: fix verification helper checks
      */
     function stakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountIn, bool _claim_rewards) external {
-        //     // checks
-        //     _validateBptAndGauge(address(_bpt), _liquidityGauge);
-        //     uint256 amountIn = _maxAvailable(_bpt, _amountIn);
-        //     ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: BALANCER QUESTION - double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
-        //     _bpt.approve(address(liquidityGauge), amountIn);
-        //     liquidityGauge.stake(amountIn, address(this));
-        //     _revokeExternalApproval(_bpt, address(liquidityGauge));
+        // checks
+        _validateBptAndGauge(address(_bpt), _liquidityGauge);
+        uint256 amountIn = _maxAvailable(_bpt, _amountIn);
+        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: BALANCER QUESTION - double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+        _bpt.approve(address(liquidityGauge), amountIn);
+        liquidityGauge.deposit(amountIn, address(this));
+        _revokeExternalApproval(_bpt, address(liquidityGauge));
     }
 
     /**
@@ -297,37 +301,47 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
     function unstakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountOut, bool _claim_rewards) public {
-        // _validateBptAndGauge(address(_bpt), _liquidityGauge);
-        // ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
-        // _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
-        // liquidityGauge.withdraw(_amountOut);
-        // if (_claim_rewards) {
-        //     // claimRewards(_bpt, _liquidityGauge, _rewardToken);
-        // }
+        _validateBptAndGauge(address(_bpt), _liquidityGauge);
+        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+        _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
+        liquidityGauge.withdraw(_amountOut);
+        if (_claim_rewards) {
+            // claimRewards(_bpt, _liquidityGauge, _rewardToken);
+        }
     }
 
-    /**
-     * @notice claim rewards ($BAL and/or other tokens) from LP position
-     * @dev rewards are only accrue for staked positions
-     * @param _bpt associated BPTs for respective reward gauge
-     * @param _rewardToken address of reward token, if not $BAL, that strategist is claiming
-     * TODO: fix verification helper checks and see other TODOs from stakeBPT()
-     * TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
-     * TODO: BALANCER QUESTION - check if claimRewards() sends tokens to us, or do we need to actually specify the rewards to come back to us.
-     */
-    function claimRewards(address _bpt, address _liquidityGauge, address _rewardToken) public {
-        _validateBptAndGauge(address(_bpt), _liquidityGauge);
+    // /**
+    //  * @notice claim rewards ($BAL and/or other tokens) from LP position
+    //  * @dev rewards are only accrue for staked positions
+    //  * @param _bpt associated BPTs for respective reward gauge
+    //  * @param _rewardToken address of reward token, if not $BAL, that strategist is claiming
+    //  * TODO: fix verification helper checks and see other TODOs from stakeBPT()
+    //  * TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
+    //  * TODO: BALANCER QUESTION - check if claimRewards() sends tokens to us, or do we need to actually specify the rewards to come back to us.
+    //  */
+    // function claimRewards(address _bpt, address _liquidityGauge, address _rewardToken) public {
+    //     _validateBptAndGauge(address(_bpt), _liquidityGauge);
 
-        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+    //     ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
 
-        // TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
+    //     // TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
 
-        if (
-            (liquidityGauge.claimable_reward(address(this), _rewardToken) > 0) ||
-            (liquidityGauge.claimable_tokens(address(this)) > 0)
-        ) {
-            liquidityGauge.claim_rewards(address(this), address(0)); // TODO: do we need to have different claim_rewards and claim_tokens function calls to get all rewards or does this one call get us everything?
-        }
+    //     liquidityGauge.claim_rewards(address(this), address(0)); // TODO: do we need to have different claim_rewards and claim_tokens function calls to get all rewards or does this one call get us everything?
+
+    //     // if (
+    //     //     (liquidityGauge.claimable_reward(address(this), _rewardToken) > 0) ||
+    //     //     (liquidityGauge.claimable_tokens(address(this)) > 0)
+    //     // ) {
+    //     //     liquidityGauge.claim_rewards(address(this), address(this)); // TODO: do we need to have different claim_rewards and claim_tokens function calls to get all rewards or does this one call get us everything?
+    //     // }
+    // }
+
+    function minter() internal returns (BalancerMinter) {
+        return BalancerMinter(0x239e55F427D44C3cc793f49bFB507ebe76638a2b);
+    }
+
+    function claimRewards(address gauge) public {
+        minter().mint(gauge);
     }
 
     //============================================ Helper Functions ===========================================
@@ -353,14 +367,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * I tried to prank the setup() and have it so the balancerPoolAdaptor was calling `setRelayerApproval()` but then I got a BAL#401 error. I'll come back to this later.
      */
     function adjustRelayerApproval(bool _relayerChange) public virtual {
-        // // if relayer is already approved, continue
-        // // if it hasn't been approved, set it to set it to approved
-        // bool currentStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
-        // if (currentStatus != _relayerChange) {
-        //     vault().setRelayerApproval(address(this), address(relayer()), _relayerChange);
-        //     // event RelayerApprovalChanged will be emitted by Balancer Vault
-        // // }
-        // vault().setRelayerApproval(address(this), address(relayer()), true);
-        // bool newStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
+        vault().setRelayerApproval(address(this), address(relayer()), _relayerChange);
     }
 }
