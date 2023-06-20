@@ -63,12 +63,12 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice bpt amount to unstake/withdraw requested exceeds amount actuall staked/deposited in liquidity gauge
      */
-    error BalancerPoolAdaptor__NotEnoughToWithdraw();
+    error BalancerPoolAdaptor__NotEnoughToUnstake();
 
     /**
-     * @notice bpt amount to unstake/withdraw requested exceeds amount actuall staked/deposited in liquidity gauge
+     * @notice bpt amount to unstake/withdraw requested exceeds amount actually staked/deposited in liquidity gauge
      */
-    error BalancerPoolAdaptor__NotEnoughToDeposit();
+    error BalancerPoolAdaptor__NotEnoughToStake();
 
     error BalancerPoolAdaptor__BptAndGaugeComboMustBeTracked(address bpt, address liquidityGauge);
 
@@ -148,7 +148,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice Calculates the Cellar's balance of the positions creditAsset, a specific bpt.
      * @param _adaptorData encoded data for trusted adaptor position detailing the bpt and liquidityGauge address (if it exists)
      * @return total balance of bpt for Cellar, including liquid bpt and staked bpt
-     * NOTE: check that bpt isn't zero address. could also put in checks that it is set to true too...
+     * NOTE: to be called via staticCall() by Strategist, thus the context vs Strategist functions below that are in the context of delegateCall usage.
      */
     function balanceOf(bytes memory _adaptorData) public view override returns (uint256) {
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
@@ -195,17 +195,17 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
+    /// STRATEGIST NOTE: for `relayerJoinPool()` and `relayerExitPool()` strategist functions callData param are encoded specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()` and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[] memory callData`.
+
     /**
      * @notice call `BalancerRelayer` on mainnet to carry out txs that can incl. joins, exits, and swaps
      * @param tokensIn specific tokens being input for tx
      * @param amountsIn amount of assets input for tx
      * @param bptOut acceptable amount of assets resulting from tx (due to slippage, etc.)
-     * @param callData encoded specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()` and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[] memory callData`.
+     * @param callData encoded specific txs to be used in `relayer.multicall()`. See general note at start of `Strategist Functions` section.
      * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-     * TODO: rename params and possibly include others for `exit()` function. ex.) bptOut needs to be renamed to be agnostic.
      * TODO: see issue for strategist callData
-     * TODO: Add a param and conditional logic to sort whether the action with the Relayer is increasing or decreasing BPT
-     * TODO: Should we include _liquidityGauge in params here even though it's not used?
+     * TODO: CRISPY QUESTION - Should we include _liquidityGauge in params here even though it's not used?
      */
     function relayerJoinPool(
         ERC20[] memory tokensIn,
@@ -237,44 +237,53 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             _revokeExternalApproval(tokensIn[i], address(vault()));
         }
 
-        // TODO: see if special revocation is required or necessary with bespoke Relayer approval sequences
+        // TODO: BALANCER QUESTION - see if special revocation is required or necessary with bespoke Relayer approval sequences
     }
 
-    // /**
-    //  * @notice call `BalancerRelayer` on mainnet to carry out txs that can incl. joins, exits, and swaps
-    //  * @param bptIn specific tokens being input for tx
-    //  * @param amountIn amount of bpts input for tx
-    //  * @param tokensOut acceptable amounts of assets out resulting from tx (due to slippage, etc.) 
-    //  * @param callData encoded specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()` and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[] memory callData`.
-    //  * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-    //  * TODO: rename params and possibly include others for `exit()` function. ex.) bptOut needs to be renamed to be agnostic.
-    //  * TODO: see issue for strategist callData
-    //  * TODO: Should we include _liquidityGauge in params here even though it's not used?
-    //  * TODO: finish implementation
-    //  */
-    // function relayerExitPool(
-    //     ERC20 memory bptIn,
-    //     uint256 memory amountIn,
-    //     ERC20[] tokensOut,
-    //     bytes[] memory callData
-    // ) public {
-    //     // _validateBptAndGauge(address(bptOut), _liquidityGauge); // liquidityGauge not used in this function but it is part of adaptorData, so leaving it for now.
-    //     // TODO: NOTE: I could check if gauge corresponds to bpt, but I think that the strategist should have done that.
-    //     bptIn.approve(address(vault()), amountsIn[i]);
-    //     uint256 startingBpt = bptIn.balanceOf(address(this));
-    //     adjustRelayerApproval(true);
-    //     relayer().multicall(callData);
-    //     for (uint256 i; i < tokensOut.length; ++i) {
-    //         // tokensOut[i].approve(address(vault()), amountsIn[i]); // TODO: figure out what metrics to pull out when exiting...
-    //     }
-    //     PriceRouter priceRouter = PriceRouter(
-    //         Cellar(address(this)).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
-    //     );
-    //     // uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut);
-    //     // if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage"); // TODO: figure out what metrics needed to calculate proper slippage, I guess this is in the for loop? TODO: we'll need a bool in case the pools are broken and we get a bad deal no matter what.
-    //     // revoke token in approval
-    //     _revokeExternalApproval(bptIn, address(vault()));
-    // }
+    /**
+     * @notice call `BalancerRelayer` on mainnet to carry out txs that can incl. joins, exits, and swaps
+     * @param bptIn specific tokens being input for tx
+     * @param amountIn amount of bpts input for tx
+     * @param tokensOut acceptable amounts of assets out resulting from tx (due to slippage, etc.)
+     * @param callData encoded specific txs to be used in `relayer.multicall()`. See general note at start of `Strategist Functions` section.
+     * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
+     * TODO: see issue for strategist callData
+     * TODO: CRISPY QUESTION - Should we include _liquidityGauge in params here even though it's not used?
+     * TODO: CRISPY QUESTION - maybe we'll need a bool in case the pools are broken and we get a bad deal no matter what, so slippage checks are overridden in that case?
+     * NOTE: when exiting pool, a number of different ERC20 constituent assets will be in the Cellar for distribution to depositors. Strategists must have ERC20Adaptor Positions trusted for these respectively. Swaps with them are to be done with external protocols for now (ZeroX, OneInch, etc.). Future swaps can be made internally using Balancer DEX upon a later Adaptor version.
+     */
+    function relayerExitPool(
+        ERC20 memory bptIn,
+        uint256 memory amountIn,
+        ERC20[] tokensOut,
+        bytes[] memory callData
+    ) public {
+        // _validateBptAndGauge(address(bptOut), _liquidityGauge); // liquidityGauge not used in this function but it is part of adaptorData, so leaving it for now.
+        // TODO: NOTE: I could check if gauge corresponds to bpt, but I think that the strategist should have done that.
+
+        bptIn.approve(address(vault()), amountsIn[i]);
+        PriceRouter priceRouter = PriceRouter(
+            Cellar(address(this)).registry().getAddress(PRICE_ROUTER_REGISTRY_SLOT())
+        );
+        uint256 bptEquivalent = 0;
+        adjustRelayerApproval(true);
+        uint256[] tokenAmountBefore;
+        uint256[] tokenAmountAfter;
+
+        for (uint256 i; i < tokensOut.length; ++i) {
+            tokenAmountBefore[i] = tokensOut[i].balanceOf(msg.sender);
+        }
+
+        relayer().multicall(callData);
+
+        for (uint256 i; i < tokensOut.length; ++i) {
+            uint256 constituentTokenOut = tokensOut[i].balanceOf(msg.sender);
+            bptEquivalent = bptEquivalent + priceRouter.getValues(tokensOut[i], tokenAmountAfter[i], bptIn);
+            // if ((tokensAmountAfter[i] - tokensAmountBefore[i]) < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage"); // TODO: figure out what slippage check to implement, if any outside of totalAssets check
+        }
+        // revoke token in approval
+        _revokeExternalApproval(bptIn, address(vault()));
+    }
 
     /**
      * @notice external function to help adjust whether or not the relayer has been approved by cellar
@@ -296,16 +305,16 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice deposit (stake) BPTs into respective pool gauge
-     * @param _bpt address of BPTs to deposit
-     * @param _amountIn number of BPTs to deposit
+     * @notice stake (deposit) BPTs into respective pool gauge
+     * @param _bpt address of BPTs to stake
+     * @param _amountIn number of BPTs to stake
      * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      * TODO: Finalize interface details when beginning to do unit testing
      * TODO: See if _claim_rewards is needed in any sequences of actions when interacting with the gauges
      * TODO: fix verification helper checks
      */
-    function depositBPT(
+    function stakeBPT(
         ERC20 _bpt,
         address _liquidityGauge,
         uint256 _amountIn,
@@ -318,19 +327,19 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         uint256 amountIn = _maxAvailable(_bpt, _amountIn);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
         _bpt.approve(address(liquidityGauge), amountIn);
-        liquidityGauge.deposit(amountIn, address(this));
+        liquidityGauge.stake(amountIn, address(this));
         _revokeExternalApproval(_bpt, address(liquidityGauge));
     }
 
     /**
-     * @notice withdraw (unstake) BPT from respective pool gauge
-     * @param _bpt address of BPTs to withdraw
-     * @param _amountOut number of BPTs to withdraw
+     * @notice unstake (withdraw) BPT from respective pool gauge
+     * @param _bpt address of BPTs to unstake
+     * @param _amountOut number of BPTs to unstake
      * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
-     * TODO: fix verification helper checks and see other TODOs from depositBPT()
+     * TODO: fix verification helper checks and see other TODOs from stakeBPT()
      */
-    function withdrawBPT(
+    function unstakeBPT(
         ERC20 _bpt,
         address _liquidityGauge,
         uint256 _amountOut,
@@ -351,7 +360,8 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @dev rewards are only accrue for staked positions
      * @param _bpt associated BPTs for respective reward gauge
      * @param _rewardToken address of reward token, if not $BAL, that strategist is claiming
-     * TODO: fix verification helper checks and see other TODOs from depositBPT()
+     * TODO: fix verification helper checks and see other TODOs from stakeBPT()
+     * TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
      */
     function claimRewards(
         address _bpt,
@@ -363,7 +373,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
 
         // TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
-        // TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
+
         if (
             (liquidityGauge.claimable_reward(address(this), _rewardToken) == 0) &&
             (liquidityGauge.claimable_tokens(address(this)) == 0)
