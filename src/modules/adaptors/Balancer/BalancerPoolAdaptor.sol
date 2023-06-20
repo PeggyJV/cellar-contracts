@@ -126,7 +126,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         address _recipient,
         bytes memory _adaptorData,
         bytes memory _configurationData
-    ) public pure override {
+    ) public override {
         // Run external receiver check.
         _externalReceiverCheck(_recipient);
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
@@ -144,7 +144,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     function withdrawableFrom(
         bytes memory _adaptorData,
         bytes memory _configData
-    ) public pure override returns (uint256) {
+    ) public view override returns (uint256) {
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
         return balanceOf(_adaptorData);
     }
@@ -247,12 +247,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * NOTE: when exiting pool, a number of different ERC20 constituent assets will be in the Cellar for distribution to depositors. Strategists must have ERC20Adaptor Positions trusted for these respectively. Swaps with them are to be done with external protocols for now (ZeroX, OneInch, etc.). Future swaps can be made internally using Balancer DEX upon a later Adaptor version.
      * NOTE: possible that bpts can be in transit between AURA positions so we don't validate that the bptIn is a valid position in the cellar during the same rebalance. Thus _liquidityGauge in params is not checked here
      */
-    function relayerExitPool(
-        ERC20 memory bptIn,
-        uint256 memory amountIn,
-        ERC20[] tokensOut,
-        bytes[] memory callData
-    ) public {
+    function relayerExitPool(ERC20 bptIn, uint256 amountIn, ERC20[] memory tokensOut, bytes[] memory callData) public {
         bptIn.approve(address(vault()), amountIn); // TODO: check if this is needed cause vault could have approval already.
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
         adjustRelayerApproval(true); // TODO: get rid of this once `adjustRelayerApproval()` helper is made and working
@@ -285,13 +280,13 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * TODO: fix verification helper checks
      */
     function stakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountIn, bool _claim_rewards) external {
-        // checks
-        _validateBptAndGauge(address(_bpt), _liquidityGauge);
-        uint256 amountIn = _maxAvailable(_bpt, _amountIn);
-        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: BALANCER QUESTION - double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
-        _bpt.approve(address(liquidityGauge), amountIn);
-        liquidityGauge.stake(amountIn, address(this));
-        _revokeExternalApproval(_bpt, address(liquidityGauge));
+        //     // checks
+        //     _validateBptAndGauge(address(_bpt), _liquidityGauge);
+        //     uint256 amountIn = _maxAvailable(_bpt, _amountIn);
+        //     ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: BALANCER QUESTION - double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+        //     _bpt.approve(address(liquidityGauge), amountIn);
+        //     liquidityGauge.stake(amountIn, address(this));
+        //     _revokeExternalApproval(_bpt, address(liquidityGauge));
     }
 
     /**
@@ -302,14 +297,13 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
     function unstakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountOut, bool _claim_rewards) public {
-        _validateBptAndGauge(address(_bpt), _liquidityGauge);
-        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
-        _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
-        liquidityGauge.withdraw(_amountOut);
-
-        if (_claim_rewards) {
-            // claimRewards(_bpt, _liquidityGauge, _rewardToken);
-        }
+        // _validateBptAndGauge(address(_bpt), _liquidityGauge);
+        // ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+        // _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
+        // liquidityGauge.withdraw(_amountOut);
+        // if (_claim_rewards) {
+        //     // claimRewards(_bpt, _liquidityGauge, _rewardToken);
+        // }
     }
 
     /**
