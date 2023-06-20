@@ -63,6 +63,9 @@ contract BalancerPoolAdaptorTest is Test {
     address private constant BB_A_USD_GAUGE_ADDRESS = 0x0052688295413b32626D226a205b95cDB337DE86;
     uint256 private constant BB_A_USD_DECIMALS = BB_A_USD.decimals();
     uint256 private constant BB_A_USD_GAUGE_DECIMALS = BB_A_USD_GAUGE.decimals();
+    uint256 private constant USDC_DECIMALS = 6;
+    uint256 private constant USDT_DECIMALS = 18;
+    uint256 private constant DAI_DECIMALS = 18;
 
     // Interfaces
     IVault vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
@@ -139,7 +142,6 @@ contract BalancerPoolAdaptorTest is Test {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
         priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
 
-
         mockBPTETHOracle = new MockBPTPriceFeed();
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockBPTETHOracle));
         priceRouter.addAsset(BB_A_USD, settings, abi.encode(stor), 1e8);
@@ -196,158 +198,216 @@ contract BalancerPoolAdaptorTest is Test {
 
         // Currently tries to write a packed slot, so below call reverts.
         // stdstore.target(address(cellar)).sig(cellar.aavePool.selector).checked_write(address(pool));
+
+        // HELPFUL CONSOLES (TODO: DELETE AFTER TESTING IS COMPLETE)
+        // console.log("cellar address: %s & test contract: %s", address(cellar), address(this));
     }
 
     // ========================================= HAPPY PATH TESTS =========================================
 
-    /// balanceOf() Tests
+    /// deposit() tests
+
+    /// withdraw() tests
+
+    /// withdrawableFrom() tests
+
+    /// balanceOf() tests
 
     /// NOTE: TODO: Phase 1: Make mock gauge contracts that accept the tx. The reason we do this is because we aren't relying on the bpt price derivative yet. We'll do that with Crispy.
     /// TODO: PHASE 2 - tests with actual pricing derivatives for bpts and their gauges
     /// check balanceOf() takes into account stakedBPTs and regular BPTs
     /// Test includes: all w/ bb-a-usd - 1) joinPool, 2) depositBPT (get gauge tokens), 3) withdrawBPT (unstake some), 4) exitPool() --> at the end of this all the cellar will still have half of its gauge balance (staked). No lingering bpts, and half of its assets as the underlying asset of bb-a-usd.
-    // function testBalanceOf() external {
-    //     console.log("cellar address: %s & test contract: %s", address(cellar), address(this));
+    function testBalanceOf() external {
+        // joinPool
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // joinPool
-    //     uint256 assets = 100e6;
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+        // PHASE 1 - joining Pool and checking balancerPoolAdaptor.balanceOf()
 
-    //     // PHASE 1 - joining Pool and checking balancerPoolAdaptor.balanceOf()
+        ERC20[] memory tokensIn = new ERC20[](1);
+        uint256[] memory amountsIn = new uint256[](1);
+        bytes[] memory joinDataArray = new bytes[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory funData = abi.decode(joinData, (bytes[])); // TODO: rename to something more descriptive than funData
 
-    //     ERC20[] memory tokensIn = new ERC20[](1);
-    //     uint256[] memory amountsIn = new uint256[](1);
-    //     bytes[] memory joinDataArray = new bytes[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory funData = abi.decode(joinData, (bytes[]));
+        tokensIn[0] = USDC;
+        amountsIn[0] = assets;
+        joinDataArray[0] = joinData;
+        adaptorCalls[0] = _createBytesDataToJoin(tokensIn, amountsIn, BB_A_USD, funData);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data); // TODO: nice to have - put above into a helper.
 
-    //     tokensIn[0] = USDC;
-    //     amountsIn[0] = assets;
-    //     joinDataArray[0] = joinData;
+        // prank as cellar to collect balances for future comparison & create adaptorCall for itself
+        vm.startPrank(address(cellar));
+        uint256 expectedBptBalanceOF1 = 100e18;
+        uint256 bptBalanceOF1 = balancerPoolAdaptor.balanceOf(adaptorData);
+        uint256 bptOnlyBalance1 = BB_A_USD.balanceOf(address(cellar));
+        // test consoles
+        console.log("BPTBALANCE0 (should be non-zero): %s", BB_A_USD.balanceOf(address(cellar))); // TODO: BB_A_USD should have some balance here, the above setup code was copied from testRelayerJoinPool().
+        console.log(
+            "BPTBALANCEOF1 (this is checking balanceOf() output. Should be the same as BPTBALANCE0 +- dust): %s",
+            bptBalanceOF1
+        );
+        console.log("expectedBptBalanceOF1: %s", expectedBptBalanceOF1);
+        // check regular BPT position
+        assertApproxEqAbs(bptBalanceOF1, expectedBptBalanceOF1, 1e18);
 
-    //     adaptorCalls[0] = _createBytesDataToJoin(tokensIn, amountsIn, BB_A_USD, funData);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data); // TODO: nice to have - put above into a helper.
+        // PHASE 2 - staking entire bpt balance and checking balancerPoolAdaptor.balanceOf()
+        adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, bptOnlyBalance1, false);
+        uint256 actualStakedBalanceOfBeforeStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        vm.stopPrank();
 
-    //     vm.startPrank(address(cellar));
-    //     uint256 expectedBptBalance1 = 100e18;
-    //     uint256 bptBalanceOF1 = balancerPoolAdaptor.balanceOf(adaptorData);
-    //     uint256 bptBalance1 = BB_A_USD.balanceOf(address(cellar));
-    //     // test consoles
-    //     console.log("BPTBALANCE0 (should be non-zero): %s", BB_A_USD.balanceOf(address(cellar))); // TODO: BB_A_USD should have some balance here, the above setup code was copied from testRelayerJoinPool().
-    //     console.log(
-    //         "BPTBALANCE1 (this is checking balanceOf() output. Should be the same as BPTBALANCE0 +- dust): %s",
-    //         bptBalanceOF1
-    //     );
-    //     console.log("expectedBptBalance1: %s", expectedBptBalance1);
-    //     // check regular BPT position
-    //     assertApproxEqAbs(bptBalanceOF1, expectedBptBalance1, 1e18);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data); // stake cellar-owned bpts
 
-    //     // PHASE 2 - staking and checking balancerPoolAdaptor.balanceOf()
-    //     // helper for staking bpt
-    //     adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, bptBalance1, false);
-    //     uint256 actualStakedBalanceOfBeforeStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
-    //     vm.stopPrank();
+        // expected values
+        uint256 expectedBptBalance2 = 0;
+        uint256 expectedStakedBalanceAfterStake = bptBalanceOF1;
+        uint256 actualStakedBalanceOfAfterStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
 
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data); // stake cellar-owned bpts
+        // prank as cellar to collect balances for future comparison
+        vm.prank(address(cellar));
+        uint256 bptBalanceOF2 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance2 should be sum of staked (all) and unstaked (0
 
-    //     // expected values
-    //     uint256 expectedBptBalance2 = 0;
-    //     uint256 expectedStakedBalanceAfterStake = bptBalanceOF1;
-    //     uint256 actualStakedBalanceOfAfterStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
-    //     vm.prank(address(cellar));
-    //     uint256 bptBalanceOF2 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance2 should be sum of staked (all) and unstaked (0
-    //     // test consoles
-    //     console.log(
-    //         "AFTER STAKE - bptBalanceOF2 (Should be close to BPTBALANCE1 from before, and same as expectedBptBalance2): %s",
-    //         bptBalanceOF2
-    //     );
-    //     console.log("AFTER STAKE - expectedBptBalance2: %s", expectedStakedBalanceAfterStake);
-    //     console.log("BEFORE STAKE - actualStakedBalanceOfBeforeStake: %s", actualStakedBalanceOfBeforeStake);
-    //     console.log("AFTER STAKE - actualStakedBalanceOfAfterStake: %s", actualStakedBalanceOfAfterStake);
-    //     assertApproxEqAbs(actualStakedBalanceOfAfterStake, expectedStakedBalanceAfterStake, 1e18); // check staked BPT position
-    //     assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), expectedBptBalance2, 1e18); // check regular BPT position
-    //     assertApproxEqAbs(bptBalanceOF2, bptBalanceOF1, 1e18);
+        // test consoles
+        console.log(
+            "AFTER STAKE - bptBalanceOF2 (Should be close to BPTBALANCEOF1 from before, and same as expectedBptBalance2): %s",
+            bptBalanceOF2
+        );
+        console.log("AFTER STAKE - expectedBptBalance2: %s", expectedStakedBalanceAfterStake);
+        console.log("BEFORE STAKE - actualStakedBalanceOfBeforeStake: %s", actualStakedBalanceOfBeforeStake);
+        console.log("AFTER STAKE - actualStakedBalanceOfAfterStake: %s", actualStakedBalanceOfAfterStake);
 
-    //     // PHASE 3 - unstaking and checking balancerPoolAdaptor.balanceOf()
-    //     // helper for unstaking bpt
-    //     vm.startPrank(address(cellar));
-    //     uint256 amountToUnstake = actualStakedBalanceOfAfterStake / 2;
-    //     adaptorCalls[0] = _createBytesDataToUnstake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, amountToUnstake, false);   
-    //     uint256 actualStakedBalanceOfBeforeStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
-    //     vm.stopPrank();
+        assertApproxEqAbs(actualStakedBalanceOfAfterStake, expectedStakedBalanceAfterStake, 10); // check staked BPT position
+        assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), expectedBptBalance2, 10); // check regular BPT position
+        assertApproxEqAbs(bptBalanceOF2, bptBalanceOF1, 10); // check that balanceOf result had minimal changes
 
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data); // unstake cellar-owned gauge tokens to get some bpts back
+        // PHASE 3 - unstaking half of the staked amount and checking balancerPoolAdaptor.balanceOf()
+        vm.startPrank(address(cellar));
+        uint256 amountToUnstake = actualStakedBalanceOfAfterStake / 2;
+        adaptorCalls[0] = _createBytesDataToUnstake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, amountToUnstake, false);
+        uint256 actualStakedBalanceOfBeforeStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        vm.stopPrank();
 
-    //     // expected values
-    //     uint256 expectedBptBalance3 = amountToUnstake;
-    //     uint256 expectedStakedBalanceAfterUnstake = bptBalanceOF1;
-    //     uint256 actualStakedBalanceOfAfterUnstake = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data); // unstake cellar-owned gauge tokens to get some bpts back
 
-    //     vm.prank(address(cellar));
-    //     uint256 bptBalanceOF3 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance3 should be sum of staked (all) and unstaked still
-    //     // test consoles
-    //     console.log(
-    //         "AFTER UNSTAKE - bptBalanceOF3 (Should be close to BPTBALANCEOF1 and BPTBALANCEOF2 from before): %s",
-    //         bptBalanceOF3
-    //     );
-    //     console.log("AFTER UNSTAKE - expectedBptBalance3: %s", expectedStakedBalanceAfterStake);
-    //     console.log("BEFORE UNSTAKE - actualStakedBalanceOfBeforeUnstake: %s", actualStakedBalanceOfBeforeUnstake);
-    //     console.log("AFTER UNSTAKE - actualStakedBalanceOfAfterUnstake: %s", actualStakedBalanceOfAfterUnstake);
-    //     assertApproxEqAbs(actualStakedBalanceOfAfterUnstake, expectedStakedBalanceAfterUnstake, 1e18); // check staked BPT position
-    //     assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), expectedBptBalance3, 1e18); // check regular BPT position
-    //     assertApproxEqAbs(bptBalanceOF3, bptBalanceOF2, 1e18);
+        // expected values
+        uint256 expectedBptBalance3 = amountToUnstake;
+        uint256 expectedStakedBalanceAfterUnstake = bptBalanceOF1;
+        uint256 actualStakedBalanceOfAfterUnstake = BB_A_USD_GAUGE.balanceOf(address(cellar));
 
-    //     // PHASE 4 - check after withdrawing some of bpt position
+        // prank as cellar to collect balances for future comparison
+        vm.prank(address(cellar));
+        uint256 bptBalanceOF3 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance3 should be sum of staked (all) and unstaked still
 
-    //     vm.startPrank(address(cellar));
-    //     uint256 amountToExit = BB_A_USD.balanceOf(address(cellar));
-    //     adaptorCalls[0] = _createBytesDataToExit(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, amountToUnstake, false);   
-    //     uint256 actualStakedBalanceOfBeforeStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
-    //     vm.stopPrank();
+        // test consoles
+        console.log(
+            "AFTER UNSTAKE - bptBalanceOF3 (Should be close to BPTBALANCEOF1 and BPTBALANCEOF2 from before): %s",
+            bptBalanceOF3
+        );
+        console.log("AFTER UNSTAKE - expectedBptBalance3: %s", expectedStakedBalanceAfterStake);
+        console.log("BEFORE UNSTAKE - actualStakedBalanceOfBeforeUnstake: %s", actualStakedBalanceOfBeforeUnstake);
+        console.log("AFTER UNSTAKE - actualStakedBalanceOfAfterUnstake: %s", actualStakedBalanceOfAfterUnstake);
 
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls }); // TODO: helper to withdraw bpt (exit pool) --> I need calldata that is exiting a pool with all of owner's pool shares
-    //     cellar.callOnAdaptor(data); // TODO: exit bpts and get base assets back --> balanceOf() won't show the underlying assets, but accounting should capture it since it is the base assets?
+        assertApproxEqAbs(actualStakedBalanceOfAfterUnstake, expectedStakedBalanceAfterUnstake, 1e18); // check staked BPT position
+        assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), expectedBptBalance3, 1e18); // check regular BPT position
+        assertApproxEqAbs(bptBalanceOF3, bptBalanceOF2, 1e18); // check that balanceOf result had minimal changes
 
-    //     // check once all bpts are unstaked and withdrawn
-    //     // expected values
-    //     uint256 expectedBptBalance4 = amountToExit;
-    //     uint256 expectedStakedBalanceAfterExit = expectedStakedBalanceAfterUnstake;
-    //     uint256 actualStakedBalanceOfAfterExit = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        // PHASE 4 - check after withdrawing some of bpt position
 
-    //     vm.prank(address(cellar));
-    //     uint256 bptBalanceOF4 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance3 should be sum of staked (all) and unstaked still
-    //     // test consoles
-    //     console.log(
-    //         "AFTER UNSTAKE - bptBalanceOF4 (Should be close to BPTBALANCEOF1 and BPTBALANCEOF2 from before and BPTBALANCEOF3): %s",
-    //         bptBalanceOF4
-    //     );
-    //     console.log("AFTER EXIT - expectedBptBalance4: %s", expectedStakedBalanceAfterExit);
-    //     console.log("BEFORE EXIT - actualStakedBalanceOfBeforeExit: %s", actualStakedBalanceOfBeforeExit);
-    //     console.log("AFTER EXIT - actualStakedBalanceOfAfterExit: %s", actualStakedBalanceOfAfterExit);
-    //     assertApproxEqAbs(actualStakedBalanceOfAfterExit, expectedStakedBalanceAfterExit, 1e18); // check staked BPT position
-    //     assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), expectedBptBalance4, 1e18); // check regular BPT position
-    //     assertApproxEqAbs(bptBalanceOF4, bptBalanceOF3, 1e18);
+        // prank as cellar to collect balances for future comparison & create adaptorCall for itself
+        vm.startPrank(address(cellar));
+        uint256 amountToExit = BB_A_USD.balanceOf(address(cellar));
+        adaptorCalls[0] = _createBytesDataToExit(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, amountToExit, false);
+        uint256 actualStakedBalanceOfBeforeExit = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        vm.stopPrank();
 
-    //     // TODO: check that half of its assets as the underlying asset of bb-a-usd.
-        
-    // }
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls }); // TODO: helper to withdraw bpt (exit pool) --> I need calldata that is exiting a pool with all of owner's pool shares
+        cellar.callOnAdaptor(data); // TODO: exit bpts and get base assets back --> balanceOf() won't show the underlying assets, but accounting should capture it since it is the base assets? If it doesn't it will revert cause of accounting().
+
+        // check once all bpts are unstaked and withdrawn
+        // expected values
+        uint256 stablecoinConstituentsWithdrawn = amountToExit / 3;
+
+        uint256 expectedUSDC = stablecoinConstituentsWithdrawn.changeDecimals(
+            stablecoinConstituentsWithdrawn,
+            BB_A_USD_DECIMALS,
+            USDC_DECIMALS
+        );
+        uint256 expectedUSDT = stablecoinConstituentsWithdrawn.changeDecimals(
+            stablecoinConstituentsWithdrawn,
+            BB_A_USD_DECIMALS,
+            USDT_DECIMALS
+        );
+        uint256 expectedDAI = stablecoinConstituentsWithdrawn.changeDecimals(
+            stablecoinConstituentsWithdrawn,
+            BB_A_USD_DECIMALS,
+            DAI_DECIMALS
+        );
+
+        uint256 expectedStakedBalanceAfterExit = expectedStakedBalanceAfterUnstake;
+        uint256 actualStakedBalanceOfAfterExit = BB_A_USD_GAUGE.balanceOf(address(cellar));
+
+        vm.prank(address(cellar));
+        uint256 bptBalanceOF4 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance3 should be sum of staked (all) and unstaked still
+
+        // test consoles
+        console.log(
+            "AFTER UNSTAKE - bptBalanceOF4 (Should be close to BPTBALANCEOF1 and BPTBALANCEOF2 from before and BPTBALANCEOF3): %s",
+            bptBalanceOF4
+        );
+        console.log("AFTER EXIT - expectedBptBalance4: %s", expectedStakedBalanceAfterExit);
+        console.log("BEFORE EXIT - actualStakedBalanceOfBeforeExit: %s", actualStakedBalanceOfBeforeExit);
+        console.log("AFTER EXIT - actualStakedBalanceOfAfterExit: %s", actualStakedBalanceOfAfterExit);
+
+        assertApproxEqAbs(actualStakedBalanceOfAfterExit, expectedStakedBalanceAfterExit, 1e18); // staked amounts shouldn't change at all
+        assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), 0, 1e18); // bpt balance should be zero
+        assertApproxEqAbs(bptBalanceOF4, bptBalanceOF3, 1e18); // check that balanceOf result had minimal changes
+
+        // TODO: check that half of its assets as the underlying asset of bb-a-usd.
+        assertApproxEqAbs(USDC.balanceOf(address(cellar)), expectedUSDC, 1e5);
+        assertApproxEqAbs(DAI.balanceOf(address(cellar)), expectedDAI, 1e17);
+        assertApproxEqAbs(USDT.balanceOf(address(cellar)), expectedUSDT, 1e17);
+    }
 
     // TODO: new test - check balanceOf() handles address(0) properly
-    function testBalanceOfAddress0() external {
-        
-    }
+    function testBalanceOfAddress0() external {}
 
     // TODO: new test - check balanceOf() reverts if untrusted BPT and gauge address combo
-    function testUntrustedAdaptorDataBalanceOf() external {
+    function testUntrustedAdaptorDataBalanceOf() external {}
 
+    /// assetsUsed() tests - TODO: rough test implementation written, make sure tests actually work
+
+    /**
+     * @notice check that assetsUsed() works which also checks assetOf() works
+     */
+    function testAssetsUsed() external {
+        ERC20[] actualAsset = balancerPoolAdaptor.assetsUsed(adaptorData);
+        address actualAssetAddress = address(actualAsset[0]);
+        assertEq(actualAssetAddress, address(BB_A_USD));
     }
 
-    /// relayerJoinPool() tests
+    // /**
+    //  * @notice tests bad adaptorData
+    //  * NOTE: should just revert with untrusted position for cellar
+    //  */
+    // function testNonTrustedAdaptorDataAssetsUsed() external {
+    //     bytes memory untrustedAdaptorData = abi.encode(address(WBTC), BB_A_USD_GAUGE_ADDRESS);
+    //     vm.expectRevert(abi.encodeWithSelector()); // TODO:  figure out what error actually comes up
+    //     ERC20[] incorrectAsset = balancerPoolAdaptor.assetsUsed(adaptorData);
+    // }
+
+    /// isDebt() tests - TODO: rough test implementation written, make sure tests actually work
+
+    function testIsDebt() external {
+        bool result = balancerPoolAdaptor.isDebt();
+        assertEq(result, false);
+    }
+
+    /// relayerJoinPool() tests - TODO: rough test implementation written, make sure tests actually work
 
     /**
      * @notice happy path test for relayerJoinPool() call w/ one example of calldata, `joinData`
@@ -392,57 +452,100 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.callOnAdaptor(data);
 
         // console.log("BPTBALANCE0: %s", BB_A_USD.balanceOf(address(cellar))); // TODO: BB_A_USD should have some balance here, the above setup code was copied from testRelayerJoinPool().
+
+        // TODO: add assert checks on final values
     }
 
-    /// TODO: relayerExitPool() Tests
+    /// relayerExitPool() Tests - TODO: rough test implementation written, make sure tests actually work
 
     /**
      * @notice happy path test for relayerExitPool() call w/ one example of calldata, `exitData
-     * @dev TODO: deal stakedBPT, use exitPool data and do 
+     * @dev TODO: deal stakedBPT, use exitPool data and do
      */
     function testRelayerExitPool() external {
-        uint256 usdcAssets = 100e6;
         uint256 assets = 100e18;
         uint256 amountOut = assets / 3;
 
         // console tests to see if vm.deal works
-        deal(address(USDC), address(cellar), usdcAssets);
         deal(address(BB_A_USD), address(cellar), assets);
         deal(address(BB_A_USD_GAUGE), address(cellar), assets);
         console.log("BPTBALANCE: %s", BB_A_USD.balanceOf(address(cellar)));
-        console.log("BB_A_USD_GAUGE_BALANCE: %s", BB_A_USD_GAUGE.balanceOf(address(cellar))); 
-        console.log("USDC: %s", USDC.balanceOf(address(cellar))); 
+        console.log("BB_A_USD_GAUGE_BALANCE: %s", BB_A_USD_GAUGE.balanceOf(address(cellar)));
+        console.log("USDC: %s", USDC.balanceOf(address(cellar)));
 
         // simulate: 1) BB_A_USD_GAUGE balance of 100, BB_A_USD balance of 100, balance of 0 for other constituent assets)
 
         ERC20[] memory tokensOut = new ERC20[](3); // strategist has to know ahead of time
         uint256[] memory amountsOut = new uint256[](3);
-        bytes[] memory exitDataArray = new bytes[](1);
+        bytes[] memory decodedExitData = new bytes[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
 
-        bytes[] memory decodedExitData = abi.decode(exitData, (bytes[]));
+        decodedExitData[0] = abi.decode(exitData, (bytes[]));
 
-        // confirm this by checking the actual BB_A_USD address (possibly via the GRAPH) on order of tokens. 
-        tokensOut[0] = DAI;
-        tokensOut[1] = USDC;
-        tokensOut[2] = USDT;
+        // TODO: BALANCER QUESTION - what is the best way to confirm constituent assets within a balancer pool, especially when withdrawing from it so one knows what assets they will be dealing with. Is it the Graph?
+        tokensOut[0] = USDC;
+        tokensOut[1] = USDT;
+        tokensOut[2] = DAI;
 
-        amountsOut[0] = amountOut;
-        amountsOut[0] = amountOut;
-        amountsOut[0] = amountOut;
+        expectedAmountOut[0] = amountOut.changeDecimals(
+            stablecoinConstituentsWithdrawn,
+            BB_A_USD_DECIMALS,
+            USDC_DECIMALS
+        );
+        expectedAmountOut[1] = amountOut;
+        expectedAmountOut[2] = amountOut;
 
         exitDataArray[0] = exitData;
-        adaptorCalls[0] = _createBytesDataToExit(BB_A_USD, amountsIn, BB_A_USD, decodedExitData);
+        adaptorCalls[0] = _createBytesDataToExit(BB_A_USD, amountsOut, BB_A_USD, decodedExitData);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        assertApproxEqAbs(USDC.balanceOf(address(cellar)), expectedAmountOut[0], 1e5);
+        assertApproxEqAbs(DAI.balanceOf(address(cellar)), expectedAmountOut[1], 1e17);
+        assertApproxEqAbs(USDT.balanceOf(address(cellar)), expectedAmountOut[2], 1e17);
+        assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), 0, 10);
     }
 
-    // repeat non-happy path tests that were done with joinPool with exitPool?
+    // TODO: repeat non-happy path tests that were done with joinPool with exitPool?
 
+    /// TODO: stakeBPT() tests
 
-    
+    /**
+     * @notice happy path test for staking bpt
+     * NOTE: 1) deal bpts to test contract, 2) calculate expected, 3) stake bpts, 4) check results (bpt remaining and staked bpts)
+     */
+    function testStakeBPT() external {
+        // get BPT
+        uint256 assets = 100e18;
+        deal(address(BB_A_USD), address(this), assets);
+        console.log("BB_A_USD Initial Balance: %s", BB_A_USD.balanceOf(address(this)));
+        assertEq(BB_A_USD.balanceOf(address(this)), assets);
+        uint256 actualStakedBalanceBefore = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        assertEq(actualStakedBalanceBefore, 0);
+
+        // calculate expected
+        vm.startPrank(Cellar);
+        uint256 expectedStakedBPT = assets / 2;
+        bytes[] memory adaptorCalls = new bytes[](1);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // PHASE 2 - staking entire bpt balance and checking balancerPoolAdaptor.balanceOf()
+        adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, expectedStakedBPT, false);
+        vm.stopPrank();
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data); // stake cellar-owned bpts
+        uint256 actualStakedBalanceAfter = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        assertEqAbs(actualStakedBalanceAfter, actualStakedBalanceBefore, 10);
+    }
+
+    /// TODO: unstakeBPT() tests
+
+    /// TODO: claimRewards() tests
+
+    /// TODO: tests for helpers --> _validateBptAndGauge(), adjustRelayerApproval(), and maybe _validateGaugeUnderlyingBpt()
+
     // ========================================= PHASE 1 - GUARD RAIL TESTS =========================================
 
     /**
@@ -862,7 +965,8 @@ contract BalancerPoolAdaptorTest is Test {
         ERC20 bptOut,
         bytes[] memory callData
     ) public view returns (bytes memory) {
-        return abi.encodeWithSelector(balancerPoolAdaptor.relayerJoinPool.selector, tokensIn, amountsIn, bptOut, callData);
+        return
+            abi.encodeWithSelector(balancerPoolAdaptor.relayerJoinPool.selector, tokensIn, amountsIn, bptOut, callData);
     }
 
     /**
@@ -913,13 +1017,7 @@ contract BalancerPoolAdaptorTest is Test {
         bytes[] memory callData
     ) public view returns (bytes memory) {
         return
-            abi.encodeWithSelector(
-                balancerPoolAdaptor.relayerExitPool.selector,
-                bptIn,
-                amountIn,
-                tokensOut,
-                callData
-            );
+            abi.encodeWithSelector(balancerPoolAdaptor.relayerExitPool.selector, bptIn, amountIn, tokensOut, callData);
     }
 
     /**

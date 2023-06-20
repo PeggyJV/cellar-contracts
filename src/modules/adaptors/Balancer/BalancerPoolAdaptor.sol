@@ -425,20 +425,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             revert BalancerPoolAdaptor__BptAndGaugeComboMustBeTracked(address(_bpt), _liquidityGauge);
     }
 
-    // /**
-    //  * @notice Validates that a liquidityGauge corresponds to a given bpt
-    //  * TODO: unsure if this is needed, we may keep this function if the balancer gauges all follow a certain interface.
-    //  * @dev This function uses `address(this)` as the address of the Cellar
-    //  * @param _bpt of interest
-    //  * @param _liquidityGauge being checked if it corresponds to _bpt
-    //  * NOTE: _liquidityGauge can be zeroAddress in cases where Cellar doesn't want to stake or there are no gauges yet available for respective bpt
-    //  */
-    // function _validateGaugeUnderlyingBpt(ERC20 _bpt, address _liquidityGauge) internal view {
-    //     address underlyingBPT = _liquidityGauge.staticcall(abi.encodeWithSelector(lp_token.selector));
-    //     if (address(_bpt) != underlyingBPT)
-    //         revert BalancerPoolAdaptor___GaugeUnderlyingBptMismatch(address(_bpt), _liquidityGauge, underlyingBPT);
-    // }
-
     /**
      * @notice external function to help adjust whether or not the relayer has been approved by cellar
      * @param _relayerChange proposed approval setting to relayer
@@ -457,4 +443,18 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         vault().setRelayerApproval(address(this), address(relayer()), true);
         // bool newStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
     }
+
+    // /**
+    //  * @notice Validates that a liquidityGauge corresponds to a given bpt
+    //  * TODO: unsure if this is needed, we may keep this function if the balancer gauges all follow a certain interface.
+    //  * @dev This function uses `address(this)` as the address of the Cellar
+    //  * @param _bpt of interest
+    //  * @param _liquidityGauge being checked if it corresponds to _bpt
+    //  * NOTE: _liquidityGauge can be zeroAddress in cases where Cellar doesn't want to stake or there are no gauges yet available for respective bpt
+    //  */
+    // function _validateGaugeUnderlyingBpt(ERC20 _bpt, address _liquidityGauge) internal view {
+    //     address underlyingBPT = _liquidityGauge.staticcall(abi.encodeWithSelector(lp_token.selector));
+    //     if (address(_bpt) != underlyingBPT)
+    //         revert BalancerPoolAdaptor___GaugeUnderlyingBptMismatch(address(_bpt), _liquidityGauge, underlyingBPT);
+    // }
 }
