@@ -156,6 +156,11 @@ contract CellarAdaptor is BaseAdaptor {
 
     //============================================ Helper Functions ===========================================
 
+    /**
+     * @notice Reverts if a given `cellar` is not set up as a position in the calling Cellar.
+     * @dev This function is only used in a delegate call context, hence why address(this) is used
+     *      to get the calling Cellar.
+     */
     function _verifyCellarPositionIsUsed(address cellar) internal view {
         // Check that cellar position is setup to be used in the cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(cellar)));
