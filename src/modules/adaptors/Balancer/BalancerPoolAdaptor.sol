@@ -112,11 +112,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice User deposits are NOT allowed into this position.
      * NOTE:
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
@@ -132,12 +128,12 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         bytes memory _configurationData
     ) public pure override {
         // Run external receiver check.
-        _externalReceiverCheck(receiver);
+        _externalReceiverCheck(_recipient);
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
         uint256 liquidBptBeforeWithdraw = bpt.balanceOf(address(this));
         if (_amountBPTToSend > liquidBptBeforeWithdraw) {
             uint256 amountToUnstake = _amountBPTToSend - liquidBptBeforeWithdraw;
-            unstakeBPT(bpt, liquidityGauge, stakedBptBeforeWithdraw, false);
+            unstakeBPT(bpt, liquidityGauge, amountToUnstake, false);
         }
         bpt.safeTransfer(_recipient, _amountBPTToSend);
     }
@@ -145,12 +141,10 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice Staked positions can be unstaked, and bpts can be sent to a respective user if Cellar cannot meet withdrawal quota.
      */
-    function withdrawableFrom(bytes memory _adaptorData, bytes memory _configData)
-        public
-        pure
-        override
-        returns (uint256)
-    {
+    function withdrawableFrom(
+        bytes memory _adaptorData,
+        bytes memory _configData
+    ) public pure override returns (uint256) {
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
         return balanceOf(_adaptorData);
     }
@@ -259,10 +253,10 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         ERC20[] tokensOut,
         bytes[] memory callData
     ) public {
-        bptIn.approve(address(vault()), amountsIn[i]); // TODO: check if this is needed cause vault could have approval already.
+        bptIn.approve(address(vault()), amountIn); // TODO: check if this is needed cause vault could have approval already.
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
         adjustRelayerApproval(true); // TODO: get rid of this once `adjustRelayerApproval()` helper is made and working
-        uint256[] tokenAmount;
+        uint256[] memory tokenAmount = new uint256[](tokensOut.length);
 
         for (uint256 i; i < tokensOut.length; ++i) {
             tokenAmount[i] = tokensOut[i].balanceOf(address(this));
@@ -273,7 +267,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         for (uint256 i; i < tokensOut.length; ++i) {
             tokenAmount[i] = tokensOut[i].balanceOf(address(this)) - tokenAmount[i];
         }
-        uint256 bptEquivalent = priceRouter.getValues(tokensOut[i], tokenAmount[i], bptIn);
+        uint256 bptEquivalent = priceRouter.getValues(tokensOut, tokenAmount, bptIn);
         if (bptEquivalent < amountIn.mulDivDown(slippage(), 1e4)) revert("Slippage"); // TODO: replace quote message with actual error message. Also check baseAdaptor slippage error that may suffice.
 
         // revoke token in approval
@@ -290,12 +284,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * TODO: See if _claim_rewards is needed in any sequences of actions when interacting with the gauges
      * TODO: fix verification helper checks
      */
-    function stakeBPT(
-        ERC20 _bpt,
-        address _liquidityGauge,
-        uint256 _amountIn,
-        bool _claim_rewards
-    ) external {
+    function stakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountIn, bool _claim_rewards) external {
         // checks
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         uint256 amountIn = _maxAvailable(_bpt, _amountIn);
@@ -312,19 +301,14 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
-    function unstakeBPT(
-        ERC20 _bpt,
-        address _liquidityGauge,
-        uint256 _amountOut,
-        bool _claim_rewards
-    ) public {
+    function unstakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountOut, bool _claim_rewards) public {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
         _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
         liquidityGauge.withdraw(_amountOut);
 
         if (_claim_rewards) {
-            claimRewards(_bpt, _liquidityGauge, _rewardToken);
+            // claimRewards(_bpt, _liquidityGauge, _rewardToken);
         }
     }
 
@@ -337,11 +321,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
      * TODO: BALANCER QUESTION - check if claimRewards() sends tokens to us, or do we need to actually specify the rewards to come back to us.
      */
-    function claimRewards(
-        address _bpt,
-        address _liquidityGauge,
-        address _rewardToken
-    ) public {
+    function claimRewards(address _bpt, address _liquidityGauge, address _rewardToken) public {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
 
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
