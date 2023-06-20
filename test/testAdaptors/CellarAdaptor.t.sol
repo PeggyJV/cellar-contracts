@@ -9,7 +9,7 @@ import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
-import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
+import { CellarAdaptor, BaseAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
@@ -129,6 +129,8 @@ contract CellarAdaptorTest is Test {
             abi.encode(positions, debtPositions, positionConfigs, debtConfigs, cellarPosition)
         );
 
+        metaCellar.addAdaptorToCatalogue(address(cellarAdaptor));
+
         USDC.safeApprove(address(metaCellar), type(uint256).max);
 
         // Deposit into meta cellar.
@@ -142,5 +144,22 @@ contract CellarAdaptorTest is Test {
 
         uint256 liquidAssets = metaCellar.maxWithdraw(address(this));
         assertEq(liquidAssets, 0, "Meta Cellar should have no liquid assets since it is configured to be illiquid.");
+
+        // Check logic in the withdraw function by having strategist call withdraw, passing in isLiquid = false.
+        bool isLiquid = false;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = abi.encodeWithSelector(
+            CellarAdaptor.withdraw.selector,
+            assets,
+            address(this),
+            abi.encode(cellar),
+            abi.encode(isLiquid)
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
+        metaCellar.callOnAdaptor(data);
     }
 }
