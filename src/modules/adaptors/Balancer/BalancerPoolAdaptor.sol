@@ -222,7 +222,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             tokensIn[i].approve(address(vault()), amountsIn[i]);
         }
         uint256 startingBpt = bptOut.balanceOf(address(this));
-        adjustRelayerApproval(true); // TODO: get rid of this once `adjustRelayerApproval()` helper is made and working
         relayer().multicall(callData);
 
         uint256 endingBpt = bptOut.balanceOf(address(this));
@@ -254,7 +253,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     function relayerExitPool(ERC20 bptIn, uint256 amountIn, ERC20[] memory tokensOut, bytes[] memory callData) public {
         bptIn.approve(address(vault()), amountIn); // TODO: check if this is needed cause vault could have approval already.
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
-        adjustRelayerApproval(true); // TODO: get rid of this once `adjustRelayerApproval()` helper is made and working
         uint256[] memory tokenAmount = new uint256[](tokensOut.length);
 
         for (uint256 i; i < tokensOut.length; ++i) {
