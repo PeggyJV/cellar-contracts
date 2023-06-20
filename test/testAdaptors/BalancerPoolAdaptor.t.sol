@@ -49,8 +49,9 @@ contract BalancerPoolAdaptorTest is Test {
 
     // Mainnet contracts
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
@@ -60,6 +61,8 @@ contract BalancerPoolAdaptorTest is Test {
     ERC20 private BB_A_USD = ERC20(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016);
     ERC20 private BB_A_USD_GAUGE = ERC20(0x0052688295413b32626D226a205b95cDB337DE86); // query subgraph for gauges wrt to poolId: https://docs.balancer.fi/reference/vebal-and-gauges/gauges.html#query-gauge-by-l2-sidechain-pool:~:text=%23-,Query%20Pending%20Tokens%20for%20a%20Given%20Pool,-The%20process%20differs
     address private constant BB_A_USD_GAUGE_ADDRESS = 0x0052688295413b32626D226a205b95cDB337DE86;
+    uint256 private constant BB_A_USD_DECIMALS = BB_A_USD.decimals();
+    uint256 private constant BB_A_USD_GAUGE_DECIMALS = BB_A_USD_GAUGE.decimals();
 
     // Interfaces
     IVault vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
@@ -68,7 +71,8 @@ contract BalancerPoolAdaptorTest is Test {
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
-    address public DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
+    address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
+    address private USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
 
     bytes private adaptorData = abi.encode(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS);
 
@@ -127,6 +131,15 @@ contract BalancerPoolAdaptorTest is Test {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
 
+        price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
+        priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDT_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
+        priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
+
+
         mockBPTETHOracle = new MockBPTPriceFeed();
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockBPTETHOracle));
         priceRouter.addAsset(BB_A_USD, settings, abi.encode(stor), 1e8);
@@ -143,6 +156,8 @@ contract BalancerPoolAdaptorTest is Test {
 
         bbaUSDPosition = registry.trustPosition(address(balancerPoolAdaptor), adaptorData);
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(USDC))); // holdingPosition for tests
+        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(DAI))); // holdingPosition for tests
+        usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(USDT))); // holdingPosition for tests
         bbaUSDGaugePosition = registry.trustPosition(address(erc20Adaptor), abi.encode(BB_A_USD_GAUGE_ADDRESS));
 
         cellar = new CellarInitializableV2_2(registry);
@@ -166,11 +181,15 @@ contract BalancerPoolAdaptorTest is Test {
 
         USDC.safeApprove(address(cellar), type(uint256).max);
         cellar.setRebalanceDeviation(0.005e18);
+        cellar.addPositionToCatalogue(daiPosition);
+        cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPositionToCatalogue(bbaUSDPosition);
         cellar.addPositionToCatalogue(bbaUSDGaugePosition);
 
         cellar.addPosition(0, bbaUSDPosition, abi.encode(0), false);
         cellar.addPosition(0, bbaUSDGaugePosition, abi.encode(0), false);
+        cellar.addPosition(0, daiPosition, abi.encode(0), false);
+        cellar.addPosition(0, usdtPosition, abi.encode(0), false);
 
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
@@ -382,53 +401,42 @@ contract BalancerPoolAdaptorTest is Test {
      * @dev TODO: deal stakedBPT, use exitPool data and do 
      */
     function testRelayerExitPool() external {
-        uint256 assets = 100e6;
+        uint256 usdcAssets = 100e6;
+        uint256 assets = 100e18;
+        uint256 amountOut = assets / 3;
 
         // console tests to see if vm.deal works
+        deal(address(USDC), address(cellar), usdcAssets);
         deal(address(BB_A_USD), address(cellar), assets);
         deal(address(BB_A_USD_GAUGE), address(cellar), assets);
-        deal(address(USDC), address(cellar), assets);
         console.log("BPTBALANCE: %s", BB_A_USD.balanceOf(address(cellar)));
         console.log("BB_A_USD_GAUGE_BALANCE: %s", BB_A_USD_GAUGE.balanceOf(address(cellar))); 
         console.log("USDC: %s", USDC.balanceOf(address(cellar))); 
 
-        // cellar.deposit(assets, address(this));
+        // simulate: 1) BB_A_USD_GAUGE balance of 100, BB_A_USD balance of 100, balance of 0 for other constituent assets)
 
-        // // should be no USDC with this test contract
-        // assertEq(USDC.balanceOf(address(cellar)), assets, "Cellar should have the USDC from test contract");
+        ERC20[] memory tokensOut = new ERC20[](3); // strategist has to know ahead of time
+        uint256[] memory amountsOut = new uint256[](3);
+        bytes[] memory exitDataArray = new bytes[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
 
-        // console.log(
-        //     "CELLAR ADDRESS: %s & CELLAR USDC BALANCE & TEST CONTRACT ADDRESS: %s",
-        //     address(cellar),
-        //     USDC.balanceOf(address(cellar)),
-        //     address(this)
-        // );
+        bytes[] memory decodedExitData = abi.decode(exitData, (bytes[]));
 
-        // // TODO: Reformatting: above could be put into setup() arguably
+        // confirm this by checking the actual BB_A_USD address (possibly via the GRAPH) on order of tokens. 
+        tokensOut[0] = DAI;
+        tokensOut[1] = USDC;
+        tokensOut[2] = USDT;
 
-        // // /// Review code blob below with Crispy and setupArrays()
-        // // uint256 arraySize = 1;
-        // // (ERC20[] memory tokensIn, uint256[] memory amountsIn, bytes[] memory joinDataArray, bytes[] memory adaptorCalls, Cellar.AdaptorCall[] memory data, bytes[] memory funData) = setupArrays(arraySize);
-        // // /// Review code blob above with Crispy and setupArrays()
+        amountsOut[0] = amountOut;
+        amountsOut[0] = amountOut;
+        amountsOut[0] = amountOut;
 
-        // // new below
-        // ERC20[] memory tokensIn = new ERC20[](1);
-        // uint256[] memory amountsIn = new uint256[](1);
-        // bytes[] memory joinDataArray = new bytes[](1);
-        // bytes[] memory adaptorCalls = new bytes[](1);
-        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        exitDataArray[0] = exitData;
+        adaptorCalls[0] = _createBytesDataToExit(BB_A_USD, amountsIn, BB_A_USD, decodedExitData);
 
-        // bytes[] memory funData = abi.decode(exitData, (bytes[]));
-
-        // tokensIn[0] = USDC;
-        // amountsIn[0] = assets;
-        // joinDataArray[0] = joinData;
-        // adaptorCalls[0] = _createBytesDataToJoin(tokensIn, amountsIn, BB_A_USD, funData);
-
-        // data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        // cellar.callOnAdaptor(data);
-
-        // // console.log("BPTBALANCE0: %s", BB_A_USD.balanceOf(address(cellar))); // TODO: BB_A_USD should have some balance here, the above setup code was copied from testRelayerJoinPool().
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
     }
 
     // repeat non-happy path tests that were done with joinPool with exitPool?
@@ -839,6 +847,13 @@ contract BalancerPoolAdaptorTest is Test {
     }
 
     /**
+     * @notice mock multicall used in `testSlippageChecks()` since it is treating this test contract as the `BalancerRelayer` through the `MockBalancerPoolAdaptor`
+     */
+    function multicall(bytes[] calldata data) external returns (bytes[] memory results) {
+        for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
+    }
+
+    /**
      * @notice create encoded bytes specifying function and params to be instantiated into the Cellar.AdaptorCall struct
      */
     function _createBytesDataToJoin(
@@ -889,10 +904,22 @@ contract BalancerPoolAdaptorTest is Test {
     }
 
     /**
-     * @notice mock multicall used in `testSlippageChecks()` since it is treating this test contract as the `BalancerRelayer` through the `MockBalancerPoolAdaptor`
+     * @notice create data for exiting pools using BalancerPoolAdaptor
      */
-    function multicall(bytes[] calldata data) external returns (bytes[] memory results) {
-        for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
+    function _createBytesDataToExit(
+        ERC20 memory bptIn,
+        uint256 memory amountIn,
+        ERC20[] tokensOut,
+        bytes[] memory callData
+    ) public view returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                balancerPoolAdaptor.relayerExitPool.selector,
+                bptIn,
+                amountIn,
+                tokensOut,
+                callData
+            );
     }
 
     /**
