@@ -124,7 +124,8 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice User withdraws are NOT allowed from this position.
      * TODO: Cellar will call this if it is trying to give user assets when the cellar doesn't have enough
      * Cellar does a delegate call to this function in the unwind situation.
-     *
+     * NOTE: accessed via delegateCall from Cellar
+     * TODO: CRISPY QUESTION - when should we claimRewards? IMO it is good to do on every mutative function. But that is more gas, so hard to say? Whoever withdrawing from the Cellar will have to get their freshest reward tokens after the fact? Do we just sell rewards tokens for base assets every once an while? Is it an epoch?
      */
     function withdraw(
         uint256 _amountBPTToSend,
@@ -132,16 +133,59 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         bytes memory _adaptorData,
         bytes memory _configurationData
     ) public pure override {
-        // _externalReceiverCheck(receiver); // TODO: IMPLEMENT THIS!! if we are in the context of callOnAdapter - the receiver needs to be the cellar. That's what this check / block is doing.
-        // ge
-        // revert BaseAdaptor__UserWithdrawsNotAllowed();
+        // Run external receiver check.
+        _externalReceiverCheck(receiver);
+        uint256 totalWithdrawable = balanceOf(_adaptorData); // in bpts
+        (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
+
+        uint256 liquidBptBeforeWithdraw = bpt.balanceOf(address(this));
+        uint256 stakedBptBeforeWithdraw = ERC20(liquidityGauge).balanceOf(address(this));
+
+        if (_amountBPTTOSend <= liquidBptBeforeWithdraw) {
+            bpt.safeTransfer(_recipient, _amountBPTToSend);
+            return;
+        }
+
+        if (stakedBptBeforeWithdraw == 0) {
+            // unwind positions
+            bpt.safeTransfer(_recipient, _amountBPTToSend); // TODO: I believe reverts happen when trying to transfer 0.
+            return;
+        }
+
+        if (_amountBPTToSend >= totalWithdrawable) {
+            // unwind positions
+            unstakeBPT(bpt, liquidityGauge, stakedBptBeforeWithdraw, false); // TODO: QUESTION - I believe the context of `delegateCall` carries through here
+            bpt.safeTransfer(_recipient, bpt.balanceOf(address(this)));
+            // TODO: insert logic for if we set claimRewards to true!
+            return;
+        }
+
+        if (_amountBPTToSend > totalWithdrawable) {
+            uint256 remainderToUnwind = _amountBPTToSend - liquidBptBeforeWithdraw;
+            unstakeBPT(bpt, liquidityGauge, remainderToUnwind, false);
+            bpt.safeTransfer(_recipient, liquidBptBeforeWithdraw + remainderToUnwind);
+            // TODO: insert logic for if we set claimRewards to true!
+        }
     }
 
     /**
-     * @notice This position is a liquidity provision (credit) position, and user withdraws are not allowed so this position must return 0 for withdrawableFrom.
+     * @notice Staked positions can be unstaked, and bpts can be sent to a respective user if Cellar cannot meet withdrawal quota.
+     * TODO: not sure about the 1:1 stakedBPT == 1 BPT math. That is the base assumption, but the bpt extension for pricing will be used and needs to be checked to ensure that this implementation makes sense with it.
+     * NOTE: Any loss of precision is OK since that means that there are enough staked BPTs to meet all the withdrawals (pulling inspiration from the AaveV3ATokenAdaptor on that)
      */
-    function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
-        return 0;
+    function withdrawableFrom(bytes memory _adaptorData, bytes memory _configData)
+        public
+        pure
+        override
+        returns (uint256)
+    {
+        // Run external receiver check.
+        _externalReceiverCheck(msg.sender); // TODO: I don't think this is needed here since withdrawableFrom() is just a view function really
+
+        (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
+        uint256 totalWithdrawable = balanceOf(_adaptorData); // in bpts
+
+        return totalWithdrawable; // TODO: not sure about the decimals right now, something to square away especially when incorporating price router extensions
     }
 
     /**
@@ -286,25 +330,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice external function to help adjust whether or not the relayer has been approved by cellar
-     * @param _relayerChange proposed approval setting to relayer
-     * TODO: I want to have this in the setup() but it is giving me issues weirdly. It only allows tests to pass when the call is made within `relayerJoinPool()` itself, where I think address(this) is the balancerPoolAdaptor itself. It's interesting cause iirc `setRelayerApproval()` allows relayer to act as a relayer for `sender` -->  I'd think that sender is the cellar, not the adaptor.
-     * I tried to prank the setup() and have it so the balancerPoolAdaptor was calling `setRelayerApproval()` but then I got a BAL#401 error. I'll come back to this later.
-     */
-    function adjustRelayerApproval(bool _relayerChange) public virtual {
-        // // if relayer is already approved, continue
-        // // if it hasn't been approved, set it to set it to approved
-        // bool currentStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
-
-        // if (currentStatus != _relayerChange) {
-        //     vault().setRelayerApproval(address(this), address(relayer()), _relayerChange);
-        //     // event RelayerApprovalChanged will be emitted by Balancer Vault
-        // }
-        vault().setRelayerApproval(address(this), address(relayer()), true);
-        // bool newStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
-    }
-
-    /**
      * @notice stake (deposit) BPTs into respective pool gauge
      * @param _bpt address of BPTs to stake
      * @param _amountIn number of BPTs to stake
@@ -413,4 +438,23 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     //     if (address(_bpt) != underlyingBPT)
     //         revert BalancerPoolAdaptor___GaugeUnderlyingBptMismatch(address(_bpt), _liquidityGauge, underlyingBPT);
     // }
+
+    /**
+     * @notice external function to help adjust whether or not the relayer has been approved by cellar
+     * @param _relayerChange proposed approval setting to relayer
+     * TODO: I want to have this in the setup() but it is giving me issues weirdly. It only allows tests to pass when the call is made within `relayerJoinPool()` itself, where I think address(this) is the balancerPoolAdaptor itself. It's interesting cause iirc `setRelayerApproval()` allows relayer to act as a relayer for `sender` -->  I'd think that sender is the cellar, not the adaptor.
+     * I tried to prank the setup() and have it so the balancerPoolAdaptor was calling `setRelayerApproval()` but then I got a BAL#401 error. I'll come back to this later.
+     */
+    function adjustRelayerApproval(bool _relayerChange) public virtual {
+        // // if relayer is already approved, continue
+        // // if it hasn't been approved, set it to set it to approved
+        // bool currentStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
+
+        // if (currentStatus != _relayerChange) {
+        //     vault().setRelayerApproval(address(this), address(relayer()), _relayerChange);
+        //     // event RelayerApprovalChanged will be emitted by Balancer Vault
+        // }
+        vault().setRelayerApproval(address(this), address(relayer()), true);
+        // bool newStatus = vault().hasApprovedRelayer(address(this), address(relayer()));
+    }
 }
