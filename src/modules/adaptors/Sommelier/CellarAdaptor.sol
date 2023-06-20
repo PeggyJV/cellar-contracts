@@ -67,7 +67,7 @@ contract CellarAdaptor is BaseAdaptor {
      * @param assets the amount of assets to withdraw from the Cellar position
      * @param receiver address to send assets to'
      * @param adaptorData data needed to withdraw from the Cellar position
-     * @param configurationData abi encoded bool inidicating whether the position is liquid or not
+     * @param configurationData abi encoded bool indicating whether the position is liquid or not
      */
     function withdraw(
         uint256 assets,
