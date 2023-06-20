@@ -351,7 +351,7 @@ contract BalancerPoolAdaptorTest is Test {
         );
     }
 
-    function testStakeBpt(uint256 assets) external {
+    function testStakeBpt(uint256 assets) external checkBlockNumber {
         assets = bound(assets, 0.1e6, 1_000_000e6);
         uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
         // User Joins Cellar.
@@ -375,7 +375,7 @@ contract BalancerPoolAdaptorTest is Test {
         assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), bptAmount, "Cellar should have staked into guage.");
     }
 
-    function testUnstakeBpt(uint256 assets) external {
+    function testUnstakeBpt(uint256 assets) external checkBlockNumber {
         assets = bound(assets, 0.1e6, 1_000_000e6);
         uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
         // User Joins Cellar.
@@ -399,7 +399,7 @@ contract BalancerPoolAdaptorTest is Test {
         assertEq(BB_A_USD.balanceOf(address(cellar)), bptAmount, "Cellar should have unstaked from guage.");
     }
 
-    function testClaimRewards() external {
+    function testClaimRewards() external checkBlockNumber {
         uint256 assets = 1_000_000e6;
         uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
         // User Joins Cellar.
@@ -431,7 +431,7 @@ contract BalancerPoolAdaptorTest is Test {
         assertGt(cellarBALBalance, 0, "Cellar should have earned BAL rewards.");
     }
 
-    function testUserWithdrawPullFromGauge(uint256 assets, uint256 percentInGauge) external {
+    function testUserWithdrawPullFromGauge(uint256 assets, uint256 percentInGauge) external checkBlockNumber {
         assets = bound(assets, 0.1e6, 1_000_000e6);
         percentInGauge = bound(percentInGauge, 0, 1e18);
         uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
@@ -478,13 +478,13 @@ contract BalancerPoolAdaptorTest is Test {
     /**
      * @notice check that assetsUsed() works which also checks assetOf() works
      */
-    function testAssetsUsed() external {
+    function testAssetsUsed() external checkBlockNumber {
         ERC20[] memory actualAsset = balancerPoolAdaptor.assetsUsed(adaptorData);
         address actualAssetAddress = address(actualAsset[0]);
         assertEq(actualAssetAddress, address(BB_A_USD));
     }
 
-    function testIsDebt() external {
+    function testIsDebt() external checkBlockNumber {
         bool result = balancerPoolAdaptor.isDebt();
         assertEq(result, false);
     }
@@ -523,7 +523,7 @@ contract BalancerPoolAdaptorTest is Test {
      * @notice test that the `relayerJoinPool()` function from `BalancerPoolAdaptor.sol` carries out delegateCalls where it receives the proper amount.
      * @dev this does not test the underlying math within a respective contract like the BalancerRelayer & BalancerVault.
      */
-    function testSlippageChecks() external {
+    function testSlippageChecks() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 1_000_000e6;
         deal(address(USDC), address(this), assets);
