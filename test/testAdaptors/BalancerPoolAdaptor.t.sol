@@ -17,10 +17,13 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
 import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolAdaptor.sol";
-import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
+import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
+// import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
+import { IVault, IAsset, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
 import { MockBPTPriceFeed } from "src/mocks/MockBPTPriceFeed.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { MockBalancerPoolAdaptor } from "src/mocks/adaptors/MockBalancerPoolAdaptor.sol";
+import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
 
 contract BalancerPoolAdaptorTest is Test {
     using SafeTransferLib for ERC20;
@@ -32,6 +35,7 @@ contract BalancerPoolAdaptorTest is Test {
     error BalancerPoolAdaptor__BptAndGaugeComboMustBeTracked(address bpt, address poolGauge);
 
     BalancerPoolAdaptor private balancerPoolAdaptor;
+    BalancerStablePoolExtension private balancerStablePoolExtension;
     ERC20Adaptor private erc20Adaptor;
     CellarInitializableV2_2 private cellar;
     PriceRouter private priceRouter;
@@ -48,6 +52,7 @@ contract BalancerPoolAdaptorTest is Test {
     uint32 private bbaUSDGaugePosition;
     address private immutable strategist = vm.addr(0xBEEF);
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
+    uint8 private constant EXTENSION_DERIVATIVE = 3;
 
     // Mainnet contracts
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -55,6 +60,7 @@ contract BalancerPoolAdaptorTest is Test {
     ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
+    ERC20 private BAL = ERC20(0xba100000625a3754423978a60c9317c58a424e3D);
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
@@ -111,8 +117,8 @@ contract BalancerPoolAdaptorTest is Test {
         hex"000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000028000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000feA793Aa415061C483D2390414275AD314B3F6210000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fea793aa415061c483d2390414275ad314b3f62100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006459107a0000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000005cbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000000000000000000000000000000000000000005f5e10000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003a48fe4624ffebb0bbf162e64fb9d0dfe186e517d84c395f0160000000000000000000005020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fea793aa415061c483d2390414275ad314b3f62100000000000000000000000003A6a84cD762D9707A21605b548aaaB891562aAb00000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000000ba100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000040000000000000000000000006667c6fa9f2b3fc1cc8d85320b62703d938e4385000000000000000000000000a1697f9af0875b63ddc472d6eebada8c1fab8568000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f792692000000000000000000000000febb0bbf162e64fb9d0dfe186e517d84c395f016000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000005644b476ee4704a53000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ba1000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000000000000000000000000000000";
 
     modifier checkBlockNumber() {
-        if (block.number < 16990614) {
-            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 16700000.");
+        if (block.number < 17523303) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 17523303.");
             return;
         }
         _;
@@ -125,33 +131,59 @@ contract BalancerPoolAdaptorTest is Test {
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
         priceRouter = new PriceRouter(registry);
         registry.setAddress(2, address(priceRouter));
+        balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, vault);
         mockBalancerPoolAdaptor = new MockBalancerPoolAdaptor();
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;
+
+        // Add WETH pricing.
         uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
+        // Add USDC pricing.
         price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
 
+        // Add DAI pricing.
         price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
         priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
+        // Add USDT pricing.
         price = uint256(IChainlinkAggregator(USDT_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
         priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
 
-        mockBPTETHOracle = new MockBPTPriceFeed();
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockBPTETHOracle));
-        priceRouter.addAsset(BB_A_USD, settings, abi.encode(stor), 1e8);
+        // Add bb_a_USD pricing.
+        uint8[8] memory rateProviderDecimals;
+        address[8] memory rateProviders;
+        ERC20[8] memory underlyings;
+        underlyings[0] = USDC;
+        underlyings[1] = DAI;
+        underlyings[2] = USDT;
+        BalancerStablePoolExtension.ExtensionStorage memory extensionStor = BalancerStablePoolExtension
+            .ExtensionStorage({
+                poolId: bytes32(0),
+                poolDecimals: 18,
+                rateProviderDecimals: rateProviderDecimals,
+                rateProviders: rateProviders,
+                underlyingOrConstituent: underlyings
+            });
 
-        // setup mockLiquidityGaugeToken PriceFeed
-        mockStakedBPTOracle = new MockBPTPriceFeed();
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockStakedBPTOracle));
-        priceRouter.addAsset(BB_A_USD_GAUGE, settings, abi.encode(stor), 1e8);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        priceRouter.addAsset(BB_A_USD, settings, abi.encode(extensionStor), 1e8);
+
+        // mockBPTETHOracle = new MockBPTPriceFeed();
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockBPTETHOracle));
+        // priceRouter.addAsset(BB_A_USD, settings, abi.encode(stor), 1e8);
+
+        // // setup mockLiquidityGaugeToken PriceFeed
+        // mockStakedBPTOracle = new MockBPTPriceFeed();
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockStakedBPTOracle));
+        // priceRouter.addAsset(BB_A_USD_GAUGE, settings, abi.encode(stor), 1e8);
 
         // Setup Cellar:
         registry.trustAdaptor(address(erc20Adaptor));
@@ -162,8 +194,8 @@ contract BalancerPoolAdaptorTest is Test {
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(USDC))); // holdingPosition for tests
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(DAI))); // holdingPosition for tests
         usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(USDT))); // holdingPosition for tests
-        bbaUSDGaugePosition = registry.trustPosition(address(erc20Adaptor), abi.encode(BB_A_USD_GAUGE_ADDRESS));
-
+        // TODO we do not need this position because the BalancerADaptor already accounts for staked bpt.
+        // bbaUSDGaugePosition = registry.trustPosition(address(erc20Adaptor), abi.encode(BB_A_USD_GAUGE_ADDRESS));
         cellar = new CellarInitializableV2_2(registry);
 
         cellar.initialize(
@@ -174,7 +206,7 @@ contract BalancerPoolAdaptorTest is Test {
                 "Balancer Pools Cellar",
                 "BPT-CLR",
                 usdcPosition,
-                abi.encode(1.1e18),
+                abi.encode(0),
                 strategist
             )
         );
@@ -188,10 +220,8 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.addPositionToCatalogue(daiPosition);
         cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPositionToCatalogue(bbaUSDPosition);
-        cellar.addPositionToCatalogue(bbaUSDGaugePosition);
 
         cellar.addPosition(0, bbaUSDPosition, abi.encode(0), false);
-        cellar.addPosition(0, bbaUSDGaugePosition, abi.encode(0), false);
         cellar.addPosition(0, daiPosition, abi.encode(0), false);
         cellar.addPosition(0, usdtPosition, abi.encode(0), false);
 
@@ -207,182 +237,244 @@ contract BalancerPoolAdaptorTest is Test {
 
     // ========================================= HAPPY PATH TESTS =========================================
 
-    /// deposit() tests
-
     /// withdraw() tests
 
     /// withdrawableFrom() tests
 
     /// balanceOf() tests
 
-    /// NOTE: TODO: Phase 1: Make mock gauge contracts that accept the tx. The reason we do this is because we aren't relying on the bpt price derivative yet. We'll do that with Crispy.
-    /// TODO: PHASE 2 - tests with actual pricing derivatives for bpts and their gauges
-    /// check balanceOf() takes into account stakedBPTs and regular BPTs
-    /// Test includes: all w/ bb-a-usd - 1) joinPool, 2) depositBPT (get gauge tokens), 3) withdrawBPT (unstake some), 4) exitPool() --> at the end of this all the cellar will still have half of its gauge balance (staked). No lingering bpts, and half of its assets as the underlying asset of bb-a-usd.
-    function testBalanceOf() external {
-        // joinPool
-        /*uint256 assets = 100e6;
+    function testTotalAssets(uint256 assets) external checkBlockNumber {
+        // User Joins Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        // PHASE 1 - joining Pool and checking balancerPoolAdaptor.balanceOf()
+        // Simulate strategist pool join.
+        _simulatePoolJoin(address(cellar), USDC, assets, BB_A_USD);
+        assertApproxEqAbs(cellar.totalAssets(), assets, 10, "Cellar totalAssets should approximately equal assets.");
 
-        ERC20[] memory tokensIn = new ERC20[](1);
-        uint256[] memory amountsIn = new uint256[](1);
-        bytes[] memory joinDataArray = new bytes[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory funData = abi.decode(joinData, (bytes[])); // TODO: rename to something more descriptive than funData
+        // Simulate strategist stakes all their BPTs.
+        uint256 bbAUsdBalance = BB_A_USD.balanceOf(address(cellar));
+        _simulateBptStake(address(cellar), BB_A_USD, bbAUsdBalance, BB_A_USD_GAUGE);
+        assertApproxEqAbs(cellar.totalAssets(), assets, 10, "Cellar totalAssets should approximately equal assets.");
 
-        tokensIn[0] = USDC;
-        amountsIn[0] = assets;
-        joinDataArray[0] = joinData;
-        adaptorCalls[0] = _createBytesDataToJoin(tokensIn, amountsIn, BB_A_USD, funData);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data); // TODO: nice to have - put above into a helper.
+        // Simulate strategist unstaking half their BPTs.
+        _simulateBptUnStake(address(cellar), BB_A_USD, bbAUsdBalance / 2, BB_A_USD_GAUGE);
+        assertApproxEqAbs(cellar.totalAssets(), assets, 10, "Cellar totalAssets should approximately equal assets.");
 
-        // prank as cellar to collect balances for future comparison & create adaptorCall for itself
-        vm.startPrank(address(cellar));
-        uint256 expectedBptBalanceOF1 = 100e18;
-        uint256 bptBalanceOF1 = balancerPoolAdaptor.balanceOf(adaptorData);
-        uint256 bptOnlyBalance1 = BB_A_USD.balanceOf(address(cellar));
-        // test consoles
-        console.log("BPTBALANCE0 (should be non-zero): %s", BB_A_USD.balanceOf(address(cellar))); // TODO: BB_A_USD should have some balance here, the above setup code was copied from testRelayerJoinPool().
-        console.log(
-            "BPTBALANCEOF1 (this is checking balanceOf() output. Should be the same as BPTBALANCE0 +- dust): %s",
-            bptBalanceOF1
+        // Simulate strategist full unstake, and exit.
+        bbAUsdBalance = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        _simulateBptUnStake(address(cellar), BB_A_USD, bbAUsdBalance, BB_A_USD_GAUGE);
+        bbAUsdBalance = BB_A_USD.balanceOf(address(cellar));
+        _simulatePoolExit(address(cellar), BB_A_USD, bbAUsdBalance, USDC);
+        assertApproxEqAbs(cellar.totalAssets(), assets, 10, "Cellar totalAssets should approximately equal assets.");
+
+        // At this point Cellar should hold approximately assets of USDC, and no bpts or guage bpts.
+        assertApproxEqAbs(
+            USDC.balanceOf(address(cellar)),
+            assets,
+            10,
+            "Cellar should be holding assets amount of USDC."
         );
-        console.log("expectedBptBalanceOF1: %s", expectedBptBalanceOF1);
-        // check regular BPT position
-        assertApproxEqAbs(bptBalanceOF1, expectedBptBalanceOF1, 1e18);
-
-        // PHASE 2 - staking entire bpt balance and checking balancerPoolAdaptor.balanceOf()
-        adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, bptOnlyBalance1, false);
-        uint256 actualStakedBalanceOfBeforeStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
-        vm.stopPrank();
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data); // stake cellar-owned bpts
-
-        // expected values
-        uint256 expectedBptBalance2 = 0;
-        uint256 expectedStakedBalanceAfterStake = bptBalanceOF1;
-        uint256 actualStakedBalanceOfAfterStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
-
-        // prank as cellar to collect balances for future comparison
-        vm.prank(address(cellar));
-        uint256 bptBalanceOF2 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance2 should be sum of staked (all) and unstaked (0
-
-        // test consoles
-        console.log(
-            "AFTER STAKE - bptBalanceOF2 (Should be close to BPTBALANCEOF1 from before, and same as expectedBptBalance2): %s",
-            bptBalanceOF2
-        );
-        console.log("AFTER STAKE - expectedBptBalance2: %s", expectedStakedBalanceAfterStake);
-        console.log("BEFORE STAKE - actualStakedBalanceOfBeforeStake: %s", actualStakedBalanceOfBeforeStake);
-        console.log("AFTER STAKE - actualStakedBalanceOfAfterStake: %s", actualStakedBalanceOfAfterStake);
-
-        assertApproxEqAbs(actualStakedBalanceOfAfterStake, expectedStakedBalanceAfterStake, 10); // check staked BPT position
-        assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), expectedBptBalance2, 10); // check regular BPT position
-        assertApproxEqAbs(bptBalanceOF2, bptBalanceOF1, 10); // check that balanceOf result had minimal changes
-
-        // PHASE 3 - unstaking half of the staked amount and checking balancerPoolAdaptor.balanceOf()
-        vm.startPrank(address(cellar));
-        uint256 amountToUnstake = actualStakedBalanceOfAfterStake / 2;
-        adaptorCalls[0] = _createBytesDataToUnstake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, amountToUnstake, false);
-        uint256 actualStakedBalanceOfBeforeStake = BB_A_USD_GAUGE.balanceOf(address(cellar));
-        vm.stopPrank();
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data); // unstake cellar-owned gauge tokens to get some bpts back
-
-        // expected values
-        uint256 expectedBptBalance3 = amountToUnstake;
-        uint256 expectedStakedBalanceAfterUnstake = bptBalanceOF1;
-        uint256 actualStakedBalanceOfAfterUnstake = BB_A_USD_GAUGE.balanceOf(address(cellar));
-
-        // prank as cellar to collect balances for future comparison
-        vm.prank(address(cellar));
-        uint256 bptBalanceOF3 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance3 should be sum of staked (all) and unstaked still
-
-        // test consoles
-        console.log(
-            "AFTER UNSTAKE - bptBalanceOF3 (Should be close to BPTBALANCEOF1 and BPTBALANCEOF2 from before): %s",
-            bptBalanceOF3
-        );
-        console.log("AFTER UNSTAKE - expectedBptBalance3: %s", expectedStakedBalanceAfterStake);
-        console.log("BEFORE UNSTAKE - actualStakedBalanceOfBeforeUnstake: %s", actualStakedBalanceOfBeforeUnstake);
-        console.log("AFTER UNSTAKE - actualStakedBalanceOfAfterUnstake: %s", actualStakedBalanceOfAfterUnstake);
-
-        assertApproxEqAbs(actualStakedBalanceOfAfterUnstake, expectedStakedBalanceAfterUnstake, 1e18); // check staked BPT position
-        assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), expectedBptBalance3, 1e18); // check regular BPT position
-        assertApproxEqAbs(bptBalanceOF3, bptBalanceOF2, 1e18); // check that balanceOf result had minimal changes
-
-        // PHASE 4 - check after withdrawing some of bpt position
-
-        // prank as cellar to collect balances for future comparison & create adaptorCall for itself
-        vm.startPrank(address(cellar));
-        uint256 amountToExit = BB_A_USD.balanceOf(address(cellar));
-        adaptorCalls[0] = _createBytesDataToExit(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, amountToExit, false);
-        uint256 actualStakedBalanceOfBeforeExit = BB_A_USD_GAUGE.balanceOf(address(cellar));
-        vm.stopPrank();
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls }); // TODO: helper to withdraw bpt (exit pool) --> I need calldata that is exiting a pool with all of owner's pool shares
-        cellar.callOnAdaptor(data); // TODO: exit bpts and get base assets back --> balanceOf() won't show the underlying assets, but accounting should capture it since it is the base assets? If it doesn't it will revert cause of accounting().
-
-        // check once all bpts are unstaked and withdrawn
-        // expected values
-        uint256 stablecoinConstituentsWithdrawn = amountToExit / 3;
-
-        uint256 expectedUSDC = stablecoinConstituentsWithdrawn.changeDecimals(
-            stablecoinConstituentsWithdrawn,
-            BB_A_USD_DECIMALS,
-            USDC_DECIMALS
-        );
-        uint256 expectedUSDT = stablecoinConstituentsWithdrawn.changeDecimals(
-            stablecoinConstituentsWithdrawn,
-            BB_A_USD_DECIMALS,
-            USDT_DECIMALS
-        );
-        uint256 expectedDAI = stablecoinConstituentsWithdrawn.changeDecimals(
-            stablecoinConstituentsWithdrawn,
-            BB_A_USD_DECIMALS,
-            DAI_DECIMALS
-        );
-
-        uint256 expectedStakedBalanceAfterExit = expectedStakedBalanceAfterUnstake;
-        uint256 actualStakedBalanceOfAfterExit = BB_A_USD_GAUGE.balanceOf(address(cellar));
-
-        vm.prank(address(cellar));
-        uint256 bptBalanceOF4 = balancerPoolAdaptor.balanceOf(adaptorData); // bptBalance3 should be sum of staked (all) and unstaked still
-
-        // test consoles
-        console.log(
-            "AFTER UNSTAKE - bptBalanceOF4 (Should be close to BPTBALANCEOF1 and BPTBALANCEOF2 from before and BPTBALANCEOF3): %s",
-            bptBalanceOF4
-        );
-        console.log("AFTER EXIT - expectedBptBalance4: %s", expectedStakedBalanceAfterExit);
-        console.log("BEFORE EXIT - actualStakedBalanceOfBeforeExit: %s", actualStakedBalanceOfBeforeExit);
-        console.log("AFTER EXIT - actualStakedBalanceOfAfterExit: %s", actualStakedBalanceOfAfterExit);
-
-        assertApproxEqAbs(actualStakedBalanceOfAfterExit, expectedStakedBalanceAfterExit, 1e18); // staked amounts shouldn't change at all
-        assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), 0, 1e18); // bpt balance should be zero
-        assertApproxEqAbs(bptBalanceOF4, bptBalanceOF3, 1e18); // check that balanceOf result had minimal changes
-
-        // TODO: check that half of its assets as the underlying asset of bb-a-usd.
-        assertApproxEqAbs(USDC.balanceOf(address(cellar)), expectedUSDC, 1e5);
-        assertApproxEqAbs(DAI.balanceOf(address(cellar)), expectedDAI, 1e17);
-        assertApproxEqAbs(USDT.balanceOf(address(cellar)), expectedUSDT, 1e17);*/
+        assertEq(BB_A_USD.balanceOf(address(cellar)), 0, "Cellar should have no BB_A_USD.");
+        assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), 0, "Cellar should have no BB_A_USD_GAUGE.");
+        console.log("Address Cellar", address(cellar));
     }
 
-    // TODO: new test - check balanceOf() handles address(0) properly
-    function testBalanceOfAddress0() external {}
+    function testRelayerJoinPool() external checkBlockNumber {
+        bytes
+            memory joinData = hex"000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000028000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fea793aa415061c483d2390414275ad314b3f621000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000064921fbc0000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000005cbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f79269200000000000000000000000000000000000000000000000000000000002dc6c000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003a48fe4624ffebb0bbf162e64fb9d0dfe186e517d84c395f0160000000000000000000005020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fea793aa415061c483d2390414275ad314b3f621000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c00000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000000ba100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000040000000000000000000000006667c6fa9f2b3fc1cc8d85320b62703d938e4385000000000000000000000000a1697f9af0875b63ddc472d6eebada8c1fab8568000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f792692000000000000000000000000febb0bbf162e64fb9d0dfe186e517d84c395f016000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000002962786912d4a7d9000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ba1000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000000000000000000000000000000";
+        bytes[] memory joinDataArray = abi.decode(joinData, (bytes[]));
+        uint256 usdcAmount = 3e6;
+        deal(address(USDC), address(this), usdcAmount);
+        cellar.deposit(usdcAmount, address(this));
 
-    // TODO: new test - check balanceOf() reverts if untrusted BPT and gauge address combo
-    function testUntrustedAdaptorDataBalanceOf() external {}
+        // Have strategist join pool.
+        ERC20[] memory tokensIn = new ERC20[](1);
+        tokensIn[0] = USDC;
 
-    /// assetsUsed() tests - TODO: rough test implementation written, make sure tests actually work
+        uint256[] memory amountsIn = new uint256[](1);
+        amountsIn[0] = usdcAmount;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataToAdjustRelayerApproval(true);
+        adaptorCalls[1] = _createBytesDataToJoin(tokensIn, amountsIn, BB_A_USD, joinDataArray);
 
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 expectedBptFromJoin = priceRouter.getValue(USDC, usdcAmount, BB_A_USD);
+        assertApproxEqRel(
+            BB_A_USD.balanceOf(address(cellar)),
+            expectedBptFromJoin,
+            0.01e18,
+            "Cellar should have received expected BPT from join."
+        );
+    }
+
+    // Cellar address A4AD4f68d0b91CFD19687c881e50f3A00242828c
+    // Bytes data to withdraw 50 BPTs
+    // At this block number 17523303
+    function testRelayerExitPool() external checkBlockNumber {
+        bytes
+            memory exitData = hex"000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000048000000000000000000000000000000000000000000000000000000000000006c0000000000000000000000000000000000000000000000000000000000000090000000000000000000000000000000000000000000000000000000000000003c4d80952d5febb0bbf162e64fb9d0dfe186e517d84c395f0160000000000000000000005020000000000000000000000000000000000000000000000000000000000000003000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c000000000000000000000000fea793aa415061c483d2390414275ad314b3f62100000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000002e00000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000040000000000000000000000006667c6fa9f2b3fc1cc8d85320b62703d938e4385000000000000000000000000a1697f9af0875b63ddc472d6eebada8c1fab8568000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f792692000000000000000000000000febb0bbf162e64fb9d0dfe186e517d84c395f0160000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000002b5e3af16b188000000000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000000ba100000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001ba100000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000002ba100000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000fea793aa415061c483d2390414275ad314b3f6210000000000000000000000000000000000000000000000000000000000000001000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000da3e439e38f3505b0000000000000000000000000000000000000000000000000000000064921a930000000000000000000000000000000000000000000000000000000000000000ba100000000000000000000000000000000000000000000000000000000000026667c6fa9f2b3fc1cc8d85320b62703d938e43850000000000000000000004fb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000006667c6fa9f2b3fc1cc8d85320b62703d938e43850000000000000000000000006b175474e89094c44da98b954eedeac495271d0fba1000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000fea793aa415061c483d2390414275ad314b3f6210000000000000000000000000000000000000000000000000000000000000001000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001175ed60000000000000000000000000000000000000000000000000000000064921a930000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000004a1697f9af0875b63ddc472d6eebada8c1fab85680000000000000000000004f90000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a1697f9af0875b63ddc472d6eebada8c1fab8568000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec7ba1000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000fea793aa415061c483d2390414275ad314b3f6210000000000000000000000000000000000000000000000000000000000000001000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f08f1f0000000000000000000000000000000000000000000000000000000064921a930000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000006cbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f792692000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48ba1000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+        bytes[] memory exitDataArray = abi.decode(exitData, (bytes[]));
+        uint256 bptAmount = 50e18;
+        // User Joins Cellar.
+        uint256 assets = 50e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar 50 Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        // Have strategist exit pool.
+        ERC20[] memory tokensOut = new ERC20[](3);
+        tokensOut[0] = USDC;
+        tokensOut[1] = DAI;
+        tokensOut[2] = USDT;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](2);
+        adaptorCalls[0] = _createBytesDataToAdjustRelayerApproval(true);
+        adaptorCalls[1] = _createBytesDataToExit(BB_A_USD, bptAmount, tokensOut, exitDataArray);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertGt(USDC.balanceOf(address(cellar)), 0, "Cellar should have received USDC.");
+        assertGt(DAI.balanceOf(address(cellar)), 0, "Cellar should have received DAI.");
+        assertGt(USDT.balanceOf(address(cellar)), 0, "Cellar should have received USDT.");
+
+        uint256[] memory amountsOut = new uint256[](3);
+        amountsOut[0] = USDC.balanceOf(address(cellar));
+        amountsOut[1] = DAI.balanceOf(address(cellar));
+        amountsOut[2] = USDT.balanceOf(address(cellar));
+
+        uint256 valueOutInTermsOfBpt = priceRouter.getValues(tokensOut, amountsOut, BB_A_USD);
+        assertApproxEqRel(
+            bptAmount,
+            valueOutInTermsOfBpt,
+            0.01e18,
+            "Cellar value out should approximately equal value in."
+        );
+    }
+
+    function testStakeBpt(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount, false);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
+
+        // Make sure cellar actually staked into gauge.
+        assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), bptAmount, "Cellar should have staked into guage.");
+    }
+
+    function testUnstakeBpt(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Gauge Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD_GAUGE), address(cellar), bptAmount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToUnstake(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount, false);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
+
+        // Make sure cellar actually staked into gauge.
+        assertEq(BB_A_USD.balanceOf(address(cellar)), bptAmount, "Cellar should have unstaked from guage.");
+    }
+
+    function testClaimRewards() external {
+        uint256 assets = 1_000_000e6;
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount, false);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Now that cellar is in gauge, wait for awards to accrue.
+        vm.warp(block.timestamp + (1 days / 4));
+
+        // Strategist claims rewards.
+        adaptorCalls[0] = _createBytesDataToClaimRewards(address(BB_A_USD_GAUGE));
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 cellarBALBalance = BAL.balanceOf(address(cellar));
+
+        assertGt(cellarBALBalance, 0, "Cellar should have earned BAL rewards.");
+    }
+
+    function testUserWithdrawPullFromGauge(uint256 assets, uint256 percentInGauge) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        percentInGauge = bound(percentInGauge, 0, 1e18);
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        uint256 amountToStakeInGauge = bptAmount.mulDivDown(percentInGauge, 1e18);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToStake(
+            address(BB_A_USD),
+            address(BB_A_USD_GAUGE),
+            amountToStakeInGauge,
+            false
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 amountToWithdraw = cellar.maxWithdraw(address(this));
+        cellar.withdraw(amountToWithdraw, address(this), address(this));
+
+        assertEq(BB_A_USD.balanceOf(address(this)), bptAmount, "User should have received assets out.");
+    }
+
+    // TODO test where you use maxavailable to stake/unstake
+    // TODO: repeat non-happy path tests that were done with joinPool with exitPool?
+    // ^^^ specifically tests where the provided inputs differ from the provided call data.
+    // TODO slippage checks
     /**
      * @notice check that assetsUsed() works which also checks assetOf() works
      */
@@ -392,138 +484,36 @@ contract BalancerPoolAdaptorTest is Test {
         assertEq(actualAssetAddress, address(BB_A_USD));
     }
 
-    // /**
-    //  * @notice tests bad adaptorData
-    //  * NOTE: should just revert with untrusted position for cellar
-    //  */
-    // function testNonTrustedAdaptorDataAssetsUsed() external {
-    //     bytes memory untrustedAdaptorData = abi.encode(address(WBTC), BB_A_USD_GAUGE_ADDRESS);
-    //     vm.expectRevert(abi.encodeWithSelector()); // TODO:  figure out what error actually comes up
-    //     ERC20[] incorrectAsset = balancerPoolAdaptor.assetsUsed(adaptorData);
-    // }
-
-    /// isDebt() tests - TODO: rough test implementation written, make sure tests actually work
-
     function testIsDebt() external {
         bool result = balancerPoolAdaptor.isDebt();
         assertEq(result, false);
     }
 
-    /// relayerJoinPool() tests - TODO: rough test implementation written, make sure tests actually work
-
-    /**
-     * @notice happy path test for relayerJoinPool() call w/ one example of calldata, `joinData`
-     */
-    function testRelayerJoinPool() external {
-        // uint256 assets = 100e6;
-        // deal(address(USDC), address(this), assets);
-        // cellar.deposit(assets, address(this));
-        // // should be no USDC with this test contract
-        // assertEq(USDC.balanceOf(address(cellar)), assets, "Cellar should have the USDC from test contract");
-        // console.log(
-        //     "CELLAR ADDRESS: %s & CELLAR USDC BALANCE & TEST CONTRACT ADDRESS: %s",
-        //     address(cellar),
-        //     USDC.balanceOf(address(cellar)),
-        //     address(this)
-        // );
-        // // TODO: Reformatting: above could be put into setup() arguably
-        // // /// Review code blob below with Crispy and setupArrays()
-        // // uint256 arraySize = 1;
-        // // (ERC20[] memory tokensIn, uint256[] memory amountsIn, bytes[] memory joinDataArray, bytes[] memory adaptorCalls, Cellar.AdaptorCall[] memory data, bytes[] memory funData) = setupArrays(arraySize);
-        // // /// Review code blob above with Crispy and setupArrays()
-        // // new below
-        // ERC20[] memory tokensIn = new ERC20[](1);
-        // uint256[] memory amountsIn = new uint256[](1);
-        // bytes[] memory joinDataArray = new bytes[](1);
-        // bytes[] memory adaptorCalls = new bytes[](1);
-        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        // bytes[] memory funData = abi.decode(joinData, (bytes[]));
-        // tokensIn[0] = USDC;
-        // amountsIn[0] = assets;
-        // joinDataArray[0] = joinData;
-        // adaptorCalls[0] = _createBytesDataToJoin(tokensIn, amountsIn, BB_A_USD, funData);
-        // data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        // cellar.callOnAdaptor(data);
-        // console.log("BPTBALANCE0: %s", BB_A_USD.balanceOf(address(cellar))); // TODO: BB_A_USD should have some balance here, the above setup code was copied from testRelayerJoinPool().
-        // TODO: add assert checks on final values
-    }
-
-    /// relayerExitPool() Tests - TODO: rough test implementation written, make sure tests actually work
-
-    /**
-     * @notice happy path test for relayerExitPool() call w/ one example of calldata, `exitData
-     * @dev TODO: deal stakedBPT, use exitPool data and do
-     */
-    function testRelayerExitPool() external {
-        // uint256 assets = 100e18;
-        // uint256 amountOut = assets / 3;
-        // // console tests to see if vm.deal works
-        // deal(address(BB_A_USD), address(cellar), assets);
-        // deal(address(BB_A_USD_GAUGE), address(cellar), assets);
-        // console.log("BPTBALANCE: %s", BB_A_USD.balanceOf(address(cellar)));
-        // console.log("BB_A_USD_GAUGE_BALANCE: %s", BB_A_USD_GAUGE.balanceOf(address(cellar)));
-        // console.log("USDC: %s", USDC.balanceOf(address(cellar)));
-        // // simulate: 1) BB_A_USD_GAUGE balance of 100, BB_A_USD balance of 100, balance of 0 for other constituent assets)
-        // ERC20[] memory tokensOut = new ERC20[](3); // strategist has to know ahead of time
-        // uint256[] memory amountsOut = new uint256[](3);
-        // bytes[] memory decodedExitData = new bytes[](1);
-        // bytes[] memory adaptorCalls = new bytes[](1);
-        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        // decodedExitData[0] = abi.decode(exitData, (bytes[]));
-        // // TODO: BALANCER QUESTION - what is the best way to confirm constituent assets within a balancer pool, especially when withdrawing from it so one knows what assets they will be dealing with. Is it the Graph?
-        // tokensOut[0] = USDC;
-        // tokensOut[1] = USDT;
-        // tokensOut[2] = DAI;
-        // expectedAmountOut[0] = amountOut.changeDecimals(
-        //     stablecoinConstituentsWithdrawn,
-        //     BB_A_USD_DECIMALS,
-        //     USDC_DECIMALS
-        // );
-        // expectedAmountOut[1] = amountOut;
-        // expectedAmountOut[2] = amountOut;
-        // exitDataArray[0] = exitData;
-        // adaptorCalls[0] = _createBytesDataToExit(BB_A_USD, amountsOut, BB_A_USD, decodedExitData);
-        // data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        // cellar.callOnAdaptor(data);
-        // assertApproxEqAbs(USDC.balanceOf(address(cellar)), expectedAmountOut[0], 1e5);
-        // assertApproxEqAbs(DAI.balanceOf(address(cellar)), expectedAmountOut[1], 1e17);
-        // assertApproxEqAbs(USDT.balanceOf(address(cellar)), expectedAmountOut[2], 1e17);
-        // assertApproxEqAbs(BB_A_USD.balanceOf(address(cellar)), 0, 10);
-    }
-
-    // TODO: repeat non-happy path tests that were done with joinPool with exitPool?
-
-    /// TODO: stakeBPT() tests
-
     /**
      * @notice happy path test for staking bpt
      * NOTE: 1) deal bpts to test contract, 2) calculate expected, 3) stake bpts, 4) check results (bpt remaining and staked bpts)
      */
-    function testStakeBPT() external {
-        // get BPT
-        // uint256 assets = 100e18;
-        // deal(address(BB_A_USD), address(this), assets);
-        // console.log("BB_A_USD Initial Balance: %s", BB_A_USD.balanceOf(address(this)));
-        // assertEq(BB_A_USD.balanceOf(address(this)), assets);
-        // uint256 actualStakedBalanceBefore = BB_A_USD_GAUGE.balanceOf(address(cellar));
-        // assertEq(actualStakedBalanceBefore, 0);
-        // // calculate expected
-        // vm.startPrank(Cellar);
-        // uint256 expectedStakedBPT = assets / 2;
-        // bytes[] memory adaptorCalls = new bytes[](1);
-        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        // // PHASE 2 - staking entire bpt balance and checking balancerPoolAdaptor.balanceOf()
-        // adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, expectedStakedBPT, false);
-        // vm.stopPrank();
-        // data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        // cellar.callOnAdaptor(data); // stake cellar-owned bpts
-        // uint256 actualStakedBalanceAfter = BB_A_USD_GAUGE.balanceOf(address(cellar));
-        // assertEqAbs(actualStakedBalanceAfter, actualStakedBalanceBefore, 10);
-    }
-
-    /// TODO: unstakeBPT() tests
-
-    /// TODO: claimRewards() tests
+    // function testStakeBPT() external {
+    // get BPT
+    // uint256 assets = 100e18;
+    // deal(address(BB_A_USD), address(this), assets);
+    // console.log("BB_A_USD Initial Balance: %s", BB_A_USD.balanceOf(address(this)));
+    // assertEq(BB_A_USD.balanceOf(address(this)), assets);
+    // uint256 actualStakedBalanceBefore = BB_A_USD_GAUGE.balanceOf(address(cellar));
+    // assertEq(actualStakedBalanceBefore, 0);
+    // // calculate expected
+    // vm.startPrank(Cellar);
+    // uint256 expectedStakedBPT = assets / 2;
+    // bytes[] memory adaptorCalls = new bytes[](1);
+    // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    // // PHASE 2 - staking entire bpt balance and checking balancerPoolAdaptor.balanceOf()
+    // adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS, expectedStakedBPT, false);
+    // vm.stopPrank();
+    // data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+    // cellar.callOnAdaptor(data); // stake cellar-owned bpts
+    // uint256 actualStakedBalanceAfter = BB_A_USD_GAUGE.balanceOf(address(cellar));
+    // assertEqAbs(actualStakedBalanceAfter, actualStakedBalanceBefore, 10);
+    // }
 
     /// TODO: tests for helpers --> _validateBptAndGauge(), adjustRelayerApproval(), and maybe _validateGaugeUnderlyingBpt()
 
@@ -534,7 +524,8 @@ contract BalancerPoolAdaptorTest is Test {
      * @dev this does not test the underlying math within a respective contract like the BalancerRelayer & BalancerVault.
      */
     function testSlippageChecks() external {
-        // Deposit into Cellar.
+        // console.log("TEST", address(this));
+        // // Deposit into Cellar.
         // uint256 assets = 1_000_000e6;
         // deal(address(USDC), address(this), assets);
         // cellar.deposit(assets, address(this));
@@ -854,23 +845,22 @@ contract BalancerPoolAdaptorTest is Test {
      * NOTE: it would take multiple tokens and amounts in and a single bpt out
      */
     function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 slippage) public {
-        // if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
-        //     // Figure out value in, quoted in `to`.
-        //     uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
-        //     uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
-        //     // Deal caller new balances.
-        //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-        //     deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
-        // } else {
-        //     // Pricing is not supported, so just assume exchange rate is 1:1.
-        //     deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
-        //     deal(
-        //         address(to),
-        //         msg.sender,
-        //         to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
-        //     );
-        // }
-        // console.log("howdy");
+        if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
+            // Figure out value in, quoted in `to`.
+            uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
+            uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
+            // Deal caller new balances.
+            deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
+            deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);
+        } else {
+            // Pricing is not supported, so just assume exchange rate is 1:1.
+            deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
+            deal(
+                address(to),
+                msg.sender,
+                to.balanceOf(msg.sender) + inAmount.changeDecimals(from.decimals(), to.decimals())
+            );
+        }
     }
 
     /**
@@ -942,6 +932,52 @@ contract BalancerPoolAdaptorTest is Test {
     ) public view returns (bytes memory) {
         return
             abi.encodeWithSelector(balancerPoolAdaptor.relayerExitPool.selector, bptIn, amountIn, tokensOut, callData);
+    }
+
+    function _createBytesDataToClaimRewards(address _liquidityGauge) public view returns (bytes memory) {
+        return abi.encodeWithSelector(balancerPoolAdaptor.claimRewards.selector, _liquidityGauge);
+    }
+
+    function _createBytesDataToAdjustRelayerApproval(bool _change) public view returns (bytes memory) {
+        return abi.encodeWithSelector(balancerPoolAdaptor.adjustRelayerApproval.selector, _change);
+    }
+
+    function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {
+        // Convert Value in to terms of bpt.
+        uint256 valueInBpt = priceRouter.getValue(tokenIn, amountIn, bpt);
+
+        // Use deal to mutate targets balances.
+        uint256 tokenInBalance = tokenIn.balanceOf(target);
+        deal(address(tokenIn), target, tokenInBalance - amountIn);
+        uint256 bptBalance = bpt.balanceOf(target);
+        deal(address(bpt), target, bptBalance + valueInBpt);
+    }
+
+    function _simulatePoolExit(address target, ERC20 bptIn, uint256 amountIn, ERC20 tokenOut) internal {
+        // Convert Value in to terms of bpt.
+        uint256 valueInTokenOut = priceRouter.getValue(bptIn, amountIn, tokenOut);
+
+        // Use deal to mutate targets balances.
+        uint256 bptBalance = bptIn.balanceOf(target);
+        deal(address(bptIn), target, bptBalance - amountIn);
+        uint256 tokenOutBalance = tokenOut.balanceOf(target);
+        deal(address(tokenOut), target, tokenOutBalance + valueInTokenOut);
+    }
+
+    function _simulateBptStake(address target, ERC20 bpt, uint256 amountIn, ERC20 gauge) internal {
+        // Use deal to mutate targets balances.
+        uint256 tokenInBalance = bpt.balanceOf(target);
+        deal(address(bpt), target, tokenInBalance - amountIn);
+        uint256 gaugeBalance = gauge.balanceOf(target);
+        deal(address(gauge), target, gaugeBalance + amountIn);
+    }
+
+    function _simulateBptUnStake(address target, ERC20 bpt, uint256 amountOut, ERC20 gauge) internal {
+        // Use deal to mutate targets balances.
+        uint256 bptBalance = bpt.balanceOf(target);
+        deal(address(bpt), target, bptBalance + amountOut);
+        uint256 gaugeBalance = gauge.balanceOf(target);
+        deal(address(gauge), target, gaugeBalance - amountOut);
     }
 
     /**
