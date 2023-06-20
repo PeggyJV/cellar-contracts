@@ -51,7 +51,7 @@ contract RedstonePriceFeedExtensionTest is Test {
 
         registry = new Registry(address(this), address(this), address(this));
 
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         mockRedstoneClassicAdapter = new MockRedstoneClassicAdapter();
         redstonePriceFeedExtension = new RedstonePriceFeedExtension(priceRouter);
 
