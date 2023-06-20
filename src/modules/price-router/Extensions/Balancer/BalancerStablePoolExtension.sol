@@ -101,7 +101,7 @@ contract BalancerStablePoolExtension is BalancerPoolExtension {
      * @param asset the BPT token
      */
     function getPriceInUSD(ERC20 asset) external view override returns (uint256) {
-        _ensureNotInVaultContext(balancerVault);
+        ensureNotInVaultContext(balancerVault);
         IBalancerPool pool = IBalancerPool(address(asset));
 
         // Read extension storage and grab pool tokens

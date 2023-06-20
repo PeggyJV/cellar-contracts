@@ -8,7 +8,7 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
  * @title FraxLend fToken Adaptor
  * @dev This adaptor is specifically for FraxLendPairV2 contracts.
  *      To interact with a different version, inherit from this adaptor
- *      and overrid the interface helper functions.
+ *      and override the interface helper functions.
  * @notice Allows Cellars to lend FRAX to FraxLend pairs.
  * @author crispymangoes, 0xEinCodes
  */
@@ -29,6 +29,24 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     error FTokenAdaptor__FTokenPositionsMustBeTracked(address fToken);
 
+    /**
+     * @notice This bool determines how this adaptor accounts for interest.
+     *         True: Account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
+     *         False: Do not account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
+     */
+    bool public immutable ACCOUNT_FOR_INTEREST;
+
+    /**
+     * @notice The FRAX contract on current network.
+     * @notice For mainnet use 0x853d955aCEf822Db058eb8505911ED77F175b99e.
+     */
+    ERC20 public immutable FRAX;
+
+    constructor(bool _accountForInterest, address frax) {
+        ACCOUNT_FOR_INTEREST = _accountForInterest;
+        FRAX = ERC20(frax);
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -37,25 +55,7 @@ contract FTokenAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend fToken Adaptor V 0.0"));
-    }
-
-    /**
-     * @notice The FRAX contract on Ethereum Mainnet.
-     */
-    function FRAX() internal pure returns (ERC20) {
-        return ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
-    }
-
-    /**
-     * @notice Indicates whether or not we should worry about updating interest
-     *         when interacting with FraxLend.
-     * @dev True is the most accurate method, but will slightly add to gas costs.
-     *      False is less accurate, but this error is mitigated by the frequency the
-     *      FraxLend Pairs are interacted with.
-     */
-    function ACCOUNT_FOR_INTEREST() internal pure virtual returns (bool) {
-        return true;
+        return keccak256(abi.encode("FraxLend fToken Adaptor V 0.1"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -68,11 +68,11 @@ contract FTokenAdaptor is BaseAdaptor {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Frax Lend.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        FRAX().safeApprove(address(fToken), assets);
+        FRAX.safeApprove(address(fToken), assets);
         _deposit(fToken, assets, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(FRAX(), address(fToken));
+        _revokeExternalApproval(FRAX, address(fToken));
     }
 
     /**
@@ -105,7 +105,7 @@ contract FTokenAdaptor is BaseAdaptor {
         (uint128 totalFraxSupplied, , uint128 totalFraxBorrowed, , ) = _getPairAccounting(fToken);
         if (totalFraxBorrowed >= totalFraxSupplied) return 0;
         uint256 liquidFrax = totalFraxSupplied - totalFraxBorrowed;
-        uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST());
+        uint256 fraxBalance = _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
         withdrawableFrax = fraxBalance > liquidFrax ? liquidFrax : fraxBalance;
     }
 
@@ -114,14 +114,14 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        return _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST());
+        return _toAssetAmount(fToken, _balanceOf(fToken, msg.sender), false, ACCOUNT_FOR_INTEREST);
     }
 
     /**
      * @notice Returns FRAX.
      */
-    function assetOf(bytes memory) public pure override returns (ERC20) {
-        return FRAX();
+    function assetOf(bytes memory) public view override returns (ERC20) {
+        return FRAX;
     }
 
     /**
@@ -140,12 +140,12 @@ contract FTokenAdaptor is BaseAdaptor {
      */
     function lendFrax(IFToken fToken, uint256 amountToDeposit) public {
         _validateFToken(fToken);
-        amountToDeposit = _maxAvailable(FRAX(), amountToDeposit);
-        FRAX().safeApprove(address(fToken), amountToDeposit);
+        amountToDeposit = _maxAvailable(FRAX, amountToDeposit);
+        FRAX.safeApprove(address(fToken), amountToDeposit);
         _deposit(fToken, amountToDeposit, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(FRAX(), address(fToken));
+        _revokeExternalApproval(FRAX, address(fToken));
     }
 
     /**

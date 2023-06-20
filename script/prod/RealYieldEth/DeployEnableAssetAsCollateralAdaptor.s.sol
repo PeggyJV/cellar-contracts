@@ -10,6 +10,7 @@ import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
+import { IPool } from "src/interfaces/external/IPool.sol";
 
 import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
@@ -34,10 +35,12 @@ contract DeployEnableAssetAsCollateralAdaptorScript is Script {
 
     AaveV2EnableAssetAsCollateralAdaptor public adaptor;
 
+    IPool private aavePool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+
     function run() external {
         vm.startBroadcast();
 
-        adaptor = new AaveV2EnableAssetAsCollateralAdaptor();
+        adaptor = new AaveV2EnableAssetAsCollateralAdaptor(address(aavePool), 1.05e18);
 
         vm.stopBroadcast();
     }

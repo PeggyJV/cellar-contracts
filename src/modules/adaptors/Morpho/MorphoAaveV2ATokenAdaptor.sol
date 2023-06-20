@@ -21,14 +21,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     // Where:
     // `aToken` is the AaveV2 A Token position this adaptor is working with
     //================= Configuration Data Specification =================
-    // isLiquid bool indicating whether user withdraws are allowed from this position.
-    // IMPORTANT: It is possible for a strategist to misconfigure their positions,
-    // and allow user withdraws from aToken positions that are backing loans.
-    // This will be mitigated by only allowing trusted strategists to use this adaptor,
-    // and educating them the dangers of misconfiguring their position.
-    // EX: If a cellar is using their aTokens to back a borrow, then strategists
-    // should make their aToken positions illiquid, so that user withdraws do not
-    // negatively affect the cellars health factor.
+    // NA
     //====================================================================
 
     /**
@@ -43,6 +36,36 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      */
     error MorphoAaveV2ATokenAdaptor__HealthFactorTooLow();
 
+    /**
+     * @notice The Morpho Aave V2 contract on current network.
+     * @notice For mainnet use 0x777777c9898D384F785Ee44Acfe945efDFf5f3E0.
+     */
+    IMorphoV2 public immutable morpho;
+
+    /**
+     * @notice The Morpho Aave V2 Lens contract on current network.
+     * @notice For mainnet use 0x507fA343d0A90786d86C7cd885f5C49263A91FF4.
+     */
+    IMorphoLensV2 public immutable morphoLens;
+
+    /**
+     * @notice Minimum Health Factor enforced after every aToken withdraw.
+     * @notice Overwrites strategist set minimums if they are lower.
+     */
+    uint256 public immutable minimumHealthFactor;
+
+    constructor(
+        address _morpho,
+        address _morphoLens,
+        uint256 minHealthFactor,
+        address rewardDistributor
+    ) MorphoRewardHandler(rewardDistributor) {
+        _verifyConstructorMinimumHealthFactor(minHealthFactor);
+        morpho = IMorphoV2(_morpho);
+        morphoLens = IMorphoLensV2(_morphoLens);
+        minimumHealthFactor = minHealthFactor;
+    }
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -51,28 +74,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V2 aToken Adaptor V 1.1"));
-    }
-
-    /**
-     * @notice The Morpho Aave V2 contract on Ethereum Mainnet.
-     */
-    function morpho() internal pure returns (IMorphoV2) {
-        return IMorphoV2(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
-    }
-
-    /**
-     * @notice The Morpho Aave V2 Lens contract on Ethereum Mainnet.
-     */
-    function morphoLens() internal pure returns (IMorphoLensV2) {
-        return IMorphoLensV2(0x507fA343d0A90786d86C7cd885f5C49263A91FF4);
-    }
-
-    /**
-     * @notice Minimum Health Factor enforced after every withdraw.
-     */
-    function HFMIN() internal pure returns (uint256) {
-        return 1.05e18;
+        return keccak256(abi.encode("Morpho Aave V2 aToken Adaptor V 1.2"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -86,12 +88,12 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
         // Deposit assets to Morpho.
         IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
         ERC20 underlying = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
-        underlying.safeApprove(address(morpho()), assets);
+        underlying.safeApprove(address(morpho), assets);
 
-        morpho().supply(address(aToken), assets);
+        morpho.supply(address(aToken), assets);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(underlying, address(morpho()));
+        _revokeExternalApproval(underlying, address(morpho));
     }
 
     /**
@@ -108,14 +110,16 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
         // Make sure position is not backing a borrow.
         if (isBorrowingAny(address(this))) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
-        IAaveToken aToken = abi.decode(adaptorData, (IAaveToken));
+        address aToken = abi.decode(adaptorData, (address));
 
         // Withdraw assets from Morpho.
-        morpho().withdraw(address(aToken), assets, receiver);
+        morpho.withdraw(aToken, assets, receiver);
     }
 
     /**
-     * @notice Uses configuration data to determine if the position is liquid or not.
+     * @notice Checks if Cellar has open borrows, and if so returns zero.
+     *         Otherwise returns balanceOf in underlying.
+     * @param adaptorData the abi encoded aToken address
      */
     function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
         // If position is backing a borrow, then return 0.
@@ -139,7 +143,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * @notice Returns the positions aToken underlying asset.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        IAaveToken token = IAaveToken(abi.decode(adaptorData, (address)));
+        IAaveToken token = abi.decode(adaptorData, (IAaveToken));
         return ERC20(token.UNDERLYING_ASSET_ADDRESS());
     }
 
@@ -160,11 +164,11 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
     function depositToAaveV2Morpho(IAaveToken aToken, uint256 amountToDeposit) public {
         ERC20 underlying = ERC20(aToken.UNDERLYING_ASSET_ADDRESS());
         amountToDeposit = _maxAvailable(underlying, amountToDeposit);
-        underlying.safeApprove(address(morpho()), amountToDeposit);
-        morpho().supply(address(aToken), amountToDeposit);
+        underlying.safeApprove(address(morpho), amountToDeposit);
+        morpho.supply(address(aToken), amountToDeposit);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(underlying, address(morpho()));
+        _revokeExternalApproval(underlying, address(morpho));
     }
 
     /**
@@ -173,11 +177,11 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * @param amountToWithdraw the amount of `tokenToWithdraw` to withdraw from Morpho
      */
     function withdrawFromAaveV2Morpho(IAaveToken aToken, uint256 amountToWithdraw) public {
-        morpho().withdraw(address(aToken), amountToWithdraw, address(this));
+        morpho.withdraw(address(aToken), amountToWithdraw, address(this));
 
         // Check that health factor is above adaptor minimum.
-        uint256 healthFactor = morphoLens().getUserHealthFactor(address(this));
-        if (healthFactor < HFMIN()) revert MorphoAaveV2ATokenAdaptor__HealthFactorTooLow();
+        uint256 healthFactor = morphoLens.getUserHealthFactor(address(this));
+        if (healthFactor < minimumHealthFactor) revert MorphoAaveV2ATokenAdaptor__HealthFactorTooLow();
     }
 
     /**
@@ -186,12 +190,12 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * @param user the address of the user to query their balance of
      */
     function _balanceOfInUnderlying(address poolToken, address user) internal view returns (uint256) {
-        (uint256 inP2P, uint256 onPool) = morpho().supplyBalanceInOf(poolToken, user);
+        (uint256 inP2P, uint256 onPool) = morpho.supplyBalanceInOf(poolToken, user);
 
         uint256 balanceInUnderlying;
         // Morpho indexes are scaled by 27 decimals, so divide by 1e27.
-        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho().p2pSupplyIndex(poolToken), 1e27);
-        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho().poolIndexes(poolToken).poolSupplyIndex, 1e27);
+        if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho.p2pSupplyIndex(poolToken), 1e27);
+        if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho.poolIndexes(poolToken).poolSupplyIndex, 1e27);
         return balanceInUnderlying;
     }
 
@@ -201,7 +205,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * @return True if the user has been borrowing on any market, false otherwise.
      */
     function isBorrowingAny(address user) public view returns (bool) {
-        bytes32 userMarkets = morpho().userMarkets(user);
+        bytes32 userMarkets = morpho.userMarkets(user);
         return userMarkets & BORROWING_MASK != 0;
     }
 }

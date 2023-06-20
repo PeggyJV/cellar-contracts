@@ -77,7 +77,7 @@ contract CellarEulerTest is Test {
     eulerETokenAdaptor = new EulerETokenAdaptor();
     eulerDebtTokenAdaptor = new EulerDebtTokenAdaptor();
     erc20Adaptor = new ERC20Adaptor();
-    priceRouter = new PriceRouter(registry);
+    priceRouter = new PriceRouter(registry, WETH);
 
     eUSDC = IEulerEToken(markets.underlyingToEToken(address(USDC)));
     eDAI = IEulerEToken(markets.underlyingToEToken(address(DAI)));

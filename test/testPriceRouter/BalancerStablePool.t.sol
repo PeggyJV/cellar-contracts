@@ -95,7 +95,7 @@ contract BalancerStablePoolTest is Test {
 
     function setUp() external checkBlockNumber {
         registry = new Registry(address(this), address(this), address(this));
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
 
         // Deploy Required Extensions.
         balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, vault);

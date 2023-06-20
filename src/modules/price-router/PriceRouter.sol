@@ -40,9 +40,11 @@ contract PriceRouter is Ownable {
     event EditAssetComplete(address asset, bytes32 editHash);
 
     Registry public immutable registry;
+    ERC20 public immutable WETH;
 
-    constructor(Registry _registry) {
+    constructor(Registry _registry, ERC20 _weth) {
         registry = _registry;
+        WETH = _weth;
     }
 
     // =========================================== ASSETS CONFIG ===========================================
@@ -471,7 +473,7 @@ contract PriceRouter is Ownable {
 
         uint256 numOfAssets = baseAssets.length;
         exchangeRates = new uint256[](numOfAssets);
-        for (uint256 i; i < numOfAssets; i++) {
+        for (uint256 i; i < numOfAssets; ++i) {
             AssetSettings memory baseSettings = getAssetSettings[baseAssets[i]];
             if (baseSettings.derivative == 0) revert PriceRouter__UnsupportedAsset(address(baseAssets[i]));
             exchangeRates[i] = _getExchangeRate(
@@ -485,7 +487,6 @@ contract PriceRouter is Ownable {
     }
 
     // =========================================== HELPER FUNCTIONS ===========================================
-    ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     /**
      * @notice Attempted to update the asset to one that is not supported by the platform.
@@ -582,7 +583,7 @@ contract PriceRouter is Ownable {
         uint256 valueInQuote;
         uint8 quoteDecimals = quoteAsset.decimals();
 
-        for (uint8 i = 0; i < baseAssets.length; i++) {
+        for (uint256 i = 0; i < baseAssets.length; ++i) {
             // Skip zero amount values.
             if (amounts[i] == 0) continue;
             ERC20 baseAsset = baseAssets[i];

@@ -4,6 +4,8 @@ pragma solidity 0.8.16;
 import { FTokenAdaptorV1, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptorV1.sol";
 
 contract MockFTokenAdaptorV1 is FTokenAdaptorV1 {
+    constructor(bool _accountForInterest, address frax) FTokenAdaptorV1(_accountForInterest, frax) {}
+
     //============================================ Interface Helper Functions ===========================================
 
     /**
@@ -14,9 +16,5 @@ contract MockFTokenAdaptorV1 is FTokenAdaptorV1 {
      */
     function identifier() public pure override returns (bytes32) {
         return keccak256(abi.encode("Mock FraxLend fTokenV1 Adaptor V 0.0"));
-    }
-
-    function ACCOUNT_FOR_INTEREST() internal pure override returns (bool) {
-        return false;
     }
 }

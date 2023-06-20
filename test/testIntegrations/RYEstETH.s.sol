@@ -102,7 +102,7 @@ contract RYEstETHTest is Test {
         vm.stopPrank();
 
         // Add AaveV2EnableAssetAsCollateralAdaptor adaptor to registry and cellar.
-        AaveV2EnableAssetAsCollateralAdaptor fix = new AaveV2EnableAssetAsCollateralAdaptor();
+        AaveV2EnableAssetAsCollateralAdaptor fix = new AaveV2EnableAssetAsCollateralAdaptor(address(aavePool), 1.05e18);
         vm.prank(multisig);
         registry.trustAdaptor(address(fix));
 
