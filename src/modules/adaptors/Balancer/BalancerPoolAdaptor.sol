@@ -111,12 +111,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     //============================================ Constructor ===========================================
 
-    constructor(
-        address _vault,
-        address _relayer,
-        address _minter,
-        uint32 _balancerSlippage
-    ) {
+    constructor(address _vault, address _relayer, address _minter, uint32 _balancerSlippage) {
         if (_balancerSlippage < slippage()) revert BalancerPoolAdaptor___ConstructorSlippageTooHigh();
         vault = IVault(_vault);
         relayer = IBalancerRelayer(_relayer);
@@ -141,11 +136,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice User deposits are NOT allowed into this position.
      * NOTE:
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
@@ -158,7 +149,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         uint256 _amountBPTToSend,
         address _recipient,
         bytes memory _adaptorData,
-        bytes memory _configurationData
+        bytes memory
     ) public override {
         // Run external receiver check.
         _externalReceiverCheck(_recipient);
@@ -174,13 +165,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice Staked positions can be unstaked, and bpts can be sent to a respective user if Cellar cannot meet withdrawal quota.
      */
-    function withdrawableFrom(bytes memory _adaptorData, bytes memory _configData)
-        public
-        view
-        override
-        returns (uint256)
-    {
-        (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
+    function withdrawableFrom(bytes memory _adaptorData, bytes memory) public view override returns (uint256) {
         return balanceOf(_adaptorData);
     }
 
@@ -215,7 +200,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @return assets for Cellar's respective balancer pool position
      * @dev all breakdowns of bpt pricing and its underlying assets are done through the PriceRouter extension (in accordance to PriceRouterv2 architecture)
      */
-    function assetsUsed(bytes memory _adaptorData) public view override returns (ERC20[] memory assets) {
+    function assetsUsed(bytes memory _adaptorData) public pure override returns (ERC20[] memory assets) {
         assets = new ERC20[](1);
         assets[0] = assetOf(_adaptorData);
     }
@@ -276,12 +261,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * NOTE: when exiting pool, a number of different ERC20 constituent assets will be in the Cellar for distribution to depositors. Strategists must have ERC20Adaptor Positions trusted for these respectively. Swaps with them are to be done with external protocols for now (ZeroX, OneInch, etc.). Future swaps can be made internally using Balancer DEX upon a later Adaptor version.
      * NOTE: possible that bpts can be in transit between AURA positions so we don't validate that the bptIn is a valid position in the cellar during the same rebalance. Thus _liquidityGauge in params is not checked here
      */
-    function relayerExitPool(
-        ERC20 bptIn,
-        uint256 amountIn,
-        ERC20[] memory tokensOut,
-        bytes[] memory callData
-    ) public {
+    function relayerExitPool(ERC20 bptIn, uint256 amountIn, ERC20[] memory tokensOut, bytes[] memory callData) public {
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
         uint256[] memory tokenAmount = new uint256[](tokensOut.length);
 
@@ -304,11 +284,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _amountIn number of BPTs to stake
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
-    function stakeBPT(
-        ERC20 _bpt,
-        address _liquidityGauge,
-        uint256 _amountIn
-    ) external {
+    function stakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountIn) external {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         uint256 amountIn = _maxAvailable(_bpt, _amountIn);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
@@ -323,11 +299,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _amountOut number of BPTs to unstake
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
-    function unstakeBPT(
-        ERC20 _bpt,
-        address _liquidityGauge,
-        uint256 _amountOut
-    ) public {
+    function unstakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountOut) public {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
         _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);

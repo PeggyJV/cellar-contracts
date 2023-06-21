@@ -101,7 +101,7 @@ contract BalancerPoolAdaptorTest is Test {
         erc20Adaptor = new ERC20Adaptor();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         registry.setAddress(2, address(priceRouter));
         balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, IVault(vault));
         mockBalancerPoolAdaptor = new MockBalancerPoolAdaptor(address(this), address(this), minter, slippage);
@@ -551,12 +551,7 @@ contract BalancerPoolAdaptorTest is Test {
     /**
      * NOTE: it would take multiple tokens and amounts in and a single bpt out
      */
-    function slippageSwap(
-        ERC20 from,
-        ERC20 to,
-        uint256 inAmount,
-        uint32 _slippage
-    ) public {
+    function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 _slippage) public {
         if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
             // Figure out value in, quoted in `to`.
             uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
@@ -638,12 +633,7 @@ contract BalancerPoolAdaptorTest is Test {
         return abi.encodeWithSelector(balancerPoolAdaptor.adjustRelayerApproval.selector, _change);
     }
 
-    function _simulatePoolJoin(
-        address target,
-        ERC20 tokenIn,
-        uint256 amountIn,
-        ERC20 bpt
-    ) internal {
+    function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInBpt = priceRouter.getValue(tokenIn, amountIn, bpt);
 
@@ -654,12 +644,7 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(bpt), target, bptBalance + valueInBpt);
     }
 
-    function _simulatePoolExit(
-        address target,
-        ERC20 bptIn,
-        uint256 amountIn,
-        ERC20 tokenOut
-    ) internal {
+    function _simulatePoolExit(address target, ERC20 bptIn, uint256 amountIn, ERC20 tokenOut) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInTokenOut = priceRouter.getValue(bptIn, amountIn, tokenOut);
 
@@ -670,12 +655,7 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(tokenOut), target, tokenOutBalance + valueInTokenOut);
     }
 
-    function _simulateBptStake(
-        address target,
-        ERC20 bpt,
-        uint256 amountIn,
-        ERC20 gauge
-    ) internal {
+    function _simulateBptStake(address target, ERC20 bpt, uint256 amountIn, ERC20 gauge) internal {
         // Use deal to mutate targets balances.
         uint256 tokenInBalance = bpt.balanceOf(target);
         deal(address(bpt), target, tokenInBalance - amountIn);
@@ -683,12 +663,7 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(gauge), target, gaugeBalance + amountIn);
     }
 
-    function _simulateBptUnStake(
-        address target,
-        ERC20 bpt,
-        uint256 amountOut,
-        ERC20 gauge
-    ) internal {
+    function _simulateBptUnStake(address target, ERC20 bpt, uint256 amountOut, ERC20 gauge) internal {
         // Use deal to mutate targets balances.
         uint256 bptBalance = bpt.balanceOf(target);
         deal(address(bpt), target, bptBalance + amountOut);
