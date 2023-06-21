@@ -28,12 +28,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     // Where:
     // `_bpt` is the Balancer pool token of the Balancer LP market this adaptor is working with
     // `_liquidityGauge` is the balancer gauge corresponding to the specified bpt
-
     //================= Configuration Data Specification =================
     // NOT USED
     // **************************** IMPORTANT ****************************
-    // This adaptor has the `assetof` as a bpt, and thus relies on the `PriceRouterv2` Balancer Extensions corresponding with the type of bpt the Cellar is working with.
-
+    // This adaptor has the `assetOf` as a bpt, and thus relies on the `PriceRouterv2` Balancer
+    // Extensions corresponding with the type of bpt the Cellar is working with.
     //==================== Adaptor Data Specification ====================
     // See Related Open Issues on this for BalancerPoolAdaptor.sol
     //================= Configuration Data Specification =================
@@ -43,39 +42,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     //============================================ Error Statements ===========================================
 
     /**
-     * @notice bptOut lower than desired
+     * @notice Tried using a bpt and/or liquidityGauge that is not setup as a position.
      */
-    error BalancerPoolAdaptor__BPTOutTooLow();
-
-    /**
-     * @notice no claimable reward tokens
-     */
-    error BalancerPoolAdaptor__ZeroClaimableRewards();
-
-    /**
-     * @notice max slippage exceeded
-     */
-    error BalancerPoolAdaptor__MaxSlippageExceeded();
-
-    /**
-     * @notice bpt amount to unstake/withdraw requested exceeds amount actuall staked/deposited in liquidity gauge
-     */
-    error BalancerPoolAdaptor__NotEnoughToUnstake();
-
-    /**
-     * @notice bpt amount to unstake/withdraw requested exceeds amount actually staked/deposited in liquidity gauge
-     */
-    error BalancerPoolAdaptor__NotEnoughToStake();
-
     error BalancerPoolAdaptor__BptAndGaugeComboMustBeTracked(address bpt, address liquidityGauge);
-
-    error BalancerPoolAdaptor___GaugeUnderlyingBptMismatch(
-        address bptInput,
-        address liquidityGauge,
-        address correctBPT
-    );
-
-    error BalancerPoolAdaptor___NoRewardsAddressZero(address bptInput, address liquidityGauge, address addressZero);
 
     /**
      * @notice Attempted balancer pool joins, exits, staking, unstaking, etc. with bad slippage
@@ -85,7 +54,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice Constructor param for slippage too high
      */
-    error BalancerPoolAdaptor___ConstructorSlippageTooHigh();
+    error BalancerPoolAdaptor___InvalidConstructorSlippage();
 
     //============================================ Global Vars && Specific Adaptor Constants ===========================================
 
@@ -107,12 +76,19 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     IBalancerMinter public immutable minter;
 
+    /**
+     * @notice Number between 0.9e4, and 1e4 representing the amount of slippage that can be
+     *         tolerated when entering/exiting a pool.
+     *         - 0.90e4: 10% slippage
+     *         - 0.95e4: 5% slippage
+     */
     uint32 public immutable balancerSlippage;
 
     //============================================ Constructor ===========================================
 
     constructor(address _vault, address _relayer, address _minter, uint32 _balancerSlippage) {
-        if (_balancerSlippage < slippage()) revert BalancerPoolAdaptor___ConstructorSlippageTooHigh();
+        if (_balancerSlippage < 0.9e4 || _balancerSlippage > 1e4)
+            revert BalancerPoolAdaptor___InvalidConstructorSlippage();
         vault = IVault(_vault);
         relayer = IBalancerRelayer(_relayer);
         minter = IBalancerMinter(_minter);
@@ -134,16 +110,14 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     /**
      * @notice User deposits are NOT allowed into this position.
-     * NOTE:
      */
     function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
-     * @notice User withdraws are NOT allowed from this position.
-     * Cellar does a delegate call to this function in the unwind situation.
-     * NOTE: accessed via delegateCall from Cellar
+     * @notice If a user withdraw needs more BPTs than what is in the Cellar's
+     *         wallet, then the Cellar will unstake BPTs from the gauge.
      */
     function withdraw(
         uint256 _amountBPTToSend,
@@ -163,7 +137,8 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Staked positions can be unstaked, and bpts can be sent to a respective user if Cellar cannot meet withdrawal quota.
+     * @notice Accounts for BPTs in the Cellar's wallet, and staked in gauge.
+     * @dev See `balanceOf`.
      */
     function withdrawableFrom(bytes memory _adaptorData, bytes memory) public view override returns (uint256) {
         return balanceOf(_adaptorData);
@@ -173,7 +148,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice Calculates the Cellar's balance of the positions creditAsset, a specific bpt.
      * @param _adaptorData encoded data for trusted adaptor position detailing the bpt and liquidityGauge address (if it exists)
      * @return total balance of bpt for Cellar, including liquid bpt and staked bpt
-     * NOTE: to be called via staticcall, also be wary that adaptorData ought to have paired gauge to bpts, otherwise it would be wrong.
      */
     function balanceOf(bytes memory _adaptorData) public view override returns (uint256) {
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
@@ -185,9 +159,8 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     /**
      * @notice Returns the positions underlying assets.
-     * @param _adaptorData specified bpt of interest
+     * @param _adaptorData encoded data for trusted adaptor position detailing the bpt and liquidityGauge address (if it exists)
      * @return bpt for Cellar's respective balancer pool position
-     * NOTE: bpts can comprise of nested underlying constituents. Thus proper AssetSettings will be made for each respective bpt (and their various types) that are used in PriceRouter. bpts is as 'low' of a level that the BalancerPoolAdaptor will report via `assetOf()` because PriceRouter takes care of the constituents.
      */
     function assetOf(bytes memory _adaptorData) public pure override returns (ERC20) {
         return ERC20(abi.decode(_adaptorData, (address)));
@@ -215,16 +188,22 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-    /// STRATEGIST NOTE: for `relayerJoinPool()` and `relayerExitPool()` strategist functions callData param are encoded specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()` and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[] memory callData`.
+    /// STRATEGIST NOTE: for `relayerJoinPool()` and `relayerExitPool()` strategist functions callData param are encoded
+    /// specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors
+    /// where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a
+    /// series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()`
+    /// and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[]
+    /// memory callData`.
 
     /**
-     * @notice call `BalancerRelayer` on mainnet to carry out txs that can incl. joins, exits, and swaps
+     * @notice Call `BalancerRelayer` on mainnet to carry out join txs.
      * @param tokensIn specific tokens being input for tx
      * @param amountsIn amount of assets input for tx
      * @param bptOut acceptable amount of assets resulting from tx (due to slippage, etc.)
      * @param callData encoded specific txs to be used in `relayer.multicall()`. See general note at start of `Strategist Functions` section.
      * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-     * NOTE: possible that bpts can be moved into AURA positions so we don't validate that the bptOut is a valid position in the cellar because it could be moved to Aura during the same rebalance. Thus _liquidityGauge in params is not checked here
+     * NOTE: possible that bpts can be moved into AURA positions so we don't validate that the bptOut is a valid position in the
+     *      cellar because it could be moved to Aura during the same rebalance. Thus _liquidityGauge in params is not checked here
      */
     function relayerJoinPool(
         ERC20[] memory tokensIn,
@@ -252,14 +231,14 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice call `BalancerRelayer` on mainnet to carry out txs that can incl. joins, exits, and swaps
+     * @notice Call `BalancerRelayer` on mainnet to carry out exit txs.
      * @param bptIn specific tokens being input for tx
      * @param amountIn amount of bpts input for tx
      * @param tokensOut acceptable amounts of assets out resulting from tx (due to slippage, etc.)
      * @param callData encoded specific txs to be used in `relayer.multicall()`. See general note at start of `Strategist Functions` section.
      * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-     * NOTE: when exiting pool, a number of different ERC20 constituent assets will be in the Cellar for distribution to depositors. Strategists must have ERC20Adaptor Positions trusted for these respectively. Swaps with them are to be done with external protocols for now (ZeroX, OneInch, etc.). Future swaps can be made internally using Balancer DEX upon a later Adaptor version.
-     * NOTE: possible that bpts can be in transit between AURA positions so we don't validate that the bptIn is a valid position in the cellar during the same rebalance. Thus _liquidityGauge in params is not checked here
+     * NOTE: possible that bpts can be in transit between AURA positions so we don't validate that the bptIn is a valid
+     *       position in the cellar during the same rebalance. Thus _liquidityGauge in params is not checked here
      */
     function relayerExitPool(ERC20 bptIn, uint256 amountIn, ERC20[] memory tokensOut, bytes[] memory callData) public {
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
@@ -308,7 +287,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     /**
      * @notice claim rewards ($BAL) from LP position
-     * @dev rewards are only accrue for staked positions
+     * @dev rewards are only accrued for staked positions
      */
     function claimRewards(address gauge) public {
         minter.mint(gauge);
