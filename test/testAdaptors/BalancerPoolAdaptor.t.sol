@@ -78,6 +78,7 @@ contract BalancerPoolAdaptorTest is Test {
     address private vault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     address private relayer = 0xfeA793Aa415061C483D2390414275AD314B3F621;
     address private minter = 0x239e55F427D44C3cc793f49bFB507ebe76638a2b;
+    uint32 private slippage = 0.9e4;
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -96,14 +97,14 @@ contract BalancerPoolAdaptorTest is Test {
     }
 
     function setUp() external checkBlockNumber {
-        balancerPoolAdaptor = new BalancerPoolAdaptor(vault, relayer, minter);
+        balancerPoolAdaptor = new BalancerPoolAdaptor(vault, relayer, minter, slippage);
         erc20Adaptor = new ERC20Adaptor();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
         priceRouter = new PriceRouter(registry);
         registry.setAddress(2, address(priceRouter));
         balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, IVault(vault));
-        mockBalancerPoolAdaptor = new MockBalancerPoolAdaptor(address(this), address(this), minter);
+        mockBalancerPoolAdaptor = new MockBalancerPoolAdaptor(address(this), address(this), minter, slippage);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;
@@ -193,12 +194,6 @@ contract BalancerPoolAdaptorTest is Test {
     }
 
     // ========================================= HAPPY PATH TESTS =========================================
-
-    /// withdraw() tests TODO:
-
-    /// withdrawableFrom() tests TODO:
-
-    /// balanceOf() tests TODO:
 
     function testTotalAssets(uint256 assets) external checkBlockNumber {
         // User Joins Cellar.
@@ -341,7 +336,6 @@ contract BalancerPoolAdaptorTest is Test {
         assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), bptAmount, "Cellar should have staked into guage.");
     }
 
-    // TODO: unsure if this is needed as a separate test, I don't think so.
     function testStakeUint256Max(uint256 assets) external checkBlockNumber {
         assets = bound(assets, 0.1e6, 1_000_000e6);
         uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
@@ -390,7 +384,6 @@ contract BalancerPoolAdaptorTest is Test {
         assertEq(BB_A_USD.balanceOf(address(cellar)), bptAmount, "Cellar should have unstaked from guage.");
     }
 
-    // TODO:
     function testUnstakeUint256Max(uint256 assets) external checkBlockNumber {
         assets = bound(assets, 0.1e6, 1_000_000e6);
         uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
@@ -493,7 +486,7 @@ contract BalancerPoolAdaptorTest is Test {
      * @notice test that the `relayerJoinPool()` function from `BalancerPoolAdaptor.sol` carries out delegateCalls where it receives the proper amount.
      * @dev this does not test the underlying math within a respective contract like the BalancerRelayer & BalancerVault.
      */
-    function testSlippageChecks() external checkBlockNumber {
+    function testSlippageChecksJoinPool() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 1_000_000e6;
         deal(address(USDC), address(this), assets);
@@ -522,6 +515,37 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
+    function testSlippageChecksExitPool() external checkBlockNumber {
+        // Deposit into Cellar.
+        uint256 assets = 1_000_000e6;
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate pool join.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        ERC20[] memory tokensOut = new ERC20[](1);
+        tokensOut[0] = USDC;
+        bytes[] memory slippageSwapData = new bytes[](1);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        // Make a swap where both assets are supported by the price router, and slippage is good.
+        slippageSwapData[0] = abi.encodeWithSignature(
+            "slippageSwap(address,address,uint256,uint32)",
+            BB_A_USD,
+            USDC,
+            bptAmount,
+            0.89e4
+        );
+        // Make the swap.
+        adaptorCalls[0] = _createBytesDataToExit(BB_A_USD, bptAmount, tokensOut, slippageSwapData);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
+        vm.expectRevert((abi.encodeWithSelector(BalancerPoolAdaptor___Slippage.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
     // ========================================= HELPERS =========================================
 
     /**
@@ -531,12 +555,12 @@ contract BalancerPoolAdaptorTest is Test {
         ERC20 from,
         ERC20 to,
         uint256 inAmount,
-        uint32 slippage
+        uint32 _slippage
     ) public {
         if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
             // Figure out value in, quoted in `to`.
             uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
-            uint256 valueOutWithSlippage = fullValueOut.mulDivDown(slippage, 1e4);
+            uint256 valueOutWithSlippage = fullValueOut.mulDivDown(_slippage, 1e4);
             // Deal caller new balances.
             deal(address(from), msg.sender, from.balanceOf(msg.sender) - inAmount);
             deal(address(to), msg.sender, to.balanceOf(msg.sender) + valueOutWithSlippage);

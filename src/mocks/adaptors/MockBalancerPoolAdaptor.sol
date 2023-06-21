@@ -25,6 +25,7 @@ contract MockBalancerPoolAdaptor is BalancerPoolAdaptor {
     constructor(
         address _vault,
         address _relayer,
-        address _minter
-    ) BalancerPoolAdaptor(_vault, _relayer, _minter) {}
+        address _minter,
+        uint32 _balancerSlippage
+    ) BalancerPoolAdaptor(_vault, _relayer, _minter, _balancerSlippage) {}
 }

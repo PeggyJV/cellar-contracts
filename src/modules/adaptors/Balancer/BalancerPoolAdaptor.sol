@@ -18,9 +18,6 @@ import { IBalancerMinter } from "src/interfaces/external/IBalancerMinter.sol";
  * @title Balancer Pool Adaptor
  * @notice Allows Cellars to interact with Weighted, Stable, and Linear Balancer Pools (BPs).
  * @author 0xEinCodes and CrispyMangoes
- * TODO: This contract is still a WIP, Still need to go through TODOs and resolve relevant github issues
- * TODO: Add event emissions where necessary
- * TODO: CONSOLIDATE THIS TO AN ISSUE THAT WE NEED TO DISCUSS FURTHER - FOR NOW WE CAN JUST PAUSE THE CELLAR... bpts rates are integrated in price router checks so if there is a shortfall of collateral (hack) in bpts or something, then there wouldn't be a discprancy on prices between the assets that the cellar has vs what the bpts are worth in the bpt pool. CRISPY QUESTION - maybe we'll need a bool in case the pools are broken and we get a bad deal no matter what, so slippage checks are overridden in that case?
  */
 contract BalancerPoolAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
@@ -31,13 +28,13 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     // Where:
     // `_bpt` is the Balancer pool token of the Balancer LP market this adaptor is working with
     // `_liquidityGauge` is the balancer gauge corresponding to the specified bpt
-    // See 1-pager made to assist constructing queries: TODO: layout 1 pager example in the docs as a ChangeRequest.
+
     //================= Configuration Data Specification =================
     // NOT USED
     // **************************** IMPORTANT ****************************
     // This adaptor has the `assetof` as a bpt, and thus relies on the `PriceRouterv2` Balancer Extensions corresponding with the type of bpt the Cellar is working with.
 
-    //==================== TODO: Adaptor Data Specification ====================
+    //==================== Adaptor Data Specification ====================
     // See Related Open Issues on this for BalancerPoolAdaptor.sol
     //================= Configuration Data Specification =================
     // NOT USED
@@ -85,6 +82,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     error BalancerPoolAdaptor___Slippage();
 
+    /**
+     * @notice Constructor param for slippage too high
+     */
+    error BalancerPoolAdaptor___ConstructorSlippageTooHigh();
+
     //============================================ Global Vars && Specific Adaptor Constants ===========================================
 
     /**
@@ -105,16 +107,21 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     IBalancerMinter public immutable minter;
 
+    uint32 public immutable balancerSlippage;
+
     //============================================ Constructor ===========================================
 
     constructor(
         address _vault,
         address _relayer,
-        address _minter
+        address _minter,
+        uint32 _balancerSlippage
     ) {
+        if (_balancerSlippage < slippage()) revert BalancerPoolAdaptor___ConstructorSlippageTooHigh();
         vault = IVault(_vault);
         relayer = IBalancerRelayer(_relayer);
         minter = IBalancerMinter(_minter);
+        balancerSlippage = _balancerSlippage;
     }
 
     //============================================ Global Functions ===========================================
@@ -186,7 +193,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     function balanceOf(bytes memory _adaptorData) public view override returns (uint256) {
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
         if (liquidityGauge == address(0)) return ERC20(bpt).balanceOf(msg.sender);
-        //TODO: this is assuming 1:1 swap ratio for staked gauge tokens to bpts themselves. We may need to have checks for that.
         ERC20 liquidityGaugeToken = ERC20(address(liquidityGauge));
         uint256 stakedBPT = liquidityGaugeToken.balanceOf(msg.sender);
         return ERC20(bpt).balanceOf(msg.sender) + stakedBPT;
@@ -233,7 +239,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param bptOut acceptable amount of assets resulting from tx (due to slippage, etc.)
      * @param callData encoded specific txs to be used in `relayer.multicall()`. See general note at start of `Strategist Functions` section.
      * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-     * TODO: see issue for strategist general callData
      * NOTE: possible that bpts can be moved into AURA positions so we don't validate that the bptOut is a valid position in the cellar because it could be moved to Aura during the same rebalance. Thus _liquidityGauge in params is not checked here
      */
     function relayerJoinPool(
@@ -259,8 +264,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         for (uint256 i; i < tokensIn.length; ++i) {
             _revokeExternalApproval(tokensIn[i], address(vault));
         }
-
-        // TODO: BALANCER QUESTION - see if special revocation is required or necessary with bespoke Relayer approval sequences
     }
 
     /**
@@ -270,7 +273,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param tokensOut acceptable amounts of assets out resulting from tx (due to slippage, etc.)
      * @param callData encoded specific txs to be used in `relayer.multicall()`. See general note at start of `Strategist Functions` section.
      * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-     * TODO: see issue for strategist general callData
      * NOTE: when exiting pool, a number of different ERC20 constituent assets will be in the Cellar for distribution to depositors. Strategists must have ERC20Adaptor Positions trusted for these respectively. Swaps with them are to be done with external protocols for now (ZeroX, OneInch, etc.). Future swaps can be made internally using Balancer DEX upon a later Adaptor version.
      * NOTE: possible that bpts can be in transit between AURA positions so we don't validate that the bptIn is a valid position in the cellar during the same rebalance. Thus _liquidityGauge in params is not checked here
      */
@@ -280,7 +282,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         ERC20[] memory tokensOut,
         bytes[] memory callData
     ) public {
-        bptIn.approve(address(vault), amountIn); // TODO: check if this is needed cause vault could have approval already.
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
         uint256[] memory tokenAmount = new uint256[](tokensOut.length);
 
@@ -295,9 +296,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         }
         uint256 bptEquivalent = priceRouter.getValues(tokensOut, tokenAmount, bptIn);
         if (bptEquivalent < amountIn.mulDivDown(slippage(), 1e4)) revert BalancerPoolAdaptor___Slippage();
-
-        // revoke token in approval
-        _revokeExternalApproval(bptIn, address(vault)); // TODO: check if this is needed cause vault could have approval already.
     }
 
     /**
@@ -305,7 +303,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _bpt address of BPTs to stake
      * @param _amountIn number of BPTs to stake
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
-     * TODO: Finalize interface details when beginning to do unit testing
      */
     function stakeBPT(
         ERC20 _bpt,
@@ -314,7 +311,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     ) external {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         uint256 amountIn = _maxAvailable(_bpt, _amountIn);
-        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: BALANCER QUESTION - double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
         _bpt.approve(address(liquidityGauge), amountIn);
         liquidityGauge.deposit(amountIn, address(this));
         _revokeExternalApproval(_bpt, address(liquidityGauge));
@@ -332,7 +329,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         uint256 _amountOut
     ) public {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
-        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+        ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
         _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
         liquidityGauge.withdraw(_amountOut);
     }
@@ -364,8 +361,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice external function to help adjust whether or not the relayer has been approved by cellar
      * @param _relayerChange proposed approval setting to relayer
-     * TODO: I want to have this in the setup() but it is giving me issues weirdly. It only allows tests to pass when the call is made within `relayerJoinPool()` itself, where I think address(this) is the balancerPoolAdaptor itself. It's interesting cause iirc `setRelayerApproval()` allows relayer to act as a relayer for `sender` -->  I'd think that sender is the cellar, not the adaptor.
-     * I tried to prank the setup() and have it so the balancerPoolAdaptor was calling `setRelayerApproval()` but then I got a BAL#401 error. I'll come back to this later.
      */
     function adjustRelayerApproval(bool _relayerChange) public virtual {
         vault.setRelayerApproval(address(this), address(relayer), _relayerChange);
