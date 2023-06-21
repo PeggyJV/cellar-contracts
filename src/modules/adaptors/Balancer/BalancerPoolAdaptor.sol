@@ -12,10 +12,7 @@ import { IBasePool } from "src/interfaces/external/Balancer/typically-npm/IBaseP
 import { ILiquidityGauge } from "src/interfaces/external/Balancer/ILiquidityGauge.sol";
 import { Math } from "src/utils/Math.sol";
 import { console } from "@forge-std/Test.sol";
-
-interface BalancerMinter {
-    function mint(address gauge) external;
-}
+import { IBalancerMinter } from "src/interfaces/external/IBalancerMinter.sol";
 
 /**
  * @title Balancer Pool Adaptor
@@ -81,22 +78,43 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         address correctBPT
     );
 
+    error BalancerPoolAdaptor___NoRewardsAddressZero(address bptInput, address liquidityGauge, address addressZero);
+
+    /**
+     * @notice Attempted balancer pool joins, exits, staking, unstaking, etc. with bad slippage
+     */
+    error BalancerPoolAdaptor___Slippage();
+
     //============================================ Global Vars && Specific Adaptor Constants ===========================================
 
     /**
-     * @notice The Balancer Vault contract on Ethereum Mainnet
-     * @return address adhering to `IVault`
+     * @notice The Balancer Vault contract
+     * @notice For mainnet use 0xBA12222222228d8Ba445958a75a0704d566BF2C8
      */
-    function vault() internal pure virtual returns (IVault) {
-        return IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
-    }
+    IVault public immutable vault;
 
     /**
-     * @notice The Balancer Relayer contract on Ethereum Mainnet
-     * @return relayer address adhering to `IBalancerRelayer`
+     * @notice The Balancer Relayer contract adhering to `IBalancerRelayer
+     * @notice For mainnet use 0xfeA793Aa415061C483D2390414275AD314B3F621
      */
-    function relayer() internal pure virtual returns (IBalancerRelayer) {
-        return IBalancerRelayer(0xfeA793Aa415061C483D2390414275AD314B3F621);
+    IBalancerRelayer public immutable relayer;
+
+    /**
+     * @notice The BalancerMinter contract adhering to IBalancerMinter (custom interface) to access `mint()` to collect $BAL rewards for Cellar
+     * @notice For mainnet use 0x239e55F427D44C3cc793f49bFB507ebe76638a2b
+     */
+    IBalancerMinter public immutable minter;
+
+    //============================================ Constructor ===========================================
+
+    constructor(
+        address _vault,
+        address _relayer,
+        address _minter
+    ) {
+        vault = IVault(_vault);
+        relayer = IBalancerRelayer(_relayer);
+        minter = IBalancerMinter(_minter);
     }
 
     //============================================ Global Functions ===========================================
@@ -116,7 +134,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice User deposits are NOT allowed into this position.
      * NOTE:
      */
-    function deposit(uint256, bytes memory, bytes memory) public pure override {
+    function deposit(
+        uint256,
+        bytes memory,
+        bytes memory
+    ) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
@@ -137,7 +159,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         uint256 liquidBptBeforeWithdraw = bpt.balanceOf(address(this));
         if (_amountBPTToSend > liquidBptBeforeWithdraw) {
             uint256 amountToUnstake = _amountBPTToSend - liquidBptBeforeWithdraw;
-            unstakeBPT(bpt, liquidityGauge, amountToUnstake, false);
+            unstakeBPT(bpt, liquidityGauge, amountToUnstake);
         }
         bpt.safeTransfer(_recipient, _amountBPTToSend);
     }
@@ -145,10 +167,12 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice Staked positions can be unstaked, and bpts can be sent to a respective user if Cellar cannot meet withdrawal quota.
      */
-    function withdrawableFrom(
-        bytes memory _adaptorData,
-        bytes memory _configData
-    ) public view override returns (uint256) {
+    function withdrawableFrom(bytes memory _adaptorData, bytes memory _configData)
+        public
+        view
+        override
+        returns (uint256)
+    {
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
         return balanceOf(_adaptorData);
     }
@@ -219,21 +243,21 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         bytes[] memory callData
     ) public {
         for (uint256 i; i < tokensIn.length; ++i) {
-            tokensIn[i].approve(address(vault()), amountsIn[i]);
+            tokensIn[i].approve(address(vault), amountsIn[i]);
         }
         uint256 startingBpt = bptOut.balanceOf(address(this));
-        relayer().multicall(callData);
+        relayer.multicall(callData);
 
         uint256 endingBpt = bptOut.balanceOf(address(this));
         uint256 amountBptOut = endingBpt - startingBpt;
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
         uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut);
 
-        if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert("Slippage"); // TODO: replace quote message with actual error message. Also check baseAdaptor slippage error that may suffice.
+        if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert BalancerPoolAdaptor___Slippage();
 
         // revoke token in approval
         for (uint256 i; i < tokensIn.length; ++i) {
-            _revokeExternalApproval(tokensIn[i], address(vault()));
+            _revokeExternalApproval(tokensIn[i], address(vault));
         }
 
         // TODO: BALANCER QUESTION - see if special revocation is required or necessary with bespoke Relayer approval sequences
@@ -250,8 +274,13 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * NOTE: when exiting pool, a number of different ERC20 constituent assets will be in the Cellar for distribution to depositors. Strategists must have ERC20Adaptor Positions trusted for these respectively. Swaps with them are to be done with external protocols for now (ZeroX, OneInch, etc.). Future swaps can be made internally using Balancer DEX upon a later Adaptor version.
      * NOTE: possible that bpts can be in transit between AURA positions so we don't validate that the bptIn is a valid position in the cellar during the same rebalance. Thus _liquidityGauge in params is not checked here
      */
-    function relayerExitPool(ERC20 bptIn, uint256 amountIn, ERC20[] memory tokensOut, bytes[] memory callData) public {
-        bptIn.approve(address(vault()), amountIn); // TODO: check if this is needed cause vault could have approval already.
+    function relayerExitPool(
+        ERC20 bptIn,
+        uint256 amountIn,
+        ERC20[] memory tokensOut,
+        bytes[] memory callData
+    ) public {
+        bptIn.approve(address(vault), amountIn); // TODO: check if this is needed cause vault could have approval already.
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
         uint256[] memory tokenAmount = new uint256[](tokensOut.length);
 
@@ -259,30 +288,30 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             tokenAmount[i] = tokensOut[i].balanceOf(address(this));
         }
 
-        relayer().multicall(callData);
+        relayer.multicall(callData);
 
         for (uint256 i; i < tokensOut.length; ++i) {
             tokenAmount[i] = tokensOut[i].balanceOf(address(this)) - tokenAmount[i];
         }
         uint256 bptEquivalent = priceRouter.getValues(tokensOut, tokenAmount, bptIn);
-        if (bptEquivalent < amountIn.mulDivDown(slippage(), 1e4)) revert("Slippage"); // TODO: replace quote message with actual error message. Also check baseAdaptor slippage error that may suffice.
+        if (bptEquivalent < amountIn.mulDivDown(slippage(), 1e4)) revert BalancerPoolAdaptor___Slippage();
 
         // revoke token in approval
-        _revokeExternalApproval(bptIn, address(vault())); // TODO: check if this is needed cause vault could have approval already.
+        _revokeExternalApproval(bptIn, address(vault)); // TODO: check if this is needed cause vault could have approval already.
     }
 
     /**
      * @notice stake (deposit) BPTs into respective pool gauge
      * @param _bpt address of BPTs to stake
      * @param _amountIn number of BPTs to stake
-     * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      * TODO: Finalize interface details when beginning to do unit testing
-     * TODO: See if _claim_rewards is needed in any sequences of actions when interacting with the gauges
-     * TODO: fix verification helper checks
      */
-    function stakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountIn, bool _claim_rewards) external {
-        // checks
+    function stakeBPT(
+        ERC20 _bpt,
+        address _liquidityGauge,
+        uint256 _amountIn
+    ) external {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         uint256 amountIn = _maxAvailable(_bpt, _amountIn);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: BALANCER QUESTION - double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
@@ -295,17 +324,17 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @notice unstake (withdraw) BPT from respective pool gauge
      * @param _bpt address of BPTs to unstake
      * @param _amountOut number of BPTs to unstake
-     * @param _claim_rewards whether or not to claim pending rewards too (true == claim)
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
-    function unstakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountOut, bool _claim_rewards) public {
+    function unstakeBPT(
+        ERC20 _bpt,
+        address _liquidityGauge,
+        uint256 _amountOut
+    ) public {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
         _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
         liquidityGauge.withdraw(_amountOut);
-        if (_claim_rewards) {
-            // claimRewards(_bpt, _liquidityGauge, _rewardToken);
-        }
     }
 
     // /**
@@ -316,30 +345,27 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     //  * TODO: fix verification helper checks and see other TODOs from stakeBPT()
     //  * TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
     //  * TODO: BALANCER QUESTION - check if claimRewards() sends tokens to us, or do we need to actually specify the rewards to come back to us.
+    //  * TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
     //  */
     // function claimRewards(address _bpt, address _liquidityGauge, address _rewardToken) public {
     //     _validateBptAndGauge(address(_bpt), _liquidityGauge);
 
-    //     ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge); // TODO: double check that we are to use ILiquidityGaugev3Custom vs ILiquidityGauge
+    //     if (_liquidityGauge == address(0))
+    //         revert BalancerPoolAdaptor___NoRewardsAddressZero(_bpt, _liquidityGauge, address(0));
 
-    //     // TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
+    //     ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
+    //     liquidityGauge.claim_rewards(address(this), address(0)); // TODO: confirm that for mainnet, we need both claim_rewards() and claim_tokens() (or BalancerMinter.mint()
 
-    //     liquidityGauge.claim_rewards(address(this), address(0)); // TODO: do we need to have different claim_rewards and claim_tokens function calls to get all rewards or does this one call get us everything?
-
-    //     // if (
-    //     //     (liquidityGauge.claimable_reward(address(this), _rewardToken) > 0) ||
-    //     //     (liquidityGauge.claimable_tokens(address(this)) > 0)
-    //     // ) {
-    //     //     liquidityGauge.claim_rewards(address(this), address(this)); // TODO: do we need to have different claim_rewards and claim_tokens function calls to get all rewards or does this one call get us everything?
-    //     // }
+    //     if ((liquidityGauge.claimable_reward(address(this), _rewardToken) > 0)) {
+    //         liquidityGauge.claim_rewards(address(this), address(this));
+    //     }
+    //     // if (liquidityGauge.claimable_tokens(address(this)) > 0) {
+    //     //     minter.mint(gauge);
+    //     // } // TODO: CRISPY Question - not sure if we want this in the same function or have separate functions for accessing rewards that are $BAL and $OTHER tokens. I lean to separate functions. Just cleaner.
     // }
 
-    function minter() internal returns (BalancerMinter) {
-        return BalancerMinter(0x239e55F427D44C3cc793f49bFB507ebe76638a2b);
-    }
-
     function claimRewards(address gauge) public {
-        minter().mint(gauge);
+        minter.mint(gauge);
     }
 
     //============================================ Helper Functions ===========================================
@@ -365,6 +391,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * I tried to prank the setup() and have it so the balancerPoolAdaptor was calling `setRelayerApproval()` but then I got a BAL#401 error. I'll come back to this later.
      */
     function adjustRelayerApproval(bool _relayerChange) public virtual {
-        vault().setRelayerApproval(address(this), address(relayer()), _relayerChange);
+        vault.setRelayerApproval(address(this), address(relayer), _relayerChange);
     }
 }
