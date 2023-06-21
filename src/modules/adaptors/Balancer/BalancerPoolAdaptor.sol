@@ -337,33 +337,10 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         liquidityGauge.withdraw(_amountOut);
     }
 
-    // /**
-    //  * @notice claim rewards ($BAL and/or other tokens) from LP position
-    //  * @dev rewards are only accrue for staked positions
-    //  * @param _bpt associated BPTs for respective reward gauge
-    //  * @param _rewardToken address of reward token, if not $BAL, that strategist is claiming
-    //  * TODO: fix verification helper checks and see other TODOs from stakeBPT()
-    //  * TODO: include `claimable_rewards` in next BalancerAdaptor (other tokens on mainnet) that will be used for non-mainnet chains.
-    //  * TODO: BALANCER QUESTION - check if claimRewards() sends tokens to us, or do we need to actually specify the rewards to come back to us.
-    //  * TODO: checks - though, I'm not sure we need these. If cellar calls `claim_rewards()` and there's no rewards for them then... there are no explicit reverts in the codebase but I assume it reverts. Need to test it though: https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/liquidity-mining/contracts/gauges/ethereum/LiquidityGaugeV5.vy#L440-L450:~:text=if%20total_claimable%20%3E%200%3A
-    //  */
-    // function claimRewards(address _bpt, address _liquidityGauge, address _rewardToken) public {
-    //     _validateBptAndGauge(address(_bpt), _liquidityGauge);
-
-    //     if (_liquidityGauge == address(0))
-    //         revert BalancerPoolAdaptor___NoRewardsAddressZero(_bpt, _liquidityGauge, address(0));
-
-    //     ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
-    //     liquidityGauge.claim_rewards(address(this), address(0)); // TODO: confirm that for mainnet, we need both claim_rewards() and claim_tokens() (or BalancerMinter.mint()
-
-    //     if ((liquidityGauge.claimable_reward(address(this), _rewardToken) > 0)) {
-    //         liquidityGauge.claim_rewards(address(this), address(this));
-    //     }
-    //     // if (liquidityGauge.claimable_tokens(address(this)) > 0) {
-    //     //     minter.mint(gauge);
-    //     // } // TODO: CRISPY Question - not sure if we want this in the same function or have separate functions for accessing rewards that are $BAL and $OTHER tokens. I lean to separate functions. Just cleaner.
-    // }
-
+    /**
+     * @notice claim rewards ($BAL) from LP position
+     * @dev rewards are only accrue for staked positions
+     */
     function claimRewards(address gauge) public {
         minter.mint(gauge);
     }
