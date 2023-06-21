@@ -40,7 +40,7 @@ contract WstEthOracleTest is Test {
         if (block.chainid != 1) return;
 
         registry = new Registry(address(this), address(this), address(this));
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
 
         wstEthOracle = new WstEthExtension();
 

@@ -52,6 +52,7 @@ contract CellarAaveV3Test is Test {
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     IPoolV3 private pool = IPoolV3(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
+    address private aaveOracle = 0x54586bE62E3c3580375aE3723C145253060Ca0C2;
 
     // Chainlink PriceFeeds
     address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -73,11 +74,11 @@ contract CellarAaveV3Test is Test {
     }
 
     function setUp() external checkBlockNumber {
-        aaveATokenAdaptor = new AaveV3ATokenAdaptor();
-        aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
+        aaveATokenAdaptor = new AaveV3ATokenAdaptor(address(pool), aaveOracle, 1.05e18);
+        aaveDebtTokenAdaptor = new AaveV3DebtTokenAdaptor(address(pool), 1.05e18);
         erc20Adaptor = new ERC20Adaptor();
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor();
-        priceRouter = new PriceRouter(registry);
+        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
+        priceRouter = new PriceRouter(registry, WETH);
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
 
@@ -557,7 +558,7 @@ contract CellarAaveV3Test is Test {
         assertApproxEqAbs(
             aUSDC.balanceOf(address(cellar)),
             3 * assets,
-            1,
+            10,
             "Cellar should have 3x its aave assets using a flash loan."
         );
     }

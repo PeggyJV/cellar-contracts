@@ -13,6 +13,7 @@ contract RegistryTest is Test {
     Registry public registry;
 
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     address public gravityBridge = vm.addr(1);
     address public swapRouter = vm.addr(2);
@@ -22,7 +23,7 @@ contract RegistryTest is Test {
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
 
     function setUp() external {
-        priceRouter = new PriceRouter(registry);
+        priceRouter = new PriceRouter(registry, WETH);
         registry = new Registry(gravityBridge, swapRouter, address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;

@@ -10,6 +10,7 @@ import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
+import { IPool } from "src/interfaces/external/IPool.sol";
 
 import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
@@ -73,6 +74,8 @@ contract DeployRealYieldEthScript is Script {
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
+    IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+
     CellarInitializableV2_2 private cellar;
 
     PriceRouter private priceRouter = PriceRouter(0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA);
@@ -113,8 +116,8 @@ contract DeployRealYieldEthScript is Script {
         // feesAndReservesAdaptor = new FeesAndReservesAdaptor();
 
         // erc20Adaptor = new ERC20Adaptor();
-        aaveATokenAdaptor = new AaveATokenAdaptor();
-        aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor();
+        aaveATokenAdaptor = new AaveATokenAdaptor(address(pool), address(WETH), 1.05e18);
+        aaveDebtTokenAdaptor = new AaveDebtTokenAdaptor(address(pool), 1.05e18);
         // aaveV3ATokenAdaptor = new AaveV3ATokenAdaptor();
         // aaveV3DebtTokenAdaptor = new AaveV3DebtTokenAdaptor();
         // zeroXAdaptor = new ZeroXAdaptor();

@@ -34,7 +34,7 @@ contract DeployUniswapV3AdaptorScript is Script {
     function run() external {
         vm.startBroadcast();
 
-        adaptor = new UniswapV3Adaptor();
+        adaptor = new UniswapV3Adaptor(address(positionManager), address(0));
 
         vm.stopBroadcast();
     }

@@ -17,7 +17,7 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
     // This can be mitigated by calling `callAddInterest` on Frax Lend pairs
     // that are not frequently interacted with.
 
-    constructor(bool _accountForInterest) FTokenAdaptor(_accountForInterest) {}
+    constructor(bool _accountForInterest, address frax) FTokenAdaptor(_accountForInterest, frax) {}
 
     //============================================ Interface Helper Functions ===========================================
 
@@ -47,7 +47,7 @@ contract FTokenAdaptorV1 is FTokenAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend fTokenV1 Adaptor V 0.0"));
+        return keccak256(abi.encode("FraxLend fTokenV1 Adaptor V 0.1"));
     }
 
     /**

@@ -33,6 +33,9 @@ contract FeesAndReservesTest is Test {
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
+    address private automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+    address private fastGasFeed = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
+
     // Values used to mimic cellar interface between test contract and FeesAndReserves.
     ERC20 public asset;
     uint8 public decimals = 18;
@@ -50,7 +53,7 @@ contract FeesAndReservesTest is Test {
 
     function setUp() external {
         registry = new Registry(address(this), address(this), address(this));
-        feesAndReserves = new FeesAndReserves(address(this));
+        feesAndReserves = new FeesAndReserves(address(this), automationRegistry, fastGasFeed);
 
         // Set this testing contracts `asset` to be USDC.
         asset = USDC;
