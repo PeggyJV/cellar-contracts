@@ -16,7 +16,14 @@ contract CellarAdaptor is BaseAdaptor {
     // Where:
     // `cellar` is the underling Cellar this adaptor is working with
     //================= Configuration Data Specification =================
-    // NOT USED
+    // configurationData = abi.encode(bool isLiquid)
+    // Where:
+    // `isLiquid` dictates whether the position is liquid or not
+    // If true:
+    //      position can support use withdraws
+    // else:
+    //      position can not support user withdraws
+    //
     //====================================================================
 
     /**
@@ -32,7 +39,7 @@ contract CellarAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Sommelier Cellar Adaptor V 1.0"));
+        return keccak256(abi.encode("Sommelier Cellar Adaptor V 1.1"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -60,9 +67,18 @@ contract CellarAdaptor is BaseAdaptor {
      * @param assets the amount of assets to withdraw from the Cellar position
      * @param receiver address to send assets to'
      * @param adaptorData data needed to withdraw from the Cellar position
-     * @dev configurationData is NOT used
+     * @param configurationData abi encoded bool indicating whether the position is liquid or not
      */
-    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public override {
+        // Check that position is setup to be liquid.
+        bool isLiquid = abi.decode(configurationData, (bool));
+        if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
+
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
@@ -75,9 +91,15 @@ contract CellarAdaptor is BaseAdaptor {
     /**
      * @notice Cellar needs to call `maxWithdraw` to see if its assets are locked.
      */
-    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        Cellar cellar = abi.decode(adaptorData, (Cellar));
-        return cellar.maxWithdraw(msg.sender);
+    function withdrawableFrom(
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public view override returns (uint256) {
+        bool isLiquid = abi.decode(configurationData, (bool));
+        if (isLiquid) {
+            Cellar cellar = abi.decode(adaptorData, (Cellar));
+            return cellar.maxWithdraw(msg.sender);
+        } else return 0;
     }
 
     /**
@@ -134,6 +156,11 @@ contract CellarAdaptor is BaseAdaptor {
 
     //============================================ Helper Functions ===========================================
 
+    /**
+     * @notice Reverts if a given `cellar` is not set up as a position in the calling Cellar.
+     * @dev This function is only used in a delegate call context, hence why address(this) is used
+     *      to get the calling Cellar.
+     */
     function _verifyCellarPositionIsUsed(address cellar) internal view {
         // Check that cellar position is setup to be used in the cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(cellar)));

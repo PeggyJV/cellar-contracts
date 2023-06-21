@@ -121,6 +121,9 @@ contract CellarTest is Test {
         uint32[] memory debtPositions;
         bytes[] memory debtConfigs;
         bytes[] memory positionConfigs = new bytes[](5);
+        positionConfigs[1] = abi.encode(true);
+        positionConfigs[2] = abi.encode(true);
+        positionConfigs[3] = abi.encode(true);
         factory = new CellarFactory();
         factory.adjustIsDeployer(address(this), true);
         implementation = new MockCellarImplementation(registry);
@@ -306,7 +309,7 @@ contract CellarTest is Test {
         priceRouter.supportAsset(WETH);
         uint32 newWETHPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wethVault));
         cellar.addPositionToCatalogue(newWETHPosition);
-        cellar.addPosition(5, newWETHPosition, abi.encode(0), false);
+        cellar.addPosition(5, newWETHPosition, abi.encode(true), false);
 
         cellar.depositIntoPosition(wethCLRPosition, 1e18); // $2000
         cellar.depositIntoPosition(newWETHPosition, 0.5e18); // $1000
@@ -1135,6 +1138,8 @@ contract CellarTest is Test {
         uint32 cellarBPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(cellarB));
         positions[0] = cellarBPosition;
 
+        positionConfigs[0] = abi.encode(true);
+
         cellarA = new MockCellar(
             registry,
             USDC,
@@ -1383,7 +1388,7 @@ contract CellarTest is Test {
 
         uint32 maliciousPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(maliciousCellar));
         cellar.addPositionToCatalogue(maliciousPosition);
-        cellar.addPosition(5, maliciousPosition, abi.encode(0), false);
+        cellar.addPosition(5, maliciousPosition, abi.encode(true), false);
 
         cellar.setHoldingPosition(maliciousPosition);
 
