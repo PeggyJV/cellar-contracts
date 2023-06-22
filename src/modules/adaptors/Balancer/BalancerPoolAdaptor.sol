@@ -194,7 +194,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /// series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()`
     /// and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[]
     /// memory callData`.
-
+    //TODO add inputs for swaps and do the following
+    // input tokens MUST be priceable
+    // output token from swap MUST be one of the targetBpt pool tokens
     function joinPool(
         ERC20 targetBpt,
         ERC20[] memory assetsToApprove,
@@ -224,39 +226,36 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     }
 
     //TODO confirm if any ETH is transferred to a cellar it reverts cuz Cellar does not implement a receive function.
-    // TODO so we can NOT price linear pool tokens...... so how do we do a slippage check on exits....
-
-    // TODO for both pool joins and exits we really just care that we start with something we can price, and end with something we can price.
-    // So I think I just need to bake swaps into these two functions.
-
+    //TODO add inputs for swaps and do the following
+    // input tokens MUST be one of the targetBpt pool tokens
+    // output token from swap MUST be pricable
     function exitPool(ERC20 targetBpt, IVault.ExitPoolRequest memory request) external {
         bytes32 poolId = IBasePool(address(targetBpt)).getPoolId();
 
         // Figure out expected tokens out.
         ERC20[] memory expectedTokensOut;
-        {
-            (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
-            uint256 poolTokensLength = poolTokens.length;
-            bool removePremintedBpts;
-            // Iterate through, and check if we need to remove pre-minted bpts.
-            for (uint256 i; i < poolTokensLength; ++i) {
-                if (address(poolTokens[i]) == address(targetBpt)) {
-                    removePremintedBpts = true;
-                    break;
-                }
-            }
-            if (removePremintedBpts) {
-                expectedTokensOut = new ERC20[](poolTokensLength - 1);
-                uint256 expectedTokensOutIndex;
-                for (uint256 i; i < poolTokensLength; ++i) {
-                    if (address(poolTokens[i]) != address(targetBpt))
-                        expectedTokensOut[expectedTokensOutIndex] = ERC20(address(poolTokens[i]));
 
-                    expectedTokensOutIndex++;
-                }
-            } else {
-                for (uint256 i; i < poolTokensLength; ++i) expectedTokensOut[i] = ERC20(address(poolTokens[i]));
+        (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
+        uint256 poolTokensLength = poolTokens.length;
+        bool removePremintedBpts;
+        // Iterate through, and check if we need to remove pre-minted bpts.
+        for (uint256 i; i < poolTokensLength; ++i) {
+            if (address(poolTokens[i]) == address(targetBpt)) {
+                removePremintedBpts = true;
+                break;
             }
+        }
+        if (removePremintedBpts) {
+            expectedTokensOut = new ERC20[](poolTokensLength - 1);
+            uint256 expectedTokensOutIndex;
+            for (uint256 i; i < poolTokensLength; ++i) {
+                if (address(poolTokens[i]) != address(targetBpt))
+                    expectedTokensOut[expectedTokensOutIndex] = ERC20(address(poolTokens[i]));
+
+                expectedTokensOutIndex++;
+            }
+        } else {
+            for (uint256 i; i < poolTokensLength; ++i) expectedTokensOut[i] = ERC20(address(poolTokens[i]));
         }
 
         request.toInternalBalance = false;
