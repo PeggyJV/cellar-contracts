@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IBalancerQueries } from "src/interfaces/external/Balancer/IBalancerQueries.sol";
-import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
+import { IVault, IERC20 } from "src/interfaces/external/Balancer/IVault.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { IStakingLiquidityGauge } from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
@@ -196,21 +196,85 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /// memory callData`.
 
     function joinPool(
-        bytes32 poolId,
-        address sender,
-        address recipient,
+        ERC20 targetBpt,
+        ERC20[] memory assetsToApprove,
+        uint256[] memory amountsToApprove,
         IVault.JoinPoolRequest memory request
     ) external {
-        vault.joinPool(poolId, sender, recipient, request);
+        bytes32 poolId = IBasePool(address(targetBpt)).getPoolId();
+        // Iterate through assetsToApprove and approve vault to spend them.
+        for (uint256 i; i < assetsToApprove.length; ++i)
+            assetsToApprove[i].safeApprove(address(vault), amountsToApprove[i]);
+
+        request.fromInternalBalance = false;
+
+        uint256 targetDelta = targetBpt.balanceOf(address(this));
+        vault.joinPool(poolId, address(this), address(this), request);
+        targetDelta = targetBpt.balanceOf(address(this)) - targetDelta;
+
+        // Compare value in vs value out, and revert if slippage is too high.
+        // NOTE if `amountsToApprove` specifies values greater than what is in`request`,
+        // it is likely this will revert regardless of real slippage.
+        PriceRouter priceRouter = Cellar(address(this)).priceRouter();
+        uint256 valueInConvertedToTarget = priceRouter.getValues(assetsToApprove, amountsToApprove, targetBpt);
+        if (targetDelta < valueInConvertedToTarget.mulDivDown(balancerSlippage, 1e4))
+            revert BalancerPoolAdaptor___Slippage();
+
+        for (uint256 i; i < assetsToApprove.length; ++i) _revokeExternalApproval(assetsToApprove[i], address(vault));
     }
 
-    function exitPool(
-        bytes32 poolId,
-        address sender,
-        address payable recipient,
-        IVault.ExitPoolRequest memory request
-    ) external {
-        vault.exitPool(poolId, sender, recipient, request);
+    //TODO confirm if any ETH is transferred to a cellar it reverts cuz Cellar does not implement a receive function.
+    // TODO so we can NOT price linear pool tokens...... so how do we do a slippage check on exits....
+
+    // TODO for both pool joins and exits we really just care that we start with something we can price, and end with something we can price.
+    // So I think I just need to bake swaps into these two functions.
+
+    function exitPool(ERC20 targetBpt, IVault.ExitPoolRequest memory request) external {
+        bytes32 poolId = IBasePool(address(targetBpt)).getPoolId();
+
+        // Figure out expected tokens out.
+        ERC20[] memory expectedTokensOut;
+        {
+            (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
+            uint256 poolTokensLength = poolTokens.length;
+            bool removePremintedBpts;
+            // Iterate through, and check if we need to remove pre-minted bpts.
+            for (uint256 i; i < poolTokensLength; ++i) {
+                if (address(poolTokens[i]) == address(targetBpt)) {
+                    removePremintedBpts = true;
+                    break;
+                }
+            }
+            if (removePremintedBpts) {
+                expectedTokensOut = new ERC20[](poolTokensLength - 1);
+                uint256 expectedTokensOutIndex;
+                for (uint256 i; i < poolTokensLength; ++i) {
+                    if (address(poolTokens[i]) != address(targetBpt))
+                        expectedTokensOut[expectedTokensOutIndex] = ERC20(address(poolTokens[i]));
+
+                    expectedTokensOutIndex++;
+                }
+            } else {
+                for (uint256 i; i < poolTokensLength; ++i) expectedTokensOut[i] = ERC20(address(poolTokens[i]));
+            }
+        }
+
+        request.toInternalBalance = false;
+        uint256[] memory tokensOutDelta = new uint256[](expectedTokensOut.length);
+        for (uint256 i; i < expectedTokensOut.length; ++i)
+            tokensOutDelta[i] = expectedTokensOut[i].balanceOf(address(this));
+
+        uint256 targetDelta = targetBpt.balanceOf(address(this));
+        vault.exitPool(poolId, address(this), payable(address(this)), request);
+        targetDelta = targetDelta - targetBpt.balanceOf(address(this));
+        for (uint256 i; i < expectedTokensOut.length; ++i)
+            tokensOutDelta[i] = expectedTokensOut[i].balanceOf(address(this)) - tokensOutDelta[i];
+
+        // Compare value in vs value out, and revert if slippage is too high.
+        PriceRouter priceRouter = Cellar(address(this)).priceRouter();
+        uint256 valueOutConvertedToTarget = priceRouter.getValues(expectedTokensOut, tokensOutDelta, targetBpt);
+        if (valueOutConvertedToTarget < targetDelta.mulDivDown(balancerSlippage, 1e4))
+            revert BalancerPoolAdaptor___Slippage();
     }
 
     function swap(

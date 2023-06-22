@@ -48,6 +48,7 @@ contract BalancerPoolAdaptorTest is Test {
     uint32 private daiPosition;
     uint32 private usdtPosition;
     uint32 private bbaUSDPosition;
+    uint32 private vanillaBbaUSDPosition;
     uint32 private bbaUSDGaugePosition;
     address private immutable strategist = vm.addr(0xBEEF);
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
@@ -66,6 +67,8 @@ contract BalancerPoolAdaptorTest is Test {
     // Balancer specific vars
     address private constant GAUGE_B_stETH_STABLE = 0xcD4722B7c24C29e0413BDCd9e51404B4539D14aE; // Balancer B-stETH-STABLE Gauge Depo... (B-stETH-S...)
     ERC20 private BB_A_USD = ERC20(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016);
+    ERC20 private vanillaUsdcDaiUsdt = ERC20(0x79c58f70905F734641735BC61e45c19dD9Ad60bC);
+
     ERC20 private BB_A_USD_GAUGE = ERC20(0x0052688295413b32626D226a205b95cDB337DE86); // query subgraph for gauges wrt to poolId: https://docs.balancer.fi/reference/vebal-and-gauges/gauges.html#query-gauge-by-l2-sidechain-pool:~:text=%23-,Query%20Pending%20Tokens%20for%20a%20Given%20Pool,-The%20process%20differs
     address private constant BB_A_USD_GAUGE_ADDRESS = 0x0052688295413b32626D226a205b95cDB337DE86;
     uint256 private constant BB_A_USD_DECIMALS = 18; //BB_A_USD.decimals();
@@ -148,12 +151,23 @@ contract BalancerPoolAdaptorTest is Test {
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
         priceRouter.addAsset(BB_A_USD, settings, abi.encode(extensionStor), 1e8);
 
+        // Add vanilla USDC DAI USDT Bpt pricing.
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        priceRouter.addAsset(vanillaUsdcDaiUsdt, settings, abi.encode(extensionStor), 1e8);
+
         // Setup Cellar:
         registry.trustAdaptor(address(erc20Adaptor));
         registry.trustAdaptor(address(balancerPoolAdaptor));
         registry.trustAdaptor(address(mockBalancerPoolAdaptor));
 
-        bbaUSDPosition = registry.trustPosition(address(balancerPoolAdaptor), adaptorData);
+        bbaUSDPosition = registry.trustPosition(
+            address(balancerPoolAdaptor),
+            abi.encode(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS)
+        );
+        vanillaBbaUSDPosition = registry.trustPosition(
+            address(balancerPoolAdaptor),
+            abi.encode(address(vanillaUsdcDaiUsdt), address(0))
+        );
         usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(USDC))); // holdingPosition for tests
         daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(DAI))); // holdingPosition for tests
         usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(USDT))); // holdingPosition for tests
@@ -181,8 +195,10 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.addPositionToCatalogue(daiPosition);
         cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPositionToCatalogue(bbaUSDPosition);
+        cellar.addPositionToCatalogue(vanillaBbaUSDPosition);
 
         cellar.addPosition(0, bbaUSDPosition, abi.encode(0), false);
+        cellar.addPosition(0, vanillaBbaUSDPosition, abi.encode(0), false);
         cellar.addPosition(0, daiPosition, abi.encode(0), false);
         cellar.addPosition(0, usdtPosition, abi.encode(0), false);
 
@@ -619,19 +635,56 @@ contract BalancerPoolAdaptorTest is Test {
         console.log("BB_A_USD BPTs", BB_A_USD.balanceOf(address(this)));
     }
 
+    function testJoinPool() external {
+        // Deposit into Cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        ERC20[] memory assetsToApprove = new ERC20[](1);
+        assetsToApprove[0] = USDC;
+        uint256[] memory amountsToApprove = new uint256[](1);
+        amountsToApprove[0] = assets;
+
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(DAI));
+        poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        poolAssets[2] = IAsset(address(USDC));
+        poolAssets[3] = IAsset(address(USDT));
+        uint256[] memory maxAmountsIn = new uint256[](4);
+        maxAmountsIn[2] = assets;
+
+        uint256[] memory amountsIn = new uint256[](3);
+        amountsIn[1] = assets;
+        bytes memory userData = abi.encode(1, amountsIn, 0);
+        IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
+            assets: poolAssets,
+            maxAmountsIn: maxAmountsIn,
+            userData: userData,
+            fromInternalBalance: false
+        });
+        adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, assetsToApprove, amountsToApprove, request);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
     function testUseAdaptorToJoin() external {
-        ERC20 vanillaUsdcDaiUsdt = ERC20(0x79c58f70905F734641735BC61e45c19dD9Ad60bC);
         bytes32 poolId = 0x79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7;
         IAsset[] memory assets = new IAsset[](4);
         assets[0] = IAsset(address(DAI));
         assets[1] = IAsset(address(vanillaUsdcDaiUsdt));
         assets[2] = IAsset(address(USDC));
         assets[3] = IAsset(address(USDT));
+        ERC20[] memory assetsIn = new ERC20[](3);
+        assetsIn[0] = DAI;
+        assetsIn[1] = USDC;
+        assetsIn[2] = USDT;
         uint256[] memory maxAmountsIn = new uint256[](4);
-        maxAmountsIn[0] = 0;
-        maxAmountsIn[1] = 0;
         maxAmountsIn[2] = 100e6;
-        maxAmountsIn[3] = 0;
 
         uint256[] memory amountsIn = new uint256[](3);
         amountsIn[1] = 100e6;
@@ -644,9 +697,9 @@ contract BalancerPoolAdaptorTest is Test {
         });
         bytes memory callData = abi.encodeWithSelector(
             BalancerPoolAdaptor.joinPool.selector,
-            poolId,
-            address(this),
-            address(this),
+            vanillaUsdcDaiUsdt,
+            assetsIn,
+            amountsIn,
             request
         );
 
@@ -660,8 +713,6 @@ contract BalancerPoolAdaptorTest is Test {
     }
 
     function testUseAdaptorToExit() external {
-        ERC20 vanillaUsdcDaiUsdt = ERC20(0x79c58f70905F734641735BC61e45c19dD9Ad60bC);
-
         bytes32 poolId = 0x79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7;
         IAsset[] memory assets = new IAsset[](4);
         assets[0] = IAsset(address(DAI));
@@ -780,6 +831,15 @@ contract BalancerPoolAdaptorTest is Test {
 
     function _createBytesDataToAdjustRelayerApproval(bool _change) public view returns (bytes memory) {
         return abi.encodeWithSelector(balancerPoolAdaptor.adjustRelayerApproval.selector, _change);
+    }
+
+    function _createBytesDataToJoinPool(
+        ERC20 targetBpt,
+        ERC20[] memory assetsIn,
+        uint256[] memory amountsIn,
+        IVault.JoinPoolRequest memory request
+    ) public view returns (bytes memory) {
+        return abi.encodeWithSelector(balancerPoolAdaptor.joinPool.selector, targetBpt, assetsIn, amountsIn, request);
     }
 
     function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {
