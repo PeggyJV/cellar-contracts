@@ -546,6 +546,42 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
+    function testUseAdaptorToSwap() external {
+        ERC20 bb_a_usdc = ERC20(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692);
+        bytes32 poolId = 0xcbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa;
+        IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
+            poolId: poolId,
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(USDC)),
+            assetOut: IAsset(address(bb_a_usdc)),
+            amount: 100e6,
+            userData: bytes(abi.encode(0))
+        });
+
+        IVault.FundManagement memory fundManagement = IVault.FundManagement({
+            sender: address(this),
+            fromInternalBalance: false,
+            recipient: payable(address(this)),
+            toInternalBalance: false
+        });
+
+        bytes memory callData = abi.encodeWithSelector(
+            BalancerPoolAdaptor.swap.selector,
+            singleSwap,
+            fundManagement,
+            0,
+            block.timestamp
+        );
+
+        deal(address(USDC), address(this), 100e6);
+        USDC.approve(address(vault), 100e6);
+
+        // IVault(vault).swap(singleSwap, fundManagement, 0, block.timestamp);
+        address(balancerPoolAdaptor).functionDelegateCall(callData);
+
+        console.log("BPTs", bb_a_usdc.balanceOf(address(this)));
+    }
+
     function testUseAdaptorToJoin() external {
         ERC20 vanillaUsdcDaiUsdt = ERC20(0x79c58f70905F734641735BC61e45c19dD9Ad60bC);
         bytes32 poolId = 0x79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7;
