@@ -579,7 +579,44 @@ contract BalancerPoolAdaptorTest is Test {
         // IVault(vault).swap(singleSwap, fundManagement, 0, block.timestamp);
         address(balancerPoolAdaptor).functionDelegateCall(callData);
 
-        console.log("BPTs", bb_a_usdc.balanceOf(address(this)));
+        uint256 bb_a_usdc_balance = bb_a_usdc.balanceOf(address(this));
+
+        console.log("BPTs", bb_a_usdc_balance);
+
+        // Now join BB_A_USD. 0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016
+        poolId = 0xfebb0bbf162e64fb9d0dfe186e517d84c395f016000000000000000000000502;
+        IAsset[] memory assets = new IAsset[](4);
+        assets[0] = IAsset(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
+        assets[1] = IAsset(0xA1697F9Af0875B63DdC472d6EeBADa8C1fAB8568);
+        assets[2] = IAsset(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692);
+        assets[3] = IAsset(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016);
+        uint256[] memory maxAmountsIn = new uint256[](4);
+        maxAmountsIn[0] = 0;
+        maxAmountsIn[1] = 0;
+        maxAmountsIn[2] = bb_a_usdc_balance;
+        maxAmountsIn[3] = 0;
+        bytes memory userData = abi.encode(2, 99e18, 2);
+        IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
+            assets: assets,
+            maxAmountsIn: maxAmountsIn,
+            userData: userData,
+            fromInternalBalance: false
+        });
+        callData = abi.encodeWithSelector(
+            BalancerPoolAdaptor.joinPool.selector,
+            poolId,
+            address(this),
+            address(this),
+            request
+        );
+
+        deal(address(USDC), address(this), 100e6);
+        USDC.approve(address(vault), 100e6);
+
+        // IVault(vault).joinPool(poolId, address(this), address(this), request);
+        address(balancerPoolAdaptor).functionDelegateCall(callData);
+
+        console.log("BB_A_USD BPTs", BB_A_USD.balanceOf(address(this)));
     }
 
     function testUseAdaptorToJoin() external {
@@ -595,7 +632,10 @@ contract BalancerPoolAdaptorTest is Test {
         maxAmountsIn[1] = 0;
         maxAmountsIn[2] = 100e6;
         maxAmountsIn[3] = 0;
-        bytes memory userData = abi.encode(2, 99e18, 1);
+
+        uint256[] memory amountsIn = new uint256[](3);
+        amountsIn[1] = 100e6;
+        bytes memory userData = abi.encode(1, amountsIn, 0);
         IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
             assets: assets,
             maxAmountsIn: maxAmountsIn,
@@ -617,6 +657,42 @@ contract BalancerPoolAdaptorTest is Test {
         address(balancerPoolAdaptor).functionDelegateCall(callData);
 
         console.log("BPTs", vanillaUsdcDaiUsdt.balanceOf(address(this)));
+    }
+
+    function testUseAdaptorToExit() external {
+        ERC20 vanillaUsdcDaiUsdt = ERC20(0x79c58f70905F734641735BC61e45c19dD9Ad60bC);
+
+        bytes32 poolId = 0x79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7;
+        IAsset[] memory assets = new IAsset[](4);
+        assets[0] = IAsset(address(DAI));
+        assets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        assets[2] = IAsset(address(USDC));
+        assets[3] = IAsset(address(USDT));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        minAmountsOut[0] = 0;
+        minAmountsOut[1] = 0;
+        minAmountsOut[2] = 0;
+        minAmountsOut[3] = 0;
+
+        // Set user data to be EXACT_BPT_IN_FOR_TOKENS_OUT and 100e18 BPTs
+        bytes memory userData = abi.encode(0, 100e18, 2);
+
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: assets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        // Mint this address BPTs so we have something to redeem.
+        deal(address(vanillaUsdcDaiUsdt), address(this), 100e18);
+
+        IVault(vault).exitPool(poolId, address(this), payable(address(this)), request);
+        // address(balancerPoolAdaptor).functionDelegateCall(callData);
+
+        console.log("USDC", USDC.balanceOf(address(this)));
+        console.log("DAI", DAI.balanceOf(address(this)));
+        console.log("USDT", USDT.balanceOf(address(this)));
     }
 
     // ========================================= HELPERS =========================================
