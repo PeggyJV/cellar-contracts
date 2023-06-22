@@ -195,6 +195,33 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /// and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[]
     /// memory callData`.
 
+    function joinPool(
+        bytes32 poolId,
+        address sender,
+        address recipient,
+        IVault.JoinPoolRequest memory request
+    ) external {
+        vault.joinPool(poolId, sender, recipient, request);
+    }
+
+    function exitPool(
+        bytes32 poolId,
+        address sender,
+        address payable recipient,
+        IVault.ExitPoolRequest memory request
+    ) external {
+        vault.exitPool(poolId, sender, recipient, request);
+    }
+
+    function swap(
+        IVault.SingleSwap memory singleSwap,
+        IVault.FundManagement memory funds,
+        uint256 limit,
+        uint256 deadline
+    ) external payable returns (uint256) {
+        return vault.swap(singleSwap, funds, limit, deadline);
+    }
+
     /**
      * @notice Call `BalancerRelayer` on mainnet to carry out join txs.
      * @param tokensIn specific tokens being input for tx

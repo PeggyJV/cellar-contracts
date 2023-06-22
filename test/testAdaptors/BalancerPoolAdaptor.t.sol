@@ -546,6 +546,43 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
+    function testUseAdaptorToJoin() external {
+        ERC20 vanillaUsdcDaiUsdt = ERC20(0x79c58f70905F734641735BC61e45c19dD9Ad60bC);
+        bytes32 poolId = 0x79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7;
+        IAsset[] memory assets = new IAsset[](4);
+        assets[0] = IAsset(address(DAI));
+        assets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        assets[2] = IAsset(address(USDC));
+        assets[3] = IAsset(address(USDT));
+        uint256[] memory maxAmountsIn = new uint256[](4);
+        maxAmountsIn[0] = 0;
+        maxAmountsIn[1] = 0;
+        maxAmountsIn[2] = 100e6;
+        maxAmountsIn[3] = 0;
+        bytes memory userData = abi.encode(2, 99e18, 1);
+        IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
+            assets: assets,
+            maxAmountsIn: maxAmountsIn,
+            userData: userData,
+            fromInternalBalance: false
+        });
+        bytes memory callData = abi.encodeWithSelector(
+            BalancerPoolAdaptor.joinPool.selector,
+            poolId,
+            address(this),
+            address(this),
+            request
+        );
+
+        deal(address(USDC), address(this), 100e6);
+        USDC.approve(address(vault), 100e6);
+
+        // IVault(vault).joinPool(poolId, address(this), address(this), request);
+        address(balancerPoolAdaptor).functionDelegateCall(callData);
+
+        console.log("BPTs", vanillaUsdcDaiUsdt.balanceOf(address(this)));
+    }
+
     // ========================================= HELPERS =========================================
 
     /**
