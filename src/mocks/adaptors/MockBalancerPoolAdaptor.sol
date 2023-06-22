@@ -7,6 +7,7 @@ import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
 import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
 import { console } from "@forge-std/Test.sol";
 import { IBalancerMinter } from "src/interfaces/external/IBalancerMinter.sol";
+import { BalancerRelayerFirewall } from "src/modules/adaptors/Balancer/BalancerRelayerFirewall.sol";
 
 /**
  * @title MockBalancerPoolAdaptor
@@ -26,6 +27,7 @@ contract MockBalancerPoolAdaptor is BalancerPoolAdaptor {
         address _vault,
         address _relayer,
         address _minter,
-        uint32 _balancerSlippage
-    ) BalancerPoolAdaptor(_vault, _relayer, _minter, _balancerSlippage) {}
+        uint32 _balancerSlippage,
+        BalancerRelayerFirewall _firewall
+    ) BalancerPoolAdaptor(_vault, _relayer, _minter, _balancerSlippage, _firewall) {}
 }

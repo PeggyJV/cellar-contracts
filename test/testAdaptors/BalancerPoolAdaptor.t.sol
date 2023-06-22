@@ -24,6 +24,7 @@ import { MockBPTPriceFeed } from "src/mocks/MockBPTPriceFeed.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { MockBalancerPoolAdaptor } from "src/mocks/adaptors/MockBalancerPoolAdaptor.sol";
 import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
+import { BalancerRelayerFirewall } from "src/modules/adaptors/Balancer/BalancerRelayerFirewall.sol";
 
 contract BalancerPoolAdaptorTest is Test {
     using SafeTransferLib for ERC20;
@@ -43,6 +44,7 @@ contract BalancerPoolAdaptorTest is Test {
     MockBPTPriceFeed private mockBPTETHOracle;
     MockBPTPriceFeed private mockStakedBPTOracle;
     MockBalancerPoolAdaptor private mockBalancerPoolAdaptor;
+    BalancerRelayerFirewall private firewall;
 
     uint32 private usdcPosition;
     uint32 private daiPosition;
@@ -97,14 +99,15 @@ contract BalancerPoolAdaptorTest is Test {
     }
 
     function setUp() external checkBlockNumber {
-        balancerPoolAdaptor = new BalancerPoolAdaptor(vault, relayer, minter, slippage);
+        firewall = new BalancerRelayerFirewall(vault, relayer);
+        balancerPoolAdaptor = new BalancerPoolAdaptor(vault, relayer, minter, slippage, firewall);
         erc20Adaptor = new ERC20Adaptor();
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
         priceRouter = new PriceRouter(registry, WETH);
         registry.setAddress(2, address(priceRouter));
         balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, IVault(vault));
-        mockBalancerPoolAdaptor = new MockBalancerPoolAdaptor(address(this), address(this), minter, slippage);
+        mockBalancerPoolAdaptor = new MockBalancerPoolAdaptor(address(this), address(this), minter, slippage, firewall);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;

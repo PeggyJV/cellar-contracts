@@ -13,6 +13,7 @@ import { ILiquidityGauge } from "src/interfaces/external/Balancer/ILiquidityGaug
 import { Math } from "src/utils/Math.sol";
 import { console } from "@forge-std/Test.sol";
 import { IBalancerMinter } from "src/interfaces/external/IBalancerMinter.sol";
+import { BalancerRelayerFirewall } from "src/modules/adaptors/Balancer/BalancerRelayerFirewall.sol";
 
 /**
  * @title Balancer Pool Adaptor
@@ -84,15 +85,24 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     uint32 public immutable balancerSlippage;
 
+    BalancerRelayerFirewall public immutable firewall;
+
     //============================================ Constructor ===========================================
 
-    constructor(address _vault, address _relayer, address _minter, uint32 _balancerSlippage) {
+    constructor(
+        address _vault,
+        address _relayer,
+        address _minter,
+        uint32 _balancerSlippage,
+        BalancerRelayerFirewall _firewall
+    ) {
         if (_balancerSlippage < 0.9e4 || _balancerSlippage > 1e4)
             revert BalancerPoolAdaptor___InvalidConstructorSlippage();
         vault = IVault(_vault);
         relayer = IBalancerRelayer(_relayer);
         minter = IBalancerMinter(_minter);
         balancerSlippage = _balancerSlippage;
+        firewall = _firewall;
     }
 
     //============================================ Global Functions ===========================================
@@ -212,10 +222,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         bytes[] memory callData
     ) public {
         for (uint256 i; i < tokensIn.length; ++i) {
-            tokensIn[i].approve(address(vault), amountsIn[i]);
+            tokensIn[i].approve(address(firewall), amountsIn[i]);
         }
         uint256 startingBpt = bptOut.balanceOf(address(this));
-        relayer.multicall(callData);
+        firewall.joinPool(tokensIn, amountsIn, bptOut, callData);
+        // relayer.multicall(callData);
 
         uint256 endingBpt = bptOut.balanceOf(address(this));
         uint256 amountBptOut = endingBpt - startingBpt;
@@ -226,7 +237,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
         // revoke token in approval
         for (uint256 i; i < tokensIn.length; ++i) {
-            _revokeExternalApproval(tokensIn[i], address(vault));
+            _revokeExternalApproval(tokensIn[i], address(firewall));
         }
     }
 
@@ -248,13 +259,18 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             tokenAmount[i] = tokensOut[i].balanceOf(address(this));
         }
 
-        relayer.multicall(callData);
+        bptIn.safeApprove(address(firewall), amountIn);
+
+        firewall.exitPool(bptIn, amountIn, tokensOut, callData);
+        // relayer.multicall(callData);
 
         for (uint256 i; i < tokensOut.length; ++i) {
             tokenAmount[i] = tokensOut[i].balanceOf(address(this)) - tokenAmount[i];
         }
         uint256 bptEquivalent = priceRouter.getValues(tokensOut, tokenAmount, bptIn);
         if (bptEquivalent < amountIn.mulDivDown(slippage(), 1e4)) revert BalancerPoolAdaptor___Slippage();
+
+        _revokeExternalApproval(bptIn, address(firewall));
     }
 
     /**
