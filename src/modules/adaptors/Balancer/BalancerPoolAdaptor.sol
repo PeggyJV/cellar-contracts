@@ -194,19 +194,54 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /// series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()`
     /// and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[]
     /// memory callData`.
-    //TODO add inputs for swaps and do the following
-    // input tokens MUST be priceable
-    // output token from swap MUST be one of the targetBpt pool tokens
+
     function joinPool(
         ERC20 targetBpt,
-        ERC20[] memory assetsToApprove,
-        uint256[] memory amountsToApprove,
+        IVault.SingleSwap[] memory swapsBeforeJoin,
+        uint256[] memory minAmountsForSwaps,
+        uint256[] memory swapDeadlines,
         IVault.JoinPoolRequest memory request
     ) external {
         bytes32 poolId = IBasePool(address(targetBpt)).getPoolId();
-        // Iterate through assetsToApprove and approve vault to spend them.
-        for (uint256 i; i < assetsToApprove.length; ++i)
-            assetsToApprove[i].safeApprove(address(vault), amountsToApprove[i]);
+        PriceRouter priceRouter = Cellar(address(this)).priceRouter();
+        (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
+
+        // Iterate through swapsBeforeJoin and swap if required. Then set approval
+        ERC20[] memory inputTokens = new ERC20[](swapsBeforeJoin.length);
+        uint256[] memory inputAmounts = new uint256[](swapsBeforeJoin.length);
+        for (uint256 i; i < swapsBeforeJoin.length; ++i) {
+            inputTokens[i] = ERC20(address(swapsBeforeJoin[i].assetIn));
+            inputAmounts[i] = swapsBeforeJoin[i].amount;
+            inputTokens[i].safeApprove(address(vault), swapsBeforeJoin[i].amount);
+
+            if (address(swapsBeforeJoin[i].assetOut) != address(0)) {
+                // Make sure assetOut is actually a token in the targetBpt.
+                for (uint256 j; j < poolTokens.length; ++j) {
+                    // If we find assetOut is one of the pool tokens, break.
+                    if (address(swapsBeforeJoin[i].assetOut) == address(poolTokens[j])) break;
+                    // If we search through all the pool tokens and don't find assetOut, revert.
+                    if (j == poolTokens.length - 1) revert("Swap asset out not in targetBpt.");
+                }
+                // Need to make a swap.
+                IVault.FundManagement memory fundManagement = IVault.FundManagement({
+                    sender: address(this),
+                    fromInternalBalance: false,
+                    recipient: payable(address(this)),
+                    toInternalBalance: false
+                });
+
+                // Perform the swap.
+                uint256 amountOut = vault.swap(
+                    swapsBeforeJoin[i],
+                    fundManagement,
+                    minAmountsForSwaps[i],
+                    swapDeadlines[i]
+                );
+
+                // Approve vault to spend bought asset.
+                ERC20(address(swapsBeforeJoin[i].assetOut)).safeApprove(address(vault), amountOut);
+            }
+        }
 
         request.fromInternalBalance = false;
 
@@ -217,45 +252,57 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         // Compare value in vs value out, and revert if slippage is too high.
         // NOTE if `amountsToApprove` specifies values greater than what is in`request`,
         // it is likely this will revert regardless of real slippage.
-        PriceRouter priceRouter = Cellar(address(this)).priceRouter();
-        uint256 valueInConvertedToTarget = priceRouter.getValues(assetsToApprove, amountsToApprove, targetBpt);
+        uint256 valueInConvertedToTarget = priceRouter.getValues(inputTokens, inputAmounts, targetBpt);
         if (targetDelta < valueInConvertedToTarget.mulDivDown(balancerSlippage, 1e4))
             revert BalancerPoolAdaptor___Slippage();
 
-        for (uint256 i; i < assetsToApprove.length; ++i) _revokeExternalApproval(assetsToApprove[i], address(vault));
+        // Revoke any unused approval from swap and or join.
+        for (uint256 i; i < inputTokens.length; ++i) _revokeExternalApproval(inputTokens[i], address(vault));
+
+        // If we had to swap for an asset, revoke any unused approval from join.
+        for (uint256 i; i < swapsBeforeJoin.length; ++i) {
+            address assetOut = address(swapsBeforeJoin[i].assetOut);
+            if (assetOut != address(0)) _revokeExternalApproval(ERC20(assetOut), address(vault));
+        }
     }
 
     //TODO confirm if any ETH is transferred to a cellar it reverts cuz Cellar does not implement a receive function.
-    //TODO add inputs for swaps and do the following
-    // input tokens MUST be one of the targetBpt pool tokens
-    // output token from swap MUST be pricable
-    function exitPool(ERC20 targetBpt, IVault.ExitPoolRequest memory request) external {
+    // NOTE so the amount for each swap is overwritten by the actual amount out we got from the pool.
+    // but min amount out should still be estimated by strategist.
+    function exitPool(
+        ERC20 targetBpt,
+        IVault.SingleSwap[] memory swapsAfterExit,
+        uint256[] memory minAmountsForSwaps,
+        uint256[] memory swapDeadlines,
+        IVault.ExitPoolRequest memory request
+    ) external {
         bytes32 poolId = IBasePool(address(targetBpt)).getPoolId();
 
         // Figure out expected tokens out.
         ERC20[] memory expectedTokensOut;
-
-        (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
-        uint256 poolTokensLength = poolTokens.length;
-        bool removePremintedBpts;
-        // Iterate through, and check if we need to remove pre-minted bpts.
-        for (uint256 i; i < poolTokensLength; ++i) {
-            if (address(poolTokens[i]) == address(targetBpt)) {
-                removePremintedBpts = true;
-                break;
-            }
-        }
-        if (removePremintedBpts) {
-            expectedTokensOut = new ERC20[](poolTokensLength - 1);
-            uint256 expectedTokensOutIndex;
+        {
+            (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
+            uint256 poolTokensLength = poolTokens.length;
+            bool removePremintedBpts;
+            // Iterate through, and check if we need to remove pre-minted bpts.
             for (uint256 i; i < poolTokensLength; ++i) {
-                if (address(poolTokens[i]) != address(targetBpt))
-                    expectedTokensOut[expectedTokensOutIndex] = ERC20(address(poolTokens[i]));
-
-                expectedTokensOutIndex++;
+                if (address(poolTokens[i]) == address(targetBpt)) {
+                    removePremintedBpts = true;
+                    break;
+                }
             }
-        } else {
-            for (uint256 i; i < poolTokensLength; ++i) expectedTokensOut[i] = ERC20(address(poolTokens[i]));
+            if (removePremintedBpts) {
+                expectedTokensOut = new ERC20[](poolTokensLength - 1);
+                uint256 expectedTokensOutIndex;
+                for (uint256 i; i < poolTokensLength; ++i) {
+                    if (address(poolTokens[i]) != address(targetBpt))
+                        expectedTokensOut[expectedTokensOutIndex] = ERC20(address(poolTokens[i]));
+
+                    expectedTokensOutIndex++;
+                }
+            } else {
+                for (uint256 i; i < poolTokensLength; ++i) expectedTokensOut[i] = ERC20(address(poolTokens[i]));
+            }
         }
 
         request.toInternalBalance = false;
@@ -268,6 +315,40 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         targetDelta = targetDelta - targetBpt.balanceOf(address(this));
         for (uint256 i; i < expectedTokensOut.length; ++i)
             tokensOutDelta[i] = expectedTokensOut[i].balanceOf(address(this)) - tokensOutDelta[i];
+
+        // TODO at this point we know what our tokens out should be, and how much we got from exiting BPT.
+        // Require swapsAfterExit to be in the order of the pool tokens(with preminted removed if need be)
+        if (swapsAfterExit.length != expectedTokensOut.length) revert("Length mismatch");
+        for (uint256 i; i < expectedTokensOut.length; ++i) {
+            if (address(swapsAfterExit[i].assetIn) != address(expectedTokensOut[i]))
+                revert("Swap Token Expected Token mismatch.");
+            if (address(swapsAfterExit[i].assetOut) != address(0)) {
+                expectedTokensOut[i].safeApprove(address(vault), tokensOutDelta[i]);
+                // Perform a swap then update expected token, and tokensOutDelta.
+                // Need to make a swap.
+                IVault.FundManagement memory fundManagement = IVault.FundManagement({
+                    sender: address(this),
+                    fromInternalBalance: false,
+                    recipient: payable(address(this)),
+                    toInternalBalance: false
+                });
+
+                // Update swap amount to be what we got out from exit.
+                swapsAfterExit[i].amount = tokensOutDelta[i];
+
+                // Perform the swap. Save amount out as the new tokensOutDelta[i].
+                tokensOutDelta[i] = vault.swap(
+                    swapsAfterExit[i],
+                    fundManagement,
+                    minAmountsForSwaps[i],
+                    swapDeadlines[i]
+                );
+                // Update expected token out to be the assetOut of the swap.
+                expectedTokensOut[i] = ERC20(address(swapsAfterExit[i].assetOut));
+                // Then revoke approval
+                _revokeExternalApproval(expectedTokensOut[i], address(vault));
+            }
+        }
 
         // Compare value in vs value out, and revert if slippage is too high.
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();

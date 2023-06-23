@@ -635,6 +635,120 @@ contract BalancerPoolAdaptorTest is Test {
         console.log("BB_A_USD BPTs", BB_A_USD.balanceOf(address(this)));
     }
 
+    function testJoinVanillaPool() external {
+        // Deposit into Cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](1);
+        swapsBeforeJoin[0].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[0].amount = assets;
+        uint256[] memory minAmountsOut = new uint256[](1);
+        minAmountsOut[0] = 0;
+        uint256[] memory swapDeadlines = new uint256[](1);
+        swapDeadlines[0] = block.timestamp;
+
+        // Formulate Join Request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(DAI));
+        poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        poolAssets[2] = IAsset(address(USDC));
+        poolAssets[3] = IAsset(address(USDT));
+        uint256[] memory maxAmountsIn = new uint256[](4);
+        maxAmountsIn[2] = assets;
+
+        uint256[] memory amountsIn = new uint256[](3);
+        amountsIn[1] = assets;
+        bytes memory userData = abi.encode(1, amountsIn, 0);
+        IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
+            assets: poolAssets,
+            maxAmountsIn: maxAmountsIn,
+            userData: userData,
+            fromInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToJoinPool(
+            vanillaUsdcDaiUsdt,
+            swapsBeforeJoin,
+            minAmountsOut,
+            swapDeadlines,
+            request
+        );
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        console.log("BPTs", vanillaUsdcDaiUsdt.balanceOf(address(cellar)));
+
+        // ERC20 targetBpt,
+        // IVault.SingleSwap[] memory swapsBeforeJoin,
+        // uint256[] memory minAmountsForSwaps,
+        // uint256[] memory swapDeadlines,
+        // IVault.JoinPoolRequest memory request
+    }
+
+    function testJoinBoostedPool() external {
+        ERC20 bb_a_usdc = ERC20(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692);
+
+        // Deposit into Cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into boosted USDC DAI USDT Bpt.
+        bytes32 boostedPoolId = 0xcbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](1);
+        swapsBeforeJoin[0] = IVault.SingleSwap({
+            poolId: boostedPoolId,
+            kind: IVault.SwapKind.GIVEN_OUT,
+            assetIn: IAsset(address(USDC)),
+            assetOut: IAsset(address(bb_a_usdc)),
+            amount: 10_000e18,
+            userData: bytes(abi.encode(0))
+        });
+
+        uint256[] memory minAmountsOut = new uint256[](1);
+        minAmountsOut[0] = 0;
+        uint256[] memory swapDeadlines = new uint256[](1);
+        swapDeadlines[0] = block.timestamp;
+
+        // Formulate Join Request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
+        poolAssets[1] = IAsset(0xA1697F9Af0875B63DdC472d6EeBADa8C1fAB8568);
+        poolAssets[2] = IAsset(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692);
+        poolAssets[3] = IAsset(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016);
+        uint256[] memory maxAmountsIn = new uint256[](4);
+        maxAmountsIn[2] = 10_000e18;
+
+        uint256[] memory amountsIn = new uint256[](3);
+        amountsIn[1] = assets;
+        bytes memory userData = abi.encode(2, 10_000e18, 2);
+        IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
+            assets: poolAssets,
+            maxAmountsIn: maxAmountsIn,
+            userData: userData,
+            fromInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToJoinPool(BB_A_USD, swapsBeforeJoin, minAmountsOut, swapDeadlines, request);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        console.log("BPTs", BB_A_USD.balanceOf(address(cellar)));
+    }
+
     function testJoinPool() external {
         // Deposit into Cellar.
         uint256 assets = 100_000e6;
@@ -666,10 +780,10 @@ contract BalancerPoolAdaptorTest is Test {
             userData: userData,
             fromInternalBalance: false
         });
-        adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, assetsToApprove, amountsToApprove, request);
+        // adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, assetsToApprove, amountsToApprove, request);
 
-        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        // data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        // cellar.callOnAdaptor(data);
     }
 
     function testUseAdaptorToJoin() external {
@@ -835,11 +949,20 @@ contract BalancerPoolAdaptorTest is Test {
 
     function _createBytesDataToJoinPool(
         ERC20 targetBpt,
-        ERC20[] memory assetsIn,
-        uint256[] memory amountsIn,
+        IVault.SingleSwap[] memory swapsBeforeJoin,
+        uint256[] memory minAmountsForSwaps,
+        uint256[] memory swapDeadlines,
         IVault.JoinPoolRequest memory request
     ) public view returns (bytes memory) {
-        return abi.encodeWithSelector(balancerPoolAdaptor.joinPool.selector, targetBpt, assetsIn, amountsIn, request);
+        return
+            abi.encodeWithSelector(
+                balancerPoolAdaptor.joinPool.selector,
+                targetBpt,
+                swapsBeforeJoin,
+                minAmountsForSwaps,
+                swapDeadlines,
+                request
+            );
     }
 
     function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {
