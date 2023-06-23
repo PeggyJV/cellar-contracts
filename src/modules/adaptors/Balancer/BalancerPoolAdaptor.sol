@@ -231,15 +231,19 @@ contract BalancerPoolAdaptor is BaseAdaptor {
                 });
 
                 // Perform the swap.
-                uint256 amountOut = vault.swap(
+                uint256 swapAmountInOrOut = vault.swap(
                     swapsBeforeJoin[i],
                     fundManagement,
                     minAmountsForSwaps[i],
                     swapDeadlines[i]
                 );
-
-                // Approve vault to spend bought asset.
-                ERC20(address(swapsBeforeJoin[i].assetOut)).safeApprove(address(vault), amountOut);
+                if (swapsBeforeJoin[i].kind == IVault.SwapKind.GIVEN_IN) {
+                    // Approve vault to spend bought asset.
+                    ERC20(address(swapsBeforeJoin[i].assetOut)).safeApprove(address(vault), swapAmountInOrOut);
+                } else if (swapsBeforeJoin[i].kind == IVault.SwapKind.GIVEN_OUT) {
+                    inputAmounts[i] = swapAmountInOrOut;
+                    ERC20(address(swapsBeforeJoin[i].assetOut)).safeApprove(address(vault), swapsBeforeJoin[i].amount);
+                }
             }
         }
 

@@ -718,7 +718,7 @@ contract BalancerPoolAdaptorTest is Test {
         });
 
         uint256[] memory minAmountsOut = new uint256[](1);
-        minAmountsOut[0] = 0;
+        minAmountsOut[0] = assets;
         uint256[] memory swapDeadlines = new uint256[](1);
         swapDeadlines[0] = block.timestamp;
 
