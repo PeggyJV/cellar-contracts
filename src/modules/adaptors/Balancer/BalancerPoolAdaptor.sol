@@ -58,6 +58,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     error BalancerPoolAdaptor___InvalidConstructorSlippage();
 
+    struct SwapData {
+        uint256[] minAmountsForSwaps;
+        uint256[] swapDeadlines;
+    }
+
     //============================================ Global Vars && Specific Adaptor Constants ===========================================
 
     /**
@@ -85,6 +90,8 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      *         - 0.95e4: 5% slippage
      */
     uint32 public immutable balancerSlippage;
+
+    uint256 public constant EXACT_TOKENS_IN_FOR_BPT_OUT = 1;
 
     //============================================ Constructor ===========================================
 
@@ -197,13 +204,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /// and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[]
     /// memory callData`.
 
-    uint256 public constant EXACT_TOKENS_IN_FOR_BPT_OUT = 1;
-
-    struct SwapData {
-        uint256[] minAmountsForSwaps;
-        uint256[] swapDeadlines;
-    }
-
     // NOTE, the swapsBeforeJoin array MUST match the pools tokens, with Preminted Bpts remmoved.
     function joinPool(
         ERC20 targetBpt,
@@ -310,35 +310,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             revert BalancerPoolAdaptor___Slippage();
     }
 
-    function _getPoolTokensWithNoPremintedBpt(
-        address bpt,
-        IERC20[] memory poolTokens
-    ) internal pure returns (ERC20[] memory tokens) {
-        uint256 poolTokensLength = poolTokens.length;
-        bool removePremintedBpts;
-        // Iterate through, and check if we need to remove pre-minted bpts.
-        for (uint256 i; i < poolTokensLength; ++i) {
-            if (address(poolTokens[i]) == bpt) {
-                removePremintedBpts = true;
-                break;
-            }
-        }
-        if (removePremintedBpts) {
-            tokens = new ERC20[](poolTokensLength - 1);
-            uint256 tokensIndex;
-            for (uint256 i; i < poolTokensLength; ++i) {
-                if (address(poolTokens[i]) != bpt) {
-                    tokens[tokensIndex] = ERC20(address(poolTokens[i]));
-                    // console.log("Expected Token", i, address(poolTokens[i]));
-                    tokensIndex++;
-                }
-            }
-        } else {
-            tokens = new ERC20[](poolTokensLength);
-            for (uint256 i; i < poolTokensLength; ++i) tokens[i] = ERC20(address(poolTokens[i]));
-        }
-    }
-
     //TODO confirm if any ETH is transferred to a cellar it reverts cuz Cellar does not implement a receive function.
     // NOTE so the amount for each swap is overwritten by the actual amount out we got from the pool.
     // but min amount out should still be estimated by strategist.
@@ -396,9 +367,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
                 // Make sure swap kind is GIVEN_IN.
                 if (swapsAfterExit[i].kind != IVault.SwapKind.GIVEN_IN) revert("Wrong kind");
 
-                console.log("assetIn", address(swapsAfterExit[i].assetIn));
-                console.log("assetOut", address(swapsAfterExit[i].assetOut));
-
                 // Perform the swap. Save amount out as the new tokensOutDelta[i].
                 tokensOutDelta[i] = vault.swap(
                     swapsAfterExit[i],
@@ -406,10 +374,12 @@ contract BalancerPoolAdaptor is BaseAdaptor {
                     swapData.minAmountsForSwaps[i],
                     swapData.swapDeadlines[i]
                 );
-                // Update expected token out to be the assetOut of the swap.
-                expectedTokensOut[i] = ERC20(address(swapsAfterExit[i].assetOut));
+
                 // Then revoke approval
                 _revokeExternalApproval(expectedTokensOut[i], address(vault));
+
+                // Update expected token out to be the assetOut of the swap.
+                expectedTokensOut[i] = ERC20(address(swapsAfterExit[i].assetOut));
             } else if (!priceRouter.isSupported(expectedTokensOut[i])) {
                 // We received some of expectedTokensOut, but no swap was provided for it, and we can not price
                 // this asset so revert.
@@ -421,77 +391,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         uint256 valueOutConvertedToTarget = priceRouter.getValues(expectedTokensOut, tokensOutDelta, targetBpt);
         if (valueOutConvertedToTarget < targetDelta.mulDivDown(balancerSlippage, 1e4))
             revert BalancerPoolAdaptor___Slippage();
-    }
-
-    function swap(
-        IVault.SingleSwap memory singleSwap,
-        IVault.FundManagement memory funds,
-        uint256 limit,
-        uint256 deadline
-    ) external payable returns (uint256) {
-        return vault.swap(singleSwap, funds, limit, deadline);
-    }
-
-    /**
-     * @notice Call `BalancerRelayer` on mainnet to carry out join txs.
-     * @param tokensIn specific tokens being input for tx
-     * @param amountsIn amount of assets input for tx
-     * @param bptOut acceptable amount of assets resulting from tx (due to slippage, etc.)
-     * @param callData encoded specific txs to be used in `relayer.multicall()`. See general note at start of `Strategist Functions` section.
-     * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-     * NOTE: possible that bpts can be moved into AURA positions so we don't validate that the bptOut is a valid position in the
-     *      cellar because it could be moved to Aura during the same rebalance. Thus _liquidityGauge in params is not checked here
-     */
-    function relayerJoinPool(
-        ERC20[] memory tokensIn,
-        uint256[] memory amountsIn,
-        ERC20 bptOut,
-        bytes[] memory callData
-    ) public {
-        for (uint256 i; i < tokensIn.length; ++i) {
-            tokensIn[i].approve(address(vault), amountsIn[i]);
-        }
-        uint256 startingBpt = bptOut.balanceOf(address(this));
-        relayer.multicall(callData);
-
-        uint256 endingBpt = bptOut.balanceOf(address(this));
-        uint256 amountBptOut = endingBpt - startingBpt;
-        PriceRouter priceRouter = Cellar(address(this)).priceRouter();
-        uint256 amountBptIn = priceRouter.getValues(tokensIn, amountsIn, bptOut);
-
-        if (amountBptOut < amountBptIn.mulDivDown(slippage(), 1e4)) revert BalancerPoolAdaptor___Slippage();
-
-        // revoke token in approval
-        for (uint256 i; i < tokensIn.length; ++i) {
-            _revokeExternalApproval(tokensIn[i], address(vault));
-        }
-    }
-
-    /**
-     * @notice Call `BalancerRelayer` on mainnet to carry out exit txs.
-     * @param bptIn specific tokens being input for tx
-     * @param amountIn amount of bpts input for tx
-     * @param tokensOut acceptable amounts of assets out resulting from tx (due to slippage, etc.)
-     * @param callData encoded specific txs to be used in `relayer.multicall()`. See general note at start of `Strategist Functions` section.
-     * @dev multicall() handles the actual mutation code whereas everything else mostly is there for checks preventing manipulation, etc.
-     * NOTE: possible that bpts can be in transit between AURA positions so we don't validate that the bptIn is a valid
-     *       position in the cellar during the same rebalance. Thus _liquidityGauge in params is not checked here
-     */
-    function relayerExitPool(ERC20 bptIn, uint256 amountIn, ERC20[] memory tokensOut, bytes[] memory callData) public {
-        PriceRouter priceRouter = Cellar(address(this)).priceRouter();
-        uint256[] memory tokenAmount = new uint256[](tokensOut.length);
-
-        for (uint256 i; i < tokensOut.length; ++i) {
-            tokenAmount[i] = tokensOut[i].balanceOf(address(this));
-        }
-
-        relayer.multicall(callData);
-
-        for (uint256 i; i < tokensOut.length; ++i) {
-            tokenAmount[i] = tokensOut[i].balanceOf(address(this)) - tokenAmount[i];
-        }
-        uint256 bptEquivalent = priceRouter.getValues(tokensOut, tokenAmount, bptIn);
-        if (bptEquivalent < amountIn.mulDivDown(slippage(), 1e4)) revert BalancerPoolAdaptor___Slippage();
     }
 
     /**
@@ -546,11 +445,32 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             revert BalancerPoolAdaptor__BptAndGaugeComboMustBeTracked(_bpt, _liquidityGauge);
     }
 
-    /**
-     * @notice external function to help adjust whether or not the relayer has been approved by cellar
-     * @param _relayerChange proposed approval setting to relayer
-     */
-    function adjustRelayerApproval(bool _relayerChange) public virtual {
-        vault.setRelayerApproval(address(this), address(relayer), _relayerChange);
+    function _getPoolTokensWithNoPremintedBpt(
+        address bpt,
+        IERC20[] memory poolTokens
+    ) internal pure returns (ERC20[] memory tokens) {
+        uint256 poolTokensLength = poolTokens.length;
+        bool removePremintedBpts;
+        // Iterate through, and check if we need to remove pre-minted bpts.
+        for (uint256 i; i < poolTokensLength; ++i) {
+            if (address(poolTokens[i]) == bpt) {
+                removePremintedBpts = true;
+                break;
+            }
+        }
+        if (removePremintedBpts) {
+            tokens = new ERC20[](poolTokensLength - 1);
+            uint256 tokensIndex;
+            for (uint256 i; i < poolTokensLength; ++i) {
+                if (address(poolTokens[i]) != bpt) {
+                    tokens[tokensIndex] = ERC20(address(poolTokens[i]));
+                    // console.log("Expected Token", i, address(poolTokens[i]));
+                    tokensIndex++;
+                }
+            }
+        } else {
+            tokens = new ERC20[](poolTokensLength);
+            for (uint256 i; i < poolTokensLength; ++i) tokens[i] = ERC20(address(poolTokens[i]));
+        }
     }
 }

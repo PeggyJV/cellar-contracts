@@ -255,85 +255,6 @@ contract BalancerPoolAdaptorTest is Test {
         console.log("Address Cellar", address(cellar));
     }
 
-    function testRelayerJoinPool() external checkBlockNumber {
-        bytes
-            memory joinData = hex"000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000028000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fea793aa415061c483d2390414275ad314b3f621000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000064921fbc0000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000005cbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f79269200000000000000000000000000000000000000000000000000000000002dc6c000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003a48fe4624ffebb0bbf162e64fb9d0dfe186e517d84c395f0160000000000000000000005020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fea793aa415061c483d2390414275ad314b3f621000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c00000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000000ba100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000040000000000000000000000006667c6fa9f2b3fc1cc8d85320b62703d938e4385000000000000000000000000a1697f9af0875b63ddc472d6eebada8c1fab8568000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f792692000000000000000000000000febb0bbf162e64fb9d0dfe186e517d84c395f016000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000002962786912d4a7d9000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ba1000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000000000000000000000000000000";
-        bytes[] memory joinDataArray = abi.decode(joinData, (bytes[]));
-        uint256 usdcAmount = 3e6;
-        deal(address(USDC), address(this), usdcAmount);
-        cellar.deposit(usdcAmount, address(this));
-
-        // Have strategist join pool.
-        ERC20[] memory tokensIn = new ERC20[](1);
-        tokensIn[0] = USDC;
-
-        uint256[] memory amountsIn = new uint256[](1);
-        amountsIn[0] = usdcAmount;
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataToAdjustRelayerApproval(true);
-        adaptorCalls[1] = _createBytesDataToJoin(tokensIn, amountsIn, BB_A_USD, joinDataArray);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-
-        uint256 expectedBptFromJoin = priceRouter.getValue(USDC, usdcAmount, BB_A_USD);
-        assertApproxEqRel(
-            BB_A_USD.balanceOf(address(cellar)),
-            expectedBptFromJoin,
-            0.01e18,
-            "Cellar should have received expected BPT from join."
-        );
-    }
-
-    // Cellar address A4AD4f68d0b91CFD19687c881e50f3A00242828c
-    // Bytes data to withdraw 50 BPTs
-    // At this block number 17523303
-    function testRelayerExitPool() external checkBlockNumber {
-        bytes
-            memory exitData = hex"000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000048000000000000000000000000000000000000000000000000000000000000006c0000000000000000000000000000000000000000000000000000000000000090000000000000000000000000000000000000000000000000000000000000003c4d80952d5febb0bbf162e64fb9d0dfe186e517d84c395f0160000000000000000000005020000000000000000000000000000000000000000000000000000000000000003000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c000000000000000000000000fea793aa415061c483d2390414275ad314b3f62100000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000002e00000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000040000000000000000000000006667c6fa9f2b3fc1cc8d85320b62703d938e4385000000000000000000000000a1697f9af0875b63ddc472d6eebada8c1fab8568000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f792692000000000000000000000000febb0bbf162e64fb9d0dfe186e517d84c395f0160000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000002b5e3af16b188000000000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000000ba100000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001ba100000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000002ba100000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000fea793aa415061c483d2390414275ad314b3f6210000000000000000000000000000000000000000000000000000000000000001000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000da3e439e38f3505b0000000000000000000000000000000000000000000000000000000064921a930000000000000000000000000000000000000000000000000000000000000000ba100000000000000000000000000000000000000000000000000000000000026667c6fa9f2b3fc1cc8d85320b62703d938e43850000000000000000000004fb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000006667c6fa9f2b3fc1cc8d85320b62703d938e43850000000000000000000000006b175474e89094c44da98b954eedeac495271d0fba1000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000fea793aa415061c483d2390414275ad314b3f6210000000000000000000000000000000000000000000000000000000000000001000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001175ed60000000000000000000000000000000000000000000000000000000064921a930000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000004a1697f9af0875b63ddc472d6eebada8c1fab85680000000000000000000004f90000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a1697f9af0875b63ddc472d6eebada8c1fab8568000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec7ba1000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002042e6272ea0000000000000000000000000000000000000000000000000000000000000120000000000000000000000000fea793aa415061c483d2390414275ad314b3f6210000000000000000000000000000000000000000000000000000000000000001000000000000000000000000A4AD4f68d0b91CFD19687c881e50f3A00242828c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f08f1f0000000000000000000000000000000000000000000000000000000064921a930000000000000000000000000000000000000000000000000000000000000000ba10000000000000000000000000000000000000000000000000000000000006cbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000cbfa4532d8b2ade2c261d3dd5ef2a2284f792692000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48ba1000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-        bytes[] memory exitDataArray = abi.decode(exitData, (bytes[]));
-        uint256 bptAmount = 50e18;
-        // User Joins Cellar.
-        uint256 assets = 50e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        // Use deal to mint cellar 50 Bpts.
-        deal(address(USDC), address(cellar), 0);
-        deal(address(BB_A_USD), address(cellar), bptAmount);
-
-        // Have strategist exit pool.
-        ERC20[] memory tokensOut = new ERC20[](3);
-        tokensOut[0] = USDC;
-        tokensOut[1] = DAI;
-        tokensOut[2] = USDT;
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataToAdjustRelayerApproval(true);
-        adaptorCalls[1] = _createBytesDataToExit(BB_A_USD, bptAmount, tokensOut, exitDataArray);
-
-        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-
-        assertGt(USDC.balanceOf(address(cellar)), 0, "Cellar should have received USDC.");
-        assertGt(DAI.balanceOf(address(cellar)), 0, "Cellar should have received DAI.");
-        assertGt(USDT.balanceOf(address(cellar)), 0, "Cellar should have received USDT.");
-
-        uint256[] memory amountsOut = new uint256[](3);
-        amountsOut[0] = USDC.balanceOf(address(cellar));
-        amountsOut[1] = DAI.balanceOf(address(cellar));
-        amountsOut[2] = USDT.balanceOf(address(cellar));
-
-        uint256 valueOutInTermsOfBpt = priceRouter.getValues(tokensOut, amountsOut, BB_A_USD);
-        assertApproxEqRel(
-            bptAmount,
-            valueOutInTermsOfBpt,
-            0.01e18,
-            "Cellar value out should approximately equal value in."
-        );
-    }
-
     function testStakeBpt(uint256 assets) external checkBlockNumber {
         assets = bound(assets, 0.1e6, 1_000_000e6);
         uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
@@ -508,65 +429,65 @@ contract BalancerPoolAdaptorTest is Test {
      * @notice test that the `relayerJoinPool()` function from `BalancerPoolAdaptor.sol` carries out delegateCalls where it receives the proper amount.
      * @dev this does not test the underlying math within a respective contract like the BalancerRelayer & BalancerVault.
      */
-    function testSlippageChecksJoinPool() external checkBlockNumber {
-        // Deposit into Cellar.
-        uint256 assets = 1_000_000e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-        ERC20[] memory from = new ERC20[](1);
-        ERC20 to;
-        uint256[] memory fromAmount = new uint256[](1);
-        bytes[] memory slippageSwapData = new bytes[](1);
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        // Make a swap where both assets are supported by the price router, and slippage is good.
-        from[0] = USDC;
-        to = BB_A_USD;
-        fromAmount[0] = 1_000e6;
-        slippageSwapData[0] = abi.encodeWithSignature(
-            "slippageSwap(address,address,uint256,uint32)",
-            from[0],
-            to,
-            fromAmount[0],
-            0.89e4
-        );
-        // Make the swap.
-        adaptorCalls[0] = _createBytesDataToJoin(from, fromAmount, to, slippageSwapData);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
-        vm.expectRevert((abi.encodeWithSelector(BalancerPoolAdaptor___Slippage.selector)));
-        cellar.callOnAdaptor(data);
-    }
+    // function testSlippageChecksJoinPool() external checkBlockNumber {
+    //     // Deposit into Cellar.
+    //     uint256 assets = 1_000_000e6;
+    //     deal(address(USDC), address(this), assets);
+    //     cellar.deposit(assets, address(this));
+    //     ERC20[] memory from = new ERC20[](1);
+    //     ERC20 to;
+    //     uint256[] memory fromAmount = new uint256[](1);
+    //     bytes[] memory slippageSwapData = new bytes[](1);
+    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    //     bytes[] memory adaptorCalls = new bytes[](1);
+    //     // Make a swap where both assets are supported by the price router, and slippage is good.
+    //     from[0] = USDC;
+    //     to = BB_A_USD;
+    //     fromAmount[0] = 1_000e6;
+    //     slippageSwapData[0] = abi.encodeWithSignature(
+    //         "slippageSwap(address,address,uint256,uint32)",
+    //         from[0],
+    //         to,
+    //         fromAmount[0],
+    //         0.89e4
+    //     );
+    //     // Make the swap.
+    //     adaptorCalls[0] = _createBytesDataToJoin(from, fromAmount, to, slippageSwapData);
+    //     data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
+    //     vm.expectRevert((abi.encodeWithSelector(BalancerPoolAdaptor___Slippage.selector)));
+    //     cellar.callOnAdaptor(data);
+    // }
 
-    function testSlippageChecksExitPool() external checkBlockNumber {
-        // Deposit into Cellar.
-        uint256 assets = 1_000_000e6;
-        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
+    // function testSlippageChecksExitPool() external checkBlockNumber {
+    //     // Deposit into Cellar.
+    //     uint256 assets = 1_000_000e6;
+    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+    //     deal(address(USDC), address(this), assets);
+    //     cellar.deposit(assets, address(this));
 
-        // Simulate pool join.
-        deal(address(USDC), address(cellar), 0);
-        deal(address(BB_A_USD), address(cellar), bptAmount);
+    //     // Simulate pool join.
+    //     deal(address(USDC), address(cellar), 0);
+    //     deal(address(BB_A_USD), address(cellar), bptAmount);
 
-        ERC20[] memory tokensOut = new ERC20[](1);
-        tokensOut[0] = USDC;
-        bytes[] memory slippageSwapData = new bytes[](1);
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        // Make a swap where both assets are supported by the price router, and slippage is good.
-        slippageSwapData[0] = abi.encodeWithSignature(
-            "slippageSwap(address,address,uint256,uint32)",
-            BB_A_USD,
-            USDC,
-            bptAmount,
-            0.89e4
-        );
-        // Make the swap.
-        adaptorCalls[0] = _createBytesDataToExit(BB_A_USD, bptAmount, tokensOut, slippageSwapData);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
-        vm.expectRevert((abi.encodeWithSelector(BalancerPoolAdaptor___Slippage.selector)));
-        cellar.callOnAdaptor(data);
-    }
+    //     ERC20[] memory tokensOut = new ERC20[](1);
+    //     tokensOut[0] = USDC;
+    //     bytes[] memory slippageSwapData = new bytes[](1);
+    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    //     bytes[] memory adaptorCalls = new bytes[](1);
+    //     // Make a swap where both assets are supported by the price router, and slippage is good.
+    //     slippageSwapData[0] = abi.encodeWithSignature(
+    //         "slippageSwap(address,address,uint256,uint32)",
+    //         BB_A_USD,
+    //         USDC,
+    //         bptAmount,
+    //         0.89e4
+    //     );
+    //     // Make the swap.
+    //     adaptorCalls[0] = _createBytesDataToExit(BB_A_USD, bptAmount, tokensOut, slippageSwapData);
+    //     data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
+    //     vm.expectRevert((abi.encodeWithSelector(BalancerPoolAdaptor___Slippage.selector)));
+    //     cellar.callOnAdaptor(data);
+    // }
 
     function testJoinVanillaPool() external {
         // Deposit into Cellar.
@@ -601,8 +522,6 @@ contract BalancerPoolAdaptorTest is Test {
     }
 
     function testJoinBoostedPool() external {
-        ERC20 bb_a_usdc = ERC20(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692);
-
         // Deposit into Cellar.
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
@@ -776,19 +695,6 @@ contract BalancerPoolAdaptorTest is Test {
     }
 
     /**
-     * @notice create encoded bytes specifying function and params to be instantiated into the Cellar.AdaptorCall struct
-     */
-    function _createBytesDataToJoin(
-        ERC20[] memory tokensIn,
-        uint256[] memory amountsIn,
-        ERC20 bptOut,
-        bytes[] memory callData
-    ) public view returns (bytes memory) {
-        return
-            abi.encodeWithSelector(balancerPoolAdaptor.relayerJoinPool.selector, tokensIn, amountsIn, bptOut, callData);
-    }
-
-    /**
      * @notice create data for staking using BalancerPoolAdaptor
      */
     function _createBytesDataToStake(
@@ -810,25 +716,8 @@ contract BalancerPoolAdaptorTest is Test {
         return abi.encodeWithSelector(balancerPoolAdaptor.unstakeBPT.selector, _bpt, _liquidityGauge, _amountOut);
     }
 
-    /**
-     * @notice create data for exiting pools using BalancerPoolAdaptor
-     */
-    function _createBytesDataToExit(
-        ERC20 bptIn,
-        uint256 amountIn,
-        ERC20[] memory tokensOut,
-        bytes[] memory callData
-    ) public view returns (bytes memory) {
-        return
-            abi.encodeWithSelector(balancerPoolAdaptor.relayerExitPool.selector, bptIn, amountIn, tokensOut, callData);
-    }
-
     function _createBytesDataToClaimRewards(address _liquidityGauge) public view returns (bytes memory) {
         return abi.encodeWithSelector(balancerPoolAdaptor.claimRewards.selector, _liquidityGauge);
-    }
-
-    function _createBytesDataToAdjustRelayerApproval(bool _change) public view returns (bytes memory) {
-        return abi.encodeWithSelector(balancerPoolAdaptor.adjustRelayerApproval.selector, _change);
     }
 
     function _createBytesDataToJoinPool(
