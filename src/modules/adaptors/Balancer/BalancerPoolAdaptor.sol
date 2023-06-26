@@ -14,8 +14,6 @@ import { Math } from "src/utils/Math.sol";
 import { console } from "@forge-std/Test.sol";
 import { IBalancerMinter } from "src/interfaces/external/IBalancerMinter.sol";
 
-import { console } from "@forge-std/Test.sol";
-
 /**
  * @title Balancer Pool Adaptor
  * @notice Allows Cellars to interact with Weighted, Stable, and Linear Balancer Pools (BPs).
@@ -58,6 +56,47 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     error BalancerPoolAdaptor___InvalidConstructorSlippage();
 
+    /**
+     * @notice Provided swap array length differs from expected tokens array length.
+     */
+    error BalancerPoolAdaptor___LengthMismatch();
+
+    /**
+     * @notice Provided swap information with wrong swap kind.
+     */
+    error BalancerPoolAdaptor___WrongSwapKind();
+
+    /**
+     * @notice Provided swap information does not match expected tokens array.
+     * @dev Swap information passed to `joinPool` and `exitPool` MUST line up with
+     *      the expected tokens array.
+     *      Example: BB A USD has 4 constituents BB A DAI, BB A USDT, BB A USDC, BB A USD
+     *               but the pool has pre-minted BPTs in its tokens array.
+     *               So the expected tokens array will only contain the first 3 constituents.
+     *               The swap data must be in the following order.
+     *               0 - Swap data to swap DAI for BB A DAI.
+     *               1 - Swap data to swap USDT for BB A USDT.
+     *               2 - Swap data to swap USDC for BB A USDC.
+     *               If the swap data is not in the order above, or tries swapping using tokens
+     *               that are NOT in the BPT, the call will revert with the below error.
+     */
+    error BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch();
+
+    /**
+     * @notice Provided swap information tried to work with internal balances.
+     */
+    error BalancerPoolAdaptor___InternalBalancesNotSupported();
+
+    /**
+     * @notice Provided swap information chose to keep an asset that is not supported
+     *         for pricing.
+     */
+    error BalancerPoolAdaptor___UnsupportedTokenNotSwapped();
+
+    /**
+     * @notice Stores each swaps min amount, and deadline.
+     * @dev Needed to overcome stack too deep errors.
+     */
     struct SwapData {
         uint256[] minAmountsForSwaps;
         uint256[] swapDeadlines;
@@ -91,6 +130,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     uint32 public immutable balancerSlippage;
 
+    /**
+     * @notice The enum value needed to specify an Exact Tokens in for BPT out join.
+     */
     uint256 public constant EXACT_TOKENS_IN_FOR_BPT_OUT = 1;
 
     //============================================ Constructor ===========================================
@@ -197,14 +239,12 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
 
-    /// STRATEGIST NOTE: for `relayerJoinPool()` and `relayerExitPool()` strategist functions callData param are encoded
-    /// specific txs to be used in `relayer.multicall()`. It is an array of bytes. This is different than other adaptors
-    /// where singular txs are carried out via the `cellar.callOnAdaptor()` with its own array of `data`. Here we take a
-    /// series of actions, encode all those into one bytes data var, pass that singular one along to `cellar.callOnAdaptor()`
-    /// and then `cellar.callOnAdaptor()` will ultimately feed individual decoded actions into `relayerJoinPool()` as `bytes[]
-    /// memory callData`.
-
-    // NOTE, the swapsBeforeJoin array MUST match the pools tokens, with Preminted Bpts remmoved.
+    /**
+     * @notice Allows strategists to join Balancer pools using EXACT_TOKENS_IN_FOR_BPT_OUT joins.
+     * @dev `swapsBeforeJoin` MUST match up with expected token array returned from `_getPoolTokensWithNoPremintedBpt`.
+     *      IE if the first token in expected token array is DAI, the first swap in `swapsBeforeJoin` MUST be for DAI.
+     * @dev Max Available logic IS supported.
+     */
     function joinPool(
         ERC20 targetBpt,
         IVault.SingleSwap[] memory swapsBeforeJoin,
@@ -230,9 +270,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         }
 
         // Insure swapsBeforeJoin has the same length as expectedTokensIn.
-        if (swapsBeforeJoin.length != expectedTokensIn.length) revert("Length mismatch");
+        if (swapsBeforeJoin.length != expectedTokensIn.length) revert BalancerPoolAdaptor___LengthMismatch();
 
-        // Iterate through swapsBeforeJoin and swap if required. Then set approval
+        // Iterate through swapsBeforeJoin and swap if required. Then set approvals for join.
         {
             uint256[] memory joinAmounts = new uint256[](expectedTokensIn.length);
             for (uint256 i; i < swapsBeforeJoin.length; ++i) {
@@ -241,16 +281,18 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
                 // Approve the vault to spend assetIn, which will be used either in a swap, or pool join.
                 ERC20 inputToken = ERC20(address(swapsBeforeJoin[i].assetIn));
+                swapsBeforeJoin[i].amount = _maxAvailable(inputToken, swapsBeforeJoin[i].amount);
                 inputToken.safeApprove(address(vault), swapsBeforeJoin[i].amount);
 
                 // if assetOut is not the zero address, we are trying to swap for it.
                 if (address(swapsBeforeJoin[i].assetOut) != address(0)) {
                     // If we are swapping for an asset, make sure that asset is in the targetBpt pool.
                     if (address(swapsBeforeJoin[i].assetOut) != address(expectedTokensIn[i]))
-                        revert("Swap Token Expected Token mismatch.");
+                        revert BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch();
 
                     // Make sure swap kind is GIVEN_IN.
-                    if (swapsBeforeJoin[i].kind != IVault.SwapKind.GIVEN_IN) revert("Wrong kind");
+                    if (swapsBeforeJoin[i].kind != IVault.SwapKind.GIVEN_IN)
+                        revert BalancerPoolAdaptor___WrongSwapKind();
 
                     // Formulate FundManagement struct.
                     IVault.FundManagement memory fundManagement = IVault.FundManagement({
@@ -276,7 +318,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
                 } else {
                     // We are not swapping, and have a non zero amount so insure that assetIn is apart of targetBpt.
                     if (address(swapsBeforeJoin[i].assetIn) != address(expectedTokensIn[i]))
-                        revert("Swap Token Expected Token mismatch!");
+                        revert BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch();
                     joinAmounts[i] = swapsBeforeJoin[i].amount;
                 }
             }
@@ -287,9 +329,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         vault.joinPool(poolId, address(this), address(this), request);
         targetDelta = targetBpt.balanceOf(address(this)) - targetDelta;
 
-        // Compare value in vs value out, and revert if slippage is too high.
-        // NOTE if `amountsToApprove` specifies values greater than what is in`request`,
-        // it is likely this will revert regardless of real slippage.
+        // Revoke any lingering approvals, and build arrays to be used in `getValues` below.
         uint256[] memory inputAmounts = new uint256[](swapsBeforeJoin.length);
         ERC20[] memory inputTokens = new ERC20[](swapsBeforeJoin.length);
         // If we had to swap for an asset, revoke any unused approval from join.
@@ -305,14 +345,20 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             if (assetOut != address(0)) _revokeExternalApproval(ERC20(assetOut), address(vault));
         }
 
+        // Compare value in vs value out, and revert if slippage is too high.
         uint256 valueInConvertedToTarget = priceRouter.getValues(inputTokens, inputAmounts, targetBpt);
         if (targetDelta < valueInConvertedToTarget.mulDivDown(balancerSlippage, 1e4))
             revert BalancerPoolAdaptor___Slippage();
     }
 
-    //TODO confirm if any ETH is transferred to a cellar it reverts cuz Cellar does not implement a receive function.
-    // NOTE so the amount for each swap is overwritten by the actual amount out we got from the pool.
-    // but min amount out should still be estimated by strategist.
+    /**
+     * @notice Allows strategists to exit Balancer pools using any exit.
+     * @dev The amounts in `swapsAfterExit` are overwritten by the actual amount out received from the swap.
+     * @dev `swapsAfterExit` MUST match up with expected token array returned from `_getPoolTokensWithNoPremintedBpt`.
+     *      IE if the first token in expected token array is BB A DAI, the first swap in `swapsBeforeJoin` MUST be to
+     *      swap BB A DAI.
+     * @dev Max Available logic IS NOT supported.
+     */
     function exitPool(
         ERC20 targetBpt,
         IVault.SingleSwap[] memory swapsAfterExit,
@@ -326,8 +372,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         ERC20[] memory expectedTokensOut = _getPoolTokensWithNoPremintedBpt(address(targetBpt), poolTokens);
 
         // Insure toInternalBalance is false.
-        if (request.toInternalBalance) revert("Internal balances not supported");
+        if (request.toInternalBalance) revert BalancerPoolAdaptor___InternalBalancesNotSupported();
 
+        // Figure out the ERC20 balance changes, and the BPT balance change from calling `exitPool`.
         uint256[] memory tokensOutDelta = new uint256[](expectedTokensOut.length);
         for (uint256 i; i < expectedTokensOut.length; ++i)
             tokensOutDelta[i] = expectedTokensOut[i].balanceOf(address(this));
@@ -338,22 +385,20 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         for (uint256 i; i < expectedTokensOut.length; ++i)
             tokensOutDelta[i] = expectedTokensOut[i].balanceOf(address(this)) - tokensOutDelta[i];
 
-        // TODO at this point we know what our tokens out should be, and how much we got from exiting BPT.
-        // Require swapsAfterExit to be in the order of the pool tokens(with preminted removed if need be)
         PriceRouter priceRouter = Cellar(address(this)).priceRouter();
-        if (swapsAfterExit.length != expectedTokensOut.length) revert("Length mismatch");
+        if (swapsAfterExit.length != expectedTokensOut.length) revert BalancerPoolAdaptor___LengthMismatch();
         for (uint256 i; i < expectedTokensOut.length; ++i) {
             // If we didn't receive any of this token, continue.
             if (tokensOutDelta[i] == 0) continue;
 
             // Make sure swap assetIn is the expectedTokensOut.
             if (address(swapsAfterExit[i].assetIn) != address(expectedTokensOut[i]))
-                revert("Swap Token Expected Token mismatch.");
+                revert BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch();
 
             if (address(swapsAfterExit[i].assetOut) != address(0)) {
                 expectedTokensOut[i].safeApprove(address(vault), tokensOutDelta[i]);
+
                 // Perform a swap then update expected token, and tokensOutDelta.
-                // Need to make a swap.
                 IVault.FundManagement memory fundManagement = IVault.FundManagement({
                     sender: address(this),
                     fromInternalBalance: false,
@@ -365,7 +410,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
                 swapsAfterExit[i].amount = tokensOutDelta[i];
 
                 // Make sure swap kind is GIVEN_IN.
-                if (swapsAfterExit[i].kind != IVault.SwapKind.GIVEN_IN) revert("Wrong kind");
+                if (swapsAfterExit[i].kind != IVault.SwapKind.GIVEN_IN) revert BalancerPoolAdaptor___WrongSwapKind();
 
                 // Perform the swap. Save amount out as the new tokensOutDelta[i].
                 tokensOutDelta[i] = vault.swap(
@@ -383,7 +428,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             } else if (!priceRouter.isSupported(expectedTokensOut[i])) {
                 // We received some of expectedTokensOut, but no swap was provided for it, and we can not price
                 // this asset so revert.
-                revert("Unsupported token not swapped");
+                revert BalancerPoolAdaptor___UnsupportedTokenNotSwapped();
             }
         }
 
@@ -445,6 +490,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             revert BalancerPoolAdaptor__BptAndGaugeComboMustBeTracked(_bpt, _liquidityGauge);
     }
 
+    /**
+     * @notice Returns a BPT's token array with any pre-minted BPT removed, but the order preserved.
+     */
     function _getPoolTokensWithNoPremintedBpt(
         address bpt,
         IERC20[] memory poolTokens
@@ -464,7 +512,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             for (uint256 i; i < poolTokensLength; ++i) {
                 if (address(poolTokens[i]) != bpt) {
                     tokens[tokensIndex] = ERC20(address(poolTokens[i]));
-                    // console.log("Expected Token", i, address(poolTokens[i]));
                     tokensIndex++;
                 }
             }
@@ -472,5 +519,16 @@ contract BalancerPoolAdaptor is BaseAdaptor {
             tokens = new ERC20[](poolTokensLength);
             for (uint256 i; i < poolTokensLength; ++i) tokens[i] = ERC20(address(poolTokens[i]));
         }
+    }
+
+    /**
+     * @notice Returns the expected tokens array for a given `targetBpt`.
+     * @dev This function is NOT used by the adaptor, but could be used by strategists
+     *      when formulating Balancer rebalances.
+     */
+    function getExpectedTokens(address targetBpt) external view returns (ERC20[] memory expectedTokens) {
+        bytes32 poolId = IBasePool(address(targetBpt)).getPoolId();
+        (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
+        return _getPoolTokensWithNoPremintedBpt(address(targetBpt), poolTokens);
     }
 }
