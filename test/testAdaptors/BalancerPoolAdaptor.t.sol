@@ -932,7 +932,7 @@ contract BalancerPoolAdaptorTest is Test {
 
     // ========================================= Reverts =========================================
 
-    function testConstructorReverts() external {
+    function testConstructorReverts() external checkBlockNumber {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___InvalidConstructorSlippage.selector))
         );
@@ -944,7 +944,7 @@ contract BalancerPoolAdaptorTest is Test {
         new BalancerPoolAdaptor(vault, minter, 1.01e4);
     }
 
-    function testJoinPoolNoSwapsReverts() external {
+    function testJoinPoolNoSwapsReverts() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
@@ -1041,7 +1041,7 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testJoinPoolWithSwapsReverts() external {
+    function testJoinPoolWithSwapsReverts() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
@@ -1141,7 +1141,7 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testExitPoolReverts() external {
+    function testExitPoolReverts() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 10_000e6;
         deal(address(USDC), address(this), assets);
@@ -1362,6 +1362,11 @@ contract BalancerPoolAdaptorTest is Test {
         // This test verifies that native eth transfers to the cellar will revert.
         // So even if the strategist somehow manages to make a swap send native eth
         // to the cellar it will revert.
+
+        if (block.number < 17523303) {
+            console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 17523303.");
+            fail("This test should fail.");
+        }
         deal(address(this), 1 ether);
         address(cellar).safeTransferETH(1 ether);
     }
