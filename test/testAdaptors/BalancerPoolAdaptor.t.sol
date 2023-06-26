@@ -447,8 +447,6 @@ contract BalancerPoolAdaptorTest is Test {
 
     // ========================================= PHASE 1 - GUARD RAIL TESTS =========================================
 
-    /// joinPool() tests
-
     function testJoinVanillaPool() external {
         // Deposit into Cellar.
         uint256 assets = 100_000e6;
@@ -463,7 +461,7 @@ contract BalancerPoolAdaptorTest is Test {
         IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
         swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
         swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
-        swapsBeforeJoin[1].amount = assets;
+        swapsBeforeJoin[1].amount = type(uint256).max;
         swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
 
         BalancerPoolAdaptor.SwapData memory swapData;
@@ -541,9 +539,9 @@ contract BalancerPoolAdaptorTest is Test {
         swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
         swapsBeforeJoin[0].amount = daiAmount;
         swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
-        swapsBeforeJoin[1].amount = usdcAmount;
+        swapsBeforeJoin[1].amount = type(uint256).max;
         swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
-        swapsBeforeJoin[2].amount = usdtAmount;
+        swapsBeforeJoin[2].amount = type(uint256).max;
         BalancerPoolAdaptor.SwapData memory swapData;
         swapData.minAmountsForSwaps = new uint256[](3);
         swapData.swapDeadlines = new uint256[](3);
@@ -611,7 +609,7 @@ contract BalancerPoolAdaptorTest is Test {
             kind: IVault.SwapKind.GIVEN_IN,
             assetIn: IAsset(address(USDT)),
             assetOut: IAsset(address(bb_a_usdt)),
-            amount: usdtAmount,
+            amount: type(uint256).max,
             userData: bytes(abi.encode(0))
         });
 
@@ -862,12 +860,7 @@ contract BalancerPoolAdaptorTest is Test {
     /**
      * NOTE: it would take multiple tokens and amounts in and a single bpt out
      */
-    function slippageSwap(
-        ERC20 from,
-        ERC20 to,
-        uint256 inAmount,
-        uint32 _slippage
-    ) public {
+    function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 _slippage) public {
         if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
             // Figure out value in, quoted in `to`.
             uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
@@ -945,12 +938,7 @@ contract BalancerPoolAdaptorTest is Test {
             abi.encodeWithSelector(balancerPoolAdaptor.exitPool.selector, targetBpt, swapsAfterExit, swapData, request);
     }
 
-    function _simulatePoolJoin(
-        address target,
-        ERC20 tokenIn,
-        uint256 amountIn,
-        ERC20 bpt
-    ) internal {
+    function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInBpt = priceRouter.getValue(tokenIn, amountIn, bpt);
 
@@ -961,12 +949,7 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(bpt), target, bptBalance + valueInBpt);
     }
 
-    function _simulatePoolExit(
-        address target,
-        ERC20 bptIn,
-        uint256 amountIn,
-        ERC20 tokenOut
-    ) internal {
+    function _simulatePoolExit(address target, ERC20 bptIn, uint256 amountIn, ERC20 tokenOut) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInTokenOut = priceRouter.getValue(bptIn, amountIn, tokenOut);
 
@@ -977,12 +960,7 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(tokenOut), target, tokenOutBalance + valueInTokenOut);
     }
 
-    function _simulateBptStake(
-        address target,
-        ERC20 bpt,
-        uint256 amountIn,
-        ERC20 gauge
-    ) internal {
+    function _simulateBptStake(address target, ERC20 bpt, uint256 amountIn, ERC20 gauge) internal {
         // Use deal to mutate targets balances.
         uint256 tokenInBalance = bpt.balanceOf(target);
         deal(address(bpt), target, tokenInBalance - amountIn);
@@ -990,12 +968,7 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(gauge), target, gaugeBalance + amountIn);
     }
 
-    function _simulateBptUnStake(
-        address target,
-        ERC20 bpt,
-        uint256 amountOut,
-        ERC20 gauge
-    ) internal {
+    function _simulateBptUnStake(address target, ERC20 bpt, uint256 amountOut, ERC20 gauge) internal {
         // Use deal to mutate targets balances.
         uint256 bptBalance = bpt.balanceOf(target);
         deal(address(bpt), target, bptBalance + amountOut);
