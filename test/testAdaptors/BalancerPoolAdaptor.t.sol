@@ -25,6 +25,7 @@ import { MockBPTPriceFeed } from "src/mocks/MockBPTPriceFeed.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { MockBalancerPoolAdaptor } from "src/mocks/adaptors/MockBalancerPoolAdaptor.sol";
 import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
+import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 
 contract BalancerPoolAdaptorTest is Test {
     using SafeTransferLib for ERC20;
@@ -36,6 +37,8 @@ contract BalancerPoolAdaptorTest is Test {
 
     BalancerPoolAdaptor private balancerPoolAdaptor;
     BalancerStablePoolExtension private balancerStablePoolExtension;
+    WstEthExtension private wstethExtension;
+
     ERC20Adaptor private erc20Adaptor;
     CellarInitializableV2_2 private cellar;
     PriceRouter private priceRouter;
@@ -54,6 +57,11 @@ contract BalancerPoolAdaptorTest is Test {
     address private immutable strategist = vm.addr(0xBEEF);
     uint8 private constant CHAINLINK_DERIVATIVE = 1;
     uint8 private constant EXTENSION_DERIVATIVE = 3;
+    uint32 private bbaWETHPosition;
+    uint32 private waWETHPosition;
+    uint32 private wstETHPosition;
+    uint32 private WETHPosition;
+    uint32 private wstETH_bbaWETHPosition;
 
     // Mainnet contracts
     ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -62,6 +70,10 @@ contract BalancerPoolAdaptorTest is Test {
     ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     ERC20 private BAL = ERC20(0xba100000625a3754423978a60c9317c58a424e3D);
+    ERC20 private waWETH = ERC20(0x59463BB67dDD04fe58ED291ba36C26d99A39fbc6);
+    ERC20 private wstETH = ERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+    ERC20 private STETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+
     address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
@@ -69,6 +81,8 @@ contract BalancerPoolAdaptorTest is Test {
     address private constant GAUGE_B_stETH_STABLE = 0xcD4722B7c24C29e0413BDCd9e51404B4539D14aE; // Balancer B-stETH-STABLE Gauge Depo... (B-stETH-S...)
     ERC20 private BB_A_USD = ERC20(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016);
     ERC20 private vanillaUsdcDaiUsdt = ERC20(0x79c58f70905F734641735BC61e45c19dD9Ad60bC);
+    ERC20 private BB_A_WETH = ERC20(0x60D604890feaa0b5460B28A424407c24fe89374a);
+    ERC20 private wstETH_bbaWETH = ERC20(0xE0fCBf4d98F0aD982DB260f86cf28b49845403C5);
 
     // Linear Pools.
     ERC20 private bb_a_dai = ERC20(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
@@ -77,11 +91,13 @@ contract BalancerPoolAdaptorTest is Test {
 
     ERC20 private BB_A_USD_GAUGE = ERC20(0x0052688295413b32626D226a205b95cDB337DE86); // query subgraph for gauges wrt to poolId: https://docs.balancer.fi/reference/vebal-and-gauges/gauges.html#query-gauge-by-l2-sidechain-pool:~:text=%23-,Query%20Pending%20Tokens%20for%20a%20Given%20Pool,-The%20process%20differs
     address private constant BB_A_USD_GAUGE_ADDRESS = 0x0052688295413b32626D226a205b95cDB337DE86;
+    address private constant wstETH_bbaWETH_GAUGE_ADDRESS = 0x5f838591A5A8048F0E4C4c7fCca8fD9A25BF0590;
     uint256 private constant BB_A_USD_DECIMALS = 18; //BB_A_USD.decimals();
     uint256 private constant BB_A_USD_GAUGE_DECIMALS = 18; //BB_A_USD_GAUGE.decimals();
     uint256 private constant USDC_DECIMALS = 6;
     uint256 private constant USDT_DECIMALS = 18;
     uint256 private constant DAI_DECIMALS = 18;
+    uint256 MultiTokenAssets_D18 = 100_000e18;
 
     // Mainnet Balancer Specific Addresses
     address private vault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
@@ -94,6 +110,7 @@ contract BalancerPoolAdaptorTest is Test {
     address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
     address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
     address private USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
+    address private STETH_USD_FEED = 0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8;
 
     bytes private adaptorData = abi.encode(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS);
 
@@ -111,6 +128,7 @@ contract BalancerPoolAdaptorTest is Test {
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         registry = new Registry(address(this), address(swapRouter), address(priceRouter));
         priceRouter = new PriceRouter(registry, WETH);
+        wstethExtension = new WstEthExtension(priceRouter);
         registry.setAddress(2, address(priceRouter));
         balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, IVault(vault));
         mockBalancerPoolAdaptor = new MockBalancerPoolAdaptor(address(this), address(this), minter, slippage);
@@ -134,9 +152,23 @@ contract BalancerPoolAdaptorTest is Test {
         priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
         // Add USDT pricing.
+        price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, STETH_USD_FEED);
+        priceRouter.addAsset(STETH, settings, abi.encode(stor), price);
+
+        // Add wstETH pricing.
         price = uint256(IChainlinkAggregator(USDT_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
         priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
+
+        // Add wstEth pricing.
+        uint256 wstethToStethConversion = wstethExtension.stEth().getPooledEthByShares(1e18);
+        price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        price = price.mulDivDown(wstethToStethConversion, 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstethExtension));
+        priceRouter.addAsset(wstETH, settings, abi.encode(0), price);
+
+        // TODO: add pricing for wstETH & waWETH to support balancer boosted weth pool: https://app.balancer.fi/#/ethereum/pool/0xe0fcbf4d98f0ad982db260f86cf28b49845403c5000000000000000000000504
 
         // Add bb_a_USD pricing.
         uint8[8] memory rateProviderDecimals;
@@ -197,6 +229,9 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.addAdaptorToCatalogue(address(mockBalancerPoolAdaptor));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
+
+        deal(address(USDT), address(cellar), 100_000e6); // TODO: EIN
+        deal(address(DAI), address(cellar), MultiTokenAssets_D18); // TODO: EIN
         cellar.setRebalanceDeviation(0.005e18);
         cellar.addPositionToCatalogue(daiPosition);
         cellar.addPositionToCatalogue(usdtPosition);
@@ -425,69 +460,7 @@ contract BalancerPoolAdaptorTest is Test {
 
     // ========================================= PHASE 1 - GUARD RAIL TESTS =========================================
 
-    /**
-     * @notice test that the `relayerJoinPool()` function from `BalancerPoolAdaptor.sol` carries out delegateCalls where it receives the proper amount.
-     * @dev this does not test the underlying math within a respective contract like the BalancerRelayer & BalancerVault.
-     */
-    // function testSlippageChecksJoinPool() external checkBlockNumber {
-    //     // Deposit into Cellar.
-    //     uint256 assets = 1_000_000e6;
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-    //     ERC20[] memory from = new ERC20[](1);
-    //     ERC20 to;
-    //     uint256[] memory fromAmount = new uint256[](1);
-    //     bytes[] memory slippageSwapData = new bytes[](1);
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     // Make a swap where both assets are supported by the price router, and slippage is good.
-    //     from[0] = USDC;
-    //     to = BB_A_USD;
-    //     fromAmount[0] = 1_000e6;
-    //     slippageSwapData[0] = abi.encodeWithSignature(
-    //         "slippageSwap(address,address,uint256,uint32)",
-    //         from[0],
-    //         to,
-    //         fromAmount[0],
-    //         0.89e4
-    //     );
-    //     // Make the swap.
-    //     adaptorCalls[0] = _createBytesDataToJoin(from, fromAmount, to, slippageSwapData);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
-    //     vm.expectRevert((abi.encodeWithSelector(BalancerPoolAdaptor___Slippage.selector)));
-    //     cellar.callOnAdaptor(data);
-    // }
-
-    // function testSlippageChecksExitPool() external checkBlockNumber {
-    //     // Deposit into Cellar.
-    //     uint256 assets = 1_000_000e6;
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate pool join.
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD), address(cellar), bptAmount);
-
-    //     ERC20[] memory tokensOut = new ERC20[](1);
-    //     tokensOut[0] = USDC;
-    //     bytes[] memory slippageSwapData = new bytes[](1);
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     // Make a swap where both assets are supported by the price router, and slippage is good.
-    //     slippageSwapData[0] = abi.encodeWithSignature(
-    //         "slippageSwap(address,address,uint256,uint32)",
-    //         BB_A_USD,
-    //         USDC,
-    //         bptAmount,
-    //         0.89e4
-    //     );
-    //     // Make the swap.
-    //     adaptorCalls[0] = _createBytesDataToExit(BB_A_USD, bptAmount, tokensOut, slippageSwapData);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
-    //     vm.expectRevert((abi.encodeWithSelector(BalancerPoolAdaptor___Slippage.selector)));
-    //     cellar.callOnAdaptor(data);
-    // }
+    /// joinPool() tests
 
     function testJoinVanillaPool() external {
         // Deposit into Cellar.
@@ -558,6 +531,267 @@ contract BalancerPoolAdaptorTest is Test {
 
         console.log("BPTs", BB_A_USD.balanceOf(address(cellar)));
     }
+
+    // take joinVanillaPool, have the user deposit. Deal out cellar equal parts of the constituents (USDC, USDT, DAI). Change the swap info so it's giving multi-tokens (not just one).
+    // NOTE: cellar has 100_000 DAI and USDT to start (from setup)
+    // TODO: make this a fuzzing test and write out proper assertions.
+    function testJoinVanillaPoolWithMultiTokens() external {
+        // Deposit into Cellar.
+        uint256 assets = 100e6;
+        uint256 assets_D18 = 100e18;
+        deal(address(USDC), address(this), assets);
+
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+        swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
+        swapsBeforeJoin[0].amount = assets_D18;
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[1].amount = assets;
+        swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
+        swapsBeforeJoin[2].amount = assets;
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+        adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
+
+        uint256 bptBalanceBefore = vanillaUsdcDaiUsdt.balanceOf(address(cellar));
+        uint256 expectedBPT = assets * 1e12 * 3; // TODO: use priceRouter.getValues --> get the value of USDC, USDT, DAI in terms of bpt. Then you can compare with a percentage. Try 1 %.
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        // carry out tx
+        cellar.callOnAdaptor(data);
+        uint256 bptBalanceAfter = vanillaUsdcDaiUsdt.balanceOf(address(cellar));
+        assertApproxEqAbs(
+            bptBalanceAfter - bptBalanceBefore,
+            expectedBPT,
+            1e18,
+            "Cellar BPT balance should incur only a small amount slippage"
+        );
+    }
+
+    function testJoinBoostedPoolWithMultipleTokens() external {
+        // Deposit into Cellar.
+        uint256 assets = 100_000e6;
+        uint256 assetsD18 = 100_000e18;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into boosted USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+
+        swapsBeforeJoin[0] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_dai)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(DAI)),
+            assetOut: IAsset(address(bb_a_dai)),
+            amount: assetsD18,
+            userData: bytes(abi.encode(0))
+        });
+
+        swapsBeforeJoin[1] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_usdt)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(USDT)),
+            assetOut: IAsset(address(bb_a_usdt)),
+            amount: assets,
+            userData: bytes(abi.encode(0))
+        });
+
+        // Create Swap Data.
+        swapsBeforeJoin[2] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_usdc)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(USDC)),
+            assetOut: IAsset(address(bb_a_usdc)),
+            amount: assets,
+            userData: bytes(abi.encode(0))
+        });
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
+
+        uint256 bptBalanceBefore = BB_A_USD.balanceOf(address(cellar));
+        uint256 expectedBPT = assets * 1e12 * 3; // TODO: use priceRouter.getValues --> get the value of USDC, USDT, DAI in terms of bpt. Then you can compare with a percentage. Try 1 %.
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 bptBalanceAfter = BB_A_USD.balanceOf(address(cellar));
+
+        assertApproxEqAbs(
+            bptBalanceAfter - bptBalanceBefore,
+            expectedBPT,
+            1000e18,
+            "Cellar BPT balance should incur only a small amount slippage (0.2-0.3%)"
+        );
+    }
+
+    // test non-stable pools
+    /**
+     * @notice test non-stablecoin pools (that are still composable stable pools or past stable pool versions)
+     */
+    function testNonStableCoinJoinSingleToken() external {
+        // Add wstETH_bbaWETH pricing.
+        uint8[8] memory rateProviderDecimals;
+        address[8] memory rateProviders;
+        ERC20[8] memory underlyings;
+        underlyings[0] = WETH;
+        underlyings[1] = STETH;
+        BalancerStablePoolExtension.ExtensionStorage memory extensionStor = BalancerStablePoolExtension
+            .ExtensionStorage({
+                poolId: bytes32(0),
+                poolDecimals: 18,
+                rateProviderDecimals: rateProviderDecimals,
+                rateProviders: rateProviders,
+                underlyingOrConstituent: underlyings
+            });
+        PriceRouter.AssetSettings memory settings;
+
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        priceRouter.addAsset(wstETH_bbaWETH, settings, abi.encode(extensionStor), 1.787e11); // from recorded price at this block
+
+        wstETH_bbaWETHPosition = registry.trustPosition(
+            address(balancerPoolAdaptor),
+            abi.encode(address(wstETH_bbaWETH), wstETH_bbaWETH_GAUGE_ADDRESS)
+        );
+        wstETHPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(wstETH))); // holdingPosition for tests
+        WETHPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(WETH))); // holdingPosition for tests
+
+        cellar.addPositionToCatalogue(wstETHPosition);
+        cellar.addPositionToCatalogue(WETHPosition);
+        cellar.addPositionToCatalogue(wstETH_bbaWETHPosition);
+
+        cellar.addPosition(0, wstETHPosition, abi.encode(0), false);
+        cellar.addPosition(0, WETHPosition, abi.encode(0), false);
+        cellar.addPosition(0, wstETH_bbaWETHPosition, abi.encode(0), false);
+
+        // pricing set up for BB_A_WETH now
+        // now, we set up the adaptorCall to actually join the pool
+        // TODO: Simple one: deal wstETH to user and they deposit to cellar. Cellar handles this like the vanillapool
+    }
+
+    /**
+     * TODO: More complex join: deal wstETH to user and they deposit to cellar. Cellar should be dealt equal amounts of other constituent (WETH). Prepare swaps for bb-a-WETH.
+     */
+    function testNonStableCoinJoinMultiTokens() external {
+        // Add wstETH_bbaWETH pricing.
+        uint8[8] memory rateProviderDecimals;
+        address[8] memory rateProviders;
+        ERC20[8] memory underlyings;
+        underlyings[0] = WETH;
+        underlyings[1] = STETH;
+        BalancerStablePoolExtension.ExtensionStorage memory extensionStor = BalancerStablePoolExtension
+            .ExtensionStorage({
+                poolId: bytes32(0),
+                poolDecimals: 18,
+                rateProviderDecimals: rateProviderDecimals,
+                rateProviders: rateProviders,
+                underlyingOrConstituent: underlyings
+            });
+        PriceRouter.AssetSettings memory settings;
+
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        priceRouter.addAsset(wstETH_bbaWETH, settings, abi.encode(extensionStor), 1.787e11); // TODO: get actual price via testing revert and then make sure to run the test at the specific block.address
+
+        wstETH_bbaWETHPosition = registry.trustPosition(
+            address(balancerPoolAdaptor),
+            abi.encode(address(wstETH_bbaWETH), wstETH_bbaWETH_GAUGE_ADDRESS)
+        );
+        wstETHPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(wstETH))); // holdingPosition for tests
+        WETHPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(WETH))); // holdingPosition for tests
+
+        cellar.addPositionToCatalogue(wstETHPosition);
+        cellar.addPositionToCatalogue(WETHPosition);
+        cellar.addPositionToCatalogue(wstETH_bbaWETHPosition);
+
+        cellar.addPosition(0, wstETHPosition, abi.encode(0), false);
+        cellar.addPosition(0, WETHPosition, abi.encode(0), false);
+        cellar.addPosition(0, wstETH_bbaWETHPosition, abi.encode(0), false);
+
+        // // pricing set up for BB_A_WETH now
+        // // TODO: now, we set up the adaptorCall to actually join the pool
+
+        // uint256 assets = 100_000e6;
+        // uint256 assetsD18 = 100_000e18;
+        // deal(address(USDC), address(this), assets);
+        // cellar.deposit(assets, address(this));
+
+        // // Have strategist rebalance into boosted USDC DAI USDT Bpt.
+        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // bytes[] memory adaptorCalls = new bytes[](1);
+
+        // // Create Swap Data with constituent tokens (waWETH (to bb-a-WETH), WETH (to bb-a-WETH), wstETH)
+        // // TODO: confirm the order for token addresses
+        // IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+
+        // // TODO: remove waWETH stuff
+        // swapsBeforeJoin[0] = IVault.SingleSwap({
+        //     poolId: IBasePool(address(BB_A_WETH)).getPoolId(),
+        //     kind: IVault.SwapKind.GIVEN_IN,
+        //     assetIn: IAsset(address(waWETH)),
+        //     assetOut: IAsset(address(BB_A_WETH)),
+        //     amount: assetsD18,
+        //     userData: bytes(abi.encode(0))
+        // });
+
+        // swapsBeforeJoin[1] = IVault.SingleSwap({
+        //     poolId: IBasePool(address(BB_A_WETH)).getPoolId(),
+        //     kind: IVault.SwapKind.GIVEN_IN,
+        //     assetIn: IAsset(address(WETH)),
+        //     assetOut: IAsset(address(BB_A_WETH)),
+        //     amount: assets,
+        //     userData: bytes(abi.encode(0))
+        // });
+
+        // // Create Swap Data.
+        // swapsBeforeJoin[2].assetIn = IAsset(address(wstETH));
+        // swapsBeforeJoin[2].amount = assetsD18;
+
+        // BalancerPoolAdaptor.SwapData memory swapData;
+        // swapData.minAmountsForSwaps = new uint256[](3);
+        // swapData.swapDeadlines = new uint256[](3);
+        // swapData.swapDeadlines[0] = block.timestamp;
+        // swapData.swapDeadlines[1] = block.timestamp;
+        // swapData.swapDeadlines[2] = block.timestamp;
+
+        // adaptorCalls[0] = _createBytesDataToJoinPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
+
+        // uint256 bptBalanceBefore = BB_A_USD.balanceOf(address(cellar));
+        // uint256 expectedBPT = assets * 1e12 * 3;
+
+        // data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        // cellar.callOnAdaptor(data);
+
+        // uint256 bptBalanceAfter = BB_A_USD.balanceOf(address(cellar));
+
+        // assertApproxEqAbs(
+        //     bptBalanceAfter - bptBalanceBefore,
+        //     expectedBPT,
+        //     1000e18,
+        //     "Cellar BPT balance should incur only a small amount slippage (0.2-0.3%)"
+        // );
+    }
+
+    /// exitPool() tests
 
     function testExitVanillaPool() external {
         // Deposit into Cellar.
@@ -668,7 +902,12 @@ contract BalancerPoolAdaptorTest is Test {
     /**
      * NOTE: it would take multiple tokens and amounts in and a single bpt out
      */
-    function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 _slippage) public {
+    function slippageSwap(
+        ERC20 from,
+        ERC20 to,
+        uint256 inAmount,
+        uint32 _slippage
+    ) public {
         if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
             // Figure out value in, quoted in `to`.
             uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
@@ -746,7 +985,12 @@ contract BalancerPoolAdaptorTest is Test {
             abi.encodeWithSelector(balancerPoolAdaptor.exitPool.selector, targetBpt, swapsAfterExit, swapData, request);
     }
 
-    function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {
+    function _simulatePoolJoin(
+        address target,
+        ERC20 tokenIn,
+        uint256 amountIn,
+        ERC20 bpt
+    ) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInBpt = priceRouter.getValue(tokenIn, amountIn, bpt);
 
@@ -757,7 +1001,12 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(bpt), target, bptBalance + valueInBpt);
     }
 
-    function _simulatePoolExit(address target, ERC20 bptIn, uint256 amountIn, ERC20 tokenOut) internal {
+    function _simulatePoolExit(
+        address target,
+        ERC20 bptIn,
+        uint256 amountIn,
+        ERC20 tokenOut
+    ) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInTokenOut = priceRouter.getValue(bptIn, amountIn, tokenOut);
 
@@ -768,7 +1017,12 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(tokenOut), target, tokenOutBalance + valueInTokenOut);
     }
 
-    function _simulateBptStake(address target, ERC20 bpt, uint256 amountIn, ERC20 gauge) internal {
+    function _simulateBptStake(
+        address target,
+        ERC20 bpt,
+        uint256 amountIn,
+        ERC20 gauge
+    ) internal {
         // Use deal to mutate targets balances.
         uint256 tokenInBalance = bpt.balanceOf(target);
         deal(address(bpt), target, tokenInBalance - amountIn);
@@ -776,11 +1030,20 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(gauge), target, gaugeBalance + amountIn);
     }
 
-    function _simulateBptUnStake(address target, ERC20 bpt, uint256 amountOut, ERC20 gauge) internal {
+    function _simulateBptUnStake(
+        address target,
+        ERC20 bpt,
+        uint256 amountOut,
+        ERC20 gauge
+    ) internal {
         // Use deal to mutate targets balances.
         uint256 bptBalance = bpt.balanceOf(target);
         deal(address(bpt), target, bptBalance + amountOut);
         uint256 gaugeBalance = gauge.balanceOf(target);
         deal(address(gauge), target, gaugeBalance - amountOut);
     }
+
+    /**
+     * TODO: create helper to make joinPool tests more efficient
+     */
 }
