@@ -1371,7 +1371,123 @@ contract BalancerPoolAdaptorTest is Test {
         address(cellar).safeTransferETH(1 ether);
     }
 
+    function testJoinPoolSlippageCheck(uint256 assets) external checkBlockNumber {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 10_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+        swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[1].amount = type(uint256).max;
+        swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+
+        adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___Slippage.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
+    function testExitPoolSlippageCheck(uint256 assets) external checkBlockNumber {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(vanillaUsdcDaiUsdt), address(cellar), bptAmount);
+
+        // Have strategist exit pool in 1 token.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // There are no swaps to be made, so just create empty arrays.
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+
+        // There are no swaps needed because we support all the assets we get from the pool.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(DAI));
+        swapsAfterExit[1].assetIn = IAsset(address(USDC));
+        swapsAfterExit[2].assetIn = IAsset(address(USDT));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(DAI));
+        poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        poolAssets[2] = IAsset(address(USDC));
+        poolAssets[3] = IAsset(address(USDT));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(0, bptAmount, 1);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitPool(vanillaUsdcDaiUsdt, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___Slippage.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
     // ========================================= HELPERS =========================================
+
+    // This function is used for exit pool slippage checks.
+    // Specifically this function will only work to mock exit pools for vanilla stablecoin pool where the cellar
+    // is exiting into USDC at index 1.
+    function exitPool(
+        bytes32 poolId,
+        address sender,
+        address payable recipient,
+        IVault.ExitPoolRequest memory request
+    ) external {
+        (, uint256 amountOfBptsToRedeem) = abi.decode(request.userData, (uint256, uint256));
+        uint256 exitPoolSlippage = 0.89e4;
+
+        uint256 amountOfUsdcToMint = priceRouter.getValue(vanillaUsdcDaiUsdt, amountOfBptsToRedeem, USDC);
+        amountOfUsdcToMint = amountOfUsdcToMint.mulDivDown(exitPoolSlippage, 1e4);
+
+        deal(address(USDC), sender, USDC.balanceOf(sender) + amountOfUsdcToMint);
+        deal(address(vanillaUsdcDaiUsdt), sender, vanillaUsdcDaiUsdt.balanceOf(address(cellar)) - amountOfBptsToRedeem);
+    }
+
+    // This function is used for join pool slippage checks.
+    // Specifically this function will only work to mock join pools for vanilla stablecoin pool where the cellar
+    // is joining with USDC at index 1.
+    function joinPool(bytes32, address sender, address, IVault.JoinPoolRequest memory request) public {
+        (, uint256[] memory amounts) = abi.decode(request.userData, (uint256, uint256[]));
+        uint256 amountOfUsdcJoinedWith = amounts[1];
+        uint256 joinPoolSlippage = 0.89e4;
+        uint256 amountOfBptsToMint = priceRouter.getValue(USDC, amountOfUsdcJoinedWith, vanillaUsdcDaiUsdt);
+        amountOfBptsToMint = amountOfBptsToMint.mulDivDown(joinPoolSlippage, 1e4);
+
+        deal(address(USDC), sender, USDC.balanceOf(sender) - amountOfUsdcJoinedWith);
+        deal(address(vanillaUsdcDaiUsdt), sender, amountOfBptsToMint);
+    }
+
+    function getPoolTokens(
+        bytes32 poolId
+    ) external view returns (IERC20[] memory tokens, uint256[] memory balances, uint256 lastChangeBlock) {
+        return IVault(vault).getPoolTokens(poolId);
+    }
 
     /**
      * NOTE: it would take multiple tokens and amounts in and a single bpt out
