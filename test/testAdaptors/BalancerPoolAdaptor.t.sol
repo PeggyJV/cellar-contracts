@@ -447,7 +447,7 @@ contract BalancerPoolAdaptorTest is Test {
 
     // ========================================= PHASE 1 - GUARD RAIL TESTS =========================================
 
-    function testJoinVanillaPool() external {
+    function testJoinVanillaPool() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
@@ -477,7 +477,7 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testJoinBoostedPool() external {
+    function testJoinBoostedPool() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
@@ -515,7 +515,7 @@ contract BalancerPoolAdaptorTest is Test {
 
     // take joinVanillaPool, have the user deposit. Deal out cellar equal parts of the constituents (USDC, USDT, DAI). Change the swap info so it's giving multi-tokens (not just one).
     // TODO: make this a fuzzing test and write out proper assertions.
-    function testJoinVanillaPoolWithMultiTokens() external {
+    function testJoinVanillaPoolWithMultiTokens() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
@@ -574,7 +574,7 @@ contract BalancerPoolAdaptorTest is Test {
         );
     }
 
-    function testJoinBoostedPoolWithMultipleTokens() external {
+    function testJoinBoostedPoolWithMultipleTokens() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
@@ -658,7 +658,7 @@ contract BalancerPoolAdaptorTest is Test {
     /**
      * More complex join: deal wstETH to user and they deposit to cellar. Cellar should be dealt equal amounts of other constituent (WETH). Prepare swaps for bb-a-WETH.
      */
-    function testNonStableCoinJoinMultiTokens() external {
+    function testNonStableCoinJoinMultiTokens() external checkBlockNumber {
         uint256 assets = 1000e6;
 
         // Add wstETH_bbaWETH pricing.
@@ -755,7 +755,7 @@ contract BalancerPoolAdaptorTest is Test {
 
     /// exitPool() tests
 
-    function testExitVanillaPool() external {
+    function testExitVanillaPool() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
@@ -802,7 +802,7 @@ contract BalancerPoolAdaptorTest is Test {
         cellar.callOnAdaptor(data);
     }
 
-    function testExitBoostedPool() external {
+    function testExitBoostedPool() external checkBlockNumber {
         // Deposit into Cellar.
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
