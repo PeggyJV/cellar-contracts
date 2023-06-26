@@ -4,9 +4,7 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IBalancerQueries } from "src/interfaces/external/Balancer/IBalancerQueries.sol";
 import { IVault, IERC20, IAsset } from "src/interfaces/external/Balancer/IVault.sol";
-import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { IStakingLiquidityGauge } from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
-import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
 import { IBasePool } from "src/interfaces/external/Balancer/typically-npm/IBasePool.sol";
 import { ILiquidityGauge } from "src/interfaces/external/Balancer/ILiquidityGauge.sol";
@@ -111,12 +109,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     IVault public immutable vault;
 
     /**
-     * @notice The Balancer Relayer contract adhering to `IBalancerRelayer
-     * @notice For mainnet use 0xfeA793Aa415061C483D2390414275AD314B3F621
-     */
-    IBalancerRelayer public immutable relayer;
-
-    /**
      * @notice The BalancerMinter contract adhering to IBalancerMinter (custom interface) to access `mint()` to collect $BAL rewards for Cellar
      * @notice For mainnet use 0x239e55F427D44C3cc793f49bFB507ebe76638a2b
      */
@@ -137,11 +129,10 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     //============================================ Constructor ===========================================
 
-    constructor(address _vault, address _relayer, address _minter, uint32 _balancerSlippage) {
+    constructor(address _vault, address _minter, uint32 _balancerSlippage) {
         if (_balancerSlippage < 0.9e4 || _balancerSlippage > 1e4)
             revert BalancerPoolAdaptor___InvalidConstructorSlippage();
         vault = IVault(_vault);
-        relayer = IBalancerRelayer(_relayer);
         minter = IBalancerMinter(_minter);
         balancerSlippage = _balancerSlippage;
     }
