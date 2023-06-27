@@ -14,7 +14,7 @@ import { IBalancerMinter } from "src/interfaces/external/IBalancerMinter.sol";
 
 /**
  * @title Balancer Pool Adaptor
- * @notice Allows Cellars to interact with Weighted, Stable, and Linear Balancer Pools (BPs).
+ * @notice Allows Cellars to interact with Stable and Boosted Stable Balancer Pools (BPs).
  * @author 0xEinCodes and CrispyMangoes
  */
 contract BalancerPoolAdaptor is BaseAdaptor {
@@ -129,7 +129,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
 
     //============================================ Constructor ===========================================
 
-    constructor(address _vault, address _minter, uint32 _balancerSlippage) {
+    constructor(
+        address _vault,
+        address _minter,
+        uint32 _balancerSlippage
+    ) {
         if (_balancerSlippage < 0.9e4 || _balancerSlippage > 1e4)
             revert BalancerPoolAdaptor___InvalidConstructorSlippage();
         vault = IVault(_vault);
@@ -153,7 +157,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(uint256, bytes memory, bytes memory) public pure override {
+    function deposit(
+        uint256,
+        bytes memory,
+        bytes memory
+    ) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
@@ -362,7 +370,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
         ERC20[] memory expectedTokensOut = _getPoolTokensWithNoPremintedBpt(address(targetBpt), poolTokens);
 
-        // Insure toInternalBalance is false.
+        // Ensure toInternalBalance is false.
         if (request.toInternalBalance) revert BalancerPoolAdaptor___InternalBalancesNotSupported();
 
         // Figure out the ERC20 balance changes, and the BPT balance change from calling `exitPool`.
@@ -435,7 +443,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _amountIn number of BPTs to stake
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
-    function stakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountIn) external {
+    function stakeBPT(
+        ERC20 _bpt,
+        address _liquidityGauge,
+        uint256 _amountIn
+    ) external {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         uint256 amountIn = _maxAvailable(_bpt, _amountIn);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
@@ -450,7 +462,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      * @param _amountOut number of BPTs to unstake
      * @dev Interface custom as Balancer/Curve do not provide for liquidityGauges.
      */
-    function unstakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountOut) public {
+    function unstakeBPT(
+        ERC20 _bpt,
+        address _liquidityGauge,
+        uint256 _amountOut
+    ) public {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
         _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
@@ -484,10 +500,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     /**
      * @notice Returns a BPT's token array with any pre-minted BPT removed, but the order preserved.
      */
-    function _getPoolTokensWithNoPremintedBpt(
-        address bpt,
-        IERC20[] memory poolTokens
-    ) internal pure returns (ERC20[] memory tokens) {
+    function _getPoolTokensWithNoPremintedBpt(address bpt, IERC20[] memory poolTokens)
+        internal
+        pure
+        returns (ERC20[] memory tokens)
+    {
         uint256 poolTokensLength = poolTokens.length;
         bool removePremintedBpts;
         // Iterate through, and check if we need to remove pre-minted bpts.
