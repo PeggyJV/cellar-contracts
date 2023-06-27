@@ -194,7 +194,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     function balanceOf(bytes memory _adaptorData) public view override returns (uint256) {
         (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
         if (liquidityGauge == address(0)) return ERC20(bpt).balanceOf(msg.sender);
-        ERC20 liquidityGaugeToken = ERC20(address(liquidityGauge));
+        ERC20 liquidityGaugeToken = ERC20(liquidityGauge);
         uint256 stakedBPT = liquidityGaugeToken.balanceOf(msg.sender);
         return ERC20(bpt).balanceOf(msg.sender) + stakedBPT;
     }
@@ -439,9 +439,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         uint256 amountIn = _maxAvailable(_bpt, _amountIn);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
-        _bpt.approve(address(liquidityGauge), amountIn);
+        _bpt.approve(_liquidityGauge, amountIn);
         liquidityGauge.deposit(amountIn, address(this));
-        _revokeExternalApproval(_bpt, address(liquidityGauge));
+        _revokeExternalApproval(_bpt, _liquidityGauge);
     }
 
     /**
@@ -453,7 +453,7 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     function unstakeBPT(ERC20 _bpt, address _liquidityGauge, uint256 _amountOut) public {
         _validateBptAndGauge(address(_bpt), _liquidityGauge);
         ILiquidityGaugev3Custom liquidityGauge = ILiquidityGaugev3Custom(_liquidityGauge);
-        _amountOut = _maxAvailable(ERC20(address(liquidityGauge)), _amountOut);
+        _amountOut = _maxAvailable(ERC20(_liquidityGauge), _amountOut);
         liquidityGauge.withdraw(_amountOut);
     }
 
