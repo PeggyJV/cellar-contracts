@@ -930,6 +930,88 @@ contract BalancerPoolAdaptorTest is Test {
         );
     }
 
+    function testExitBoostedPoolProportional(uint256 assets) external checkBlockNumber {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        // Have strategist exit pool in 1 token.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // There are no swaps to be made, so just create empty arrays.
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        // We need to swap any linear pool tokens for ERC20s.
+        // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
+        swapsAfterExit[0].poolId = IBasePool(address(bb_a_dai)).getPoolId();
+        swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
+        swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
+        swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
+        swapsAfterExit[2].poolId = IBasePool(address(bb_a_usdc)).getPoolId();
+        swapsAfterExit[0].assetOut = IAsset(address(DAI));
+        swapsAfterExit[1].assetOut = IAsset(address(USDT));
+        swapsAfterExit[2].assetOut = IAsset(address(USDC));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(bb_a_dai));
+        poolAssets[1] = IAsset(address(bb_a_usdt));
+        poolAssets[2] = IAsset(address(bb_a_usdc));
+        poolAssets[3] = IAsset(address(BB_A_USD));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(2, bptAmount);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitPool(BB_A_USD, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = USDC;
+        baseAssets[1] = DAI;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = USDC.balanceOf(address(cellar));
+        baseAmounts[1] = DAI.balanceOf(address(cellar));
+        baseAmounts[2] = USDT.balanceOf(address(cellar));
+
+        assertGt(baseAmounts[0], 0, "Cellar should have got USDC.");
+        assertGt(baseAmounts[1], 0, "Cellar should have got DAI.");
+        assertGt(baseAmounts[2], 0, "Cellar should have got USDT.");
+
+        uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            expectedValueOut,
+            0.001e18,
+            "Cellar should have received expected value out."
+        );
+
+        assertEq(BB_A_USD.balanceOf(address(cellar)), 0, "Cellar shouyld have redeemed all BPTs.");
+    }
+
     // ========================================= Reverts =========================================
 
     function testConstructorReverts() external checkBlockNumber {
