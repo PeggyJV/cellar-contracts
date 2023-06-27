@@ -31,10 +31,6 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     // **************************** IMPORTANT ****************************
     // This adaptor has the `assetOf` as a bpt, and thus relies on the `PriceRouterv2` Balancer
     // Extensions corresponding with the type of bpt the Cellar is working with.
-    //==================== Adaptor Data Specification ====================
-    // See Related Open Issues on this for BalancerPoolAdaptor.sol
-    //================= Configuration Data Specification =================
-    // NOT USED
     //====================================================================
 
     //============================================ Error Statements ===========================================
