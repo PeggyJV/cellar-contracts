@@ -19,7 +19,6 @@ import { Math } from "src/utils/Math.sol";
 import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolAdaptor.sol";
 import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
 import { IBasePool } from "src/interfaces/external/Balancer/typically-npm/IBasePool.sol";
-// import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
 import { IVault, IAsset, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
 import { MockBPTPriceFeed } from "src/mocks/MockBPTPriceFeed.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
@@ -1009,7 +1008,79 @@ contract BalancerPoolAdaptorTest is Test {
             "Cellar should have received expected value out."
         );
 
-        assertEq(BB_A_USD.balanceOf(address(cellar)), 0, "Cellar shouyld have redeemed all BPTs.");
+        assertEq(BB_A_USD.balanceOf(address(cellar)), 0, "Cellar should have redeemed all BPTs.");
+    }
+
+    function testExitVanillaPoolProportional(uint256 assets) external checkBlockNumber {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(vanillaUsdcDaiUsdt), address(cellar), bptAmount);
+
+        // Have strategist exit pool in underlying tokens.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // There are no swaps to be made, so just create empty arrays.
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+
+        // There are no swaps needed because we support all the assets we get from the pool.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(DAI));
+        swapsAfterExit[1].assetIn = IAsset(address(USDC));
+        swapsAfterExit[2].assetIn = IAsset(address(USDT));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(DAI));
+        poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        poolAssets[2] = IAsset(address(USDC));
+        poolAssets[3] = IAsset(address(USDT));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(2, bptAmount);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitPool(vanillaUsdcDaiUsdt, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = USDC;
+        baseAssets[1] = DAI;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = USDC.balanceOf(address(cellar));
+        baseAmounts[1] = DAI.balanceOf(address(cellar));
+        baseAmounts[2] = USDT.balanceOf(address(cellar));
+
+        uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            expectedValueOut,
+            0.002e18,
+            "Cellar should have received expected value out."
+        );
+
+        assertGt(baseAmounts[0], 0, "Cellar should have got USDC.");
+        assertGt(baseAmounts[1], 0, "Cellar should have got DAI.");
+        assertGt(baseAmounts[2], 0, "Cellar should have got USDT.");
+
+        assertEq(vanillaUsdcDaiUsdt.balanceOf(address(cellar)), 0, "Cellar shouyld have redeemed all BPTs.");
     }
 
     // ========================================= Reverts =========================================
@@ -1554,7 +1625,12 @@ contract BalancerPoolAdaptorTest is Test {
     // This function is used for join pool slippage checks.
     // Specifically this function will only work to mock join pools for vanilla stablecoin pool where the cellar
     // is joining with USDC at index 1.
-    function joinPool(bytes32, address sender, address, IVault.JoinPoolRequest memory request) public {
+    function joinPool(
+        bytes32,
+        address sender,
+        address,
+        IVault.JoinPoolRequest memory request
+    ) public {
         (, uint256[] memory amounts) = abi.decode(request.userData, (uint256, uint256[]));
         uint256 amountOfUsdcJoinedWith = amounts[1];
         uint256 joinPoolSlippage = 0.89e4;
@@ -1565,16 +1641,27 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(vanillaUsdcDaiUsdt), sender, amountOfBptsToMint);
     }
 
-    function getPoolTokens(
-        bytes32 poolId
-    ) external view returns (IERC20[] memory tokens, uint256[] memory balances, uint256 lastChangeBlock) {
+    function getPoolTokens(bytes32 poolId)
+        external
+        view
+        returns (
+            IERC20[] memory tokens,
+            uint256[] memory balances,
+            uint256 lastChangeBlock
+        )
+    {
         return IVault(vault).getPoolTokens(poolId);
     }
 
     /**
      * NOTE: it would take multiple tokens and amounts in and a single bpt out
      */
-    function slippageSwap(ERC20 from, ERC20 to, uint256 inAmount, uint32 _slippage) public {
+    function slippageSwap(
+        ERC20 from,
+        ERC20 to,
+        uint256 inAmount,
+        uint32 _slippage
+    ) public {
         if (priceRouter.isSupported(from) && priceRouter.isSupported(to)) {
             // Figure out value in, quoted in `to`.
             uint256 fullValueOut = priceRouter.getValue(from, inAmount, to);
@@ -1652,7 +1739,12 @@ contract BalancerPoolAdaptorTest is Test {
             abi.encodeWithSelector(balancerPoolAdaptor.exitPool.selector, targetBpt, swapsAfterExit, swapData, request);
     }
 
-    function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {
+    function _simulatePoolJoin(
+        address target,
+        ERC20 tokenIn,
+        uint256 amountIn,
+        ERC20 bpt
+    ) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInBpt = priceRouter.getValue(tokenIn, amountIn, bpt);
 
@@ -1663,7 +1755,12 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(bpt), target, bptBalance + valueInBpt);
     }
 
-    function _simulatePoolExit(address target, ERC20 bptIn, uint256 amountIn, ERC20 tokenOut) internal {
+    function _simulatePoolExit(
+        address target,
+        ERC20 bptIn,
+        uint256 amountIn,
+        ERC20 tokenOut
+    ) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInTokenOut = priceRouter.getValue(bptIn, amountIn, tokenOut);
 
@@ -1674,7 +1771,12 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(tokenOut), target, tokenOutBalance + valueInTokenOut);
     }
 
-    function _simulateBptStake(address target, ERC20 bpt, uint256 amountIn, ERC20 gauge) internal {
+    function _simulateBptStake(
+        address target,
+        ERC20 bpt,
+        uint256 amountIn,
+        ERC20 gauge
+    ) internal {
         // Use deal to mutate targets balances.
         uint256 tokenInBalance = bpt.balanceOf(target);
         deal(address(bpt), target, tokenInBalance - amountIn);
@@ -1682,7 +1784,12 @@ contract BalancerPoolAdaptorTest is Test {
         deal(address(gauge), target, gaugeBalance + amountIn);
     }
 
-    function _simulateBptUnStake(address target, ERC20 bpt, uint256 amountOut, ERC20 gauge) internal {
+    function _simulateBptUnStake(
+        address target,
+        ERC20 bpt,
+        uint256 amountOut,
+        ERC20 gauge
+    ) internal {
         // Use deal to mutate targets balances.
         uint256 bptBalance = bpt.balanceOf(target);
         deal(address(bpt), target, bptBalance + amountOut);
