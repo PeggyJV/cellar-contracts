@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolAdaptor.sol";
-import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { IVault } from "src/interfaces/external/Balancer/IVault.sol";
 import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
 import { console } from "@forge-std/Test.sol";
@@ -24,8 +23,7 @@ contract MockBalancerPoolAdaptor is BalancerPoolAdaptor {
 
     constructor(
         address _vault,
-        address _relayer,
         address _minter,
         uint32 _balancerSlippage
-    ) BalancerPoolAdaptor(_vault, _relayer, _minter, _balancerSlippage) {}
+    ) BalancerPoolAdaptor(_vault, _minter, _balancerSlippage) {}
 }

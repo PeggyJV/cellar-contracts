@@ -4,7 +4,6 @@ pragma solidity 0.8.16;
 import { IBalancerPool } from "src/interfaces/external/IBalancerPool.sol";
 import { IRateProvider } from "src/interfaces/external/IRateProvider.sol";
 import { BalancerPoolExtension, PriceRouter, ERC20, Math, IVault, IERC20 } from "./BalancerPoolExtension.sol";
-import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 /**
  * @title Sommelier Price Router Balancer Stable Pool Extension
@@ -13,7 +12,6 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
  */
 contract BalancerStablePoolExtension is BalancerPoolExtension {
     using Math for uint256;
-    using Address for address;
 
     /**
      * @notice Atleast one of the pools underlying tokens is not supported by the Price Router.
