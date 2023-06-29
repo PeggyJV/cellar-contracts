@@ -77,6 +77,23 @@ contract DeployMacroAudit8Script is Script {
     ERC20 public aV3RETH = ERC20(0xCc9EE9483f662091a1de4795249E24aC0aC2630f);
     ERC20 public dV3RETH = ERC20(0xae8593DD575FE29A9745056aA91C4b746eee62C8);
 
+    // FraxLend Pairs
+    address private FPI_PAIR_v1 = 0x74F82Bd9D0390A4180DaaEc92D64cf0708751759;
+    address private FXS_PAIR_v1 = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
+    address private wBTC_PAIR_v1 = 0x32467a5fc2d72D21E8DCe990906547A2b012f382;
+    address private wETH_PAIR_v1 = 0x794F6B13FBd7EB7ef10d1ED205c9a416910207Ff;
+    address private gOHM_PAIR_v1 = 0x66bf36dBa79d4606039f04b32946A260BCd3FF52;
+    address private Curve_PAIR_v1 = 0x3835a58CA93Cdb5f912519ad366826aC9a752510;
+    address private Convex_PAIR_v1 = 0xa1D100a5bf6BFd2736837c97248853D989a9ED84;
+
+    address private AAVE_PAIR_v2 = 0xc779fEE076EB04b9F8EA424ec19DE27Efd17A68d;
+    address private Uni_PAIR_v2 = 0xc6CadA314389430d396C7b0C70c6281e99ca7fe8;
+    address private MKR_PAIR_v2 = 0x82Ec28636B77661a95f021090F6bE0C8d379DD5D;
+    address private APE_PAIR_v2 = 0x3a25B9aB8c07FfEFEe614531C75905E810d8A239;
+    address private FRAX_USDC_Curve_LP_PAIR_v2 = 0x1Fff4a418471a7b44EFa023320e02DCDB486ED77;
+    address private frxETH_ETH_Curve_LP_PAIR_v2 = 0x281E6CB341a552E4faCCc6b4eEF1A6fCC523682d;
+    address private sfrxETH_PAIR_v2 = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
+
     IMorphoV2 private morphoV2 = IMorphoV2(0x777777c9898D384F785Ee44Acfe945efDFf5f3E0);
     address private morphoLens = 0x507fA343d0A90786d86C7cd885f5C49263A91FF4;
     address private rewardHandler = 0x3B14E5C73e0A56D607A8688098326fD4b4292135;
