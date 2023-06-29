@@ -29,11 +29,13 @@ contract DeployFraximalScript is Script {
 
     address private devOwner = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
     address private strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
+    address private tempOwner = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
 
     // Define Adaptors.
     ERC20Adaptor private erc20Adaptor = ERC20Adaptor(0xB1d08c5a1A67A34d9dC6E9F2C5fAb797BA4cbbaE);
     FTokenAdaptor private fTokenAdaptorV2 = FTokenAdaptor(0x13C7DA01977E6de1dFa8B135DA34BD569650Acb9);
     FTokenAdaptorV1 private fTokenAdaptorV1 = FTokenAdaptorV1(0x4e4E5610885c6c2c8D9ad92e36945FB7092aADae);
+    address private feesAndReserves = 0x647d264d800A2461E594796af61a39b7735d8933;
 
     // FraxLend Pairs
     address private FPI_PAIR_v1 = 0x74F82Bd9D0390A4180DaaEc92D64cf0708751759;
@@ -51,8 +53,8 @@ contract DeployFraximalScript is Script {
     address private frxETH_ETH_Curve_LP_PAIR_v2 = 0x281E6CB341a552E4faCCc6b4eEF1A6fCC523682d;
     address private sfrxETH_PAIR_v2 = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
 
-    Registry private registry = Registry(0xc3ddF6F2512c16d0780Ff03Ec621E81a0919F1CA);
-    CellarFactory private factory = CellarFactory(0x0C6B501c3ee7D26D86633A581434105D40DB239B);
+    Registry private registry = Registry(0x3051e76a62da91D4aD6Be6bD98D8Ab26fdaF9D08);
+    CellarFactory private factory = CellarFactory(0x9D30672eED8D514cD1ad009Cfe85Ea8f0019D37F);
     PriceRouter private priceRouter = PriceRouter(0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA);
     ERC20 private FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
 
@@ -61,21 +63,21 @@ contract DeployFraximalScript is Script {
 
         vm.startBroadcast();
 
-        // positions[0] = ;  // FRAX position
-        // positions[1] = ;  // FPI_PAIR_v1 position
-        // positions[2] = ;  // FXS_PAIR_v1 position
-        // positions[3] = ;  // wBTC_PAIR_v1 position
-        // positions[4] = ;  // wETH_PAIR_v1 position
-        // positions[5] = ;  // gOHM_PAIR_v1 position
-        // positions[6] = ;  // Curve_PAIR_v1 position
-        // positions[7] = ;  // Convex_PAIR_v1 position
-        // positions[8] = ;  // AAVE_PAIR_v2 position
-        // positions[9] = ;  // Uni_PAIR_v2 position
-        // positions[10] = ; // MKR_PAIR_v2 position
-        // positions[11] = ; // APE_PAIR_v2 position
-        // positions[12] = ; // FRAX_USDC_Curve_LP_PAIR_v2 position
-        // positions[13] = ; // frxETH_ETH_Curve_LP_PAIR_v2 position
-        // positions[14] = ; // sfrxETH_PAIR_v2 position
+        positions[0] = 181; // FRAX position
+        positions[1] = 167; // FPI_PAIR_v1 position
+        positions[2] = 168; // FXS_PAIR_v1 position
+        positions[3] = 169; // wBTC_PAIR_v1 position
+        positions[4] = 170; // wETH_PAIR_v1 position
+        positions[5] = 171; // gOHM_PAIR_v1 position
+        positions[6] = 172; // Curve_PAIR_v1 position
+        positions[7] = 173; // Convex_PAIR_v1 position
+        positions[8] = 174; // AAVE_PAIR_v2 position
+        positions[9] = 175; // Uni_PAIR_v2 position
+        positions[10] = 176; // MKR_PAIR_v2 position
+        positions[11] = 177; // APE_PAIR_v2 position
+        positions[12] = 178; // FRAX_USDC_Curve_LP_PAIR_v2 position
+        positions[13] = 179; // frxETH_ETH_Curve_LP_PAIR_v2 position
+        positions[14] = 180; // sfrxETH_PAIR_v2 position
 
         {
             // Deploy cellar using factory.
@@ -108,7 +110,13 @@ contract DeployFraximalScript is Script {
             // Setup all the adaptors the cellar will use.
             cellar.addAdaptorToCatalogue(address(fTokenAdaptorV2));
             cellar.addAdaptorToCatalogue(address(fTokenAdaptorV1));
+            cellar.addAdaptorToCatalogue(address(feesAndReserves));
 
             for (uint256 i = 1; i < positions.length; ++i) cellar.addPositionToCatalogue(positions[i]);
+
+            cellar.setShareLockPeriod(10 * 60);
+
+            cellar.transferOwnership(tempOwner);
+        }
     }
 }

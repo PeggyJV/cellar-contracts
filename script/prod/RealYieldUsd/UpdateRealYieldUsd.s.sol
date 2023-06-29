@@ -49,32 +49,15 @@ contract UpdateRealYieldUsdScript is Script {
 
     IRegistry private registry = IRegistry(0x2Cbd27E034FEE53f79b607430dA7771B22050741);
 
-    address public vestingSimpleAdaptor = 0x508E6aE090eA92Cb90571e4269B799257CD78CA1;
-    address public oneInchAdaptor = 0xB8952ce4010CFF3C74586d712a4402285A3a3AFb;
-    address public swapWithUniswapAdaptor = 0xd6BC6Df1ed43e3101bC27a4254593a06598a3fDD;
-    address public zeroXAdaptor = 0x1039a9b61DFF6A3fb8dbF4e924AA749E5cFE35ef;
-    address public aaveV3DebtTokenAdaptor = 0x6DEd49176a69bEBf8dC1a4Ea357faa555df188f7;
-    address public aaveV3AtokenAdaptor = 0x3184CBEa47eD519FA04A23c4207cD15b7545F1A6;
-    address public aaveDebtTokenAdaptor = 0x5F4e81E1BC9D7074Fc30aa697855bE4e1AA16F0b;
-    address public aaveATokenAdaptor = 0x25570a77dCA06fda89C1ef41FAb6eE48a2377E81;
-    address public feesAndReservesAdaptor = 0x647d264d800A2461E594796af61a39b7735d8933;
-    address public cTokenAdaptor = 0x9a384Df333588428843D128120Becd72434ec078;
-
     // Values needed to make positions.
-    address public usdcVestor = 0xd944D0e62de2ae742C4CA085e80222f58B69b231;
     address private aV2USDC = 0xBcca60bB61934080951369a648Fb03DF4F96263C;
     address private aV2DAI = 0x028171bCA77440897B824Ca71D1c56caC55b68A3;
     address private aV2USDT = 0x3Ed3B47Dd13EC9a98b44e6204A523E766B225811;
-    address private aV3USDC = 0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c;
-    address private aV3DAI = 0x018008bfb33d285247A21d44E50697654f754e63;
-    address private aV3USDT = 0x23878914EFE38d27C4D67Ab83ed1b93A74D4086a;
 
-    // address private cUSDC = 0x39AA39c021dfbaE8faC545936693aC917d5E7563;
-    // address private cDAI = 0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643;
-    // address private cUSDT = 0xf650C3d88D12dB855b8bf7D11Be6C55A4e07dCC9;
+    address private morphoAaveV2ATokenAdaptor = 0x1a4cB53eDB8C65C3DF6Aa9D88c1aB4CF35312b73;
 
     function run() external {
-        uint256 numberOfCalls = 15;
+        uint256 numberOfCalls = 4;
 
         address[] memory targets = new address[](numberOfCalls);
         for (uint256 i; i < numberOfCalls; ++i) targets[i] = address(registry);
@@ -83,60 +66,25 @@ contract UpdateRealYieldUsdScript is Script {
 
         bytes[] memory payloads = new bytes[](numberOfCalls);
         // Need to trustAdaptors
-        payloads[0] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, vestingSimpleAdaptor, 0, 0);
-        payloads[1] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, oneInchAdaptor, 0, 0);
-        payloads[2] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, swapWithUniswapAdaptor, 0, 0);
-        payloads[3] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, zeroXAdaptor, 0, 0);
-        payloads[4] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, aaveV3AtokenAdaptor, 0, 0);
-        payloads[5] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, aaveATokenAdaptor, 0, 0);
-        payloads[6] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, feesAndReservesAdaptor, 0, 0);
-        payloads[7] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, cTokenAdaptor, 0, 0);
-        payloads[8] = abi.encodeWithSelector(
+        payloads[0] = abi.encodeWithSelector(IRegistry.trustAdaptor.selector, morphoAaveV2ATokenAdaptor, 0, 0);
+        payloads[1] = abi.encodeWithSelector(
             IRegistry.trustPosition.selector,
-            aaveATokenAdaptor,
-            abi.encode(aV2USDC),
-            0,
-            0
-        );
-        payloads[9] = abi.encodeWithSelector(
-            IRegistry.trustPosition.selector,
-            aaveATokenAdaptor,
+            morphoAaveV2ATokenAdaptor,
             abi.encode(aV2DAI),
             0,
             0
         );
-        payloads[10] = abi.encodeWithSelector(
+        payloads[2] = abi.encodeWithSelector(
             IRegistry.trustPosition.selector,
-            aaveATokenAdaptor,
+            morphoAaveV2ATokenAdaptor,
             abi.encode(aV2USDT),
             0,
             0
         );
-        payloads[11] = abi.encodeWithSelector(
+        payloads[3] = abi.encodeWithSelector(
             IRegistry.trustPosition.selector,
-            aaveV3AtokenAdaptor,
-            abi.encode(aV3USDC),
-            0,
-            0
-        );
-        payloads[12] = abi.encodeWithSelector(
-            IRegistry.trustPosition.selector,
-            aaveV3AtokenAdaptor,
-            abi.encode(aV3DAI),
-            0,
-            0
-        );
-        payloads[13] = abi.encodeWithSelector(
-            IRegistry.trustPosition.selector,
-            aaveV3AtokenAdaptor,
-            abi.encode(aV3USDT),
-            0,
-            0
-        );
-        payloads[14] = abi.encodeWithSelector(
-            IRegistry.trustPosition.selector,
-            vestingSimpleAdaptor,
-            abi.encode(usdcVestor),
+            morphoAaveV2ATokenAdaptor,
+            abi.encode(aV2USDC),
             0,
             0
         );
@@ -149,10 +97,5 @@ contract UpdateRealYieldUsdScript is Script {
         vm.startBroadcast();
         controller.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
         vm.stopBroadcast();
-
-        // Wait to trust Compound positions cuz RYUSD needs the new compound adaptor in order to fully exit the compound positions.
-        // registry.trustPosition(cTokenAdaptor, abi.encode(cUSDC), 0, 0);
-        // registry.trustPosition(cTokenAdaptor, abi.encode(cDAI), 0, 0);
-        // registry.trustPosition(cTokenAdaptor, abi.encode(cUSDT), 0, 0);
     }
 }
