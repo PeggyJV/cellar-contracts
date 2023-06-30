@@ -117,7 +117,7 @@ contract MorphoAaveV2AdaptorIntegrations is Test {
         _;
     }
 
-    function setUp() external {
+    function setUp() external checkBlockNumber {
         // Setup positions and CataloguePositions for RYUSD with MorphoAaveV2AToken && stables
         // trustAdaptor and set up new positions (credit positions) in RYU cellar.
         vm.startPrank(controller); // controller is used to manage the RYUSD registry
@@ -153,7 +153,7 @@ contract MorphoAaveV2AdaptorIntegrations is Test {
     }
 
     // test lending USDT, USDC, DAI
-    function testMorphoAaveV2Lending() external {
+    function testMorphoAaveV2Lending() external checkBlockNumber {
         // set up ryUSDCellar to have 1_000_000 of each stablecoin
         deal(address(DAI), address(ryUSDCellar), 1_000_000e18);
         deal(address(USDC), address(ryUSDCellar), 1_000_000e6);

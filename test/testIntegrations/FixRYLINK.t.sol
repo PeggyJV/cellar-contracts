@@ -61,7 +61,7 @@ contract FixRYLINK is Test {
         _;
     }
 
-    function testRealYieldLink() external {
+    function testRealYieldLink() external checkBlockNumber {
         // Distrust old adaptor and position in registry.
         vm.startPrank(multisig);
         registry.distrustPosition(oldRyePosition);
