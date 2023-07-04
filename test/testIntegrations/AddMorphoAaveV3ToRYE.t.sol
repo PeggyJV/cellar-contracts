@@ -86,9 +86,9 @@ contract MorphoAaveV3AdaptorIntegrations is Test {
 
         // setup positions in rye cellar
         vm.prank(gravityBridge);
+        rye.addAdaptorToCatalogue(address(morphoAaveV3P2PAdaptor));
         rye.addAdaptorToCatalogue(address(morphoAaveV3ATokenAdaptor));
         rye.addAdaptorToCatalogue(address(morphoAaveV3DebtTokenAdaptor));
-        rye.addAdaptorToCatalogue(address(morphoAaveV3P2PAdaptor));
         rye.addPositionToCatalogue(morphoAaveV3AWstETHPosition);
         rye.addPositionToCatalogue(morphoAaveV3DebtWETHPosition);
         rye.addPositionToCatalogue(morphoAaveV3AWstETHPosition);
@@ -152,9 +152,10 @@ contract MorphoAaveV3AdaptorIntegrations is Test {
             "RYE WETH balance should equal  amount borrowed from Morpho"
         );
 
-        // Make sure that Cellar has deposited into Morpho.
+        // Make sure that Cellar has provided collateral to Morpho
+        // TODO:
         assertApproxEqAbs(
-            getMorphoBalance(address(aWstETH), address(ryUSD)),
+            morpho.collateralBalance(address(WstEth), address(rye)),
             1_000_000e18,
             1,
             "Morpho balance should equal assets dealt. "
@@ -201,6 +202,82 @@ contract MorphoAaveV3AdaptorIntegrations is Test {
         );
     }
 
+    // running the stETH (provide stETH on AAVE, get WETH out, they go directly to morpho-AaveV3) loop on Aave v2 so we're going to make the Aave v3 the holding position of the cellar (wETH deposits can directly go into there --> where the Morpho-Aavev3 WETH P2p is there) --> this doesn't make sense wholey since we're going to want to rebalance in an actual loop.
+    // TODO: Go over this and get it working with Crispy - when trying to compile, I had issues with the adaptor setup for some reason.
+    function test2() external {
+        // setup entirely new cellar that has a holding position for Morpho P2P? OR is it part of the RYE cellar? Going with a new cellar. 
+
+        // initialize new cellar that will have holding position as MorphoAaveV3P2P 
+
+        uint256 assets = 1_000_000e18;
+        uint256 maxDelta = 10; // adjust for dust loss
+
+        CellarInitializableV2_2 private morphoP2PCellar;
+
+        vm.startPrank(gravityBridge);
+        morphoP2PCellar = new CellarInitializableV2_2(registry);
+
+        morphoP2PCellar.initialize(
+            abi.encode(
+                address(this),
+                registry,
+                WETH,
+                "MORPHO P2P Cellar",
+                "MORPHO-P2P-CLR",
+                morphoV3P2PWETHPosition,
+                abi.encode(4),
+                strategist
+            )
+        );
+
+        // TODO: add adaptors to catalogues. 
+        morphoP2PCellar.addAdaptorToCatalogue(address(p2pATokenAdaptor));
+        morphoP2PCellar.addAdaptorToCatalogue(address(collateralATokenAdaptor));
+        morphoP2PCellar.addAdaptorToCatalogue(address(debtTokenAdaptor));
+        morphoP2PCellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+
+        morphoP2PCellar.addPositionToCatalogue(wethPosition);
+        morphoP2PCellar.addPositionToCatalogue(wstethPosition);
+        morphoP2PCellar.addPositionToCatalogue(morphoAWstEthPosition);
+        morphoP2PCellar.addPositionToCatalogue(morphoDebtWethPosition);
+        morphoP2PCellar.addPositionToCatalogue(morphoV3P2PWETHPosition);    
+        morphoP2PCellar.addPositionToCatalogue(morphoAWethPosition);
+    
+        vm.stopPrank(); // now cellar is set for holding position
+        
+        // have RYE w/ liquid wstETH ready to lend into Morpho
+        deal(address(WstEth), address(rye), 1_000_000e18);
+        deal(address(WETH), address(rye), 0);
+        console.log("WstEthBalance: %S", WstEth.balanceOf(address(rye)));
+        // deposit into Morpho and it will automatically be put into the holding position.
+
+        // Rebalance Cellar to take on debt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+
+        // Supply WSTETH as collateral on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLend(WstEth, type(uint256).max);
+            data[1] = Cellar.AdaptorCall({ adaptor: address(collateralATokenAdaptor), callData: adaptorCalls });
+        }
+        // Supply WETH as collateral p2p on Morpho.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToLendP2P(WETH, type(uint256).max, 4);
+            data[2] = Cellar.AdaptorCall({ adaptor: address(p2pATokenAdaptor), callData: adaptorCalls });
+        }
+        // TODO: Loop - borrow on Morpho? Repeat?
+    
+        morphoP2PCellar.callOnAdaptor(data);
+        uint256 wethNewBalance = getMorphoBalance(WETH, address(cellar));
+        uint256 wstETHNewBalance = getMorphoBalance(WstEth, address(cellar));
+
+        // TODO: set asserts to check that holding position is working
+        assertApproxEqAbs(wstETHNewBalance, assets, maxDelta, "P2PIntegrationTest: All WstETH lent out through Morpho");
+        assertApproxEqAbs(wethNewBalance, assets, maxDelta, "P2PIntegrationTest: All WETH lent out through Morpho");
+    }
+
+
     // /// helpers
 
     function _createBytesDataToLend(ERC20 tokenToLend, uint256 amountToLend) internal pure returns (bytes memory) {
@@ -235,13 +312,30 @@ contract MorphoAaveV3AdaptorIntegrations is Test {
             );
     }
 
+    function _createBytesDataToLendP2P(
+        ERC20 tokenToLend,
+        uint256 amountToLend,
+        uint256 maxIterations
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                MorphoAaveV3ATokenP2PAdaptor.depositToAaveV3Morpho.selector,
+                tokenToLend,
+                amountToLend,
+                maxIterations
+            );
+    }
+
     // TODO: make this for MorphoAaveV3
-    function getMorphoBalance(address poolToken, address user) internal view returns (uint256) {
-        (uint256 inP2P, uint256 onPool) = morpho.supplyBalanceInOf(poolToken, user);
+    // p2p adaptor is morphoSupplyBalance morpho.supplyBalance(underlying, msg.sender)
+    function getMorphoBalance(address _underlying, address _user) internal view returns (uint256) {
+        (uint256 generalCollateral) = morpho.collateralBalance(_underlying, _user);
+        (uint256 inP2P) = morpho.supplyBalance(_underlying, _user);
 
         uint256 balanceInUnderlying;
         if (inP2P > 0) balanceInUnderlying = inP2P.mulDivDown(morpho.p2pSupplyIndex(poolToken), 1e27);
         if (onPool > 0) balanceInUnderlying += onPool.mulDivDown(morpho.poolIndexes(poolToken).poolSupplyIndex, 1e27);
         return balanceInUnderlying;
     }
+    
 }
