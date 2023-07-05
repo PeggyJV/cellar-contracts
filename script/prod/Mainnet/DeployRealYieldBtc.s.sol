@@ -10,6 +10,7 @@ import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
+import { CellarStaking } from "src/modules/staking/CellarStaking.sol";
 
 import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
@@ -45,7 +46,7 @@ import { Math } from "src/utils/Math.sol";
 
 /**
  * @dev Run
- *      `source .env && forge script script/prod/RealYieldEth/DeployRealYieldEth.s.sol:DeployRealYieldEthScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/prod/Mainnet/DeployRealYieldBtc.s.sol:DeployRealYieldBtcScript --rpc-url $MAINNET_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 25000000000 --verify --etherscan-api-key $ETHERSCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployRealYieldBtcScript is Script {
@@ -57,27 +58,11 @@ contract DeployRealYieldBtcScript is Script {
     address private multisig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
     address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
 
-    // TODO needs
-    // FRAX ERC20
-    // Fraximal Deposit
-    // Leverage stake ETH on morpho
-    // Leverage stake ETH on aave v2
-    // Leverage stake ETH on aave v3
-    // WETH ERC20
-    // RYE Deposit
-    // WBTC ERC20
-    // cbETH ERC20
-    // rETH ERC20
-    // stETH ERC20
-
     ERC20 public WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 public WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     ERC20 public cbETH = ERC20(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
     ERC20 public rETH = ERC20(0xae78736Cd615f374D3085123A210448E74Fc6393);
     ERC20 public stETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
-
-    // Compound positions
-    CErc20 private cWETH = CErc20(0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5);
 
     // Aave V2 Positions.
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
@@ -102,13 +87,15 @@ contract DeployRealYieldBtcScript is Script {
 
     CellarInitializableV2_2 private cellar;
 
+    ERC20 private somm = ERC20(0xa670d7237398238DE01267472C6f13e5B8010FD1);
+    CellarStaking private staker;
+
     PriceRouter private priceRouter = PriceRouter(0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA);
     CellarFactory private factory = CellarFactory(0x9D30672eED8D514cD1ad009Cfe85Ea8f0019D37F);
     SwapRouter private swapRouter = SwapRouter(0x070f43E613B33aD3EFC6B2928f3C01d58D032020);
     Registry private registry = Registry(0x3051e76a62da91D4aD6Be6bD98D8Ab26fdaF9D08);
     FeesAndReserves private feesAndReserves = FeesAndReserves(0xF4279E93a06F9d4b5d0625b1F471AA99Ef9B686b);
     UniswapV3PositionTracker private tracker = UniswapV3PositionTracker(0xf2854d84D9Dd27eCcD6aB20b3F66111a51bb56d2);
-    VestingSimple private wethVestor;
 
     // Define Adaptors.
     ERC20Adaptor private erc20Adaptor = ERC20Adaptor(0xB1d08c5a1A67A34d9dC6E9F2C5fAb797BA4cbbaE);
@@ -145,10 +132,6 @@ contract DeployRealYieldBtcScript is Script {
 
         uint32[] memory positionIds = new uint32[](26);
 
-        // add Fraximal position to registry.
-        // add WBTC position to registry.
-        // TODO add wbtc vesting contract and position?
-
         positionIds[0] = 101; // ERC20 WETH
         positionIds[1] = 102; // ERC20 CBETH
         positionIds[2] = 103; // ERC20 RETH
@@ -172,11 +155,9 @@ contract DeployRealYieldBtcScript is Script {
         positionIds[20] = 164; // morpho v3 collateral wbtc
         positionIds[21] = 165; // morpho v3 collateral reth
         positionIds[22] = 166; // morpho v3 debt weth
-        // TODO add to registry
         positionIds[23] = 182; // av2WBTC
         positionIds[24] = 183; // av3WBTC
         positionIds[25] = 184; // ERC20 WBTC
-        // aave v2/v3 awbtc position
 
         // Deploy cellar using factory.
         bytes memory initializeCallData = abi.encode(
@@ -184,7 +165,7 @@ contract DeployRealYieldBtcScript is Script {
             registry,
             WBTC,
             "Real Yield BTC",
-            "RYBTC",
+            "YieldBTC",
             positionIds[25],
             abi.encode(0),
             strategist
@@ -192,8 +173,8 @@ contract DeployRealYieldBtcScript is Script {
         address imp = factory.getImplementation(2, 2);
         require(imp != address(0), "Invalid implementation");
 
-        uint256 initialDeposit = 0.00033333e8;
-        WBTC.approve(address(factory), initialDeposit);
+        uint256 initialDeposit = 0;
+        // WBTC.approve(address(factory), initialDeposit);
         address clone = factory.deploy(
             2,
             2,
@@ -205,7 +186,7 @@ contract DeployRealYieldBtcScript is Script {
         cellar = CellarInitializableV2_2(clone);
 
         // Setup all the adaptors the cellar will use.
-        cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
+        // cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
         cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
         cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
         cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
@@ -220,13 +201,26 @@ contract DeployRealYieldBtcScript is Script {
         cellar.addAdaptorToCatalogue(address(morphoAaveV3ATokenCollateralAdaptor));
         cellar.addAdaptorToCatalogue(address(morphoAaveV3DebtTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(cellarAdaptor));
-        cellar.addAdaptorToCatalogue(address(vestingSimpleAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveV2EnableAssetAsCollateralAdaptor));
 
         for (uint256 i; i < positionIds.length - 1; ++i) cellar.addPositionToCatalogue(positionIds[i]);
 
         cellar.setShareLockPeriod(60 * 10);
 
-        // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+        cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
+
+        staker = new CellarStaking(
+            multisig,
+            ERC20(address(cellar)),
+            somm,
+            30 days,
+            0.1e18,
+            0.3e18,
+            0.5e18,
+            7 days,
+            14 days,
+            21 days
+        );
 
         vm.stopBroadcast();
     }
