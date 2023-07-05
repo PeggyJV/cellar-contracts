@@ -71,6 +71,7 @@ contract DeployRealYieldBtcScript is Script {
     // stETH ERC20
 
     ERC20 public WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 public WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
     ERC20 public cbETH = ERC20(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
     ERC20 public rETH = ERC20(0xae78736Cd615f374D3085123A210448E74Fc6393);
     ERC20 public stETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
@@ -80,6 +81,7 @@ contract DeployRealYieldBtcScript is Script {
 
     // Aave V2 Positions.
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
+    ERC20 public aV2WBTC = ERC20(0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656);
     ERC20 public dV2WETH = ERC20(0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf);
     ERC20 public aV2STETH = ERC20(0x1982b2F5814301d4e9a8b0201555376e62F82428);
 
@@ -91,6 +93,7 @@ contract DeployRealYieldBtcScript is Script {
     ERC20 public aV3RETH = ERC20(0xCc9EE9483f662091a1de4795249E24aC0aC2630f);
     ERC20 public dV3RETH = ERC20(0xae8593DD575FE29A9745056aA91C4b746eee62C8);
     ERC20 public aV3WSTETH = ERC20(0x0B925eD163218f6662a35e0f0371Ac234f9E9371);
+    ERC20 public aV3WBTC = ERC20(0x5Ee5bf7ae06D1Be5997A1A72006FE6C607eC6DE8);
 
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
@@ -136,110 +139,92 @@ contract DeployRealYieldBtcScript is Script {
     MorphoAaveV3DebtTokenAdaptor private morphoAaveV3DebtTokenAdaptor =
         MorphoAaveV3DebtTokenAdaptor(0x25a61f771aF9a38C10dDd93c2bBAb39a88926fa9);
     CellarAdaptor private cellarAdaptor = CellarAdaptor(0x3B5CA5de4d808Cd793d3a7b3a731D3E67E707B27);
-    
 
     function run() external {
         vm.startBroadcast();
 
-        uint32[] memory positionIds = new uint32[](24);
+        uint32[] memory positionIds = new uint32[](26);
 
-       positionIds[0] = 181; // ERC20 FRAX
-       positionIds[1] = 101; // ERC20 WETH
-       positionIds[2] = 102; // ERC20 CBETH
-       positionIds[3] = 103; // ERC20 RETH
-       positionIds[4] = 104; // ERC20 stETH
-       positionIds[5] = 142; // ERC20 wstETH
-       positionIds[6] = ;
-       positionIds[7] = ;
-       positionIds[8] = ;
-       positionIds[9] = ;
-       positionIds[10] = ;
-       positionIds[11] = ;
-       positionIds[12] = ;
-       positionIds[13] = ;
-       positionIds[14] = ;
-       positionIds[15] = ;
-       positionIds[16] = ;
-       positionIds[17] = ;
-       positionIds[18] = ;
-       positionIds[19] = ;
-       positionIds[20] = ;
-       positionIds[21] = ;
-       positionIds[22] = ;
+        // add Fraximal position to registry.
+        // add WBTC position to registry.
+        // TODO add wbtc vesting contract and position?
 
-        // // Deploy new Cellar implementation.
-        // CellarInitializableV2_2 implementation = new CellarInitializableV2_2(registry);
+        positionIds[0] = 101; // ERC20 WETH
+        positionIds[1] = 102; // ERC20 CBETH
+        positionIds[2] = 103; // ERC20 RETH
+        positionIds[3] = 104; // ERC20 stETH
+        positionIds[4] = 142; // ERC20 wstETH
+        positionIds[5] = 154; // Cellar RYE
+        positionIds[6] = 117; // av2WETH
+        positionIds[7] = 118; // av2STETH
+        positionIds[8] = 119; // dv2WETH
+        positionIds[9] = 107; // av3WETH
+        positionIds[10] = 108; // av3 RETH
+        positionIds[11] = 109; // av3cbETH
+        positionIds[12] = 114; // dv3WETH
+        positionIds[13] = 141; // av3wsteth
+        positionIds[14] = 155; // morpho v2 steth
+        positionIds[15] = 156; // morpho v2 weth
+        positionIds[16] = 160; // morpho v2 wbtc
+        positionIds[17] = 161; // morpho v2 debt weth
+        positionIds[18] = 162; // morpho v3 p2p weth
+        positionIds[19] = 163; // morpho v3 collateral wsteth
+        positionIds[20] = 164; // morpho v3 collateral wbtc
+        positionIds[21] = 165; // morpho v3 collateral reth
+        positionIds[22] = 166; // morpho v3 debt weth
+        // TODO add to registry
+        positionIds[23] = 182; // av2WBTC
+        positionIds[24] = 183; // av3WBTC
+        positionIds[25] = 184; // ERC20 WBTC
+        // aave v2/v3 awbtc position
 
-        // bytes memory params = abi.encode(
-        //     address(0),
-        //     registry,
-        //     WETH,
-        //     "Production Implementation",
-        //     "Prod Imp",
-        //     positionIds[0],
-        //     abi.encode(0),
-        //     address(0)
-        // );
+        // Deploy cellar using factory.
+        bytes memory initializeCallData = abi.encode(
+            devOwner,
+            registry,
+            WBTC,
+            "Real Yield BTC",
+            "RYBTC",
+            positionIds[25],
+            abi.encode(0),
+            strategist
+        );
+        address imp = factory.getImplementation(2, 2);
+        require(imp != address(0), "Invalid implementation");
 
-        // // Initialize Implementation.
-        // implementation.initialize(params);
+        uint256 initialDeposit = 0.00033333e8;
+        WBTC.approve(address(factory), initialDeposit);
+        address clone = factory.deploy(
+            2,
+            2,
+            initializeCallData,
+            WBTC,
+            initialDeposit,
+            keccak256(abi.encode(block.timestamp))
+        );
+        cellar = CellarInitializableV2_2(clone);
 
-        // factory.addImplementation(address(implementation), 2, 2);
+        // Setup all the adaptors the cellar will use.
+        cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
+        cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+        cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
+        cellar.addAdaptorToCatalogue(address(morphoAaveV2ATokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(morphoAaveV2DebtTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(morphoAaveV3ATokenP2PAdaptor));
+        cellar.addAdaptorToCatalogue(address(morphoAaveV3ATokenCollateralAdaptor));
+        cellar.addAdaptorToCatalogue(address(morphoAaveV3DebtTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(cellarAdaptor));
+        cellar.addAdaptorToCatalogue(address(vestingSimpleAdaptor));
 
-        // // Deploy cellar using factory.
-        // bytes memory initializeCallData = abi.encode(
-        //     devOwner,
-        //     registry,
-        //     WETH,
-        //     "Real Yield ETH",
-        //     "YieldETH",
-        //     positionIds[6],
-        //     abi.encode(1.05e18),
-        //     strategist
-        // );
-        // address imp = factory.getImplementation(2, 2);
-        // require(imp != address(0), "Invalid implementation");
+        for (uint256 i; i < positionIds.length - 1; ++i) cellar.addPositionToCatalogue(positionIds[i]);
 
-        // uint256 initialDeposit = 0.001e18;
-        // WETH.approve(address(factory), initialDeposit);
-        // address clone = factory.deploy(
-        //     2,
-        //     2,
-        //     initializeCallData,
-        //     WETH,
-        //     initialDeposit,
-        //     keccak256(abi.encode(block.timestamp))
-        // );
-        // cellar = CellarInitializableV2_2(clone);
-
-        // // Setup all the adaptors the cellar will use.
-        // cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
-        // cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
-        // cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
-        // cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
-        // cellar.addAdaptorToCatalogue(address(aaveV3ATokenAdaptor));
-        // cellar.addAdaptorToCatalogue(address(aaveV3DebtTokenAdaptor));
-        // cellar.addAdaptorToCatalogue(address(zeroXAdaptor));
-        // cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
-        // cellar.addAdaptorToCatalogue(address(oneInchAdaptor));
-        // cellar.addAdaptorToCatalogue(address(vestingSimpleAdaptor));
-
-        // // Setup all the positions the cellar will use.
-        // cellar.addPositionToCatalogue(positionIds[0]);
-        // cellar.addPositionToCatalogue(positionIds[1]);
-        // cellar.addPositionToCatalogue(positionIds[2]);
-        // cellar.addPositionToCatalogue(positionIds[3]);
-        // cellar.addPositionToCatalogue(positionIds[4]);
-        // cellar.addPositionToCatalogue(positionIds[5]);
-        // cellar.addPositionToCatalogue(positionIds[7]);
-        // cellar.addPositionToCatalogue(positionIds[8]);
-        // cellar.addPositionToCatalogue(positionIds[9]);
-        // cellar.addPositionToCatalogue(positionIds[10]);
-        // cellar.addPositionToCatalogue(positionIds[11]);
-        // cellar.addPositionToCatalogue(positionIds[12]);
-        // cellar.addPositionToCatalogue(positionIds[13]);
-        // cellar.addPositionToCatalogue(positionIds[14]);
-        // cellar.addPositionToCatalogue(positionIds[15]);
+        cellar.setShareLockPeriod(60 * 10);
 
         // cellar.transferOwnership(0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138);
 
