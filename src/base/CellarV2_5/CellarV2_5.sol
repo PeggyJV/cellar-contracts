@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, SafeTransferLib, Math, ERC20 } from "./ERC4626.sol";
+import { ERC4626, SafeTransferLib, Math, ERC20 } from "src/base/ERC4626.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";
@@ -604,6 +604,7 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      */
     Registry public registry;
 
+    // TODO constructor should make the first deposit into the cellar, without using the share price oracle
     /**
      * @dev Owner should be set to the Gravity Bridge, which relays instructions from the Steward
      *      module to the cellars.
@@ -1017,13 +1018,6 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
 
     // ========================================= ACCOUNTING LOGIC =========================================
 
-    // TODO probs need a new internal function to call to get totalAssets
-    function _getSharePrice() internal view returns (uint256 lastUpdated, uint256 twasp) {
-        // Grab info from oracle which could be this contract
-        // See if we can use the oracle share price
-        // if not either revert, or default to _accounting(false)
-    }
-
     // TODO new view funcitons to see saved share price and get twasp? would be in the oracle
     /**
      * @notice Internal accounting function that can report total assets, or total assets withdrawable.
@@ -1063,6 +1057,8 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
         }
     }
 
+    // TODO totalAssets SHOULD return the real totalAssets, not the oracle value.
+    // But previoew functions,a nd internal functions use the oracle values.
     /**
      * @notice The total amount of assets in the cellar.
      * @dev EIP4626 states totalAssets needs to be inclusive of fees.
