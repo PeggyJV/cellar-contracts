@@ -125,16 +125,19 @@ contract ERC4626SharePriceOracleTest is Test {
         // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
         stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
 
+        ERC4626 _target = ERC4626(address(cellar));
+        uint64 _heartbeat = 1 days;
+        uint64 _deviationTrigger = 0.0005e4;
+        uint64 _gracePeriod = 60 * 60; // 1 hr
+        uint256 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+
         // Setup share price oracle.
         sharePriceOracle = new ERC4626SharePriceOracle(
-            ERC4626(address(cellar)),
-            1 days,
-            0.0005e4,
-            2 days,
-            3 days,
-            false,
-            1 days,
-            7
+            _target,
+            _heartbeat,
+            _deviationTrigger,
+            _gracePeriod,
+            _observationsToUse
         );
     }
 
@@ -179,26 +182,14 @@ contract ERC4626SharePriceOracleTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
-        // We missed the grace period to update the oracle by 1 second
-        // TODO I expected below warp to be a 1 day + 1 sec warp, but I had to put in 2 days + 1 in order
-        // to make it revert, then I added the 2 below performUpkeep calls to "reset" the
-        // TWAA value which works as expected, if you try any less than 3 it reverts from it being too old.
-        // TODO update after thinking about this more, I think 2 days should work because the oldest cumulative value it is using
-        // is from 3 days ago, which is equal to the maximum delta.
-        // So in this scenario, we have a 3 day TWAP where it is weighting 2 of the days with the previous cumulative data, and 1 of the days is the
-        // previous previous cumulative. It isn't ideal, but we are atleast using 2 points.
-        vm.warp(block.timestamp + 2 days + 1);
+        // Advance time to 1 sec after grace period, and make sure we revert when trying to get TWAA, until enough observations are added that this delayed entry is no longer affecting TWAA.
+        vm.warp(block.timestamp + 1 days + 3601);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-
-        // Mini test
-        vm.warp(block.timestamp + 1 days);
-        usdcMockFeed.setMockUpdatedAt(block.timestamp);
-        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
-        assertTrue(upkeepNeeded, "Upkeep should be needed.");
-        sharePriceOracle.performUpkeep(performData);
+        vm.expectRevert(bytes("CumulativeData too old"));
+        sharePriceOracle.getLatest();
 
         vm.warp(block.timestamp + 1 days);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -206,7 +197,23 @@ contract ERC4626SharePriceOracleTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
-        // End mini test
+        vm.expectRevert(bytes("CumulativeData too old"));
+        sharePriceOracle.getLatest();
+
+        vm.warp(block.timestamp + 1 days);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        vm.expectRevert(bytes("CumulativeData too old"));
+        sharePriceOracle.getLatest();
+
+        vm.warp(block.timestamp + 1 days);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
 
         uint256 currentSharePrice = cellar.previewRedeem(1e18);
 

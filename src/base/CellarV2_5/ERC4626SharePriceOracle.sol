@@ -17,18 +17,13 @@ import { console } from "@forge-std/Test.sol";
 // TODO this could implement the chainlink data feed interface!
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
-    bool public immutable revertOnBadAnswer;
-    // The delta time between the currentCumulativeData timestamp, and the previous cumulativeData timestamp, that causes currentIndex to advance.
-    uint64 public immutable cumulativeUpdateDuration;
-    // The minimum amount of time between to cumulatives that can be used to get a TWAP.
-    uint64 public immutable minimumTimeDelta;
-    // The maximum amount of time between to cumulatives that can be used to get a TWAP.
-    uint64 public immutable maximumTimeDelta;
-    uint8 public immutable cumulativeLength;
-    // The deviation in current answer, and last answer that triggers an upkeep.
+    // Determines when answer is stale, and also the minimum time each observation must last.
+    uint64 public immutable heartbeat;
+    // Determines how far off observations used in a TWAA calculation can be from the heartbeat.
+    // IE if 4 observations are used, then the delta time between those 4 observations must be within
+    // 3*heartbeat -> 3*heartbeat+gracePeriod.
+    uint64 public immutable gracePeriod;
     uint64 public immutable deviationTrigger;
-    // The amount of time that passes between updates that triggers an upkeep.
-    uint64 public immutable timeTrigger;
     uint256 public immutable ONE_SHARE;
     uint8 public immutable decimals;
 
@@ -37,99 +32,79 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     uint256 public answer;
 
-    struct CumulativeData {
-        uint8 next;
-        uint8 previous;
+    struct Observation {
         uint64 timestamp;
-        uint176 cumulative;
+        uint192 cumulative;
     }
 
-    mapping(uint256 => CumulativeData) public cumulativeData;
-    uint8 public currentIndex;
+    Observation[] public observations;
 
+    uint256 public currentIndex;
+
+    /**
+     * @dev _observationsToUse * _heartbeat = TWAA duration possibly(+ gracePeriod)
+     * @dev TWAA duration at a minimum will be _observationsToUse * _heartbeat.
+     * @dev TWAA duration at a maximum will be _observationsToUse * _heartbeat + _gracePeriod.
+     * @dev NOTE TWAA calcs will use the most recently completed observation, which can at most be ~heartbeat stale
+     */
     constructor(
         ERC4626 _target,
-        uint64 _timeTrigger,
+        uint64 _heartbeat,
         uint64 _deviationTrigger,
-        uint64 _minimumTimeDelta,
-        uint64 _maximumTimeDelta,
-        bool _revertOnBadAnswer,
-        uint64 _cumulativeUpdateDuration,
-        uint8 _cumulativeLength
+        uint64 _gracePeriod,
+        uint256 _observationsToUse
     ) {
         target = _target;
         decimals = target.decimals();
         ONE_SHARE = 10 ** decimals;
-        timeTrigger = _timeTrigger;
+        heartbeat = _heartbeat;
         deviationTrigger = _deviationTrigger;
-        minimumTimeDelta = _minimumTimeDelta;
-        maximumTimeDelta = _maximumTimeDelta;
-        revertOnBadAnswer = _revertOnBadAnswer;
-        cumulativeUpdateDuration = _cumulativeUpdateDuration;
-        cumulativeLength = _cumulativeLength;
-        uint8 minCumulativeIndex = 0;
-        uint8 maxCumulativeIndex = _cumulativeLength - 1;
-        for (uint256 i; i < _cumulativeLength; ++i) {
-            if (i == maxCumulativeIndex) cumulativeData[i].next = minCumulativeIndex;
-            else cumulativeData[i].next = uint8(i + 1);
-            if (i == minCumulativeIndex) cumulativeData[i].previous = maxCumulativeIndex;
-            else cumulativeData[i].previous = uint8(i - 1);
-        }
+        gracePeriod = _gracePeriod;
+        uint256 observationsLength = _observationsToUse + 1;
+
+        // Grow Observations array to required length, and fill it with observations that use 1 for timestamp and cumulative.
+        // That way the initial upkeeps won't need to change state from 0 which is more expensive.
+        for (uint256 i; i < observationsLength; ++i) observations.push(Observation({ timestamp: 1, cumulative: 1 }));
     }
 
-    // TODO this should enforce that we are using atleast 3 cumulative data entries,
-    // Cuz if you just go to the previous one, then the share price you are using could possibly be whatever the share price was in the previoud cumulative data
-    // which could have just been updated by time
-    function _getTimeWeightedAverageAnswerAndTimeUpdated() internal view returns (uint256 twaa, uint64 timeUpdated) {
-        // Get the newest cumulative.
-        CumulativeData memory newData = cumulativeData[currentIndex];
-        // Now find a cumulative that is far eno[ugh in the past that minimumTimeDelta is met, but fresh enough that maximumTimeDelta is met.
-        // Max possible iterations is the cumulative length - 1, since we start checking the previous cumulative.
-        CumulativeData memory oldData = cumulativeData[newData.previous];
-        for (uint256 i; i < cumulativeLength - 1; ++i) {
-            if (oldData.timestamp == 0) revert("CumulativeData not set");
-            uint256 timeDelta = newData.timestamp - oldData.timestamp;
-            // Check if Previous is good.
-            // Also make sure we have gone sufficiently far back so that we are atleast using 3 cumulative datas to
-            // calculate TWAA.
-            // Why 3? The first one can be impartial, if currentIndex is advanced now, then 1 second later deviation triggers another update,
-            // the first cumulativeData is only weighted by 1 second, so we are relying mainly on the second cumulative data.
-            // We want more than 2 because of the above scenario
+    function _getNextIndex(uint256 _currentIndex, uint256 _length) internal pure returns (uint256 nextIndex) {
+        nextIndex = (_currentIndex == _length - 1) ? 0 : _currentIndex + 1;
+    }
 
-            // You need atleast 2 to calcualte a TWAA, because of this setup, if an upkeep happens and updates the current index, then
-            // one second later, a deviation triggers an upkeep, the first cumulativeData will only have 1 second of weight, so our TWAA will essentially be
-            // whatever the share price was for the immediate previous cumulative data, which might be safe, but if the upkeep is not funded during that time,
-            // then that data could just be composed of one data point and is possibly unsafe to use, so we use 3, so that we know we atleast have 2 safe data points.
-            // TODO this 2 could probs be an input, and I think every number you add to it would mean the delta between the min and max time delta should increase
-            // by 1 heartbeat. Then in my test I need to add another performUpkeep on line 208
-            if (i >= 2 && timeDelta >= minimumTimeDelta) {
-                // Previous is old enough, make sure it is fresh enough.
-                if (timeDelta <= maximumTimeDelta) {
-                    // Previous is old enough, and fresh enough, so use it.
-                    break;
-                } else {
-                    // We found a previous cumulative that is old enough, but it is too old so there is no point in continuing to look.
-                    revert("CumulativeData too old");
-                }
-            } else {
-                // Previous is not usable.
-                // Make sure we aren't at the end.
-                if (i == cumulativeLength - 1) revert("CumulativeData too new");
-                //Go back 1.
-                oldData = cumulativeData[oldData.previous];
-            }
-        }
+    function _getPreviousIndex(uint256 _currentIndex, uint256 _length) internal pure returns (uint256 previousIndex) {
+        previousIndex = (_currentIndex == 0) ? _length - 1 : _currentIndex - 1;
+    }
 
-        // At this point we have a cumulative that will work so calculate the time weighted average answer.
-        twaa = (newData.cumulative - oldData.cumulative) / (newData.timestamp - oldData.timestamp);
-        timeUpdated = newData.timestamp;
+    function _getTimeWeightedAverageAnswer() internal view returns (uint256 twaa) {
+        uint256 _currentIndex = currentIndex;
+        uint256 _length = observations.length;
+        Observation memory mostRecentlyCompletedObservation = observations[_getPreviousIndex(_currentIndex, _length)];
+        Observation memory oldestObservation = observations[_getNextIndex(_currentIndex, _length)];
+        if (oldestObservation.timestamp == 1) revert("CumulativeData not set");
+
+        uint256 timeDelta = mostRecentlyCompletedObservation.timestamp - oldestObservation.timestamp;
+        /// @dev use _length - 2 because
+        /// remove 1 because observations array stores the current pending observation.
+        /// remove 1 because we are really interested in the time between observations.
+        uint256 minDuration = heartbeat * (_length - 2);
+        uint256 maxDuration = minDuration + gracePeriod;
+        if (timeDelta < minDuration) revert("CumulativeData too new");
+        if (timeDelta > maxDuration) revert("CumulativeData too old");
+
+        twaa =
+            (mostRecentlyCompletedObservation.cumulative - oldestObservation.cumulative) /
+            (mostRecentlyCompletedObservation.timestamp - oldestObservation.timestamp);
     }
 
     function getLatest() external view returns (uint256 ans, uint256 timeWeightedAverageAnswer, uint256 timeUpdated) {
         // TODO could revert if upkeep is underfunded
         // TODO could revert if answer is stale.
+        // TODO ORRRRR this can return a bool indicaitng their was a problem, and that the values can not be used.
+        // TODO for staleness check, we could do heartbeat + gracePeriod
+        // Also if we do the check here we dont need to return the timeUpdated.
         ans = answer;
-        (timeWeightedAverageAnswer, timeUpdated) = _getTimeWeightedAverageAnswerAndTimeUpdated();
+        timeWeightedAverageAnswer = _getTimeWeightedAverageAnswer();
+        timeUpdated = observations[currentIndex].timestamp;
         // TODO is this scaling needed?
         // Scale results back down to cellar asset decimals.
         ans = ans.changeDecimals(18, decimals);
@@ -172,9 +147,15 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // TODO so myabe for saftey the constructor should enforce heartbeat is 1/2 or 1/3 of the minimumTimeDelta?
 
         // See if we need to update because answer is stale or outside deviation.
-        uint256 timeDelta = block.timestamp - cumulativeData[currentIndex].timestamp;
+        uint256 _currentIndex = currentIndex;
+        // Time since answer was last updated.
+        uint256 timeDeltaCurrentAnswer = block.timestamp - observations[_currentIndex].timestamp;
+        uint256 timeDeltaSincePreviousObservation = block.timestamp -
+            observations[_getPreviousIndex(_currentIndex, observations.length)].timestamp;
+        uint64 _heartbeat = heartbeat;
         if (
-            timeDelta >= timeTrigger ||
+            timeDeltaCurrentAnswer >= _heartbeat ||
+            timeDeltaSincePreviousObservation >= _heartbeat ||
             sharePrice > currentAnswer.mulDivDown(1e4 + deviationTrigger, 1e4) ||
             sharePrice < currentAnswer.mulDivDown(1e4 - deviationTrigger, 1e4)
         ) {
@@ -185,25 +166,34 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     }
 
     function performUpkeep(bytes calldata performData) external {
+        // TODO msg.sender should be registry
         (uint256 sharePrice, uint64 currentTime) = abi.decode(performData, (uint256, uint64));
 
         // Update answer.
         answer = sharePrice;
 
-        // Update current cumulative.
-        CumulativeData storage currentCumulative = cumulativeData[currentIndex];
-        uint256 timeDelta = currentTime - currentCumulative.timestamp;
-        currentCumulative.cumulative += uint176(sharePrice * timeDelta);
-        currentCumulative.timestamp = currentTime;
+        // Update current observation.
+        uint256 _currentIndex = currentIndex;
+        uint256 _length = observations.length;
+        Observation storage currentObservation = observations[_currentIndex];
+        uint256 timeDelta = currentTime - currentObservation.timestamp;
+        uint256 currentCumulative = currentObservation.cumulative + (sharePrice * timeDelta);
+        if (currentCumulative > type(uint192).max) revert("Cumulative Too large");
+        currentObservation.cumulative = uint192(currentCumulative);
+        // Make sure time is larger than previous time.
+        if (currentObservation.timestamp >= currentTime) revert("Bad time given");
+        currentObservation.timestamp = currentTime;
 
+        uint256 timeDeltaSincePreviousObservation = currentTime -
+            observations[_getPreviousIndex(_currentIndex, _length)].timestamp;
         // See if we need to advance to the next cumulative.
-        uint256 timeDeltaSincePreviousCumulative = currentTime - cumulativeData[currentCumulative.previous].timestamp;
-        if (timeDeltaSincePreviousCumulative >= cumulativeUpdateDuration) {
-            currentIndex = currentCumulative.next;
+        if (timeDeltaSincePreviousObservation >= heartbeat) {
+            uint256 nextIndex = _getNextIndex(_currentIndex, _length);
+            currentIndex = nextIndex;
             // Update newest cumulative.
-            CumulativeData storage newCumulative = cumulativeData[currentIndex];
-            newCumulative.cumulative = currentCumulative.cumulative;
-            newCumulative.timestamp = currentTime;
+            Observation storage newObservation = observations[nextIndex];
+            newObservation.cumulative = uint192(currentCumulative);
+            newObservation.timestamp = currentTime;
         }
     }
 }
