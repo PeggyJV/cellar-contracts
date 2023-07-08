@@ -111,21 +111,37 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     function getLatest() external view returns (uint256 ans, uint256 timeWeightedAverageAnswer, uint256 timeUpdated) {
         ans = answer;
         (timeWeightedAverageAnswer, timeUpdated) = _getTimeWeightedAverageAnswerAndTimeUpdated();
+        // TODO is this scaling needed?
+        // Scale results back down to cellar asset decimals.
+        ans = ans.changeDecimals(18, decimals);
+        timeWeightedAverageAnswer = timeWeightedAverageAnswer.changeDecimals(18, decimals);
     }
 
     function _getTargetSharePrice() internal view returns (uint256 sharePrice) {
         uint256 totalShares = target.totalSupply();
-        uint256 totalAssets = target.totalAssets();
+        // Get total Assets but scale it up to 18 decimals of precision.
+        // TODO is this scaling needed?
+        uint256 totalAssets = target.totalAssets().changeDecimals(decimals, 18);
 
-        sharePrice = totalShares == 0
-            ? ONE_SHARE.changeDecimals(18, decimals)
-            : ONE_SHARE.mulDivDown(totalAssets, totalShares);
+        if (totalShares == 0) return 0;
+
+        sharePrice = ONE_SHARE.mulDivDown(totalAssets, totalShares);
     }
 
     function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
         // Get target share price.
         uint256 sharePrice = _getTargetSharePrice();
         uint256 currentAnswer = answer;
+        // TODO so we could have this check if the timeDelta between now and the previous cumulative is greater than the cumulativeUpdateDuration, and if so, call performUpkeep.
+        // Otherwise there is an edgecase where answer is updated from deviation, and the time it is updated is 1 second short of the time delta between previous and now IE
+        // if update duration is 1 day, and the answer is updated 1 second before the updateDuration would advance the index, then the next update could take a full day
+        // to go through, so now the current cumulative data is now holding data for 2 days - 1 second, instead of holding data for roughly 1 day(the update duration)
+        // TODO the max possible cumulative data duration is = (cumulativeUpdateDuration - 1) + timeTrigger;
+        // So minimumTimeDelta should be no smaller than cumulativeUpdateDuration + timeTrigger
+        // And no larger than (cumulativeUpdateDuration * (cumulativeLength-1))
+        // Then maximumTimeDelta should be no smaller than (cumulativeUpdateDuration * (cumulativeLength-1)) cuz that is the smalleset possible cumulative data can be
+        // And maximumTimeDelta should be no larger than (cumulativeUpdateDuration * cumulativeLength)
+        // And we always know that the previous cumulative timestamp is the timestamp of when the current cumulative started
 
         // See if we need to update because answer is stale or outside deviation.
         uint256 timeDelta = block.timestamp - cumulativeData[currentIndex].timestamp;
