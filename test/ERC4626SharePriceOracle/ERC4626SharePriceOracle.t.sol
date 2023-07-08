@@ -129,22 +129,23 @@ contract ERC4626SharePriceOracleTest is Test {
         sharePriceOracle = new ERC4626SharePriceOracle(
             ERC4626(address(cellar)),
             1 days,
-            0.001e4,
+            0.0005e4,
             2 days,
             3 days,
             false,
             1 days,
-            10
+            7
         );
     }
+
+    // TODO so I think the delta between the min and max time deltas just tells you how long your upkeep can miss for
+    // Like if the heart beat is a day, and min is 3 days, max is 4 days, the upkeep TX can at most be 1 day late, and you can still price stuff without needing to wait 3 days to fill up the TWAP again.
 
     function testHappyPath() external {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
         assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 1, "Assets should have been deposited into Aave.");
-
-        console.log("TotalAssets", cellar.totalAssets());
 
         bool upkeepNeeded;
         bytes memory performData;
@@ -156,33 +157,70 @@ contract ERC4626SharePriceOracleTest is Test {
 
         vm.warp(block.timestamp + 1 days);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
-        console.log("TotalAssets", cellar.totalAssets());
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
         vm.warp(block.timestamp + 1 days);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
-        console.log("TotalAssets", cellar.totalAssets());
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
-        // vm.warp(block.timestamp + 1 days);
-        // usdcMockFeed.setMockUpdatedAt(block.timestamp);
-        // console.log("TotalAssets", cellar.totalAssets());
-        // (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
-        // assertTrue(upkeepNeeded, "Upkeep should be needed.");
-        // sharePriceOracle.performUpkeep(performData);
+        vm.warp(block.timestamp + 1 days);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        vm.warp(block.timestamp + 1 days);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // We missed the grace period to update the oracle by 1 second
+        // TODO I expected below warp to be a 1 day + 1 sec warp, but I had to put in 2 days + 1 in order
+        // to make it revert, then I added the 2 below performUpkeep calls to "reset" the
+        // TWAA value which works as expected, if you try any less than 3 it reverts from it being too old.
+        // TODO update after thinking about this more, I think 2 days should work because the oldest cumulative value it is using
+        // is from 3 days ago, which is equal to the maximum delta.
+        // So in this scenario, we have a 3 day TWAP where it is weighting 2 of the days with the previous cumulative data, and 1 of the days is the
+        // previous previous cumulative. It isn't ideal, but we are atleast using 2 points.
+        vm.warp(block.timestamp + 2 days + 1);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Mini test
+        vm.warp(block.timestamp + 1 days);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        vm.warp(block.timestamp + 1 days);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // End mini test
 
         uint256 currentSharePrice = cellar.previewRedeem(1e18);
 
         // Get time weighted average share price.
+        uint256 gas = gasleft();
         (uint256 ans, uint256 timeWeightedAverageAnswer, uint256 timeUpdated) = sharePriceOracle.getLatest();
+        console.log("Gas Used", gas - gasleft());
         assertEq(timeUpdated, block.timestamp, "Should be updated at block.timestamp");
         assertEq(ans, currentSharePrice, "Answer should be equal to current share price.");
         assertGt(currentSharePrice, timeWeightedAverageAnswer, "Current share price should be greater than TWASP.");
         console.log("Current share price", currentSharePrice);
         console.log("TWASP", timeWeightedAverageAnswer);
     }
+
+    // TODO add worst case scenario test where days pass and the upkeep is not working.
+    // What should happen is it should revert until it has enough fresh days of data that it can safely get a TWAP.
 }

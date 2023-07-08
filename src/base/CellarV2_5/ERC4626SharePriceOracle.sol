@@ -12,6 +12,8 @@ import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721H
 import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
+import { console } from "@forge-std/Test.sol";
+
 // TODO this could implement the chainlink data feed interface!
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
@@ -75,6 +77,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         }
     }
 
+    // TODO this should enforce that we are using atleast 3 cumulative data entries,
+    // Cuz if you just go to the previous one, then the share price you are using could possibly be whatever the share price was in the previoud cumulative data
+    // which could have just been updated by time
     function _getTimeWeightedAverageAnswerAndTimeUpdated() internal view returns (uint256 twaa, uint64 timeUpdated) {
         // Get the newest cumulative.
         CumulativeData memory newData = cumulativeData[currentIndex];
@@ -85,7 +90,19 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
             if (oldData.timestamp == 0) revert("CumulativeData not set");
             uint256 timeDelta = newData.timestamp - oldData.timestamp;
             // Check if Previous is good.
-            if (timeDelta >= minimumTimeDelta) {
+            // Also make sure we have gone sufficiently far back so that we are atleast using 3 cumulative datas to
+            // calculate TWAA.
+            // Why 3? The first one can be impartial, if currentIndex is advanced now, then 1 second later deviation triggers another update,
+            // the first cumulativeData is only weighted by 1 second, so we are relying mainly on the second cumulative data.
+            // We want more than 2 because of the above scenario
+
+            // You need atleast 2 to calcualte a TWAA, because of this setup, if an upkeep happens and updates the current index, then
+            // one second later, a deviation triggers an upkeep, the first cumulativeData will only have 1 second of weight, so our TWAA will essentially be
+            // whatever the share price was for the immediate previous cumulative data, which might be safe, but if the upkeep is not funded during that time,
+            // then that data could just be composed of one data point and is possibly unsafe to use, so we use 3, so that we know we atleast have 2 safe data points.
+            // TODO this 2 could probs be an input, and I think every number you add to it would mean the delta between the min and max time delta should increase
+            // by 1 heartbeat. Then in my test I need to add another performUpkeep on line 208
+            if (i >= 2 && timeDelta >= minimumTimeDelta) {
                 // Previous is old enough, make sure it is fresh enough.
                 if (timeDelta <= maximumTimeDelta) {
                     // Previous is old enough, and fresh enough, so use it.
@@ -109,6 +126,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     }
 
     function getLatest() external view returns (uint256 ans, uint256 timeWeightedAverageAnswer, uint256 timeUpdated) {
+        // TODO could revert if upkeep is underfunded
+        // TODO could revert if answer is stale.
         ans = answer;
         (timeWeightedAverageAnswer, timeUpdated) = _getTimeWeightedAverageAnswerAndTimeUpdated();
         // TODO is this scaling needed?
@@ -128,6 +147,11 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         sharePrice = ONE_SHARE.mulDivDown(totalAssets, totalShares);
     }
 
+    // TODO maybe maximum time delta should be the minimum time delta plus (cumulativeUpdateDuration - 1) + timeTrigger
+    // Ideally if we miss a normal upkeep, this should start reverting from cumulative data that is too old.
+    // TODO so the wanted behavior is we want a small buffer around when the normal upkeep should happen since it is unliely to happen right at 1 days
+    // If we do miss an upkeep, then pricing should start reverting from staleness, and even when the answer is updated, the TWASP answer should revert from being too old.
+
     function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
         // Get target share price.
         uint256 sharePrice = _getTargetSharePrice();
@@ -139,9 +163,13 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // TODO the max possible cumulative data duration is = (cumulativeUpdateDuration - 1) + timeTrigger;
         // So minimumTimeDelta should be no smaller than cumulativeUpdateDuration + timeTrigger
         // And no larger than (cumulativeUpdateDuration * (cumulativeLength-1))
-        // Then maximumTimeDelta should be no smaller than (cumulativeUpdateDuration * (cumulativeLength-1)) cuz that is the smalleset possible cumulative data can be
+        // Then maximumTimeDelta should be no smaller than (2*cumulativeUpdateDuration - 1) + timeTrigger cuz that is the smalleset possible cumulative data can be
         // And maximumTimeDelta should be no larger than (cumulativeUpdateDuration * cumulativeLength)
         // And we always know that the previous cumulative timestamp is the timestamp of when the current cumulative started
+
+        // TODO the heartbeat value should be significantly less than the minimumTimeDelta, otherwise you don't get any TWAP action.
+        // If minimumTimeDelta ~ heartbeat then the latest cumulative answer is weighted for the same length as the minimum twap duration.
+        // TODO so myabe for saftey the constructor should enforce heartbeat is 1/2 or 1/3 of the minimumTimeDelta?
 
         // See if we need to update because answer is stale or outside deviation.
         uint256 timeDelta = block.timestamp - cumulativeData[currentIndex].timestamp;
@@ -170,7 +198,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
         // See if we need to advance to the next cumulative.
         uint256 timeDeltaSincePreviousCumulative = currentTime - cumulativeData[currentCumulative.previous].timestamp;
-        if (timeDeltaSincePreviousCumulative > cumulativeUpdateDuration) {
+        if (timeDeltaSincePreviousCumulative >= cumulativeUpdateDuration) {
             currentIndex = currentCumulative.next;
             // Update newest cumulative.
             CumulativeData storage newCumulative = cumulativeData[currentIndex];
