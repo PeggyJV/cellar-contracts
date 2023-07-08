@@ -4,7 +4,7 @@ pragma solidity 0.8.16;
 import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
-import { AaveDebtTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
+import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -25,6 +25,7 @@ contract ERC4626SharePriceOracleTest is Test {
     using stdStorage for StdStorage;
 
     AaveATokenAdaptor private aaveATokenAdaptor;
+    ERC20Adaptor private erc20Adaptor;
     MockDataFeed private usdcMockFeed;
     Cellar private cellar;
     PriceRouter private priceRouter;
@@ -65,6 +66,7 @@ contract ERC4626SharePriceOracleTest is Test {
     function setUp() external {
         usdcMockFeed = new MockDataFeed(USDC_USD_FEED);
         aaveATokenAdaptor = new AaveATokenAdaptor(address(pool), address(WETH), 1.05e18);
+        erc20Adaptor = new ERC20Adaptor();
         priceRouter = new PriceRouter(registry, WETH);
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
@@ -85,17 +87,20 @@ contract ERC4626SharePriceOracleTest is Test {
 
         // Setup Cellar:
         // Cellar positions array.
-        uint32[] memory positions = new uint32[](1);
+        uint32[] memory positions = new uint32[](2);
         uint32[] memory debtPositions;
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(aaveATokenAdaptor));
+        registry.trustAdaptor(address(erc20Adaptor));
 
         aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDC)));
+        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(USDC)));
 
         positions[0] = aUSDCPosition;
+        positions[1] = usdcPosition;
 
-        bytes[] memory positionConfigs = new bytes[](1);
+        bytes[] memory positionConfigs = new bytes[](2);
         bytes[] memory debtConfigs;
 
         uint256 minHealthFactor = 1.1e18;
@@ -228,6 +233,133 @@ contract ERC4626SharePriceOracleTest is Test {
         assertGt(currentSharePrice, timeWeightedAverageAnswer, "Current share price should be greater than TWASP.");
         console.log("Current share price", currentSharePrice);
         console.log("TWASP", timeWeightedAverageAnswer);
+    }
+
+    function testLatestAnswerPositiveYield() external {
+        cellar.setHoldingPosition(usdcPosition);
+        // Test latestAnswer over a 3 day period.
+        uint64 dayOneYield = 1.001e4;
+        uint64 dayTwoYield = 1.0005e4;
+        uint64 dayThreeYield = 1.0005e4;
+        bool checkNotSafeToUse;
+        uint256 answer;
+        uint256 twaa;
+
+        // Have user deposit into cellar.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 1, "Index should be 1");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, dayOneYield);
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 2, "Index should be 2");
+
+        // Simulate deviation from share price triggers an update.
+        _passTimeAlterSharePriceAndUpkeep(43_200, dayOneYield);
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 2, "Index should be 2");
+
+        // 12 hrs later, the timeDeltaSincePreviousObservation check should trigger an update.
+        _passTimeAlterSharePriceAndUpkeep(43_200, dayTwoYield);
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 3, "Index should be 3");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, dayThreeYield);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 4, "Index should be 4");
+
+        assertGt(answer, twaa, "Answer should be larger than TWAA since all yield was positive.");
+    }
+
+    function testLatestAnswerNegativeYield() external {
+        cellar.setHoldingPosition(usdcPosition);
+        // Test latestAnswer over a 3 day period.
+        uint64 dayOneYield = 0.990e4;
+        uint64 dayTwoYield = 0.9995e4;
+        uint64 dayThreeYield = 0.9993e4;
+        bool checkNotSafeToUse;
+        uint256 answer;
+        uint256 twaa;
+
+        // Have user deposit into cellar.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 1, "Index should be 1");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, dayOneYield);
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 2, "Index should be 2");
+
+        // Simulate deviation from share price triggers an update.
+        _passTimeAlterSharePriceAndUpkeep(43_200, dayOneYield);
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 2, "Index should be 2");
+
+        // 12 hrs later, the timeDeltaSincePreviousObservation check should trigger an update.
+        _passTimeAlterSharePriceAndUpkeep(43_200, dayTwoYield);
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 3, "Index should be 3");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, dayThreeYield);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+
+        assertEq(sharePriceOracle.currentIndex(), 4, "Index should be 4");
+
+        assertGt(twaa, answer, "TWASS should be larger than answer since all yield was negative.");
+    }
+
+    // TODO test verifying that the shortest period an observation can be is heartbeat
+    // TODO test with malicious performUpkeep data
+    // TODO test where we are performing upkeep regualrly, then miss teh grace period for one.
+    // confirm that the missed grace period is thrown out and not used in TWAA calcs
+
+    function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint64 sharePriceMultiplier) internal {
+        vm.warp(block.timestamp + timeToPass);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
     }
 
     // TODO add worst case scenario test where days pass and the upkeep is not working.

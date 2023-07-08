@@ -172,6 +172,16 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // TODO msg.sender should be registry
         (uint256 sharePrice, uint64 currentTime) = abi.decode(performData, (uint256, uint64));
 
+        // Verify atleast one of the upkeep conditions was met.
+        bool upkeepConditionMet;
+
+        // See if we are upkeeping because of deviation.
+        uint256 currentAnswer = answer;
+        if (
+            sharePrice > currentAnswer.mulDivDown(1e4 + deviationTrigger, 1e4) ||
+            sharePrice < currentAnswer.mulDivDown(1e4 - deviationTrigger, 1e4)
+        ) upkeepConditionMet = true;
+
         // Update answer.
         answer = sharePrice;
 
@@ -182,7 +192,10 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // Make sure time is larger than previous time.
         if (currentObservation.timestamp >= currentTime) revert("Bad time given");
 
+        // See if we are updating because of staleness.
         uint256 timeDelta = currentTime - currentObservation.timestamp;
+        if (timeDelta >= heartbeat) upkeepConditionMet = true;
+
         uint256 currentCumulative = currentObservation.cumulative + (sharePrice * timeDelta);
         // TODO this check realistically is not needed, but can talk with auditors about it.
         if (currentCumulative > type(uint192).max) revert("Cumulative Too large");
@@ -199,6 +212,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
             Observation storage newObservation = observations[nextIndex];
             newObservation.cumulative = uint192(currentCumulative);
             newObservation.timestamp = currentTime;
+            upkeepConditionMet = true;
         }
+
+        if (!upkeepConditionMet) revert("No upkeep condition met.");
     }
 }
