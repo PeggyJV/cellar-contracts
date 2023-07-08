@@ -183,13 +183,15 @@ contract ERC4626SharePriceOracleTest is Test {
         sharePriceOracle.performUpkeep(performData);
 
         // Advance time to 1 sec after grace period, and make sure we revert when trying to get TWAA, until enough observations are added that this delayed entry is no longer affecting TWAA.
+        bool checkNotSafeToUse;
         vm.warp(block.timestamp + 1 days + 3601);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        vm.expectRevert(bytes("CumulativeData too old"));
-        sharePriceOracle.getLatest();
+
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
 
         vm.warp(block.timestamp + 1 days);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -197,8 +199,8 @@ contract ERC4626SharePriceOracleTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
-        vm.expectRevert(bytes("CumulativeData too old"));
-        sharePriceOracle.getLatest();
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
 
         vm.warp(block.timestamp + 1 days);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -206,8 +208,8 @@ contract ERC4626SharePriceOracleTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
-        vm.expectRevert(bytes("CumulativeData too old"));
-        sharePriceOracle.getLatest();
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
 
         vm.warp(block.timestamp + 1 days);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -219,9 +221,9 @@ contract ERC4626SharePriceOracleTest is Test {
 
         // Get time weighted average share price.
         uint256 gas = gasleft();
-        (uint256 ans, uint256 timeWeightedAverageAnswer, uint256 timeUpdated) = sharePriceOracle.getLatest();
+        (uint256 ans, uint256 timeWeightedAverageAnswer, bool notSafeToUse) = sharePriceOracle.getLatest();
         console.log("Gas Used", gas - gasleft());
-        assertEq(timeUpdated, block.timestamp, "Should be updated at block.timestamp");
+        assertTrue(!notSafeToUse, "Should be safe to use");
         assertEq(ans, currentSharePrice, "Answer should be equal to current share price.");
         assertGt(currentSharePrice, timeWeightedAverageAnswer, "Current share price should be greater than TWASP.");
         console.log("Current share price", currentSharePrice);
