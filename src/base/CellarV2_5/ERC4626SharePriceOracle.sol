@@ -31,6 +31,11 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     uint256 public immutable ONE_SHARE;
     uint8 public immutable decimals;
     uint8 public constant SCALING_DECIMALS = 18;
+    /**
+     * @notice Chainlink's Automation Registry contract address.
+     * @notice For mainnet use 0x02777053d6764996e594c3E88AF1D58D5363a2e6.
+     */
+    address public immutable automationRegistry;
 
     // ERC4626 Target to save pricing information for.
     ERC4626 public immutable target;
@@ -46,6 +51,10 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     uint256 public currentIndex;
 
+    // TODO so we could create an upkeep in the constructor, then make it owned by this contract, so that there is no way to cancel the upkeep
+    // this does mean if we need to migrate to a new contract the upkeep funds are stuck here, but it makes this oracle setup only reliant
+    // on LINK deposits, as opposed to worrying about the owner canceling it.
+    // TODO can this emit a low link event? That way if its running low on link it can easily alert us?
     /**
      * @dev _observationsToUse * _heartbeat = TWAA duration possibly(+ gracePeriod)
      * @dev TWAA duration at a minimum will be _observationsToUse * _heartbeat.
@@ -57,7 +66,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint64 _heartbeat,
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
-        uint256 _observationsToUse
+        uint256 _observationsToUse,
+        address _automationRegistry
     ) {
         target = _target;
         decimals = target.decimals();
@@ -65,11 +75,14 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         heartbeat = _heartbeat;
         deviationTrigger = _deviationTrigger;
         gracePeriod = _gracePeriod;
+        automationRegistry = _automationRegistry;
         uint256 observationsLength = _observationsToUse + 1;
 
         // Grow Observations array to required length, and fill it with observations that use 1 for timestamp and cumulative.
         // That way the initial upkeeps won't need to change state from 0 which is more expensive.
         for (uint256 i; i < observationsLength; ++i) observations.push(Observation({ timestamp: 1, cumulative: 1 }));
+        // Set to one so slot is dirty for first upkeep.
+        answer = 1;
     }
 
     function _getNextIndex(uint256 _currentIndex, uint256 _length) internal pure returns (uint256 nextIndex) {
@@ -135,8 +148,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     function _getTargetSharePrice() internal view returns (uint256 sharePrice) {
         uint256 totalShares = target.totalSupply();
-        // Get total Assets but scale it up to 18 decimals of precision.
-        // TODO is this scaling needed?
+        // Get total Assets but scale it up to SCALING_DECIMALS decimals of precision.
         uint256 totalAssets = target.totalAssets().changeDecimals(decimals, SCALING_DECIMALS);
 
         if (totalShares == 0) return 0;
@@ -169,10 +181,12 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     }
 
     function performUpkeep(bytes calldata performData) external {
-        // TODO msg.sender should be registry
+        if (msg.sender != automationRegistry) revert("Not automation registry");
         (uint256 sharePrice, uint64 currentTime) = abi.decode(performData, (uint256, uint64));
 
         // Verify atleast one of the upkeep conditions was met.
+        // TODO is this really needed? Like we are already trusting the upkeep to give us a safe
+        // share price, and the share price is something we can't really easily verify...
         bool upkeepConditionMet;
 
         // See if we are upkeeping because of deviation.

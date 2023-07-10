@@ -135,6 +135,7 @@ contract ERC4626SharePriceOracleTest is Test {
         uint64 _deviationTrigger = 0.0005e4;
         uint64 _gracePeriod = 60 * 60; // 1 hr
         uint256 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+        address _automationRegistry = address(this);
 
         // Setup share price oracle.
         sharePriceOracle = new ERC4626SharePriceOracle(
@@ -142,7 +143,8 @@ contract ERC4626SharePriceOracleTest is Test {
             _heartbeat,
             _deviationTrigger,
             _gracePeriod,
-            _observationsToUse
+            _observationsToUse,
+            _automationRegistry
         );
     }
 
@@ -235,7 +237,7 @@ contract ERC4626SharePriceOracleTest is Test {
         console.log("TWASP", timeWeightedAverageAnswer);
     }
 
-    function testLatestAnswerPositiveYield() external {
+    function testGetLatestPositiveYield() external {
         cellar.setHoldingPosition(usdcPosition);
         // Test latestAnswer over a 3 day period.
         uint64 dayOneYield = 1.001e4;
@@ -290,7 +292,7 @@ contract ERC4626SharePriceOracleTest is Test {
         assertGt(answer, twaa, "Answer should be larger than TWAA since all yield was positive.");
     }
 
-    function testLatestAnswerNegativeYield() external {
+    function testGetLatestNegativeYield() external {
         cellar.setHoldingPosition(usdcPosition);
         // Test latestAnswer over a 3 day period.
         uint64 dayOneYield = 0.990e4;
@@ -345,10 +347,63 @@ contract ERC4626SharePriceOracleTest is Test {
         assertGt(twaa, answer, "TWASS should be larger than answer since all yield was negative.");
     }
 
+    function testGracePeriod(uint256 suppressionTime) external {
+        suppressionTime = bound(suppressionTime, 1, 3 days);
+        cellar.setHoldingPosition(usdcPosition);
+        bool checkNotSafeToUse;
+        uint256 answer;
+        uint256 twaa;
+
+        // Have user deposit into cellar.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Log TWAA details for 3 days, so that answer is usable.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+
+        // Assume an attack found some way to alter the target Cellar share price, and they also have a way to suppress
+        // Chainlink Automation upkeeps to prevent the upkeep from running.
+        uint256 maxTime = 1 days + 3600; // Heartbeat + grace period
+        _passTimeAlterSharePriceAndUpkeep(maxTime + suppressionTime, 0.5e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        // Attackers TWAA value is not safe to use, recover, and advance time forward.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 2e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+
+        assertEq(answer, twaa, "Answer should eqaul TWAA since attacker answer is thrown out");
+    }
+
     // TODO test verifying that the shortest period an observation can be is heartbeat
     // TODO test with malicious performUpkeep data
-    // TODO test where we are performing upkeep regualrly, then miss teh grace period for one.
-    // confirm that the missed grace period is thrown out and not used in TWAA calcs
 
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint64 sharePriceMultiplier) internal {
         vm.warp(block.timestamp + timeToPass);
