@@ -156,9 +156,13 @@ contract ERC4626SharePriceOracleTest is Test {
 
         bool upkeepNeeded;
         bytes memory performData;
+        uint256 checkGas = gasleft();
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        console.log("Gas used for checkUpkeep", checkGas - gasleft());
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        uint256 performGas = gasleft();
         sharePriceOracle.performUpkeep(performData);
+        console.log("Gas Used for PerformUpkeep", performGas - gasleft());
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(!upkeepNeeded, "Upkeep should not be needed.");
 
