@@ -156,13 +156,13 @@ contract ERC4626SharePriceOracleTest is Test {
 
         bool upkeepNeeded;
         bytes memory performData;
-        uint256 checkGas = gasleft();
+        // uint256 checkGas = gasleft();
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
-        console.log("Gas used for checkUpkeep", checkGas - gasleft());
+        // console.log("Gas used for checkUpkeep", checkGas - gasleft());
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
-        uint256 performGas = gasleft();
+        // uint256 performGas = gasleft();
         sharePriceOracle.performUpkeep(performData);
-        console.log("Gas Used for PerformUpkeep", performGas - gasleft());
+        // console.log("Gas Used for PerformUpkeep", performGas - gasleft());
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(!upkeepNeeded, "Upkeep should not be needed.");
 
@@ -190,7 +190,8 @@ contract ERC4626SharePriceOracleTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
-        // Advance time to 1 sec after grace period, and make sure we revert when trying to get TWAA, until enough observations are added that this delayed entry is no longer affecting TWAA.
+        // Advance time to 1 sec after grace period, and make sure we revert when trying to get TWAA,
+        // until enough observations are added that this delayed entry is no longer affecting TWAA.
         bool checkNotSafeToUse;
         vm.warp(block.timestamp + 1 days + 3601);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -228,9 +229,9 @@ contract ERC4626SharePriceOracleTest is Test {
         uint256 currentSharePrice = cellar.previewRedeem(1e18);
 
         // Get time weighted average share price.
-        uint256 gas = gasleft();
+        // uint256 gas = gasleft();
         (uint256 ans, uint256 timeWeightedAverageAnswer, bool notSafeToUse) = sharePriceOracle.getLatest();
-        console.log("Gas Used For getLatest", gas - gasleft());
+        // console.log("Gas Used For getLatest", gas - gasleft());
         assertTrue(!notSafeToUse, "Should be safe to use");
         assertEq(ans, currentSharePrice, "Answer should be equal to current share price.");
         assertGt(currentSharePrice, timeWeightedAverageAnswer, "Current share price should be greater than TWASP.");
@@ -346,7 +347,7 @@ contract ERC4626SharePriceOracleTest is Test {
         assertGt(twaa, answer, "TWASS should be larger than answer since all yield was negative.");
     }
 
-    function testGracePeriod(uint256 suppressionTime) external {
+    function testSuppressedUpkeepAttack(uint256 suppressionTime) external {
         suppressionTime = bound(suppressionTime, 1, 3 days);
         cellar.setHoldingPosition(usdcPosition);
         bool checkNotSafeToUse;
@@ -401,6 +402,42 @@ contract ERC4626SharePriceOracleTest is Test {
         assertEq(answer, twaa, "Answer should eqaul TWAA since attacker answer is thrown out");
     }
 
+    function testGracePeriod(uint256 delayOne, uint256 delayTwo, uint256 delayThree) external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        uint256 gracePeriod = sharePriceOracle.gracePeriod();
+
+        delayOne = bound(delayOne, 0, gracePeriod);
+        delayTwo = bound(delayTwo, 0, gracePeriod - delayOne);
+        delayThree = bound(delayThree, 0, gracePeriod - (delayOne + delayTwo));
+
+        // Have user deposit into cellar.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        _passTimeAlterSharePriceAndUpkeep(1 days + delayOne, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days + delayTwo, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days + delayThree, 1e4);
+
+        (, , bool checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+
+        // But if the next reading is delayed 1 more second than gracePeriod - (delayTwo + delayThree), pricing is not safe to use.
+        uint256 unsafeDelay = 1 + (gracePeriod - (delayTwo + delayThree));
+        _passTimeAlterSharePriceAndUpkeep(1 days + unsafeDelay, 1e4);
+
+        (, , checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+    }
+
     function testOracleUpdatesFromDeviation() external {
         cellar.setHoldingPosition(usdcPosition);
 
@@ -447,7 +484,6 @@ contract ERC4626SharePriceOracleTest is Test {
         assertEq(sharePriceOracle.currentIndex(), 1, "Index should be 1");
     }
 
-    // TODO test using fuzz to check that TWAA makes sense even with deviation updates.
     function testTimeWeightedAverageAnswerWithDeviationUpdates(uint256 assets) external {
         cellar.setHoldingPosition(usdcPosition);
 
@@ -537,9 +573,57 @@ contract ERC4626SharePriceOracleTest is Test {
         assertEq(cellar.previewRedeem(1e18), ans, "Actual share price should equal answer.");
     }
 
+    function testWrongPerformDataInputs() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 1e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Try calling performUpkeep with a timestamp in the past.
+        (uint224 ans, uint64 timestamp) = abi.decode(performData, (uint224, uint64));
+        timestamp = timestamp - 100;
+        performData = abi.encode(ans, timestamp);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__StalePerformData.selector))
+        );
+        sharePriceOracle.performUpkeep(performData);
+
+        // Try calling performUpkeep when no upkeep condition is met.
+        (ans, timestamp) = abi.decode(performData, (uint224, uint64));
+        timestamp = timestamp + 1_000;
+        performData = abi.encode(ans, timestamp);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__NoUpkeepConditionMet.selector)
+            )
+        );
+        sharePriceOracle.performUpkeep(performData);
+
+        // Try calling performUpkeep from an address that is not the automation registry.
+        address attacker = vm.addr(111);
+        vm.startPrank(attacker);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    ERC4626SharePriceOracle.ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry.selector
+                )
+            )
+        );
+        sharePriceOracle.performUpkeep(performData);
+        vm.stopPrank();
+    }
+
     // TODO test verifying that the shortest period an observation can be is heartbeat
     // TODO test checking to see if we ever have a scenario where an upkeep is triggered by the answer heartbeat check, but not triggered by the previous observation heartbeat check
-    // TODO test with malicious performUpkeep data
 
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
         vm.warp(block.timestamp + timeToPass);
