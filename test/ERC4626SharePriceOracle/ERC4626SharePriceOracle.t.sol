@@ -134,7 +134,7 @@ contract ERC4626SharePriceOracleTest is Test {
         uint64 _heartbeat = 1 days;
         uint64 _deviationTrigger = 0.0005e4;
         uint64 _gracePeriod = 60 * 60; // 1 hr
-        uint256 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
         address _automationRegistry = address(this);
 
         // Setup share price oracle.

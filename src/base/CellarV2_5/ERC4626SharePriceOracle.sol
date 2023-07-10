@@ -33,16 +33,22 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     }
 
     // ========================================= GLOBAL STATE =========================================
-    // TODO could change answer to be a uint240, and currentIndex to be a uint16, so that they are stored in the same slot.
     /**
      * @notice The latest stored onchain answer.
      */
-    uint256 public answer;
+    uint224 public answer;
 
     /**
      * @notice Stores the index of observations with the pending Observation.
      */
-    uint256 public currentIndex;
+    uint16 public currentIndex;
+
+    /**
+     * @notice The lenght of the observations array.
+     * @dev `observations` will never change itsw length once set in the constructor.
+     *      By saving this value here, we can take advantage of variable packing to make reads cheaper.
+     */
+    uint16 public observationsLength;
 
     /**
      * @notice Stores the observations this contract uses to derive a
@@ -120,7 +126,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint64 _heartbeat,
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
-        uint256 _observationsToUse,
+        uint16 _observationsToUse,
         address _automationRegistry
     ) {
         target = _target;
@@ -130,11 +136,13 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         deviationTrigger = _deviationTrigger;
         gracePeriod = _gracePeriod;
         automationRegistry = _automationRegistry;
-        uint256 observationsLength = _observationsToUse + 1;
+        // Add 1 to observations to use.
+        _observationsToUse = _observationsToUse + 1;
+        observationsLength = _observationsToUse;
 
         // Grow Observations array to required length, and fill it with observations that use 1 for timestamp and cumulative.
         // That way the initial upkeeps won't need to change state from 0 which is more expensive.
-        for (uint256 i; i < observationsLength; ++i) observations.push(Observation({ timestamp: 1, cumulative: 1 }));
+        for (uint256 i; i < _observationsToUse; ++i) observations.push(Observation({ timestamp: 1, cumulative: 1 }));
         // Set to one so slot is dirty for first upkeep.
         answer = 1;
     }
@@ -143,23 +151,25 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
         // Get target share price.
-        uint256 sharePrice = _getTargetSharePrice();
-        uint256 currentAnswer = answer;
+        uint224 sharePrice = _getTargetSharePrice();
+        // Read state from one slot.
+        uint224 _answer = answer;
+        uint16 _currentIndex = currentIndex;
+        uint16 _observationsLength = observationsLength;
 
         // See if we need to update because answer is stale or outside deviation.
-        uint256 _currentIndex = currentIndex;
         // Time since answer was last updated.
         uint256 timeDeltaCurrentAnswer = block.timestamp - observations[_currentIndex].timestamp;
         uint256 timeDeltaSincePreviousObservation = block.timestamp -
-            observations[_getPreviousIndex(_currentIndex, observations.length)].timestamp;
+            observations[_getPreviousIndex(_currentIndex, _observationsLength)].timestamp;
         uint64 _heartbeat = heartbeat;
         // TODO would we ever have a scenario where performUpkeep is called from
         // `timeDeltaCurrentAnswer >= _heartbeat` being true? Like I think if that is true, then `timeDeltaSincePreviousObservation >= _heartbeat` is also true.
         if (
             timeDeltaCurrentAnswer >= _heartbeat ||
             timeDeltaSincePreviousObservation >= _heartbeat ||
-            sharePrice > currentAnswer.mulDivDown(1e4 + deviationTrigger, 1e4) ||
-            sharePrice < currentAnswer.mulDivDown(1e4 - deviationTrigger, 1e4)
+            sharePrice > uint256(_answer).mulDivDown(1e4 + deviationTrigger, 1e4) ||
+            sharePrice < uint256(_answer).mulDivDown(1e4 - deviationTrigger, 1e4)
         ) {
             // We need to update answer.
             upkeepNeeded = true;
@@ -169,7 +179,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     function performUpkeep(bytes calldata performData) external {
         if (msg.sender != automationRegistry) revert("Not automation registry");
-        (uint256 sharePrice, uint64 currentTime) = abi.decode(performData, (uint256, uint64));
+        (uint224 sharePrice, uint64 currentTime) = abi.decode(performData, (uint224, uint64));
 
         // Verify atleast one of the upkeep conditions was met.
         // TODO is this really needed? Like we are already trusting the upkeep to give us a safe
@@ -177,19 +187,21 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // TODO this does protect us from 2 upkeep TXs being submitted at the same time by multiple keepers...
         bool upkeepConditionMet;
 
+        // Read state from one slot.
+        uint224 _answer = answer;
+        uint16 _currentIndex = currentIndex;
+        uint16 _observationsLength = observationsLength;
+
         // See if we are upkeeping because of deviation.
-        uint256 currentAnswer = answer;
         if (
-            sharePrice > currentAnswer.mulDivDown(1e4 + deviationTrigger, 1e4) ||
-            sharePrice < currentAnswer.mulDivDown(1e4 - deviationTrigger, 1e4)
+            sharePrice > uint256(_answer).mulDivDown(1e4 + deviationTrigger, 1e4) ||
+            sharePrice < uint256(_answer).mulDivDown(1e4 - deviationTrigger, 1e4)
         ) upkeepConditionMet = true;
 
         // Update answer.
         answer = sharePrice;
 
         // Update current observation.
-        uint256 _currentIndex = currentIndex;
-        uint256 _length = observations.length;
         Observation storage currentObservation = observations[_currentIndex];
         // Make sure time is larger than previous time.
         if (currentObservation.timestamp >= currentTime) revert("Bad time given");
@@ -205,10 +217,10 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         currentObservation.timestamp = currentTime;
 
         uint256 timeDeltaSincePreviousObservation = currentTime -
-            observations[_getPreviousIndex(_currentIndex, _length)].timestamp;
+            observations[_getPreviousIndex(_currentIndex, _observationsLength)].timestamp;
         // See if we need to advance to the next cumulative.
         if (timeDeltaSincePreviousObservation >= heartbeat) {
-            uint256 nextIndex = _getNextIndex(_currentIndex, _length);
+            uint16 nextIndex = _getNextIndex(_currentIndex, _observationsLength);
             currentIndex = nextIndex;
             // Update newest cumulative.
             Observation storage newObservation = observations[nextIndex];
@@ -230,35 +242,40 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // Note add in the grace period here, because it can take time for the upkeep TX to go through.
         if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, 0, true);
 
+        // Read state from one slot.
         ans = answer;
+        uint16 _currentIndex = currentIndex;
+        uint16 _observationsLength = observationsLength;
+
         // Scale results back down to cellar asset decimals.
         ans = ans.changeDecimals(SCALING_DECIMALS, decimals);
 
-        (timeWeightedAverageAnswer, notSafeToUse) = _getTimeWeightedAverageAnswer();
+        (timeWeightedAverageAnswer, notSafeToUse) = _getTimeWeightedAverageAnswer(_currentIndex, _observationsLength);
         if (notSafeToUse) return (0, 0, true);
         timeWeightedAverageAnswer = timeWeightedAverageAnswer.changeDecimals(SCALING_DECIMALS, decimals);
     }
 
     //============================== INTERNAL HELPER FUNCTIONS ===============================
 
-    function _getNextIndex(uint256 _currentIndex, uint256 _length) internal pure returns (uint256 nextIndex) {
+    function _getNextIndex(uint16 _currentIndex, uint16 _length) internal pure returns (uint16 nextIndex) {
         nextIndex = (_currentIndex == _length - 1) ? 0 : _currentIndex + 1;
     }
 
-    function _getPreviousIndex(uint256 _currentIndex, uint256 _length) internal pure returns (uint256 previousIndex) {
+    function _getPreviousIndex(uint16 _currentIndex, uint16 _length) internal pure returns (uint16 previousIndex) {
         previousIndex = (_currentIndex == 0) ? _length - 1 : _currentIndex - 1;
     }
 
     // TODO if we make the slot optimization above, then pass in index to this function, we reduce gas costs by 2,100 for reads.
-    function _getTimeWeightedAverageAnswer()
-        internal
-        view
-        returns (uint256 timeWeightedAverageAnswer, bool notSafeToUse)
-    {
-        uint256 _currentIndex = currentIndex;
-        uint256 _length = observations.length;
-        Observation memory mostRecentlyCompletedObservation = observations[_getPreviousIndex(_currentIndex, _length)];
-        Observation memory oldestObservation = observations[_getNextIndex(_currentIndex, _length)];
+    function _getTimeWeightedAverageAnswer(
+        uint16 _currentIndex,
+        uint16 _observationsLength
+    ) internal view returns (uint256 timeWeightedAverageAnswer, bool notSafeToUse) {
+        // Read observations from storage.
+        Observation memory mostRecentlyCompletedObservation = observations[
+            _getPreviousIndex(_currentIndex, _observationsLength)
+        ];
+        Observation memory oldestObservation = observations[_getNextIndex(_currentIndex, _observationsLength)];
+
         // Data is not set.
         if (oldestObservation.timestamp == 1) return (0, true);
 
@@ -266,7 +283,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         /// @dev use _length - 2 because
         /// remove 1 because observations array stores the current pending observation.
         /// remove 1 because we are really interested in the time between observations.
-        uint256 minDuration = heartbeat * (_length - 2);
+        uint256 minDuration = heartbeat * (_observationsLength - 2);
         uint256 maxDuration = minDuration + gracePeriod;
         // Data is too new
         // TODO we should realisitcally never hit this if we confirm observations always last a minimum of heartbeat.
@@ -279,13 +296,16 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
             (mostRecentlyCompletedObservation.timestamp - oldestObservation.timestamp);
     }
 
-    function _getTargetSharePrice() internal view returns (uint256 sharePrice) {
+    function _getTargetSharePrice() internal view returns (uint224 sharePrice) {
         uint256 totalShares = target.totalSupply();
         // Get total Assets but scale it up to SCALING_DECIMALS decimals of precision.
         uint256 totalAssets = target.totalAssets().changeDecimals(decimals, SCALING_DECIMALS);
 
         if (totalShares == 0) return 0;
 
-        sharePrice = ONE_SHARE.mulDivDown(totalAssets, totalShares);
+        uint256 _sharePrice = ONE_SHARE.mulDivDown(totalAssets, totalShares);
+
+        if (_sharePrice > type(uint224).max) revert("Share price too large");
+        sharePrice = uint224(_sharePrice);
     }
 }
