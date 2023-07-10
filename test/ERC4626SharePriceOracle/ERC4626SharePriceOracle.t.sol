@@ -148,9 +148,6 @@ contract ERC4626SharePriceOracleTest is Test {
         );
     }
 
-    // TODO so I think the delta between the min and max time deltas just tells you how long your upkeep can miss for
-    // Like if the heart beat is a day, and min is 3 days, max is 4 days, the upkeep TX can at most be 1 day late, and you can still price stuff without needing to wait 3 days to fill up the TWAP again.
-
     function testHappyPath() external {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
@@ -229,12 +226,10 @@ contract ERC4626SharePriceOracleTest is Test {
         // Get time weighted average share price.
         uint256 gas = gasleft();
         (uint256 ans, uint256 timeWeightedAverageAnswer, bool notSafeToUse) = sharePriceOracle.getLatest();
-        console.log("Gas Used", gas - gasleft());
+        console.log("Gas Used For getLatest", gas - gasleft());
         assertTrue(!notSafeToUse, "Should be safe to use");
         assertEq(ans, currentSharePrice, "Answer should be equal to current share price.");
         assertGt(currentSharePrice, timeWeightedAverageAnswer, "Current share price should be greater than TWASP.");
-        console.log("Current share price", currentSharePrice);
-        console.log("TWASP", timeWeightedAverageAnswer);
     }
 
     function testGetLatestPositiveYield() external {
@@ -402,10 +397,147 @@ contract ERC4626SharePriceOracleTest is Test {
         assertEq(answer, twaa, "Answer should eqaul TWAA since attacker answer is thrown out");
     }
 
+    function testOracleUpdatesFromDeviation() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Update share price so that it falls under the update deviation.
+        vm.warp(block.timestamp + 600);
+
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed.");
+
+        uint256 sharePriceMultiplier = 0.9994e4;
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        assertEq(sharePriceOracle.currentIndex(), 1, "Index should be 1");
+
+        // Update share price so that it falls over the update deviation.
+        vm.warp(block.timestamp + 600);
+
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed.");
+
+        sharePriceMultiplier = 1.0006e4;
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        assertEq(sharePriceOracle.currentIndex(), 1, "Index should be 1");
+    }
+
+    // TODO test using fuzz to check that TWAA makes sense even with deviation updates.
+    function testTimeWeightedAverageAnswerWithDeviationUpdates(uint256 assets) external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        assets = bound(assets, 0.1e6, 1_000_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        uint256 startingCumulative = cellar.previewRedeem(1e18) * (block.timestamp - 1);
+        uint256 cumulative = startingCumulative;
+
+        // Deviate outside threshold for first 12 hours
+        uint256 sharePriceMultiplier = 0.9990e4;
+        vm.warp(block.timestamp + (1 days / 2));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+        cumulative += cellar.previewRedeem(1e18) * (1 days / 2);
+
+        // For last 12 hours, reset to original share price.
+        sharePriceMultiplier = 1.0010e4;
+        _passTimeAlterSharePriceAndUpkeep((1 days / 2), sharePriceMultiplier);
+        cumulative += cellar.previewRedeem(1e18) * (1 days / 2);
+
+        // Deviate outside threshold for first 6 hours
+        sharePriceMultiplier = 1.0010e4;
+        vm.warp(block.timestamp + (1 days / 4));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+
+        // Deviate outside threshold for first 6-12 hours
+        sharePriceMultiplier = 1.0010e4;
+        vm.warp(block.timestamp + (1 days / 4));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+
+        // Deviate outside threshold for 12-18 hours
+        sharePriceMultiplier = 1.0010e4;
+        vm.warp(block.timestamp + (1 days / 4));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+
+        // For last 6 hours show a loss.
+        sharePriceMultiplier = 0.9990e4;
+        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier);
+        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+
+        // Deviate outside threshold for first 18 hours
+        sharePriceMultiplier = 1.0015e4;
+        vm.warp(block.timestamp + (18 * 3_600));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+        cumulative += cellar.previewRedeem(1e18) * (18 * 3_600);
+
+        // For last 6 hours earn no yield.
+        sharePriceMultiplier = 1e4;
+        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier);
+        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+
+        (uint256 ans, uint256 twaa, bool notSafeToUse) = sharePriceOracle.getLatest();
+
+        assertTrue(!notSafeToUse, "Answer should be safe to use.");
+        uint256 expectedTWAA = (cumulative - startingCumulative) / 3 days;
+        console.log("Expected", expectedTWAA);
+        console.log("Actual", twaa);
+
+        assertEq(twaa, expectedTWAA, "Actual Time Weighted Average Answer should equal expected.");
+        assertEq(cellar.previewRedeem(1e18), ans, "Actual share price should equal answer.");
+    }
+
     // TODO test verifying that the shortest period an observation can be is heartbeat
+    // TODO test checking to see if we ever have a scenario where an upkeep is triggered by the answer heartbeat check, but not triggered by the previous observation heartbeat check
     // TODO test with malicious performUpkeep data
 
-    function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint64 sharePriceMultiplier) internal {
+    function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
         vm.warp(block.timestamp + timeToPass);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
         deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
