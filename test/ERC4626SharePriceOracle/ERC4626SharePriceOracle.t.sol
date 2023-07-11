@@ -14,7 +14,7 @@ import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/
 import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
-import { ERC4626SharePriceOracle } from "src/base/CellarV2_5/ERC4626SharePriceOracle.sol";
+import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
 
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 import { Math } from "src/utils/Math.sol";
