@@ -490,7 +490,7 @@ contract ERC4626SharePriceOracleTest is Test {
         uint256 sharePriceMultiplier1
     ) external {
         cellar.setHoldingPosition(usdcPosition);
-
+        // TODO need to make sure value is outside of 1e5 +- 5bps
         sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.8e4, 1.5e4);
         sharePriceMultiplier1 = bound(sharePriceMultiplier1, 0.8e4, 1.5e4);
         uint256 sharePriceMultiplier2 = sharePriceMultiplier0 / 2;
@@ -499,6 +499,14 @@ contract ERC4626SharePriceOracleTest is Test {
         uint256 sharePriceMultiplier5 = (sharePriceMultiplier1 * 1.1e4) / 1e4;
         uint256 sharePriceMultiplier6 = (sharePriceMultiplier1 * 1.2e4) / 1e4;
         uint256 sharePriceMultiplier7 = (sharePriceMultiplier1 * 1.3e4) / 1e4;
+        sharePriceMultiplier0 = sharePriceMultiplier0 < 1e4 ? sharePriceMultiplier0 - 6 : sharePriceMultiplier0 + 6;
+        sharePriceMultiplier1 = sharePriceMultiplier1 < 1e4 ? sharePriceMultiplier1 - 6 : sharePriceMultiplier1 + 6;
+        sharePriceMultiplier2 = sharePriceMultiplier2 < 1e4 ? sharePriceMultiplier2 - 6 : sharePriceMultiplier2 + 6;
+        sharePriceMultiplier3 = sharePriceMultiplier3 < 1e4 ? sharePriceMultiplier3 - 6 : sharePriceMultiplier3 + 6;
+        sharePriceMultiplier4 = sharePriceMultiplier4 < 1e4 ? sharePriceMultiplier4 - 6 : sharePriceMultiplier4 + 6;
+        sharePriceMultiplier5 = sharePriceMultiplier5 < 1e4 ? sharePriceMultiplier5 - 6 : sharePriceMultiplier5 + 6;
+        sharePriceMultiplier6 = sharePriceMultiplier6 < 1e4 ? sharePriceMultiplier6 - 6 : sharePriceMultiplier6 + 6;
+        sharePriceMultiplier7 = sharePriceMultiplier7 < 1e4 ? sharePriceMultiplier7 - 6 : sharePriceMultiplier7 + 6;
 
         // Have user deposit into cellar.
         assets = bound(assets, 0.1e6, 1_000_000_000e6);
