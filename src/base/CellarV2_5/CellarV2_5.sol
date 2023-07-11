@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
+// import { Math } from "src/utils/Math.sol";
+// import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
+// import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+// import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ERC4626, SafeTransferLib, Math, ERC20 } from "src/base/ERC4626.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
@@ -10,7 +14,10 @@ import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
+import { ERC4626SharePriceOracle } from "src/base/CellarV2_5/ERC4626SharePriceOracle.sol";
 
+// TODO could add in a view function to the oracle that indicates whether it is healthy or not, then if it isn't healthy, it enforces a share lock period
+// This would probs add like 10k gas to user transfers/and withdraws.
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use arbitrary DeFi assets/positions using adaptors.
@@ -348,20 +355,16 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      * @dev Called by strategist.
      * @param index index at which to remove the position
      */
-    function removePosition(uint32 index, bool inDebtArray) external onlyOwner {
+    function removePosition(uint32 index, bool inDebtArray, bool checkPositionBalance) external onlyOwner {
         // Get position being removed.
         uint32 positionId = inDebtArray ? debtPositions[index] : creditPositions[index];
-        // Only remove position if it is empty, and if it is not the holding position.
-        uint256 positionBalance = _balanceOf(positionId);
-        if (positionBalance > 0) revert Cellar__PositionNotEmpty(positionId, positionBalance);
 
-        _removePosition(index, positionId, inDebtArray);
-    }
+        if (checkPositionBalance) {
+            // Only remove position if it is empty, and if it is not the holding position.
+            uint256 positionBalance = _balanceOf(positionId);
+            if (positionBalance > 0) revert Cellar__PositionNotEmpty(positionId, positionBalance);
+        }
 
-    /**
-     * @notice Allows Governance to force a cellar out of a position without making ANY external calls.
-     */
-    function forcePositionOut(uint32 index, uint32 positionId, bool inDebtArray) external onlyOwner {
         _removePosition(index, positionId, inDebtArray);
     }
 
@@ -737,7 +740,6 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      */
     mapping(address => uint256) public userShareLockStartTime;
 
-    // TODO remove sharelock period logic
     /**
      * @notice Allows share lock period to be updated.
      * @param newLock the new lock period
@@ -767,7 +769,7 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      * @notice Override `transfer` to add share lock check.
      */
     function transfer(address to, uint256 amount) public override returns (bool) {
-        _checkIfSharesLocked(msg.sender);
+        if (address(sharePriceOracle) == address(0)) _checkIfSharesLocked(msg.sender);
         return super.transfer(to, amount);
     }
 
@@ -775,7 +777,7 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      * @notice Override `transferFrom` to add share lock check.
      */
     function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
-        _checkIfSharesLocked(from);
+        if (address(sharePriceOracle) == address(0)) _checkIfSharesLocked(from);
         return super.transferFrom(from, to, amount);
     }
 
@@ -795,9 +797,12 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
     function beforeDeposit(uint256 assets, uint256, address receiver) internal view override {
         _whenNotShutdown();
         _checkIfPaused();
-        if (msg.sender != receiver) {
-            if (!registry.approvedForDepositOnBehalf(msg.sender))
-                revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
+        // Only check for approvedForDepositOnBehalf if sharePriceOracle is not set.
+        if (address(sharePriceOracle) == address(0)) {
+            if (msg.sender != receiver) {
+                if (!registry.approvedForDepositOnBehalf(msg.sender))
+                    revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
+            }
         }
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) revert Cellar__DepositRestricted(assets, maxAssets);
@@ -809,6 +814,9 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      */
     function afterDeposit(uint256 assets, uint256, address receiver) internal override {
         _depositTo(holdingPosition, assets);
+        // TODO leaving this in here even when the oracle is set, does add to deposit costs, but also
+        // covers us from the edge case of governance preparing a TX to set the oracle to address 0, and
+        // an attacker sees this, and a sandwich attack oppurtunity arises.
         userShareLockStartTime[receiver] = block.timestamp;
     }
 
@@ -817,8 +825,10 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      */
     function beforeWithdraw(uint256, uint256, address, address owner) internal view override {
         _checkIfPaused();
-        // Make sure users shares are not locked.
-        _checkIfSharesLocked(owner);
+        if (address(sharePriceOracle) == address(0)) {
+            // Make sure users shares are not locked.
+            _checkIfSharesLocked(owner);
+        }
     }
 
     function _enter(uint256 assets, uint256 shares, address receiver) internal {
@@ -843,10 +853,10 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      */
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
         // Use `_accounting` instead of totalAssets bc re-entrancy is already checked in this function.
-        uint256 _totalAssets = _accounting(false);
+        uint256 _sharePrice = _getSharePrice(true);
 
         // Check for rounding error since we round down in previewDeposit.
-        if ((shares = _convertToShares(assets, _totalAssets)) == 0) revert Cellar__ZeroShares();
+        if ((shares = _convertToShares(assets, _sharePrice)) == 0) revert Cellar__ZeroShares();
 
         _enter(assets, shares, receiver);
     }
@@ -858,11 +868,10 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      * @return assets amount of assets deposited into the cellar.
      */
     function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
-        // Use `_accounting` instead of totalAssets bc re-entrancy is already checked in this function.
-        uint256 _totalAssets = _accounting(false);
+        uint256 _sharePrice = _getSharePrice(true);
 
         // previewMint rounds up, but initial mint could return zero assets, so check for rounding error.
-        if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
+        if ((assets = _convertToAssets(shares, _sharePrice)) == 0) revert Cellar__ZeroAssets();
 
         _enter(assets, shares, receiver);
     }
@@ -903,11 +912,10 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 shares) {
-        // Use `_accounting` instead of totalAssets bc re-entrancy is already checked in this function.
-        uint256 _totalAssets = _accounting(false);
+        uint256 _sharePrice = _getSharePrice(false);
 
         // No need to check for rounding error, `previewWithdraw` rounds up.
-        shares = _previewWithdraw(assets, _totalAssets);
+        shares = _convertToShares(assets, _sharePrice);
 
         _exit(assets, shares, receiver, owner);
     }
@@ -930,11 +938,10 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 assets) {
-        // Use `_accounting` instead of totalAssets bc re-entrancy is already checked in this function.
-        uint256 _totalAssets = _accounting(false);
+        uint256 _sharePrice = _getSharePrice(false);
 
         // Check for rounding error since we round down in previewRedeem.
-        if ((assets = _convertToAssets(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
+        if ((assets = _convertToAssets(shares, _sharePrice)) == 0) revert Cellar__ZeroAssets();
 
         _exit(assets, shares, receiver, owner);
     }
@@ -1018,7 +1025,51 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
 
     // ========================================= ACCOUNTING LOGIC =========================================
 
-    // TODO new view funcitons to see saved share price and get twasp? would be in the oracle
+    ERC4626SharePriceOracle public sharePriceOracle;
+    bool public revertOnOracleFailure;
+
+    error CellarV2_5__OracleFailure();
+
+    function toggleRevertOnOracleFailure() external onlyOwner {
+        revertOnOracleFailure = revertOnOracleFailure ? false : true;
+    }
+
+    function setSharePriceOracle(ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
+        sharePriceOracle = _sharePriceOracle;
+        // TODO emit an event
+    }
+
+    function _getSharePrice(bool useUpper) internal view returns (uint256 sharePrice) {
+        // TODO technically this is only needed if we are calculting share price from scratch.
+        require(locked == 1, "REENTRANCY");
+        ERC4626SharePriceOracle _sharePriceOracle = sharePriceOracle;
+        uint8 assetDecimals = asset.decimals();
+        // Check if sharePriceOracle is set.
+        if (address(_sharePriceOracle) != address(0)) {
+            // Consult the oracle.
+            (uint256 latestAnswer, uint256 timeWeightedAverageAnswer, bool isNotSafeToUse) = _sharePriceOracle
+                .getLatest();
+            if (isNotSafeToUse) {
+                if (revertOnOracleFailure) revert CellarV2_5__OracleFailure();
+            } else {
+                if (useUpper)
+                    sharePrice = latestAnswer > timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
+                else sharePrice = latestAnswer < timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
+                uint8 oracleDecimals = _sharePriceOracle.decimals();
+                if (oracleDecimals != assetDecimals) sharePrice.changeDecimals(oracleDecimals, assetDecimals);
+                return sharePrice;
+            }
+        }
+        // If we make it this far, either oracle is not set, or we do not want to revert on oracle failure,
+        // and need to calculate share price from scratch.
+        uint256 _totalShares = totalSupply;
+        uint256 _totalAssets = _accounting(false);
+        uint256 oneShare = 10 ** decimals;
+        sharePrice = _totalShares == 0
+            ? oneShare.changeDecimals(18, assetDecimals)
+            : oneShare.mulDivDown(_totalAssets, _totalShares);
+    }
+
     /**
      * @notice Internal accounting function that can report total assets, or total assets withdrawable.
      * @param reportWithdrawable if true, then the withdrawable total assets is reported,
@@ -1057,8 +1108,6 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
         }
     }
 
-    // TODO totalAssets SHOULD return the real totalAssets, not the oracle value.
-    // But previoew functions,a nd internal functions use the oracle values.
     /**
      * @notice The total amount of assets in the cellar.
      * @dev EIP4626 states totalAssets needs to be inclusive of fees.
@@ -1086,31 +1135,34 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
 
     /**
      * @notice The amount of assets that the cellar would exchange for the amount of shares provided.
+     * @dev Use preview functions to get accurate assets.
+     * @dev Under estimates assets.
      * @param shares amount of shares to convert
      * @return assets the shares can be exchanged for
      */
     function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
-        assets = _convertToAssets(shares, totalAssets());
+        assets = _convertToAssets(shares, _getSharePrice(false));
     }
 
     /**
      * @notice The amount of shares that the cellar would exchange for the amount of assets provided.
+     * @dev Use preview functions to get accurate shares.
+     * @dev Under estimates shares.
      * @param assets amount of assets to convert
      * @return shares the assets can be exchanged for
      */
     function convertToShares(uint256 assets) public view override returns (uint256 shares) {
-        shares = _convertToShares(assets, totalAssets());
+        shares = _convertToShares(assets, _getSharePrice(true));
     }
 
-    // TODO preview functions will need to get the share price and use the upper or lower value
     /**
      * @notice Simulate the effects of minting shares at the current block, given current on-chain conditions.
      * @param shares amount of shares to mint
      * @return assets that will be deposited
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
-        uint256 _totalAssets = totalAssets();
-        assets = _previewMint(shares, _totalAssets);
+        uint256 _sharePrice = _getSharePrice(true);
+        assets = _convertToAssets(shares, _sharePrice);
     }
 
     /**
@@ -1119,8 +1171,8 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      * @return shares that will be redeemed
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
-        uint256 _totalAssets = totalAssets();
-        shares = _previewWithdraw(assets, _totalAssets);
+        uint256 _sharePrice = _getSharePrice(false);
+        shares = _convertToShares(assets, _sharePrice);
     }
 
     /**
@@ -1129,8 +1181,8 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      * @return shares that will be minted
      */
     function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
-        uint256 _totalAssets = totalAssets();
-        shares = _convertToShares(assets, _totalAssets);
+        uint256 _sharePrice = _getSharePrice(true);
+        shares = _convertToShares(assets, _sharePrice);
     }
 
     /**
@@ -1139,8 +1191,8 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      * @return assets that will be returned
      */
     function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
-        uint256 _totalAssets = totalAssets();
-        assets = _convertToAssets(shares, _totalAssets);
+        uint256 _sharePrice = _getSharePrice(false);
+        assets = _convertToAssets(shares, _sharePrice);
     }
 
     /**
@@ -1158,17 +1210,15 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
             if (timeSharesAreUnlocked > block.timestamp) return 0;
         }
         // Get amount of assets to withdraw.
-        uint256 _totalAssets = _accounting(false);
-        uint256 assets = _convertToAssets(balanceOf[owner], _totalAssets);
+        uint256 _sharePrice = _getSharePrice(false);
+        uint256 assets = _convertToAssets(balanceOf[owner], _sharePrice);
 
         uint256 withdrawable = _accounting(true);
         maxOut = assets <= withdrawable ? assets : withdrawable;
 
-        if (inShares) maxOut = _convertToShares(maxOut, _totalAssets);
+        if (inShares) maxOut = _convertToShares(maxOut, _sharePrice);
         // else leave maxOut in terms of assets.
     }
-
-    // TODO helper functions to use share price to get shares in or share out, given assets
 
     /**
      * @notice Returns the max amount withdrawable by a user inclusive of performance fees
@@ -1197,45 +1247,26 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
     /**
      * @dev Used to more efficiently convert amount of shares to assets using a stored `totalAssets` value.
      */
-    function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
+    function _convertToAssets(uint256 _shares, uint256 _sharePrice) internal view returns (uint256 assets) {
         uint256 totalShares = totalSupply;
 
+        // TODO if this is used a lot we could probs save it as an immutable val.
+        uint8 assetDecimals = asset.decimals();
+
         assets = totalShares == 0
-            ? shares.changeDecimals(18, asset.decimals())
-            : shares.mulDivDown(_totalAssets, totalShares);
+            ? _shares.changeDecimals(decimals, assetDecimals)
+            : _shares.mulDivDown(_sharePrice, 10 ** assetDecimals);
     }
 
     /**
      * @dev Used to more efficiently convert amount of assets to shares using a stored `totalAssets` value.
      */
-    function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
+    function _convertToShares(uint256 _assets, uint256 _sharePrice) internal view returns (uint256 shares) {
         uint256 totalShares = totalSupply;
 
         shares = totalShares == 0
-            ? assets.changeDecimals(asset.decimals(), 18)
-            : assets.mulDivDown(totalShares, _totalAssets);
-    }
-
-    /**
-     * @dev Used to more efficiently simulate minting shares using a stored `totalAssets` value.
-     */
-    function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply;
-
-        assets = totalShares == 0
-            ? shares.changeDecimals(18, asset.decimals())
-            : shares.mulDivUp(_totalAssets, totalShares);
-    }
-
-    /**
-     * @dev Used to more efficiently simulate withdrawing assets using a stored `totalAssets` value.
-     */
-    function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply;
-
-        shares = totalShares == 0
-            ? assets.changeDecimals(asset.decimals(), 18)
-            : assets.mulDivUp(totalShares, _totalAssets);
+            ? _assets.changeDecimals(asset.decimals(), decimals)
+            : _assets.mulDivDown(10 ** decimals, _sharePrice);
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================
@@ -1317,6 +1348,18 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
 
     event AdaptorCalled(address adaptor, bytes data);
 
+    function _makeAdaptorCalls(AdaptorCall[] memory data) internal {
+        for (uint256 i = 0; i < data.length; ++i) {
+            address adaptor = data[i].adaptor;
+            // Revert if adaptor not in catalogue, or adaptor is paused.
+            if (!adaptorCatalogue[adaptor]) revert Cellar__CallToAdaptorNotAllowed(adaptor);
+            for (uint256 j = 0; j < data[i].callData.length; j++) {
+                adaptor.functionDelegateCall(data[i].callData[j]);
+                emit AdaptorCalled(adaptor, data[i].callData[j]);
+            }
+        }
+    }
+
     /**
      * @notice Allows strategists to manage their Cellar using arbitrary logic calls to adaptors.
      * @dev There are several safety checks in this function to prevent strategists from abusing it.
@@ -1328,7 +1371,7 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
      *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
      */
-    function callOnAdaptor(AdaptorCall[] memory data) external onlyOwner nonReentrant {
+    function callOnAdaptor(AdaptorCall[] calldata data) external onlyOwner nonReentrant {
         _whenNotShutdown();
         _checkIfPaused();
         blockExternalReceiver = true;
@@ -1343,17 +1386,9 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
             maximumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
             totalShares = totalSupply;
         }
-        // TODO make this an internal function so that flash loan contracts can use it
+
         // Run all adaptor calls.
-        for (uint8 i = 0; i < data.length; ++i) {
-            address adaptor = data[i].adaptor;
-            // Revert if adaptor not in catalogue, or adaptor is paused.
-            if (!adaptorCatalogue[adaptor]) revert Cellar__CallToAdaptorNotAllowed(adaptor);
-            for (uint8 j = 0; j < data[i].callData.length; j++) {
-                adaptor.functionDelegateCall(data[i].callData[j]);
-                emit AdaptorCalled(adaptor, data[i].callData[j]);
-            }
-        }
+        _makeAdaptorCalls(data);
 
         // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
         uint256 assets = _accounting(false);
@@ -1399,14 +1434,7 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
         AdaptorCall[] memory data = abi.decode(params, (AdaptorCall[]));
 
         // Run all adaptor calls.
-        for (uint8 i = 0; i < data.length; ++i) {
-            address adaptor = data[i].adaptor;
-            // Revert if adaptor not in catalogue, or adaptor is paused.
-            if (!adaptorCatalogue[adaptor]) revert Cellar__CallToAdaptorNotAllowed(adaptor);
-            for (uint8 j = 0; j < data[i].callData.length; j++) {
-                adaptor.functionDelegateCall(data[i].callData[j]);
-            }
-        }
+        _makeAdaptorCalls(data);
 
         // Approve pool to repay all debt.
         for (uint256 i = 0; i < amounts.length; ++i) {
@@ -1417,7 +1445,8 @@ contract CellarV2_5 is ERC4626, Owned, ERC721Holder {
     }
 
     // ============================================ LIMITS LOGIC ============================================
-    // TODO add TVL cap loweest priority
+    // TODO add TVL cap lowest priority
+
     /**
      * @notice Total amount of assets that can be deposited for a user.
      * @return assets maximum amount of assets that can be deposited
