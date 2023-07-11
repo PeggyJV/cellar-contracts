@@ -484,8 +484,21 @@ contract ERC4626SharePriceOracleTest is Test {
         assertEq(sharePriceOracle.currentIndex(), 1, "Index should be 1");
     }
 
-    function testTimeWeightedAverageAnswerWithDeviationUpdates(uint256 assets) external {
+    function testTimeWeightedAverageAnswerWithDeviationUpdates(
+        uint256 assets,
+        uint256 sharePriceMultiplier0,
+        uint256 sharePriceMultiplier1
+    ) external {
         cellar.setHoldingPosition(usdcPosition);
+
+        sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.8e4, 1.5e4);
+        sharePriceMultiplier1 = bound(sharePriceMultiplier1, 0.8e4, 1.5e4);
+        uint256 sharePriceMultiplier2 = sharePriceMultiplier0 / 2;
+        uint256 sharePriceMultiplier3 = sharePriceMultiplier0 / 3;
+        uint256 sharePriceMultiplier4 = sharePriceMultiplier0 / 4;
+        uint256 sharePriceMultiplier5 = (sharePriceMultiplier1 * 1.1e4) / 1e4;
+        uint256 sharePriceMultiplier6 = (sharePriceMultiplier1 * 1.2e4) / 1e4;
+        uint256 sharePriceMultiplier7 = (sharePriceMultiplier1 * 1.3e4) / 1e4;
 
         // Have user deposit into cellar.
         assets = bound(assets, 0.1e6, 1_000_000_000e6);
@@ -499,78 +512,118 @@ contract ERC4626SharePriceOracleTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
+        assertEq(sharePriceOracle.currentIndex(), 1, "Wrong Current Index");
+
         uint256 startingCumulative = cellar.previewRedeem(1e18) * (block.timestamp - 1);
         uint256 cumulative = startingCumulative;
 
         // Deviate outside threshold for first 12 hours
-        uint256 sharePriceMultiplier = 0.9990e4;
         vm.warp(block.timestamp + (1 days / 2));
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier0, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
         cumulative += cellar.previewRedeem(1e18) * (1 days / 2);
+
+        assertEq(sharePriceOracle.currentIndex(), 1, "Wrong Current Index");
 
         // For last 12 hours, reset to original share price.
-        sharePriceMultiplier = 1.0010e4;
-        _passTimeAlterSharePriceAndUpkeep((1 days / 2), sharePriceMultiplier);
+        _passTimeAlterSharePriceAndUpkeep((1 days / 2), sharePriceMultiplier1);
         cumulative += cellar.previewRedeem(1e18) * (1 days / 2);
 
+        assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
+
         // Deviate outside threshold for first 6 hours
-        sharePriceMultiplier = 1.0010e4;
         vm.warp(block.timestamp + (1 days / 4));
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier2, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
         cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+
+        assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
         // Deviate outside threshold for first 6-12 hours
-        sharePriceMultiplier = 1.0010e4;
         vm.warp(block.timestamp + (1 days / 4));
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier3, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
         cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+
+        assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
         // Deviate outside threshold for 12-18 hours
-        sharePriceMultiplier = 1.0010e4;
         vm.warp(block.timestamp + (1 days / 4));
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier4, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
         cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
 
+        assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
+
         // For last 6 hours show a loss.
-        sharePriceMultiplier = 0.9990e4;
-        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier);
+        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier5);
         cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
 
+        assertEq(sharePriceOracle.currentIndex(), 3, "Wrong Current Index");
+
         // Deviate outside threshold for first 18 hours
-        sharePriceMultiplier = 1.0015e4;
         vm.warp(block.timestamp + (18 * 3_600));
-        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier6, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
         cumulative += cellar.previewRedeem(1e18) * (18 * 3_600);
 
+        assertEq(sharePriceOracle.currentIndex(), 3, "Wrong Current Index");
+
         // For last 6 hours earn no yield.
-        sharePriceMultiplier = 1e4;
-        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier);
+        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier7);
         cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+
+        assertEq(sharePriceOracle.currentIndex(), 4, "Wrong Current Index");
 
         (uint256 ans, uint256 twaa, bool notSafeToUse) = sharePriceOracle.getLatest();
 
         assertTrue(!notSafeToUse, "Answer should be safe to use.");
         uint256 expectedTWAA = (cumulative - startingCumulative) / 3 days;
-        console.log("Expected", expectedTWAA);
-        console.log("Actual", twaa);
 
         assertEq(twaa, expectedTWAA, "Actual Time Weighted Average Answer should equal expected.");
         assertEq(cellar.previewRedeem(1e18), ans, "Actual share price should equal answer.");
+    }
+
+    function testMultipleReads() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 1_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        uint256 answer;
+        uint256 twaa;
+        bool isNotSafeToUse;
+
+        for (uint256 i; i < 30; ++i) {
+            _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+            (answer, twaa, isNotSafeToUse) = sharePriceOracle.getLatest();
+            assertEq(answer, 1e6, "Answer should be 1 USDC");
+            assertEq(twaa, 1e6, "TWAA should be 1 USDC");
+            assertTrue(!isNotSafeToUse, "Should be safe to use");
+        }
     }
 
     function testWrongPerformDataInputs() external {
