@@ -16,6 +16,9 @@ import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721H
 import { Owned } from "@solmate/auth/Owned.sol";
 import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
 
+// TODO remove
+import { console } from "@forge-std/Test.sol";
+
 // TODO could add in a view function to the oracle that indicates whether it is healthy or not, then if it isn't healthy, it enforces a share lock period
 // This would probs add like 10k gas to user transfers/and withdraws.
 /**
@@ -825,7 +828,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // TODO leaving this in here even when the oracle is set, does add to deposit costs, but also
         // covers us from the edge case of governance preparing a TX to set the oracle to address 0, and
         // an attacker sees this, and a sandwich attack oppurtunity arises.
-        userShareLockStartTime[receiver] = block.timestamp;
+        if (address(sharePriceOracle) == address(0)) userShareLockStartTime[receiver] = block.timestamp;
     }
 
     /**
@@ -861,10 +864,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
         // Use `_accounting` instead of totalAssets bc re-entrancy is already checked in this function.
-        uint256 _sharePrice = _getTotalAssets(true);
+        uint256 _totalAssets = _getTotalAssets(true);
 
         // Check for rounding error since we round down in previewDeposit.
-        if ((shares = _convertToShares(assets, _sharePrice)) == 0) revert Cellar__ZeroShares();
+        if ((shares = _convertToShares(assets, _totalAssets)) == 0) revert Cellar__ZeroShares();
 
         _enter(assets, shares, receiver);
     }
@@ -876,10 +879,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return assets amount of assets deposited into the cellar.
      */
     function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
-        uint256 _sharePrice = _getTotalAssets(true);
+        uint256 _totalAssets = _getTotalAssets(true);
 
         // previewMint rounds up, but initial mint could return zero assets, so check for rounding error.
-        if ((assets = _convertToAssets(shares, _sharePrice)) == 0) revert Cellar__ZeroAssets();
+        if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
 
         _enter(assets, shares, receiver);
     }
@@ -920,10 +923,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 shares) {
-        uint256 _sharePrice = _getTotalAssets(false);
+        uint256 _totalAssets = _getTotalAssets(false);
 
         // No need to check for rounding error, `previewWithdraw` rounds up.
-        shares = _convertToShares(assets, _sharePrice);
+        shares = _previewWithdraw(assets, _totalAssets);
 
         _exit(assets, shares, receiver, owner);
     }
@@ -946,10 +949,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 assets) {
-        uint256 _sharePrice = _getTotalAssets(false);
+        uint256 _totalAssets = _getTotalAssets(false);
 
         // Check for rounding error since we round down in previewRedeem.
-        if ((assets = _convertToAssets(shares, _sharePrice)) == 0) revert Cellar__ZeroAssets();
+        if ((assets = _convertToAssets(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
 
         _exit(assets, shares, receiver, owner);
     }
@@ -1047,10 +1050,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // TODO emit an event
     }
 
-    //
+    // TODO getLatest could return the decimals of the oracle
     function _getTotalAssets(bool useUpper) internal view returns (uint256 _totalAssets) {
         ERC4626SharePriceOracle _sharePriceOracle = sharePriceOracle;
+
         uint8 assetDecimals = asset.decimals();
+
         // Check if sharePriceOracle is set.
         if (address(_sharePriceOracle) != address(0)) {
             // Consult the oracle.
@@ -1063,7 +1068,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
                 if (useUpper)
                     sharePrice = latestAnswer > timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
                 else sharePrice = latestAnswer < timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
+                uint256 gas = gasleft();
                 uint8 oracleDecimals = _sharePriceOracle.decimals();
+                console.log("deciamls", gas - gasleft());
                 if (oracleDecimals != assetDecimals) sharePrice.changeDecimals(oracleDecimals, assetDecimals);
                 // Convert share price to totalAssets.
                 uint256 totalShares = totalSupply;
@@ -1471,6 +1478,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     // ============================================ LIMITS LOGIC ============================================
     // TODO add TVL cap lowest priority
+    // Could add a total share cap? This would be reading 1 value in state
 
     /**
      * @notice Total amount of assets that can be deposited for a user.
