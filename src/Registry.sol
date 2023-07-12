@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Cellar } from "src/base/Cellar.sol";
-import { ERC20 } from "src/base/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { Registry, PriceRouter, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
+import { Cellar, Registry, PriceRouter, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
 import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
 
-contract MockCellarImplementation is CellarInitializableV2_2, Test {
+contract MockCellarImplementation is Cellar, Test {
     using SafeCast for uint256;
     using SafeCast for int256;
     using stdStorage for StdStorage;
 
-    constructor(Registry _registry) CellarInitializableV2_2(_registry) {}
+    constructor(Registry _registry) Cellar(_registry, ERC20(address(0)), "", "", 0, abi.encode(0), 0, 0) {}
 
     function depositIntoPosition(
         uint32 position,

@@ -2,9 +2,7 @@
 pragma solidity 0.8.16;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
-import { CellarInitializableV2_1 } from "src/base/CellarInitializableV2_1.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
-import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 
 // Import adaptors.
@@ -19,7 +17,7 @@ import { Math } from "src/utils/Math.sol";
 contract AddLiqquidityToAllPositionsTest is Test {
     address private gravityBridge = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
 
-    CellarInitializableV2_1 private cellar = CellarInitializableV2_1(0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E);
+    Cellar private cellar = Cellar(0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E);
 
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);

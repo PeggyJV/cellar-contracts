@@ -2,9 +2,7 @@
 pragma solidity 0.8.16;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
-import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
-import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/WstEthExtension.sol";
 import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
@@ -33,7 +31,7 @@ contract AddWstEthToRYETest is Test {
 
     PriceRouter private priceRouter = PriceRouter(0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA);
     Registry private registry = Registry(0x3051e76a62da91D4aD6Be6bD98D8Ab26fdaF9D08);
-    CellarInitializableV2_2 private rye = CellarInitializableV2_2(0xb5b29320d2Dde5BA5BAFA1EbcD270052070483ec);
+    Cellar private rye = Cellar(0xb5b29320d2Dde5BA5BAFA1EbcD270052070483ec);
 
     IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
     INonfungiblePositionManager internal positionManager =

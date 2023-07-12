@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { ERC20, SafeTransferLib } from "src/base/Cellar.sol";
@@ -19,7 +18,6 @@ contract TEnv {
     address public strategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
     address public devOwner = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
     address public gravityBridge = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
-    CellarFactory public factory = CellarFactory(0xFCed747657ACfFc6FAfacD606E17D0988EDf3Fd9);
     Registry public registry = Registry(0xd1c18363F81d8E6260511b38FcF1e8b710E7e31D);
     PriceRouter public priceRouter = PriceRouter(0xD8029A05bEB0FaF1215fBb064D98c39B28d317Ee);
     SwapRouter public swapRouter = SwapRouter(0xC356F0AC3a0d3fC18167d8ee62e0A8FB487D1719);

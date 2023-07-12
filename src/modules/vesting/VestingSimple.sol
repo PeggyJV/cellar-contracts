@@ -2,8 +2,8 @@
 pragma solidity 0.8.16;
 
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-
-import { ERC20, SafeTransferLib } from "src/base/ERC4626.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Math } from "src/utils/Math.sol";
 
 /**
@@ -128,11 +128,7 @@ contract VestingSimple {
      * @param _vestingPeriod                The length of time, in seconds, that tokens should vest over.
      * @param _minimumDeposit               The minimum amount of tokens that can be deposited for vesting.
      */
-    constructor(
-        ERC20 _asset,
-        uint256 _vestingPeriod,
-        uint256 _minimumDeposit
-    ) {
+    constructor(ERC20 _asset, uint256 _vestingPeriod, uint256 _minimumDeposit) {
         if (address(_asset) == address(0)) revert Vesting_ZeroDeposit();
         if (_vestingPeriod == 0) revert Vesting_ZeroVestingPeriod();
         if (_minimumDeposit < _vestingPeriod) revert Vesting_MinimumTooSmall(_vestingPeriod);
@@ -400,16 +396,7 @@ contract VestingSimple {
      * @return lastClaimed                  The last time vesting occurred.
      * @return amountPerSecond              The amount of tokens released per second.
      */
-    function userVestingInfo(address user, uint256 depositId)
-        public
-        view
-        returns (
-            uint256,
-            uint128,
-            uint128,
-            uint256
-        )
-    {
+    function userVestingInfo(address user, uint256 depositId) public view returns (uint256, uint128, uint128, uint256) {
         VestingSchedule memory s = vests[user][depositId];
 
         return (s.amountPerSecond, s.until, s.lastClaimed, s.vested);

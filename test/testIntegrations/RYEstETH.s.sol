@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
-import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
@@ -28,7 +27,7 @@ contract RYEstETHTest is Test {
     address private controller = 0xaDa78a5E01325B91Bc7879a63c309F7D54d42950;
 
     Registry private registry = Registry(0x3051e76a62da91D4aD6Be6bD98D8Ab26fdaF9D08);
-    CellarInitializableV2_2 private rye = CellarInitializableV2_2(0xb5b29320d2Dde5BA5BAFA1EbcD270052070483ec);
+    Cellar private rye = Cellar(0xb5b29320d2Dde5BA5BAFA1EbcD270052070483ec);
 
     ERC20 public WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 public stETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);

@@ -2,9 +2,7 @@
 pragma solidity 0.8.16;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib, PriceRouter } from "src/base/Cellar.sol";
-import { CellarInitializableV2_1 } from "src/base/CellarInitializableV2_1.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
-import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
@@ -38,7 +36,7 @@ contract TimelockTest is Test {
 
     IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
 
-    CellarInitializableV2_1 private cellar = CellarInitializableV2_1(0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E);
+    Cellar private cellar = Cellar(0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E);
     PriceRouter private priceRouter;
     Registry private registry;
     UniswapV3Adaptor private uniswapV3Adaptor = UniswapV3Adaptor(0xDbd750F72a00d01f209FFc6C75e80301eFc789C1);
