@@ -77,10 +77,11 @@ contract Registry is Ownable {
      * @param swapRouter address of SwapRouter contract
      * @param priceRouter address of PriceRouter contract
      */
-    constructor(address gravityBridge, address swapRouter, address priceRouter) Ownable() {
+    constructor(address newOwner, address gravityBridge, address swapRouter, address priceRouter) Ownable() {
         _register(gravityBridge);
         _register(swapRouter);
         _register(priceRouter);
+        transferOwnership(newOwner);
     }
 
     // ============================================ REGISTER CONFIG ============================================

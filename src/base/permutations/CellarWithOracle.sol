@@ -9,6 +9,7 @@ contract CellarWithOracle is Cellar {
     using Math for uint256;
 
     constructor(
+        address _owner,
         Registry _registry,
         ERC20 _asset,
         string memory _name,
@@ -19,6 +20,7 @@ contract CellarWithOracle is Cellar {
         uint64 _strategistPlatformCut
     )
         Cellar(
+            _owner,
             _registry,
             _asset,
             _name,

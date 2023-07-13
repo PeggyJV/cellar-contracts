@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC20 } from "src/base/ERC20.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { ICurveFi } from "src/interfaces/external/ICurveFi.sol";
 import { ICurvePool } from "src/interfaces/external/ICurvePool.sol";

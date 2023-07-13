@@ -43,9 +43,10 @@ contract PriceRouter is Ownable {
     Registry public immutable registry;
     ERC20 public immutable WETH;
 
-    constructor(Registry _registry, ERC20 _weth) {
+    constructor(address newOwner, Registry _registry, ERC20 _weth) {
         registry = _registry;
         WETH = _weth;
+        transferOwnership(newOwner);
     }
 
     // =========================================== ASSETS CONFIG ===========================================

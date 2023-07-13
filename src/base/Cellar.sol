@@ -613,6 +613,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param _holdingPosition TODO
      */
     constructor(
+        address _owner,
         Registry _registry,
         ERC20 _asset,
         string memory _name,
@@ -631,12 +632,15 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         setHoldingPosition(_holdingPosition);
 
         // TODO add min deposit amount, maybe 10,000 uints?
-        // Deposit into Cellar, and mint shares to DEAD address.
-        _asset.safeTransferFrom(msg.sender, address(this), _initialDeposit);
+        // Deposit into Cellar, and mint shares to Deployer address.
+        _asset.safeTransferFrom(_owner, address(this), _initialDeposit);
         // Set the share price as 1:1 with underlying asset.
-        _mint(0x000000000000000000000000000000000000dEaD, _initialDeposit);
+        _mint(msg.sender, _initialDeposit);
+        // Deposit _initialDeposit into holding position.
+        _depositTo(_holdingPosition, _initialDeposit);
 
         feeData.strategistPlatformCut = _strategistPlatformCut;
+        transferOwnership(_owner);
     }
 
     // =========================================== CORE LOGIC ===========================================
@@ -677,7 +681,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     error Cellar__DepositRestricted(uint256 assets, uint256 maxDeposit);
 
-    // TODO remove approvedForDepositOnBehalf logic
     /**
      * @notice called at the beginning of deposit.
      * @param assets amount of assets deposited by user.
@@ -694,14 +697,14 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice called at the end of deposit.
      * @param assets amount of assets deposited by user.
      */
-    function afterDeposit(uint256 assets, uint256, address receiver) internal virtual {
+    function afterDeposit(uint256 assets, uint256, address) internal virtual {
         _depositTo(holdingPosition, assets);
     }
 
     /**
      * @notice called at the beginning of withdraw.
      */
-    function beforeWithdraw(uint256, uint256, address, address owner) internal view virtual {
+    function beforeWithdraw(uint256, uint256, address, address) internal view virtual {
         _checkIfPaused();
     }
 
@@ -899,7 +902,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // ========================================= ACCOUNTING LOGIC =========================================
 
     // TODO getLatest could return the decimals of the oracle
-    function _getTotalAssets(bool useUpper) internal view virtual returns (uint256 _totalAssets) {
+    function _getTotalAssets(bool) internal view virtual returns (uint256 _totalAssets) {
         _totalAssets = _accounting(false);
     }
 
@@ -1071,6 +1074,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         return _findMax(owner, true);
     }
 
+    // TODO remove 0 share logic.
     /**
      * @dev Used to more efficiently convert amount of shares to assets using a stored `totalAssets` value.
      */

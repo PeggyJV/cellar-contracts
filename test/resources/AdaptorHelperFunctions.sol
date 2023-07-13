@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity 0.8.16;
+
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
+
+import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
+import { AaveDebtTokenAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
+import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
+
+contract AdaptorHelperFunctions {
+    // ========================================= General FUNCTIONS =========================================
+    function _createBytesDataForSwapWithUniv3(
+        ERC20 from,
+        ERC20 to,
+        uint24 poolFee,
+        uint256 fromAmount
+    ) internal pure returns (bytes memory) {
+        address[] memory path = new address[](2);
+        path[0] = address(from);
+        path[1] = address(to);
+        uint24[] memory poolFees = new uint24[](1);
+        poolFees[0] = poolFee;
+        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
+    }
+
+    // ========================================= Aave V2 FUNCTIONS =========================================
+    function _createBytesDataToLendOnAaveV2(
+        ERC20 tokenToLend,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveATokenAdaptor.depositToAave.selector, tokenToLend, amountToLend);
+    }
+
+    function _createBytesDataToWithdrawFromAaveV2(
+        ERC20 tokenToWithdraw,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveATokenAdaptor.withdrawFromAave.selector, tokenToWithdraw, amountToWithdraw);
+    }
+
+    function _createBytesDataToBorrowFromAaveV2(
+        ERC20 debtToken,
+        uint256 amountToBorrow
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveDebtTokenAdaptor.borrowFromAave.selector, debtToken, amountToBorrow);
+    }
+
+    function _createBytesDataToRepayToAaveV2(
+        ERC20 tokenToRepay,
+        uint256 amountToRepay
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveDebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
+    }
+
+    function _createBytesDataToFlashLoanFromAaveV2(
+        address[] memory loanToken,
+        uint256[] memory loanAmount,
+        bytes memory params
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveDebtTokenAdaptor.flashLoan.selector, loanToken, loanAmount, params);
+    }
+}

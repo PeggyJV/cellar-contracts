@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
-import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
@@ -32,7 +31,7 @@ contract FraxLendFTokenAdaptorTest is Test {
     FTokenAdaptorV1 private fTokenAdaptor;
     MockFTokenAdaptor private mockFTokenAdaptorV2;
     MockFTokenAdaptorV1 private mockFTokenAdaptor;
-    CellarInitializableV2_2 private cellar;
+    Cellar private cellar;
     PriceRouter private priceRouter;
     Registry private registry;
 
@@ -120,19 +119,9 @@ contract FraxLendFTokenAdaptorTest is Test {
             abi.encode(SFRXETH_FRAX_PAIR)
         );
 
-        cellar = new CellarInitializableV2_2(registry);
-        cellar.initialize(
-            abi.encode(
-                address(this),
-                registry,
-                FRAX,
-                "Fraximal Cellar",
-                "oWo",
-                fxsFraxPairPosition,
-                abi.encode(0),
-                strategist
-            )
-        );
+        uint256 initialDeposit = 1e18;
+
+        cellar = new Cellar(registry, FRAX, "Fraximal Cellar", "oWo", fxsFraxPairPosition, abi.encode(0), 1e18, 0.8e18);
 
         cellar.addAdaptorToCatalogue(address(fTokenAdaptor));
         cellar.addAdaptorToCatalogue(address(fTokenAdaptorV2));
