@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { ERC4626, Math } from "src/base/ERC4626.sol";
+import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
+import { Math } from "src/utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 

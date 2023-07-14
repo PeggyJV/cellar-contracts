@@ -687,6 +687,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param receiver address receiving the shares.
      */
     function beforeDeposit(uint256 assets, uint256, address receiver) internal view virtual {
+        // TODO below 2 checks use 8k gas cuz we are reading so much state
         _whenNotShutdown();
         _checkIfPaused();
         uint256 maxAssets = maxDeposit(receiver);
@@ -708,6 +709,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _checkIfPaused();
     }
 
+    // 92 k gas used in here
     function _enter(uint256 assets, uint256 shares, address receiver) internal {
         beforeDeposit(assets, shares, receiver);
 
@@ -900,8 +902,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     // ========================================= ACCOUNTING LOGIC =========================================
-
-    // TODO getLatest could return the decimals of the oracle
+    // TODO natspec
     function _getTotalAssets(bool) internal view virtual returns (uint256 _totalAssets) {
         _totalAssets = _accounting(false);
     }
@@ -1074,49 +1075,32 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         return _findMax(owner, true);
     }
 
-    // TODO remove 0 share logic.
     /**
      * @dev Used to more efficiently convert amount of shares to assets using a stored `totalAssets` value.
      */
     function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply;
-
-        assets = totalShares == 0
-            ? shares.changeDecimals(18, asset.decimals())
-            : shares.mulDivDown(_totalAssets, totalShares);
+        assets = shares.mulDivDown(_totalAssets, totalSupply);
     }
 
     /**
      * @dev Used to more efficiently convert amount of assets to shares using a stored `totalAssets` value.
      */
     function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply;
-
-        shares = totalShares == 0
-            ? assets.changeDecimals(asset.decimals(), 18)
-            : assets.mulDivDown(totalShares, _totalAssets);
+        shares = assets.mulDivDown(totalSupply, _totalAssets);
     }
 
     /**
      * @dev Used to more efficiently simulate minting shares using a stored `totalAssets` value.
      */
     function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        uint256 totalShares = totalSupply;
-
-        assets = totalShares == 0
-            ? shares.changeDecimals(18, asset.decimals())
-            : shares.mulDivUp(_totalAssets, totalShares);
+        assets = shares.mulDivUp(_totalAssets, totalSupply);
     }
 
     /**
      * @dev Used to more efficiently simulate withdrawing assets using a stored `totalAssets` value.
      */
     function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        uint256 totalShares = totalSupply;
-
-        shares = totalShares == 0
-            ? assets.changeDecimals(asset.decimals(), 18)
-            : assets.mulDivUp(totalShares, _totalAssets);
+        shares = assets.mulDivUp(totalSupply, _totalAssets);
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================

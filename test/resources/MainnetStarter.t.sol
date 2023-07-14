@@ -13,7 +13,7 @@ import { Math } from "src/utils/Math.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { MainnetERC20s } from "test/resources/MainnetERC20s.sol";
+import { MainnetAddresses } from "test/resources/MainnetAddresses.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 
 // Import Frequently Used Adaptors
@@ -27,7 +27,7 @@ import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test
 /**
  * @notice This base contract should hold the most often repeated test code.
  */
-contract StarterTest is Test, MainnetERC20s {
+contract MainnetStarterTest is Test, MainnetAddresses {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
@@ -37,15 +37,13 @@ contract StarterTest is Test, MainnetERC20s {
     PriceRouter public priceRouter;
     ERC20Adaptor public erc20Adaptor;
     SwapWithUniswapAdaptor public swapWithUniswapAdaptor;
-
-    IGravity public gravityBridge = IGravity(0x69592e6f9d21989a043646fE8225da2600e5A0f7);
-
-    address public uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address public uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    IGravity public gravityBridge;
 
     uint8 public constant CHAINLINK_DERIVATIVE = 1;
 
     function _setUp() internal {
+        gravityBridge = IGravity(gravityBridgeAddress);
+
         address[] memory deployers = new address[](1);
         deployers[0] = address(this);
         deployer = new Deployer(address(this), deployers);

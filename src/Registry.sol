@@ -409,15 +409,19 @@ contract Registry is Ownable {
 
     /**
      * @notice Trust a position to be used by the cellar.
+     * @param positionId the position id of the newly added position
      * @param adaptor the adaptor address this position uses
      * @param adaptorData arbitrary bytes used to configure this position
-     * @return positionId the position id of the newly added position
      */
-    function trustPosition(address adaptor, bytes memory adaptorData) external onlyOwner returns (uint32 positionId) {
+    function trustPosition(uint32 positionId, address adaptor, bytes memory adaptorData) external onlyOwner {
         bytes32 identifier = BaseAdaptor(adaptor).identifier();
         bool isDebt = BaseAdaptor(adaptor).isDebt();
         bytes32 positionHash = keccak256(abi.encode(identifier, isDebt, adaptorData));
-        positionId = positionCount + 1; //Add one so that we do not use Id 0.
+
+        if (positionId == 0) revert Registry__InvalidPositionInput();
+        // Make sure positionId is not already in use.
+        PositionData storage pData = getPositionIdToPositionData[positionId];
+        if (pData.adaptor != address(0)) revert Registry__InvalidPositionInput();
 
         // Check that...
         // `adaptor` is a non zero address
@@ -428,12 +432,10 @@ contract Registry is Ownable {
         if (!isAdaptorTrusted[adaptor]) revert Registry__AdaptorNotTrusted(adaptor);
 
         // Set position data.
-        getPositionIdToPositionData[positionId] = PositionData({
-            adaptor: adaptor,
-            isDebt: isDebt,
-            adaptorData: adaptorData,
-            configurationData: abi.encode(0)
-        });
+        pData.adaptor = adaptor;
+        pData.isDebt = isDebt;
+        pData.adaptorData = adaptorData;
+        pData.configurationData = abi.encode(0);
 
         // Globally trust the position.
         isPositionTrusted[positionId] = true;
@@ -447,8 +449,6 @@ contract Registry is Ownable {
             if (!priceRouter.isSupported(assets[i])) revert Registry__PositionPricingNotSetUp(address(assets[i]));
         }
 
-        positionCount = positionId;
-
         emit PositionAdded(positionId, adaptor, isDebt, adaptorData);
     }
 
@@ -458,7 +458,7 @@ contract Registry is Ownable {
      *      and adding the position to their tracked arrays.
      */
     function distrustPosition(uint32 positionId) external onlyOwner {
-        if (!isPositionTrusted[positionId]) revert("Position not trusted");
+        if (!isPositionTrusted[positionId]) revert Registry__PositionIsNotTrusted(positionId);
         isPositionTrusted[positionId] = false;
     }
 
@@ -471,11 +471,12 @@ contract Registry is Ownable {
     function addPositionToCellar(
         uint32 positionId
     ) external view returns (address adaptor, bool isDebt, bytes memory adaptorData) {
-        if (positionId > positionCount || positionId == 0) revert Registry__PositionDoesNotExist();
+        if (positionId == 0) revert Registry__PositionDoesNotExist();
+        PositionData memory positionData = getPositionIdToPositionData[positionId];
+        if (positionData.adaptor == address(0)) revert Registry__PositionDoesNotExist();
 
         revertIfPositionIsNotTrusted(positionId);
 
-        PositionData memory positionData = getPositionIdToPositionData[positionId];
         return (positionData.adaptor, positionData.isDebt, positionData.adaptorData);
     }
 

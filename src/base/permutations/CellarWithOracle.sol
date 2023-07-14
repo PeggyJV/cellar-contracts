@@ -43,14 +43,12 @@ contract CellarWithOracle is Cellar {
 
     function setSharePriceOracle(ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
         sharePriceOracle = _sharePriceOracle;
+        // TODO require oracle decimals to be the same as the cellars.
         // TODO emit an event
     }
 
-    // TODO getLatest could return the decimals of the oracle
     function _getTotalAssets(bool useUpper) internal view override returns (uint256 _totalAssets) {
         ERC4626SharePriceOracle _sharePriceOracle = sharePriceOracle;
-
-        uint8 assetDecimals = asset.decimals();
 
         // Check if sharePriceOracle is set.
         if (address(_sharePriceOracle) != address(0)) {
@@ -63,8 +61,6 @@ contract CellarWithOracle is Cellar {
                 if (useUpper)
                     sharePrice = latestAnswer > timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
                 else sharePrice = latestAnswer < timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
-                uint8 oracleDecimals = _sharePriceOracle.decimals();
-                if (oracleDecimals != assetDecimals) sharePrice.changeDecimals(oracleDecimals, assetDecimals);
                 // Convert share price to totalAssets.
                 uint256 totalShares = totalSupply;
                 _totalAssets = sharePrice.mulDivDown(totalShares, 10 ** decimals);
