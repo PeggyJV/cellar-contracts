@@ -40,6 +40,8 @@ contract MainnetStarterTest is Test, MainnetAddresses {
     IGravity public gravityBridge;
 
     uint8 public constant CHAINLINK_DERIVATIVE = 1;
+    uint8 public constant TWAP_DERIVATIVE = 2;
+    uint8 public constant EXTENSION_DERIVATIVE = 3;
 
     function _setUp() internal {
         gravityBridge = IGravity(gravityBridgeAddress);

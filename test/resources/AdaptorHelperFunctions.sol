@@ -15,10 +15,16 @@ import { MorphoAaveV2DebtTokenAdaptor } from "src/modules/adaptors/Morpho/Morpho
 import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
 import { AaveV3DebtTokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3DebtTokenAdaptor.sol";
 
+// Morpho Aave V3
+import { MorphoAaveV3ATokenP2PAdaptor, IMorphoV3, BaseAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3ATokenP2PAdaptor.sol";
+import { MorphoAaveV3ATokenCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3ATokenCollateralAdaptor.sol";
+import { MorphoAaveV3DebtTokenAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3DebtTokenAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
+
     function _createBytesDataForSwapWithUniv3(
         ERC20 from,
         ERC20 to,
@@ -167,5 +173,85 @@ contract AdaptorHelperFunctions {
         bytes memory params
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveV3DebtTokenAdaptor.flashLoan.selector, loanToken, loanAmount, params);
+    }
+
+    // ========================================= Morpho Aave V2 FUNCTIONS =========================================
+
+    function _createBytesDataToLendP2POnMorpoAaveV3(
+        ERC20 tokenToLend,
+        uint256 amountToLend,
+        uint256 maxIterations
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                MorphoAaveV3ATokenP2PAdaptor.depositToAaveV3Morpho.selector,
+                tokenToLend,
+                amountToLend,
+                maxIterations
+            );
+    }
+
+    function _createBytesDataToLendCollateralOnMorphoAaveV3(
+        ERC20 tokenToLend,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                MorphoAaveV3ATokenCollateralAdaptor.depositToAaveV3Morpho.selector,
+                tokenToLend,
+                amountToLend
+            );
+    }
+
+    function _createBytesDataToWithdrawP2PFromMorphoAaveV3(
+        ERC20 tokenToWithdraw,
+        uint256 amountToWithdraw,
+        uint256 maxIterations
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                MorphoAaveV3ATokenP2PAdaptor.withdrawFromAaveV3Morpho.selector,
+                tokenToWithdraw,
+                amountToWithdraw,
+                maxIterations
+            );
+    }
+
+    function _createBytesDataToWithdrawCollateralFromMorphoAaveV3(
+        ERC20 tokenToWithdraw,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                MorphoAaveV3ATokenCollateralAdaptor.withdrawFromAaveV3Morpho.selector,
+                tokenToWithdraw,
+                amountToWithdraw
+            );
+    }
+
+    function _createBytesDataToBorrowFromMorphoAaveV3(
+        ERC20 debtToken,
+        uint256 amountToBorrow,
+        uint256 maxIterations
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                MorphoAaveV3DebtTokenAdaptor.borrowFromAaveV3Morpho.selector,
+                debtToken,
+                amountToBorrow,
+                maxIterations
+            );
+    }
+
+    function _createBytesDataToRepayToMorphoAaveV3(
+        ERC20 tokenToRepay,
+        uint256 amountToRepay
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                MorphoAaveV3DebtTokenAdaptor.repayAaveV3MorphoDebt.selector,
+                tokenToRepay,
+                amountToRepay
+            );
     }
 }
