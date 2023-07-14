@@ -110,8 +110,8 @@ contract CellarAaveTest is StarterTest, AdaptorHelperFunctions {
         // stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
 
-    function testDeposit() external {
-        uint256 assets = 100e6;
+    function testDeposit(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
         uint256 initialAssets = cellar.totalAssets();
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -123,8 +123,8 @@ contract CellarAaveTest is StarterTest, AdaptorHelperFunctions {
         );
     }
 
-    function testWithdraw() external {
-        uint256 assets = 100e6;
+    function testWithdraw(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
@@ -139,9 +139,9 @@ contract CellarAaveTest is StarterTest, AdaptorHelperFunctions {
         );
     }
 
-    function testTotalAssets() external {
+    function testTotalAssets(uint256 assets) external {
         uint256 initialAssets = cellar.totalAssets();
-        uint256 assets = 100e6;
+        assets = bound(assets, 0.1e6, 1_000_000e6);
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
         assertApproxEqAbs(
@@ -152,9 +152,9 @@ contract CellarAaveTest is StarterTest, AdaptorHelperFunctions {
         );
     }
 
-    function testTakingOutLoans() external {
+    function testTakingOutLoans(uint256 assets) external {
         uint256 initialAssets = cellar.totalAssets();
-        uint256 assets = 100e6;
+        assets = bound(assets, 0.1e6, 1_000_000e6);
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
@@ -213,9 +213,9 @@ contract CellarAaveTest is StarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
     }
 
-    function testRepayingLoans() external {
+    function testRepayingLoans(uint256 assets) external {
         uint256 initialAssets = cellar.totalAssets();
-        uint256 assets = 100e6;
+        assets = bound(assets, 0.1e6, 1_000_000e6);
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
