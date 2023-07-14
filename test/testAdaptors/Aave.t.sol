@@ -44,8 +44,8 @@ contract CellarAaveTest is StarterTest, AdaptorHelperFunctions {
     function setUp() public {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        string memory blockNumberKey = "BLOCK_NUMBER";
-        _startFork(rpcKey, blockNumberKey);
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
         _setUp();

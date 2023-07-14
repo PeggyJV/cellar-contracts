@@ -83,8 +83,8 @@ contract StarterTest is Test, MainnetERC20s {
         registry.trustAdaptor(address(swapWithUniswapAdaptor));
     }
 
-    function _startFork(string memory rpcKey, string memory blockNumberKey) internal returns (uint256 forkId) {
-        forkId = vm.createFork(vm.envString(rpcKey), vm.envUint(blockNumberKey));
+    function _startFork(string memory rpcKey, uint256 blockNumber) internal returns (uint256 forkId) {
+        forkId = vm.createFork(vm.envString(rpcKey), blockNumber);
         vm.selectFork(forkId);
     }
 
