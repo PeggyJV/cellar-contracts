@@ -11,6 +11,10 @@ import { AaveDebtTokenAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAda
 import { MorphoAaveV2ATokenAdaptor, IMorphoV2 } from "src/modules/adaptors/Morpho/MorphoAaveV2ATokenAdaptor.sol";
 import { MorphoAaveV2DebtTokenAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV2DebtTokenAdaptor.sol";
 
+// Aave V3
+import { AaveV3ATokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3ATokenAdaptor.sol";
+import { AaveV3DebtTokenAdaptor } from "src/modules/adaptors/Aave/V3/AaveV3DebtTokenAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 contract AdaptorHelperFunctions {
@@ -41,6 +45,7 @@ contract AdaptorHelperFunctions {
     }
 
     // ========================================= Aave V2 FUNCTIONS =========================================
+
     function _createBytesDataToLendOnAaveV2(
         ERC20 tokenToLend,
         uint256 amountToLend
@@ -120,5 +125,47 @@ contract AdaptorHelperFunctions {
                 debtToken,
                 amountToRepay
             );
+    }
+
+    // ========================================= Aave V3 FUNCTIONS =========================================
+
+    function _createBytesDataToLendOnAaveV3(
+        ERC20 tokenToLend,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveV3ATokenAdaptor.depositToAave.selector, tokenToLend, amountToLend);
+    }
+
+    function _createBytesDataToChangeEModeOnAaveV3(uint8 category) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveV3ATokenAdaptor.changeEMode.selector, category);
+    }
+
+    function _createBytesDataToWithdrawFromAaveV3(
+        ERC20 tokenToWithdraw,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveV3ATokenAdaptor.withdrawFromAave.selector, tokenToWithdraw, amountToWithdraw);
+    }
+
+    function _createBytesDataToBorrowFromAaveV3(
+        ERC20 debtToken,
+        uint256 amountToBorrow
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveV3DebtTokenAdaptor.borrowFromAave.selector, debtToken, amountToBorrow);
+    }
+
+    function _createBytesDataToRepayToAaveV3(
+        ERC20 tokenToRepay,
+        uint256 amountToRepay
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveV3DebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
+    }
+
+    function _createBytesDataToFlashLoanFromAaveV3(
+        address[] memory loanToken,
+        uint256[] memory loanAmount,
+        bytes memory params
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AaveV3DebtTokenAdaptor.flashLoan.selector, loanToken, loanAmount, params);
     }
 }

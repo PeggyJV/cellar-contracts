@@ -1205,11 +1205,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
      */
-    function callOnAdaptor(AdaptorCall[] calldata data) external onlyOwner nonReentrant {
+    function callOnAdaptor(AdaptorCall[] calldata data) external virtual onlyOwner nonReentrant {
         _whenNotShutdown();
         _checkIfPaused();
         blockExternalReceiver = true;
-        // TODO technically the first totalAsstes value we use could come from the oracle.
+
         // Record `totalAssets` and `totalShares` before making any external calls.
         uint256 minimumAllowedAssets;
         uint256 maximumAllowedAssets;
@@ -1232,50 +1232,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         if (totalShares != totalSupply) revert Cellar__TotalSharesMustRemainConstant(totalSupply, totalShares);
 
         blockExternalReceiver = false;
-    }
-
-    // ========================================= Aave Flash Loan Support =========================================
-    // TODO move this logic to a helper contract, that inherits from cellar.
-    // IE contract CellarWithAaveFlashLoans
-    /**
-     * @notice External contract attempted to initiate a flash loan.
-     */
-    error Cellar__ExternalInitiator();
-
-    /**
-     * @notice executeOperation was not called by the Aave Pool.
-     */
-    error Cellar__CallerNotAavePool();
-
-    /**
-     * @notice The Aave V2 Pool contract on Ethereum Mainnet.
-     */
-    address public aavePool = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
-
-    /**
-     * @notice Allows strategist to utilize Aave flashloans while rebalancing the cellar.
-     */
-    function executeOperation(
-        address[] calldata assets,
-        uint256[] calldata amounts,
-        uint256[] calldata premiums,
-        address initiator,
-        bytes calldata params
-    ) external returns (bool) {
-        if (initiator != address(this)) revert Cellar__ExternalInitiator();
-        if (msg.sender != aavePool) revert Cellar__CallerNotAavePool();
-
-        AdaptorCall[] memory data = abi.decode(params, (AdaptorCall[]));
-
-        // Run all adaptor calls.
-        _makeAdaptorCalls(data);
-
-        // Approve pool to repay all debt.
-        for (uint256 i = 0; i < amounts.length; ++i) {
-            ERC20(assets[i]).safeApprove(aavePool, (amounts[i] + premiums[i]));
-        }
-
-        return true;
     }
 
     // ============================================ LIMITS LOGIC ============================================

@@ -7,6 +7,8 @@ import { AaveDebtTokenAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAda
 
 import { IPool } from "src/interfaces/external/IPool.sol";
 
+import { CellarWithAaveFlashLoans } from "src/base/permutations/CellarWithAaveFlashLoans.sol";
+
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
 
@@ -17,7 +19,7 @@ contract CellarAaveTest is MainnetStarterTest, AdaptorHelperFunctions {
     using Math for uint256;
     AaveATokenAdaptor public aaveATokenAdaptor;
     AaveDebtTokenAdaptor public aaveDebtTokenAdaptor;
-    Cellar public cellar;
+    CellarWithAaveFlashLoans public cellar;
 
     IPool public pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
@@ -79,14 +81,26 @@ contract CellarAaveTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        cellar = _createCellar(
-            cellarName,
+        // Approve new cellar to spend assets.
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(address(USDC), address(this), initialDeposit);
+        USDC.approve(cellarAddress, initialDeposit);
+
+        creationCode = type(CellarWithAaveFlashLoans).creationCode;
+        constructorArgs = abi.encode(
+            address(this),
+            registry,
             USDC,
+            cellarName,
+            cellarName,
             aV2USDCPosition,
             abi.encode(minHealthFactor),
             initialDeposit,
-            platformCut
+            platformCut,
+            address(pool)
         );
+
+        cellar = CellarWithAaveFlashLoans(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
 
         cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
         cellar.addAdaptorToCatalogue(address(aaveDebtTokenAdaptor));
