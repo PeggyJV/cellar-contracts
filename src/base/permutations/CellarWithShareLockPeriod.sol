@@ -15,7 +15,8 @@ contract CellarWithShareLockPeriod is Cellar {
         uint32 _holdingPosition,
         bytes memory _holdingPositionConfig,
         uint256 _initialDeposit,
-        uint64 _strategistPlatformCut
+        uint64 _strategistPlatformCut,
+        uint192 _shareSupplyCap
     )
         Cellar(
             _owner,
@@ -26,7 +27,8 @@ contract CellarWithShareLockPeriod is Cellar {
             _holdingPosition,
             _holdingPositionConfig,
             _initialDeposit,
-            _strategistPlatformCut
+            _strategistPlatformCut,
+            _shareSupplyCap
         )
     {}
 
@@ -114,11 +116,11 @@ contract CellarWithShareLockPeriod is Cellar {
      * @param receiver address receiving the shares.
      */
     function beforeDeposit(uint256 assets, uint256 shares, address receiver) internal view override {
+        super.beforeDeposit(assets, shares, receiver);
         if (msg.sender != receiver) {
             if (!registry.approvedForDepositOnBehalf(msg.sender))
                 revert Cellar__NotApprovedToDepositOnBehalf(msg.sender);
         }
-        super.beforeDeposit(assets, shares, receiver);
     }
 
     /**

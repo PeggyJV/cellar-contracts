@@ -64,7 +64,8 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             usdcPosition,
             abi.encode(0),
             initialDeposit,
-            platformCut
+            platformCut,
+            type(uint192).max
         );
 
         address cellarAddress = deployer.getAddress(cellarName);

@@ -31,6 +31,38 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     using Math for uint256;
     using Address for address;
 
+    // ========================================= Slot0 Values =========================================
+    // Below values are frequently accessed in the same TXs. By moving them to the top
+    // they will be stored in the same slot, reducing cold access reads.
+
+    /**
+     * @notice `locked` is public, so that the state can be checked even during view function calls.
+     */
+    bool public locked;
+
+    /**
+     * @notice Whether or not the contract is shutdown in case of an emergency.
+     */
+    bool public isShutdown;
+
+    /**
+     * @notice Pauses all user entry/exits, and strategist rebalances.
+     */
+    bool public ignorePause;
+
+    /**
+     * @notice This bool is used to stop strategists from abusing Base Adaptor functions(deposit/withdraw).
+     */
+    bool public blockExternalReceiver;
+
+    /**
+     * @notice Stores the index of the holding position in the creditPositions array.
+     */
+    uint32 public holdingPosition;
+
+    // TODO natspec
+    uint192 public shareSupplyCap;
+
     // ========================================= MULTICALL =========================================
 
     /**
@@ -43,19 +75,14 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     // ========================================= REENTRANCY GUARD =========================================
 
-    /**
-     * @notice `locked` is public, so that the state can be checked even during view function calls.
-     */
-    uint256 public locked = 1;
-
     modifier nonReentrant() {
-        require(locked == 1, "REENTRANCY");
+        require(!locked, "REENTRANCY");
 
-        locked = 2;
+        locked = true;
 
         _;
 
-        locked = 1;
+        locked = false;
     }
 
     // ========================================= PRICE ROUTER CACHE =========================================
@@ -224,11 +251,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Maximum amount of positions a cellar can have in it's credit/debt arrays.
      */
     uint256 public constant MAX_POSITIONS = 16;
-
-    /**
-     * @notice Stores the index of the holding position in the creditPositions array.
-     */
-    uint32 public holdingPosition;
 
     /**
      * @notice Allows owner to change the holding position.
@@ -520,16 +542,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     error Cellar__Paused();
 
     /**
-     * @notice Whether or not the contract is shutdown in case of an emergency.
-     */
-    bool public isShutdown;
-
-    /**
-     * @notice Pauses all user entry/exits, and strategist rebalances.
-     */
-    bool public ignorePause;
-
-    /**
      * @notice View function external contracts can use to see if the cellar is paused.
      */
     function isPaused() external view returns (bool) {
@@ -551,8 +563,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Allows governance to choose whether or not to respect a pause.
      */
-    function toggleIgnorePause(bool toggle) external onlyOwner {
-        ignorePause = toggle;
+    function toggleIgnorePause() external onlyOwner {
+        ignorePause = ignorePause ? false : true;
     }
 
     /**
@@ -595,10 +607,15 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
 
+    // TODO natspec
+    uint256 internal constant MINIMUM_CONSTRUCTOR_MINT = 1e4;
+
+    error Cellar__MinimumConstructorMintNotMet();
+
     /**
      * @notice Address of the platform's registry contract. Used to get the latest address of modules.
      */
-    Registry public registry;
+    Registry public immutable registry;
 
     // TODO add in immutable values here that other pieces of the cellar reads state for.
     /**
@@ -621,7 +638,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         uint32 _holdingPosition,
         bytes memory _holdingPositionConfig,
         uint256 _initialDeposit,
-        uint64 _strategistPlatformCut
+        uint64 _strategistPlatformCut,
+        uint192 _shareSupplyCap
     ) ERC4626(_asset, _name, _symbol) Owned(msg.sender) {
         registry = _registry;
         priceRouter = PriceRouter(_registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
@@ -631,7 +649,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         addPosition(0, _holdingPosition, _holdingPositionConfig, false);
         setHoldingPosition(_holdingPosition);
 
-        // TODO add min deposit amount, maybe 10,000 uints?
+        // Update Share Supply Cap.
+        shareSupplyCap = _shareSupplyCap;
+
+        if (_initialDeposit < MINIMUM_CONSTRUCTOR_MINT) revert Cellar__MinimumConstructorMintNotMet();
+
         // Deposit into Cellar, and mint shares to Deployer address.
         _asset.safeTransferFrom(_owner, address(this), _initialDeposit);
         // Set the share price as 1:1 with underlying asset.
@@ -675,23 +697,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     error Cellar__IlliquidWithdraw(address illiquidPosition);
 
     /**
-     * @notice Attempted deposit more than the max deposit.
-     * @param assets the assets user attempted to deposit
-     * @param maxDeposit the max assets that can be deposited
-     */
-    error Cellar__DepositRestricted(uint256 assets, uint256 maxDeposit);
-
-    /**
      * @notice called at the beginning of deposit.
-     * @param assets amount of assets deposited by user.
-     * @param receiver address receiving the shares.
      */
-    function beforeDeposit(uint256 assets, uint256, address receiver) internal view virtual {
-        // TODO below 2 checks use 8k gas cuz we are reading so much state
+    function beforeDeposit(uint256, uint256, address) internal view virtual {
         _whenNotShutdown();
         _checkIfPaused();
-        uint256 maxAssets = maxDeposit(receiver);
-        if (assets > maxAssets) revert Cellar__DepositRestricted(assets, maxAssets);
     }
 
     /**
@@ -730,11 +740,13 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return shares amount of shares given for deposit.
      */
     function deposit(uint256 assets, address receiver) public override nonReentrant returns (uint256 shares) {
-        // Use `_accounting` instead of totalAssets bc re-entrancy is already checked in this function.
-        uint256 _totalAssets = _getTotalAssets(true);
+        // Use `_calculateTotalAssetsOrTotalAssetsWithdrawable` instead of totalAssets bc re-entrancy is already checked in this function.
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
 
         // Check for rounding error since we round down in previewDeposit.
-        if ((shares = _convertToShares(assets, _totalAssets)) == 0) revert Cellar__ZeroShares();
+        if ((shares = _convertToShares(assets, _totalAssets, _totalSupply)) == 0) revert Cellar__ZeroShares();
+
+        if ((_totalSupply + shares) > shareSupplyCap) revert Cellar__ShareSupplyCapExceeded();
 
         _enter(assets, shares, receiver);
     }
@@ -746,10 +758,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return assets amount of assets deposited into the cellar.
      */
     function mint(uint256 shares, address receiver) public override nonReentrant returns (uint256 assets) {
-        uint256 _totalAssets = _getTotalAssets(true);
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
 
         // previewMint rounds up, but initial mint could return zero assets, so check for rounding error.
-        if ((assets = _previewMint(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
+        if ((assets = _previewMint(shares, _totalAssets, _totalSupply)) == 0) revert Cellar__ZeroAssets();
+
+        if ((_totalSupply + shares) > shareSupplyCap) revert Cellar__ShareSupplyCapExceeded();
 
         _enter(assets, shares, receiver);
     }
@@ -790,10 +804,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 shares) {
-        uint256 _totalAssets = _getTotalAssets(false);
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(false);
 
         // No need to check for rounding error, `previewWithdraw` rounds up.
-        shares = _previewWithdraw(assets, _totalAssets);
+        shares = _previewWithdraw(assets, _totalAssets, _totalSupply);
 
         _exit(assets, shares, receiver, owner);
     }
@@ -816,10 +830,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 assets) {
-        uint256 _totalAssets = _getTotalAssets(false);
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(false);
 
         // Check for rounding error since we round down in previewRedeem.
-        if ((assets = _convertToAssets(shares, _totalAssets)) == 0) revert Cellar__ZeroAssets();
+        if ((assets = _convertToAssets(shares, _totalAssets, _totalSupply)) == 0) revert Cellar__ZeroAssets();
 
         _exit(assets, shares, receiver, owner);
     }
@@ -850,6 +864,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Save asset price in USD, and decimals to reduce external calls.
         WithdrawPricing memory pricingInfo;
         pricingInfo.priceQuoteUSD = priceRouter.getPriceInUSD(asset);
+        // TODO this should be fixed now, could probs replace with decimals.
         pricingInfo.oneQuote = 10 ** asset.decimals();
         uint256 creditLength = creditPositions.length;
         for (uint256 i; i < creditLength; ++i) {
@@ -903,8 +918,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     // ========================================= ACCOUNTING LOGIC =========================================
     // TODO natspec
-    function _getTotalAssets(bool) internal view virtual returns (uint256 _totalAssets) {
-        _totalAssets = _accounting(false);
+    function _getTotalAssetsAndTotalSupply(
+        bool
+    ) internal view virtual returns (uint256 _totalAssets, uint256 _totalSupply) {
+        _totalAssets = _calculateTotalAssetsOrTotalAssetsWithdrawable(false);
+        _totalSupply = totalSupply;
     }
 
     /**
@@ -912,7 +930,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param reportWithdrawable if true, then the withdrawable total assets is reported,
      *                           if false, then the total assets is reported
      */
-    function _accounting(bool reportWithdrawable) internal view returns (uint256 assets) {
+    function _calculateTotalAssetsOrTotalAssetsWithdrawable(
+        bool reportWithdrawable
+    ) internal view returns (uint256 assets) {
         uint256 numOfCreditPositions = creditPositions.length;
         ERC20[] memory creditAssets = new ERC20[](numOfCreditPositions);
         uint256[] memory creditBalances = new uint256[](numOfCreditPositions);
@@ -956,8 +976,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     function totalAssets() public view override returns (uint256 assets) {
         _checkIfPaused();
-        require(locked == 1, "REENTRANCY");
-        assets = _accounting(false);
+        require(!locked, "REENTRANCY");
+        assets = _calculateTotalAssetsOrTotalAssetsWithdrawable(false);
     }
 
     /**
@@ -966,8 +986,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      */
     function totalAssetsWithdrawable() public view returns (uint256 assets) {
         _checkIfPaused();
-        require(locked == 1, "REENTRANCY");
-        assets = _accounting(true);
+        require(!locked, "REENTRANCY");
+        assets = _calculateTotalAssetsOrTotalAssetsWithdrawable(true);
     }
 
     /**
@@ -978,7 +998,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return assets the shares can be exchanged for
      */
     function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
-        assets = _convertToAssets(shares, _getTotalAssets(false));
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(false);
+        assets = _convertToAssets(shares, _totalAssets, _totalSupply);
     }
 
     /**
@@ -989,7 +1010,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return shares the assets can be exchanged for
      */
     function convertToShares(uint256 assets) public view override returns (uint256 shares) {
-        shares = _convertToShares(assets, _getTotalAssets(true));
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
+        shares = _convertToShares(assets, _totalAssets, _totalSupply);
     }
 
     /**
@@ -998,8 +1020,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return assets that will be deposited
      */
     function previewMint(uint256 shares) public view override returns (uint256 assets) {
-        uint256 _totalAssets = _getTotalAssets(true);
-        assets = _previewMint(shares, _totalAssets);
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
+        assets = _previewMint(shares, _totalAssets, _totalSupply);
     }
 
     /**
@@ -1008,8 +1030,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return shares that will be redeemed
      */
     function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
-        uint256 _totalAssets = _getTotalAssets(false);
-        shares = _previewWithdraw(assets, _totalAssets);
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(false);
+        shares = _previewWithdraw(assets, _totalAssets, _totalSupply);
     }
 
     /**
@@ -1018,8 +1040,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return shares that will be minted
      */
     function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
-        uint256 _totalAssets = _getTotalAssets(true);
-        shares = _convertToShares(assets, _totalAssets);
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
+        shares = _convertToShares(assets, _totalAssets, _totalSupply);
     }
 
     /**
@@ -1028,8 +1050,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return assets that will be returned
      */
     function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
-        uint256 _totalAssets = _getTotalAssets(false);
-        assets = _convertToAssets(shares, _totalAssets);
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(false);
+        assets = _convertToAssets(shares, _totalAssets, _totalSupply);
     }
 
     /**
@@ -1041,13 +1063,13 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function _findMax(address owner, bool inShares) internal view virtual returns (uint256 maxOut) {
         _checkIfPaused();
         // Get amount of assets to withdraw.
-        uint256 _totalAssets = _getTotalAssets(false);
-        uint256 assets = _convertToAssets(balanceOf[owner], _totalAssets);
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(false);
+        uint256 assets = _convertToAssets(balanceOf[owner], _totalAssets, _totalSupply);
 
-        uint256 withdrawable = _accounting(true);
+        uint256 withdrawable = _calculateTotalAssetsOrTotalAssetsWithdrawable(true);
         maxOut = assets <= withdrawable ? assets : withdrawable;
 
-        if (inShares) maxOut = _convertToShares(maxOut, _totalAssets);
+        if (inShares) maxOut = _convertToShares(maxOut, _totalAssets, _totalSupply);
         // else leave maxOut in terms of assets.
     }
 
@@ -1059,7 +1081,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return the max amount of assets withdrawable by `owner`.
      */
     function maxWithdraw(address owner) public view override returns (uint256) {
-        require(locked == 1, "REENTRANCY");
+        require(!locked, "REENTRANCY");
         return _findMax(owner, false);
     }
 
@@ -1071,36 +1093,52 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @return the max amount of shares redeemable by `owner`.
      */
     function maxRedeem(address owner) public view override returns (uint256) {
-        require(locked == 1, "REENTRANCY");
+        require(!locked, "REENTRANCY");
         return _findMax(owner, true);
     }
 
     /**
      * @dev Used to more efficiently convert amount of shares to assets using a stored `totalAssets` value.
      */
-    function _convertToAssets(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        assets = shares.mulDivDown(_totalAssets, totalSupply);
+    function _convertToAssets(
+        uint256 shares,
+        uint256 _totalAssets,
+        uint256 _totalSupply
+    ) internal pure returns (uint256 assets) {
+        assets = shares.mulDivDown(_totalAssets, _totalSupply);
     }
 
     /**
      * @dev Used to more efficiently convert amount of assets to shares using a stored `totalAssets` value.
      */
-    function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        shares = assets.mulDivDown(totalSupply, _totalAssets);
+    function _convertToShares(
+        uint256 assets,
+        uint256 _totalAssets,
+        uint256 _totalSupply
+    ) internal pure returns (uint256 shares) {
+        shares = assets.mulDivDown(_totalSupply, _totalAssets);
     }
 
     /**
      * @dev Used to more efficiently simulate minting shares using a stored `totalAssets` value.
      */
-    function _previewMint(uint256 shares, uint256 _totalAssets) internal view returns (uint256 assets) {
-        assets = shares.mulDivUp(_totalAssets, totalSupply);
+    function _previewMint(
+        uint256 shares,
+        uint256 _totalAssets,
+        uint256 _totalSupply
+    ) internal pure returns (uint256 assets) {
+        assets = shares.mulDivUp(_totalAssets, _totalSupply);
     }
 
     /**
      * @dev Used to more efficiently simulate withdrawing assets using a stored `totalAssets` value.
      */
-    function _previewWithdraw(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
-        shares = assets.mulDivUp(totalSupply, _totalAssets);
+    function _previewWithdraw(
+        uint256 assets,
+        uint256 _totalAssets,
+        uint256 _totalSupply
+    ) internal pure returns (uint256 shares) {
+        shares = assets.mulDivUp(_totalSupply, _totalAssets);
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================
@@ -1164,12 +1202,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         emit RebalanceDeviationChanged(oldDeviation, newDeviation);
     }
 
-    // Set to true before any adaptor calls are made.
-    /**
-     * @notice This bool is used to stop strategists from abusing Base Adaptor functions(deposit/withdraw).
-     */
-    bool public blockExternalReceiver;
-
     /**
      * @notice Struct used to make calls to adaptors.
      * @param adaptor the address of the adaptor to make calls to
@@ -1182,6 +1214,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     event AdaptorCalled(address adaptor, bytes data);
 
+    // TODO natspec
     function _makeAdaptorCalls(AdaptorCall[] memory data) internal {
         for (uint256 i = 0; i < data.length; ++i) {
             address adaptor = data[i].adaptor;
@@ -1215,7 +1248,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         uint256 maximumAllowedAssets;
         uint256 totalShares;
         {
-            uint256 assetsBeforeAdaptorCall = _accounting(false);
+            uint256 assetsBeforeAdaptorCall = _calculateTotalAssetsOrTotalAssetsWithdrawable(false);
             minimumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
             maximumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
             totalShares = totalSupply;
@@ -1225,7 +1258,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _makeAdaptorCalls(data);
 
         // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
-        uint256 assets = _accounting(false);
+        uint256 assets = _calculateTotalAssetsOrTotalAssetsWithdrawable(false);
         if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
         }
@@ -1235,8 +1268,23 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     // ============================================ LIMITS LOGIC ============================================
-    // TODO add TVL cap lowest priority
-    // Could add a total share cap? This would be reading 1 value in state
+
+    // TODO natspec
+    error Cellar__ShareSupplyCapExceeded();
+
+    error Cellar__InvalidShareSupplyCap();
+
+    function increaseShareSupplyCap(uint192 _newShareSupplyCap) public onlyOwner {
+        if (_newShareSupplyCap < shareSupplyCap) revert Cellar__InvalidShareSupplyCap();
+
+        shareSupplyCap = _newShareSupplyCap;
+    }
+
+    function decreaseShareSupplyCap(uint192 _newShareSupplyCap) public onlyOwner {
+        if (_newShareSupplyCap > shareSupplyCap) revert Cellar__InvalidShareSupplyCap();
+
+        shareSupplyCap = _newShareSupplyCap;
+    }
 
     /**
      * @notice Total amount of assets that can be deposited for a user.
@@ -1245,7 +1293,15 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function maxDeposit(address) public view override returns (uint256) {
         if (isShutdown) return 0;
 
-        return type(uint256).max;
+        uint192 _cap = shareSupplyCap;
+        if ((_cap = shareSupplyCap) == type(uint192).max) return type(uint192).max;
+
+        (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
+        if (_totalSupply >= _cap) return 0;
+        else {
+            uint256 shareDelta = _cap - _totalSupply;
+            return _convertToAssets(shareDelta, _totalAssets, _totalSupply);
+        }
     }
 
     /**
@@ -1255,7 +1311,12 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function maxMint(address) public view override returns (uint256) {
         if (isShutdown) return 0;
 
-        return type(uint256).max;
+        uint192 _cap;
+        if ((_cap = shareSupplyCap) == type(uint192).max) return type(uint192).max;
+
+        uint256 _totalSupply = totalSupply;
+
+        return _totalSupply >= _cap ? 0 : _cap - _totalSupply;
     }
 
     // ========================================== HELPER FUNCTIONS ==========================================

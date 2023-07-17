@@ -10,7 +10,9 @@ contract MockCellarImplementation is Cellar, Test {
     using SafeCast for int256;
     using stdStorage for StdStorage;
 
-    constructor(Registry _registry) Cellar(address(0), _registry, ERC20(address(0)), "", "", 0, abi.encode(0), 0, 0) {}
+    constructor(
+        Registry _registry
+    ) Cellar(address(0), _registry, ERC20(address(0)), "", "", 0, abi.encode(0), 0, 0, 0) {}
 
     function depositIntoPosition(
         uint32 position,

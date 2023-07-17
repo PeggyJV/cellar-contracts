@@ -113,7 +113,8 @@ contract MainnetStarterTest is Test, MainnetAddresses {
             holdingPosition,
             holdingPositionConfig,
             initialDeposit,
-            platformCut
+            platformCut,
+            type(uint192).max
         );
 
         return Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));

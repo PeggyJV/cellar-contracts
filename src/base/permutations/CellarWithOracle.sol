@@ -17,7 +17,8 @@ contract CellarWithOracle is Cellar {
         uint32 _holdingPosition,
         bytes memory _holdingPositionConfig,
         uint256 _initialDeposit,
-        uint64 _strategistPlatformCut
+        uint64 _strategistPlatformCut,
+        uint192 _shareSupplyCap
     )
         Cellar(
             _owner,
@@ -28,7 +29,8 @@ contract CellarWithOracle is Cellar {
             _holdingPosition,
             _holdingPositionConfig,
             _initialDeposit,
-            _strategistPlatformCut
+            _strategistPlatformCut,
+            _shareSupplyCap
         )
     {}
 
@@ -47,7 +49,9 @@ contract CellarWithOracle is Cellar {
         // TODO emit an event
     }
 
-    function _getTotalAssets(bool useUpper) internal view override returns (uint256 _totalAssets) {
+    function _getTotalAssetsAndTotalSupply(
+        bool useUpper
+    ) internal view override returns (uint256 _totalAssets, uint256 _totalSupply) {
         ERC4626SharePriceOracle _sharePriceOracle = sharePriceOracle;
 
         // Check if sharePriceOracle is set.
@@ -62,66 +66,9 @@ contract CellarWithOracle is Cellar {
                     sharePrice = latestAnswer > timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
                 else sharePrice = latestAnswer < timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
                 // Convert share price to totalAssets.
-                uint256 totalShares = totalSupply;
-                _totalAssets = sharePrice.mulDivDown(totalShares, 10 ** decimals);
-                return _totalAssets;
+                _totalSupply = totalSupply;
+                _totalAssets = sharePrice.mulDivDown(_totalSupply, 10 ** decimals);
             }
         } else revert Cellar__OracleFailure();
-    }
-
-    /**
-     * @notice Allows strategists to manage their Cellar using arbitrary logic calls to adaptors.
-     * @dev There are several safety checks in this function to prevent strategists from abusing it.
-     *      - `blockExternalReceiver`
-     *      - `totalAssets` must not change by much
-     *      - `totalShares` must remain constant
-     *      - adaptors must be set up to be used with this cellar
-     * @dev Since `totalAssets` is allowed to deviate slightly, strategists could abuse this by sending
-     *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
-     *      To mitigate this, rate limiting will be put in place on the Sommelier side.
-     */
-    function callOnAdaptor(AdaptorCall[] calldata data) external override onlyOwner nonReentrant {
-        _whenNotShutdown();
-        _checkIfPaused();
-        blockExternalReceiver = true;
-
-        // Record `totalAssets` and `totalShares` before making any external calls.
-        uint256 assetsBeforeAdaptorCall;
-        uint256 minimumAllowedAssets;
-        uint256 maximumAllowedAssets;
-        uint256 totalShares;
-
-        ERC4626SharePriceOracle _sharePriceOracle = sharePriceOracle;
-        // Check if sharePriceOracle is set.
-        if (address(_sharePriceOracle) != address(0)) {
-            // Consult the oracle.
-            (uint256 latestAnswer, , bool isNotSafeToUse) = _sharePriceOracle.getLatest();
-            if (isNotSafeToUse) revert Cellar__OracleFailure();
-            else {
-                uint256 sharePrice;
-                sharePrice = latestAnswer;
-
-                // Convert share price to totalAssets.
-                totalShares = totalSupply;
-                assetsBeforeAdaptorCall = latestAnswer.mulDivDown(totalShares, 10 ** decimals);
-            }
-        } else {
-            totalShares = totalSupply;
-            assetsBeforeAdaptorCall = _accounting(false);
-        }
-        minimumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 - allowedRebalanceDeviation), 1e18);
-        maximumAllowedAssets = assetsBeforeAdaptorCall.mulDivUp((1e18 + allowedRebalanceDeviation), 1e18);
-
-        // Run all adaptor calls.
-        _makeAdaptorCalls(data);
-
-        // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
-        uint256 assets = _accounting(false);
-        if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
-            revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
-        }
-        if (totalShares != totalSupply) revert Cellar__TotalSharesMustRemainConstant(totalSupply, totalShares);
-
-        blockExternalReceiver = false;
     }
 }

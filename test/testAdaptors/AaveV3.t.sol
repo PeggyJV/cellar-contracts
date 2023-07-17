@@ -93,6 +93,7 @@ contract CellarAaveV3Test is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(minHealthFactor),
             initialDeposit,
             platformCut,
+            type(uint192).max,
             address(pool)
         );
 

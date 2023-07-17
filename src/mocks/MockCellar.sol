@@ -19,7 +19,8 @@ contract MockCellar is Cellar, Test {
         uint32 _holdingPosition,
         bytes memory _holdingPositionConfig,
         uint256 _initialDeposit,
-        uint64 _strategistPlatformCut
+        uint64 _strategistPlatformCut,
+        uint192 _shareSupplyCap
     )
         Cellar(
             _owner,
@@ -30,7 +31,8 @@ contract MockCellar is Cellar, Test {
             _holdingPosition,
             _holdingPositionConfig,
             _initialDeposit,
-            _strategistPlatformCut
+            _strategistPlatformCut,
+            _shareSupplyCap
         )
     {}
 
