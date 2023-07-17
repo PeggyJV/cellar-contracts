@@ -10,6 +10,7 @@ import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRela
 import { MockBalancerPoolAdaptor } from "src/mocks/adaptors/MockBalancerPoolAdaptor.sol";
 import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
+import { CellarWithBalancerFlashLoans } from "src/base/permutations/CellarWithBalancerFlashLoans.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -28,8 +29,8 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     BalancerStablePoolExtension private balancerStablePoolExtension;
     WstEthExtension private wstethExtension;
 
-    Cellar private cellar;
-    Cellar private wethCellar;
+    CellarWithBalancerFlashLoans private cellar;
+    CellarWithBalancerFlashLoans private wethCellar;
 
     uint32 private usdcPosition = 1;
     uint32 private daiPosition = 2;
@@ -43,8 +44,6 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private wstETH_bbaWETHPosition = 10;
 
     uint32 private slippage = 0.9e4;
-
-    // bytes private adaptorData = abi.encode(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS);
 
     function setUp() external {
         // Setup forked environment.
@@ -158,1384 +157,1443 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(address(wstETH_bbaWETH), wstETH_bbaWETH_GAUGE_ADDRESS)
         );
 
-        // cellar = new CellarInitializableV2_2(registry);
+        string memory cellarName = "Balancer Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
 
-        // cellar.initialize(
-        //     abi.encode(
-        //         address(this),
-        //         registry,
-        //         USDC,
-        //         "Balancer Pools Cellar",
-        //         "BPT-CLR",
-        //         usdcPosition,
-        //         abi.encode(0),
-        //         strategist
-        //     )
-        // );
+        // Approve new cellar to spend assets.
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(address(USDC), address(this), initialDeposit);
+        USDC.approve(cellarAddress, initialDeposit);
 
-        // cellar.addAdaptorToCatalogue(address(balancerPoolAdaptor));
-        // cellar.addAdaptorToCatalogue(address(erc20Adaptor));
-        // cellar.addAdaptorToCatalogue(address(mockBalancerPoolAdaptor));
+        bytes memory creationCode = type(CellarWithBalancerFlashLoans).creationCode;
+        bytes memory constructorArgs = abi.encode(
+            address(this),
+            registry,
+            USDC,
+            cellarName,
+            cellarName,
+            usdcPosition,
+            abi.encode(0),
+            initialDeposit,
+            platformCut,
+            type(uint192).max,
+            vault
+        );
+        cellar = CellarWithBalancerFlashLoans(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
 
-        // USDC.safeApprove(address(cellar), type(uint256).max);
+        cellar.addAdaptorToCatalogue(address(balancerPoolAdaptor));
+        cellar.addAdaptorToCatalogue(address(erc20Adaptor));
+        cellar.addAdaptorToCatalogue(address(mockBalancerPoolAdaptor));
 
-        // cellar.setRebalanceDeviation(0.005e18);
-        // cellar.addPositionToCatalogue(daiPosition);
-        // cellar.addPositionToCatalogue(usdtPosition);
-        // cellar.addPositionToCatalogue(bbaUSDPosition);
-        // cellar.addPositionToCatalogue(vanillaBbaUSDPosition);
+        USDC.safeApprove(address(cellar), type(uint256).max);
 
-        // cellar.addPosition(0, bbaUSDPosition, abi.encode(0), false);
-        // cellar.addPosition(0, vanillaBbaUSDPosition, abi.encode(0), false);
-        // cellar.addPosition(0, daiPosition, abi.encode(0), false);
-        // cellar.addPosition(0, usdtPosition, abi.encode(0), false);
+        cellar.setRebalanceDeviation(0.005e18);
+        cellar.addPositionToCatalogue(daiPosition);
+        cellar.addPositionToCatalogue(usdtPosition);
+        cellar.addPositionToCatalogue(bbaUSDPosition);
+        cellar.addPositionToCatalogue(vanillaBbaUSDPosition);
 
-        // // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        // stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+        cellar.addPosition(0, bbaUSDPosition, abi.encode(0), false);
+        cellar.addPosition(0, vanillaBbaUSDPosition, abi.encode(0), false);
+        cellar.addPosition(0, daiPosition, abi.encode(0), false);
+        cellar.addPosition(0, usdtPosition, abi.encode(0), false);
 
-        // // Deploy WETH cellar.
-        // wethCellar = new CellarInitializableV2_2(registry);
+        // Deploy WETH cellar.
+        cellarName = "WETH Balancer Cellar V0.0";
+        initialDeposit = 1e6;
+        platformCut = 0.75e18;
 
-        // wethCellar.initialize(
-        //     abi.encode(
-        //         address(this),
-        //         registry,
-        //         WETH,
-        //         "Balancer Pools Weth Cellar",
-        //         "WETH-BPT-CLR",
-        //         wethPosition,
-        //         abi.encode(0),
-        //         strategist
-        //     )
-        // );
+        // Approve new cellar to spend assets.
+        cellarAddress = deployer.getAddress(cellarName);
+        deal(address(WETH), address(this), initialDeposit);
+        WETH.approve(cellarAddress, initialDeposit);
 
-        // wethCellar.addAdaptorToCatalogue(address(balancerPoolAdaptor));
-        // wethCellar.addAdaptorToCatalogue(address(erc20Adaptor));
-        // wethCellar.addAdaptorToCatalogue(address(mockBalancerPoolAdaptor));
+        creationCode = type(CellarWithBalancerFlashLoans).creationCode;
+        constructorArgs = abi.encode(
+            address(this),
+            registry,
+            WETH,
+            cellarName,
+            cellarName,
+            wethPosition,
+            abi.encode(0),
+            initialDeposit,
+            platformCut,
+            type(uint192).max,
+            vault
+        );
+        wethCellar = CellarWithBalancerFlashLoans(
+            deployer.deployContract(cellarName, creationCode, constructorArgs, 0)
+        );
 
-        // WETH.safeApprove(address(wethCellar), type(uint256).max);
+        wethCellar.addAdaptorToCatalogue(address(balancerPoolAdaptor));
+        wethCellar.addAdaptorToCatalogue(address(erc20Adaptor));
+        wethCellar.addAdaptorToCatalogue(address(mockBalancerPoolAdaptor));
 
-        // wethCellar.setRebalanceDeviation(0.005e18);
-        // wethCellar.addPositionToCatalogue(wstETHPosition);
-        // wethCellar.addPositionToCatalogue(wstETH_bbaWETHPosition);
+        WETH.safeApprove(address(wethCellar), type(uint256).max);
 
-        // wethCellar.addPosition(0, wstETHPosition, abi.encode(0), false);
-        // wethCellar.addPosition(0, wstETH_bbaWETHPosition, abi.encode(0), false);
+        wethCellar.setRebalanceDeviation(0.005e18);
+        wethCellar.addPositionToCatalogue(wstETHPosition);
+        wethCellar.addPositionToCatalogue(wstETH_bbaWETHPosition);
 
-        // // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        // stdstore.target(address(wethCellar)).sig(wethCellar.shareLockPeriod.selector).checked_write(uint256(0));
+        wethCellar.addPosition(0, wstETHPosition, abi.encode(0), false);
+        wethCellar.addPosition(0, wstETH_bbaWETHPosition, abi.encode(0), false);
     }
 
     // ========================================= HAPPY PATH TESTS =========================================
 
-    // function testTotalAssets(uint256 assets) external {
-    //     // User Joins Cellar.
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate strategist pool join.
-    //     _simulatePoolJoin(address(cellar), USDC, assets, BB_A_USD);
-    //     assertApproxEqAbs(cellar.totalAssets(), assets, 10, "Cellar totalAssets should approximately equal assets.");
-
-    //     // Simulate strategist stakes all their BPTs.
-    //     uint256 bbAUsdBalance = BB_A_USD.balanceOf(address(cellar));
-    //     _simulateBptStake(address(cellar), BB_A_USD, bbAUsdBalance, BB_A_USD_GAUGE);
-    //     assertApproxEqAbs(cellar.totalAssets(), assets, 10, "Cellar totalAssets should approximately equal assets.");
-
-    //     // Simulate strategist unstaking half their BPTs.
-    //     _simulateBptUnStake(address(cellar), BB_A_USD, bbAUsdBalance / 2, BB_A_USD_GAUGE);
-    //     assertApproxEqAbs(cellar.totalAssets(), assets, 10, "Cellar totalAssets should approximately equal assets.");
-
-    //     // Simulate strategist full unstake, and exit.
-    //     bbAUsdBalance = BB_A_USD_GAUGE.balanceOf(address(cellar));
-    //     _simulateBptUnStake(address(cellar), BB_A_USD, bbAUsdBalance, BB_A_USD_GAUGE);
-    //     bbAUsdBalance = BB_A_USD.balanceOf(address(cellar));
-    //     _simulatePoolExit(address(cellar), BB_A_USD, bbAUsdBalance, USDC);
-    //     assertApproxEqAbs(cellar.totalAssets(), assets, 10, "Cellar totalAssets should approximately equal assets.");
-
-    //     // At this point Cellar should hold approximately assets of USDC, and no bpts or guage bpts.
-    //     assertApproxEqAbs(
-    //         USDC.balanceOf(address(cellar)),
-    //         assets,
-    //         10,
-    //         "Cellar should be holding assets amount of USDC."
-    //     );
-    //     assertEq(BB_A_USD.balanceOf(address(cellar)), 0, "Cellar should have no BB_A_USD.");
-    //     assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), 0, "Cellar should have no BB_A_USD_GAUGE.");
-    // }
-
-    // function testStakeBpt(uint256 assets) external {
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     // User Joins Cellar.
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Use deal to mint cellar Bpts.
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD), address(cellar), bptAmount);
-
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
-
-    //     // Make sure cellar actually staked into gauge.
-    //     assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), bptAmount, "Cellar should have staked into guage.");
-    // }
-
-    // function testStakeUint256Max(uint256 assets) external {
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     // User Joins Cellar.
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Use deal to mint cellar Bpts.
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD), address(cellar), bptAmount);
-
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), address(BB_A_USD_GAUGE), type(uint256).max);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
-
-    //     // Make sure cellar actually staked into gauge.
-    //     assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), bptAmount, "Cellar should have staked into guage.");
-    // }
-
-    // function testUnstakeBpt(uint256 assets) external {
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     // User Joins Cellar.
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Use deal to mint cellar Gauge Bpts.
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD_GAUGE), address(cellar), bptAmount);
-
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = _createBytesDataToUnstake(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
-
-    //     // Make sure cellar actually staked into gauge.
-    //     assertEq(BB_A_USD.balanceOf(address(cellar)), bptAmount, "Cellar should have unstaked from guage.");
-    // }
+    function testTotalAssets(uint256 assets) external {
+        uint256 initialAssets = cellar.totalAssets();
+        // User Joins Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate strategist pool join.
+        _simulatePoolJoin(address(cellar), USDC, assets, BB_A_USD);
+        assertApproxEqAbs(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            10,
+            "Cellar totalAssets should approximately equal assets."
+        );
+
+        // Simulate strategist stakes all their BPTs.
+        uint256 bbAUsdBalance = BB_A_USD.balanceOf(address(cellar));
+        _simulateBptStake(address(cellar), BB_A_USD, bbAUsdBalance, BB_A_USD_GAUGE);
+        assertApproxEqAbs(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            10,
+            "Cellar totalAssets should approximately equal assets."
+        );
+
+        // Simulate strategist unstaking half their BPTs.
+        _simulateBptUnStake(address(cellar), BB_A_USD, bbAUsdBalance / 2, BB_A_USD_GAUGE);
+        assertApproxEqAbs(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            10,
+            "Cellar totalAssets should approximately equal assets."
+        );
+
+        // Simulate strategist full unstake, and exit.
+        bbAUsdBalance = BB_A_USD_GAUGE.balanceOf(address(cellar));
+        _simulateBptUnStake(address(cellar), BB_A_USD, bbAUsdBalance, BB_A_USD_GAUGE);
+        bbAUsdBalance = BB_A_USD.balanceOf(address(cellar));
+        _simulatePoolExit(address(cellar), BB_A_USD, bbAUsdBalance, USDC);
+        assertApproxEqAbs(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            10,
+            "Cellar totalAssets should approximately equal assets."
+        );
+
+        // At this point Cellar should hold approximately assets of USDC, and no bpts or guage bpts.
+        assertApproxEqAbs(
+            USDC.balanceOf(address(cellar)),
+            assets + initialAssets,
+            10,
+            "Cellar should be holding assets amount of USDC."
+        );
+        assertEq(BB_A_USD.balanceOf(address(cellar)), 0, "Cellar should have no BB_A_USD.");
+        assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), 0, "Cellar should have no BB_A_USD_GAUGE.");
+    }
+
+    function testStakeBpt(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToStakeBpts(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
+
+        // Make sure cellar actually staked into gauge.
+        assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), bptAmount, "Cellar should have staked into guage.");
+    }
+
+    function testStakeUint256Max(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToStakeBpts(address(BB_A_USD), address(BB_A_USD_GAUGE), type(uint256).max);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
+
+        // Make sure cellar actually staked into gauge.
+        assertEq(BB_A_USD_GAUGE.balanceOf(address(cellar)), bptAmount, "Cellar should have staked into guage.");
+    }
+
+    function testUnstakeBpt(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    // function testUnstakeUint256Max(uint256 assets) external {
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     // User Joins Cellar.
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Use deal to mint cellar Gauge Bpts.
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD_GAUGE), address(cellar), bptAmount);
-
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = _createBytesDataToUnstake(address(BB_A_USD), address(BB_A_USD_GAUGE), type(uint256).max);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
-
-    //     // Make sure cellar actually staked into gauge.
-    //     assertEq(BB_A_USD.balanceOf(address(cellar)), bptAmount, "Cellar should have unstaked from guage.");
-    // }
-
-    // function testClaimRewards() external {
-    //     uint256 assets = 1_000_000e6;
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     // User Joins Cellar.
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Use deal to mint cellar Bpts.
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD), address(cellar), bptAmount);
-
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     // Now that cellar is in gauge, wait for awards to accrue.
-    //     vm.warp(block.timestamp + (1 days / 4));
-
-    //     // Strategist claims rewards.
-    //     adaptorCalls[0] = _createBytesDataToClaimRewards(address(BB_A_USD_GAUGE));
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     uint256 cellarBALBalance = BAL.balanceOf(address(cellar));
-
-    //     assertGt(cellarBALBalance, 0, "Cellar should have earned BAL rewards.");
-    // }
-
-    // function testUserWithdrawPullFromGauge(uint256 assets, uint256 percentInGauge) external {
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     percentInGauge = bound(percentInGauge, 0, 1e18);
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     // User Joins Cellar.
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Use deal to mint cellar Bpts.
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD), address(cellar), bptAmount);
-
-    //     uint256 amountToStakeInGauge = bptAmount.mulDivDown(percentInGauge, 1e18);
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = _createBytesDataToStake(address(BB_A_USD), address(BB_A_USD_GAUGE), amountToStakeInGauge);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     uint256 amountToWithdraw = cellar.maxWithdraw(address(this));
-    //     cellar.withdraw(amountToWithdraw, address(this), address(this));
-
-    //     assertEq(BB_A_USD.balanceOf(address(this)), bptAmount, "User should have received assets out.");
-    // }
-
-    // /**
-    //  * @notice check that assetsUsed() works which also checks assetOf() works
-    //  */
-    // function testAssetsUsed() external {
-    //     ERC20[] memory actualAsset = balancerPoolAdaptor.assetsUsed(adaptorData);
-    //     address actualAssetAddress = address(actualAsset[0]);
-    //     assertEq(actualAssetAddress, address(BB_A_USD));
-    // }
-
-    // function testIsDebt() external {
-    //     bool result = balancerPoolAdaptor.isDebt();
-    //     assertEq(result, false);
-    // }
-
-    // // ========================================= Join Happy Paths =========================================
-
-    // function testJoinVanillaPool(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 10_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // Create Swap Data.
-    //     IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
-    //     swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
-    //     swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
-    //     swapsBeforeJoin[1].amount = type(uint256).max;
-    //     swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
-
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-    //     swapData.swapDeadlines[2] = block.timestamp;
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     uint256 expectedBpt = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
-
-    //     assertApproxEqRel(
-    //         vanillaUsdcDaiUsdt.balanceOf(address(cellar)),
-    //         expectedBpt,
-    //         0.002e18,
-    //         "Cellar should have received expected BPT."
-    //     );
-    // }
-
-    // function testJoinBoostedPool(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 10_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Have strategist rebalance into boosted USDC DAI USDT Bpt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // Create Swap Data.
-    //     IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
-    //     swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
-    //     swapsBeforeJoin[1].assetIn = IAsset(address(USDT));
-
-    //     // Create Swap Data.
-    //     swapsBeforeJoin[2] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(bb_a_usdc)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_IN,
-    //         assetIn: IAsset(address(USDC)),
-    //         assetOut: IAsset(address(bb_a_usdc)),
-    //         amount: assets,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[2] = block.timestamp;
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     uint256 expectedBpt = priceRouter.getValue(USDC, assets, BB_A_USD);
-
-    //     assertApproxEqRel(
-    //         BB_A_USD.balanceOf(address(cellar)),
-    //         expectedBpt,
-    //         0.001e18,
-    //         "Cellar should have received expected BPT."
-    //     );
-    // }
-
-    // function testJoinVanillaPoolWithMultiTokens(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 10_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate strategist rebalance into pools underlying assets.
-    //     uint256 daiAmount = priceRouter.getValue(USDC, assets / 3, DAI);
-    //     uint256 usdtAmount = priceRouter.getValue(USDC, assets / 3, USDT);
-    //     uint256 usdcAmount = assets / 3;
-
-    //     deal(address(USDT), address(cellar), usdtAmount);
-    //     deal(address(DAI), address(cellar), daiAmount);
-    //     deal(address(USDC), address(cellar), usdcAmount);
-
-    //     // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // Create Swap Data.
-    //     IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
-    //     swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
-    //     swapsBeforeJoin[0].amount = daiAmount;
-    //     swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
-    //     swapsBeforeJoin[1].amount = type(uint256).max;
-    //     swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
-    //     swapsBeforeJoin[2].amount = type(uint256).max;
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-    //     swapData.swapDeadlines[2] = block.timestamp;
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
-
-    //     ERC20[] memory baseAssets = new ERC20[](3);
-    //     baseAssets[0] = DAI;
-    //     baseAssets[1] = USDC;
-    //     baseAssets[2] = USDT;
-
-    //     uint256[] memory baseAmounts = new uint256[](3);
-    //     baseAmounts[0] = daiAmount;
-    //     baseAmounts[1] = usdcAmount;
-    //     baseAmounts[2] = usdtAmount;
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     // carry out tx
-    //     cellar.callOnAdaptor(data);
-
-    //     uint256 expectedBpt = priceRouter.getValues(baseAssets, baseAmounts, vanillaUsdcDaiUsdt);
-
-    //     assertApproxEqRel(
-    //         vanillaUsdcDaiUsdt.balanceOf(address(cellar)),
-    //         expectedBpt,
-    //         0.001e18,
-    //         "Cellar should have received expected BPT."
-    //     );
-    // }
-
-    // function testJoinBoostedPoolWithMultipleTokens(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 10_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate strategist rebalance into pools underlying assets.
-    //     uint256 daiAmount = priceRouter.getValue(USDC, assets / 3, DAI);
-    //     uint256 usdtAmount = priceRouter.getValue(USDC, assets / 3, USDT);
-    //     uint256 usdcAmount = assets / 3;
-
-    //     deal(address(USDT), address(cellar), usdtAmount);
-    //     deal(address(DAI), address(cellar), daiAmount);
-    //     deal(address(USDC), address(cellar), usdcAmount);
-
-    //     // Have strategist rebalance into boosted USDC DAI USDT Bpt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // Create Swap Data.
-    //     IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
-
-    //     swapsBeforeJoin[0] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(bb_a_dai)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_IN,
-    //         assetIn: IAsset(address(DAI)),
-    //         assetOut: IAsset(address(bb_a_dai)),
-    //         amount: daiAmount,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     swapsBeforeJoin[1] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(bb_a_usdt)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_IN,
-    //         assetIn: IAsset(address(USDT)),
-    //         assetOut: IAsset(address(bb_a_usdt)),
-    //         amount: type(uint256).max,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     // Create Swap Data.
-    //     swapsBeforeJoin[2] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(bb_a_usdc)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_IN,
-    //         assetIn: IAsset(address(USDC)),
-    //         assetOut: IAsset(address(bb_a_usdc)),
-    //         amount: usdcAmount,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-    //     swapData.swapDeadlines[2] = block.timestamp;
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
-
-    //     ERC20[] memory baseAssets = new ERC20[](3);
-    //     baseAssets[0] = DAI;
-    //     baseAssets[1] = USDC;
-    //     baseAssets[2] = USDT;
-
-    //     uint256[] memory baseAmounts = new uint256[](3);
-    //     baseAmounts[0] = daiAmount;
-    //     baseAmounts[1] = usdcAmount;
-    //     baseAmounts[2] = usdtAmount;
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
-
-    //     uint256 expectedBpt = priceRouter.getValues(baseAssets, baseAmounts, BB_A_USD);
-
-    //     assertApproxEqRel(
-    //         BB_A_USD.balanceOf(address(cellar)),
-    //         expectedBpt,
-    //         0.001e18,
-    //         "Cellar should have received expected BPT."
-    //     );
-    // }
-
-    // /**
-    //  * More complex join: deal wstETH to user and they deposit to cellar. Cellar should be dealt equal amounts of other constituent (WETH). Prepare swaps for bb-a-WETH.
-    //  */
-    // function testNonStableCoinJoinMultiTokens(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e18, 100_000e18);
-    //     deal(address(WETH), address(this), assets);
-    //     wethCellar.deposit(assets, address(this));
-
-    //     // pricing set up for BB_A_WETH. Now, we set up the adaptorCall to actually join the pool
-
-    //     uint256 wethAmount = assets / 2;
-    //     uint256 wstethAmount = priceRouter.getValue(WETH, assets / 2, wstETH);
-
-    //     deal(address(WETH), address(wethCellar), wethAmount);
-    //     deal(address(wstETH), address(wethCellar), wstethAmount);
-
-    //     // Have strategist rebalance into Boosted.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](2);
-
-    //     // NOTE: `vault.getPoolTokens(wstETH_bbaWETH)` to be - [0]: BB_A_WETH, [1]: wstETH, [2]: wstETH_bbaWETH
-    //     swapsBeforeJoin[0] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(BB_A_WETH)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_IN,
-    //         assetIn: IAsset(address(WETH)),
-    //         assetOut: IAsset(address(BB_A_WETH)),
-    //         amount: wethAmount,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     swapsBeforeJoin[1].assetIn = IAsset(address(wstETH));
-    //     swapsBeforeJoin[1].amount = wstethAmount;
-
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](2);
-    //     swapData.swapDeadlines = new uint256[](2);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(wstETH_bbaWETH, swapsBeforeJoin, swapData, 0);
-
-    //     ERC20[] memory baseAssets = new ERC20[](2);
-    //     baseAssets[0] = WETH;
-    //     baseAssets[1] = wstETH;
-
-    //     uint256[] memory baseAmounts = new uint256[](2);
-    //     baseAmounts[0] = wethAmount;
-    //     baseAmounts[1] = wstethAmount;
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-    //     wethCellar.callOnAdaptor(data);
-
-    //     uint256 expectedBpt = priceRouter.getValues(baseAssets, baseAmounts, wstETH_bbaWETH);
-
-    //     assertApproxEqRel(
-    //         wstETH_bbaWETH.balanceOf(address(wethCellar)),
-    //         expectedBpt,
-    //         0.001e18,
-    //         "Cellar should have received expected BPT."
-    //     );
-    // }
-
-    // // ========================================= Exit Happy Paths =========================================
-
-    // function testExitVanillaPool(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate a vanilla pool deposit by minting cellar bpts.
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(vanillaUsdcDaiUsdt), address(cellar), bptAmount);
-
-    //     // Have strategist exit pool in 1 token.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // There are no swaps to be made, so just create empty arrays.
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-
-    //     // There are no swaps needed because we support all the assets we get from the pool.
-    //     IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetIn = IAsset(address(USDC));
-    //     swapsAfterExit[2].assetIn = IAsset(address(USDT));
-
-    //     // Formulate request.
-    //     IAsset[] memory poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(DAI));
-    //     poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
-    //     poolAssets[2] = IAsset(address(USDC));
-    //     poolAssets[3] = IAsset(address(USDT));
-    //     uint256[] memory minAmountsOut = new uint256[](4);
-    //     bytes memory userData = abi.encode(0, bptAmount, 1);
-    //     IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(vanillaUsdcDaiUsdt, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     cellar.callOnAdaptor(data);
-
-    //     ERC20[] memory baseAssets = new ERC20[](3);
-    //     baseAssets[0] = USDC;
-    //     baseAssets[1] = DAI;
-    //     baseAssets[2] = USDT;
-
-    //     uint256[] memory baseAmounts = new uint256[](3);
-    //     baseAmounts[0] = USDC.balanceOf(address(cellar));
-    //     baseAmounts[1] = DAI.balanceOf(address(cellar));
-    //     baseAmounts[2] = USDT.balanceOf(address(cellar));
-
-    //     uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
-
-    //     assertApproxEqRel(
-    //         cellar.totalAssets(),
-    //         expectedValueOut,
-    //         0.001e18,
-    //         "Cellar should have received expected value out."
-    //     );
-    // }
-
-    // function testExitBoostedPool(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate a vanilla pool deposit by minting cellar bpts.
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD), address(cellar), bptAmount);
-
-    //     // Have strategist exit pool in 1 token.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // There are no swaps to be made, so just create empty arrays.
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[1] = block.timestamp;
-
-    //     // We need to swap any linear pool tokens for ERC20s.
-    //     // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
-    //     IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
-    //     swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
-    //     swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
-    //     swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
-    //     swapsAfterExit[0].assetOut = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetOut = IAsset(address(USDT));
-    //     swapsAfterExit[2].assetOut = IAsset(address(USDC));
-
-    //     // Formulate request.
-    //     IAsset[] memory poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(bb_a_dai));
-    //     poolAssets[1] = IAsset(address(bb_a_usdt));
-    //     poolAssets[2] = IAsset(address(bb_a_usdc));
-    //     poolAssets[3] = IAsset(address(BB_A_USD));
-    //     uint256[] memory minAmountsOut = new uint256[](4);
-    //     bytes memory userData = abi.encode(0, bptAmount, 1);
-    //     IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(BB_A_USD, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     cellar.callOnAdaptor(data);
-
-    //     ERC20[] memory baseAssets = new ERC20[](3);
-    //     baseAssets[0] = USDC;
-    //     baseAssets[1] = DAI;
-    //     baseAssets[2] = USDT;
-
-    //     uint256[] memory baseAmounts = new uint256[](3);
-    //     baseAmounts[0] = USDC.balanceOf(address(cellar));
-    //     baseAmounts[1] = DAI.balanceOf(address(cellar));
-    //     baseAmounts[2] = USDT.balanceOf(address(cellar));
-
-    //     uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
-
-    //     assertApproxEqRel(
-    //         cellar.totalAssets(),
-    //         expectedValueOut,
-    //         0.001e18,
-    //         "Cellar should have received expected value out."
-    //     );
-    // }
-
-    // function testExitBoostedPoolProportional(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate a vanilla pool deposit by minting cellar bpts.
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD), address(cellar), bptAmount);
-
-    //     // Have strategist exit pool in 1 token.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // There are no swaps to be made, so just create empty arrays.
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-    //     swapData.swapDeadlines[2] = block.timestamp;
-
-    //     // We need to swap any linear pool tokens for ERC20s.
-    //     // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
-    //     IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
-    //     swapsAfterExit[0].poolId = IBasePool(address(bb_a_dai)).getPoolId();
-    //     swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
-    //     swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
-    //     swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
-    //     swapsAfterExit[2].poolId = IBasePool(address(bb_a_usdc)).getPoolId();
-    //     swapsAfterExit[0].assetOut = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetOut = IAsset(address(USDT));
-    //     swapsAfterExit[2].assetOut = IAsset(address(USDC));
-
-    //     // Formulate request.
-    //     IAsset[] memory poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(bb_a_dai));
-    //     poolAssets[1] = IAsset(address(bb_a_usdt));
-    //     poolAssets[2] = IAsset(address(bb_a_usdc));
-    //     poolAssets[3] = IAsset(address(BB_A_USD));
-    //     uint256[] memory minAmountsOut = new uint256[](4);
-    //     bytes memory userData = abi.encode(2, bptAmount);
-    //     IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(BB_A_USD, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     cellar.callOnAdaptor(data);
-
-    //     ERC20[] memory baseAssets = new ERC20[](3);
-    //     baseAssets[0] = USDC;
-    //     baseAssets[1] = DAI;
-    //     baseAssets[2] = USDT;
-
-    //     uint256[] memory baseAmounts = new uint256[](3);
-    //     baseAmounts[0] = USDC.balanceOf(address(cellar));
-    //     baseAmounts[1] = DAI.balanceOf(address(cellar));
-    //     baseAmounts[2] = USDT.balanceOf(address(cellar));
-
-    //     assertGt(baseAmounts[0], 0, "Cellar should have got USDC.");
-    //     assertGt(baseAmounts[1], 0, "Cellar should have got DAI.");
-    //     assertGt(baseAmounts[2], 0, "Cellar should have got USDT.");
-
-    //     uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
-
-    //     assertApproxEqRel(
-    //         cellar.totalAssets(),
-    //         expectedValueOut,
-    //         0.001e18,
-    //         "Cellar should have received expected value out."
-    //     );
-
-    //     assertEq(BB_A_USD.balanceOf(address(cellar)), 0, "Cellar should have redeemed all BPTs.");
-    // }
-
-    // function testExitVanillaPoolProportional(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate a vanilla pool deposit by minting cellar bpts.
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(vanillaUsdcDaiUsdt), address(cellar), bptAmount);
-
-    //     // Have strategist exit pool in underlying tokens.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // There are no swaps to be made, so just create empty arrays.
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-
-    //     // There are no swaps needed because we support all the assets we get from the pool.
-    //     IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetIn = IAsset(address(USDC));
-    //     swapsAfterExit[2].assetIn = IAsset(address(USDT));
-
-    //     // Formulate request.
-    //     IAsset[] memory poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(DAI));
-    //     poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
-    //     poolAssets[2] = IAsset(address(USDC));
-    //     poolAssets[3] = IAsset(address(USDT));
-    //     uint256[] memory minAmountsOut = new uint256[](4);
-    //     bytes memory userData = abi.encode(2, bptAmount);
-    //     IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(vanillaUsdcDaiUsdt, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     cellar.callOnAdaptor(data);
-
-    //     ERC20[] memory baseAssets = new ERC20[](3);
-    //     baseAssets[0] = USDC;
-    //     baseAssets[1] = DAI;
-    //     baseAssets[2] = USDT;
-
-    //     uint256[] memory baseAmounts = new uint256[](3);
-    //     baseAmounts[0] = USDC.balanceOf(address(cellar));
-    //     baseAmounts[1] = DAI.balanceOf(address(cellar));
-    //     baseAmounts[2] = USDT.balanceOf(address(cellar));
-
-    //     uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
-
-    //     assertApproxEqRel(
-    //         cellar.totalAssets(),
-    //         expectedValueOut,
-    //         0.002e18,
-    //         "Cellar should have received expected value out."
-    //     );
-
-    //     assertGt(baseAmounts[0], 0, "Cellar should have got USDC.");
-    //     assertGt(baseAmounts[1], 0, "Cellar should have got DAI.");
-    //     assertGt(baseAmounts[2], 0, "Cellar should have got USDT.");
-
-    //     assertEq(vanillaUsdcDaiUsdt.balanceOf(address(cellar)), 0, "Cellar shouyld have redeemed all BPTs.");
-    // }
-
-    // // ========================================= Reverts =========================================
-
-    // function testConstructorReverts() external {
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___InvalidConstructorSlippage.selector))
-    //     );
-    //     new BalancerPoolAdaptor(vault, minter, 0.89e4);
-
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___InvalidConstructorSlippage.selector))
-    //     );
-    //     new BalancerPoolAdaptor(vault, minter, 1.01e4);
-    // }
-
-    // function testJoinPoolNoSwapsReverts() external {
-    //     // Deposit into Cellar.
-    //     uint256 assets = 10_000e6;
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // Create Swap Data with 1 less index than required.
-    //     IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](2);
-    //     swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
-    //     swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
-    //     swapsBeforeJoin[1].amount = type(uint256).max;
-
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](2);
-    //     swapData.swapDeadlines = new uint256[](2);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___LengthMismatch.selector))
-    //     );
-    //     cellar.callOnAdaptor(data);
-
-    //     // Simulate strategist rebalance into pools underlying assets.
-    //     uint256 daiAmount = priceRouter.getValue(USDC, assets / 3, DAI);
-    //     uint256 usdtAmount = priceRouter.getValue(USDC, assets / 3, USDT);
-    //     uint256 usdcAmount = assets / 3;
-
-    //     deal(address(USDT), address(cellar), usdtAmount);
-    //     deal(address(DAI), address(cellar), daiAmount);
-    //     deal(address(USDC), address(cellar), usdcAmount);
-
-    //     // Now make the lengths right, but mix up USDC and USDT inputs.
-    //     swapsBeforeJoin = new IVault.SingleSwap[](3);
-    //     swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
-    //     swapsBeforeJoin[0].amount = daiAmount;
-    //     swapsBeforeJoin[1].assetIn = IAsset(address(USDT));
-    //     swapsBeforeJoin[1].amount = type(uint256).max;
-    //     swapsBeforeJoin[2].assetIn = IAsset(address(USDC));
-    //     swapsBeforeJoin[2].amount = type(uint256).max;
-
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-    //     swapData.swapDeadlines[2] = block.timestamp;
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(
-    //                 BalancerPoolAdaptor.BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch.selector
-    //             )
-    //         )
-    //     );
-    //     cellar.callOnAdaptor(data);
-
-    //     // Now fix USDT USDC order, but replace DAI with FRAX.
-    //     swapsBeforeJoin = new IVault.SingleSwap[](3);
-    //     swapsBeforeJoin[0].assetIn = IAsset(address(FRAX));
-    //     swapsBeforeJoin[0].amount = daiAmount;
-    //     swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
-    //     swapsBeforeJoin[1].amount = type(uint256).max;
-    //     swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
-    //     swapsBeforeJoin[2].amount = type(uint256).max;
-
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-    //     swapData.swapDeadlines[2] = block.timestamp;
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(
-    //                 BalancerPoolAdaptor.BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch.selector
-    //             )
-    //         )
-    //     );
-    //     cellar.callOnAdaptor(data);
-    // }
-
-    // function testJoinPoolWithSwapsReverts() external {
-    //     // Deposit into Cellar.
-    //     uint256 assets = 10_000e6;
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate strategist rebalance into pools underlying assets.
-    //     uint256 daiAmount = priceRouter.getValue(USDC, assets / 3, DAI);
-    //     uint256 usdtAmount = priceRouter.getValue(USDC, assets / 3, USDT);
-    //     uint256 usdcAmount = assets / 3;
-
-    //     deal(address(USDT), address(cellar), usdtAmount);
-    //     deal(address(DAI), address(cellar), daiAmount);
-    //     deal(address(USDC), address(cellar), usdcAmount);
-
-    //     // Have strategist rebalance into boosted USDC DAI USDT Bpt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // First replace BB A DAI with Frax.
-    //     IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
-
-    //     swapsBeforeJoin[0] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(bb_a_dai)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_IN,
-    //         assetIn: IAsset(address(DAI)),
-    //         assetOut: IAsset(address(FRAX)),
-    //         amount: daiAmount,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     swapsBeforeJoin[1] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(bb_a_usdt)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_IN,
-    //         assetIn: IAsset(address(USDT)),
-    //         assetOut: IAsset(address(bb_a_usdt)),
-    //         amount: type(uint256).max,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     // Create Swap Data.
-    //     swapsBeforeJoin[2] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(bb_a_usdc)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_IN,
-    //         assetIn: IAsset(address(USDC)),
-    //         assetOut: IAsset(address(bb_a_usdc)),
-    //         amount: usdcAmount,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[0] = block.timestamp;
-    //     swapData.swapDeadlines[1] = block.timestamp;
-    //     swapData.swapDeadlines[2] = block.timestamp;
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
-
-    //     ERC20[] memory baseAssets = new ERC20[](3);
-    //     baseAssets[0] = DAI;
-    //     baseAssets[1] = USDC;
-    //     baseAssets[2] = USDT;
-
-    //     uint256[] memory baseAmounts = new uint256[](3);
-    //     baseAmounts[0] = daiAmount;
-    //     baseAmounts[1] = usdcAmount;
-    //     baseAmounts[2] = usdtAmount;
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(
-    //                 BalancerPoolAdaptor.BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch.selector
-    //             )
-    //         )
-    //     );
-    //     cellar.callOnAdaptor(data);
-
-    //     // Fix it by setting it back to bb_a_dai, but change swap kind.
-    //     swapsBeforeJoin[0] = IVault.SingleSwap({
-    //         poolId: IBasePool(address(bb_a_dai)).getPoolId(),
-    //         kind: IVault.SwapKind.GIVEN_OUT,
-    //         assetIn: IAsset(address(DAI)),
-    //         assetOut: IAsset(address(bb_a_dai)),
-    //         amount: daiAmount,
-    //         userData: bytes(abi.encode(0))
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___WrongSwapKind.selector))
-    //     );
-    //     cellar.callOnAdaptor(data);
-    // }
-
-    // function testExitPoolReverts() external {
-    //     // Deposit into Cellar.
-    //     uint256 assets = 10_000e6;
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate a vanilla pool deposit by minting cellar bpts.
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(BB_A_USD), address(cellar), bptAmount);
-
-    //     // Have strategist exit pool but try to send funds to an internal balance.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[1] = block.timestamp;
-
-    //     // We need to swap any linear pool tokens for ERC20s.
-    //     // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
-    //     IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
-    //     swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
-    //     swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
-    //     swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
-    //     swapsAfterExit[0].assetOut = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetOut = IAsset(address(USDT));
-    //     swapsAfterExit[2].assetOut = IAsset(address(USDC));
-
-    //     // Formulate request.
-    //     IAsset[] memory poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(bb_a_dai));
-    //     poolAssets[1] = IAsset(address(bb_a_usdt));
-    //     poolAssets[2] = IAsset(address(bb_a_usdc));
-    //     poolAssets[3] = IAsset(address(BB_A_USD));
-    //     uint256[] memory minAmountsOut = new uint256[](4);
-    //     bytes memory userData = abi.encode(0, bptAmount, 1);
-    //     IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: true
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(BB_A_USD, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___InternalBalancesNotSupported.selector)
-    //         )
-    //     );
-    //     cellar.callOnAdaptor(data);
-
-    //     // Change toInternalBalance to false, but mistmatch the array lengths.
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[1] = block.timestamp;
-
-    //     // We need to swap any linear pool tokens for ERC20s.
-    //     // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
-    //     swapsAfterExit = new IVault.SingleSwap[](2);
-    //     swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
-    //     swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
-    //     swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
-    //     swapsAfterExit[0].assetOut = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetOut = IAsset(address(USDT));
-
-    //     // Formulate request.
-    //     poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(bb_a_dai));
-    //     poolAssets[1] = IAsset(address(bb_a_usdt));
-    //     poolAssets[2] = IAsset(address(bb_a_usdc));
-    //     poolAssets[3] = IAsset(address(BB_A_USD));
-    //     minAmountsOut = new uint256[](4);
-    //     userData = abi.encode(0, bptAmount, 1);
-    //     request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(BB_A_USD, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___LengthMismatch.selector))
-    //     );
-    //     cellar.callOnAdaptor(data);
-
-    //     // Now have strategist try to swap an asset not in the BPT.
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[1] = block.timestamp;
-
-    //     // We need to swap any linear pool tokens for ERC20s.
-    //     // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
-    //     swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
-    //     swapsAfterExit[1].assetIn = IAsset(address(FRAX));
-    //     swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
-    //     swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
-    //     swapsAfterExit[0].assetOut = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetOut = IAsset(address(USDT));
-    //     swapsAfterExit[2].assetOut = IAsset(address(USDC));
-
-    //     // Formulate request.
-    //     poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(bb_a_dai));
-    //     poolAssets[1] = IAsset(address(bb_a_usdt));
-    //     poolAssets[2] = IAsset(address(bb_a_usdc));
-    //     poolAssets[3] = IAsset(address(BB_A_USD));
-    //     minAmountsOut = new uint256[](4);
-    //     userData = abi.encode(0, bptAmount, 1);
-    //     request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(BB_A_USD, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(
-    //             abi.encodeWithSelector(
-    //                 BalancerPoolAdaptor.BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch.selector
-    //             )
-    //         )
-    //     );
-    //     cellar.callOnAdaptor(data);
-
-    //     // Now have strategist try to swap with wrong swap kind.
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[1] = block.timestamp;
-
-    //     // We need to swap any linear pool tokens for ERC20s.
-    //     // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
-    //     swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
-    //     swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
-    //     swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
-    //     swapsAfterExit[1].kind = IVault.SwapKind.GIVEN_OUT;
-    //     swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
-    //     swapsAfterExit[0].assetOut = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetOut = IAsset(address(USDT));
-    //     swapsAfterExit[2].assetOut = IAsset(address(USDC));
-
-    //     // Formulate request.
-    //     poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(bb_a_dai));
-    //     poolAssets[1] = IAsset(address(bb_a_usdt));
-    //     poolAssets[2] = IAsset(address(bb_a_usdc));
-    //     poolAssets[3] = IAsset(address(BB_A_USD));
-    //     minAmountsOut = new uint256[](4);
-    //     userData = abi.encode(0, bptAmount, 1);
-    //     request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(BB_A_USD, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___WrongSwapKind.selector))
-    //     );
-    //     cellar.callOnAdaptor(data);
-
-    //     // Now have strategist try to not swap their linear pool tokens.
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-    //     swapData.swapDeadlines[1] = block.timestamp;
-
-    //     // We need to swap any linear pool tokens for ERC20s.
-    //     // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
-    //     swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
-    //     swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
-    //     swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
-    //     swapsAfterExit[1].kind = IVault.SwapKind.GIVEN_IN;
-    //     swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
-    //     swapsAfterExit[0].assetOut = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetOut = IAsset(address(0));
-    //     swapsAfterExit[2].assetOut = IAsset(address(USDC));
-
-    //     // Formulate request.
-    //     poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(bb_a_dai));
-    //     poolAssets[1] = IAsset(address(bb_a_usdt));
-    //     poolAssets[2] = IAsset(address(bb_a_usdc));
-    //     poolAssets[3] = IAsset(address(BB_A_USD));
-    //     minAmountsOut = new uint256[](4);
-    //     userData = abi.encode(0, bptAmount, 1);
-    //     request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(BB_A_USD, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(
-    //         bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___UnsupportedTokenNotSwapped.selector))
-    //     );
-    //     cellar.callOnAdaptor(data);
-    // }
-
-    // function testFailTransferEthToCellar() external {
-    //     // This test verifies that native eth transfers to the cellar will revert.
-    //     // So even if the strategist somehow manages to make a swap send native eth
-    //     // to the cellar it will revert.
-
-    //     if (block.number < 17523303) {
-    //         console.log("INVALID BLOCK NUMBER: Contracts not deployed yet use 17523303.");
-    //         fail("This test should fail.");
-    //     }
-    //     deal(address(this), 1 ether);
-    //     address(cellar).safeTransferETH(1 ether);
-    // }
-
-    // function testJoinPoolSlippageCheck(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 10_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // Create Swap Data.
-    //     IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
-    //     swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
-    //     swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
-    //     swapsBeforeJoin[1].amount = type(uint256).max;
-    //     swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
-
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-
-    //     adaptorCalls[0] = _createBytesDataToJoinPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
-
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___Slippage.selector)));
-    //     cellar.callOnAdaptor(data);
-    // }
-
-    // function testExitPoolSlippageCheck(uint256 assets) external {
-    //     // Deposit into Cellar.
-    //     assets = bound(assets, 0.1e6, 1_000_000e6);
-    //     deal(address(USDC), address(this), assets);
-    //     cellar.deposit(assets, address(this));
-
-    //     // Simulate a vanilla pool deposit by minting cellar bpts.
-    //     uint256 bptAmount = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
-    //     deal(address(USDC), address(cellar), 0);
-    //     deal(address(vanillaUsdcDaiUsdt), address(cellar), bptAmount);
-
-    //     // Have strategist exit pool in 1 token.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-
-    //     // There are no swaps to be made, so just create empty arrays.
-    //     BalancerPoolAdaptor.SwapData memory swapData;
-    //     swapData.minAmountsForSwaps = new uint256[](3);
-    //     swapData.swapDeadlines = new uint256[](3);
-
-    //     // There are no swaps needed because we support all the assets we get from the pool.
-    //     IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
-    //     swapsAfterExit[0].assetIn = IAsset(address(DAI));
-    //     swapsAfterExit[1].assetIn = IAsset(address(USDC));
-    //     swapsAfterExit[2].assetIn = IAsset(address(USDT));
-
-    //     // Formulate request.
-    //     IAsset[] memory poolAssets = new IAsset[](4);
-    //     poolAssets[0] = IAsset(address(DAI));
-    //     poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
-    //     poolAssets[2] = IAsset(address(USDC));
-    //     poolAssets[3] = IAsset(address(USDT));
-    //     uint256[] memory minAmountsOut = new uint256[](4);
-    //     bytes memory userData = abi.encode(0, bptAmount, 1);
-    //     IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
-    //         assets: poolAssets,
-    //         minAmountsOut: minAmountsOut,
-    //         userData: userData,
-    //         toInternalBalance: false
-    //     });
-
-    //     adaptorCalls[0] = _createBytesDataToExitPool(vanillaUsdcDaiUsdt, swapsAfterExit, swapData, request);
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
-
-    //     vm.expectRevert(bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___Slippage.selector)));
-    //     cellar.callOnAdaptor(data);
-    // }
+        // Use deal to mint cellar Gauge Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD_GAUGE), address(cellar), bptAmount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToUnstakeBpts(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
+
+        // Make sure cellar actually staked into gauge.
+        assertEq(BB_A_USD.balanceOf(address(cellar)), bptAmount, "Cellar should have unstaked from guage.");
+    }
+
+    function testUnstakeUint256Max(uint256 assets) external {
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Gauge Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD_GAUGE), address(cellar), bptAmount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToUnstakeBpts(address(BB_A_USD), address(BB_A_USD_GAUGE), type(uint256).max);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqRel(cellar.totalAssets(), assets, 0.01e18, "Cellar totalAssets should equal assets.");
+
+        // Make sure cellar actually staked into gauge.
+        assertEq(BB_A_USD.balanceOf(address(cellar)), bptAmount, "Cellar should have unstaked from guage.");
+    }
+
+    function testClaimRewards() external {
+        uint256 assets = 1_000_000e6;
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToStakeBpts(address(BB_A_USD), address(BB_A_USD_GAUGE), bptAmount);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Now that cellar is in gauge, wait for awards to accrue.
+        vm.warp(block.timestamp + (1 days / 4));
+
+        // Strategist claims rewards.
+        adaptorCalls[0] = _createBytesDataToClaimBalancerRewards(address(BB_A_USD_GAUGE));
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 cellarBALBalance = BAL.balanceOf(address(cellar));
+
+        assertGt(cellarBALBalance, 0, "Cellar should have earned BAL rewards.");
+    }
+
+    function testUserWithdrawPullFromGauge(uint256 assets, uint256 percentInGauge) external {
+        uint256 initialAssets = cellar.totalAssets();
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        percentInGauge = bound(percentInGauge, 0, 1e18);
+        uint256 bptAmount = priceRouter.getValue(USDC, assets + initialAssets, BB_A_USD);
+        // User Joins Cellar.
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Use deal to mint cellar Bpts.
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        uint256 amountToStakeInGauge = bptAmount.mulDivDown(percentInGauge, 1e18);
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToStakeBpts(address(BB_A_USD), address(BB_A_USD_GAUGE), amountToStakeInGauge);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 amountToWithdraw = cellar.maxWithdraw(address(this));
+        cellar.withdraw(amountToWithdraw, address(this), address(this));
+
+        uint256 expectedBptOut = priceRouter.getValue(USDC, assets, BB_A_USD);
+
+        assertApproxEqRel(
+            BB_A_USD.balanceOf(address(this)),
+            expectedBptOut,
+            0.0001e18,
+            "User should have received assets out."
+        );
+    }
+
+    function testBalancerFlashLoans() external {
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(USDC);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1e6;
+        Cellar.AdaptorCall[] memory data;
+        bytes memory flashLoanData = abi.encode(data);
+        data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToMakeFlashLoanFromBalancer(tokens, amounts, flashLoanData);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
+    /**
+     * @notice check that assetsUsed() works which also checks assetOf() works
+     */
+    function testAssetsUsed() external {
+        bytes memory adaptorData = abi.encode(address(BB_A_USD), BB_A_USD_GAUGE_ADDRESS);
+        ERC20[] memory actualAsset = balancerPoolAdaptor.assetsUsed(adaptorData);
+        address actualAssetAddress = address(actualAsset[0]);
+        assertEq(actualAssetAddress, address(BB_A_USD));
+    }
+
+    function testIsDebt() external {
+        bool result = balancerPoolAdaptor.isDebt();
+        assertEq(result, false);
+    }
+
+    // ========================================= Join Happy Paths =========================================
+
+    function testJoinVanillaPool(uint256 assets) external {
+        uint256 initialAssets = cellar.totalAssets();
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 10_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+        swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[1].amount = type(uint256).max;
+        swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 expectedBpt = priceRouter.getValue(USDC, assets + initialAssets, vanillaUsdcDaiUsdt);
+
+        assertApproxEqRel(
+            vanillaUsdcDaiUsdt.balanceOf(address(cellar)),
+            expectedBpt,
+            0.002e18,
+            "Cellar should have received expected BPT."
+        );
+    }
+
+    function testJoinBoostedPool(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 10_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into boosted USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+        swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDT));
+
+        // Create Swap Data.
+        swapsBeforeJoin[2] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_usdc)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(USDC)),
+            assetOut: IAsset(address(bb_a_usdc)),
+            amount: assets,
+            userData: bytes(abi.encode(0))
+        });
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 expectedBpt = priceRouter.getValue(USDC, assets, BB_A_USD);
+
+        assertApproxEqRel(
+            BB_A_USD.balanceOf(address(cellar)),
+            expectedBpt,
+            0.001e18,
+            "Cellar should have received expected BPT."
+        );
+    }
+
+    function testJoinVanillaPoolWithMultiTokens(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 10_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate strategist rebalance into pools underlying assets.
+        uint256 daiAmount = priceRouter.getValue(USDC, assets / 3, DAI);
+        uint256 usdtAmount = priceRouter.getValue(USDC, assets / 3, USDT);
+        uint256 usdcAmount = assets / 3;
+
+        deal(address(USDT), address(cellar), usdtAmount);
+        deal(address(DAI), address(cellar), daiAmount);
+        deal(address(USDC), address(cellar), usdcAmount);
+
+        // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+        swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
+        swapsBeforeJoin[0].amount = daiAmount;
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[1].amount = type(uint256).max;
+        swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
+        swapsBeforeJoin[2].amount = type(uint256).max;
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = DAI;
+        baseAssets[1] = USDC;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = daiAmount;
+        baseAmounts[1] = usdcAmount;
+        baseAmounts[2] = usdtAmount;
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        // carry out tx
+        cellar.callOnAdaptor(data);
+
+        uint256 expectedBpt = priceRouter.getValues(baseAssets, baseAmounts, vanillaUsdcDaiUsdt);
+
+        assertApproxEqRel(
+            vanillaUsdcDaiUsdt.balanceOf(address(cellar)),
+            expectedBpt,
+            0.001e18,
+            "Cellar should have received expected BPT."
+        );
+    }
+
+    function testJoinBoostedPoolWithMultipleTokens(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 10_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate strategist rebalance into pools underlying assets.
+        uint256 daiAmount = priceRouter.getValue(USDC, assets / 3, DAI);
+        uint256 usdtAmount = priceRouter.getValue(USDC, assets / 3, USDT);
+        uint256 usdcAmount = assets / 3;
+
+        deal(address(USDT), address(cellar), usdtAmount);
+        deal(address(DAI), address(cellar), daiAmount);
+        deal(address(USDC), address(cellar), usdcAmount);
+
+        // Have strategist rebalance into boosted USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+
+        swapsBeforeJoin[0] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_dai)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(DAI)),
+            assetOut: IAsset(address(bb_a_dai)),
+            amount: daiAmount,
+            userData: bytes(abi.encode(0))
+        });
+
+        swapsBeforeJoin[1] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_usdt)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(USDT)),
+            assetOut: IAsset(address(bb_a_usdt)),
+            amount: type(uint256).max,
+            userData: bytes(abi.encode(0))
+        });
+
+        // Create Swap Data.
+        swapsBeforeJoin[2] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_usdc)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(USDC)),
+            assetOut: IAsset(address(bb_a_usdc)),
+            amount: usdcAmount,
+            userData: bytes(abi.encode(0))
+        });
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = DAI;
+        baseAssets[1] = USDC;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = daiAmount;
+        baseAmounts[1] = usdcAmount;
+        baseAmounts[2] = usdtAmount;
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 expectedBpt = priceRouter.getValues(baseAssets, baseAmounts, BB_A_USD);
+
+        assertApproxEqRel(
+            BB_A_USD.balanceOf(address(cellar)),
+            expectedBpt,
+            0.001e18,
+            "Cellar should have received expected BPT."
+        );
+    }
+
+    /**
+     * More complex join: deal wstETH to user and they deposit to cellar.
+     * Cellar should be dealt equal amounts of other constituent (WETH). Prepare swaps for bb-a-WETH.
+     */
+    function testNonStableCoinJoinMultiTokens(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e18, 100_000e18);
+        deal(address(WETH), address(this), assets);
+        wethCellar.deposit(assets, address(this));
+
+        // pricing set up for BB_A_WETH. Now, we set up the adaptorCall to actually join the pool
+
+        uint256 wethAmount = assets / 2;
+        uint256 wstethAmount = priceRouter.getValue(WETH, assets / 2, WSTETH);
+
+        deal(address(WETH), address(wethCellar), wethAmount);
+        deal(address(WSTETH), address(wethCellar), wstethAmount);
+
+        // Have strategist rebalance into Boosted.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](2);
+
+        // NOTE: `vault.getPoolTokens(wstETH_bbaWETH)` to be - [0]: BB_A_WETH, [1]: wstETH, [2]: wstETH_bbaWETH
+        swapsBeforeJoin[0] = IVault.SingleSwap({
+            poolId: IBasePool(address(BB_A_WETH)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(WETH)),
+            assetOut: IAsset(address(BB_A_WETH)),
+            amount: wethAmount,
+            userData: bytes(abi.encode(0))
+        });
+
+        swapsBeforeJoin[1].assetIn = IAsset(address(WSTETH));
+        swapsBeforeJoin[1].amount = wstethAmount;
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](2);
+        swapData.swapDeadlines = new uint256[](2);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(wstETH_bbaWETH, swapsBeforeJoin, swapData, 0);
+
+        ERC20[] memory baseAssets = new ERC20[](2);
+        baseAssets[0] = WETH;
+        baseAssets[1] = WSTETH;
+
+        uint256[] memory baseAmounts = new uint256[](2);
+        baseAmounts[0] = wethAmount;
+        baseAmounts[1] = wstethAmount;
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+        wethCellar.callOnAdaptor(data);
+
+        uint256 expectedBpt = priceRouter.getValues(baseAssets, baseAmounts, wstETH_bbaWETH);
+
+        assertApproxEqRel(
+            wstETH_bbaWETH.balanceOf(address(wethCellar)),
+            expectedBpt,
+            0.001e18,
+            "Cellar should have received expected BPT."
+        );
+    }
+
+    // ========================================= Exit Happy Paths =========================================
+
+    function testExitVanillaPool(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(vanillaUsdcDaiUsdt), address(cellar), bptAmount);
+
+        // Have strategist exit pool in 1 token.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // There are no swaps to be made, so just create empty arrays.
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+
+        // There are no swaps needed because we support all the assets we get from the pool.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(DAI));
+        swapsAfterExit[1].assetIn = IAsset(address(USDC));
+        swapsAfterExit[2].assetIn = IAsset(address(USDT));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(DAI));
+        poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        poolAssets[2] = IAsset(address(USDC));
+        poolAssets[3] = IAsset(address(USDT));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(0, bptAmount, 1);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(vanillaUsdcDaiUsdt, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = USDC;
+        baseAssets[1] = DAI;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = USDC.balanceOf(address(cellar));
+        baseAmounts[1] = DAI.balanceOf(address(cellar));
+        baseAmounts[2] = USDT.balanceOf(address(cellar));
+
+        uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            expectedValueOut,
+            0.001e18,
+            "Cellar should have received expected value out."
+        );
+    }
+
+    function testExitBoostedPool(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        // Have strategist exit pool in 1 token.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // There are no swaps to be made, so just create empty arrays.
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[1] = block.timestamp;
+
+        // We need to swap any linear pool tokens for ERC20s.
+        // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
+        swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
+        swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
+        swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
+        swapsAfterExit[0].assetOut = IAsset(address(DAI));
+        swapsAfterExit[1].assetOut = IAsset(address(USDT));
+        swapsAfterExit[2].assetOut = IAsset(address(USDC));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(bb_a_dai));
+        poolAssets[1] = IAsset(address(bb_a_usdt));
+        poolAssets[2] = IAsset(address(bb_a_usdc));
+        poolAssets[3] = IAsset(address(BB_A_USD));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(0, bptAmount, 1);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(BB_A_USD, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = USDC;
+        baseAssets[1] = DAI;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = USDC.balanceOf(address(cellar));
+        baseAmounts[1] = DAI.balanceOf(address(cellar));
+        baseAmounts[2] = USDT.balanceOf(address(cellar));
+
+        uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            expectedValueOut,
+            0.001e18,
+            "Cellar should have received expected value out."
+        );
+    }
+
+    function testExitBoostedPoolProportional(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        // Have strategist exit pool in 1 token.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // There are no swaps to be made, so just create empty arrays.
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        // We need to swap any linear pool tokens for ERC20s.
+        // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
+        swapsAfterExit[0].poolId = IBasePool(address(bb_a_dai)).getPoolId();
+        swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
+        swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
+        swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
+        swapsAfterExit[2].poolId = IBasePool(address(bb_a_usdc)).getPoolId();
+        swapsAfterExit[0].assetOut = IAsset(address(DAI));
+        swapsAfterExit[1].assetOut = IAsset(address(USDT));
+        swapsAfterExit[2].assetOut = IAsset(address(USDC));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(bb_a_dai));
+        poolAssets[1] = IAsset(address(bb_a_usdt));
+        poolAssets[2] = IAsset(address(bb_a_usdc));
+        poolAssets[3] = IAsset(address(BB_A_USD));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(2, bptAmount);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(BB_A_USD, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = USDC;
+        baseAssets[1] = DAI;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = USDC.balanceOf(address(cellar));
+        baseAmounts[1] = DAI.balanceOf(address(cellar));
+        baseAmounts[2] = USDT.balanceOf(address(cellar));
+
+        assertGt(baseAmounts[0], 0, "Cellar should have got USDC.");
+        assertGt(baseAmounts[1], 0, "Cellar should have got DAI.");
+        assertGt(baseAmounts[2], 0, "Cellar should have got USDT.");
+
+        uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            expectedValueOut,
+            0.001e18,
+            "Cellar should have received expected value out."
+        );
+
+        assertEq(BB_A_USD.balanceOf(address(cellar)), 0, "Cellar should have redeemed all BPTs.");
+    }
+
+    function testExitVanillaPoolProportional(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(vanillaUsdcDaiUsdt), address(cellar), bptAmount);
+
+        // Have strategist exit pool in underlying tokens.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // There are no swaps to be made, so just create empty arrays.
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+
+        // There are no swaps needed because we support all the assets we get from the pool.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(DAI));
+        swapsAfterExit[1].assetIn = IAsset(address(USDC));
+        swapsAfterExit[2].assetIn = IAsset(address(USDT));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(DAI));
+        poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        poolAssets[2] = IAsset(address(USDC));
+        poolAssets[3] = IAsset(address(USDT));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(2, bptAmount);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(vanillaUsdcDaiUsdt, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = USDC;
+        baseAssets[1] = DAI;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = USDC.balanceOf(address(cellar));
+        baseAmounts[1] = DAI.balanceOf(address(cellar));
+        baseAmounts[2] = USDT.balanceOf(address(cellar));
+
+        uint256 expectedValueOut = priceRouter.getValues(baseAssets, baseAmounts, USDC);
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            expectedValueOut,
+            0.002e18,
+            "Cellar should have received expected value out."
+        );
+
+        assertGt(baseAmounts[0], 0, "Cellar should have got USDC.");
+        assertGt(baseAmounts[1], 0, "Cellar should have got DAI.");
+        assertGt(baseAmounts[2], 0, "Cellar should have got USDT.");
+
+        assertEq(vanillaUsdcDaiUsdt.balanceOf(address(cellar)), 0, "Cellar shouyld have redeemed all BPTs.");
+    }
+
+    // ========================================= Reverts =========================================
+
+    function testConstructorReverts() external {
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___InvalidConstructorSlippage.selector))
+        );
+        new BalancerPoolAdaptor(vault, minter, 0.89e4);
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___InvalidConstructorSlippage.selector))
+        );
+        new BalancerPoolAdaptor(vault, minter, 1.01e4);
+    }
+
+    function testJoinPoolNoSwapsReverts() external {
+        // Deposit into Cellar.
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data with 1 less index than required.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](2);
+        swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[1].amount = type(uint256).max;
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](2);
+        swapData.swapDeadlines = new uint256[](2);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___LengthMismatch.selector))
+        );
+        cellar.callOnAdaptor(data);
+
+        // Simulate strategist rebalance into pools underlying assets.
+        uint256 daiAmount = priceRouter.getValue(USDC, assets / 3, DAI);
+        uint256 usdtAmount = priceRouter.getValue(USDC, assets / 3, USDT);
+        uint256 usdcAmount = assets / 3;
+
+        deal(address(USDT), address(cellar), usdtAmount);
+        deal(address(DAI), address(cellar), daiAmount);
+        deal(address(USDC), address(cellar), usdcAmount);
+
+        // Now make the lengths right, but mix up USDC and USDT inputs.
+        swapsBeforeJoin = new IVault.SingleSwap[](3);
+        swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
+        swapsBeforeJoin[0].amount = daiAmount;
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDT));
+        swapsBeforeJoin[1].amount = type(uint256).max;
+        swapsBeforeJoin[2].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[2].amount = type(uint256).max;
+
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    BalancerPoolAdaptor.BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch.selector
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        // Now fix USDT USDC order, but replace DAI with FRAX.
+        swapsBeforeJoin = new IVault.SingleSwap[](3);
+        swapsBeforeJoin[0].assetIn = IAsset(address(FRAX));
+        swapsBeforeJoin[0].amount = daiAmount;
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[1].amount = type(uint256).max;
+        swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
+        swapsBeforeJoin[2].amount = type(uint256).max;
+
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    BalancerPoolAdaptor.BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch.selector
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+    }
+
+    function testJoinPoolWithSwapsReverts() external {
+        // Deposit into Cellar.
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate strategist rebalance into pools underlying assets.
+        uint256 daiAmount = priceRouter.getValue(USDC, assets / 3, DAI);
+        uint256 usdtAmount = priceRouter.getValue(USDC, assets / 3, USDT);
+        uint256 usdcAmount = assets / 3;
+
+        deal(address(USDT), address(cellar), usdtAmount);
+        deal(address(DAI), address(cellar), daiAmount);
+        deal(address(USDC), address(cellar), usdcAmount);
+
+        // Have strategist rebalance into boosted USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // First replace BB A DAI with Frax.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+
+        swapsBeforeJoin[0] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_dai)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(DAI)),
+            assetOut: IAsset(address(FRAX)),
+            amount: daiAmount,
+            userData: bytes(abi.encode(0))
+        });
+
+        swapsBeforeJoin[1] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_usdt)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(USDT)),
+            assetOut: IAsset(address(bb_a_usdt)),
+            amount: type(uint256).max,
+            userData: bytes(abi.encode(0))
+        });
+
+        // Create Swap Data.
+        swapsBeforeJoin[2] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_usdc)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(USDC)),
+            assetOut: IAsset(address(bb_a_usdc)),
+            amount: usdcAmount,
+            userData: bytes(abi.encode(0))
+        });
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[0] = block.timestamp;
+        swapData.swapDeadlines[1] = block.timestamp;
+        swapData.swapDeadlines[2] = block.timestamp;
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
+
+        ERC20[] memory baseAssets = new ERC20[](3);
+        baseAssets[0] = DAI;
+        baseAssets[1] = USDC;
+        baseAssets[2] = USDT;
+
+        uint256[] memory baseAmounts = new uint256[](3);
+        baseAmounts[0] = daiAmount;
+        baseAmounts[1] = usdcAmount;
+        baseAmounts[2] = usdtAmount;
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    BalancerPoolAdaptor.BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch.selector
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        // Fix it by setting it back to bb_a_dai, but change swap kind.
+        swapsBeforeJoin[0] = IVault.SingleSwap({
+            poolId: IBasePool(address(bb_a_dai)).getPoolId(),
+            kind: IVault.SwapKind.GIVEN_OUT,
+            assetIn: IAsset(address(DAI)),
+            assetOut: IAsset(address(bb_a_dai)),
+            amount: daiAmount,
+            userData: bytes(abi.encode(0))
+        });
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(BB_A_USD, swapsBeforeJoin, swapData, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___WrongSwapKind.selector))
+        );
+        cellar.callOnAdaptor(data);
+    }
+
+    function testExitPoolReverts() external {
+        // Deposit into Cellar.
+        uint256 assets = 10_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, BB_A_USD);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(BB_A_USD), address(cellar), bptAmount);
+
+        // Have strategist exit pool but try to send funds to an internal balance.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[1] = block.timestamp;
+
+        // We need to swap any linear pool tokens for ERC20s.
+        // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
+        swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
+        swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
+        swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
+        swapsAfterExit[0].assetOut = IAsset(address(DAI));
+        swapsAfterExit[1].assetOut = IAsset(address(USDT));
+        swapsAfterExit[2].assetOut = IAsset(address(USDC));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(bb_a_dai));
+        poolAssets[1] = IAsset(address(bb_a_usdt));
+        poolAssets[2] = IAsset(address(bb_a_usdc));
+        poolAssets[3] = IAsset(address(BB_A_USD));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(0, bptAmount, 1);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: true
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(BB_A_USD, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___InternalBalancesNotSupported.selector)
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        // Change toInternalBalance to false, but mistmatch the array lengths.
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[1] = block.timestamp;
+
+        // We need to swap any linear pool tokens for ERC20s.
+        // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
+        swapsAfterExit = new IVault.SingleSwap[](2);
+        swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
+        swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
+        swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
+        swapsAfterExit[0].assetOut = IAsset(address(DAI));
+        swapsAfterExit[1].assetOut = IAsset(address(USDT));
+
+        // Formulate request.
+        poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(bb_a_dai));
+        poolAssets[1] = IAsset(address(bb_a_usdt));
+        poolAssets[2] = IAsset(address(bb_a_usdc));
+        poolAssets[3] = IAsset(address(BB_A_USD));
+        minAmountsOut = new uint256[](4);
+        userData = abi.encode(0, bptAmount, 1);
+        request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(BB_A_USD, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___LengthMismatch.selector))
+        );
+        cellar.callOnAdaptor(data);
+
+        // Now have strategist try to swap an asset not in the BPT.
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[1] = block.timestamp;
+
+        // We need to swap any linear pool tokens for ERC20s.
+        // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
+        swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
+        swapsAfterExit[1].assetIn = IAsset(address(FRAX));
+        swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
+        swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
+        swapsAfterExit[0].assetOut = IAsset(address(DAI));
+        swapsAfterExit[1].assetOut = IAsset(address(USDT));
+        swapsAfterExit[2].assetOut = IAsset(address(USDC));
+
+        // Formulate request.
+        poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(bb_a_dai));
+        poolAssets[1] = IAsset(address(bb_a_usdt));
+        poolAssets[2] = IAsset(address(bb_a_usdc));
+        poolAssets[3] = IAsset(address(BB_A_USD));
+        minAmountsOut = new uint256[](4);
+        userData = abi.encode(0, bptAmount, 1);
+        request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(BB_A_USD, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    BalancerPoolAdaptor.BalancerPoolAdaptor___SwapTokenAndExpectedTokenMismatch.selector
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        // Now have strategist try to swap with wrong swap kind.
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[1] = block.timestamp;
+
+        // We need to swap any linear pool tokens for ERC20s.
+        // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
+        swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
+        swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
+        swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
+        swapsAfterExit[1].kind = IVault.SwapKind.GIVEN_OUT;
+        swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
+        swapsAfterExit[0].assetOut = IAsset(address(DAI));
+        swapsAfterExit[1].assetOut = IAsset(address(USDT));
+        swapsAfterExit[2].assetOut = IAsset(address(USDC));
+
+        // Formulate request.
+        poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(bb_a_dai));
+        poolAssets[1] = IAsset(address(bb_a_usdt));
+        poolAssets[2] = IAsset(address(bb_a_usdc));
+        poolAssets[3] = IAsset(address(BB_A_USD));
+        minAmountsOut = new uint256[](4);
+        userData = abi.encode(0, bptAmount, 1);
+        request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(BB_A_USD, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___WrongSwapKind.selector))
+        );
+        cellar.callOnAdaptor(data);
+
+        // Now have strategist try to not swap their linear pool tokens.
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+        swapData.swapDeadlines[1] = block.timestamp;
+
+        // We need to swap any linear pool tokens for ERC20s.
+        // We don't set amounts because adaptor will automatically use all the tokens we receive as the amount.
+        swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(bb_a_dai));
+        swapsAfterExit[1].assetIn = IAsset(address(bb_a_usdt));
+        swapsAfterExit[1].poolId = IBasePool(address(bb_a_usdt)).getPoolId();
+        swapsAfterExit[1].kind = IVault.SwapKind.GIVEN_IN;
+        swapsAfterExit[2].assetIn = IAsset(address(bb_a_usdc));
+        swapsAfterExit[0].assetOut = IAsset(address(DAI));
+        swapsAfterExit[1].assetOut = IAsset(address(0));
+        swapsAfterExit[2].assetOut = IAsset(address(USDC));
+
+        // Formulate request.
+        poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(bb_a_dai));
+        poolAssets[1] = IAsset(address(bb_a_usdt));
+        poolAssets[2] = IAsset(address(bb_a_usdc));
+        poolAssets[3] = IAsset(address(BB_A_USD));
+        minAmountsOut = new uint256[](4);
+        userData = abi.encode(0, bptAmount, 1);
+        request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(BB_A_USD, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___UnsupportedTokenNotSwapped.selector))
+        );
+        cellar.callOnAdaptor(data);
+    }
+
+    function testFailTransferEthToCellar() external {
+        // This test verifies that native eth transfers to the cellar will revert.
+        // So even if the strategist somehow manages to make a swap send native eth
+        // to the cellar it will revert.
+
+        deal(address(this), 1 ether);
+        address(cellar).safeTransferETH(1 ether);
+    }
+
+    function testJoinPoolSlippageCheck(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 10_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Have strategist rebalance into vanilla USDC DAI USDT Bpt.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // Create Swap Data.
+        IVault.SingleSwap[] memory swapsBeforeJoin = new IVault.SingleSwap[](3);
+        swapsBeforeJoin[0].assetIn = IAsset(address(DAI));
+        swapsBeforeJoin[1].assetIn = IAsset(address(USDC));
+        swapsBeforeJoin[1].amount = type(uint256).max;
+        swapsBeforeJoin[2].assetIn = IAsset(address(USDT));
+
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+
+        adaptorCalls[0] = _createBytesDataToJoinBalancerPool(vanillaUsdcDaiUsdt, swapsBeforeJoin, swapData, 0);
+
+        data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___Slippage.selector)));
+        cellar.callOnAdaptor(data);
+    }
+
+    function testExitPoolSlippageCheck(uint256 assets) external {
+        // Deposit into Cellar.
+        assets = bound(assets, 0.1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Simulate a vanilla pool deposit by minting cellar bpts.
+        uint256 bptAmount = priceRouter.getValue(USDC, assets, vanillaUsdcDaiUsdt);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(vanillaUsdcDaiUsdt), address(cellar), bptAmount);
+
+        // Have strategist exit pool in 1 token.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+
+        // There are no swaps to be made, so just create empty arrays.
+        BalancerPoolAdaptor.SwapData memory swapData;
+        swapData.minAmountsForSwaps = new uint256[](3);
+        swapData.swapDeadlines = new uint256[](3);
+
+        // There are no swaps needed because we support all the assets we get from the pool.
+        IVault.SingleSwap[] memory swapsAfterExit = new IVault.SingleSwap[](3);
+        swapsAfterExit[0].assetIn = IAsset(address(DAI));
+        swapsAfterExit[1].assetIn = IAsset(address(USDC));
+        swapsAfterExit[2].assetIn = IAsset(address(USDT));
+
+        // Formulate request.
+        IAsset[] memory poolAssets = new IAsset[](4);
+        poolAssets[0] = IAsset(address(DAI));
+        poolAssets[1] = IAsset(address(vanillaUsdcDaiUsdt));
+        poolAssets[2] = IAsset(address(USDC));
+        poolAssets[3] = IAsset(address(USDT));
+        uint256[] memory minAmountsOut = new uint256[](4);
+        bytes memory userData = abi.encode(0, bptAmount, 1);
+        IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+            assets: poolAssets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+
+        adaptorCalls[0] = _createBytesDataToExitBalancerPool(vanillaUsdcDaiUsdt, swapsAfterExit, swapData, request);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(mockBalancerPoolAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(BalancerPoolAdaptor.BalancerPoolAdaptor___Slippage.selector)));
+        cellar.callOnAdaptor(data);
+    }
 
     // ========================================= HELPERS =========================================
 
@@ -1607,58 +1665,6 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
     }
 
-    /**
-     * @notice create data for staking using BalancerPoolAdaptor
-     */
-    function _createBytesDataToStake(
-        address _bpt,
-        address _liquidityGauge,
-        uint256 _amountIn
-    ) public view returns (bytes memory) {
-        return abi.encodeWithSelector(balancerPoolAdaptor.stakeBPT.selector, _bpt, _liquidityGauge, _amountIn);
-    }
-
-    /**
-     * @notice create data for unstaking using BalancerPoolAdaptor
-     */
-    function _createBytesDataToUnstake(
-        address _bpt,
-        address _liquidityGauge,
-        uint256 _amountOut
-    ) public view returns (bytes memory) {
-        return abi.encodeWithSelector(balancerPoolAdaptor.unstakeBPT.selector, _bpt, _liquidityGauge, _amountOut);
-    }
-
-    function _createBytesDataToClaimRewards(address _liquidityGauge) public view returns (bytes memory) {
-        return abi.encodeWithSelector(balancerPoolAdaptor.claimRewards.selector, _liquidityGauge);
-    }
-
-    function _createBytesDataToJoinPool(
-        ERC20 targetBpt,
-        IVault.SingleSwap[] memory swapsBeforeJoin,
-        BalancerPoolAdaptor.SwapData memory swapData,
-        uint256 minimumBpt
-    ) public view returns (bytes memory) {
-        return
-            abi.encodeWithSelector(
-                balancerPoolAdaptor.joinPool.selector,
-                targetBpt,
-                swapsBeforeJoin,
-                swapData,
-                minimumBpt
-            );
-    }
-
-    function _createBytesDataToExitPool(
-        ERC20 targetBpt,
-        IVault.SingleSwap[] memory swapsAfterExit,
-        BalancerPoolAdaptor.SwapData memory swapData,
-        IVault.ExitPoolRequest memory request
-    ) public view returns (bytes memory) {
-        return
-            abi.encodeWithSelector(balancerPoolAdaptor.exitPool.selector, targetBpt, swapsAfterExit, swapData, request);
-    }
-
     function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {
         // Convert Value in to terms of bpt.
         uint256 valueInBpt = priceRouter.getValue(tokenIn, amountIn, bpt);
@@ -1696,8 +1702,4 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 gaugeBalance = gauge.balanceOf(target);
         deal(address(gauge), target, gaugeBalance - amountOut);
     }
-
-    /**
-     * TODO: create helper to make joinPool tests more efficient
-     */
 }

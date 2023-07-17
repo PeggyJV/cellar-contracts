@@ -20,6 +20,10 @@ import { MorphoAaveV3ATokenP2PAdaptor, IMorphoV3, BaseAdaptor } from "src/module
 import { MorphoAaveV3ATokenCollateralAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3ATokenCollateralAdaptor.sol";
 import { MorphoAaveV3DebtTokenAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3DebtTokenAdaptor.sol";
 
+// Balancer
+import { IVault, IAsset, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
+import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 contract AdaptorHelperFunctions {
@@ -253,5 +257,70 @@ contract AdaptorHelperFunctions {
                 tokenToRepay,
                 amountToRepay
             );
+    }
+
+    // ========================================= Balancer FUNCTIONS =========================================
+
+    /**
+     * @notice create data for staking using BalancerPoolAdaptor
+     */
+    function _createBytesDataToStakeBpts(
+        address _bpt,
+        address _liquidityGauge,
+        uint256 _amountIn
+    ) public view returns (bytes memory) {
+        return abi.encodeWithSelector(BalancerPoolAdaptor.stakeBPT.selector, _bpt, _liquidityGauge, _amountIn);
+    }
+
+    /**
+     * @notice create data for staking using BalancerPoolAdaptor
+     */
+    function _createBytesDataToMakeFlashLoanFromBalancer(
+        address[] memory tokens,
+        uint256[] memory amounts,
+        bytes memory data
+    ) public view returns (bytes memory) {
+        return abi.encodeWithSelector(BalancerPoolAdaptor.makeFlashLoan.selector, tokens, amounts, data);
+    }
+
+    /**
+     * @notice create data for unstaking using BalancerPoolAdaptor
+     */
+    function _createBytesDataToUnstakeBpts(
+        address _bpt,
+        address _liquidityGauge,
+        uint256 _amountOut
+    ) public view returns (bytes memory) {
+        return abi.encodeWithSelector(BalancerPoolAdaptor.unstakeBPT.selector, _bpt, _liquidityGauge, _amountOut);
+    }
+
+    function _createBytesDataToClaimBalancerRewards(address _liquidityGauge) public view returns (bytes memory) {
+        return abi.encodeWithSelector(BalancerPoolAdaptor.claimRewards.selector, _liquidityGauge);
+    }
+
+    function _createBytesDataToJoinBalancerPool(
+        ERC20 targetBpt,
+        IVault.SingleSwap[] memory swapsBeforeJoin,
+        BalancerPoolAdaptor.SwapData memory swapData,
+        uint256 minimumBpt
+    ) public view returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                BalancerPoolAdaptor.joinPool.selector,
+                targetBpt,
+                swapsBeforeJoin,
+                swapData,
+                minimumBpt
+            );
+    }
+
+    function _createBytesDataToExitBalancerPool(
+        ERC20 targetBpt,
+        IVault.SingleSwap[] memory swapsAfterExit,
+        BalancerPoolAdaptor.SwapData memory swapData,
+        IVault.ExitPoolRequest memory request
+    ) public view returns (bytes memory) {
+        return
+            abi.encodeWithSelector(BalancerPoolAdaptor.exitPool.selector, targetBpt, swapsAfterExit, swapData, request);
     }
 }
