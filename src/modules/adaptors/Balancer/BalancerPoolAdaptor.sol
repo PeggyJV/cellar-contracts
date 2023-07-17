@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IBalancerQueries } from "src/interfaces/external/Balancer/IBalancerQueries.sol";
-import { IVault, IERC20, IAsset } from "src/interfaces/external/Balancer/IVault.sol";
+import { IVault, IERC20, IAsset, IFlashLoanRecipient } from "src/interfaces/external/Balancer/IVault.sol";
 import { IStakingLiquidityGauge } from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
 import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
 import { IBasePool } from "src/interfaces/external/Balancer/typically-npm/IBasePool.sol";
@@ -459,6 +459,11 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     function claimRewards(address gauge) public {
         minter.mint(gauge);
+    }
+
+    // TODO natspec
+    function makeFlashLoan(IERC20[] memory tokens, uint256[] memory amounts, bytes memory data) public {
+        vault.flashLoan(IFlashLoanRecipient(address(this)), tokens, amounts, data);
     }
 
     //============================================ Helper Functions ===========================================
