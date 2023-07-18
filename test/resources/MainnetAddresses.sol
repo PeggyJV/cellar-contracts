@@ -2,6 +2,7 @@
 pragma solidity 0.8.16;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { CErc20 } from "src/interfaces/external/ICompound.sol";
 
 contract MainnetAddresses {
     // Sommelier
@@ -23,6 +24,7 @@ contract MainnetAddresses {
     ERC20 public STETH = ERC20(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
     ERC20 public FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
     ERC20 public BAL = ERC20(0xba100000625a3754423978a60c9317c58a424e3D);
+    ERC20 public COMP = ERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -32,6 +34,7 @@ contract MainnetAddresses {
     address public STETH_USD_FEED = 0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8;
     address public DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
     address public USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
+    address public COMP_USD_FEED = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
 
     // Aave V2 Tokens
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
@@ -70,4 +73,9 @@ contract MainnetAddresses {
     address public vault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     address public relayer = 0xfeA793Aa415061C483D2390414275AD314B3F621;
     address public minter = 0x239e55F427D44C3cc793f49bFB507ebe76638a2b;
+
+    // Compound V2
+    CErc20 public cDAI = CErc20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);
+    CErc20 public cUSDC = CErc20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
+    CErc20 public cTUSD = CErc20(0x12392F67bdf24faE0AF363c24aC620a2f67DAd86);
 }

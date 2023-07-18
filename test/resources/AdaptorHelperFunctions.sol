@@ -24,6 +24,10 @@ import { MorphoAaveV3DebtTokenAdaptor } from "src/modules/adaptors/Morpho/Morpho
 import { IVault, IAsset, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
 import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolAdaptor.sol";
 
+// Compound
+import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
+import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 contract AdaptorHelperFunctions {
@@ -322,5 +326,21 @@ contract AdaptorHelperFunctions {
     ) public view returns (bytes memory) {
         return
             abi.encodeWithSelector(BalancerPoolAdaptor.exitPool.selector, targetBpt, swapsAfterExit, swapData, request);
+    }
+
+    // ========================================= Compound V2 FUNCTIONS =========================================
+
+    function _createBytesDataToLendOnComnpoundV2(
+        CErc20 market,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CTokenAdaptor.depositToCompound.selector, market, amountToLend);
+    }
+
+    function _createBytesDataToWithdrawFromCompoundV2(
+        CErc20 market,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CTokenAdaptor.withdrawFromCompound.selector, market, amountToWithdraw);
     }
 }
