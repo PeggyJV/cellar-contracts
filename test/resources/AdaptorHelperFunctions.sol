@@ -28,6 +28,9 @@ import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolA
 import { CTokenAdaptor } from "src/modules/adaptors/Compound/CTokenAdaptor.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 
+// FeesAndReserves
+import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 contract AdaptorHelperFunctions {
@@ -342,5 +345,39 @@ contract AdaptorHelperFunctions {
         uint256 amountToWithdraw
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.withdrawFromCompound.selector, market, amountToWithdraw);
+    }
+
+    // ========================================= Fees And Reserves FUNCTIONS =========================================
+
+    // Make sure that if a strategists makes a huge deposit before calling log fees, it doesn't affect fee pay out
+    function _createBytesDataToSetupFeesAndReserves(
+        uint32 targetAPR,
+        uint32 performanceFee
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.setupMetaData.selector, targetAPR, performanceFee);
+    }
+
+    function _createBytesDataToChangeUpkeepFrequency(uint64 newFrequency) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepFrequency.selector, newFrequency);
+    }
+
+    function _createBytesDataToChangeUpkeepMaxGas(uint64 newMaxGas) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepMaxGas.selector, newMaxGas);
+    }
+
+    function _createBytesDataToAddToReserves(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.addAssetsToReserves.selector, amount);
+    }
+
+    function _createBytesDataToWithdrawFromReserves(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.withdrawAssetsFromReserves.selector, amount);
+    }
+
+    function _createBytesDataToPrepareFees(uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.prepareFees.selector, amount);
+    }
+
+    function _createBytesDataToUpdateManagementFee(uint32 newFee) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FeesAndReservesAdaptor.updateManagementFee.selector, newFee);
     }
 }

@@ -1,73 +1,40 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
-import { Cellar } from "src/base/Cellar.sol";
-import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
-import { AaveDebtTokenAdaptor, BaseAdaptor } from "src/modules/adaptors/Aave/AaveDebtTokenAdaptor.sol";
-import { IPool } from "src/interfaces/external/IPool.sol";
-import { Registry } from "src/Registry.sol";
-import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
-import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
-import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
-import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { FakeFeesAndReserves } from "src/mocks/FakeFeesAndReserves.sol";
-import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
-import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
-import { Math } from "src/utils/Math.sol";
+// Import Everything from Starter file.
+import "test/resources/MainnetStarter.t.sol";
 
-contract FeesAndReservesTest is Test {
+import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
+
+contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
     FeesAndReservesAdaptor private feesAndReservesAdaptor;
-    ERC20Adaptor private erc20Adaptor;
     Cellar private cellar;
-    PriceRouter private priceRouter;
-    Registry private registry;
-    SwapRouter private swapRouter;
     FeesAndReserves private far;
-    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
 
-    address private immutable strategist = vm.addr(0xBEEF);
     address private immutable cosmos = vm.addr(0xCAAA);
 
-    uint8 private constant CHAINLINK_DERIVATIVE = 1;
+    uint32 private usdcPosition = 1;
 
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-
-    address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-
-    IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-
-    // Chainlink PriceFeeds
-    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
-    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
-    // Note this is the BTC USD data feed, but we assume the risk that WBTC depegs from BTC.
-    address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
-    address private TUSD_USD_FEED = 0xec746eCF986E2927Abd291a2A1716c940100f8Ba;
-
-    address private automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
-    address private fastGasFeed = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
-
-    uint32 private usdcPosition;
+    uint256 initialAssets;
 
     function setUp() external {
-        erc20Adaptor = new ERC20Adaptor();
-        priceRouter = new PriceRouter(registry, WETH);
-        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-        registry = new Registry(address(this), address(swapRouter), address(priceRouter));
+        // Setup forked environment.
+        string memory rpcKey = "MAINNET_RPC_URL";
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
+
+        // Run Starter setUp code.
+        _setUp();
+
         far = new FeesAndReserves(address(this), automationRegistry, fastGasFeed);
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
         feesAndReservesAdaptor = new FeesAndReservesAdaptor(address(far));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor = PriceRouter.ChainlinkDerivativeStorage({
@@ -88,46 +55,26 @@ contract FeesAndReservesTest is Test {
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
         // Setup Cellar:
-        // Cellar positions array.
-        uint32[] memory positions = new uint32[](1);
-        uint32[] memory debtPositions;
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(erc20Adaptor));
         registry.trustAdaptor(address(feesAndReservesAdaptor));
-        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
+        registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
 
-        positions[0] = usdcPosition;
+        string memory cellarName = "FeesAndReserves Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
 
-        bytes[] memory positionConfigs = new bytes[](1);
-        bytes[] memory debtConfigs;
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
-        cellar = new Cellar(
-            registry,
-            USDC,
-            "FAR Cellar",
-            "FAR-CLR",
-            abi.encode(
-                positions,
-                debtPositions,
-                positionConfigs,
-                debtConfigs,
-                usdcPosition,
-                strategist,
-                type(uint128).max,
-                type(uint128).max
-            )
-        );
+        cellar.setStrategistPayoutAddress(strategist);
 
         cellar.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
-        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+        initialAssets = cellar.totalAssets();
     }
 
     function testPositiveYield() external {
@@ -161,9 +108,9 @@ contract FeesAndReservesTest is Test {
             timestamp: uint64(block.timestamp),
             reserves: 0,
             exactHighWatermark: 1e27,
-            totalAssets: assets,
+            totalAssets: assets + initialAssets,
             feesOwed: 0,
-            cellarDecimals: 18,
+            cellarDecimals: 6,
             reserveAssetDecimals: 6,
             performanceFee: 0.2e4
         });
@@ -213,7 +160,7 @@ contract FeesAndReservesTest is Test {
         // Strategist swaps WETH yield into USDC, then adds it to reserves.
         data = new Cellar.AdaptorCall[](2);
         bytes[] memory adaptorCalls0 = new bytes[](1);
-        adaptorCalls0[0] = _createBytesDataForSwap(WETH, USDC, 500, 1e18);
+        adaptorCalls0[0] = _createBytesDataForSwapWithUniv3(WETH, USDC, 500, 1e18);
         data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls0 });
 
         bytes[] memory adaptorCalls1 = new bytes[](1);
@@ -338,7 +285,7 @@ contract FeesAndReservesTest is Test {
 
         uint256 totalSupply = cellar.totalSupply();
         // Calculate Share price normalized to 27 decimals.
-        uint256 currentSharePrice = cellar.totalAssets().changeDecimals(6, 27).mulDivDown(10 ** 18, totalSupply);
+        uint256 currentSharePrice = cellar.totalAssets().changeDecimals(6, 27).mulDivDown(10 ** 6, totalSupply);
 
         // Reset HWM halfway.
         uint256 expectedHWM = currentSharePrice + ((currentHWM - currentSharePrice) / 2);
@@ -346,7 +293,7 @@ contract FeesAndReservesTest is Test {
 
         metaData = far.getMetaData(cellar);
 
-        assertEq(metaData.exactHighWatermark, expectedHWM, "Stored HWM should equal expected.");
+        assertApproxEqAbs(metaData.exactHighWatermark, expectedHWM, 1, "Stored HWM should equal expected.");
 
         // Make sure Cellars fees owed are reset.
         assertEq(metaData.feesOwed, 0, "Fees owed should have been reset.");
@@ -515,7 +462,7 @@ contract FeesAndReservesTest is Test {
 
         FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
 
-        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+        assertApproxEqAbs(metaData.feesOwed, expectedFee, 1, "Fees owed should equal expected.");
     }
 
     // no yield earned w performance fees
@@ -608,6 +555,8 @@ contract FeesAndReservesTest is Test {
         deal(address(USDC), address(this), totalAssets);
         cellar.deposit(totalAssets, address(this));
 
+        totalAssets = cellar.totalAssets();
+
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
         bytes memory performData;
@@ -669,6 +618,8 @@ contract FeesAndReservesTest is Test {
         deal(address(USDC), address(this), totalAssets);
         cellar.deposit(totalAssets, address(this));
 
+        totalAssets = cellar.totalAssets();
+
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
         bytes memory performData;
@@ -696,7 +647,7 @@ contract FeesAndReservesTest is Test {
 
         FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
 
-        assertEq(metaData.feesOwed, expectedFee, "Fees owed should equal expected.");
+        assertApproxEqAbs(metaData.feesOwed, expectedFee, 1, "Fees owed should equal expected.");
     }
 
     // no yield earned w both fees
@@ -710,6 +661,8 @@ contract FeesAndReservesTest is Test {
         // Add assets to the cellar.
         deal(address(USDC), address(this), totalAssets);
         cellar.deposit(totalAssets, address(this));
+
+        totalAssets = cellar.totalAssets();
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -803,6 +756,8 @@ contract FeesAndReservesTest is Test {
         deal(address(USDC), address(this), totalAssets);
         cellar.deposit(totalAssets, address(this));
 
+        totalAssets = cellar.totalAssets();
+
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
         bytes memory performData;
@@ -828,9 +783,9 @@ contract FeesAndReservesTest is Test {
     }
 
     function testMultipleCellarsServedByOneUpkeep() external {
-        Cellar cellarA = _createCellar();
-        Cellar cellarB = _createCellar();
-        Cellar cellarC = _createCellar();
+        Cellar cellarA = _createFARCellar("1");
+        Cellar cellarB = _createFARCellar("2");
+        Cellar cellarC = _createFARCellar("3");
 
         Cellar[] memory cellars = new Cellar[](3);
         cellars[0] = cellarA;
@@ -943,40 +898,17 @@ contract FeesAndReservesTest is Test {
 
     // ========================================= HELPER FUNCTIONS =========================================
 
-    function _createCellar() internal returns (Cellar target) {
+    function _createFARCellar(string memory cellarName) internal returns (Cellar target) {
         // Setup Cellar:
-        // Cellar positions array.
-        uint32[] memory positions = new uint32[](1);
-        uint32[] memory debtPositions;
 
-        positions[0] = usdcPosition;
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
 
-        bytes[] memory positionConfigs = new bytes[](1);
-        bytes[] memory debtConfigs;
-
-        target = new Cellar(
-            registry,
-            USDC,
-            "FAR Cellar",
-            "FAR-CLR",
-            abi.encode(
-                positions,
-                debtPositions,
-                positionConfigs,
-                debtConfigs,
-                usdcPosition,
-                strategist,
-                type(uint128).max,
-                type(uint128).max
-            )
-        );
+        target = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
         target.addAdaptorToCatalogue(address(feesAndReservesAdaptor));
 
         USDC.safeApprove(address(target), type(uint256).max);
-
-        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        stdstore.target(address(target)).sig(target.shareLockPeriod.selector).checked_write(uint256(0));
 
         // Add assets to the cellar.
         deal(address(USDC), address(this), 100_000e6);
@@ -1047,53 +979,6 @@ contract FeesAndReservesTest is Test {
             uint256 newFeesOwed = targetMetaData.feesOwed;
             assertApproxEqAbs((newFeesOwed - currentFeesOwed), expectedFeesOwed, 1, "Fees owed differs from expected.");
         } else assertEq(upkeepNeeded, false, "Upkeep should not be needed.");
-    }
-
-    function _createBytesDataForSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee,
-        uint256 fromAmount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        bytes memory params = abi.encode(path, poolFees, fromAmount, 0);
-        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
-    }
-
-    // Make sure that if a strategists makes a huge deposit before calling log fees, it doesn't affect fee pay out
-    function _createBytesDataToSetupFeesAndReserves(
-        uint32 targetAPR,
-        uint32 performanceFee
-    ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.setupMetaData.selector, targetAPR, performanceFee);
-    }
-
-    function _createBytesDataToChangeUpkeepFrequency(uint64 newFrequency) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepFrequency.selector, newFrequency);
-    }
-
-    function _createBytesDataToChangeUpkeepMaxGas(uint64 newMaxGas) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.changeUpkeepMaxGas.selector, newMaxGas);
-    }
-
-    function _createBytesDataToAddToReserves(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.addAssetsToReserves.selector, amount);
-    }
-
-    function _createBytesDataToWithdrawFromReserves(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.withdrawAssetsFromReserves.selector, amount);
-    }
-
-    function _createBytesDataToPrepareFees(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.prepareFees.selector, amount);
-    }
-
-    function _createBytesDataToUpdateManagementFee(uint32 newFee) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(FeesAndReservesAdaptor.updateManagementFee.selector, newFee);
     }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
