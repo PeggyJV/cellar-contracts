@@ -1,109 +1,60 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { MockCellar, Cellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
-import { Registry, PriceRouter, IGravity } from "src/base/Cellar.sol";
-import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
-import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
-import { MockERC4626 } from "src/mocks/MockERC4626.sol";
-import { MockGravity } from "src/mocks/MockGravity.sol";
-import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
-import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
-import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
-import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
-import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
 import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol";
 import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
-import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 import "@uniswapV3C/libraries/FixedPoint128.sol";
 import "@uniswapV3C/libraries/FullMath.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
+import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 
-import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
-import { Math } from "src/utils/Math.sol";
+// Import Everything from Starter file.
+import "test/resources/MainnetStarter.t.sol";
+
+import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
 // Will test the swapping and cellar position management using adaptors
-contract UniswapV3AdaptorTest is Test, ERC721Holder {
+contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC721Holder {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
     using Address for address;
 
-    MockCellar private cellar;
-    MockGravity private gravity;
-
-    PriceRouter private priceRouter;
+    Cellar private cellar;
     SwapRouter private swapRouter;
-
-    Registry public registry;
-
-    uint8 private constant CHAINLINK_DERIVATIVE = 1;
-
-    address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-
-    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-
-    ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
-
-    ERC20 private LINK = ERC20(0x514910771AF9Ca656af840dff83E8264EcF986CA);
-
-    ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
-
-    address private immutable strategist = vm.addr(0xBEEF);
-
-    address private immutable cosmos = vm.addr(0xCAAA);
-
     UniswapV3Adaptor private uniswapV3Adaptor;
-    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
-    ERC20Adaptor private erc20Adaptor;
     UniswapV3PositionTracker private tracker;
 
-    // Chainlink PriceFeeds
-    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
-    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
-    address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
-    address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
-
-    uint32 private usdcPosition;
-    uint32 private wethPosition;
-    uint32 private daiPosition;
-    uint32 private usdcDaiPosition;
-    uint32 private usdcWethPosition;
+    uint32 private usdcPosition = 1;
+    uint32 private wethPosition = 2;
+    uint32 private daiPosition = 3;
+    uint32 private usdcDaiPosition = 4;
+    uint32 private usdcWethPosition = 5;
 
     function setUp() external {
-        // Setup Registry and modules:
-        priceRouter = new PriceRouter(registry, WETH);
+        // Setup forked environment.
+        string memory rpcKey = "MAINNET_RPC_URL";
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
+
+        // Run Starter setUp code.
+        _setUp();
+
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
-        gravity = new MockGravity();
         tracker = new UniswapV3PositionTracker(positionManager);
         uniswapV3Adaptor = new UniswapV3Adaptor(address(positionManager), address(tracker));
-        erc20Adaptor = new ERC20Adaptor();
-
-        registry = new Registry(
-            // Set this contract to the Gravity Bridge for testing to give the permissions usually
-            // given to the Gravity Bridge to this contract.
-            address(this),
-            address(swapRouter),
-            address(priceRouter)
-        );
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -121,41 +72,34 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
         priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
-        // Cellar positions array.
-        uint32[] memory positions = new uint32[](5);
-        uint32[] memory debtPositions;
-
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(uniswapV3Adaptor));
-        registry.trustAdaptor(address(erc20Adaptor));
-        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
-        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
-        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
-        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC));
-        usdcWethPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, WETH));
+        registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
+        registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
+        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
+        registry.trustPosition(usdcDaiPosition, address(uniswapV3Adaptor), abi.encode(DAI, USDC));
+        registry.trustPosition(usdcWethPosition, address(uniswapV3Adaptor), abi.encode(USDC, WETH));
 
-        positions[0] = usdcPosition;
-        positions[1] = daiPosition;
-        positions[2] = wethPosition;
-        positions[3] = usdcDaiPosition;
-        positions[4] = usdcWethPosition;
+        string memory cellarName = "UniswapV3 Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
 
-        bytes[] memory positionConfigs = new bytes[](5);
-        bytes[] memory debtConfigs;
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
-        cellar = new MockCellar(
-            registry,
-            USDC,
-            "Multiposition Cellar LP Token",
-            "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
-        );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
 
-        // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
+        cellar.addPositionToCatalogue(daiPosition);
+        cellar.addPositionToCatalogue(wethPosition);
+        cellar.addPositionToCatalogue(usdcDaiPosition);
+        cellar.addPositionToCatalogue(usdcWethPosition);
+
+        cellar.addPosition(1, daiPosition, abi.encode(0), false);
+        cellar.addPosition(1, wethPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdcDaiPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdcWethPosition, abi.encode(0), false);
+
         cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
@@ -163,9 +107,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
-
-        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
 
     // ========================================== POSITION MANAGEMENT TEST ==========================================
@@ -380,7 +321,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToOpenRangeOrder(DAI, USDC, 100, 0, assets);
+        adaptorCalls[0] = _createBytesDataToOpenRangeOrder(DAI, USDC, 100, 0, type(uint256).max);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -597,7 +538,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
     // ========================================== REVERT TEST ==========================================
     function testUsingUntrackedLPPosition() external {
         // Remove USDC WETH LP position from cellar.
-        cellar.removePosition(4, false);
+        cellar.removePosition(1, false);
 
         // Strategist tries to move funds into USDC WETH LP position.
         uint256 assets = 100_000e6;
@@ -642,7 +583,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(WBTC)))
         );
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
+        registry.trustPosition(101, address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
     }
 
     function testAddingPositionWithUnsupportedToken1Reverts() external {
@@ -656,7 +597,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(USDT)))
         );
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
+        registry.trustPosition(101, address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
     }
 
     function testUsingLPTokensNotOwnedByCellarOrTokensThatDoNotExist() external {
@@ -1009,9 +950,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
-
-        // Advance time so users can withdraw.
-        vm.roll(block.timestamp + cellar.shareLockPeriod());
 
         // Have users exit the cellar.
         uint256 whaleAssetsToWithdraw = cellar.maxWithdraw(whale);

@@ -19,8 +19,6 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
     Cellar private cellar;
     FeesAndReserves private far;
 
-    address private immutable cosmos = vm.addr(0xCAAA);
-
     uint32 private usdcPosition = 1;
 
     uint256 initialAssets;

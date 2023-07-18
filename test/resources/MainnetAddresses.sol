@@ -8,6 +8,7 @@ contract MainnetAddresses {
     // Sommelier
     address public gravityBridgeAddress = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
+    address public cosmos = address(0xCAAA);
 
     // DeFi Ecosystem
     address public uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -25,6 +26,7 @@ contract MainnetAddresses {
     ERC20 public FRAX = ERC20(0x853d955aCEf822Db058eb8505911ED77F175b99e);
     ERC20 public BAL = ERC20(0xba100000625a3754423978a60c9317c58a424e3D);
     ERC20 public COMP = ERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
+    ERC20 public LINK = ERC20(0x514910771AF9Ca656af840dff83E8264EcF986CA);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
