@@ -75,7 +75,6 @@ contract RedstonePriceFeedExtension is Extension {
         uint256 timeSinceLastUpdate = block.timestamp - updatedAt;
         if (timeSinceLastUpdate > stor.heartbeat) revert RedstonePriceFeedExtension__STALE_PRICE();
 
-        // TODO confirm that answer is given in USD with 8 decimals.
         uint256 price = stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
         if (price == 0) revert RedstonePriceFeedExtension__ZERO_PRICE();
         return price;
