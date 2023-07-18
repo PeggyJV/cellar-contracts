@@ -118,7 +118,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -149,7 +149,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         uint24 fee = 500;
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, fee, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, fee, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
         uint256 wethOut = priceRouter.getValue(USDC, 50_000e6, WETH);
@@ -178,7 +178,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -208,7 +208,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 100_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 100_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -248,7 +248,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
         {
@@ -278,7 +278,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -296,8 +296,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         cellar.setRebalanceDeviation(0.1e18);
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 10_000e6);
-        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 10_000e18);
+        adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 3000, 10_000e6);
+        adaptorCalls[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 3000, 10_000e18);
         data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -338,8 +338,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](2);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, assets / 4);
-            adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, assets / 4);
+            adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, assets / 4);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -471,7 +471,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -490,8 +490,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
         bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 10_000e6);
-        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 10_000e18);
+        adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 3000, 10_000e6);
+        adaptorCalls[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 3000, 10_000e18);
         data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -670,8 +670,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
 
             {
                 bytes[] memory adaptorCalls = new bytes[](2);
-                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, usdcToUse);
                 data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
             }
 
@@ -697,8 +697,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
 
             {
                 bytes[] memory adaptorCalls = new bytes[](2);
-                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, usdcToUse);
                 data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
             }
 
@@ -834,8 +834,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
 
             {
                 bytes[] memory adaptorCalls = new bytes[](2);
-                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, usdcToUse);
                 data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
             }
 
@@ -944,8 +944,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         {
             bytes[] memory adaptorCalls = new bytes[](2);
 
-            adaptorCalls[0] = _createBytesDataForSwap(DAI, USDC, 100, DAI.balanceOf(address(cellar)));
-            adaptorCalls[1] = _createBytesDataForSwap(WETH, USDC, 500, WETH.balanceOf(address(cellar)));
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(DAI, USDC, 100, DAI.balanceOf(address(cellar)));
+            adaptorCalls[1] = _createBytesDataForSwapWithUniv3(WETH, USDC, 500, WETH.balanceOf(address(cellar)));
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
@@ -1102,7 +1102,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -1196,7 +1196,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -1241,7 +1241,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -1342,20 +1342,6 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         lower = tick - (tick % spacing);
         lower = lower - ((spacing * size) / 2);
         upper = lower + spacing * size;
-    }
-
-    function _createBytesDataForSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee,
-        uint256 fromAmount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToOpenLP(
