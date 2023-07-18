@@ -36,6 +36,7 @@ contract MainnetAddresses {
     address public USDT_USD_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
     address public COMP_USD_FEED = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
     address public fastGasFeed = 0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C;
+    address public FRAX_USD_FEED = 0xB9E1E3A9feFf48998E45Fa90847ed4D467E8BcfD;
 
     // Aave V2 Tokens
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
@@ -82,4 +83,10 @@ contract MainnetAddresses {
 
     // Chainlink Automation Registry
     address public automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+
+    // FraxLend Pairs
+    address public FXS_FRAX_PAIR = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
+    address public FPI_FRAX_PAIR = 0x74F82Bd9D0390A4180DaaEc92D64cf0708751759;
+    address public SFRXETH_FRAX_PAIR = 0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15;
+    address public WETH_FRAX_PAIR = 0x794F6B13FBd7EB7ef10d1ED205c9a416910207Ff;
 }

@@ -31,6 +31,9 @@ import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/IC
 // FeesAndReserves
 import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/FeesAndReservesAdaptor.sol";
 
+// FraxLend
+import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 contract AdaptorHelperFunctions {
@@ -379,5 +382,32 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToUpdateManagementFee(uint32 newFee) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FeesAndReservesAdaptor.updateManagementFee.selector, newFee);
+    }
+
+    // ========================================= FraxLend FUNCTIONS =========================================
+
+    function _createBytesDataToLendOnFraxLend(
+        address fToken,
+        uint256 amountToDeposit
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FTokenAdaptor.lendFrax.selector, fToken, amountToDeposit);
+    }
+
+    function _createBytesDataToRedeemFromFraxLend(
+        address fToken,
+        uint256 amountToRedeem
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FTokenAdaptor.redeemFraxShare.selector, fToken, amountToRedeem);
+    }
+
+    function _createBytesDataToWithdrawFromFraxLend(
+        address fToken,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FTokenAdaptor.withdrawFrax.selector, fToken, amountToWithdraw);
+    }
+
+    function _createBytesDataToCallAddInterestOnFraxLend(address fToken) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(FTokenAdaptor.callAddInterest.selector, fToken);
     }
 }
