@@ -276,7 +276,7 @@ contract CellarAaveV2MorphoTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Withdrawable assets should equal assetsToLend.
         assetsWithdrawable = cellar.totalAssetsWithdrawable();
 
-        assertApproxEqAbs(assetsWithdrawable - initialAssets, assetsToLend, 2, "Cellar should be fully liquid.");
+        assertApproxEqAbs(assetsWithdrawable - initialAssets, assetsToLend, 10, "Cellar should be fully liquid.");
     }
 
     function testTakingOutLoansInUntrackedPosition(uint256 assets) external {

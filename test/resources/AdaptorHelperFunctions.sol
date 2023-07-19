@@ -34,6 +34,9 @@ import { FeesAndReservesAdaptor } from "src/modules/adaptors/FeesAndReserves/Fee
 // FraxLend
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
 
+// Sommelier
+import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 contract AdaptorHelperFunctions {
@@ -409,5 +412,11 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToCallAddInterestOnFraxLend(address fToken) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FTokenAdaptor.callAddInterest.selector, fToken);
+    }
+
+    // ========================================= FraxLend FUNCTIONS =========================================
+
+    function _createBytesDataToDepositToCellar(address cellar, uint256 assets) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CellarAdaptor.depositToCellar.selector, cellar, assets);
     }
 }

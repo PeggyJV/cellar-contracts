@@ -1,164 +1,154 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { MockCellarImplementation, ERC4626, ERC20 } from "src/mocks/MockCellarImplementation.sol";
-import { MockCellar } from "src/mocks/MockCellar.sol";
-import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
-import { CellarFactory, Cellar } from "src/CellarFactory.sol";
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
-import { Registry, PriceRouter, IGravity } from "src/base/Cellar.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
-import { MockExchange } from "src/mocks/MockExchange.sol";
-import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { MockERC4626 } from "src/mocks/MockERC4626.sol";
 import { MockGravity } from "src/mocks/MockGravity.sol";
 import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
-import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { ERC20DebtAdaptor } from "src/mocks/ERC20DebtAdaptor.sol";
+import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 
-import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
-import { Math } from "src/utils/Math.sol";
+// Import Everything from Starter file.
+import "test/resources/MainnetStarter.t.sol";
 
-contract CellarTest is Test {
+import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
+
+contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
-    MockCellarImplementation private cellar;
-    CellarFactory private factory;
-    MockCellarImplementation private implementation;
-    MockGravity private gravity;
-
-    MockExchange private exchange;
-    MockPriceRouter private priceRouter;
-    SwapRouter private swapRouter;
-
-    Registry private registry;
-
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    MockERC4626 private usdcCLR;
-
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    MockERC4626 private wethCLR;
-
-    ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
-    MockERC4626 private wbtcCLR;
-
-    ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
-
-    address private immutable strategist = vm.addr(0xBEEF);
-
-    address private immutable cosmos = vm.addr(0xCAAA);
+    Cellar private cellar;
+    Cellar private usdcCLR;
+    Cellar private wethCLR;
+    Cellar private wbtcCLR;
 
     CellarAdaptor private cellarAdaptor;
-    ERC20Adaptor private erc20Adaptor;
 
-    uint32 private usdcPosition;
-    uint32 private wethPosition;
-    uint32 private usdcCLRPosition;
-    uint32 private wethCLRPosition;
-    uint32 private wbtcCLRPosition;
+    MockDataFeed private mockUsdcUsd;
+    MockDataFeed private mockWethUsd;
+    MockDataFeed private mockWbtcUsd;
+    MockDataFeed private mockUsdtUsd;
+
+    uint32 private usdcPosition = 1;
+    uint32 private wethPosition = 2;
+    uint32 private wbtcPosition = 3;
+    uint32 private usdcCLRPosition = 4;
+    uint32 private wethCLRPosition = 5;
+    uint32 private wbtcCLRPosition = 6;
+    uint32 private usdtPosition = 7;
+
+    uint256 private initialAssets;
+    uint256 private initialShares;
 
     function setUp() external {
-        usdcCLR = new MockERC4626(USDC, "USDC Cellar LP Token", "USDC-CLR", 6);
-        vm.label(address(usdcCLR), "usdcCLR");
-        wethCLR = new MockERC4626(WETH, "WETH Cellar LP Token", "WETH-CLR", 18);
-        vm.label(address(wethCLR), "wethCLR");
-        wbtcCLR = new MockERC4626(WBTC, "WBTC Cellar LP Token", "WBTC-CLR", 8);
-        vm.label(address(wbtcCLR), "wbtcCLR");
-        // Setup Registry and modules:
-        priceRouter = new MockPriceRouter();
-        exchange = new MockExchange(priceRouter);
-        swapRouter = new SwapRouter(IUniswapV2Router(address(exchange)), IUniswapV3Router(address(exchange)));
-        gravity = new MockGravity();
+        // Setup forked environment.
+        string memory rpcKey = "MAINNET_RPC_URL";
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
+
+        // Run Starter setUp code.
+        _setUp();
+
+        mockUsdcUsd = new MockDataFeed(USDC_USD_FEED);
+        mockWethUsd = new MockDataFeed(WETH_USD_FEED);
+        mockWbtcUsd = new MockDataFeed(WBTC_USD_FEED);
+        mockUsdtUsd = new MockDataFeed(USDT_USD_FEED);
         cellarAdaptor = new CellarAdaptor();
-        erc20Adaptor = new ERC20Adaptor();
-        registry = new Registry(
-            // Set this contract to the Gravity Bridge for testing to give the permissions usually
-            // given to the Gravity Bridge to this contract.
-            address(this),
-            address(swapRouter),
-            address(priceRouter)
-        );
+
+        // Setup pricing
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+
+        PriceRouter.AssetSettings memory settings;
+
+        uint256 price = uint256(mockUsdcUsd.latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockUsdcUsd));
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(mockWethUsd.latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockWethUsd));
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
+        price = uint256(mockWbtcUsd.latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockWbtcUsd));
+        priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
+
+        price = uint256(mockUsdtUsd.latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockUsdtUsd));
+        priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
+
         // Setup exchange rates:
         // USDC Simulated Price: $1
         // WETH Simulated Price: $2000
         // WBTC Simulated Price: $30,000
-        priceRouter.setExchangeRate(USDC, USDC, 1e6);
-        priceRouter.setExchangeRate(WETH, WETH, 1e18);
-        priceRouter.setExchangeRate(WBTC, WBTC, 1e8);
-        priceRouter.setExchangeRate(USDC, WETH, 0.0005e18);
-        priceRouter.setExchangeRate(WETH, USDC, 2000e6);
-        priceRouter.setExchangeRate(USDC, WBTC, 0.00003333e8);
-        priceRouter.setExchangeRate(WBTC, USDC, 30_000e6);
-        priceRouter.setExchangeRate(WETH, WBTC, 0.06666666e8);
-        priceRouter.setExchangeRate(WBTC, WETH, 15e18);
-        priceRouter.setPrice(USDC, 1e8);
-        priceRouter.setPrice(WETH, 2_000e8);
-        priceRouter.setPrice(WBTC, 30_000e8);
-        priceRouter.supportAsset(USDC);
-        priceRouter.supportAsset(WETH);
-        priceRouter.supportAsset(WBTC);
-        // Cellar positions array.
-        uint32[] memory positions = new uint32[](5);
-        // Add adaptors and positions to the registry.
+        mockUsdcUsd.setMockAnswer(1e8);
+        mockWethUsd.setMockAnswer(2_000e8);
+        mockWbtcUsd.setMockAnswer(30_000e8);
+        mockUsdtUsd.setMockAnswer(1e8);
+
+        // Add adaptors and ERC20 positions to the registry.
         registry.trustAdaptor(address(cellarAdaptor));
-        registry.trustAdaptor(address(erc20Adaptor));
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
-        usdcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(usdcCLR));
-        wethCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wethCLR));
-        wbtcCLRPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wbtcCLR));
-        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
-        positions[0] = usdcPosition;
-        positions[1] = usdcCLRPosition;
-        positions[2] = wethCLRPosition;
-        positions[3] = wbtcCLRPosition;
-        positions[4] = wethPosition;
-        uint32[] memory debtPositions;
-        bytes[] memory debtConfigs;
-        bytes[] memory positionConfigs = new bytes[](5);
-        positionConfigs[1] = abi.encode(true);
-        positionConfigs[2] = abi.encode(true);
-        positionConfigs[3] = abi.encode(true);
-        factory = new CellarFactory();
-        factory.adjustIsDeployer(address(this), true);
-        implementation = new MockCellarImplementation(registry);
-        bytes memory initializeCallData = abi.encode(
-            address(this),
-            registry,
-            USDC,
-            "Multiposition Cellar LP Token",
-            "multiposition-CLR",
-            usdcPosition,
-            abi.encode(0),
-            strategist
-        );
-        factory.addImplementation(address(implementation), 2, 0);
-        address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(2)));
-        cellar = MockCellarImplementation(clone);
+        registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
+        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
+        registry.trustPosition(wbtcPosition, address(erc20Adaptor), abi.encode(WBTC));
+        registry.trustPosition(usdtPosition, address(erc20Adaptor), abi.encode(USDT));
+
+        // Create Dummy Cellars.
+        string memory cellarName = "Dummy Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
+
+        usdcCLR = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        vm.label(address(usdcCLR), "usdcCLR");
+
+        cellarName = "Dummy Cellar V0.1";
+        initialDeposit = 1e12;
+        platformCut = 0.75e18;
+        wethCLR = _createCellar(cellarName, WETH, wethPosition, abi.encode(0), initialDeposit, platformCut);
+        vm.label(address(wethCLR), "wethCLR");
+
+        cellarName = "Dummy Cellar V0.2";
+        initialDeposit = 1e4;
+        platformCut = 0.75e18;
+        wbtcCLR = _createCellar(cellarName, WBTC, wbtcPosition, abi.encode(0), initialDeposit, platformCut);
+        vm.label(address(wbtcCLR), "wbtcCLR");
+
+        // Add Cellar Positions to the registry.
+        registry.trustPosition(usdcCLRPosition, address(cellarAdaptor), abi.encode(usdcCLR));
+        registry.trustPosition(wethCLRPosition, address(cellarAdaptor), abi.encode(wethCLR));
+        registry.trustPosition(wbtcCLRPosition, address(cellarAdaptor), abi.encode(wbtcCLR));
+
+        cellarName = "Cellar V0.0";
+        initialDeposit = 1e6;
+        platformCut = 0.75e18;
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
         // Set up remaining cellar positions.
-        for (uint32 i = 1; i < 5; ++i) cellar.addPositionToCatalogue(positions[i]);
-        for (uint32 i = 1; i < 5; ++i) cellar.addPosition(i, positions[i], positionConfigs[i], false);
+        cellar.addPositionToCatalogue(usdcCLRPosition);
+        cellar.addPosition(1, usdcCLRPosition, abi.encode(true), false);
+        cellar.addPositionToCatalogue(wethCLRPosition);
+        cellar.addPosition(2, wethCLRPosition, abi.encode(true), false);
+        cellar.addPositionToCatalogue(wbtcCLRPosition);
+        cellar.addPosition(3, wbtcCLRPosition, abi.encode(true), false);
+        cellar.addPositionToCatalogue(wethPosition);
+        cellar.addPosition(4, wethPosition, abi.encode(0), false);
+        cellar.addPositionToCatalogue(wbtcPosition);
+        cellar.addPosition(5, wbtcPosition, abi.encode(0), false);
+        cellar.addAdaptorToCatalogue(address(cellarAdaptor));
+        cellar.addPositionToCatalogue(usdtPosition);
+
+        cellar.setStrategistPayoutAddress(strategist);
 
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
-        // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
-        cellar.addAdaptorToCatalogue(address(cellarAdaptor));
-        // Mint enough liquidity to swap router for swaps.
-        deal(address(USDC), address(exchange), type(uint224).max);
-        deal(address(WETH), address(exchange), type(uint224).max);
-        deal(address(WBTC), address(exchange), type(uint224).max);
+
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
-        WETH.approve(address(cellar), type(uint256).max);
-        WBTC.approve(address(cellar), type(uint256).max);
-        // Manipulate  test contracts storage so that minimum shareLockPeriod is zero blocks.
-        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+
+        initialAssets = cellar.totalAssets();
+        initialShares = cellar.totalSupply();
     }
 
     // ========================================= INITIALIZATION TEST =========================================
@@ -166,32 +156,35 @@ contract CellarTest is Test {
     function testInitialization() external {
         assertEq(address(cellar.registry()), address(registry), "Should initialize registry to test registry.");
 
-        uint32[] memory expectedPositions = new uint32[](5);
+        uint32[] memory expectedPositions = new uint32[](6);
         expectedPositions[0] = usdcPosition;
         expectedPositions[1] = usdcCLRPosition;
         expectedPositions[2] = wethCLRPosition;
         expectedPositions[3] = wbtcCLRPosition;
         expectedPositions[4] = wethPosition;
+        expectedPositions[5] = wbtcPosition;
 
-        address[] memory expectedAdaptor = new address[](5);
+        address[] memory expectedAdaptor = new address[](6);
         expectedAdaptor[0] = address(erc20Adaptor);
         expectedAdaptor[1] = address(cellarAdaptor);
         expectedAdaptor[2] = address(cellarAdaptor);
         expectedAdaptor[3] = address(cellarAdaptor);
         expectedAdaptor[4] = address(erc20Adaptor);
+        expectedAdaptor[5] = address(erc20Adaptor);
 
-        bytes[] memory expectedAdaptorData = new bytes[](5);
+        bytes[] memory expectedAdaptorData = new bytes[](6);
         expectedAdaptorData[0] = abi.encode(USDC);
         expectedAdaptorData[1] = abi.encode(usdcCLR);
         expectedAdaptorData[2] = abi.encode(wethCLR);
         expectedAdaptorData[3] = abi.encode(wbtcCLR);
         expectedAdaptorData[4] = abi.encode(WETH);
+        expectedAdaptorData[5] = abi.encode(WBTC);
 
         uint32[] memory positions = cellar.getCreditPositions();
 
-        assertEq(cellar.getCreditPositions().length, 5, "Position length should be 5.");
+        assertEq(cellar.getCreditPositions().length, 6, "Position length should be 5.");
 
-        for (uint256 i = 0; i < 5; i++) {
+        for (uint256 i = 0; i < 6; i++) {
             assertEq(positions[i], expectedPositions[i], "Positions should have been written to Cellar.");
             uint32 position = positions[i];
             (address adaptor, bool isDebt, bytes memory adaptorData, ) = cellar.getPositionData(position);
@@ -205,7 +198,7 @@ contract CellarTest is Test {
         (, , uint64 lastAccrual, ) = cellar.feeData();
 
         (uint64 strategistPlatformCut, uint64 platformFee, , address strategistPayoutAddress) = cellar.feeData();
-        assertEq(strategistPlatformCut, 0.8e18, "Platform cut should be set to 0.75e18.");
+        assertEq(strategistPlatformCut, 0.75e18, "Platform cut should be set to 0.75e18.");
         assertEq(strategistPayoutAddress, strategist, "Strategist payout address should be equal to strategist.");
 
         assertEq(cellar.owner(), address(this), "Should initialize owner to this contract.");
@@ -226,11 +219,15 @@ contract CellarTest is Test {
         uint256 expectedShares = cellar.previewDeposit(assets);
         uint256 shares = cellar.deposit(assets, address(this));
 
-        assertEq(shares, assets.changeDecimals(6, 18), "Should have 1:1 exchange rate for initial deposit.");
+        assertEq(shares, assets, "Should have 1:1 exchange rate for initial deposit.");
         assertEq(cellar.previewWithdraw(assets), shares, "Withdrawing assets should burn shares given.");
         assertEq(shares, expectedShares, "Depositing assets should mint shares given.");
-        assertEq(cellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
-        assertEq(cellar.totalAssets(), assets, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.totalSupply(), shares + initialShares, "Should have updated total supply with shares minted.");
+        assertEq(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            "Should have updated total assets with assets deposited."
+        );
         assertEq(cellar.balanceOf(address(this)), shares, "Should have updated user's share balance.");
         assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets, "Should return all user's assets.");
@@ -243,18 +240,17 @@ contract CellarTest is Test {
         // Test single withdraw.
         cellar.withdraw(assets, address(this), address(this));
 
-        assertEq(cellar.totalAssets(), 0, "Should have updated total assets with assets withdrawn.");
+        assertEq(cellar.totalAssets(), initialAssets, "Should have updated total assets with assets withdrawn.");
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0, "Should return zero assets.");
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
     }
 
     function testMintAndRedeem(uint256 shares) external {
-        shares = bound(shares, 1e18, type(uint112).max);
+        shares = bound(shares, 1e6, type(uint112).max);
 
         // Change decimals from the 18 used by shares to the 6 used by USDC.
-        deal(address(USDC), address(this), shares.changeDecimals(18, 6));
+        deal(address(USDC), address(this), shares);
 
         // Try minting more assets than balance.
         vm.expectRevert("TRANSFER_FROM_FAILED");
@@ -263,13 +259,16 @@ contract CellarTest is Test {
         // Test single mint.
         uint256 assets = cellar.mint(shares, address(this));
 
-        assertEq(shares.changeDecimals(18, 6), assets, "Should have 1:1 exchange rate for initial deposit.");
+        assertEq(shares, assets, "Should have 1:1 exchange rate for initial deposit.");
         assertEq(cellar.previewRedeem(shares), assets, "Redeeming shares should withdraw assets owed.");
         assertEq(cellar.previewMint(shares), assets, "Minting shares should deposit assets owed.");
-        assertEq(cellar.totalSupply(), shares, "Should have updated total supply with shares minted.");
-        assertEq(cellar.totalAssets(), assets, "Should have updated total assets with assets deposited.");
+        assertEq(cellar.totalSupply(), shares + initialShares, "Should have updated total supply with shares minted.");
+        assertEq(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            "Should have updated total assets with assets deposited."
+        );
         assertEq(cellar.balanceOf(address(this)), shares, "Should have updated user's share balance.");
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), assets, "Should return all user's assets.");
         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
@@ -277,58 +276,81 @@ contract CellarTest is Test {
         cellar.redeem(shares, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed user's share balance.");
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
         assertEq(cellar.convertToAssets(cellar.balanceOf(address(this))), 0, "Should return zero assets.");
         assertEq(USDC.balanceOf(address(this)), assets, "Should have withdrawn assets to user.");
     }
 
     function testWithdrawInOrder() external {
-        cellar.depositIntoPosition(wethCLRPosition, 1e18); // $2000
-        cellar.depositIntoPosition(wbtcCLRPosition, 1e8); // $30,000
-        assertEq(cellar.totalAssets(), 32_000e6, "Should have updated total assets with assets deposited.");
+        // Deposit enough assets into the Cellar to rebalance.
+        uint256 assets = 32_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-        // Mint shares to user to redeem.
-        deal(address(cellar), address(this), cellar.previewWithdraw(32_000e6));
+        _depositToCellar(cellar, wethCLR, 2_000e6); // 1 Ether
+        _depositToCellar(cellar, wbtcCLR, 30_000e6); // 1 WBTC
+        assertEq(
+            cellar.totalAssets(),
+            assets + initialAssets,
+            "Should have updated total assets with assets deposited."
+        );
+
+        // Move USDC position to the back of the withdraw queue.
+        cellar.swapPositions(0, 3, false);
 
         // Withdraw from position.
         uint256 shares = cellar.withdraw(32_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
-        assertEq(cellar.balanceOf(address(cellar)), 0, "Should not have minted fees because no gains.");
-        assertEq(shares, 32_000e18, "Should returned all redeemed shares.");
+        assertEq(shares, 32_000e6, "Should returned all redeemed shares.");
         assertEq(WETH.balanceOf(address(this)), 1e18, "Should have transferred position balance to user.");
         assertEq(WBTC.balanceOf(address(this)), 1e8, "Should have transferred position balance to user.");
-        assertEq(WETH.balanceOf(address(wethCLR)), 0, "Should have transferred balance from WETH position.");
-        assertEq(WBTC.balanceOf(address(wbtcCLR)), 0, "Should have transferred balance from BTC position.");
-        assertEq(cellar.totalAssets(), 0, "Should have emptied cellar.");
+        assertLt(WETH.balanceOf(address(wethCLR)), 1e18, "Should have transferred balance from WETH position.");
+        assertLt(WBTC.balanceOf(address(wbtcCLR)), 1e8, "Should have transferred balance from BTC position.");
+        assertEq(cellar.totalAssets(), initialAssets, "Cellar total assets should equal initial.");
     }
 
     function testWithdrawWithDuplicateReceivedAssets() external {
-        MockERC4626 wethVault = new MockERC4626(WETH, "WETH Vault LP Token", "WETH-VLT", 18);
+        string memory cellarName = "Dummy Cellar V0.3";
+        uint256 initialDeposit = 1e12;
+        uint64 platformCut = 0.75e18;
+        Cellar wethVault = _createCellar(cellarName, WETH, wethPosition, abi.encode(0), initialDeposit, platformCut);
 
-        priceRouter.supportAsset(WETH);
-        uint32 newWETHPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(wethVault));
+        uint32 newWETHPosition = 10;
+        registry.trustPosition(newWETHPosition, address(cellarAdaptor), abi.encode(wethVault));
         cellar.addPositionToCatalogue(newWETHPosition);
-        cellar.addPosition(5, newWETHPosition, abi.encode(true), false);
+        cellar.addPosition(1, newWETHPosition, abi.encode(true), false);
 
-        cellar.depositIntoPosition(wethCLRPosition, 1e18); // $2000
-        cellar.depositIntoPosition(newWETHPosition, 0.5e18); // $1000
+        // Deposit enough assets into the Cellar to rebalance.
+        uint256 assets = 3_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-        assertEq(cellar.totalAssets(), 3000e6, "Should have updated total assets with assets deposited.");
-        assertEq(cellar.totalSupply(), 3000e18);
+        _depositToCellar(cellar, wethCLR, 2_000e6); // 1 Ether
+        _depositToCellar(cellar, wethVault, 1_000e6); // 0.5 Ether
 
-        // Mint shares to user to redeem.
-        deal(address(cellar), address(this), cellar.previewWithdraw(3000e6));
+        assertEq(
+            cellar.totalAssets(),
+            3_000e6 + initialAssets,
+            "Should have updated total assets with assets deposited."
+        );
+        assertEq(cellar.totalSupply(), 3_000e6 + initialShares, "Should have updated total supply with deposit");
+
+        // Move USDC position to the back of the withdraw queue.
+        cellar.swapPositions(0, 4, false);
 
         // Withdraw from position.
-        uint256 shares = cellar.withdraw(3000e6, address(this), address(this));
+        uint256 shares = cellar.withdraw(3_000e6, address(this), address(this));
 
         assertEq(cellar.balanceOf(address(this)), 0, "Should have redeemed all shares.");
-        assertEq(shares, 3000e18, "Should returned all redeemed shares.");
+        assertEq(shares, 3000e6, "Should returned all redeemed shares.");
         assertEq(WETH.balanceOf(address(this)), 1.5e18, "Should have transferred position balance to user.");
-        assertEq(WETH.balanceOf(address(wethCLR)), 0, "Should have transferred balance from WETH cellar position.");
-        assertEq(WETH.balanceOf(address(wethVault)), 0, "Should have transferred balance from WETH vault position.");
-        assertEq(cellar.totalAssets(), 0, "Should have no assets remaining in cellar.");
+        assertLt(WETH.balanceOf(address(wethCLR)), 1e18, "Should have transferred balance from WETH cellar position.");
+        assertLt(
+            WETH.balanceOf(address(wethVault)),
+            0.5e18,
+            "Should have transferred balance from WETH vault position."
+        );
+        assertEq(cellar.totalAssets(), initialAssets, "Cellar total assets should equal initial.");
     }
 
     function testDepositMintWithdrawRedeemWithZeroInputs() external {
@@ -347,98 +369,22 @@ contract CellarTest is Test {
         assertEq(USDC.balanceOf(address(this)), 0, "Cellar should not have sent any assets to this address.");
     }
 
-    function testTransfer() external {
-        // Change cellar share lock period.
-        cellar.setShareLockPeriod(300);
-
-        // Deposit into cellar.
-        uint256 assets = 100e6;
-        deal(address(USDC), address(this), assets);
-        uint256 shares = cellar.deposit(assets, address(this));
-
-        // Check that withdraw/redeem fails.
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.withdraw(assets, address(this), address(this));
-
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.redeem(shares, address(this), address(this));
-
-        // Check that transfer and transferFrom fails.
-        address me = address(this);
-        address friend = vm.addr(55555);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.transfer(friend, shares);
-
-        cellar.approve(friend, shares / 2);
-        vm.startPrank(friend);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.transferFrom(me, friend, shares);
-        vm.stopPrank();
-
-        // Advance time so shares are unlocked.
-        vm.warp(block.timestamp + cellar.shareLockPeriod());
-
-        // Check that transfer complies with ERC20 standards.
-        assertTrue(cellar.transfer(friend, shares / 2), "transfer should return true.");
-        assertEq(cellar.balanceOf(friend), shares / 2, "Friend should have received shares.");
-        assertEq(cellar.balanceOf(me), shares / 2, "I should have sent shares.");
-
-        // Check that transferFrom complies with ERC20 standards.
-        vm.prank(friend);
-        assertTrue(cellar.transferFrom(me, friend, shares / 2), "transferFrom should return true.");
-        assertEq(cellar.balanceOf(friend), shares, "Friend should have received shares.");
-        assertEq(cellar.balanceOf(me), 0, "I should have sent shares.");
-        assertEq(cellar.allowance(me, friend), 0, "Friend should have used all their allowance.");
-    }
-
     // ========================================== POSITIONS TEST ==========================================
 
     function testInteractingWithDistrustedPositions() external {
         cellar.removePosition(4, false);
-        cellar.removePositionFromCatalogue(105); // Removes WETH position from catalogue.
+        cellar.removePositionFromCatalogue(wethPosition); // Removes WETH position from catalogue.
 
         // Cellar should not be able to add position to tracked array until it is in the catalogue.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, 105)));
-        cellar.addPosition(4, 105, abi.encode(0), false);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotInCatalogue.selector, wethPosition)));
+        cellar.addPosition(4, wethPosition, abi.encode(0), false);
 
         // Since WETH position is trusted, cellar should be able to add it to the catalogue, and to the tracked array.
-        cellar.addPositionToCatalogue(105);
-        cellar.addPosition(4, 105, abi.encode(0), false);
+        cellar.addPositionToCatalogue(wethPosition);
+        cellar.addPosition(4, wethPosition, abi.encode(0), false);
 
         // Registry distrusts weth position.
-        registry.distrustPosition(105);
+        registry.distrustPosition(wethPosition);
 
         // Even though position is distrusted Cellar can still operate normally.
         cellar.totalAssets();
@@ -447,15 +393,15 @@ contract CellarTest is Test {
         cellar.removePosition(4, false);
 
         // If strategist tries adding it back it reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 105)));
-        cellar.addPosition(4, 105, abi.encode(0), false);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, wethPosition)));
+        cellar.addPosition(4, wethPosition, abi.encode(0), false);
 
         // Governance removes position from cellars catalogue.
-        cellar.removePositionFromCatalogue(105); // Removes WETH position from catalogue.
+        cellar.removePositionFromCatalogue(wethPosition); // Removes WETH position from catalogue.
 
         // But tries to add it back later which reverts.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, 105)));
-        cellar.addPositionToCatalogue(105);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__PositionIsNotTrusted.selector, wethPosition)));
+        cellar.addPositionToCatalogue(wethPosition);
     }
 
     function testInteractingWithDistrustedAdaptors() external {
@@ -571,23 +517,34 @@ contract CellarTest is Test {
         uint32 invalidPositionId = 100;
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionNotUsed.selector, invalidPositionId)));
         cellar.setHoldingPosition(invalidPositionId);
+
         // Try setting holding position with a position with different asset.
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Cellar.Cellar__AssetMismatch.selector, address(USDC), address(WETH)))
         );
         cellar.setHoldingPosition(wethPosition);
+
+        // Set holding position to usdcCLR.
+        cellar.setHoldingPosition(usdcCLRPosition);
+
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__RemovingHoldingPosition.selector)));
         // Try removing the holding position.
-        cellar.removePosition(0, false);
+        cellar.removePosition(1, false);
+
+        // Set holding position back to USDC.
+        cellar.setHoldingPosition(usdcPosition);
 
         // Work with debt positions now.
         // Try setting holding position to a debt position.
         ERC20DebtAdaptor debtAdaptor = new ERC20DebtAdaptor();
         registry.trustAdaptor(address(debtAdaptor));
-        uint32 debtWethPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WETH));
-        uint32 debtWbtcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WBTC));
+        uint32 debtWethPosition = 101;
+        registry.trustPosition(debtWethPosition, address(debtAdaptor), abi.encode(WETH));
+        uint32 debtWbtcPosition = 102;
+        registry.trustPosition(debtWbtcPosition, address(debtAdaptor), abi.encode(WBTC));
 
-        uint32 debtUsdcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(USDC));
+        uint32 debtUsdcPosition = 103;
+        registry.trustPosition(debtUsdcPosition, address(debtAdaptor), abi.encode(USDC));
         cellar.addPositionToCatalogue(debtUsdcPosition);
         cellar.addPositionToCatalogue(debtWethPosition);
         cellar.addPositionToCatalogue(debtWbtcPosition);
@@ -596,7 +553,7 @@ contract CellarTest is Test {
             bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidHoldingPosition.selector, debtUsdcPosition))
         );
         cellar.setHoldingPosition(debtUsdcPosition);
-        cellar.removePosition(0, true);
+        cellar.forcePositionOut(0, debtUsdcPosition, true);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DebtMismatch.selector, debtWethPosition)));
         cellar.addPosition(0, debtWethPosition, abi.encode(0), false);
@@ -659,13 +616,13 @@ contract CellarTest is Test {
         cellar.deposit(1e6, address(this));
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
-        cellar.mint(1e18, address(this));
+        cellar.mint(1e6, address(this));
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
         cellar.withdraw(1e6, address(this), address(this));
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
-        cellar.redeem(1e18, address(this), address(this));
+        cellar.redeem(1e6, address(this), address(this));
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
         cellar.totalAssets();
@@ -687,9 +644,9 @@ contract CellarTest is Test {
         assertEq(cellar.isPaused(), false, "Cellar should not be paused.");
         deal(address(USDC), address(this), 100e6);
         cellar.deposit(1e6, address(this));
-        cellar.mint(1e18, address(this));
+        cellar.mint(1e6, address(this));
         cellar.withdraw(1e6, address(this), address(this));
-        cellar.redeem(1e18, address(this), address(this));
+        cellar.redeem(1e6, address(this), address(this));
         cellar.totalAssets();
         cellar.totalAssetsWithdrawable();
         cellar.maxWithdraw(address(this));
@@ -709,14 +666,14 @@ contract CellarTest is Test {
         registry.batchPause(targets);
 
         // Cellar is fully paused, but governance chooses to ignore it.
-        cellar.toggleIgnorePause(true);
+        cellar.toggleIgnorePause();
         assertEq(cellar.isPaused(), false, "Cellar should not be paused.");
 
         deal(address(USDC), address(this), 100e6);
         cellar.deposit(1e6, address(this));
-        cellar.mint(1e18, address(this));
+        cellar.mint(1e6, address(this));
         cellar.withdraw(1e6, address(this), address(this));
-        cellar.redeem(1e18, address(this), address(this));
+        cellar.redeem(1e6, address(this), address(this));
         cellar.totalAssets();
         cellar.totalAssetsWithdrawable();
         cellar.maxWithdraw(address(this));
@@ -724,7 +681,7 @@ contract CellarTest is Test {
         cellar.callOnAdaptor(data);
 
         // Governance chooses to accept the pause.
-        cellar.toggleIgnorePause(false);
+        cellar.toggleIgnorePause();
         assertEq(cellar.isPaused(), true, "Cellar should be paused.");
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
@@ -737,7 +694,7 @@ contract CellarTest is Test {
         cellar.withdraw(1e6, address(this), address(this));
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
-        cellar.redeem(1e18, address(this), address(this));
+        cellar.redeem(1e6, address(this), address(this));
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__Paused.selector)));
         cellar.totalAssets();
@@ -850,20 +807,11 @@ contract CellarTest is Test {
 
         // Try to set it as the cellars price router.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector, 50e6, 95e6, 105e6))
+            bytes(
+                abi.encodeWithSelector(Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector, 50e6, 95.95e6, 106.05e6)
+            )
         );
         cellar.cachePriceRouter(true, 0.05e4);
-    }
-
-    // Used to act like malicious price router nuder reporting assets.
-    function getValuesDelta(
-        ERC20[] calldata,
-        uint256[] calldata,
-        ERC20[] calldata,
-        uint256[] calldata,
-        ERC20
-    ) external view returns (uint256) {
-        return 50e6;
     }
 
     function testTotalAssets(
@@ -873,31 +821,36 @@ contract CellarTest is Test {
         uint256 wbtcCLRAmount,
         uint256 wethAmount
     ) external {
-        usdcAmount = bound(usdcAmount, 1e6, 1_000_000_000_000e6);
-        usdcCLRAmount = bound(usdcCLRAmount, 1e6, 1_000_000_000_000e6);
-        wethCLRAmount = bound(wethCLRAmount, 1e18, 200_000_000e18);
-        wbtcCLRAmount = bound(wbtcCLRAmount, 1e8, 21_000_000e8);
-        wethAmount = bound(wethAmount, 1e18, 200_000_000e18);
+        usdcAmount = bound(usdcAmount, 1e6, 1_000_000e6);
+        usdcCLRAmount = bound(usdcCLRAmount, 1e6, 1_000_000e6);
+        wethCLRAmount = bound(wethCLRAmount, 1e6, 1_000_000e6);
+        wbtcCLRAmount = bound(wbtcCLRAmount, 1e6, 1_000_000e6);
+        wethAmount = bound(wethAmount, 1e18, 10_000e18);
         uint256 totalAssets = cellar.totalAssets();
 
-        assertEq(totalAssets, 0, "Cellar total assets should be zero.");
+        assertEq(totalAssets, initialAssets, "Cellar total assets should be initialAssets.");
 
-        cellar.depositIntoPosition(usdcCLRPosition, usdcCLRAmount);
-        cellar.depositIntoPosition(wethCLRPosition, wethCLRAmount);
-        cellar.depositIntoPosition(wbtcCLRPosition, wbtcCLRAmount);
+        deal(address(USDC), address(this), usdcCLRAmount + wethCLRAmount + wbtcCLRAmount + usdcAmount);
+        cellar.deposit(usdcCLRAmount + wethCLRAmount + wbtcCLRAmount + usdcAmount, address(this));
+
+        _depositToCellar(cellar, usdcCLR, usdcCLRAmount);
+        _depositToCellar(cellar, wethCLR, wethCLRAmount);
+        _depositToCellar(cellar, wbtcCLR, wbtcCLRAmount);
         deal(address(WETH), address(cellar), wethAmount);
-        deal(address(USDC), address(cellar), usdcAmount);
 
-        uint256 expectedTotalAssets = usdcAmount + usdcCLRAmount;
-        expectedTotalAssets += (wethAmount + wethCLRAmount).mulDivDown(2_000e6, 1e18);
-        expectedTotalAssets += wbtcCLRAmount.mulDivDown(30_000e6, 1e8);
+        uint256 expectedTotalAssets = usdcAmount +
+            usdcCLRAmount +
+            priceRouter.getValue(WETH, wethAmount, USDC) +
+            wethCLRAmount +
+            wbtcCLRAmount +
+            initialAssets;
 
         totalAssets = cellar.totalAssets();
 
-        assertApproxEqAbs(
+        assertApproxEqRel(
             totalAssets,
             expectedTotalAssets,
-            1,
+            0.0001e18,
             "`totalAssets` should equal all asset values summed together."
         );
     }
@@ -923,144 +876,20 @@ contract CellarTest is Test {
         cellar.setStrategistPlatformCut(1.1e18);
     }
 
-    function testMaliciousStrategistWithUnboundForLoop() external {
-        // Initialize test Cellar.
-        MockCellarImplementation multiPositionCellar;
-        uint32[] memory positions;
-        uint32[] memory debtPositions;
-        bytes[] memory debtConfigs;
-        {
-            // Create new cellar with USDC position.
-            positions = new uint32[](1);
-            positions[0] = usdcPosition;
-            bytes[] memory positionConfigs = new bytes[](1);
-            bytes memory initializeCallData = abi.encode(
-                address(this),
-                registry,
-                USDC,
-                "Asset Management Cellar LP Token",
-                "assetmanagement-CLR",
-                usdcPosition,
-                abi.encode(0),
-                strategist
-            );
-            address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(0)));
-            multiPositionCellar = MockCellarImplementation(clone);
-
-            stdstore
-                .target(address(multiPositionCellar))
-                .sig(multiPositionCellar.shareLockPeriod.selector)
-                .checked_write(uint256(0));
-        }
-
-        MockERC20 position;
-        for (uint256 i = 1; i < 16; i++) {
-            position = new MockERC20("Howdy", 18);
-            priceRouter.supportAsset(position);
-            uint32 id = registry.trustPosition(address(erc20Adaptor), abi.encode(position));
-            multiPositionCellar.addPositionToCatalogue(id);
-            multiPositionCellar.addPosition(
-                uint32(multiPositionCellar.getCreditPositions().length),
-                id,
-                abi.encode(0),
-                false
-            );
-        }
-
-        assertEq(uint32(multiPositionCellar.getCreditPositions().length), 16, "Cellar should have 16 positions.");
-
-        // Adding one more position should revert.
-        position = new MockERC20("Howdy", 18);
-        priceRouter.supportAsset(position);
-        uint32 finalId = registry.trustPosition(address(erc20Adaptor), abi.encode(position));
-        multiPositionCellar.addPositionToCatalogue(finalId);
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__PositionArrayFull.selector, uint256(16))));
-        multiPositionCellar.addPosition(16, finalId, abi.encode(0), false);
-
-        // Check that users can still interact with the cellar even at max positions size.
-        deal(address(USDC), address(this), 100e6);
-        USDC.approve(address(multiPositionCellar), 100e6);
-        uint256 gas = gasleft();
-        multiPositionCellar.deposit(100e6, address(this));
-        uint256 remainingGas = gasleft();
-        assertLt(
-            gas - remainingGas,
-            600_000,
-            "Gas used on deposit should be comfortably less than the block gas limit."
-        );
-
-        gas = gasleft();
-        multiPositionCellar.withdraw(100e6, address(this), address(this));
-        remainingGas = gasleft();
-        assertLt(
-            gas - remainingGas,
-            600_000,
-            "Gas used on withdraw should be comfortably less than the block gas limit."
-        );
-
-        // Now check a worst case scenario, SP maxes out positions, and evenly
-        // distributes funds to every position, then user withdraws.
-        deal(address(USDC), address(this), 16e6);
-        USDC.approve(address(multiPositionCellar), 16e6);
-        multiPositionCellar.deposit(16e6, address(this));
-
-        uint256 totalAssets = multiPositionCellar.totalAssets();
-
-        // Change the cellars USDC balance, so that we can deal cellar assets in
-        // other positions and not change the share price.
-        deal(address(USDC), address(multiPositionCellar), 1e6);
-
-        positions = multiPositionCellar.getCreditPositions();
-        for (uint256 i = 1; i < positions.length; i++) {
-            (, , bytes memory data, ) = multiPositionCellar.getPositionData(positions[i]);
-            ERC20 token = abi.decode(data, (ERC20));
-            priceRouter.setExchangeRate(token, USDC, 1e6);
-            priceRouter.setPrice(token, 1e8);
-            deal(address(token), address(multiPositionCellar), 1e18);
-        }
-
-        assertEq(multiPositionCellar.totalAssets(), totalAssets, "Cellar total assets should be unchanged.");
-
-        gas = gasleft();
-        multiPositionCellar.withdraw(16e6, address(this), address(this));
-        remainingGas = gasleft();
-        assertLt(
-            gas - remainingGas,
-            2_000_000,
-            "Gas used on worst case scenario withdraw should be comfortably less than the block gas limit."
-        );
-    }
-
     function testDebtTokensInCellars() external {
         ERC20DebtAdaptor debtAdaptor = new ERC20DebtAdaptor();
         registry.trustAdaptor(address(debtAdaptor));
-        uint32 debtWethPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WETH));
-        uint32 debtWbtcPosition = registry.trustPosition(address(debtAdaptor), abi.encode(WBTC));
+        uint32 debtWethPosition = 10;
+        registry.trustPosition(debtWethPosition, address(debtAdaptor), abi.encode(WETH));
+        uint32 debtWbtcPosition = 11;
+        registry.trustPosition(debtWbtcPosition, address(debtAdaptor), abi.encode(WBTC));
 
         // Setup Cellar with debt positions:
-        uint32[] memory positions = new uint32[](1);
-        positions[0] = usdcPosition;
+        string memory cellarName = "Debt Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
 
-        bytes[] memory positionConfigs = new bytes[](1);
-
-        uint32[] memory debtPositions = new uint32[](1);
-
-        debtPositions[0] = debtWethPosition; // not a real debt position, but for test will be treated as such
-
-        bytes[] memory debtConfigs = new bytes[](1);
-
-        bytes memory initializeCallData = abi.encode(
-            address(this),
-            registry,
-            USDC,
-            "Multiposition Cellar LP Token",
-            "multiposition-CLR",
-            usdcPosition,
-            abi.encode(0),
-            strategist
-        );
-        address clone = factory.deploy(2, 0, initializeCallData, USDC, 0, keccak256(abi.encode(10)));
-        MockCellarImplementation debtCellar = MockCellarImplementation(clone);
+        Cellar debtCellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
         debtCellar.addPositionToCatalogue(debtWethPosition);
         debtCellar.addPositionToCatalogue(debtWbtcPosition);
@@ -1104,60 +933,26 @@ contract CellarTest is Test {
     function testCellarWithCellarPositions() external {
         // Cellar A's asset is USDC, holding position is Cellar B shares, whose holding asset is USDC.
         // Initialize test Cellars.
-        MockCellar cellarA;
-        MockCellar cellarB;
 
-        uint32[] memory positions = new uint32[](1);
-        positions[0] = usdcPosition;
+        // Create Cellar B
+        string memory cellarName = "Cellar B V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
+        Cellar cellarB = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
-        uint32[] memory debtPositions;
+        uint32 cellarBPosition = 10;
+        registry.trustPosition(cellarBPosition, address(cellarAdaptor), abi.encode(cellarB));
 
-        bytes[] memory positionConfigs = new bytes[](1);
+        // Create Cellar A
+        cellarName = "Cellar A V0.0";
+        initialDeposit = 1e6;
+        platformCut = 0.75e18;
+        Cellar cellarA = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
-        bytes[] memory debtConfigs;
-
-        cellarB = new MockCellar(
-            registry,
-            USDC,
-            "Ultimate Stablecoin cellar",
-            "USC-CLR",
-            abi.encode(
-                positions,
-                debtPositions,
-                positionConfigs,
-                debtConfigs,
-                usdcPosition,
-                strategist,
-                type(uint128).max,
-                type(uint128).max
-            )
-        );
-
-        stdstore.target(address(cellarB)).sig(cellarB.shareLockPeriod.selector).checked_write(uint256(0));
-
-        uint32 cellarBPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(cellarB));
-        positions[0] = cellarBPosition;
-
-        positionConfigs[0] = abi.encode(true);
-
-        cellarA = new MockCellar(
-            registry,
-            USDC,
-            "Stablecoin cellar",
-            "SC-CLR",
-            abi.encode(
-                positions,
-                debtPositions,
-                positionConfigs,
-                debtConfigs,
-                cellarBPosition,
-                strategist,
-                type(uint128).max,
-                type(uint128).max
-            )
-        );
-
-        stdstore.target(address(cellarA)).sig(cellarA.shareLockPeriod.selector).checked_write(uint256(0));
+        cellarA.addPositionToCatalogue(cellarBPosition);
+        cellarA.addPosition(0, cellarBPosition, abi.encode(true), false);
+        cellarA.setHoldingPosition(cellarBPosition);
+        cellarA.swapPositions(0, 1, false);
 
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
@@ -1178,24 +973,16 @@ contract CellarTest is Test {
         // Governance can remove it itself by calling `distrustPosition`.
 
         // Add asset that will be depegged.
-        priceRouter.supportAsset(USDT);
-        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
-        cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPosition(5, usdtPosition, abi.encode(0), false);
-        priceRouter.setExchangeRate(USDT, USDC, 1e6);
-        priceRouter.setExchangeRate(USDC, USDT, 1e6);
-        priceRouter.setPrice(USDT, 1e8);
 
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
 
         // USDT depeggs to $0.90.
-        priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
-        priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
-        priceRouter.setPrice(USDT, 0.9e8);
+        mockUsdtUsd.setMockAnswer(0.9e8);
 
-        assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
-        assertEq(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should not change.");
+        assertEq(cellar.totalAssets(), 100e6 + initialAssets, "Cellar total assets should remain unchanged.");
+        assertEq(cellar.deposit(100e6, address(this)), 100e6, "Cellar share price should not change.");
     }
 
     function testDepeggedAssetUsedByTheCellar() external {
@@ -1204,13 +991,7 @@ contract CellarTest is Test {
         // it.
 
         // Add asset that will be depegged.
-        priceRouter.supportAsset(USDT);
-        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
-        cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPosition(5, usdtPosition, abi.encode(0), false);
-        priceRouter.setExchangeRate(USDT, USDC, 1e6);
-        priceRouter.setExchangeRate(USDC, USDT, 1e6);
-        priceRouter.setPrice(USDT, 1e8);
 
         deal(address(USDC), address(this), 200e6);
         cellar.deposit(100e6, address(this));
@@ -1220,12 +1001,10 @@ contract CellarTest is Test {
         deal(address(USDT), address(cellar), 50e6);
 
         // USDT depeggs to $0.90.
-        priceRouter.setExchangeRate(USDT, USDC, 0.9e6);
-        priceRouter.setExchangeRate(USDC, USDT, 1.111111e6);
-        priceRouter.setPrice(USDT, 0.9e8);
+        mockUsdtUsd.setMockAnswer(0.9e8);
 
         assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
-        assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
+        assertGt(cellar.deposit(100e6, address(this)), 100e6, "Cellar share price should have decreased.");
 
         // Governance votes to rebalance out of USDT, and distrust USDT.
         // Manually rebalance into USDC.
@@ -1255,8 +1034,8 @@ contract CellarTest is Test {
         // usdcCLR depeggs from USDC
         deal(address(USDC), address(usdcCLR), 45e6);
 
-        assertEq(cellar.totalAssets(), 95e6, "Cellar total assets should have gone down.");
-        assertGt(cellar.deposit(100e6, address(this)), 100e18, "Cellar share price should have decreased.");
+        assertLt(cellar.totalAssets(), 100e6, "Cellar total assets should have gone down.");
+        assertGt(cellar.deposit(100e6, address(this)), 100e6, "Cellar share price should have decreased.");
 
         // Governance votes to rebalance out of usdcCLR, change the holding
         // position, and distrust usdcCLR. No swap is made because both
@@ -1281,23 +1060,15 @@ contract CellarTest is Test {
         // safety contract, shutdown old cellar, and allow users to withdraw
         // from the safety contract.
 
-        priceRouter.supportAsset(USDT);
-        uint32 usdtPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
-        cellar.addPositionToCatalogue(usdtPosition);
         cellar.addPosition(5, usdtPosition, abi.encode(0), false);
-        priceRouter.setExchangeRate(USDT, USDC, 1e6);
-        priceRouter.setExchangeRate(USDC, USDT, 1e6);
-        priceRouter.setPrice(USDT, 1e8);
 
         deal(address(USDC), address(this), 100e6);
         cellar.deposit(100e6, address(this));
 
         // USDC depeggs to $0.90.
-        priceRouter.setExchangeRate(USDC, USDT, 0.9e6);
-        priceRouter.setExchangeRate(USDT, USDC, 1.111111e6);
-        priceRouter.setPrice(USDC, 0.9e8);
+        mockUsdcUsd.setMockAnswer(0.9e8);
 
-        assertEq(cellar.totalAssets(), 100e6, "Cellar total assets should remain unchanged.");
+        assertEq(cellar.totalAssets(), 100e6 + initialAssets, "Cellar total assets should remain unchanged.");
 
         // Governance rebalances to USDT, sets performance and platform fees to
         // zero, initiates a shutdown, and has users withdraw their funds.
@@ -1316,21 +1087,19 @@ contract CellarTest is Test {
         cellar.deposit(1, attacker);
         vm.stopPrank();
 
-        cellar.redeem(50e18, address(this), address(this));
+        cellar.redeem(50e6, address(this), address(this));
 
         // USDC depeggs to $0.10.
-        priceRouter.setExchangeRate(USDC, USDT, 0.1e6);
-        priceRouter.setExchangeRate(USDT, USDC, 10e6);
-        priceRouter.setPrice(USDC, 0.1e8);
+        mockUsdcUsd.setMockAnswer(0.1e8);
 
-        cellar.redeem(50e18, address(this), address(this));
+        cellar.redeem(50e6, address(this), address(this));
 
         // Eventhough USDC depegged further, cellar rebalanced out of USDC
         // removing its exposure to it.  So users can expect to get the
         // remaining value out of the cellar.
         assertEq(
             USDT.balanceOf(address(this)),
-            90e6,
+            89108910,
             "Withdraws should total the amount of USDT in the cellar after rebalance."
         );
 
@@ -1386,7 +1155,8 @@ contract CellarTest is Test {
         // True means this cellar tries to re-enter caller on deposit calls.
         ReentrancyERC4626 maliciousCellar = new ReentrancyERC4626(USDC, "Bad Cellar", "BC", true);
 
-        uint32 maliciousPosition = registry.trustPosition(address(cellarAdaptor), abi.encode(maliciousCellar));
+        uint32 maliciousPosition = 20;
+        registry.trustPosition(maliciousPosition, address(cellarAdaptor), abi.encode(maliciousCellar));
         cellar.addPositionToCatalogue(maliciousPosition);
         cellar.addPosition(5, maliciousPosition, abi.encode(true), false);
 
@@ -1409,27 +1179,9 @@ contract CellarTest is Test {
     // If Cellar A takes a postion in Cellar B, then Cellar B takes a position in Cellar C, Cellar B would need to look upstream to see the nested postions which is unreasonable,
     // and it means Cellar A can dictate what positions Cellar B takes which is not good.
 
-    // M-4, change in mint function
-    function testAttackOnFirstMint() external {
-        // An attacker attacks as first minter
-        address attacker = vm.addr(1337);
-
-        vm.startPrank(attacker);
-
-        deal(address(USDC), address(attacker), 10000e6);
-        USDC.approve(address(cellar), 10000e6);
-
-        // Attacker mints shares < 1e12 on first mint
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ZeroAssets.selector)));
-        cellar.mint(9e11, attacker);
-
-        vm.stopPrank();
-    }
-
-    // // M-2, changes in trustPosition.
+    // M-2, changes in trustPosition.
     function testTrustPositionForUnsupportedAssetLocksAllFunds() external {
-        // USDT is not a supported PriceRouter asset.
+        // FRAX is not a supported PriceRouter asset.
 
         uint256 assets = 10e18;
 
@@ -1440,243 +1192,12 @@ contract CellarTest is Test {
         cellar.deposit(assets, address(this));
         assertEq(USDC.balanceOf(address(this)), 0, "Should have deposited assets from user.");
 
-        // USDT is added as a trusted Cellar position,
+        // FRAX is added as a trusted Cellar position,
         // but is not supported by the PriceRouter.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(USDT)))
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(FRAX)))
         );
-        registry.trustPosition(address(erc20Adaptor), abi.encode(USDT));
-    }
-
-    //H-1
-    function testChainlinkPriceFeedUpdateSandwichAttack() external {
-        // Initialize test Cellar.
-
-        // Create new cellar with WETH, and USDC positions.
-        uint32[] memory positions = new uint32[](2);
-        positions[0] = usdcPosition;
-        positions[1] = wethPosition;
-
-        uint32[] memory debtPositions;
-        bytes[] memory debtConfigs;
-
-        bytes[] memory positionConfigs = new bytes[](2);
-
-        MockCellar cellarA = new MockCellar(
-            registry,
-            USDC,
-            "Asset Management Cellar LP Token",
-            "assetmanagement-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
-        );
-
-        // Set up worst case scenario where
-        // Cellar has all of its funds in mispriced asset(WETH)
-        // Chainlink updates price because of max price deviation(1%)
-
-        uint256 assets = 10_000e6;
-        deal(address(USDC), address(this), assets);
-        USDC.approve(address(cellarA), assets);
-        cellarA.deposit(assets, address(this));
-        // Manually rebalance funds from USDC to WETH.
-        deal(address(USDC), address(cellarA), 0);
-        deal(address(WETH), address(cellarA), 5e18);
-
-        // Attacker joins cellar right before price update.
-        address attacker = vm.addr(8349058);
-        deal(address(USDC), attacker, assets);
-        vm.startPrank(attacker);
-        USDC.approve(address(cellarA), assets);
-        cellarA.deposit(assets, attacker);
-        vm.stopPrank();
-
-        // Price updates
-        priceRouter.setExchangeRate(USDC, WETH, 0.000495e18);
-        priceRouter.setExchangeRate(WETH, USDC, 2020e6);
-
-        // Confirm attackers maxWithdraw is zero while shares are locked.
-        assertEq(cellarA.maxWithdraw(attacker), 0, "Attackers maxWithdraw should be zero while shares are locked.");
-
-        // Confirm attackers maxRedeem is zero while shares are locked.
-        assertEq(cellarA.maxRedeem(attacker), 0, "Attackers maxRedeem should be zero while shares are locked.");
-
-        vm.startPrank(attacker);
-        uint256 shares = cellarA.balanceOf(attacker);
-        // Attacker tries to redeem their shares.
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellarA.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellarA.redeem(shares, attacker, attacker);
-
-        // Attacker tries to transfer shares to another address.
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellarA.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellarA.transfer(address(this), shares);
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + cellarA.shareLockPeriod());
-
-        // Confirm attackers shares are worth more once shares are unlocked.
-        assertGt(cellarA.maxWithdraw(attacker), assets, "Attackers shares should be worth more than deposit.");
-
-        // Note the attacker was able to arbitrage the price feed update, but must wait the share lock period in order to capture profit.
-    }
-
-    function testShareLockUpPeriod() external {
-        // Try to set lock period to illogical value.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidShareLockPeriod.selector)));
-        cellar.setShareLockPeriod(type(uint32).max);
-
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidShareLockPeriod.selector)));
-        cellar.setShareLockPeriod(0);
-
-        // Set lock period to reasonable value.
-        uint256 newLock = 300;
-        cellar.setShareLockPeriod(newLock);
-        assertEq(cellar.shareLockPeriod(), newLock, "Cellar share lock should equal newLock.");
-
-        // Make sure user's who join with mint or deposit can not transfer, withdraw, or redeem for the shareLockPeriod.
-        uint256 assets = 100e6;
-        uint256 shares = 100e18;
-        address depositUser = vm.addr(7777);
-        address mintUser = vm.addr(77777);
-        vm.startPrank(depositUser);
-        deal(address(USDC), depositUser, assets);
-        USDC.approve(address(cellar), assets);
-        cellar.deposit(assets, depositUser);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.withdraw(assets, depositUser, depositUser);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.redeem(shares, depositUser, depositUser);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.transfer(address(this), shares);
-        vm.stopPrank();
-
-        vm.startPrank(mintUser);
-        deal(address(USDC), mintUser, assets);
-        USDC.approve(address(cellar), assets);
-        cellar.mint(shares, mintUser);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.withdraw(assets, mintUser, mintUser);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.redeem(shares, mintUser, mintUser);
-        vm.expectRevert(
-            bytes(
-                abi.encodeWithSelector(
-                    Cellar.Cellar__SharesAreLocked.selector,
-                    block.timestamp + cellar.shareLockPeriod(),
-                    block.timestamp
-                )
-            )
-        );
-        cellar.transfer(address(this), shares);
-        vm.stopPrank();
-
-        // Advance block timestamp to end of share lock period.
-        vm.warp(block.timestamp + cellar.shareLockPeriod());
-
-        // Users can withdraw.
-        vm.prank(depositUser);
-        cellar.withdraw(assets, depositUser, depositUser);
-
-        // // Users can transfer.
-        // vm.prank(mintUser);
-        // cellar.transfer(depositUser, shares);
-
-        // // Users can redeem.
-        // vm.prank(depositUser);
-        // cellar.redeem(shares, depositUser, depositUser);
-
-        // // Check that if a user has waited the lock period but then decides to deposit again, they must wait for the new lock period to end.
-        // vm.startPrank(depositUser);
-        // deal(address(USDC), depositUser, assets);
-        // USDC.approve(address(cellar), 2 * assets);
-        // cellar.deposit(assets, depositUser);
-        // // Advance block timestamp to end of share lock period.
-        // vm.warp(block.timestamp + cellar.shareLockPeriod());
-
-        // // If user joins again, they must wait the lock period again, even if withdrawing previous amount.
-        // deal(address(USDC), depositUser, assets);
-        // cellar.deposit(assets, depositUser);
-        // vm.expectRevert(
-        //     bytes(
-        //         abi.encodeWithSelector(
-        //             Cellar.Cellar__SharesAreLocked.selector,
-        //             block.timestamp + cellar.shareLockPeriod(),
-        //             block.timestamp
-        //         )
-        //     )
-        // );
-        // cellar.withdraw(assets, depositUser, depositUser);
-        // vm.stopPrank();
-    }
-
-    function testDepositOnBehalf() external {
-        address user = vm.addr(1111);
-        uint256 assets = 100e6;
-        deal(address(USDC), address(this), assets);
-        vm.expectRevert(
-            bytes(abi.encodeWithSelector(Cellar.Cellar__NotApprovedToDepositOnBehalf.selector, address(this)))
-        );
-        cellar.deposit(assets, user);
-
-        // Add this address as an approved depositor.
-        registry.setApprovedForDepositOnBehalf(address(this), true);
-        // Deposits are now allowed.
-        cellar.deposit(assets, user);
+        registry.trustPosition(101, address(erc20Adaptor), abi.encode(FRAX));
     }
 
     // Crowd Audit Tests
@@ -1698,10 +1219,41 @@ contract CellarTest is Test {
         cellar.deposit(assets, user);
         vm.stopPrank();
 
-        assertEq(
-            cellar.maxWithdraw(user),
-            assets.mulWadDown(2e18),
-            "User should be able to withdraw their assets and the attackers."
-        );
+        assertEq(cellar.maxWithdraw(user), assets, "User should be able to withdraw their assets.");
+    }
+
+    //============================================ Helper Functions ===========================================
+
+    function _depositToCellar(Cellar targetFrom, Cellar targetTo, uint256 amountIn) internal {
+        ERC20 assetIn = targetFrom.asset();
+        ERC20 assetOut = targetTo.asset();
+
+        uint256 amountTo = priceRouter.getValue(assetIn, amountIn, assetOut);
+
+        // Update targetFrom ERC20 balances.
+        deal(address(assetIn), address(targetFrom), assetIn.balanceOf(address(targetFrom)) - amountIn);
+        deal(address(assetOut), address(targetFrom), assetOut.balanceOf(address(targetFrom)) + amountTo);
+
+        // Rebalance into targetTo.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToDepositToCellar(address(targetTo), amountTo);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
+        }
+
+        // Perform callOnAdaptor.
+        targetFrom.callOnAdaptor(data);
+    }
+
+    // Used to act like malicious price router under reporting assets.
+    function getValuesDelta(
+        ERC20[] calldata,
+        uint256[] calldata,
+        ERC20[] calldata,
+        uint256[] calldata,
+        ERC20
+    ) external view returns (uint256) {
+        return 50e6;
     }
 }
