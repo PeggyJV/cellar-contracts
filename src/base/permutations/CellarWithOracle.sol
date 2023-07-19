@@ -35,18 +35,14 @@ contract CellarWithOracle is Cellar {
     {}
 
     ERC4626SharePriceOracle public sharePriceOracle;
-    bool public revertOnOracleFailure;
+    event SharePriceOracleUpdated(address newOracle);
 
     error Cellar__OracleFailure();
 
-    function toggleRevertOnOracleFailure() external onlyOwner {
-        revertOnOracleFailure = revertOnOracleFailure ? false : true;
-    }
-
     function setSharePriceOracle(ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
+        if (decimals != _sharePriceOracle.decimals()) revert Cellar__OracleFailure();
         sharePriceOracle = _sharePriceOracle;
-        // TODO require oracle decimals to be the same as the cellars.
-        // TODO emit an event
+        emit SharePriceOracleUpdated(address(_sharePriceOracle));
     }
 
     function _getTotalAssetsAndTotalSupply(

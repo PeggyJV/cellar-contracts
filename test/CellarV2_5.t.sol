@@ -107,7 +107,6 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         assertTrue(!notSafeToUse);
 
         cellar.setSharePriceOracle(sharePriceOracle);
-        cellar.toggleRevertOnOracleFailure();
 
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);

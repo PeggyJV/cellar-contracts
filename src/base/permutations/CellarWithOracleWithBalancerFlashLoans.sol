@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { Cellar, Registry, ERC20, Math, SafeTransferLib } from "src/base/Cellar.sol";
+import { Registry, ERC20, Math, SafeTransferLib } from "src/base/Cellar.sol";
 import { IFlashLoanRecipient, IERC20 } from "@balancer/interfaces/contracts/vault/IFlashLoanRecipient.sol";
+import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
 import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
 
-contract CellarWithOracleWithBalancerFlashLoans is Cellar, IFlashLoanRecipient {
+contract CellarWithOracleWithBalancerFlashLoans is CellarWithOracle, IFlashLoanRecipient {
     using Math for uint256;
     using SafeTransferLib for ERC20;
 
@@ -29,7 +30,7 @@ contract CellarWithOracleWithBalancerFlashLoans is Cellar, IFlashLoanRecipient {
         uint192 _shareSupplyCap,
         address _balancerVault
     )
-        Cellar(
+        CellarWithOracle(
             _owner,
             _registry,
             _asset,
@@ -45,43 +46,6 @@ contract CellarWithOracleWithBalancerFlashLoans is Cellar, IFlashLoanRecipient {
         balancerVault = _balancerVault;
     }
 
-    // ========================================= Share Price Oracle Support =========================================
-
-    ERC4626SharePriceOracle public sharePriceOracle;
-
-    event SharePriceOracleUpdated(address newOracle);
-
-    error Cellar__OracleFailure();
-
-    function setSharePriceOracle(ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
-        if (decimals != _sharePriceOracle.decimals()) revert Cellar__OracleFailure();
-        sharePriceOracle = _sharePriceOracle;
-        emit SharePriceOracleUpdated(address(_sharePriceOracle));
-    }
-
-    function _getTotalAssetsAndTotalSupply(
-        bool useUpper
-    ) internal view override returns (uint256 _totalAssets, uint256 _totalSupply) {
-        ERC4626SharePriceOracle _sharePriceOracle = sharePriceOracle;
-
-        // Check if sharePriceOracle is set.
-        if (address(_sharePriceOracle) != address(0)) {
-            // Consult the oracle.
-            (uint256 latestAnswer, uint256 timeWeightedAverageAnswer, bool isNotSafeToUse) = _sharePriceOracle
-                .getLatest();
-            if (isNotSafeToUse) revert Cellar__OracleFailure();
-            else {
-                uint256 sharePrice;
-                if (useUpper)
-                    sharePrice = latestAnswer > timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
-                else sharePrice = latestAnswer < timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
-                // Convert share price to totalAssets.
-                _totalSupply = totalSupply;
-                _totalAssets = sharePrice.mulDivDown(_totalSupply, 10 ** decimals);
-            }
-        } else revert Cellar__OracleFailure();
-    }
-
     // ========================================= Balancer Flash Loan Support =========================================
     /**
      * @notice External contract attempted to initiate a flash loan.
@@ -93,8 +57,6 @@ contract CellarWithOracleWithBalancerFlashLoans is Cellar, IFlashLoanRecipient {
      */
     error Cellar__CallerNotBalancerVault();
 
-    // TODO Balacner has below calldata arguments listed as memory, which adds 0.4kb to contract size
-    // need to make sure this still works.
     /**
      * @notice Allows strategist to utilize balancer flashloans while rebalancing the cellar.
      * @dev Balancer does not provide an initiator, so instead insure we are in the `callOnAdaptor` context
