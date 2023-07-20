@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
-import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { ERC20DebtAdaptor } from "src/mocks/ERC20DebtAdaptor.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";

@@ -719,7 +719,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _checkIfPaused();
     }
 
-    // 92 k gas used in here
     function _enter(uint256 assets, uint256 shares, address receiver) internal {
         beforeDeposit(assets, shares, receiver);
 
