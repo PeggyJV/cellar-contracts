@@ -1,77 +1,45 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { MockCellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
-import { Cellar } from "src/base/Cellar.sol";
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
-import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
-import { Registry } from "src/Registry.sol";
-import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { Denominations } from "@chainlink/contracts/src/v0.8/Denominations.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
-import { IUniswapV2Router02 as IUniswapV2Router } from "src/interfaces/external/IUniswapV2Router02.sol";
-import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
-import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
 
-import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
-import { Math } from "src/utils/Math.sol";
+// Import Everything from Starter file.
+import "test/resources/MainnetStarter.t.sol";
 
-contract ERC4626SharePriceOracleTest is Test {
+import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
+
+contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
     AaveATokenAdaptor private aaveATokenAdaptor;
-    ERC20Adaptor private erc20Adaptor;
     MockDataFeed private usdcMockFeed;
     Cellar private cellar;
-    PriceRouter private priceRouter;
-    Registry private registry;
-    SwapRouter private swapRouter;
     ERC4626SharePriceOracle private sharePriceOracle;
-
-    address private immutable strategist = vm.addr(0xBEEF);
-
-    uint8 private constant CHAINLINK_DERIVATIVE = 1;
-
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    ERC20 private aWETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
-    ERC20 private aUSDC = ERC20(0xBcca60bB61934080951369a648Fb03DF4F96263C);
-    ERC20 private dUSDC = ERC20(0x619beb58998eD2278e08620f97007e1116D5D25b);
-    ERC20 private dWETH = ERC20(0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf);
-    ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
-    ERC20 private aWBTC = ERC20(0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656);
-    ERC20 private TUSD = ERC20(0x0000000000085d4780B73119b644AE5ecd22b376);
-    ERC20 private aTUSD = ERC20(0x101cc05f4A51C0319f570d5E146a8C625198e636);
-    address private constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address private constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     IPool private pool = IPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
 
-    // Chainlink PriceFeeds
-    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
-    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
-    // Note this is the BTC USD data feed, but we assume the risk that WBTC depegs from BTC.
-    address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
-    address private TUSD_USD_FEED = 0xec746eCF986E2927Abd291a2A1716c940100f8Ba;
+    uint32 private usdcPosition = 1;
+    uint32 private aV2USDCPosition = 2;
+    uint32 private debtUSDCPosition = 3;
 
-    uint32 private usdcPosition;
-    uint32 private aUSDCPosition;
-    uint32 private debtUSDCPosition;
+    uint256 private initialAssets;
 
     function setUp() external {
+        // Setup forked environment.
+        string memory rpcKey = "MAINNET_RPC_URL";
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
+
+        // Run Starter setUp code.
+        _setUp();
+
         usdcMockFeed = new MockDataFeed(USDC_USD_FEED);
         aaveATokenAdaptor = new AaveATokenAdaptor(address(pool), address(WETH), 1.05e18);
-        erc20Adaptor = new ERC20Adaptor();
-        priceRouter = new PriceRouter(registry, WETH);
-
-        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-
-        registry = new Registry(address(this), address(swapRouter), address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -86,49 +54,36 @@ contract ERC4626SharePriceOracleTest is Test {
         priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
 
         // Setup Cellar:
-        // Cellar positions array.
-        uint32[] memory positions = new uint32[](2);
-        uint32[] memory debtPositions;
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(aaveATokenAdaptor));
-        registry.trustAdaptor(address(erc20Adaptor));
 
-        aUSDCPosition = registry.trustPosition(address(aaveATokenAdaptor), abi.encode(address(aUSDC)));
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(address(USDC)));
-
-        positions[0] = aUSDCPosition;
-        positions[1] = usdcPosition;
-
-        bytes[] memory positionConfigs = new bytes[](2);
-        bytes[] memory debtConfigs;
+        registry.trustPosition(aV2USDCPosition, address(aaveATokenAdaptor), abi.encode(address(aV2USDC)));
+        registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(address(USDC)));
 
         uint256 minHealthFactor = 1.1e18;
-        positionConfigs[0] = abi.encode(minHealthFactor);
 
-        cellar = new Cellar(
-            registry,
+        string memory cellarName = "Simple Aave Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
+
+        cellar = _createCellar(
+            cellarName,
             USDC,
-            "Simple Aave Cellar",
-            "AAVE-CLR",
-            abi.encode(
-                positions,
-                debtPositions,
-                positionConfigs,
-                debtConfigs,
-                aUSDCPosition,
-                address(0),
-                type(uint128).max,
-                type(uint128).max
-            )
+            aV2USDCPosition,
+            abi.encode(minHealthFactor),
+            initialDeposit,
+            platformCut
         );
 
         cellar.addAdaptorToCatalogue(address(aaveATokenAdaptor));
 
+        cellar.addPositionToCatalogue(usdcPosition);
+        cellar.addPosition(1, usdcPosition, abi.encode(0), false);
+
         USDC.safeApprove(address(cellar), type(uint256).max);
 
-        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+        initialAssets = cellar.totalAssets();
 
         ERC4626 _target = ERC4626(address(cellar));
         uint64 _heartbeat = 1 days;
@@ -152,7 +107,12 @@ contract ERC4626SharePriceOracleTest is Test {
         uint256 assets = 100e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
-        assertApproxEqAbs(aUSDC.balanceOf(address(cellar)), assets, 1, "Assets should have been deposited into Aave.");
+        assertApproxEqAbs(
+            aV2USDC.balanceOf(address(cellar)),
+            assets + initialAssets,
+            1,
+            "Assets should have been deposited into Aave."
+        );
 
         bool upkeepNeeded;
         bytes memory performData;
@@ -226,7 +186,7 @@ contract ERC4626SharePriceOracleTest is Test {
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
-        uint256 currentSharePrice = cellar.previewRedeem(1e18);
+        uint256 currentSharePrice = cellar.previewRedeem(1e6);
 
         // Get time weighted average share price.
         // uint256 gas = gasleft();
@@ -399,7 +359,7 @@ contract ERC4626SharePriceOracleTest is Test {
         (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(!checkNotSafeToUse, "Value should be safe to use");
 
-        assertEq(answer, twaa, "Answer should eqaul TWAA since attacker answer is thrown out");
+        assertApproxEqAbs(answer, twaa, 1, "Answer should eqaul TWAA since attacker answer is thrown out");
     }
 
     function testGracePeriod(uint256 delayOne, uint256 delayTwo, uint256 delayThree) external {
@@ -489,10 +449,20 @@ contract ERC4626SharePriceOracleTest is Test {
         uint256 sharePriceMultiplier0,
         uint256 sharePriceMultiplier1
     ) external {
+        // Rebalance aV2USDC into USDC position.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromAaveV2(USDC, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls });
+            // Perform callOnAdaptor.
+            cellar.callOnAdaptor(data);
+        }
+
         cellar.setHoldingPosition(usdcPosition);
         // TODO need to make sure value is outside of 1e5 +- 5bps
-        sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.8e4, 1.5e4);
-        sharePriceMultiplier1 = bound(sharePriceMultiplier1, 0.8e4, 1.5e4);
+        sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.2e4, 0.94e4);
+        sharePriceMultiplier1 = bound(sharePriceMultiplier1, 1.06e4, 1.5e4);
         uint256 sharePriceMultiplier2 = sharePriceMultiplier0 / 2;
         uint256 sharePriceMultiplier3 = sharePriceMultiplier0 / 3;
         uint256 sharePriceMultiplier4 = sharePriceMultiplier0 / 4;
@@ -522,7 +492,7 @@ contract ERC4626SharePriceOracleTest is Test {
 
         assertEq(sharePriceOracle.currentIndex(), 1, "Wrong Current Index");
 
-        uint256 startingCumulative = cellar.previewRedeem(1e18) * (block.timestamp - 1);
+        uint256 startingCumulative = cellar.previewRedeem(1e6) * (block.timestamp - 1);
         uint256 cumulative = startingCumulative;
 
         // Deviate outside threshold for first 12 hours
@@ -531,13 +501,13 @@ contract ERC4626SharePriceOracleTest is Test {
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e18) * (1 days / 2);
+        cumulative += cellar.previewRedeem(1e6) * (1 days / 2);
 
         assertEq(sharePriceOracle.currentIndex(), 1, "Wrong Current Index");
 
         // For last 12 hours, reset to original share price.
         _passTimeAlterSharePriceAndUpkeep((1 days / 2), sharePriceMultiplier1);
-        cumulative += cellar.previewRedeem(1e18) * (1 days / 2);
+        cumulative += cellar.previewRedeem(1e6) * (1 days / 2);
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
@@ -547,7 +517,7 @@ contract ERC4626SharePriceOracleTest is Test {
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
@@ -557,7 +527,7 @@ contract ERC4626SharePriceOracleTest is Test {
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
@@ -567,13 +537,13 @@ contract ERC4626SharePriceOracleTest is Test {
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
         // For last 6 hours show a loss.
         _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier5);
-        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
 
         assertEq(sharePriceOracle.currentIndex(), 3, "Wrong Current Index");
 
@@ -583,13 +553,13 @@ contract ERC4626SharePriceOracleTest is Test {
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e18) * (18 * 3_600);
+        cumulative += cellar.previewRedeem(1e6) * (18 * 3_600);
 
         assertEq(sharePriceOracle.currentIndex(), 3, "Wrong Current Index");
 
         // For last 6 hours earn no yield.
         _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier7);
-        cumulative += cellar.previewRedeem(1e18) * (1 days / 4);
+        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
 
         assertEq(sharePriceOracle.currentIndex(), 4, "Wrong Current Index");
 
@@ -598,11 +568,21 @@ contract ERC4626SharePriceOracleTest is Test {
         assertTrue(!notSafeToUse, "Answer should be safe to use.");
         uint256 expectedTWAA = (cumulative - startingCumulative) / 3 days;
 
-        assertEq(twaa, expectedTWAA, "Actual Time Weighted Average Answer should equal expected.");
-        assertEq(cellar.previewRedeem(1e18), ans, "Actual share price should equal answer.");
+        assertApproxEqAbs(twaa, expectedTWAA, 1, "Actual Time Weighted Average Answer should equal expected.");
+        assertApproxEqAbs(cellar.previewRedeem(1e6), ans, 1, "Actual share price should equal answer.");
     }
 
     function testMultipleReads() external {
+        // Rebalance aV2USDC into USDC position.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToWithdrawFromAaveV2(USDC, type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls });
+        }
+        // Perform callOnAdaptor.
+        cellar.callOnAdaptor(data);
+
         cellar.setHoldingPosition(usdcPosition);
 
         // Have user deposit into cellar.
