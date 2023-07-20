@@ -110,7 +110,6 @@ contract MainnetAddresses {
     address public WETH_FRAX_PAIR = 0x794F6B13FBd7EB7ef10d1ED205c9a416910207Ff;
 
     // Curve Pools and Tokens
-    // Curve Pools and Tokens.
     address public TriCryptoPool = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
     ERC20 public CRV_3_CRYPTO = ERC20(0xc4AD29ba4B3c580e6D59105FFf484999997675Ff);
     address public daiUsdcUsdtPool = 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7;

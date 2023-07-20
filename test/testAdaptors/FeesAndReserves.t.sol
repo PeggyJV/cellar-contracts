@@ -894,6 +894,81 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.stopPrank();
     }
 
+    // ========================================= Malicious Caller Test =========================================
+
+    // Values used to mimic cellar interface between test contract and FeesAndReserves.
+    ERC20 public asset;
+    uint8 public decimals = 18;
+    uint256 public totalAssets;
+    uint256 public totalSupply;
+
+    function feeData()
+        public
+        view
+        returns (uint64 strategistPlatformCut, uint64 platformFee, uint64 lastAccrual, address strategistPayoutAddress)
+    {
+        return (0.8e18, 0, 0, strategist);
+    }
+
+    function testMaliciousCallerChangingReserveAsset() external {
+        // Set this testing contracts `asset` to be USDC.
+        asset = USDC;
+
+        far.setupMetaData(0.05e4, 0.2e4);
+        far.changeUpkeepMaxGas(100e9);
+        far.changeUpkeepFrequency(3_600);
+
+        Cellar[] memory cellars = new Cellar[](1);
+        cellars[0] = Cellar(address(this));
+        totalAssets = 100e18;
+        totalSupply = 100e18;
+        (bool upkeepNeeded, bytes memory performData) = far.checkUpkeep(abi.encode(cellars));
+        far.performUpkeep(performData);
+
+        vm.warp(block.timestamp + 3_600);
+
+        // Add assets to reserves.
+        deal(address(USDC), address(this), 100e6);
+        USDC.approve(address(far), 100e6);
+        far.addAssetsToReserves(100e6);
+
+        // Change asset to WETH.
+        asset = WETH;
+
+        // Try removing assets to take WETH from FeesAndReserves.
+        far.withdrawAssetsFromReserves(100e6);
+
+        assertEq(WETH.balanceOf(address(this)), 0, "Test contract should have no WETH.");
+        assertEq(USDC.balanceOf(address(this)), 100e6, "Test contract should have original USDC balance.");
+
+        // Withdrawing more assets should revert.
+        vm.expectRevert(bytes(abi.encodeWithSelector(FeesAndReserves.FeesAndReserves__NotEnoughReserves.selector)));
+        far.withdrawAssetsFromReserves(1);
+
+        // Adjust totalAssets so that far thinks there are performance fees owed.
+        totalAssets = 200e18;
+        vm.warp(block.timestamp + 365 days);
+
+        (upkeepNeeded, performData) = far.checkUpkeep(abi.encode(cellars));
+        assertEq(upkeepNeeded, true, "Upkeep should be needed.");
+        far.performUpkeep(performData);
+
+        // Add some assets to reserves.
+        deal(address(USDC), address(this), 100e6);
+        USDC.approve(address(far), 100e6);
+        far.addAssetsToReserves(100e6);
+
+        // Prepare fees.
+        far.prepareFees(1e6);
+
+        far.sendFees(Cellar(address(this)));
+
+        // Strategist should have recieved USDC.
+        assertGt(USDC.balanceOf(strategist), 0, "Strategist should have got USDC from performance fees.");
+
+        // Even though caller maliciously changed their `asset`, FeesAndReserves did not use the new asset, it used the asset stored when `setupMetaData` was called.
+    }
+
     // ========================================= HELPER FUNCTIONS =========================================
 
     function _createFARCellar(string memory cellarName) internal returns (Cellar target) {
@@ -983,7 +1058,7 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // Since this contract is set as the Gravity Bridge, this will be called by
     // the Cellar's `sendFees` function to send funds Cosmos.
-    function sendToCosmos(address asset, bytes32, uint256 assets) external {
-        ERC20(asset).transferFrom(msg.sender, cosmos, assets);
+    function sendToCosmos(address assetToSend, bytes32, uint256 assets) external {
+        ERC20(assetToSend).transferFrom(msg.sender, cosmos, assets);
     }
 }
