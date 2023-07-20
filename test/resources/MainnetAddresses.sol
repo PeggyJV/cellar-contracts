@@ -9,6 +9,7 @@ contract MainnetAddresses {
     address public gravityBridgeAddress = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
     address public cosmos = address(0xCAAA);
+    address public multisig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
 
     // DeFi Ecosystem
     address public uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;

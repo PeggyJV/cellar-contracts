@@ -34,7 +34,7 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
-    SinglePositionUniswapV3Adaptor private uniswapV3Adaptor;
+    SinglePositionUniswapV3Adaptor private singlePositionUniswapV3Adaptor;
     SinglePositionUniswapV3PositionTracker private tracker;
 
     uint32 private usdcPosition = 1;
@@ -58,7 +58,7 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
 
         swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         tracker = new SinglePositionUniswapV3PositionTracker(positionManager);
-        uniswapV3Adaptor = new SinglePositionUniswapV3Adaptor(address(positionManager), address(tracker));
+        singlePositionUniswapV3Adaptor = new SinglePositionUniswapV3Adaptor(address(positionManager), address(tracker));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -77,13 +77,13 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
         priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(uniswapV3Adaptor));
+        registry.trustAdaptor(address(singlePositionUniswapV3Adaptor));
 
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
         registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
         registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
-        registry.trustPosition(usdcDaiPosition, address(uniswapV3Adaptor), abi.encode(DAI_USDC_100, 0));
-        registry.trustPosition(usdcWethPosition, address(uniswapV3Adaptor), abi.encode(USDC_WETH_500, 0));
+        registry.trustPosition(usdcDaiPosition, address(singlePositionUniswapV3Adaptor), abi.encode(DAI_USDC_100, 0));
+        registry.trustPosition(usdcWethPosition, address(singlePositionUniswapV3Adaptor), abi.encode(USDC_WETH_500, 0));
 
         string memory cellarName = "UniswapV3 Cellar V0.0";
         uint256 initialDeposit = 1e6;
@@ -102,7 +102,7 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
         cellar.addPosition(1, daiPosition, abi.encode(0), false);
         cellar.addPosition(2, usdcDaiPosition, abi.encode(true), false);
 
-        cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
+        cellar.addAdaptorToCatalogue(address(singlePositionUniswapV3Adaptor));
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         cellar.setRebalanceDeviation(0.003e18);
@@ -114,17 +114,22 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
     }
 
     // ========================================== POSITION MANAGEMENT TEST ==========================================
-    function testOpenUSDC_DAIPosition() external {
-        deal(address(USDC), address(this), 101_000e6);
-        cellar.deposit(101_000e6, address(this));
-        deal(address(USDC), address(cellar), 50_000e6 + initialAssets);
-        deal(address(DAI), address(cellar), 50_000e18);
+    function testOpenUSDC_DAIPosition(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        uint256 usdcAmount = assets / 2;
+        uint256 daiAmount = priceRouter.getValue(USDC, assets / 2, DAI);
+        deal(address(USDC), address(cellar), usdcAmount + initialAssets);
+        deal(address(DAI), address(cellar), daiAmount);
+
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToOpenLP(DAI_USDC_100, 0, 50_000e18, 50_000e6, 10);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            adaptorCalls[0] = _createBytesDataToOpenLP(DAI_USDC_100, 0, type(uint256).max, type(uint256).max, 10);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(singlePositionUniswapV3Adaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
         uint256 position = tracker.getTokenAtIndex(address(cellar), DAI_USDC_100, 0);
@@ -137,13 +142,23 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
 
         // Try to withdraw.
         uint256 maxWithdraw = cellar.maxWithdraw(address(this));
-        console.log(maxWithdraw);
+        assertApproxEqRel(assets, maxWithdraw, 0.001e18, "Max Withdraw should equal assets in.");
         cellar.withdraw(maxWithdraw, address(this), address(this));
 
         uint256 valueOut = priceRouter.getValue(DAI, DAI.balanceOf(address(this)), USDC) +
             USDC.balanceOf(address(this));
-        console.log("USDC Val out", valueOut);
+        assertApproxEqAbs(valueOut, maxWithdraw, 1, "Value out should equal maxWithdraw");
     }
+
+    // TODO test with multiple positions in the same pool
+    // TODO test with multiple positions in different pools
+    // TODO test where user withdraw removes some of the liquidity
+    // TODO test where user withdraw removes all the liquidity
+    // TODO attack tests where user skews pool tick before exitting, make sure cellar total assets only increases.
+    // this also checks pulling assets from mixed orders, or single token withdraws
+    // TODO test where cellar has traditional Uniswap V3 illiquid positions, and new single position in the same pool
+    // TODO test to make sure isLiquid works.
+    // TODO revert tests where we try to overwrite positions, or add to positions that aren't setup.
 
     // ========================================= GRAVITY FUNCTIONS =========================================
 
