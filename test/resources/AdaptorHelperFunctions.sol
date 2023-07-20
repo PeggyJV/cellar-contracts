@@ -281,7 +281,7 @@ contract AdaptorHelperFunctions {
         address _bpt,
         address _liquidityGauge,
         uint256 _amountIn
-    ) public view returns (bytes memory) {
+    ) public pure returns (bytes memory) {
         return abi.encodeWithSelector(BalancerPoolAdaptor.stakeBPT.selector, _bpt, _liquidityGauge, _amountIn);
     }
 
@@ -292,7 +292,7 @@ contract AdaptorHelperFunctions {
         address[] memory tokens,
         uint256[] memory amounts,
         bytes memory data
-    ) public view returns (bytes memory) {
+    ) public pure returns (bytes memory) {
         return abi.encodeWithSelector(BalancerPoolAdaptor.makeFlashLoan.selector, tokens, amounts, data);
     }
 
@@ -303,11 +303,11 @@ contract AdaptorHelperFunctions {
         address _bpt,
         address _liquidityGauge,
         uint256 _amountOut
-    ) public view returns (bytes memory) {
+    ) public pure returns (bytes memory) {
         return abi.encodeWithSelector(BalancerPoolAdaptor.unstakeBPT.selector, _bpt, _liquidityGauge, _amountOut);
     }
 
-    function _createBytesDataToClaimBalancerRewards(address _liquidityGauge) public view returns (bytes memory) {
+    function _createBytesDataToClaimBalancerRewards(address _liquidityGauge) public pure returns (bytes memory) {
         return abi.encodeWithSelector(BalancerPoolAdaptor.claimRewards.selector, _liquidityGauge);
     }
 
@@ -316,7 +316,7 @@ contract AdaptorHelperFunctions {
         IVault.SingleSwap[] memory swapsBeforeJoin,
         BalancerPoolAdaptor.SwapData memory swapData,
         uint256 minimumBpt
-    ) public view returns (bytes memory) {
+    ) public pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 BalancerPoolAdaptor.joinPool.selector,
@@ -332,7 +332,7 @@ contract AdaptorHelperFunctions {
         IVault.SingleSwap[] memory swapsAfterExit,
         BalancerPoolAdaptor.SwapData memory swapData,
         IVault.ExitPoolRequest memory request
-    ) public view returns (bytes memory) {
+    ) public pure returns (bytes memory) {
         return
             abi.encodeWithSelector(BalancerPoolAdaptor.exitPool.selector, targetBpt, swapsAfterExit, swapData, request);
     }

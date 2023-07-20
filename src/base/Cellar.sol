@@ -18,8 +18,6 @@ import { Owned } from "@solmate/auth/Owned.sol";
 // TODO remove
 import { console } from "@forge-std/Test.sol";
 
-// TODO could add in a view function to the oracle that indicates whether it is healthy or not, then if it isn't healthy, it enforces a share lock period
-// This would probs add like 10k gas to user transfers/and withdraws.
 /**
  * @title Sommelier Cellar
  * @notice A composable ERC4626 that can use arbitrary DeFi assets/positions using adaptors.
