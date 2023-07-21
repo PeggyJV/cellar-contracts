@@ -521,7 +521,8 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
 
         // TODO we could add a check here to make sure the pool tick is not being manipulated. Like if we use the
         // Chainlink price we could derive a safe pool tick.
-        // But I haven't found any scenarios where the pool tick being manipulated led to loss of Cellar funds, only gains.
+        // TODO could calcualte swrtPriceX96 from chainlink, then enforce it is within 1% or maybe base it off the pool fee.
+        // TODO could be config data that is bounded based off the pool fee
 
         return (
             amount0 + Cellar(caller).priceRouter().getValue(token1, amount1, token0),
