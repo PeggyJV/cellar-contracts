@@ -144,7 +144,198 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.deposit(assets, address(this));
     }
 
-    // TODO test showing how adding a ton of positions does not increase the deposit gas cost
+    function testDepositAndMintUseLargerAnswer() external {
+        address user0 = vm.addr(10);
+        address user1 = vm.addr(11);
+
+        uint256 snapshotBeforeEntries = vm.snapshot();
+
+        // Double the share price.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 2e4);
+        uint256 assets = 100e6;
+        uint256 expectedShares = assets / 2;
+        {
+            vm.startPrank(user0);
+            deal(address(USDC), user0, assets);
+            USDC.approve(address(cellar), assets);
+            cellar.deposit(assets, user0);
+            vm.stopPrank();
+            assertEq(cellar.balanceOf(user0), expectedShares, "User entry should have used larger answer");
+            assertEq(
+                cellar.balanceOf(user0),
+                cellar.previewDeposit(assets),
+                "User entry should have used larger answer"
+            );
+        }
+
+        {
+            vm.startPrank(user1);
+            deal(address(USDC), user1, assets);
+            USDC.approve(address(cellar), assets);
+            cellar.mint(expectedShares, user1);
+            vm.stopPrank();
+            assertEq(cellar.balanceOf(user1), expectedShares, "User entry should have used larger answer");
+            assertEq(assets, cellar.previewMint(expectedShares), "User entry should have used larger answer");
+        }
+
+        // Revert to before entries.
+        vm.revertTo(snapshotBeforeEntries);
+
+        // Half the share price.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 0.5e4);
+
+        expectedShares = assets.mulDivDown(3e4, 2.5e4);
+        {
+            vm.startPrank(user0);
+            deal(address(USDC), user0, assets);
+            USDC.approve(address(cellar), assets);
+            cellar.deposit(assets, user0);
+            vm.stopPrank();
+            assertApproxEqRel(
+                cellar.balanceOf(user0),
+                expectedShares,
+                0.0001e18,
+                "User entry should have used larger time weighted average answer"
+            );
+            assertApproxEqRel(
+                cellar.balanceOf(user0),
+                cellar.previewDeposit(assets),
+                0.0001e18,
+                "User entry should have used larger answer"
+            );
+        }
+
+        {
+            vm.startPrank(user1);
+            deal(address(USDC), user1, assets);
+            USDC.approve(address(cellar), assets);
+            cellar.mint(expectedShares, user1);
+            vm.stopPrank();
+            assertApproxEqRel(
+                cellar.balanceOf(user1),
+                expectedShares,
+                0.0001e18,
+                "User entry should have used larger time weighted average answer"
+            );
+            assertApproxEqRel(
+                assets,
+                cellar.previewMint(expectedShares),
+                0.0001e18,
+                "User entry should have used larger answer"
+            );
+        }
+    }
+
+    function testWithdrawAndRedeemUseSmallerAnswer() external {
+        address user0 = vm.addr(10);
+        address user1 = vm.addr(11);
+        uint256 assets = 100e6;
+        uint256 initialShares = 100e6;
+        {
+            vm.startPrank(user0);
+            deal(address(USDC), user0, assets);
+            USDC.approve(address(cellar), assets);
+            cellar.deposit(assets, user0);
+            vm.stopPrank();
+        }
+        {
+            vm.startPrank(user1);
+            deal(address(USDC), user1, assets);
+            USDC.approve(address(cellar), assets);
+            cellar.deposit(assets, user1);
+            vm.stopPrank();
+        }
+
+        uint256 snapshotBeforeExits = vm.snapshot();
+
+        // Double the share price.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 2e4);
+
+        uint256 expectedAssets = assets.mulDivDown(4, 3);
+        {
+            vm.startPrank(user0);
+            uint256 assetsToWithdraw = cellar.maxWithdraw(user0);
+            cellar.withdraw(assetsToWithdraw, user0, user0);
+            vm.stopPrank();
+            assertApproxEqRel(
+                USDC.balanceOf(user0),
+                expectedAssets,
+                0.0001e18,
+                "User exit should have used smaller time weighted average answer"
+            );
+            assertApproxEqRel(
+                initialShares,
+                cellar.previewWithdraw(assetsToWithdraw),
+                0.0001e18,
+                "User exit should have used smaller time weighted average answer"
+            );
+        }
+
+        {
+            vm.startPrank(user1);
+            uint256 sharesToRedeem = cellar.maxRedeem(user1);
+            cellar.redeem(sharesToRedeem, user1, user1);
+            vm.stopPrank();
+            assertApproxEqRel(
+                USDC.balanceOf(user1),
+                expectedAssets,
+                0.0001e18,
+                "User exit should have used smaller time weighted average answer"
+            );
+            assertApproxEqRel(
+                USDC.balanceOf(user1),
+                cellar.previewRedeem(initialShares),
+                0.0001e18,
+                "User exit should have used smaller time weighted average answer"
+            );
+        }
+
+        // Revert to before exits.
+        vm.revertTo(snapshotBeforeExits);
+
+        // Half the share price.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 0.5e4);
+
+        expectedAssets = assets / 2;
+        {
+            vm.startPrank(user0);
+            uint256 assetsToWithdraw = cellar.maxWithdraw(user0);
+            cellar.withdraw(assetsToWithdraw, user0, user0);
+            vm.stopPrank();
+            assertApproxEqRel(
+                USDC.balanceOf(user0),
+                expectedAssets,
+                0.0001e18,
+                "User exit should have used smaller time weighted average answer"
+            );
+            assertApproxEqRel(
+                initialShares,
+                cellar.previewWithdraw(assetsToWithdraw),
+                0.0001e18,
+                "User exit should have used smaller time weighted average answer"
+            );
+        }
+
+        {
+            vm.startPrank(user1);
+            uint256 sharesToRedeem = cellar.maxRedeem(user1);
+            cellar.redeem(sharesToRedeem, user1, user1);
+            vm.stopPrank();
+            assertApproxEqRel(
+                USDC.balanceOf(user1),
+                expectedAssets,
+                0.0001e18,
+                "User exit should have used smaller time weighted average answer"
+            );
+            assertApproxEqRel(
+                USDC.balanceOf(user1),
+                cellar.previewRedeem(initialShares),
+                0.0001e18,
+                "User exit should have used smaller time weighted average answer"
+            );
+        }
+    }
+
     function testDepositGas(uint256 assets) external {
         assets = bound(assets, 0.1e6, 1_000_000e6);
         deal(address(USDC), address(this), 3 * assets);
@@ -177,8 +368,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertApproxEqRel(depositGas1Asset, depositGas4Assets, 0.001e18, "Deposit gas should be the same");
     }
 
-    // TODO test showing if an attacker can manipulate the share price, it doesn't change share price until the oracle updates.
-    function testAttackerManipulatingSharePrice() external {
+    function testAttackerManipulatingSharePriceUp() external {
         // In this hypothetical scenario, the attacker has found a way to 2x the share price.
         // And perfectly times it so that oracle updates immediately after.
         // Even though this happens, when the attacker withdraws, they use the
@@ -224,6 +414,71 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             0.0001e18,
             "Attacker assets out should equal expected"
         );
+    }
+
+    function testAttackerManipulatingSharePriceDown() external {
+        // In this hypothetical scenario, the attacker has found a way to 0.5x the share price.
+        // And perfectly times it so that oracle updates immediately after.
+        // Even though this happens, when the attacker mints, then withdraws, the
+        // cellar uses valeus that benefit the cellar.
+        address attacker = vm.addr(88);
+        uint256 attackerAssets = 1_000e6;
+
+        // Attacker manipulates Cellar Share Price.
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)) / 2);
+
+        // Assume upkeep happens right after share price manipulation.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        // Attacker joins cellar.
+        vm.startPrank(attacker);
+        deal(address(USDC), attacker, attackerAssets);
+        USDC.approve(address(cellar), attackerAssets);
+        cellar.deposit(attackerAssets, attacker);
+        vm.stopPrank();
+
+        uint256 attackerPaidSharePrice = cellar.previewMint(1e6);
+
+        assertGt(
+            attackerPaidSharePrice,
+            0.5e6,
+            "Even though attacker reduced the share price before entering, it should be greater than 0.5e6"
+        );
+    }
+
+    // ------------------------------------- Revert Tests -------------------------------------------------
+    // Implement Decimals so that `setSharePriceOracle` reverts for the right reason.
+    uint8 public decimals = 18;
+
+    function testAddingOracleWithWrongDecimalsReverts() external {
+        vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
+        cellar.setSharePriceOracle(ERC4626SharePriceOracle(address(this)));
+    }
+
+    // Make sure if oracle answer is not safe to use deposits revert
+    function testOracleNotSetOrUnsafeOracleAnswersRevert() external {
+        uint256 assets = 1_000e6;
+        deal(address(USDC), address(this), assets);
+        USDC.approve(address(cellar), assets);
+
+        // Alter storage since it is impossible to set share price oracle to zero address normally.
+        stdstore.target(address(cellar)).sig(cellar.sharePriceOracle.selector).checked_write(address(0));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
+        cellar.deposit(assets, address(this));
+
+        cellar.setSharePriceOracle(sharePriceOracle);
+
+        vm.warp(block.timestamp + 1 days + 3_601);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
+        cellar.deposit(assets, address(this));
+    }
+
+    function testSettingSharePriceOracleToZeroAddressReverts() external {
+        vm.expectRevert();
+        cellar.setSharePriceOracle(ERC4626SharePriceOracle(address(0)));
     }
 
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
