@@ -104,7 +104,6 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint8 public immutable targetDecimals;
 
-    // TODO add Automation V2.1 Upkeep creation code to the constructor, so that the upkeep ID can be saved, and upkeep balances can be checked during getLatest calls.
     /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod`.
@@ -157,8 +156,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 timeDeltaSincePreviousObservation = block.timestamp -
             observations[_getPreviousIndex(_currentIndex, _observationsLength)].timestamp;
         uint64 _heartbeat = heartbeat;
-        // TODO would we ever have a scenario where performUpkeep is called from
-        // `timeDeltaCurrentAnswer >= _heartbeat` being true? Like I think if that is true, then `timeDeltaSincePreviousObservation >= _heartbeat` is also true.
+
         if (
             timeDeltaCurrentAnswer >= _heartbeat ||
             timeDeltaSincePreviousObservation >= _heartbeat ||
@@ -284,7 +282,6 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 minDuration = heartbeat * (_observationsLength - 2);
         uint256 maxDuration = minDuration + gracePeriod;
         // Data is too new
-        // TODO we should realistically never hit this if we confirm observations always last a minimum of heartbeat.
         if (timeDelta < minDuration) return (0, true);
         // Data is too old
         if (timeDelta > maxDuration) return (0, true);
