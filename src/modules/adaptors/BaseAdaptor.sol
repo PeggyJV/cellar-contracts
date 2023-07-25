@@ -6,7 +6,6 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 
 /**

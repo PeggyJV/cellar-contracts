@@ -2,7 +2,7 @@
 pragma solidity 0.8.16;
 
 import { MockCellar, Cellar, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
-import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
+import {  IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { Registry, IGravity } from "src/base/Cellar.sol";
 import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";

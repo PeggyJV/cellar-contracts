@@ -13,7 +13,7 @@ import "@uniswapV3C/libraries/FullMath.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
+import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -28,7 +28,6 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
     using Address for address;
 
     Cellar private cellar;
-    SwapRouter private swapRouter;
 
     IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
     INonfungiblePositionManager internal positionManager =
@@ -36,6 +35,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
 
     UniswapV3Adaptor private uniswapV3Adaptor;
     UniswapV3PositionTracker private tracker;
+
+    IUniswapV3Router public uniswapV3Router = IUniswapV3Router(uniV3Router);
 
     uint32 private usdcPosition = 1;
     uint32 private wethPosition = 2;
@@ -52,7 +53,6 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         // Run Starter setUp code.
         _setUp();
 
-        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
         tracker = new UniswapV3PositionTracker(positionManager);
         uniswapV3Adaptor = new UniswapV3Adaptor(address(positionManager), address(tracker));
 
@@ -745,35 +745,32 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
             uint24[] memory poolFees_10000 = new uint24[](1);
             poolFees_10000[0] = 10000;
 
-            USDC.safeApprove(address(swapRouter), type(uint256).max);
-            DAI.safeApprove(address(swapRouter), type(uint256).max);
-            WETH.safeApprove(address(swapRouter), type(uint256).max);
             for (uint256 i = 0; i < 10; i++) {
                 uint256 swapAmount = assetsToSwap / 2;
                 swapData = abi.encode(path0, poolFees_100, swapAmount, 0);
-                uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                uint256 daiAmount = swapWithUniV3(swapData, address(this), USDC, DAI);
                 swapData = abi.encode(path1, poolFees_500, swapAmount, 0);
-                uint256 wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                uint256 wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path2, poolFees_100, daiAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), DAI, USDC);
                 swapData = abi.encode(path3, poolFees_500, wethAmount, 0);
-                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap += swapWithUniV3(swapData, address(this), WETH, USDC);
 
                 swapAmount = assetsToSwap / 2;
                 swapData = abi.encode(path0, poolFees_500, swapAmount, 0);
-                daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                daiAmount = swapWithUniV3(swapData, address(this), USDC, DAI);
                 swapData = abi.encode(path1, poolFees_3000, swapAmount, 0);
-                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path2, poolFees_500, daiAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), DAI, USDC);
                 swapData = abi.encode(path3, poolFees_3000, wethAmount, 0);
-                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap += swapWithUniV3(swapData, address(this), WETH, USDC);
 
                 swapAmount = assetsToSwap;
                 swapData = abi.encode(path1, poolFees_10000, swapAmount, 0);
-                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path3, poolFees_10000, wethAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), WETH, USDC);
             }
         }
         data = new Cellar.AdaptorCall[](1);
@@ -882,35 +879,32 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
             uint24[] memory poolFees_10000 = new uint24[](1);
             poolFees_10000[0] = 10000;
 
-            USDC.safeApprove(address(swapRouter), type(uint256).max);
-            DAI.safeApprove(address(swapRouter), type(uint256).max);
-            WETH.safeApprove(address(swapRouter), type(uint256).max);
             for (uint256 i = 0; i < 10; i++) {
                 uint256 swapAmount = assetsToSwap / 2;
                 swapData = abi.encode(path0, poolFees_100, swapAmount, 0);
-                uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                uint256 daiAmount = swapWithUniV3(swapData, address(this), USDC, DAI);
                 swapData = abi.encode(path1, poolFees_500, swapAmount, 0);
-                uint256 wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                uint256 wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path2, poolFees_100, daiAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), DAI, USDC);
                 swapData = abi.encode(path3, poolFees_500, wethAmount, 0);
-                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap += swapWithUniV3(swapData, address(this), WETH, USDC);
 
                 swapAmount = assetsToSwap / 2;
                 swapData = abi.encode(path0, poolFees_500, swapAmount, 0);
-                daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                daiAmount = swapWithUniV3(swapData, address(this), USDC, DAI);
                 swapData = abi.encode(path1, poolFees_3000, swapAmount, 0);
-                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path2, poolFees_500, daiAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), DAI, USDC);
                 swapData = abi.encode(path3, poolFees_3000, wethAmount, 0);
-                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap += swapWithUniV3(swapData, address(this), WETH, USDC);
 
                 swapAmount = assetsToSwap;
                 swapData = abi.encode(path1, poolFees_10000, swapAmount, 0);
-                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path3, poolFees_10000, wethAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), WETH, USDC);
             }
         }
 
@@ -1305,6 +1299,38 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
+
+    function swapWithUniV3(
+        bytes memory swapData,
+        address receiver,
+        ERC20 assetIn,
+        ERC20 assetOut
+    ) public returns (uint256 amountOut) {
+        (address[] memory path, uint24[] memory poolFees, uint256 amount, uint256 amountOutMin) = abi.decode(
+            swapData,
+            (address[], uint24[], uint256, uint256)
+        );
+
+        // Approve assets to be swapped through the router.
+        assetIn.safeApprove(address(uniswapV3Router), amount);
+
+        // Encode swap parameters.
+        bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
+        for (uint256 i = 1; i < path.length; i++)
+            encodePackedPath = abi.encodePacked(encodePackedPath, poolFees[i - 1], path[i]);
+
+        // Execute the swap.
+        amountOut = uniswapV3Router.exactInput(
+            IUniswapV3Router.ExactInputParams({
+                path: encodePackedPath,
+                recipient: receiver,
+                deadline: block.timestamp + 60,
+                amountIn: amount,
+                amountOutMinimum: amountOutMin
+            })
+        );
+    }
+
     function _sqrt(uint256 _x) internal pure returns (uint256 y) {
         uint256 z = (_x + 1) / 2;
         y = _x;

@@ -2,14 +2,14 @@
 pragma solidity 0.8.16;
 
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
-import { ERC20, MockERC20 } from "src/mocks/MockERC20.sol";
 
-import { Test, console } from "@forge-std/Test.sol";
-import { Math } from "src/utils/Math.sol";
+// Import Everything from Starter file.
+import "test/resources/MainnetStarter.t.sol";
 
-contract VestingTest is Test {
+import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
+
+contract VestingTest is MainnetStarterTest, AdaptorHelperFunctions {
     using Math for uint256;
-
 
     VestingSimple internal vesting;
     ERC20 internal token;
@@ -28,8 +28,13 @@ contract VestingTest is Test {
     uint256 internal constant minimumDeposit = vestingPeriod * 1000;
 
     function setUp() external {
+        // Setup forked environment.
+        string memory rpcKey = "MAINNET_RPC_URL";
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
+
         // Deploy token
-        token = new MockERC20("TT", 18);
+        token = WETH;
 
         // Deploy vesting contract
         vesting = new VestingSimple(token, vestingPeriod, minimumDeposit);
@@ -105,10 +110,7 @@ contract VestingTest is Test {
         _doWithdrawal(1, amount);
 
         // Try to withdraw again, should get error that deposit is fully vested
-        vm.expectRevert(bytes(abi.encodeWithSelector(
-            VestingSimple.Vesting_DepositFullyVested.selector,
-            1
-        )));
+        vm.expectRevert(bytes(abi.encodeWithSelector(VestingSimple.Vesting_DepositFullyVested.selector, 1)));
         vesting.withdraw(1, 1);
 
         // Also make sure user has no deposits
@@ -145,14 +147,16 @@ contract VestingTest is Test {
 
         // Check state, with deposit info's vesting value now nonzero
         assertEq(vesting.vestedBalanceOf(user), amount - amountToClaim, "User vested balance should be 0");
-        assertEq(vesting.vestedBalanceOfDeposit(user, 1), amount - amountToClaim, "User vested balance of deposit should be 0");
+        assertEq(
+            vesting.vestedBalanceOfDeposit(user, 1),
+            amount - amountToClaim,
+            "User vested balance of deposit should be 0"
+        );
 
-        (
-            uint256 amountPerSecond,
-            uint128 until,
-            uint128 lastClaimed,
-            uint256 vested
-        ) = vesting.userVestingInfo(user, 1);
+        (uint256 amountPerSecond, uint128 until, uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(
+            user,
+            1
+        );
 
         assertEq(amountPerSecond, amount.mulDivDown(ONE, vestingPeriod), "Amount per second should be accurate");
         assertEq(until, depositTimestamp + vestingPeriod, "Release time should be accurate");
@@ -172,9 +176,13 @@ contract VestingTest is Test {
         assertEq(vesting.vestedBalanceOfDeposit(user, 1), 0, "User vested balance of deposit should be 0");
         assertEq(vesting.totalBalanceOf(user), 0, "User total balance should be 0");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 1);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 1);
 
-        assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate after final withdrawal");
+        assertEq(
+            lastClaimed,
+            depositTimestamp + vestingPeriod,
+            "Last claim timestamp should be accurate after final withdrawal"
+        );
         assertEq(vested, 0, "Vested tokens should be accounted for after final withdrawal");
 
         // Also make sure user has no deposits
@@ -216,14 +224,16 @@ contract VestingTest is Test {
 
         // Check state, with deposit info's vesting value now nonzero
         assertEq(vesting.vestedBalanceOf(user), amountVested - amountToClaim, "User vested balance should be 0");
-        assertEq(vesting.vestedBalanceOfDeposit(user, 1), amountVested - amountToClaim, "User vested balance of deposit should be 0");
+        assertEq(
+            vesting.vestedBalanceOfDeposit(user, 1),
+            amountVested - amountToClaim,
+            "User vested balance of deposit should be 0"
+        );
 
-        (
-            uint256 amountPerSecond,
-            uint128 until,
-            uint128 lastClaimed,
-            uint256 vested
-        ) = vesting.userVestingInfo(user, 1);
+        (uint256 amountPerSecond, uint128 until, uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(
+            user,
+            1
+        );
 
         assertEq(amountPerSecond, amount.mulDivDown(ONE, vestingPeriod), "Amount per second should be accurate");
         assertEq(until, depositTimestamp + vestingPeriod, "Release time should be accurate");
@@ -243,9 +253,13 @@ contract VestingTest is Test {
         assertEq(vesting.vestedBalanceOfDeposit(user, 1), 0, "User vested balance of deposit should be 0");
         assertEq(vesting.totalBalanceOf(user), amount - amountVested, "User total balance should be 0");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 1);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 1);
 
-        assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate after final withdrawal");
+        assertEq(
+            lastClaimed,
+            depositTimestamp + time,
+            "Last claim timestamp should be accurate after final withdrawal"
+        );
         assertEq(vested, 0, "Vested tokens should be accounted for after final withdrawal");
 
         // Deposit still active, since only partially vested
@@ -283,7 +297,7 @@ contract VestingTest is Test {
         // Also make sure user still has a deposit
         assertEq(vesting.userDepositIds(user).length, 1, "User deposit should still be active");
 
-        (,, uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
+        (, , uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
 
         assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
@@ -297,8 +311,18 @@ contract VestingTest is Test {
 
         assertEq(vesting.currentId(user), 1, "User currentId should be 1");
         assertApproxEqAbs(vesting.vestedBalanceOf(user), amountToClaim, 1, "User vested balance should be accurate");
-        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountToClaim, 1, "User vested balance of deposit should be accurate");
-        assertApproxEqAbs(vesting.totalBalanceOf(user), amount - amountVested, 1, "User total balance should be accrate");
+        assertApproxEqAbs(
+            vesting.vestedBalanceOfDeposit(user, 1),
+            amountToClaim,
+            1,
+            "User vested balance of deposit should be accurate"
+        );
+        assertApproxEqAbs(
+            vesting.totalBalanceOf(user),
+            amount - amountVested,
+            1,
+            "User total balance should be accrate"
+        );
 
         _checkWithdrawReverts(1, amountToClaim);
 
@@ -307,7 +331,7 @@ contract VestingTest is Test {
         // Also make sure user has no deposits
         assertEq(vesting.userDepositIds(user).length, 0, "User should have no more deposits");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 1);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 1);
 
         assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
@@ -350,12 +374,12 @@ contract VestingTest is Test {
         // Also make sure user still has a deposit
         assertEq(vesting.userDepositIds(user).length, 2, "User deposits should both be active");
 
-        (,, uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
+        (, , uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
 
         assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 2);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 2);
 
         assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
@@ -373,10 +397,30 @@ contract VestingTest is Test {
         // Move to the end of the period and claim again
         {
             assertEq(vesting.currentId(user), 2, "User currentId should be 2");
-            assertApproxEqAbs(vesting.vestedBalanceOf(user), amountSecondVest + amountVested2, 1, "User vested balance should be accurate");
-            assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountSecondVest, 1, "User vested balance of deposit should be accurate");
-            assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 2), amountVested2, 1, "User vested balance of deposit should be accurate");
-            assertApproxEqAbs(vesting.totalBalanceOf(user), amount2 + amount - amountVested, 1, "User total balance should be accurate");
+            assertApproxEqAbs(
+                vesting.vestedBalanceOf(user),
+                amountSecondVest + amountVested2,
+                1,
+                "User vested balance should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.vestedBalanceOfDeposit(user, 1),
+                amountSecondVest,
+                1,
+                "User vested balance of deposit should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.vestedBalanceOfDeposit(user, 2),
+                amountVested2,
+                1,
+                "User vested balance of deposit should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.totalBalanceOf(user),
+                amount2 + amount - amountVested,
+                1,
+                "User total balance should be accurate"
+            );
 
             _checkWithdrawReverts(1, amountSecondVest);
             _checkWithdrawReverts(2, amountVested2);
@@ -384,20 +428,34 @@ contract VestingTest is Test {
             uint256 amtBefore = token.balanceOf(user);
             vesting.withdrawAll();
 
-            assertEq(token.balanceOf(user) - amtBefore, amountSecondVest + amountVested2, "User should have received vested tokens");
+            assertEq(
+                token.balanceOf(user) - amtBefore,
+                amountSecondVest + amountVested2,
+                "User should have received vested tokens"
+            );
         }
 
         // Also make sure user has 1 deposit removed, 1 remaining
         assertEq(vesting.userDepositIds(user).length, 1, "User should have 1 deposit left");
-        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), 0, 1, "User vested balance of deposit should be accurate");
-        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 2), 0, 1, "User vested balance of deposit should be accurate");
+        assertApproxEqAbs(
+            vesting.vestedBalanceOfDeposit(user, 1),
+            0,
+            1,
+            "User vested balance of deposit should be accurate"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOfDeposit(user, 2),
+            0,
+            1,
+            "User vested balance of deposit should be accurate"
+        );
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 1);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 1);
 
         assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 2);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 2);
 
         assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
@@ -448,12 +506,12 @@ contract VestingTest is Test {
         assertEq(vesting.userDepositIds(user).length, 1, "User 1 should only have 1 deposit");
         assertEq(vesting.userDepositIds(user2).length, 1, "User 2 should only have 1 deposit");
 
-        (,, uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
+        (, , uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
 
         assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user2, 1);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user2, 1);
 
         assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
@@ -472,10 +530,30 @@ contract VestingTest is Test {
         {
             assertEq(vesting.currentId(user), 1, "User currentId should be 1");
             assertEq(vesting.currentId(user2), 1, "User 2 currentId should be 1");
-            assertApproxEqAbs(vesting.vestedBalanceOf(user), amountSecondVest, 1, "User vested balance should be accurate");
-            assertApproxEqAbs(vesting.vestedBalanceOf(user2), amountVested2, 1, "User vested balance should be accurate");
-            assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountSecondVest, 1, "User vested balance of deposit should be accurate");
-            assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user2, 1), amountVested2, 1, "User vested balance of deposit should be accurate");
+            assertApproxEqAbs(
+                vesting.vestedBalanceOf(user),
+                amountSecondVest,
+                1,
+                "User vested balance should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.vestedBalanceOf(user2),
+                amountVested2,
+                1,
+                "User vested balance should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.vestedBalanceOfDeposit(user, 1),
+                amountSecondVest,
+                1,
+                "User vested balance of deposit should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.vestedBalanceOfDeposit(user2, 1),
+                amountVested2,
+                1,
+                "User vested balance of deposit should be accurate"
+            );
             assertApproxEqAbs(vesting.totalBalanceOf(user2), amount2, 1, "User total balance should be nonzero");
 
             _checkWithdrawReverts(1, amountSecondVest);
@@ -500,15 +578,25 @@ contract VestingTest is Test {
         assertEq(vesting.userDepositIds(user).length, 0, "User should have no deposit left");
         assertEq(vesting.userDepositIds(user2).length, 1, "User should have 1 deposit left");
 
-        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), 0, 1, "User vested balance of deposit should be accurate");
-        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user2, 1), 0, 1, "User vested balance of deposit should be accurate");
+        assertApproxEqAbs(
+            vesting.vestedBalanceOfDeposit(user, 1),
+            0,
+            1,
+            "User vested balance of deposit should be accurate"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOfDeposit(user2, 1),
+            0,
+            1,
+            "User vested balance of deposit should be accurate"
+        );
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 1);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 1);
 
         assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user2, 1);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user2, 1);
 
         assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
@@ -596,12 +684,12 @@ contract VestingTest is Test {
         // Also make sure user still has a deposit
         assertEq(vesting.userDepositIds(user).length, 2, "User deposits should both be active");
 
-        (,, uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
+        (, , uint128 lastClaimed, uint256 vested) = vesting.userVestingInfo(user, 1);
 
         assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 2);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 2);
 
         assertEq(lastClaimed, depositTimestamp + time, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
@@ -620,10 +708,30 @@ contract VestingTest is Test {
         // but use a withdrawAnyFor
         {
             assertEq(vesting.currentId(user), 2, "User currentId should be 2");
-            assertApproxEqAbs(vesting.vestedBalanceOf(user), amountSecondVest + amountVested2, 1, "User vested balance should be accurate");
-            assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), amountSecondVest, 1, "User vested balance of deposit should be accurate");
-            assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 2), amountVested2, 1, "User vested balance of deposit should be accurate");
-            assertApproxEqAbs(vesting.totalBalanceOf(user), amount2 + amount - amountVested, 1, "User total balance should be accurate");
+            assertApproxEqAbs(
+                vesting.vestedBalanceOf(user),
+                amountSecondVest + amountVested2,
+                1,
+                "User vested balance should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.vestedBalanceOfDeposit(user, 1),
+                amountSecondVest,
+                1,
+                "User vested balance of deposit should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.vestedBalanceOfDeposit(user, 2),
+                amountVested2,
+                1,
+                "User vested balance of deposit should be accurate"
+            );
+            assertApproxEqAbs(
+                vesting.totalBalanceOf(user),
+                amount2 + amount - amountVested,
+                1,
+                "User total balance should be accurate"
+            );
 
             _checkWithdrawReverts(1, amountSecondVest);
             _checkWithdrawReverts(2, amountVested2);
@@ -639,15 +747,25 @@ contract VestingTest is Test {
 
         // Also make sure user has 1 deposit removed, 1 remaining
         assertEq(vesting.userDepositIds(user).length, 1, "User should have 1 deposit left");
-        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 1), 0, 1, "User vested balance of deposit should be accurate");
-        assertApproxEqAbs(vesting.vestedBalanceOfDeposit(user, 2), amountVested2.mulDivDown(9, 10), 1, "User vested balance of deposit should be accurate");
+        assertApproxEqAbs(
+            vesting.vestedBalanceOfDeposit(user, 1),
+            0,
+            1,
+            "User vested balance of deposit should be accurate"
+        );
+        assertApproxEqAbs(
+            vesting.vestedBalanceOfDeposit(user, 2),
+            amountVested2.mulDivDown(9, 10),
+            1,
+            "User vested balance of deposit should be accurate"
+        );
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 1);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 1);
 
         assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
         assertEq(vested, 0, "Vested tokens should be accounted for");
 
-        (,, lastClaimed, vested) = vesting.userVestingInfo(user, 2);
+        (, , lastClaimed, vested) = vesting.userVestingInfo(user, 2);
 
         assertEq(lastClaimed, depositTimestamp + vestingPeriod, "Last claim timestamp should be accurate");
         assertApproxEqAbs(vested, amountVested2.mulDivDown(9, 10), 1, "Vested tokens should be accounted for");
@@ -671,11 +789,11 @@ contract VestingTest is Test {
 
     function _checkWithdrawReverts(uint256 depositId, uint256 available) internal {
         // Make sure we cannot withdraw more than vested
-        vm.expectRevert(bytes(abi.encodeWithSelector(
-            VestingSimple.Vesting_DepositNotEnoughAvailable.selector,
-            depositId,
-            available
-        )));
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(VestingSimple.Vesting_DepositNotEnoughAvailable.selector, depositId, available)
+            )
+        );
         vesting.withdraw(depositId, available + 100);
 
         // Make sure we cannot withdraw 0
@@ -683,10 +801,7 @@ contract VestingTest is Test {
         vesting.withdraw(depositId, 0);
 
         // Make sure we cannot withdraw invalid deposit
-        vm.expectRevert(bytes(abi.encodeWithSelector(
-            VestingSimple.Vesting_NoDeposit.selector,
-            100
-        )));
+        vm.expectRevert(bytes(abi.encodeWithSelector(VestingSimple.Vesting_NoDeposit.selector, 100)));
         vesting.withdraw(100, available);
     }
 

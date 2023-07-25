@@ -6,7 +6,7 @@ import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
 import { CellarInitializableV2_2 } from "src/base/CellarInitializableV2_2.sol";
 import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
-import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
+import {  IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 import { ComptrollerG7 as Comptroller, CErc20 } from "src/interfaces/external/ICompound.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";

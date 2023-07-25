@@ -5,7 +5,7 @@ import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
 import { CellarInitializableV2_1 } from "src/base/CellarInitializableV2_1.sol";
 import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
-import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
+import {  IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { IEuler, IEulerMarkets, IEulerExec, IEulerEToken, IEulerDToken } from "src/interfaces/external/IEuler.sol";
 
 // Import adaptors.
