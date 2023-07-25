@@ -59,7 +59,6 @@ contract FTokenAdaptor is BaseAdaptor {
     }
 
     //============================================ Implement Base Functions ===========================================
-    // TODO this function should validate fToken position
     /**
      * @notice Cellar must approve fToken to spend its assets, then call deposit to lend its assets.
      * @param assets the amount of assets to lend on FraxLend
@@ -69,7 +68,6 @@ contract FTokenAdaptor is BaseAdaptor {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Frax Lend.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
-        _validateFToken(fToken);
         FRAX.safeApprove(address(fToken), assets);
         _deposit(fToken, assets, address(this));
 
