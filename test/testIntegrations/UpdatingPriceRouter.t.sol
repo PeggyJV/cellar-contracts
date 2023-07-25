@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.16;
 
-import { SinglePositionUniswapV3Adaptor } from "src/modules/adaptors/Uniswap/SinglePositionUniswapV3Adaptor.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
@@ -11,7 +10,6 @@ import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungible
 import "@uniswapV3C/libraries/FixedPoint128.sol";
 import "@uniswapV3C/libraries/FullMath.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
-import { SinglePositionUniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/SinglePositionUniswapV3PositionTracker.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 
