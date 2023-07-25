@@ -43,7 +43,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     /**
      * @notice Decimals used to scale share price for internal calculations.
      */
-    uint8 public constant SCALING_DECIMALS = 18;
+    uint8 public constant ORACLE_DECIMALS = 18;
 
     //============================== ERRORS ===============================
     error ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry();
@@ -89,11 +89,6 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     uint256 public immutable ONE_SHARE;
 
     /**
-     * @notice Target vault decimals.
-     */
-    uint8 public immutable decimals;
-
-    /**
      * @notice Chainlink's Automation Registry contract address.
      * @notice For mainnet use 0x02777053d6764996e594c3E88AF1D58D5363a2e6.
      */
@@ -103,6 +98,11 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice ERC4626 target vault this contract is an oracle for.
      */
     ERC4626 public immutable target;
+
+    /**
+     * @notice Target vault decimals.
+     */
+    uint8 public immutable targetDecimals;
 
     // TODO add Automation V2.1 Upkeep creation code to the constructor, so that the upkeep ID can be saved, and upkeep balances can be checked during getLatest calls.
     /**
@@ -120,8 +120,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         address _automationRegistry
     ) {
         target = _target;
-        decimals = target.decimals();
-        ONE_SHARE = 10 ** decimals;
+        targetDecimals = target.decimals();
+        ONE_SHARE = 10 ** targetDecimals;
         heartbeat = _heartbeat;
         deviationTrigger = _deviationTrigger;
         gracePeriod = _gracePeriod;
@@ -244,12 +244,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint16 _currentIndex = currentIndex;
         uint16 _observationsLength = observationsLength;
 
-        // Scale results back down to cellar asset decimals.
-        ans = ans.changeDecimals(SCALING_DECIMALS, decimals);
-
         (timeWeightedAverageAnswer, notSafeToUse) = _getTimeWeightedAverageAnswer(_currentIndex, _observationsLength);
         if (notSafeToUse) return (0, 0, true);
-        timeWeightedAverageAnswer = timeWeightedAverageAnswer.changeDecimals(SCALING_DECIMALS, decimals);
     }
 
     //============================== INTERNAL HELPER FUNCTIONS ===============================
@@ -298,7 +294,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
         timeWeightedAverageAnswer =
             (mostRecentlyCompletedObservation.cumulative - oldestObservation.cumulative) /
-            (mostRecentlyCompletedObservation.timestamp - oldestObservation.timestamp);
+            timeDelta;
     }
 
     /**
@@ -306,8 +302,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     function _getTargetSharePrice() internal view returns (uint224 sharePrice) {
         uint256 totalShares = target.totalSupply();
-        // Get total Assets but scale it up to SCALING_DECIMALS decimals of precision.
-        uint256 totalAssets = target.totalAssets().changeDecimals(decimals, SCALING_DECIMALS);
+        // Get total Assets but scale it up to ORACLE_DECIMALS decimals of precision.
+        uint256 totalAssets = target.totalAssets().changeDecimals(targetDecimals, ORACLE_DECIMALS);
 
         if (totalShares == 0) return 0;
 

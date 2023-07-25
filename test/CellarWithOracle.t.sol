@@ -191,16 +191,16 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             USDC.approve(address(cellar), assets);
             cellar.deposit(assets, user0);
             vm.stopPrank();
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 cellar.balanceOf(user0),
                 expectedShares,
-                0.0001e18,
+                100,
                 "User entry should have used larger time weighted average answer"
             );
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 cellar.balanceOf(user0),
                 cellar.previewDeposit(assets),
-                0.0001e18,
+                100,
                 "User entry should have used larger answer"
             );
         }
@@ -211,16 +211,16 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             USDC.approve(address(cellar), assets);
             cellar.mint(expectedShares, user1);
             vm.stopPrank();
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 cellar.balanceOf(user1),
                 expectedShares,
-                0.0001e18,
+                100,
                 "User entry should have used larger time weighted average answer"
             );
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 assets,
                 cellar.previewMint(expectedShares),
-                0.0001e18,
+                100,
                 "User entry should have used larger answer"
             );
         }
@@ -257,16 +257,16 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             uint256 assetsToWithdraw = cellar.maxWithdraw(user0);
             cellar.withdraw(assetsToWithdraw, user0, user0);
             vm.stopPrank();
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 USDC.balanceOf(user0),
                 expectedAssets,
-                0.0001e18,
+                100,
                 "User exit should have used smaller time weighted average answer"
             );
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 initialShares,
                 cellar.previewWithdraw(assetsToWithdraw),
-                0.0001e18,
+                100,
                 "User exit should have used smaller time weighted average answer"
             );
         }
@@ -276,16 +276,16 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             uint256 sharesToRedeem = cellar.maxRedeem(user1);
             cellar.redeem(sharesToRedeem, user1, user1);
             vm.stopPrank();
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 USDC.balanceOf(user1),
                 expectedAssets,
-                0.0001e18,
+                100,
                 "User exit should have used smaller time weighted average answer"
             );
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 USDC.balanceOf(user1),
                 cellar.previewRedeem(initialShares),
-                0.0001e18,
+                100,
                 "User exit should have used smaller time weighted average answer"
             );
         }
@@ -302,16 +302,16 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             uint256 assetsToWithdraw = cellar.maxWithdraw(user0);
             cellar.withdraw(assetsToWithdraw, user0, user0);
             vm.stopPrank();
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 USDC.balanceOf(user0),
                 expectedAssets,
-                0.0001e18,
+                100,
                 "User exit should have used smaller time weighted average answer"
             );
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 initialShares,
                 cellar.previewWithdraw(assetsToWithdraw),
-                0.0001e18,
+                100,
                 "User exit should have used smaller time weighted average answer"
             );
         }
@@ -321,16 +321,16 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             uint256 sharesToRedeem = cellar.maxRedeem(user1);
             cellar.redeem(sharesToRedeem, user1, user1);
             vm.stopPrank();
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 USDC.balanceOf(user1),
                 expectedAssets,
-                0.0001e18,
+                100,
                 "User exit should have used smaller time weighted average answer"
             );
-            assertApproxEqRel(
+            assertApproxEqAbs(
                 USDC.balanceOf(user1),
                 cellar.previewRedeem(initialShares),
-                0.0001e18,
+                100,
                 "User exit should have used smaller time weighted average answer"
             );
         }
@@ -398,20 +398,28 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         (uint256 ans, uint256 twaa, bool isSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(!isSafeToUse, "Oracle should be safe to use");
-        assertEq(ans, 2 * attackerPaidSharePrice, "SharePrice should 2.0");
-        assertEq(twaa, (4 * attackerPaidSharePrice) / 3, "Time Weighted Average share price should be 1.333");
+        assertEq(ans.changeDecimals(18, 6), 2 * attackerPaidSharePrice, "SharePrice should 2.0");
+        assertEq(
+            twaa.changeDecimals(18, 6),
+            (4 * attackerPaidSharePrice) / 3,
+            "Time Weighted Average share price should be 1.333"
+        );
 
         uint256 attackerRedemptionSharePrice = cellar.previewRedeem(1e6);
 
-        assertEq(attackerRedemptionSharePrice, twaa, "Share price for redemption should equal twaa");
+        assertEq(
+            attackerRedemptionSharePrice,
+            twaa.changeDecimals(18, 6),
+            "Share price for redemption should equal twaa"
+        );
         uint256 expectedAttackerAssetsOut = attackerAssets.mulDivDown(4, 3);
         vm.startPrank(attacker);
         cellar.redeem(1_000e6, attacker, attacker);
         vm.stopPrank();
-        assertApproxEqRel(
+        assertApproxEqAbs(
             USDC.balanceOf(attacker),
             expectedAttackerAssetsOut,
-            0.0001e18,
+            1,
             "Attacker assets out should equal expected"
         );
     }
@@ -448,7 +456,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // ------------------------------------- Revert Tests -------------------------------------------------
     // Implement Decimals so that `setSharePriceOracle` reverts for the right reason.
-    uint8 public decimals = 18;
+    uint256 public ORACLE_DECIMALS = 6;
 
     function testAddingOracleWithWrongDecimalsReverts() external {
         vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));

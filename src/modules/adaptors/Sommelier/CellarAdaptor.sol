@@ -108,6 +108,7 @@ contract CellarAdaptor is BaseAdaptor {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Cellar cellar = abi.decode(adaptorData, (Cellar));
         return cellar.previewRedeem(cellar.balanceOf(msg.sender));
+        // return cellar.balanceOf(msg.sender);
     }
 
     /**

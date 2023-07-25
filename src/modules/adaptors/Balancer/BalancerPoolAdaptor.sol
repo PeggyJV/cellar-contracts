@@ -147,11 +147,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     //============================================ Implement Base Functions ===========================================
 
     /**
-     * @notice User deposits are NOT allowed into this position.
+     * @notice User deposits are allowed into this position.
      */
-    function deposit(uint256, bytes memory, bytes memory) public pure override {
-        revert BaseAdaptor__UserDepositsNotAllowed();
-    }
+    function deposit(uint256, bytes memory, bytes memory) public pure override {}
 
     /**
      * @notice If a user withdraw needs more BPTs than what is in the Cellar's

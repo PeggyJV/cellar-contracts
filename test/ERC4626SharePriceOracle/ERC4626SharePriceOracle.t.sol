@@ -191,6 +191,8 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         // Get time weighted average share price.
         // uint256 gas = gasleft();
         (uint256 ans, uint256 timeWeightedAverageAnswer, bool notSafeToUse) = sharePriceOracle.getLatest();
+        ans = ans.changeDecimals(18, 6);
+        timeWeightedAverageAnswer = timeWeightedAverageAnswer.changeDecimals(18, 6);
         // console.log("Gas Used For getLatest", gas - gasleft());
         assertTrue(!notSafeToUse, "Should be safe to use");
         assertEq(ans, currentSharePrice, "Answer should be equal to current share price.");
@@ -359,7 +361,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(!checkNotSafeToUse, "Value should be safe to use");
 
-        assertApproxEqAbs(answer, twaa, 1, "Answer should eqaul TWAA since attacker answer is thrown out");
+        assertApproxEqRel(answer, twaa, 0.0001e18, "Answer should eqaul TWAA since attacker answer is thrown out");
     }
 
     function testGracePeriod(uint256 delayOne, uint256 delayTwo, uint256 delayThree) external {
@@ -460,7 +462,6 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         }
 
         cellar.setHoldingPosition(usdcPosition);
-        // TODO need to make sure value is outside of 1e5 +- 5bps
         sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.2e4, 0.94e4);
         sharePriceMultiplier1 = bound(sharePriceMultiplier1, 1.06e4, 1.5e4);
         uint256 sharePriceMultiplier2 = sharePriceMultiplier0 / 2;
@@ -492,7 +493,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
         assertEq(sharePriceOracle.currentIndex(), 1, "Wrong Current Index");
 
-        uint256 startingCumulative = cellar.previewRedeem(1e6) * (block.timestamp - 1);
+        uint256 startingCumulative = _calcCumulative(cellar, 0, (block.timestamp - 1));
         uint256 cumulative = startingCumulative;
 
         // Deviate outside threshold for first 12 hours
@@ -501,13 +502,13 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e6) * (1 days / 2);
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 2));
 
         assertEq(sharePriceOracle.currentIndex(), 1, "Wrong Current Index");
 
         // For last 12 hours, reset to original share price.
         _passTimeAlterSharePriceAndUpkeep((1 days / 2), sharePriceMultiplier1);
-        cumulative += cellar.previewRedeem(1e6) * (1 days / 2);
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 2));
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
@@ -517,7 +518,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
@@ -527,7 +528,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
@@ -537,13 +538,13 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
         // For last 6 hours show a loss.
         _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier5);
-        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
 
         assertEq(sharePriceOracle.currentIndex(), 3, "Wrong Current Index");
 
@@ -553,13 +554,13 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative += cellar.previewRedeem(1e6) * (18 * 3_600);
+        cumulative = _calcCumulative(cellar, cumulative, (18 * 3_600));
 
         assertEq(sharePriceOracle.currentIndex(), 3, "Wrong Current Index");
 
         // For last 6 hours earn no yield.
         _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier7);
-        cumulative += cellar.previewRedeem(1e6) * (1 days / 4);
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
 
         assertEq(sharePriceOracle.currentIndex(), 4, "Wrong Current Index");
 
@@ -569,7 +570,12 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         uint256 expectedTWAA = (cumulative - startingCumulative) / 3 days;
 
         assertApproxEqAbs(twaa, expectedTWAA, 1, "Actual Time Weighted Average Answer should equal expected.");
-        assertApproxEqAbs(cellar.previewRedeem(1e6), ans, 1, "Actual share price should equal answer.");
+        assertApproxEqAbs(
+            cellar.previewRedeem(1e6),
+            ans.changeDecimals(18, 6),
+            1,
+            "Actual share price should equal answer."
+        );
     }
 
     function testMultipleReads() external {
@@ -608,6 +614,8 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         for (uint256 i; i < 30; ++i) {
             _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
             (answer, twaa, isNotSafeToUse) = sharePriceOracle.getLatest();
+            answer = answer.changeDecimals(18, 6);
+            twaa = twaa.changeDecimals(18, 6);
             assertEq(answer, 1e6, "Answer should be 1 USDC");
             assertEq(twaa, 1e6, "TWAA should be 1 USDC");
             assertTrue(!isNotSafeToUse, "Should be safe to use");
@@ -676,6 +684,15 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
+    }
+
+    function _calcCumulative(Cellar target, uint256 previous, uint256 timePassed) internal view returns (uint256) {
+        uint256 oneShare = 10 ** target.decimals();
+        uint256 totalAssets = target.totalAssets().changeDecimals(
+            target.decimals(),
+            sharePriceOracle.ORACLE_DECIMALS()
+        );
+        return previous + totalAssets.mulDivDown(oneShare * timePassed, target.totalSupply());
     }
 
     // TODO add worst case scenario test where days pass and the upkeep is not working.

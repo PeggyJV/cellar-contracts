@@ -37,14 +37,20 @@ contract CellarWithOracle is Cellar {
     ERC4626SharePriceOracle public sharePriceOracle;
     event SharePriceOracleUpdated(address newOracle);
 
+    uint8 public constant ORACLE_DECIMALS = 18;
+
     error Cellar__OracleFailure();
 
+    //TODO governance only
     function setSharePriceOracle(ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
-        if (decimals != _sharePriceOracle.decimals()) revert Cellar__OracleFailure();
+        if (_sharePriceOracle.ORACLE_DECIMALS() != ORACLE_DECIMALS) revert Cellar__OracleFailure();
         sharePriceOracle = _sharePriceOracle;
         emit SharePriceOracleUpdated(address(_sharePriceOracle));
     }
 
+    /**
+     * @notice _totalAssets calculation is dependent on the Cellar having the same amount of decimals as the underlying asset.
+     */
     function _getTotalAssetsAndTotalSupply(
         bool useUpper
     ) internal view override returns (uint256 _totalAssets, uint256 _totalSupply) {
@@ -63,7 +69,7 @@ contract CellarWithOracle is Cellar {
                 else sharePrice = latestAnswer < timeWeightedAverageAnswer ? latestAnswer : timeWeightedAverageAnswer;
                 // Convert share price to totalAssets.
                 _totalSupply = totalSupply;
-                _totalAssets = sharePrice.mulDivDown(_totalSupply, 10 ** decimals);
+                _totalAssets = sharePrice.mulDivDown(_totalSupply, 10 ** ORACLE_DECIMALS);
             }
         } else revert Cellar__OracleFailure();
     }
