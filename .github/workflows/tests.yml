@@ -25,5 +25,5 @@ jobs:
 
       - name: Run Forge tests
         run: |
-          forge test -vvv --fork-url https://eth-mainnet.alchemyapi.io/v2/${{ secrets.ALCHEMY_API_KEY }} --etherscan-api-key ${{ secrets.ETHERSCAN_API_KEY }} --fork-block-number 16869780
+          forge test
         id: forge-test
