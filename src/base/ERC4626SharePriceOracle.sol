@@ -205,7 +205,6 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         if (timeDelta >= heartbeat) upkeepConditionMet = true;
 
         uint256 currentCumulative = currentObservation.cumulative + (sharePrice * timeDelta);
-        // TODO this check realistically is not needed, but can talk with auditors about it.
         if (currentCumulative > type(uint192).max) revert ERC4626SharePriceOracle__CumulativeTooLarge();
         currentObservation.cumulative = uint192(currentCumulative);
         currentObservation.timestamp = currentTime;
@@ -232,8 +231,6 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Get the latest answer, time weighted average answer, and bool indicating whether they can be safely used.
      */
     function getLatest() external view returns (uint256 ans, uint256 timeWeightedAverageAnswer, bool notSafeToUse) {
-        // TODO Check if upkeep is underfunded, if so set notSafeToUse to true, and return.
-
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
         // Note add in the grace period here, because it can take time for the upkeep TX to go through.

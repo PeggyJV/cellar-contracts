@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 import { Cellar, Registry, ERC20, Math } from "src/base/Cellar.sol";
-
 import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
 
 contract CellarWithOracle is Cellar {
@@ -34,14 +33,32 @@ contract CellarWithOracle is Cellar {
         )
     {}
 
+    /**
+     * @notice The ERC4626 Share Price Oracle this Cellar uses to calculate its totalAssets,
+     *         during user entry/exits.
+     */
     ERC4626SharePriceOracle public sharePriceOracle;
+
+    /**
+     * @notice Emitted when Share Price Oracle is changed.
+     */
     event SharePriceOracleUpdated(address newOracle);
 
+    /**
+     * @notice The decimals the Cellar is expecting the oracle to have.
+     */
     uint8 public constant ORACLE_DECIMALS = 18;
 
+    /**
+     * @notice Some failure occurred while trying to setup/use the oracle.
+     */
     error Cellar__OracleFailure();
 
-    //TODO governance only
+    /**
+     * @notice Change the share price oracle this Cellar uses for share price calculations.
+     * @dev Only callable through Sommelier Governance.
+     * @dev Trying to set the share price oracle to the zero address will revert here.
+     */
     function setSharePriceOracle(ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
         if (_sharePriceOracle.ORACLE_DECIMALS() != ORACLE_DECIMALS) revert Cellar__OracleFailure();
         sharePriceOracle = _sharePriceOracle;
@@ -49,7 +66,10 @@ contract CellarWithOracle is Cellar {
     }
 
     /**
-     * @notice _totalAssets calculation is dependent on the Cellar having the same amount of decimals as the underlying asset.
+     * @notice Estimate totalAssets be querying oracle to get latest answer, and time weighted average answer.
+     * @dev If useUpper is true, use larger of the 2 to maximize share price
+     *      else use smaller of the 2 to minimize share price
+     * @dev _totalAssets calculation is dependent on the Cellar having the same amount of decimals as the underlying asset.
      */
     function _getTotalAssetsAndTotalSupply(
         bool useUpper
