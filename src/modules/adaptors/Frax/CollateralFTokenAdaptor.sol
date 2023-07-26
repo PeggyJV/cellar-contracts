@@ -19,7 +19,7 @@ contract CollateralFTokenAdaptor is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address collateralToken)
+    // adaptorData = abi.encode(address fToken)
     // Where:
     // `collateralToken` is the collateralToken address position this adaptor is working with.
     //================= Configuration Data Specification =================
@@ -101,17 +101,16 @@ contract CollateralFTokenAdaptor is BaseAdaptor {
      * TODO: confirm that there is no need to typeCast on the decoded adaptorData when needing address, ERC20 or vice versa.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        address _collateralFToken = abi.decode(adaptorData, (address));
-        ICollateralFToken collateralFToken = ICollateralFToken(_collateralFToken);
-        return collateralFToken.userCollateralBalance(msg.sender) + IERC20(_collateralFToken).balanceOf(msg.sender); // reports balance of collateral provided to protocol.
+        ICollateralFToken fToken = ICollateralFToken(abi.decode(adaptorData, (address))); // TODO: CRISPY QUESTION - could change adaptorData to be collateralToken but then it won't be consistent with rest of fraxlend adaptors.
+        return fToken.userCollateralBalance(msg.sender) + fToken.collateralContract().balanceOf(msg.sender); // reports balance of collateral provided to protocol.
     }
 
     /**
      * @notice Returns collateral asset
      */
     function assetOf(bytes memory) public view override returns (ERC20) {
-        ERC20 collateralToken = abi.decode(adaptorData, (ERC20));
-        return collateralToken;
+        IFToken fToken = abi.decode(adaptorData, (IFToken));
+        return ERC20(fToken.collateralContract());
     }
 
     /**
