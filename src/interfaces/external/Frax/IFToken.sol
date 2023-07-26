@@ -29,9 +29,15 @@ interface IFToken {
             uint256 totalCollateral
         );
 
-    function borrowAsset(uint256 borrowAmount, uint256 collateralAmount, address receiver) external;
+    // function borrowAsset(uint256 borrowAmount, uint256 collateralAmount, address receiver) external;
 
-    function repayAsset(uint256 shares, address borrower) external;
+    function borrowAsset(
+        uint256 _borrowAmount,
+        uint256 _collateralAmount,
+        address _receiver
+    ) external returns (uint256 _shares)
+
+    function repayAsset(uint256 shares, address borrower) external returns (uint256 _amountToRepay);
 
     // Changes for Frax Pair V2 interface.
     // Example Pair: https://etherscan.io/address/0x78bB3aEC3d855431bd9289fD98dA13F9ebB7ef15#code
@@ -66,4 +72,14 @@ interface IFToken {
             VaultAccount memory _totalAsset,
             VaultAccount memory _totalBorrow
         );
+
+    function addCollateral(uint256 _collateralAmount, address _borrower) external;
+
+    function removeCollateral(uint256 _collateralAmount, address _receiver) external;
+
+    function updateExchangeRate()
+        external
+        returns (bool _isBorrowAllowed, uint256 _lowExchangeRate, uint256 _highExchangeRate);
+
+    function collateralContract() external returns (IERC20 collateralContract);
 }
