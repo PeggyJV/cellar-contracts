@@ -606,6 +606,29 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         cellar.addPosition(0, debtWbtcPosition, abi.encode(0), true);
         assertEq(cellar.getDebtPositions().length, 2, "Debt positions should be length 2.");
+
+        // Check force position out logic.
+        // Give Cellar 1 WEI WETH.
+        deal(address(WETH), address(cellar), 1);
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    Cellar.Cellar__PositionNotEmpty.selector,
+                    wethPosition,
+                    WETH.balanceOf(address(cellar))
+                )
+            )
+        );
+        cellar.removePosition(2, false);
+
+        // Try forcing out the wrong position.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ForcingOutWrongPosition.selector)));
+        cellar.forcePositionOut(4, wethPosition, false);
+
+        // When correct index is used, call works.
+        cellar.forcePositionOut(2, wethPosition, false);
+
+        assertTrue(!cellar.isPositionUsed(wethPosition), "WETH Position should have been forced out.");
     }
 
     // ========================================== REBALANCE TEST ==========================================
