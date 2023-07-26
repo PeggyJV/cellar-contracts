@@ -1342,7 +1342,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         if (isShutdown) return 0;
 
         uint192 _cap = shareSupplyCap;
-        if ((_cap = shareSupplyCap) == type(uint192).max) return type(uint192).max;
+        if ((_cap = shareSupplyCap) == type(uint192).max) return type(uint256).max;
 
         (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
         if (_totalSupply >= _cap) return 0;
@@ -1360,7 +1360,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         if (isShutdown) return 0;
 
         uint192 _cap;
-        if ((_cap = shareSupplyCap) == type(uint192).max) return type(uint192).max;
+        if ((_cap = shareSupplyCap) == type(uint192).max) return type(uint256).max;
 
         uint256 _totalSupply = totalSupply;
 

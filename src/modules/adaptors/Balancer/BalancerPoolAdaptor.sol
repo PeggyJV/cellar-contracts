@@ -459,7 +459,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
         minter.mint(gauge);
     }
 
-    // TODO natspec
+    /**
+     * @notice Start a flash loan using Balancer.
+     */
     function makeFlashLoan(IERC20[] memory tokens, uint256[] memory amounts, bytes memory data) public {
         vault.flashLoan(IFlashLoanRecipient(address(this)), tokens, amounts, data);
     }

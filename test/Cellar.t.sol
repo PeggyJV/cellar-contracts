@@ -11,7 +11,6 @@ import "test/resources/MainnetStarter.t.sol";
 
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
-// TODO total supply cap check
 contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
@@ -364,6 +363,39 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(USDC), address(cellar), 1);
         cellar.withdraw(0, address(this), address(this));
         assertEq(USDC.balanceOf(address(this)), 0, "Cellar should not have sent any assets to this address.");
+    }
+
+    // ========================================= LIMITS TEST =========================================
+
+    function testLimits() external {
+        // Currently limits are not set, so they should report type(uint256).max
+        assertEq(cellar.maxDeposit(address(this)), type(uint256).max, "Max Deposit should equal type(uint256).max");
+        assertEq(cellar.maxMint(address(this)), type(uint256).max, "Max Mint should equal type(uint256).max");
+
+        uint192 newCap = 100e6;
+        cellar.decreaseShareSupplyCap(newCap);
+        assertEq(cellar.shareSupplyCap(), newCap, "Share Supply Cap should have been updated.");
+        uint256 totalAssets = cellar.totalAssets();
+        // Since shares are currently 1:1 with assets, they are interchangeable in below equation.
+        uint256 expectedMax = newCap - totalAssets;
+        assertEq(cellar.maxDeposit(address(this)), expectedMax, "Max Deposit should equal expected.");
+        assertEq(cellar.maxMint(address(this)), expectedMax, "Max Mint should equal expected.");
+
+        uint256 amountToExceedCap = expectedMax + 1;
+        deal(address(USDC), address(this), amountToExceedCap);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ShareSupplyCapExceeded.selector)));
+        cellar.deposit(amountToExceedCap, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ShareSupplyCapExceeded.selector)));
+        cellar.mint(amountToExceedCap, address(this));
+
+        // But if 1 wei is removed, deposit works.
+        cellar.deposit(amountToExceedCap - 1, address(this));
+
+        // Max function should now return 0.
+        assertEq(cellar.maxDeposit(address(this)), 0, "Max Deposit should equal 0");
+        assertEq(cellar.maxMint(address(this)), 0, "Max Mint should equal 0");
     }
 
     // ========================================== POSITIONS TEST ==========================================

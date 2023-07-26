@@ -825,9 +825,6 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         vm.stopPrank();
     }
 
-    // TODO test verifying that the shortest period an observation can be is heartbeat
-    // TODO test checking to see if we ever have a scenario where an upkeep is triggered by the answer heartbeat check, but not triggered by the previous observation heartbeat check
-
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
         vm.warp(block.timestamp + timeToPass);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -848,7 +845,4 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         );
         return previous + totalAssets.mulDivDown(oneShare * timePassed, target.totalSupply());
     }
-
-    // TODO add worst case scenario test where days pass and the upkeep is not working.
-    // What should happen is it should revert until it has enough fresh days of data that it can safely get a TWAP.
 }

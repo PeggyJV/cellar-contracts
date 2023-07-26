@@ -56,8 +56,6 @@ contract CellarWithBalancerFlashLoans is Cellar, IFlashLoanRecipient {
      */
     error Cellar__CallerNotBalancerVault();
 
-    // TODO Balancer has below calldata arguments listed as memory, which adds 0.4kb to contract size
-    // need to make sure this still works.
     /**
      * @notice Allows strategist to utilize balancer flashloans while rebalancing the cellar.
      * @dev Balancer does not provide an initiator, so instead insure we are in the `callOnAdaptor` context
