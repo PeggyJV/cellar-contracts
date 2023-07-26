@@ -309,6 +309,57 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         assertGt(twaa, answer, "TWASS should be larger than answer since all yield was negative.");
     }
 
+    function testStrategistForgetsToFillUpkeep(uint256 forgetTime) external {
+        forgetTime = bound(forgetTime, 1, 3 days);
+        cellar.setHoldingPosition(usdcPosition);
+        bool checkNotSafeToUse;
+        uint256 answer;
+        uint256 twaa;
+
+        // Have user deposit into cellar.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Log TWAA details for 3 days, so that answer is usable.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+
+        // Upkeep becomes underfunded, and strategist forgets to fill it.
+        _passTimeAlterSharePriceAndUpkeep(1 days + 3_600 + forgetTime, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        // Strategist refills upkeep with link and pricing can continue as normal once observations are written.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+    }
+
     function testSuppressedUpkeepAttack(uint256 suppressionTime) external {
         suppressionTime = bound(suppressionTime, 1, 3 days);
         cellar.setHoldingPosition(usdcPosition);
@@ -341,15 +392,74 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(!checkNotSafeToUse, "Value should be safe to use");
 
-        // Assume an attack found some way to alter the target Cellar share price, and they also have a way to suppress
-        // Chainlink Automation upkeeps to prevent the upkeep from running.
-        uint256 maxTime = 1 days + 3600; // Heartbeat + grace period
-        _passTimeAlterSharePriceAndUpkeep(maxTime + suppressionTime, 0.5e4);
+        vm.warp(block.timestamp + 1 days);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+
+        // Attacker allows upkeep to go through.
+        sharePriceOracle.performUpkeep(performData);
+
+        // Another day passes.
+        vm.warp(block.timestamp + 1 days);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+
+        // Upkeep is needed, but attacker starts suppressing chainlink upkeeps.
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+
+        // Attacker suppresses updates for heartbest + grace period + suppressionTime.
+        vm.warp(block.timestamp + 1 days + 3_600 + suppressionTime);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+
+        // Attacker finally allows upkeep to succeed.
+        sharePriceOracle.performUpkeep(performData);
+
         (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(checkNotSafeToUse, "Value should not be safe to use");
 
-        // Attackers TWAA value is not safe to use, recover, and advance time forward.
-        _passTimeAlterSharePriceAndUpkeep(1 days, 2e4);
+        // Must wait unitl observations are filled up with fresh data before we can start pricing again.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(checkNotSafeToUse, "Value should not be safe to use");
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        // Finally have enough observations so value is safe to use.
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+    }
+
+    function testSharePriceManipulationAttack(uint256 suppressionTime) external {
+        suppressionTime = bound(suppressionTime, 1, 3 days);
+        cellar.setHoldingPosition(usdcPosition);
+        bool checkNotSafeToUse;
+        uint256 answer;
+        uint256 twaa;
+
+        // Have user deposit into cellar.
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Log TWAA details for 3 days, so that answer is usable.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
         (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(checkNotSafeToUse, "Value should not be safe to use");
 
@@ -361,7 +471,51 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(!checkNotSafeToUse, "Value should be safe to use");
 
-        assertApproxEqRel(answer, twaa, 0.0001e18, "Answer should eqaul TWAA since attacker answer is thrown out");
+        (uint256 answerBeforeAttack, uint256 twaaBeforeAttack, ) = sharePriceOracle.getLatest();
+
+        // Assume an attack found some way to alter the target Cellar share price temporarily.
+        // Attacker raises share price 10x, right before observation is complete.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 10e4);
+
+        (answer, , ) = sharePriceOracle.getLatest();
+
+        assertApproxEqRel(answer, 10 * answerBeforeAttack, 0.01e18, "Oracle answer should have been 10xed from attack");
+
+        // Attacker is able to hold share price at 10x for 10 min.
+        vm.warp(block.timestamp + 600);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+
+        // Attacker returns share price to what it was before attack.
+        deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(0.1e4, 1e4));
+
+        // Upkeep should be needed due to deviation.
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+
+        // TWAA calculation includes 3 days of good values, and 10 min of attacker bad values.
+        assertApproxEqRel(
+            twaa,
+            twaaBeforeAttack,
+            0.021e18,
+            "Attack should have little effect on time weighted average share price."
+        );
+
+        // Also check that once this observations ends and we use the next one that TWAA is good as well.
+        // Worst case scenario because total TWAP is 3 days, but inludes the 10 min
+        // where attacker had elevated share price.
+        _passTimeAlterSharePriceAndUpkeep(1 days - 600, 1e4);
+        (answer, twaa, checkNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!checkNotSafeToUse, "Value should be safe to use");
+
+        assertApproxEqRel(
+            twaa,
+            twaaBeforeAttack,
+            0.021e18,
+            "Attack should have little effect on time weighted average share price."
+        );
     }
 
     function testGracePeriod(uint256 delayOne, uint256 delayTwo, uint256 delayThree) external {
@@ -498,69 +652,69 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
         // Deviate outside threshold for first 12 hours
         vm.warp(block.timestamp + (1 days / 2));
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 2));
         deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier0, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative = _calcCumulative(cellar, cumulative, (1 days / 2));
 
         assertEq(sharePriceOracle.currentIndex(), 1, "Wrong Current Index");
 
         // For last 12 hours, reset to original share price.
-        _passTimeAlterSharePriceAndUpkeep((1 days / 2), sharePriceMultiplier1);
         cumulative = _calcCumulative(cellar, cumulative, (1 days / 2));
+        _passTimeAlterSharePriceAndUpkeep((1 days / 2), sharePriceMultiplier1);
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
         // Deviate outside threshold for first 6 hours
         vm.warp(block.timestamp + (1 days / 4));
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
         deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier2, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
         // Deviate outside threshold for first 6-12 hours
         vm.warp(block.timestamp + (1 days / 4));
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
         deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier3, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
         // Deviate outside threshold for 12-18 hours
         vm.warp(block.timestamp + (1 days / 4));
+        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
         deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier4, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
 
         assertEq(sharePriceOracle.currentIndex(), 2, "Wrong Current Index");
 
         // For last 6 hours show a loss.
-        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier5);
         cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
+        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier5);
 
         assertEq(sharePriceOracle.currentIndex(), 3, "Wrong Current Index");
 
         // Deviate outside threshold for first 18 hours
         vm.warp(block.timestamp + (18 * 3_600));
+        cumulative = _calcCumulative(cellar, cumulative, (18 * 3_600));
         deal(address(USDC), address(cellar), USDC.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier6, 1e4));
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
-        cumulative = _calcCumulative(cellar, cumulative, (18 * 3_600));
 
         assertEq(sharePriceOracle.currentIndex(), 3, "Wrong Current Index");
 
         // For last 6 hours earn no yield.
-        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier7);
         cumulative = _calcCumulative(cellar, cumulative, (1 days / 4));
+        _passTimeAlterSharePriceAndUpkeep((1 days / 4), sharePriceMultiplier7);
 
         assertEq(sharePriceOracle.currentIndex(), 4, "Wrong Current Index");
 

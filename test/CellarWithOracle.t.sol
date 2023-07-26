@@ -152,6 +152,13 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Double the share price.
         _passTimeAlterSharePriceAndUpkeep(1 days, 2e4);
+
+        vm.warp(block.timestamp + 1 days / 2);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        usdtMockFeed.setMockUpdatedAt(block.timestamp);
+        daiMockFeed.setMockUpdatedAt(block.timestamp);
+        fraxMockFeed.setMockUpdatedAt(block.timestamp);
+
         uint256 assets = 100e6;
         uint256 expectedShares = assets / 2;
         {
@@ -184,7 +191,13 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Half the share price.
         _passTimeAlterSharePriceAndUpkeep(1 days, 0.5e4);
 
-        expectedShares = assets.mulDivDown(3e4, 2.5e4);
+        vm.warp(block.timestamp + 1 days / 2);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        usdtMockFeed.setMockUpdatedAt(block.timestamp);
+        daiMockFeed.setMockUpdatedAt(block.timestamp);
+        fraxMockFeed.setMockUpdatedAt(block.timestamp);
+
+        expectedShares = assets.mulDivDown(3.5e18, 3.25e18);
         {
             vm.startPrank(user0);
             deal(address(USDC), user0, assets);
@@ -251,7 +264,13 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Double the share price.
         _passTimeAlterSharePriceAndUpkeep(1 days, 2e4);
 
-        uint256 expectedAssets = assets.mulDivDown(4, 3);
+        vm.warp(block.timestamp + 1 days / 2);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        usdtMockFeed.setMockUpdatedAt(block.timestamp);
+        daiMockFeed.setMockUpdatedAt(block.timestamp);
+        fraxMockFeed.setMockUpdatedAt(block.timestamp);
+
+        uint256 expectedAssets = assets.mulDivDown(4e18, 3.5e18);
         {
             vm.startPrank(user0);
             uint256 assetsToWithdraw = cellar.maxWithdraw(user0);
@@ -295,6 +314,12 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Half the share price.
         _passTimeAlterSharePriceAndUpkeep(1 days, 0.5e4);
+
+        vm.warp(block.timestamp + 1 days / 2);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        usdtMockFeed.setMockUpdatedAt(block.timestamp);
+        daiMockFeed.setMockUpdatedAt(block.timestamp);
+        fraxMockFeed.setMockUpdatedAt(block.timestamp);
 
         expectedAssets = assets / 2;
         {
@@ -384,6 +409,8 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         uint256 attackerPaidSharePrice = cellar.previewMint(1e6);
 
+        (, uint256 twaaBeforeAttack, ) = sharePriceOracle.getLatest();
+
         // Attacker manipulates Cellar Share Price.
         deal(address(USDC), address(cellar), 2 * USDC.balanceOf(address(cellar)));
 
@@ -397,22 +424,31 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
 
         (uint256 ans, uint256 twaa, bool isSafeToUse) = sharePriceOracle.getLatest();
+        // Immediately after attack, twaa is unaffected.
+        assertEq(twaa, twaaBeforeAttack, "TWAA should be unaffected.");
+        // But as time passes, TWAA will gradually be affected by share price manipulation.
+        vm.warp(block.timestamp + 1 days / 2);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        usdtMockFeed.setMockUpdatedAt(block.timestamp);
+        daiMockFeed.setMockUpdatedAt(block.timestamp);
+        fraxMockFeed.setMockUpdatedAt(block.timestamp);
+
+        (, twaa, isSafeToUse) = sharePriceOracle.getLatest();
+        // Math behind this. cumulative is 4, and the elapsed time is 3.5 days.
+        uint256 expectedTwaa = twaaBeforeAttack.mulDivDown(4e18, 3.5e18);
+        assertApproxEqRel(twaa, expectedTwaa, 0.01e18, "TWAA is now affected.");
+
         assertTrue(!isSafeToUse, "Oracle should be safe to use");
         assertEq(ans.changeDecimals(18, 6), 2 * attackerPaidSharePrice, "SharePrice should 2.0");
-        assertEq(
-            twaa.changeDecimals(18, 6),
-            (4 * attackerPaidSharePrice) / 3,
-            "Time Weighted Average share price should be 1.333"
-        );
 
         uint256 attackerRedemptionSharePrice = cellar.previewRedeem(1e6);
 
         assertEq(
             attackerRedemptionSharePrice,
-            twaa.changeDecimals(18, 6),
+            expectedTwaa.changeDecimals(18, 6),
             "Share price for redemption should equal twaa"
         );
-        uint256 expectedAttackerAssetsOut = attackerAssets.mulDivDown(4, 3);
+        uint256 expectedAttackerAssetsOut = attackerAssets.mulDivDown(expectedTwaa, 1e18);
         vm.startPrank(attacker);
         cellar.redeem(1_000e6, attacker, attacker);
         vm.stopPrank();
@@ -445,11 +481,20 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.deposit(attackerAssets, attacker);
         vm.stopPrank();
 
+        vm.warp(block.timestamp + 1 days / 2);
+        usdcMockFeed.setMockUpdatedAt(block.timestamp);
+        usdtMockFeed.setMockUpdatedAt(block.timestamp);
+        daiMockFeed.setMockUpdatedAt(block.timestamp);
+        fraxMockFeed.setMockUpdatedAt(block.timestamp);
+
         uint256 attackerPaidSharePrice = cellar.previewMint(1e6);
 
-        assertGt(
+        uint256 expectedAttackerPaidSharePrice = uint256(1e6).mulDivDown(3.25e18, 3.5e18);
+
+        assertApproxEqAbs(
             attackerPaidSharePrice,
-            0.5e6,
+            expectedAttackerPaidSharePrice,
+            1,
             "Even though attacker reduced the share price before entering, it should be greater than 0.5e6"
         );
     }

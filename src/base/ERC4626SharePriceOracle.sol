@@ -6,6 +6,9 @@ import { Math } from "src/utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
+// TODO remove this
+import { console } from "@forge-std/Test.sol";
+
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
 
@@ -29,7 +32,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     /**
      * @notice The length of the observations array.
-     * @dev `observations` will never change itsw length once set in the constructor.
+     * @dev `observations` will never change its length once set in the constructor.
      *      By saving this value here, we can take advantage of variable packing to make reads cheaper.
      */
     uint16 public observationsLength;
@@ -202,7 +205,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 timeDelta = currentTime - currentObservation.timestamp;
         if (timeDelta >= heartbeat) upkeepConditionMet = true;
 
-        uint256 currentCumulative = currentObservation.cumulative + (sharePrice * timeDelta);
+        // Use the old answer to calculate cumulative.
+        uint256 currentCumulative = currentObservation.cumulative + (_answer * timeDelta);
         if (currentCumulative > type(uint192).max) revert ERC4626SharePriceOracle__CumulativeTooLarge();
         currentObservation.cumulative = uint192(currentCumulative);
         currentObservation.timestamp = currentTime;
@@ -239,7 +243,11 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint16 _currentIndex = currentIndex;
         uint16 _observationsLength = observationsLength;
 
-        (timeWeightedAverageAnswer, notSafeToUse) = _getTimeWeightedAverageAnswer(_currentIndex, _observationsLength);
+        (timeWeightedAverageAnswer, notSafeToUse) = _getTimeWeightedAverageAnswer(
+            ans,
+            _currentIndex,
+            _observationsLength
+        );
         if (notSafeToUse) return (0, 0, true);
     }
 
@@ -263,6 +271,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Use observations to get the time weighted average answer.
      */
     function _getTimeWeightedAverageAnswer(
+        uint256 _answer,
         uint16 _currentIndex,
         uint16 _observationsLength
     ) internal view returns (uint256 timeWeightedAverageAnswer, bool notSafeToUse) {
@@ -275,6 +284,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // Data is not set.
         if (oldestObservation.timestamp == 1) return (0, true);
 
+        // Make sure that the old observations we are using are not too stale.
         uint256 timeDelta = mostRecentlyCompletedObservation.timestamp - oldestObservation.timestamp;
         /// @dev use _length - 2 because
         /// remove 1 because observations array stores the current pending observation.
@@ -286,9 +296,13 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // Data is too old
         if (timeDelta > maxDuration) return (0, true);
 
+        Observation memory latestObservation = observations[_currentIndex];
+        uint192 latestCumulative = latestObservation.cumulative +
+            uint192((_answer * (block.timestamp - latestObservation.timestamp)));
+
         timeWeightedAverageAnswer =
-            (mostRecentlyCompletedObservation.cumulative - oldestObservation.cumulative) /
-            timeDelta;
+            (latestCumulative - oldestObservation.cumulative) /
+            (block.timestamp - oldestObservation.timestamp);
     }
 
     /**
