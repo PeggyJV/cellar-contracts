@@ -6,9 +6,6 @@ import { Math } from "src/utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
-// TODO remove this
-import { console } from "@forge-std/Test.sol";
-
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
 
@@ -67,7 +64,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Used to enforce that the summation of each observations delay used in
      *         a time weighed average calculation is less than the gracePeriod.
      * @dev Example: Using a 3 day TWAA with 1 hour grace period.
-     *      When calculating the TWAA, the total time must be greater than 3 days but less than
+     *      When calculating the TWAA, the total time delta for completed observations must be greater than 3 days but less than
      *      3 days + 1hr. So one observation could be delayed 1 hr, or two observations could be
      *      delayed 30 min each.
      */
@@ -109,9 +106,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
-     * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod`.
-     * @notice TWAA calculations will use the most recently completed observation,
-     *         which can at most be ~heartbeat stale.
+     * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
+     * @notice TWAA calculations will use the current pending observation, and then `_observationsToUse` observations.
      */
     constructor(
         ERC4626 _target,
