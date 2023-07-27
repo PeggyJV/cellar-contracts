@@ -3,6 +3,7 @@ pragma solidity 0.8.16;
 
 import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
+import { Deployer } from "src/Deployer.sol";
 
 import "forge-std/Script.sol";
 
