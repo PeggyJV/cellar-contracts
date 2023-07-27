@@ -247,6 +247,16 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         if (notSafeToUse) return (0, 0, true);
     }
 
+    // TODO natspec
+    function getLatestAnswer() external view returns (uint256, bool) {
+        // Check if answer is stale, if so set notSafeToUse to true, and return.
+        uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
+        // Note add in the grace period here, because it can take time for the upkeep TX to go through.
+        if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, true);
+
+        return (answer, false);
+    }
+
     //============================== INTERNAL HELPER FUNCTIONS ===============================
 
     /**
