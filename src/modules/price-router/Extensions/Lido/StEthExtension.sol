@@ -62,6 +62,11 @@ contract StEthExtension is Extension {
      */
     uint32 public immutable twapDuration;
 
+    /**
+     * @notice The minimum harmonic mean liquidity that must be present in a TWAP observation.
+     */
+    uint128 public immutable minimumMeanLiquidity;
+
     constructor(
         PriceRouter _priceRouter,
         uint256 _allowedDivergence,
@@ -70,7 +75,8 @@ contract StEthExtension is Extension {
         uint24 _heartbeat,
         address _weth,
         address _steth,
-        uint32 _twapDuration
+        uint32 _twapDuration,
+        uint128 _minimumMeanLiquidity
     ) Extension(_priceRouter) {
         allowedDivergence = _allowedDivergence;
 
@@ -81,6 +87,7 @@ contract StEthExtension is Extension {
         stEth = ISTETH(_steth);
         if (_twapDuration < MINIMUM_SECONDS_AGO) revert StEthExtension__SecondsAgoDoesNotMeetMinimum();
         twapDuration = _twapDuration;
+        minimumMeanLiquidity = _minimumMeanLiquidity;
     }
 
     /**
@@ -168,12 +175,15 @@ contract StEthExtension is Extension {
         // If oldest observation will not work for TWAP, return 0, so we use chainlink answer.
         if (oldestObservation < twapDuration) return 0;
 
-        (int24 arithmeticMeanTick, ) = OracleLibrary.consult(address(uniV3WstEthWethPool), twapDuration);
+        (int24 arithmeticMeanTick, uint128 harmonicMeanLiquidity) = OracleLibrary.consult(
+            address(uniV3WstEthWethPool),
+            twapDuration
+        );
         // Get the amount of quote token each base token is worth.
         uint256 answer = OracleLibrary.getQuoteAtTick(arithmeticMeanTick, uint128(1e18), address(stEth), address(WETH));
 
-        // TODO could check mean liquidity?
-        // Use 1e25
+        // If mean liquidity during observation is less than minimumMeanLiquidity, return 0, so we use chainlink answer.
+        if (harmonicMeanLiquidity < minimumMeanLiquidity) return 0;
 
         // Convert answer to be in terms of stEth.
         answer = answer.mulDivDown(1e18, stEth.getPooledEthByShares(1e18));

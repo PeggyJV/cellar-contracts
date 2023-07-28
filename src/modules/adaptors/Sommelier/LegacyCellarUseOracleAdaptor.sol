@@ -31,7 +31,12 @@ contract LegacyCellarUseOracleAdaptor is BaseAdaptor {
     /**
      * @notice Strategist attempted to interact with a Cellar with no position setup for it.
      */
-    error CellarAdaptor__CellarPositionNotUsed(address cellar);
+    error LegacyCellarUseOracleAdaptor__CellarPositionNotUsed(address cellar);
+
+    /**
+     * @notice Oracle is not safe to use.
+     */
+    error LegacyCellarUseOracleAdaptor__OracleFailure();
 
     //============================================ Global Functions ===========================================
     /**
@@ -41,7 +46,7 @@ contract LegacyCellarUseOracleAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Sommelier Cellar Adaptor V 1.1"));
+        return keccak256(abi.encode("Sommelier Legacy Cellar Use Oracle Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -110,7 +115,7 @@ contract LegacyCellarUseOracleAdaptor is BaseAdaptor {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (Cellar cellar, ERC4626SharePriceOracle oracle) = abi.decode(adaptorData, (Cellar, ERC4626SharePriceOracle));
         (uint256 latest, bool isNotSafeToUse) = oracle.getLatestAnswer();
-        if (isNotSafeToUse) revert("Oracle Failure");
+        if (isNotSafeToUse) revert LegacyCellarUseOracleAdaptor__OracleFailure();
         uint256 balance = cellar.balanceOf(msg.sender);
         balance = balance.mulDivDown(latest, oracle.ORACLE_DECIMALS());
         // Convert balance from share decimals to asset decimals.
@@ -172,6 +177,7 @@ contract LegacyCellarUseOracleAdaptor is BaseAdaptor {
         // Check that cellar position is setup to be used in the cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(cellar, oracle)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId)) revert CellarAdaptor__CellarPositionNotUsed(cellar);
+        if (!Cellar(address(this)).isPositionUsed(positionId))
+            revert LegacyCellarUseOracleAdaptor__CellarPositionNotUsed(cellar);
     }
 }

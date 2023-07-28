@@ -46,11 +46,16 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     uint8 public constant ORACLE_DECIMALS = 18;
 
     //============================== ERRORS ===============================
+
     error ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry();
     error ERC4626SharePriceOracle__StalePerformData();
     error ERC4626SharePriceOracle__CumulativeTooLarge();
     error ERC4626SharePriceOracle__NoUpkeepConditionMet();
     error ERC4626SharePriceOracle__SharePriceTooLarge();
+
+    //============================== EVENTS ===============================
+
+    event OracleUpdated(uint256 sharePrice, uint256 currentTime);
 
     //============================== IMMUTABLES ===============================
 
@@ -221,6 +226,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         }
 
         if (!upkeepConditionMet) revert ERC4626SharePriceOracle__NoUpkeepConditionMet();
+
+        emit OracleUpdated(sharePrice, currentTime);
     }
 
     //============================== ORACLE VIEW FUNCTIONS ===============================
@@ -247,7 +254,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         if (notSafeToUse) return (0, 0, true);
     }
 
-    // TODO natspec
+    /**
+     * @notice Get the latest answer, and bool indicating whether answer is safe to use or not.
+     */
     function getLatestAnswer() external view returns (uint256, bool) {
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
