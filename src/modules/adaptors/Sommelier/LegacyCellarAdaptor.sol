@@ -4,12 +4,16 @@ pragma solidity 0.8.16;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
 
+// TODO remove
+import { console } from "@forge-std/Test.sol";
+
 /**
- * @title Cellar Adaptor
+ * @title Legacy Cellar Adaptor
  * @notice Allows Cellars to interact with other Cellar positions.
+ * @dev Uses Share Price Oracle if available.
  * @author crispymangoes
  */
-contract LegacyCellarUseOracleAdaptor is BaseAdaptor {
+contract LegacyCellarAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -31,12 +35,12 @@ contract LegacyCellarUseOracleAdaptor is BaseAdaptor {
     /**
      * @notice Strategist attempted to interact with a Cellar with no position setup for it.
      */
-    error LegacyCellarUseOracleAdaptor__CellarPositionNotUsed(address cellar);
+    error LegacyCellarAdaptor__CellarPositionNotUsed(address cellar);
 
     /**
      * @notice Oracle is not safe to use.
      */
-    error LegacyCellarUseOracleAdaptor__OracleFailure();
+    error LegacyCellarAdaptor__OracleFailure();
 
     //============================================ Global Functions ===========================================
     /**
@@ -110,16 +114,24 @@ contract LegacyCellarUseOracleAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Uses ERC4626 `previewRedeem` to determine Cellars balance in Cellar position.
+     * @notice Uses ERC4626 Share Price Oracle or `previewRedeem` to determine Cellars balance in Cellar position.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (Cellar cellar, ERC4626SharePriceOracle oracle) = abi.decode(adaptorData, (Cellar, ERC4626SharePriceOracle));
-        (uint256 latest, bool isNotSafeToUse) = oracle.getLatestAnswer();
-        if (isNotSafeToUse) revert LegacyCellarUseOracleAdaptor__OracleFailure();
+
         uint256 balance = cellar.balanceOf(msg.sender);
-        balance = balance.mulDivDown(latest, oracle.ORACLE_DECIMALS());
-        // Convert balance from share decimals to asset decimals.
-        return balance.changeDecimals(cellar.decimals(), cellar.asset().decimals());
+
+        // If oracle is not set, default to calculating share price on chain.
+        if (address(oracle) != address(0)) {
+            (uint256 latest, bool isNotSafeToUse) = oracle.getLatestAnswer();
+            // If oracle is not safe to use, default to calculating share price on chain.
+            if (!isNotSafeToUse) {
+                balance = balance.mulDivDown(latest, 10 ** oracle.ORACLE_DECIMALS());
+                // Convert balance from share decimals to asset decimals.
+                return balance.changeDecimals(cellar.decimals(), cellar.asset().decimals());
+            }
+        }
+        return cellar.previewRedeem(balance);
     }
 
     /**
@@ -178,6 +190,6 @@ contract LegacyCellarUseOracleAdaptor is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(cellar, oracle)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert LegacyCellarUseOracleAdaptor__CellarPositionNotUsed(cellar);
+            revert LegacyCellarAdaptor__CellarPositionNotUsed(cellar);
     }
 }

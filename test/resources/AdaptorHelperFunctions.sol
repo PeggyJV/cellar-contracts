@@ -36,6 +36,7 @@ import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.
 
 // Sommelier
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
+import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellarAdaptor.sol";
 
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
@@ -414,9 +415,17 @@ contract AdaptorHelperFunctions {
         return abi.encodeWithSelector(FTokenAdaptor.callAddInterest.selector, fToken);
     }
 
-    // ========================================= FraxLend FUNCTIONS =========================================
+    // ========================================= Sommelier FUNCTIONS =========================================
 
     function _createBytesDataToDepositToCellar(address cellar, uint256 assets) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CellarAdaptor.depositToCellar.selector, cellar, assets);
+    }
+
+    function _createBytesDataToDepositToLegacyCellar(
+        address cellar,
+        uint256 assets,
+        address oracle
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(LegacyCellarAdaptor.depositToCellar.selector, cellar, assets, oracle);
     }
 }
