@@ -254,7 +254,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Maximum amount of positions a cellar can have in it's credit/debt arrays.
      */
-    uint256 public constant MAX_POSITIONS = 16;
+    uint256 public constant MAX_POSITIONS = 32;
 
     /**
      * @notice Allows owner to change the holding position.
