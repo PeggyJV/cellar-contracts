@@ -55,7 +55,23 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     //============================== EVENTS ===============================
 
-    event OracleUpdated(uint256 sharePrice, uint256 currentTime);
+    /**
+     * @notice Emitted when performUpkeep is ran.
+     * @param timeUpdated the time the answer was updated on chain
+     * @param timeAnswerCalculated the time the answer was calculated in checkUpkeep
+     * @param latestAnswer the new answer
+     * @param timeWeightedAverageAnswer the new time weighted average answer
+     * @param isNotSafeToUse bool
+     *                       if true: `timeWeightedAverageAnswer` is illogical, use `latestAnswer`
+     *                       if false: use `timeWeightedAverageAnswer`
+     */
+    event OracleUpdated(
+        uint256 timeUpdated,
+        uint256 timeAnswerCalculated,
+        uint256 latestAnswer,
+        uint256 timeWeightedAverageAnswer,
+        bool isNotSafeToUse
+    );
 
     //============================== IMMUTABLES ===============================
 
@@ -218,6 +234,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         if (timeDeltaSincePreviousObservation >= heartbeat) {
             uint16 nextIndex = _getNextIndex(_currentIndex, _observationsLength);
             currentIndex = nextIndex;
+            // Update memory variable for event.
+            _currentIndex = nextIndex;
             // Update newest cumulative.
             Observation storage newObservation = observations[nextIndex];
             newObservation.cumulative = uint192(currentCumulative);
@@ -227,7 +245,12 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
         if (!upkeepConditionMet) revert ERC4626SharePriceOracle__NoUpkeepConditionMet();
 
-        emit OracleUpdated(sharePrice, currentTime);
+        (uint256 timeWeightedAverageAnswer, bool isNotSafeToUse) = _getTimeWeightedAverageAnswer(
+            sharePrice,
+            _currentIndex,
+            _observationsLength
+        );
+        emit OracleUpdated(block.timestamp, currentTime, sharePrice, timeWeightedAverageAnswer, isNotSafeToUse);
     }
 
     //============================== ORACLE VIEW FUNCTIONS ===============================

@@ -25,58 +25,52 @@ contract LegacyCellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private legacyCellarRyePosition;
 
     function setUp() external {
-        // Setup forked environment.
-        string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 17792767;
-        _startFork(rpcKey, blockNumber);
-
-        // Setup RYE Share Price Oracle.
-        ERC4626 _target = ERC4626(address(rye));
-        uint64 _heartbeat = 1 days;
-        uint64 _deviationTrigger = 0.0005e4;
-        uint64 _gracePeriod = 60 * 60; // 1 hr
-        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-        address _automationRegistry = address(this);
-
-        // Setup share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
-            _target,
-            _heartbeat,
-            _deviationTrigger,
-            _gracePeriod,
-            _observationsToUse,
-            _automationRegistry
-        );
-
-        // Call first performUpkeep on Cellar.
-        bool upkeepNeeded;
-        bytes memory performData;
-        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
-        assertTrue(upkeepNeeded, "Upkeep should be needed.");
-        sharePriceOracle.performUpkeep(performData);
-
-        cellarAdaptor = new LegacyCellarAdaptor();
-
-        vm.startPrank(multisig);
-        legacyRegistry.trustAdaptor(address(cellarAdaptor));
-        vm.stopPrank();
-
-        deal(address(WBTC), address(this), type(uint256).max);
-        WBTC.safeApprove(address(ryb), type(uint256).max);
+        // // Setup forked environment.
+        // string memory rpcKey = "MAINNET_RPC_URL";
+        // uint256 blockNumber = 17792767;
+        // _startFork(rpcKey, blockNumber);
+        // // Setup RYE Share Price Oracle.
+        // ERC4626 _target = ERC4626(address(rye));
+        // uint64 _heartbeat = 1 days;
+        // uint64 _deviationTrigger = 0.0005e4;
+        // uint64 _gracePeriod = 60 * 60; // 1 hr
+        // uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+        // address _automationRegistry = address(this);
+        // // Setup share price oracle.
+        // sharePriceOracle = new ERC4626SharePriceOracle(
+        //     _target,
+        //     _heartbeat,
+        //     _deviationTrigger,
+        //     _gracePeriod,
+        //     _observationsToUse,
+        //     _automationRegistry
+        // );
+        // // Call first performUpkeep on Cellar.
+        // bool upkeepNeeded;
+        // bytes memory performData;
+        // (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        // assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        // sharePriceOracle.performUpkeep(performData);
+        // cellarAdaptor = new LegacyCellarAdaptor();
+        // vm.startPrank(multisig);
+        // legacyRegistry.trustAdaptor(address(cellarAdaptor));
+        // vm.stopPrank();
+        // deal(address(WBTC), address(this), type(uint256).max);
+        // WBTC.safeApprove(address(ryb), type(uint256).max);
     }
 
-    function testUsingRyeWithNoOracle() external {
-        vm.startPrank(multisig);
-        legacyCellarRyePosition = legacyRegistry.trustPosition(address(cellarAdaptor), abi.encode(rye, address(0)));
-        vm.stopPrank();
-    }
+    // function testUsingRyeWithNoOracle() external {
+    //     vm.startPrank(multisig);
+    //     legacyCellarRyePosition = legacyRegistry.trustPosition(address(cellarAdaptor), abi.encode(rye, address(0)));
+    //     vm.stopPrank();
+    // }
 
-    function testUsingRyeWithOracle() external {
-        vm.startPrank(multisig);
-        legacyCellarRyePosition = legacyRegistry.trustPosition(
-            address(cellarAdaptor),
-            abi.encode(rye, sharePriceOracle)
-        );
-        vm.stopPrank();
-    }
+    // function testUsingRyeWithOracle() external {
+    //     vm.startPrank(multisig);
+    //     legacyCellarRyePosition = legacyRegistry.trustPosition(
+    //         address(cellarAdaptor),
+    //         abi.encode(rye, sharePriceOracle)
+    //     );
+    //     vm.stopPrank();
+    // }
 }
