@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { StEthExtension } from "src/modules/price-router/Extensions/Lido/StEthExtension.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";

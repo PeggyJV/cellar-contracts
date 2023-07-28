@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Cellar } from "src/base/Cellar.sol";

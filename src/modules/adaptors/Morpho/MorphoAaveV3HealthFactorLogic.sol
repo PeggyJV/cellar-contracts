@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { Math } from "src/utils/Math.sol";
 import { IMorphoV3 } from "src/interfaces/external/Morpho/IMorphoV3.sol";

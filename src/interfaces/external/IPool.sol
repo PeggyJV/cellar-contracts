@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { IPoolAddressesProvider } from "./IPoolAddressesProvider.sol";
 import { DataTypes } from "./DataTypes.sol";
@@ -218,12 +218,7 @@ interface IPool {
      * @param referralCode Code used to register the integrator originating the operation, for potential rewards.
      *   0 if the action is executed directly by the user, without any middle-man
      **/
-    function mintUnbacked(
-        address asset,
-        uint256 amount,
-        address onBehalfOf,
-        uint16 referralCode
-    ) external;
+    function mintUnbacked(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external;
 
     /**
      * @dev Back the current unbacked underlying with `amount` and pay `fee`.
@@ -231,11 +226,7 @@ interface IPool {
      * @param amount The amount to back
      * @param fee The amount paid in fees
      **/
-    function backUnbacked(
-        address asset,
-        uint256 amount,
-        uint256 fee
-    ) external;
+    function backUnbacked(address asset, uint256 amount, uint256 fee) external;
 
     /**
      * @notice Supplies an `amount` of underlying asset into the reserve, receiving in return overlying aTokens.
@@ -248,12 +239,7 @@ interface IPool {
      * @param referralCode Code used to register the integrator originating the operation, for potential rewards.
      *   0 if the action is executed directly by the user, without any middle-man
      **/
-    function supply(
-        address asset,
-        uint256 amount,
-        address onBehalfOf,
-        uint16 referralCode
-    ) external;
+    function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external;
 
     /**
      * @notice Supply with transfer approval of asset to be supplied done via permit function
@@ -292,11 +278,7 @@ interface IPool {
      *   different wallet
      * @return The final amount withdrawn
      **/
-    function withdraw(
-        address asset,
-        uint256 amount,
-        address to
-    ) external returns (uint256);
+    function withdraw(address asset, uint256 amount, address to) external returns (uint256);
 
     /**
      * @notice Allows users to borrow a specific `amount` of the reserve underlying asset, provided that the borrower
@@ -379,11 +361,7 @@ interface IPool {
      * @param interestRateMode The interest rate mode at of the debt the user wants to repay: 1 for Stable, 2 for Variable
      * @return The final amount repaid
      **/
-    function repayWithATokens(
-        address asset,
-        uint256 amount,
-        uint256 interestRateMode
-    ) external returns (uint256);
+    function repayWithATokens(address asset, uint256 amount, uint256 interestRateMode) external returns (uint256);
 
     /**
      * @notice Allows a borrower to swap his debt between stable and variable mode, or vice versa
@@ -486,7 +464,9 @@ interface IPool {
      * @return ltv The loan to value of The user
      * @return healthFactor The current health factor of the user
      **/
-    function getUserAccountData(address user)
+    function getUserAccountData(
+        address user
+    )
         external
         view
         returns (
@@ -571,7 +551,9 @@ interface IPool {
      * @notice Returns the state and configuration of the reserve
      * @param asset The address of the underlying asset of the reserve
      **/
-    function getReserveData(address asset)
+    function getReserveData(
+        address asset
+    )
         external
         view
         returns (
@@ -722,11 +704,7 @@ interface IPool {
      * @param to The address of the recipient
      * @param amount The amount of token to transfer
      */
-    function rescueTokens(
-        address token,
-        address to,
-        uint256 amount
-    ) external;
+    function rescueTokens(address token, address to, uint256 amount) external;
 
     /**
      * @notice Supplies an `amount` of underlying asset into the reserve, receiving in return overlying aTokens.
@@ -740,10 +718,5 @@ interface IPool {
      * @param referralCode Code used to register the integrator originating the operation, for potential rewards.
      *   0 if the action is executed directly by the user, without any middle-man
      **/
-    function deposit(
-        address asset,
-        uint256 amount,
-        address onBehalfOf,
-        uint16 referralCode
-    ) external;
+    function deposit(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external;
 }

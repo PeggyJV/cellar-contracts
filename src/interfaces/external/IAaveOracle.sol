@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 interface IAaveOracle {
     function BASE_CURRENCY_UNIT() external view returns (uint256);

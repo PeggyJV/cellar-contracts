@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, Registry } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";

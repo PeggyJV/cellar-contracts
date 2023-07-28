@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { IRETH } from "src/interfaces/external/IRETH.sol";
 import { ICBETH } from "src/interfaces/external/ICBETH.sol";
