@@ -1304,7 +1304,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         bytes memory swapData,
         address receiver,
         ERC20 assetIn,
-        ERC20 assetOut
+        ERC20
     ) public returns (uint256 amountOut) {
         (address[] memory path, uint24[] memory poolFees, uint256 amount, uint256 amountOutMin) = abi.decode(
             swapData,

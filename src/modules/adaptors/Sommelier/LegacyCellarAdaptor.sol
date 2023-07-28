@@ -18,14 +18,16 @@ contract LegacyCellarAdaptor is BaseAdaptor {
     // adaptorData = abi.encode(Cellar cellar, ERC4626SharePriceOracle oracle)
     // Where:
     // `cellar` is the underling Cellar this adaptor is working with
+    // `oracle` is the underling Cellar oracle this adaptor is working with
     //================= Configuration Data Specification =================
     // NA
     //============================= NOTE =================================
     // Contract is illiquid because using a share price oracle to estimate
-    // the balance of the position will be very accruate, but not
+    // the balance of the position will be very accurate, but not
     // perfect. By making it illiquid, the Cellar share price will only
     // feel the difference of oracle share price compared to actual
-    // when the strategsit enters or exists the position.
+    // when the strategist enters or exists the position.
+    // Otherwise user deposits/withdraws would alter this Cellars share price.
     //====================================================================
 
     /**
@@ -46,27 +48,16 @@ contract LegacyCellarAdaptor is BaseAdaptor {
 
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice Cellar must approve Cellar position to spend its assets, then deposit into the Cellar position.
-     * @param assets the amount of assets to deposit into the Cellar position
-     * @param adaptorData adaptor data containining the abi encoded Cellar
-     * @dev configurationData is NOT used
+     * @notice User deposits are not allowed.
      */
-    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
-        // Deposit assets to `cellar`.
-        (Cellar cellar, address oracle) = abi.decode(adaptorData, (Cellar, address));
-        _verifyCellarPositionIsUsed(address(cellar), oracle);
-        ERC20 asset = cellar.asset();
-        asset.safeApprove(address(cellar), assets);
-        cellar.deposit(assets, address(this));
-
-        // Zero out approvals if necessary.
-        _revokeExternalApproval(asset, address(cellar));
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
+        revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are not allowed.
      */
-    function withdraw(uint256, address, bytes memory, bytes memory) public override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
