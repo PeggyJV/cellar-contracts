@@ -19,25 +19,19 @@ contract LegacyCellarAdaptor is BaseAdaptor {
     // Where:
     // `cellar` is the underling Cellar this adaptor is working with
     //================= Configuration Data Specification =================
-    // configurationData = abi.encode(bool isLiquid)
-    // Where:
-    // `isLiquid` dictates whether the position is liquid or not
-    // If true:
-    //      position can support use withdraws
-    // else:
-    //      position can not support user withdraws
-    //
+    // NA
+    //============================= NOTE =================================
+    // Contract is illiquid because using a share price oracle to estimate
+    // the balance of the position will be very accruate, but not
+    // perfect. By making it illiquid, the Cellar share price will only
+    // feel the difference of oracle share price compared to actual
+    // when the strategsit enters or exists the position.
     //====================================================================
 
     /**
      * @notice Strategist attempted to interact with a Cellar with no position setup for it.
      */
     error LegacyCellarAdaptor__CellarPositionNotUsed(address cellar);
-
-    /**
-     * @notice Oracle is not safe to use.
-     */
-    error LegacyCellarAdaptor__OracleFailure();
 
     //============================================ Global Functions ===========================================
     /**
@@ -70,44 +64,20 @@ contract LegacyCellarAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Cellar needs to call withdraw on Cellar position.
-     * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
-     * @param assets the amount of assets to withdraw from the Cellar position
-     * @param receiver address to send assets to'
-     * @param adaptorData data needed to withdraw from the Cellar position
-     * @param configurationData abi encoded bool indicating whether the position is liquid or not
+     * @notice User withdraws are not allowed.
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        bytes memory adaptorData,
-        bytes memory configurationData
-    ) public override {
-        // Check that position is setup to be liquid.
-        bool isLiquid = abi.decode(configurationData, (bool));
-        if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
-
-        // Run external receiver check.
-        _externalReceiverCheck(receiver);
-
-        // Withdraw assets from `cellar`.
-        (Cellar cellar, address oracle) = abi.decode(adaptorData, (Cellar, address));
-        _verifyCellarPositionIsUsed(address(cellar), oracle);
-        cellar.withdraw(assets, receiver, address(this));
+    function withdraw(uint256, address, bytes memory, bytes memory) public override {
+        revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
     /**
-     * @notice Cellar needs to call `maxWithdraw` to see if its assets are locked.
+     * @notice Position is not liquid
      */
     function withdrawableFrom(
         bytes memory adaptorData,
         bytes memory configurationData
     ) public view override returns (uint256) {
-        bool isLiquid = abi.decode(configurationData, (bool));
-        if (isLiquid) {
-            Cellar cellar = abi.decode(adaptorData, (Cellar));
-            return cellar.maxWithdraw(msg.sender);
-        } else return 0;
+        return 0;
     }
 
     /**
@@ -118,17 +88,13 @@ contract LegacyCellarAdaptor is BaseAdaptor {
 
         uint256 balance = cellar.balanceOf(msg.sender);
 
-        // If oracle is not set, default to calculating share price on chain.
-        if (address(oracle) != address(0)) {
-            (uint256 latest, bool isNotSafeToUse) = oracle.getLatestAnswer();
-            // If oracle is not safe to use, default to calculating share price on chain.
-            if (!isNotSafeToUse) {
-                balance = balance.mulDivDown(latest, 10 ** oracle.ORACLE_DECIMALS());
-                // Convert balance from share decimals to asset decimals.
-                return balance.changeDecimals(cellar.decimals(), cellar.asset().decimals());
-            }
-        }
-        return cellar.previewRedeem(balance);
+        (uint256 latest, bool isNotSafeToUse) = oracle.getLatestAnswer();
+        // If oracle is not safe to use, default to calculating share price on chain.
+        if (!isNotSafeToUse) {
+            balance = balance.mulDivDown(latest, 10 ** oracle.ORACLE_DECIMALS());
+            // Convert balance from share decimals to asset decimals.
+            return balance.changeDecimals(cellar.decimals(), cellar.asset().decimals());
+        } else return cellar.previewRedeem(balance);
     }
 
     /**

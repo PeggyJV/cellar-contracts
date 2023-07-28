@@ -78,23 +78,6 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
         console.log("Gas Used Base", gas - gasleft());
     }
 
-    function testUsingRyeWithNoOracle() external {
-        vm.startPrank(multisig);
-        legacyCellarRyePosition = legacyRegistry.trustPosition(address(cellarAdaptor), abi.encode(rye, address(0)));
-        vm.stopPrank();
-
-        vm.startPrank(gravityBridgeAddress);
-        ryb.addAdaptorToCatalogue(address(cellarAdaptor));
-        ryb.addPositionToCatalogue(legacyCellarRyePosition);
-        ryb.addPosition(1, legacyCellarRyePosition, abi.encode(false), false);
-        _withdrawFromUniswapAndDepositToRye(address(0));
-        vm.stopPrank();
-
-        uint256 gas = gasleft();
-        ryb.totalAssets();
-        console.log("Gas Used No Oracle", gas - gasleft());
-    }
-
     function testUsingRyeWithOracle() external {
         vm.startPrank(multisig);
         legacyCellarRyePosition = legacyRegistry.trustPosition(

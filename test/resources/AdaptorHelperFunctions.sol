@@ -428,4 +428,12 @@ contract AdaptorHelperFunctions {
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(LegacyCellarAdaptor.depositToCellar.selector, cellar, assets, oracle);
     }
+
+    function _createBytesDataToWithdrawFromLegacyCellar(
+        address cellar,
+        uint256 assets,
+        address oracle
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(LegacyCellarAdaptor.withdrawFromCellar.selector, cellar, assets, oracle);
+    }
 }
