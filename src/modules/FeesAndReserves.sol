@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { Cellar, Owned, ERC20, SafeTransferLib, Math, Address } from "src/base/Cellar.sol";
 import { IGravity } from "src/interfaces/external/IGravity.sol";

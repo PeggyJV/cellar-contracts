@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar } from "src/modules/adaptors/BaseAdaptor.sol";
 
@@ -108,7 +108,6 @@ contract CellarAdaptor is BaseAdaptor {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         Cellar cellar = abi.decode(adaptorData, (Cellar));
         return cellar.previewRedeem(cellar.balanceOf(msg.sender));
-        // return cellar.balanceOf(msg.sender);
     }
 
     /**

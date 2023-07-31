@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
@@ -774,6 +774,29 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             assertEq(twaa, 1e6, "TWAA should be 1 USDC");
             assertTrue(!isNotSafeToUse, "Should be safe to use");
         }
+    }
+
+    function testGetLatestAnswer() external {
+        bool upkeepNeeded;
+        bytes memory performData;
+        // uint256 checkGas = gasleft();
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        sharePriceOracle.performUpkeep(performData);
+
+        // Fill oracle with observations.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        uint256 answer;
+        bool isNotSafeToUse;
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertTrue(!isNotSafeToUse, "Answer should be safe to use.");
+
+        // Make sure `isNotSafeToUse` is true if answer is stale.
+        vm.warp(block.timestamp + (1 days + 3_601));
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertTrue(isNotSafeToUse, "Answer should not be safe to use.");
     }
 
     function testWrongPerformDataInputs() external {

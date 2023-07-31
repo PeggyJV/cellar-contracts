@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
-import { ERC20, SafeTransferLib, Cellar,  Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
+import { ERC20, SafeTransferLib, Cellar, Registry, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { FeesAndReserves } from "src/modules/FeesAndReserves.sol";
 import { PositionlessAdaptor } from "src/modules/adaptors/PositionlessAdaptor.sol";
 

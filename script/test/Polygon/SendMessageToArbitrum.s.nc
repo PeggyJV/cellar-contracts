@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { ERC20 } from "src/base/Cellar.sol";
 import { AxelarProxy } from "src/AxelarProxy.sol";

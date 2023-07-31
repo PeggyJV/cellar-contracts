@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { Cellar, ERC20 } from "src/base/Cellar.sol";
 
 contract FakeFeesAndReserves {
     constructor() {}
 
-    function metaData(Cellar cellar)
+    function metaData(
+        Cellar cellar
+    )
         public
         view
         returns (

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";

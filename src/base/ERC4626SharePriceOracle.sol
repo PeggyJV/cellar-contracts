@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { Math } from "src/utils/Math.sol";
@@ -46,11 +46,32 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     uint8 public constant ORACLE_DECIMALS = 18;
 
     //============================== ERRORS ===============================
+
     error ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry();
     error ERC4626SharePriceOracle__StalePerformData();
     error ERC4626SharePriceOracle__CumulativeTooLarge();
     error ERC4626SharePriceOracle__NoUpkeepConditionMet();
     error ERC4626SharePriceOracle__SharePriceTooLarge();
+
+    //============================== EVENTS ===============================
+
+    /**
+     * @notice Emitted when performUpkeep is ran.
+     * @param timeUpdated the time the answer was updated on chain
+     * @param timeAnswerCalculated the time the answer was calculated in checkUpkeep
+     * @param latestAnswer the new answer
+     * @param timeWeightedAverageAnswer the new time weighted average answer
+     * @param isNotSafeToUse bool
+     *                       if true: `timeWeightedAverageAnswer` is illogical, use `latestAnswer`
+     *                       if false: use `timeWeightedAverageAnswer`
+     */
+    event OracleUpdated(
+        uint256 timeUpdated,
+        uint256 timeAnswerCalculated,
+        uint256 latestAnswer,
+        uint256 timeWeightedAverageAnswer,
+        bool isNotSafeToUse
+    );
 
     //============================== IMMUTABLES ===============================
 
@@ -213,6 +234,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         if (timeDeltaSincePreviousObservation >= heartbeat) {
             uint16 nextIndex = _getNextIndex(_currentIndex, _observationsLength);
             currentIndex = nextIndex;
+            // Update memory variable for event.
+            _currentIndex = nextIndex;
             // Update newest cumulative.
             Observation storage newObservation = observations[nextIndex];
             newObservation.cumulative = uint192(currentCumulative);
@@ -221,6 +244,13 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         }
 
         if (!upkeepConditionMet) revert ERC4626SharePriceOracle__NoUpkeepConditionMet();
+
+        (uint256 timeWeightedAverageAnswer, bool isNotSafeToUse) = _getTimeWeightedAverageAnswer(
+            sharePrice,
+            _currentIndex,
+            _observationsLength
+        );
+        emit OracleUpdated(block.timestamp, currentTime, sharePrice, timeWeightedAverageAnswer, isNotSafeToUse);
     }
 
     //============================== ORACLE VIEW FUNCTIONS ===============================
@@ -245,6 +275,18 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
             _observationsLength
         );
         if (notSafeToUse) return (0, 0, true);
+    }
+
+    /**
+     * @notice Get the latest answer, and bool indicating whether answer is safe to use or not.
+     */
+    function getLatestAnswer() external view returns (uint256, bool) {
+        // Check if answer is stale, if so set notSafeToUse to true, and return.
+        uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
+        // Note add in the grace period here, because it can take time for the upkeep TX to go through.
+        if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, true);
+
+        return (answer, false);
     }
 
     //============================== INTERNAL HELPER FUNCTIONS ===============================

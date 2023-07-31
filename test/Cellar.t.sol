@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
@@ -1016,6 +1016,32 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertEq(cellarA.totalAssets(), cellarB.totalAssets(), "Total assets should be the same.");
 
         cellarA.withdraw(withdrawAmount, address(this), address(this));
+    }
+
+    function testCallerOfCallOnAdaptor() external {
+        // Specify a zero length Adaptor Call array.
+        Cellar.AdaptorCall[] memory data;
+
+        address automationActions = vm.addr(5);
+        cellar.setAutomationActions(automationActions);
+
+        // Only owner and automation actions can call `callOnAdaptor`.
+        cellar.callOnAdaptor(data);
+
+        vm.prank(automationActions);
+        cellar.callOnAdaptor(data);
+
+        // Update Automation Actions contract to zero address.
+        cellar.setAutomationActions(address(0));
+
+        // Call now reverts.
+        vm.startPrank(automationActions);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__CallerNotApprovedToRebalance.selector)));
+        cellar.callOnAdaptor(data);
+        vm.stopPrank();
+
+        // Owner can still call callOnAdaptor.
+        cellar.callOnAdaptor(data);
     }
 
     // ======================================== DEPEGGING ASSET TESTS ========================================

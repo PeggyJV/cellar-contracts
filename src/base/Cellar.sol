@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { Math } from "src/utils/Math.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
@@ -254,7 +254,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Maximum amount of positions a cellar can have in it's credit/debt arrays.
      */
-    uint256 public constant MAX_POSITIONS = 16;
+    uint256 public constant MAX_POSITIONS = 32;
 
     /**
      * @notice Allows owner to change the holding position.
@@ -1172,6 +1172,27 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         shares = assets.mulDivUp(_totalSupply, _totalAssets);
     }
 
+    // =========================================== AUTOMATION ACTIONS LOGIC ===========================================
+
+    /**
+     * Emitted when sender is not approved to call `callOnAdaptor`.
+     */
+    error Cellar__CallerNotApprovedToRebalance();
+
+    /**
+     * @notice The Automation Actions contract that can rebalance this Cellar.
+     * @dev Set to zero address if not in use.
+     */
+    address public automationActions;
+
+    /**
+     * @notice Set the Automation Actions contract.
+     * @dev Callable by Sommelier Governance.
+     */
+    function setAutomationActions(address _actions) external onlyOwner {
+        automationActions = _actions;
+    }
+
     // =========================================== ADAPTOR LOGIC ===========================================
 
     /**
@@ -1273,7 +1294,8 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
      * @dev Callable by Sommelier Strategist.
      */
-    function callOnAdaptor(AdaptorCall[] calldata data) external virtual onlyOwner nonReentrant {
+    function callOnAdaptor(AdaptorCall[] calldata data) external virtual nonReentrant {
+        if (msg.sender != owner && msg.sender != automationActions) revert Cellar__CallerNotApprovedToRebalance();
         _whenNotShutdown();
         _checkIfPaused();
         blockExternalReceiver = true;

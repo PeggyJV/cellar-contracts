@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { OneInchAdaptor } from "src/modules/adaptors/OneInch/OneInchAdaptor.sol";
 import { MockOneInchAdaptor } from "src/mocks/adaptors/MockOneInchAdaptor.sol";
