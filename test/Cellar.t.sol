@@ -1018,6 +1018,32 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellarA.withdraw(withdrawAmount, address(this), address(this));
     }
 
+    function testCallerOfCallOnAdaptor() external {
+        // Specify a zero length Adaptor Call array.
+        Cellar.AdaptorCall[] memory data;
+
+        address automationActions = vm.addr(5);
+        cellar.setAutomationActions(automationActions);
+
+        // Only owner and automation actions can call `callOnAdaptor`.
+        cellar.callOnAdaptor(data);
+
+        vm.prank(automationActions);
+        cellar.callOnAdaptor(data);
+
+        // Update Automation Actions contract to zero address.
+        cellar.setAutomationActions(address(0));
+
+        // Call now reverts.
+        vm.startPrank(automationActions);
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__CallerNotApprovedToRebalance.selector)));
+        cellar.callOnAdaptor(data);
+        vm.stopPrank();
+
+        // Owner can still call callOnAdaptor.
+        cellar.callOnAdaptor(data);
+    }
+
     // ======================================== DEPEGGING ASSET TESTS ========================================
 
     function testDepeggedAssetNotUsedByCellar() external {
