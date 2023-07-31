@@ -1600,12 +1600,7 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     // This function is used for exit pool slippage checks.
     // Specifically this function will only work to mock exit pools for vanilla stablecoin pool where the cellar
     // is exiting into USDC at index 1.
-    function exitPool(
-        bytes32 poolId,
-        address sender,
-        address payable recipient,
-        IVault.ExitPoolRequest memory request
-    ) external {
+    function exitPool(bytes32, address sender, address payable, IVault.ExitPoolRequest memory request) external {
         (, uint256 amountOfBptsToRedeem) = abi.decode(request.userData, (uint256, uint256));
         uint256 exitPoolSlippage = 0.89e4;
 
@@ -1663,6 +1658,7 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
      */
     function multicall(bytes[] calldata data) external returns (bytes[] memory results) {
         for (uint256 i = 0; i < data.length; i++) address(this).functionDelegateCall(data[i]);
+        return results;
     }
 
     function _simulatePoolJoin(address target, ERC20 tokenIn, uint256 amountIn, ERC20 bpt) internal {

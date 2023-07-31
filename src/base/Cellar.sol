@@ -86,6 +86,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // ========================================= PRICE ROUTER CACHE =========================================
 
     /**
+     * @notice Attempted to use an address from the registry, but address was not expected.
+     */
+    error Cellar__ExpectedAddressDoesNotMatchActual();
+
+    /**
      * @notice Cached price router contract.
      * @dev This way cellar has to "opt in" to price router changes.
      */
@@ -99,11 +104,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param allowableRange The +- range the total assets may deviate between the old and new price router.
      *                       - 1_000 == 10%
      *                       - 500 == 5%
+     * @param expectedPriceRouter The registry price router differed from the expected price router.
      * @dev `allowableRange` reverts from arithmetic underflow if it is greater than 10_000, this is
      *      desired behavior.
      * @dev Callable by Sommelier Governance.
      */
-    function cachePriceRouter(bool checkTotalAssets, uint16 allowableRange) external onlyOwner {
+    function cachePriceRouter(
+        bool checkTotalAssets,
+        uint16 allowableRange,
+        address expectedPriceRouter
+    ) external onlyOwner {
         uint256 minAssets;
         uint256 maxAssets;
 
@@ -114,6 +124,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         }
 
         priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
+        if (address(priceRouter) != expectedPriceRouter) revert Cellar__ExpectedAddressDoesNotMatchActual();
         uint256 assetsAfter = totalAssets();
 
         if (checkTotalAssets) {
@@ -1187,10 +1198,15 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
 
     /**
      * @notice Set the Automation Actions contract.
+     * @param _registryId Registry Id to get the automation action.
+     * @param _expectedAutomationActions The registry automation actions differed from the expected automation actions.
      * @dev Callable by Sommelier Governance.
+
      */
-    function setAutomationActions(address _actions) external onlyOwner {
-        automationActions = _actions;
+    function setAutomationActions(uint256 _registryId, address _expectedAutomationActions) external onlyOwner {
+        address registryAutomationActions = registry.getAddress(_registryId);
+        if (registryAutomationActions != _expectedAutomationActions) revert Cellar__ExpectedAddressDoesNotMatchActual();
+        automationActions = registryAutomationActions;
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================

@@ -191,10 +191,12 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         cellar.callOnAdaptor(data);
 
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
         assertEq(positions.length, 0, "Tracker should have zero positions.");
@@ -229,11 +231,13 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
             "Tracker should be tracking cellars first Uni NFT."
         );
 
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
-        data = new Cellar.AdaptorCall[](1);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
+            data = new Cellar.AdaptorCall[](1);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         positions = tracker.getTokens(address(cellar), DAI, USDC);
 
@@ -260,10 +264,12 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         cellar.callOnAdaptor(data);
 
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18, true);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18, true);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
@@ -291,23 +297,27 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         cellar.callOnAdaptor(data);
 
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        // Have Cellar make several terrible swaps
-        cellar.setRebalanceDeviation(0.1e18);
-        deal(address(USDC), address(cellar), 1_000_000e6);
-        deal(address(DAI), address(cellar), 1_000_000e18);
-        adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 3000, 10_000e6);
-        adaptorCalls[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 3000, 10_000e18);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            // Have Cellar make several terrible swaps
+            cellar.setRebalanceDeviation(0.1e18);
+            deal(address(USDC), address(cellar), 1_000_000e6);
+            deal(address(DAI), address(cellar), 1_000_000e18);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 3000, 10_000e6);
+            adaptorCalls[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 3000, 10_000e18);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         // Check that cellar did receive some fees.
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
-        adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         assertTrue(USDC.balanceOf(address(cellar)) > 1_000_000e6, "Cellar should have earned USDC fees.");
         assertTrue(DAI.balanceOf(address(cellar)) > 1_000_000e18, "Cellar should have earned DAI fees.");
@@ -489,11 +499,13 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         cellar.setRebalanceDeviation(0.1e18);
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 3000, 10_000e6);
-        adaptorCalls[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 3000, 10_000e18);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 3000, 10_000e6);
+            adaptorCalls[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 3000, 10_000e18);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         // First try to get rid of a token with liquidity + fees
         // Prank cellar, and give tacker approval to spend token with liquidity + fees
@@ -505,10 +517,12 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         vm.stopPrank();
 
         // Remove liquidity from position but do not take fees.
-        adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, type(uint128).max, false);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, type(uint128).max, false);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         // Then try to get rid of a token with fees
         vm.startPrank(address(cellar));
@@ -521,11 +535,13 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
         // Finally collect fees and purge unused token.
-        adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
-        adaptorCalls[1] = _createBytesDataToPurgePosition(address(cellar), 0);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
+            adaptorCalls[1] = _createBytesDataToPurgePosition(address(cellar), 0);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
@@ -668,8 +684,8 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         {
             uint256 usdcToUse = assets.mulDivDown(15, 100);
 
+            bytes[] memory adaptorCalls = new bytes[](2);
             {
-                bytes[] memory adaptorCalls = new bytes[](2);
                 adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, usdcToUse);
                 adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, usdcToUse);
                 data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
@@ -678,7 +694,7 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
             // Since we are dividing the USDC into 2 LP positions each, cut it in half.
             usdcToUse = usdcToUse / 2;
 
-            bytes[] memory adaptorCalls = new bytes[](5);
+            adaptorCalls = new bytes[](5);
             adaptorCalls[0] = _createBytesDataToOpenLP(USDC, WETH, 500, usdcToUse, type(uint256).max, 20);
             adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, 3000, usdcToUse, type(uint256).max, 80);
             adaptorCalls[2] = _createBytesDataToOpenLP(USDC, WETH, 10000, usdcToUse, type(uint256).max, 10);
@@ -1271,11 +1287,13 @@ contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC
         );
 
         // Strategist can remove the unowned tracked position.
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRemoveTrackedPositionNotOwned(idToRemove, DAI, USDC);
-        data = new Cellar.AdaptorCall[](1);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveTrackedPositionNotOwned(idToRemove, DAI, USDC);
+            data = new Cellar.AdaptorCall[](1);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         positions = tracker.getTokens(address(cellar), DAI, USDC);
 

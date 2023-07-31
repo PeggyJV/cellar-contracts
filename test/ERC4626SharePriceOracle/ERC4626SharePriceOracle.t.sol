@@ -788,7 +788,6 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
         _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
 
-        uint256 answer;
         bool isNotSafeToUse;
         (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
         assertTrue(!isNotSafeToUse, "Answer should be safe to use.");

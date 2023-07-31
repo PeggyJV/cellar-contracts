@@ -26,7 +26,7 @@ contract DeployTestOracleScript is Script {
         vm.startBroadcast();
 
         // Setup share price oracle.
-        ERC4626SharePriceOracle sharePriceOracle = new ERC4626SharePriceOracle(
+        new ERC4626SharePriceOracle(
             _target,
             _heartbeat,
             _deviationTrigger,

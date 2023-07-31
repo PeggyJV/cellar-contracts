@@ -191,9 +191,9 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         assertEq(address(cellar.asset()), address(USDC), "Should initialize asset to be USDC.");
 
-        (, , uint64 lastAccrual, ) = cellar.feeData();
+        // (, , uint64 lastAccrual, ) = cellar.feeData();
 
-        (uint64 strategistPlatformCut, uint64 platformFee, , address strategistPayoutAddress) = cellar.feeData();
+        (uint64 strategistPlatformCut, , , address strategistPayoutAddress) = cellar.feeData();
         assertEq(strategistPlatformCut, 0.75e18, "Platform cut should be set to 0.75e18.");
         assertEq(strategistPayoutAddress, strategist, "Strategist payout address should be equal to strategist.");
 
@@ -844,7 +844,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.totalAssets();
 
         // Governance can recover cellar by calling `cachePriceRouter(false)`.
-        cellar.cachePriceRouter(false, 0.05e4);
+        cellar.cachePriceRouter(false, 0.05e4, registry.getAddress(2));
         assertEq(
             address(cellar.priceRouter()),
             address(priceRouter),
@@ -852,7 +852,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
 
         // Now that price router is correct, calling it again should succeed even though it doesn't set anything.
-        cellar.cachePriceRouter(true, 0.05e4);
+        cellar.cachePriceRouter(true, 0.05e4, registry.getAddress(2));
 
         // Registry sets a malicious price router.
         registry.setAddress(2, address(this));
@@ -863,7 +863,16 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
                 abi.encodeWithSelector(Cellar.Cellar__TotalAssetDeviatedOutsideRange.selector, 50e6, 95.95e6, 106.05e6)
             )
         );
-        cellar.cachePriceRouter(true, 0.05e4);
+        cellar.cachePriceRouter(true, 0.05e4, address(this));
+
+        // Set registry back to use old price router.
+        registry.setAddress(2, address(priceRouter));
+
+        // Multisig tries to change the price router address once governance prop goes through.
+        registry.setAddress(2, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
+        cellar.cachePriceRouter(true, 0.05e4, address(priceRouter));
     }
 
     function testTotalAssets(
@@ -913,7 +922,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         address newStrategistAddress = vm.addr(777);
         cellar.setStrategistPlatformCut(0.8e18);
         cellar.setStrategistPayoutAddress(newStrategistAddress);
-        (uint64 strategistPlatformCut, uint64 platformFee, , address strategistPayoutAddress) = cellar.feeData();
+        (uint64 strategistPlatformCut, , , address strategistPayoutAddress) = cellar.feeData();
         assertEq(strategistPlatformCut, 0.8e18, "Platform cut should be set to 0.8e18.");
         assertEq(
             strategistPayoutAddress,
@@ -1023,7 +1032,8 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         Cellar.AdaptorCall[] memory data;
 
         address automationActions = vm.addr(5);
-        cellar.setAutomationActions(automationActions);
+        registry.register(automationActions);
+        cellar.setAutomationActions(3, automationActions);
 
         // Only owner and automation actions can call `callOnAdaptor`.
         cellar.callOnAdaptor(data);
@@ -1032,7 +1042,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
 
         // Update Automation Actions contract to zero address.
-        cellar.setAutomationActions(address(0));
+        cellar.setAutomationActions(4, address(0));
 
         // Call now reverts.
         vm.startPrank(automationActions);
@@ -1042,6 +1052,14 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Owner can still call callOnAdaptor.
         cellar.callOnAdaptor(data);
+
+        registry.setAddress(3, automationActions);
+
+        // Governance tries to set automation actions to registry address 3, but malicious multisig changes it after prop passes.
+        registry.setAddress(3, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
+        cellar.setAutomationActions(3, automationActions);
     }
 
     // ======================================== DEPEGGING ASSET TESTS ========================================
@@ -1331,7 +1349,7 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         ERC20[] calldata,
         uint256[] calldata,
         ERC20
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         return 50e6;
     }
 }

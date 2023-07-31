@@ -774,12 +774,12 @@ contract CellarAaveV3Test is MainnetStarterTest, AdaptorHelperFunctions {
                 USDCtoFlashLoan
             );
             // Swap USDC for WBTC.
-            uint256 amountToSwap = priceRouter.getValue(USDC, USDCtoFlashLoan.mulDivDown(2, 3), WETH);
+            uint256 amountToSwap0 = priceRouter.getValue(USDC, USDCtoFlashLoan.mulDivDown(2, 3), WETH);
             adaptorCallsInsideFlashLoanFirstAdaptor[1] = _createBytesDataForSwapWithUniv3(
                 WETH,
                 WBTC,
                 500,
-                amountToSwap
+                amountToSwap0
             );
             // Lend USDC on Aave specifying to use the max amount available.
             adaptorCallsInsideFlashLoanSecondAdaptor[0] = _createBytesDataToLendOnAaveV3(WETH, type(uint256).max);

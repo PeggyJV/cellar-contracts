@@ -199,12 +199,12 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertEq(cellar.totalAssets(), expectedTotalAssets, "Total assets should have increased by `reserves` amount.");
     }
 
-    function testPerformanceFees(uint256 totalAssets) external {
-        totalAssets = bound(totalAssets, 100e6, 100_000_000e6);
+    function testPerformanceFees(uint256 _totalAssets) external {
+        _totalAssets = bound(_totalAssets, 100e6, 100_000_000e6);
 
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         // Strategist calls fees and reserves setup.
         {
@@ -230,16 +230,16 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         vm.warp(block.timestamp + 3_600);
 
-        _simulateYieldAndCheckTotalFeesEarned(cellar, totalAssets.mulDivDown(1, 100), 0);
+        _simulateYieldAndCheckTotalFeesEarned(cellar, _totalAssets.mulDivDown(1, 100), 0);
     }
 
     function testResetHWM() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 0;
         uint32 performanceFee = 0.25e4;
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -260,7 +260,7 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         (, performData) = far.checkUpkeep(abi.encode(cellars));
         far.performUpkeep(performData);
 
-        deal(address(USDC), address(cellar), totalAssets.mulDivDown(99, 100));
+        deal(address(USDC), address(cellar), _totalAssets.mulDivDown(99, 100));
 
         _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
 
@@ -281,9 +281,9 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         uint256 currentHWM = metaData.exactHighWatermark;
 
-        uint256 totalSupply = cellar.totalSupply();
+        uint256 _totalSupply = cellar.totalSupply();
         // Calculate Share price normalized to 27 decimals.
-        uint256 currentSharePrice = cellar.totalAssets().changeDecimals(6, 27).mulDivDown(10 ** 6, totalSupply);
+        uint256 currentSharePrice = cellar.totalAssets().changeDecimals(6, 27).mulDivDown(10 ** 6, _totalSupply);
 
         // Reset HWM halfway.
         uint256 expectedHWM = currentSharePrice + ((currentHWM - currentSharePrice) / 2);
@@ -360,10 +360,10 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     function testPerformanceFeeAccrual() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -390,8 +390,8 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         _simulateYieldAndCheckTotalFeesEarned(cellar, 100_000e6, 0);
 
         // Cellar loses yield.
-        totalAssets = cellar.totalAssets();
-        deal(address(USDC), address(cellar), totalAssets.mulDivDown(99, 100));
+        _totalAssets = cellar.totalAssets();
+        deal(address(USDC), address(cellar), _totalAssets.mulDivDown(99, 100));
         _simulateYieldAndCheckTotalFeesEarned(cellar, 0, 0);
 
         // Pass in old perform data to try and take performance fees eventhough none are due.
@@ -401,16 +401,16 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.warp(block.timestamp + 3_600);
 
         // Cellar regains lost yield, and performance fees are earned again.
-        deal(address(USDC), address(cellar), totalAssets);
+        deal(address(USDC), address(cellar), _totalAssets);
 
         _simulateYieldAndCheckTotalFeesEarned(cellar, 50_000e6, 0);
     }
 
     function testPerformUpkeepOnCellarNotSetUp() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -427,12 +427,12 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // yield earned w performance fees
     function testYieldWithPerformanceFees() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 200_000e6;
         uint32 performanceFee = 0.25e4;
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -465,12 +465,12 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // no yield earned w performance fees
     function testNoYieldWithPerformanceFees() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 0;
         uint32 performanceFee = 0.25e4;
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -503,12 +503,12 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // Negative yield earned with performance fees.
     function testNegativeYieldWithPerformanceFees() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 0;
         uint32 performanceFee = 0.25e4;
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -529,7 +529,7 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         (, performData) = far.checkUpkeep(abi.encode(cellars));
         far.performUpkeep(performData);
 
-        deal(address(USDC), address(cellar), totalAssets.mulDivDown(99, 100));
+        deal(address(USDC), address(cellar), _totalAssets.mulDivDown(99, 100));
 
         _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
 
@@ -543,17 +543,17 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // yield earned w management fees
     function testManagementFees() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 0;
         uint32 performanceFee = 0;
         uint32 managementFee = 0.02e4;
         uint256 timePassed = 100 days;
 
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
-        totalAssets = cellar.totalAssets();
+        _totalAssets = cellar.totalAssets();
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -577,7 +577,7 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         _simulateYieldAndCheckTotalFeesEarned(cellar, yield, timePassed);
 
         // Management fees are zero, so cellar should only earn yield * performance fee.
-        uint256 expectedFee = totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
+        uint256 expectedFee = _totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
 
         FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
 
@@ -596,7 +596,7 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Pass the some more time and make sure that management fee is still right.
         _simulateYieldAndCheckTotalFeesEarned(cellar, yield, timePassed / 2);
 
-        expectedFee += totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed / 2, 365 days);
+        expectedFee += _totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed / 2, 365 days);
 
         metaData = far.getMetaData(cellar);
 
@@ -606,17 +606,17 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // yield earned w both fees
     function testYieldWithPerformanceFeesAndManagementFees() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 200_000e6;
         uint32 performanceFee = 0.25e4;
         uint32 managementFee = 0.02e4;
         uint256 timePassed = 100 days;
 
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
-        totalAssets = cellar.totalAssets();
+        _totalAssets = cellar.totalAssets();
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -641,7 +641,7 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Management fees are zero, so cellar should only earn yield * performance fee.
         uint256 expectedFee = yield.mulDivDown(performanceFee, 1e4);
-        expectedFee += totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
+        expectedFee += _totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
 
         FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
 
@@ -650,17 +650,17 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // no yield earned w both fees
     function testNoYieldWithPerformanceFeesAndManagementFees() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 0;
         uint32 performanceFee = 0.25e4;
         uint32 managementFee = 0.02e4;
         uint256 timePassed = 100 days;
 
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
-        totalAssets = cellar.totalAssets();
+        _totalAssets = cellar.totalAssets();
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -685,7 +685,7 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Management fees are zero, so cellar should only earn yield * performance fee.
         uint256 expectedFee = 0;
-        expectedFee += totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
+        expectedFee += _totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
 
         FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
 
@@ -694,15 +694,15 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // Negative yield earned with both fees.
     function testNegativeYieldWithPerformanceFeesAndManagementFees() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 0;
         uint32 performanceFee = 0.25e4;
         uint32 managementFee = 0.02e4;
         uint256 timePassed = 100 days;
 
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -723,14 +723,14 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         (, performData) = far.checkUpkeep(abi.encode(cellars));
         far.performUpkeep(performData);
 
-        totalAssets = totalAssets.mulDivDown(99, 100);
-        deal(address(USDC), address(cellar), totalAssets);
+        _totalAssets = _totalAssets.mulDivDown(99, 100);
+        deal(address(USDC), address(cellar), _totalAssets);
 
         _simulateYieldAndCheckTotalFeesEarned(cellar, yield, 100 days);
 
         // Management fees are zero, so cellar should only earn yield * performance fee.
         uint256 expectedFee = 0;
-        expectedFee += totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
+        expectedFee += _totalAssets.mulDivDown(managementFee, 1e4).mulDivDown(timePassed, 365 days);
 
         FeesAndReserves.MetaData memory metaData = far.getMetaData(cellar);
 
@@ -738,23 +738,23 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     function testFeesEarned(
-        uint256 totalAssets,
+        uint256 _totalAssets,
         uint256 yield,
         uint256 timePassed,
         uint256 performanceFee,
         uint256 managementFee
     ) external {
-        totalAssets = bound(totalAssets, 1e6, 1_000_000_000e6);
+        _totalAssets = bound(_totalAssets, 1e6, 1_000_000_000e6);
         yield = bound(yield, 0, 100_000_000_000e6);
         timePassed = bound(timePassed, 0, 150 days);
         performanceFee = bound(performanceFee, 0, 0.3e4);
         managementFee = bound(managementFee, 0, 0.1e4);
 
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
-        totalAssets = cellar.totalAssets();
+        _totalAssets = cellar.totalAssets();
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -844,12 +844,12 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     function testStalePerformData() external {
-        uint256 totalAssets = 1_000_000e6;
+        uint256 _totalAssets = 1_000_000e6;
         uint256 yield = 200_000e6;
         uint32 performanceFee = 0.25e4;
         // Add assets to the cellar.
-        deal(address(USDC), address(this), totalAssets);
-        cellar.deposit(totalAssets, address(this));
+        deal(address(USDC), address(this), _totalAssets);
+        cellar.deposit(_totalAssets, address(this));
 
         Cellar[] memory cellars = new Cellar[](1);
         cellars[0] = cellar;
@@ -1019,8 +1019,8 @@ contract FeesAndReservesTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 timeDelta = block.timestamp - targetMetaData.timestamp;
 
         // Simulate yield.
-        ERC20 asset = target.asset();
-        deal(address(asset), address(target), asset.balanceOf(address(target)) + yield);
+        ERC20 yieldAsset = target.asset();
+        deal(address(yieldAsset), address(target), yieldAsset.balanceOf(address(target)) + yield);
 
         uint256 minTotalAssets = target.totalAssets().min(targetMetaData.totalAssets);
 

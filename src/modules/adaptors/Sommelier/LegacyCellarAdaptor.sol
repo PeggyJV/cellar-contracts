@@ -64,10 +64,7 @@ contract LegacyCellarAdaptor is BaseAdaptor {
     /**
      * @notice Position is not liquid
      */
-    function withdrawableFrom(
-        bytes memory adaptorData,
-        bytes memory configurationData
-    ) public view override returns (uint256) {
+    function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
         return 0;
     }
 

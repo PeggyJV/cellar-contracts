@@ -158,10 +158,12 @@ contract SushiswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, E
         cellar.callOnAdaptor(data);
 
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
         assertEq(positions.length, 0, "Tracker should have zero positions.");
@@ -196,11 +198,13 @@ contract SushiswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, E
             "Tracker should be tracking cellars first Uni NFT."
         );
 
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
-        data = new Cellar.AdaptorCall[](1);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
+            data = new Cellar.AdaptorCall[](1);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         positions = tracker.getTokens(address(cellar), DAI, USDC);
 
@@ -227,10 +231,12 @@ contract SushiswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, E
         cellar.callOnAdaptor(data);
 
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18, true);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18, true);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 

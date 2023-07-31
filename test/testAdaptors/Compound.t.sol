@@ -184,7 +184,6 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint24[] memory poolFees = new uint24[](2);
         poolFees[0] = 3000;
         poolFees[1] = 500;
-        bytes memory params = abi.encode(path, poolFees, 0, 0);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
             adaptorCalls[0] = abi.encodeWithSelector(CTokenAdaptor.claimComp.selector);
@@ -231,8 +230,8 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
     function testMaliciousStrategistMovingFundsIntoUntrackedCompoundPosition() external {
         uint256 initialAssets = cellar.totalAssets();
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
         {
-            bytes[] memory adaptorCalls = new bytes[](1);
             adaptorCalls[0] = _createBytesDataToWithdrawFromCompoundV2(cDAI, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
@@ -251,7 +250,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Strategist malicously makes several `callOnAdaptor` calls to lower the Cellars Share Price.
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls = new bytes[](1);
         uint256 amountToLend = assets;
         for (uint8 i; i < 10; i++) {
             // Choose a value close to the Cellars rebalance deviation limit.
@@ -310,8 +309,8 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function testErrorCodeCheck() external {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
         {
-            bytes[] memory adaptorCalls = new bytes[](1);
             adaptorCalls[0] = _createBytesDataToWithdrawFromCompoundV2(cDAI, type(uint256).max);
             data[0] = Cellar.AdaptorCall({ adaptor: address(cTokenAdaptor), callData: adaptorCalls });
         }
@@ -332,7 +331,7 @@ contract CellarCompoundTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Strategist tries to lend more USDC then they have,
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls = new bytes[](1);
 
         // Choose an amount too large so deposit fails.
         uint256 amountToLend = assets + 1;
