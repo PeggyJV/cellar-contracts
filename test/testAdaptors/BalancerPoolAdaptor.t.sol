@@ -5,12 +5,13 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { BalancerPoolAdaptor } from "src/modules/adaptors/Balancer/BalancerPoolAdaptor.sol";
 import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
 import { IBasePool } from "src/interfaces/external/Balancer/typically-npm/IBasePool.sol";
-import { IVault, IAsset, IERC20 } from "@balancer/interfaces/contracts/vault/IVault.sol";
+import { IVault, IAsset, IERC20, IFlashLoanRecipient } from "@balancer/interfaces/contracts/vault/IVault.sol";
 import { IBalancerRelayer } from "src/interfaces/external/Balancer/IBalancerRelayer.sol";
 import { MockBalancerPoolAdaptor } from "src/mocks/adaptors/MockBalancerPoolAdaptor.sol";
 import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 import { CellarWithBalancerFlashLoans } from "src/base/permutations/CellarWithBalancerFlashLoans.sol";
+import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -44,6 +45,7 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private wstETH_bbaWETHPosition = 10;
 
     uint32 private slippage = 0.9e4;
+    uint256 public initialAssets;
 
     function setUp() external {
         // Setup forked environment.
@@ -185,6 +187,7 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.addAdaptorToCatalogue(address(balancerPoolAdaptor));
         cellar.addAdaptorToCatalogue(address(erc20Adaptor));
         cellar.addAdaptorToCatalogue(address(mockBalancerPoolAdaptor));
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -239,12 +242,13 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         wethCellar.addPosition(0, wstETHPosition, abi.encode(0), false);
         wethCellar.addPosition(0, wstETH_bbaWETHPosition, abi.encode(0), false);
+
+        initialAssets = cellar.totalAssets();
     }
 
     // ========================================= HAPPY PATH TESTS =========================================
 
     function testTotalAssets(uint256 assets) external {
-        uint256 initialAssets = cellar.totalAssets();
         // User Joins Cellar.
         assets = bound(assets, 0.1e6, 1_000_000e6);
         deal(address(USDC), address(this), assets);
@@ -430,7 +434,6 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     function testUserWithdrawPullFromGauge(uint256 assets, uint256 percentInGauge) external {
-        uint256 initialAssets = cellar.totalAssets();
         assets = bound(assets, 0.1e6, 1_000_000e6);
         percentInGauge = bound(percentInGauge, 0, 1e18);
         uint256 bptAmount = priceRouter.getValue(USDC, assets + initialAssets, BB_A_USD);
@@ -464,18 +467,52 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     function testBalancerFlashLoans() external {
+        uint256 assets = 100e6;
+        deal(address(USDC), address(this), assets);
+        USDC.safeApprove(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+
         address[] memory tokens = new address[](1);
         tokens[0] = address(USDC);
         uint256[] memory amounts = new uint256[](1);
-        amounts[0] = 1e6;
-        Cellar.AdaptorCall[] memory data;
+        amounts[0] = 1_000e6;
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCallsInFlashLoan = new bytes[](2);
+        adaptorCallsInFlashLoan[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 1_000e6);
+        adaptorCallsInFlashLoan[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 100, type(uint256).max);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCallsInFlashLoan });
         bytes memory flashLoanData = abi.encode(data);
+
         data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToMakeFlashLoanFromBalancer(tokens, amounts, flashLoanData);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(balancerPoolAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
+
+        assertApproxEqRel(
+            cellar.totalAssets(),
+            initialAssets + assets,
+            0.002e18,
+            "Cellar totalAssets should be relatively unchanged."
+        );
+    }
+
+    function testBalancerFlashLoanChecks() external {
+        // Try calling `receiveFlashLoan` directly on the Cellar.
+        IERC20[] memory tokens;
+        uint256[] memory amounts;
+        uint256[] memory feeAmounts;
+        bytes memory userData;
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CellarWithBalancerFlashLoans.Cellar__CallerNotBalancerVault.selector))
+        );
+        cellar.receiveFlashLoan(tokens, amounts, feeAmounts, userData);
+
+        // Attacker tries to initiate a flashloan to control the Cellar.
+        vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithBalancerFlashLoans.Cellar__ExternalInitiator.selector)));
+        IVault(vault).flashLoan(IFlashLoanRecipient(address(cellar)), tokens, amounts, userData);
     }
 
     /**
@@ -493,10 +530,39 @@ contract BalancerPoolAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertEq(result, false);
     }
 
+    function testDepositToHoldingPosition() external {
+        string memory cellarName = "Balancer LP Cellar V0.0";
+        uint256 initialDeposit = 1e12;
+        uint64 platformCut = 0.75e18;
+
+        Cellar balancerCellar = _createCellar(
+            cellarName,
+            BB_A_USD,
+            bbaUSDPosition,
+            abi.encode(0),
+            initialDeposit,
+            platformCut
+        );
+
+        uint256 totalAssetsBefore = balancerCellar.totalAssets();
+
+        uint256 assetsToDeposit = 100e18;
+        deal(address(BB_A_USD), address(this), assetsToDeposit);
+        BB_A_USD.safeApprove(address(balancerCellar), assetsToDeposit);
+        balancerCellar.deposit(assetsToDeposit, address(this));
+
+        uint256 totalAssetsAfter = balancerCellar.totalAssets();
+
+        assertEq(
+            totalAssetsAfter,
+            totalAssetsBefore + assetsToDeposit,
+            "TotalAssets should have increased by assetsToDeposit"
+        );
+    }
+
     // ========================================= Join Happy Paths =========================================
 
     function testJoinVanillaPool(uint256 assets) external {
-        uint256 initialAssets = cellar.totalAssets();
         // Deposit into Cellar.
         assets = bound(assets, 0.1e6, 10_000_000e6);
         deal(address(USDC), address(this), assets);

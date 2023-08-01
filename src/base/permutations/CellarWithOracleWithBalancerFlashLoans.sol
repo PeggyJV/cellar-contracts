@@ -68,8 +68,8 @@ contract CellarWithOracleWithBalancerFlashLoans is CellarWithOracle, IFlashLoanR
         uint256[] calldata feeAmounts,
         bytes calldata userData
     ) external {
-        if (!blockExternalReceiver) revert Cellar__ExternalInitiator();
         if (msg.sender != balancerVault) revert Cellar__CallerNotBalancerVault();
+        if (!blockExternalReceiver) revert Cellar__ExternalInitiator();
 
         AdaptorCall[] memory data = abi.decode(userData, (AdaptorCall[]));
 
