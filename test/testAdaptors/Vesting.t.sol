@@ -35,7 +35,7 @@ contract CellarVestingTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
         uint256 blockNumber = 16869780;
-        _startFork(rpcKey, blockNumber); 
+        _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
         _setUp();
@@ -321,6 +321,8 @@ contract CellarVestingTest is MainnetStarterTest, AdaptorHelperFunctions {
         data[0] = Cellar.AdaptorCall({ adaptor: address(vestingAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
+        uint256 totalAssetsBeforeVesting = cellar.totalAssets();
+
         // skip forward, half of vesting period
         skip(vestingPeriod / 2);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -342,6 +344,13 @@ contract CellarVestingTest is MainnetStarterTest, AdaptorHelperFunctions {
             0,
             1,
             "Vesting contract should not report vested funds"
+        );
+
+        assertApproxEqAbs(
+            cellar.totalAssets(),
+            totalAssetsBeforeVesting + assets.mulDivDown(500, 1000),
+            1,
+            "Cellar totalAssets should regain half of deposit"
         );
     }
 
@@ -407,11 +416,10 @@ contract CellarVestingTest is MainnetStarterTest, AdaptorHelperFunctions {
             );
     }
 
-    function _createBytesDataToWithdrawAny(VestingSimple _vesting, uint256 amount)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawAny(
+        VestingSimple _vesting,
+        uint256 amount
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(VestingSimpleAdaptor.withdrawAnyFromVesting.selector, address(_vesting), amount);
     }
 
@@ -437,11 +445,7 @@ contract CellarVestingTest is MainnetStarterTest, AdaptorHelperFunctions {
         emit VestingDeposit(address(cellar), address(cellar), amount);
     }
 
-    function _emitWithdraw(
-        address receiver,
-        uint256 amount,
-        uint256 depositId
-    ) internal {
+    function _emitWithdraw(address receiver, uint256 amount, uint256 depositId) internal {
         emit VestingWithdraw(address(cellar), receiver, depositId, amount);
     }
 }
