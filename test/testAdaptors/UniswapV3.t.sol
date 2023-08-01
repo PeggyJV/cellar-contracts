@@ -1,109 +1,60 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
-import { MockCellar, Cellar, ERC4626, ERC20, SafeTransferLib } from "src/mocks/MockCellar.sol";
-import { Registry, PriceRouter, IGravity } from "src/base/Cellar.sol";
-import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
-import { MockPriceRouter } from "src/mocks/MockPriceRouter.sol";
-import { MockERC4626 } from "src/mocks/MockERC4626.sol";
-import { MockGravity } from "src/mocks/MockGravity.sol";
-import { MockERC20 } from "src/mocks/MockERC20.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
-import { BaseAdaptor } from "src/modules/adaptors/BaseAdaptor.sol";
-import { LockedERC4626 } from "src/mocks/LockedERC4626.sol";
-import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
-import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
 import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol";
 import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
-import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { INonfungiblePositionManager } from "@uniswapV3P/interfaces/INonfungiblePositionManager.sol";
 import "@uniswapV3C/libraries/FixedPoint128.sol";
 import "@uniswapV3C/libraries/FullMath.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { UniswapV3PositionTracker } from "src/modules/adaptors/Uniswap/UniswapV3PositionTracker.sol";
 import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
+import { IUniswapV3Router } from "src/interfaces/external/IUniswapV3Router.sol";
 
-import { Test, stdStorage, console, StdStorage, stdError } from "@forge-std/Test.sol";
-import { Math } from "src/utils/Math.sol";
+// Import Everything from Starter file.
+import "test/resources/MainnetStarter.t.sol";
+
+import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
 // Will test the swapping and cellar position management using adaptors
-contract UniswapV3AdaptorTest is Test, ERC721Holder {
+contract UniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions, ERC721Holder {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
     using Address for address;
 
-    MockCellar private cellar;
-    MockGravity private gravity;
-
-    PriceRouter private priceRouter;
-    SwapRouter private swapRouter;
-
-    Registry public registry;
-
-    uint8 private constant CHAINLINK_DERIVATIVE = 1;
-
-    address internal constant uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address internal constant uniV2Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    Cellar private cellar;
 
     IUniswapV3Factory internal factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-
-    ERC20 private DAI = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-
-    ERC20 private WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
-
-    ERC20 private LINK = ERC20(0x514910771AF9Ca656af840dff83E8264EcF986CA);
-
-    ERC20 private USDT = ERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
-
-    address private immutable strategist = vm.addr(0xBEEF);
-
-    address private immutable cosmos = vm.addr(0xCAAA);
-
     UniswapV3Adaptor private uniswapV3Adaptor;
-    SwapWithUniswapAdaptor private swapWithUniswapAdaptor;
-    ERC20Adaptor private erc20Adaptor;
     UniswapV3PositionTracker private tracker;
 
-    // Chainlink PriceFeeds
-    address private WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
-    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
-    address private DAI_USD_FEED = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
-    address private WBTC_USD_FEED = 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c;
+    IUniswapV3Router public uniswapV3Router = IUniswapV3Router(uniV3Router);
 
-    uint32 private usdcPosition;
-    uint32 private wethPosition;
-    uint32 private daiPosition;
-    uint32 private usdcDaiPosition;
-    uint32 private usdcWethPosition;
+    uint32 private usdcPosition = 1;
+    uint32 private wethPosition = 2;
+    uint32 private daiPosition = 3;
+    uint32 private usdcDaiPosition = 4;
+    uint32 private usdcWethPosition = 5;
 
     function setUp() external {
-        // Setup Registry and modules:
-        priceRouter = new PriceRouter(registry, WETH);
-        swapRouter = new SwapRouter(IUniswapV2Router(uniV2Router), IUniswapV3Router(uniV3Router));
-        swapWithUniswapAdaptor = new SwapWithUniswapAdaptor(uniV2Router, uniV3Router);
-        gravity = new MockGravity();
+        // Setup forked environment.
+        string memory rpcKey = "MAINNET_RPC_URL";
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
+
+        // Run Starter setUp code.
+        _setUp();
+
         tracker = new UniswapV3PositionTracker(positionManager);
         uniswapV3Adaptor = new UniswapV3Adaptor(address(positionManager), address(tracker));
-        erc20Adaptor = new ERC20Adaptor();
-
-        registry = new Registry(
-            // Set this contract to the Gravity Bridge for testing to give the permissions usually
-            // given to the Gravity Bridge to this contract.
-            address(this),
-            address(swapRouter),
-            address(priceRouter)
-        );
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -121,41 +72,34 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
         priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
-        // Cellar positions array.
-        uint32[] memory positions = new uint32[](5);
-        uint32[] memory debtPositions;
-
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(uniswapV3Adaptor));
-        registry.trustAdaptor(address(erc20Adaptor));
-        registry.trustAdaptor(address(swapWithUniswapAdaptor));
 
-        usdcPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(USDC));
-        daiPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(DAI));
-        wethPosition = registry.trustPosition(address(erc20Adaptor), abi.encode(WETH));
-        usdcDaiPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(DAI, USDC));
-        usdcWethPosition = registry.trustPosition(address(uniswapV3Adaptor), abi.encode(USDC, WETH));
+        registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
+        registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
+        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
+        registry.trustPosition(usdcDaiPosition, address(uniswapV3Adaptor), abi.encode(DAI, USDC));
+        registry.trustPosition(usdcWethPosition, address(uniswapV3Adaptor), abi.encode(USDC, WETH));
 
-        positions[0] = usdcPosition;
-        positions[1] = daiPosition;
-        positions[2] = wethPosition;
-        positions[3] = usdcDaiPosition;
-        positions[4] = usdcWethPosition;
+        string memory cellarName = "UniswapV3 Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
 
-        bytes[] memory positionConfigs = new bytes[](5);
-        bytes[] memory debtConfigs;
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
-        cellar = new MockCellar(
-            registry,
-            USDC,
-            "Multiposition Cellar LP Token",
-            "multiposition-CLR",
-            abi.encode(positions, debtPositions, positionConfigs, debtConfigs, usdcPosition, strategist)
-        );
         vm.label(address(cellar), "cellar");
         vm.label(strategist, "strategist");
 
-        // Allow cellar to use CellarAdaptor so it can swap ERC20's and enter/leave other cellar positions.
+        cellar.addPositionToCatalogue(daiPosition);
+        cellar.addPositionToCatalogue(wethPosition);
+        cellar.addPositionToCatalogue(usdcDaiPosition);
+        cellar.addPositionToCatalogue(usdcWethPosition);
+
+        cellar.addPosition(1, daiPosition, abi.encode(0), false);
+        cellar.addPosition(1, wethPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdcDaiPosition, abi.encode(0), false);
+        cellar.addPosition(1, usdcWethPosition, abi.encode(0), false);
+
         cellar.addAdaptorToCatalogue(address(uniswapV3Adaptor));
         cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
 
@@ -163,9 +107,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
         // Approve cellar to spend all assets.
         USDC.approve(address(cellar), type(uint256).max);
-
-        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-        stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
     }
 
     // ========================================== POSITION MANAGEMENT TEST ==========================================
@@ -177,7 +118,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -208,7 +149,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         uint24 fee = 500;
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, fee, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, fee, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
         uint256 wethOut = priceRouter.getValue(USDC, 50_000e6, WETH);
@@ -237,7 +178,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -250,10 +191,12 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.callOnAdaptor(data);
 
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToCloseLP(address(cellar), 0);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
         assertEq(positions.length, 0, "Tracker should have zero positions.");
@@ -267,7 +210,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 100_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 100_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -288,11 +231,13 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
             "Tracker should be tracking cellars first Uni NFT."
         );
 
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
-        data = new Cellar.AdaptorCall[](1);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLP(address(cellar), 0, 50_000e18, 50_000e6);
+            data = new Cellar.AdaptorCall[](1);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         positions = tracker.getTokens(address(cellar), DAI, USDC);
 
@@ -307,7 +252,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
         {
@@ -319,10 +264,12 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.callOnAdaptor(data);
 
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18, true);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, 0.5e18, true);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
@@ -337,7 +284,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -350,23 +297,27 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.callOnAdaptor(data);
 
         data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        // Have Cellar make several terrible swaps
-        cellar.setRebalanceDeviation(0.1e18);
-        deal(address(USDC), address(cellar), 1_000_000e6);
-        deal(address(DAI), address(cellar), 1_000_000e18);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 10_000e6);
-        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 10_000e18);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            // Have Cellar make several terrible swaps
+            cellar.setRebalanceDeviation(0.1e18);
+            deal(address(USDC), address(cellar), 1_000_000e6);
+            deal(address(DAI), address(cellar), 1_000_000e18);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 3000, 10_000e6);
+            adaptorCalls[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 3000, 10_000e18);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         // Check that cellar did receive some fees.
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
-        adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         assertTrue(USDC.balanceOf(address(cellar)) > 1_000_000e6, "Cellar should have earned USDC fees.");
         assertTrue(DAI.balanceOf(address(cellar)) > 1_000_000e18, "Cellar should have earned DAI fees.");
@@ -380,7 +331,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         // Use `callOnAdaptor` to swap 50,000 USDC for DAI, and enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToOpenRangeOrder(DAI, USDC, 100, 0, assets);
+        adaptorCalls[0] = _createBytesDataToOpenRangeOrder(DAI, USDC, 100, 0, type(uint256).max);
 
         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -397,8 +348,8 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](2);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, assets / 4);
-            adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, assets / 4);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, assets / 4);
+            adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, assets / 4);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -530,7 +481,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -548,11 +499,13 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         cellar.setRebalanceDeviation(0.1e18);
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
-        bytes[] memory adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 3000, 10_000e6);
-        adaptorCalls[1] = _createBytesDataForSwap(DAI, USDC, 3000, 10_000e18);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 3000, 10_000e6);
+            adaptorCalls[1] = _createBytesDataForSwapWithUniv3(DAI, USDC, 3000, 10_000e18);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         // First try to get rid of a token with liquidity + fees
         // Prank cellar, and give tacker approval to spend token with liquidity + fees
@@ -564,10 +517,12 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.stopPrank();
 
         // Remove liquidity from position but do not take fees.
-        adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, type(uint128).max, false);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToTakeLP(address(cellar), 0, type(uint128).max, false);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         // Then try to get rid of a token with fees
         vm.startPrank(address(cellar));
@@ -580,11 +535,13 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         deal(address(USDC), address(cellar), 1_000_000e6);
         deal(address(DAI), address(cellar), 1_000_000e18);
         // Finally collect fees and purge unused token.
-        adaptorCalls = new bytes[](2);
-        adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
-        adaptorCalls[1] = _createBytesDataToPurgePosition(address(cellar), 0);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](2);
+            adaptorCalls[0] = _createBytesDataToCollectFees(address(cellar), 0, type(uint128).max, type(uint128).max);
+            adaptorCalls[1] = _createBytesDataToPurgePosition(address(cellar), 0);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         uint256[] memory positions = tracker.getTokens(address(cellar), DAI, USDC);
 
@@ -597,7 +554,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
     // ========================================== REVERT TEST ==========================================
     function testUsingUntrackedLPPosition() external {
         // Remove USDC WETH LP position from cellar.
-        cellar.removePosition(4, false);
+        cellar.removePosition(1, false);
 
         // Strategist tries to move funds into USDC WETH LP position.
         uint256 assets = 100_000e6;
@@ -642,7 +599,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(WBTC)))
         );
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
+        registry.trustPosition(101, address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
     }
 
     function testAddingPositionWithUnsupportedToken1Reverts() external {
@@ -656,7 +613,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         vm.expectRevert(
             bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(USDT)))
         );
-        registry.trustPosition(address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
+        registry.trustPosition(101, address(uniswapV3Adaptor), abi.encode(WBTC, USDT));
     }
 
     function testUsingLPTokensNotOwnedByCellarOrTokensThatDoNotExist() external {
@@ -727,17 +684,17 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         {
             uint256 usdcToUse = assets.mulDivDown(15, 100);
 
+            bytes[] memory adaptorCalls = new bytes[](2);
             {
-                bytes[] memory adaptorCalls = new bytes[](2);
-                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, usdcToUse);
                 data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
             }
 
             // Since we are dividing the USDC into 2 LP positions each, cut it in half.
             usdcToUse = usdcToUse / 2;
 
-            bytes[] memory adaptorCalls = new bytes[](5);
+            adaptorCalls = new bytes[](5);
             adaptorCalls[0] = _createBytesDataToOpenLP(USDC, WETH, 500, usdcToUse, type(uint256).max, 20);
             adaptorCalls[1] = _createBytesDataToOpenLP(USDC, WETH, 3000, usdcToUse, type(uint256).max, 80);
             adaptorCalls[2] = _createBytesDataToOpenLP(USDC, WETH, 10000, usdcToUse, type(uint256).max, 10);
@@ -756,8 +713,8 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
             {
                 bytes[] memory adaptorCalls = new bytes[](2);
-                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, usdcToUse);
                 data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
             }
 
@@ -804,35 +761,32 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
             uint24[] memory poolFees_10000 = new uint24[](1);
             poolFees_10000[0] = 10000;
 
-            USDC.safeApprove(address(swapRouter), type(uint256).max);
-            DAI.safeApprove(address(swapRouter), type(uint256).max);
-            WETH.safeApprove(address(swapRouter), type(uint256).max);
             for (uint256 i = 0; i < 10; i++) {
                 uint256 swapAmount = assetsToSwap / 2;
                 swapData = abi.encode(path0, poolFees_100, swapAmount, 0);
-                uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                uint256 daiAmount = swapWithUniV3(swapData, address(this), USDC, DAI);
                 swapData = abi.encode(path1, poolFees_500, swapAmount, 0);
-                uint256 wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                uint256 wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path2, poolFees_100, daiAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), DAI, USDC);
                 swapData = abi.encode(path3, poolFees_500, wethAmount, 0);
-                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap += swapWithUniV3(swapData, address(this), WETH, USDC);
 
                 swapAmount = assetsToSwap / 2;
                 swapData = abi.encode(path0, poolFees_500, swapAmount, 0);
-                daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                daiAmount = swapWithUniV3(swapData, address(this), USDC, DAI);
                 swapData = abi.encode(path1, poolFees_3000, swapAmount, 0);
-                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path2, poolFees_500, daiAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), DAI, USDC);
                 swapData = abi.encode(path3, poolFees_3000, wethAmount, 0);
-                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap += swapWithUniV3(swapData, address(this), WETH, USDC);
 
                 swapAmount = assetsToSwap;
                 swapData = abi.encode(path1, poolFees_10000, swapAmount, 0);
-                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path3, poolFees_10000, wethAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), WETH, USDC);
             }
         }
         data = new Cellar.AdaptorCall[](1);
@@ -893,8 +847,8 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
 
             {
                 bytes[] memory adaptorCalls = new bytes[](2);
-                adaptorCalls[0] = _createBytesDataForSwap(USDC, WETH, 500, usdcToUse);
-                adaptorCalls[1] = _createBytesDataForSwap(USDC, DAI, 100, usdcToUse);
+                adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, usdcToUse);
+                adaptorCalls[1] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, usdcToUse);
                 data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
             }
 
@@ -941,35 +895,32 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
             uint24[] memory poolFees_10000 = new uint24[](1);
             poolFees_10000[0] = 10000;
 
-            USDC.safeApprove(address(swapRouter), type(uint256).max);
-            DAI.safeApprove(address(swapRouter), type(uint256).max);
-            WETH.safeApprove(address(swapRouter), type(uint256).max);
             for (uint256 i = 0; i < 10; i++) {
                 uint256 swapAmount = assetsToSwap / 2;
                 swapData = abi.encode(path0, poolFees_100, swapAmount, 0);
-                uint256 daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                uint256 daiAmount = swapWithUniV3(swapData, address(this), USDC, DAI);
                 swapData = abi.encode(path1, poolFees_500, swapAmount, 0);
-                uint256 wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                uint256 wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path2, poolFees_100, daiAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), DAI, USDC);
                 swapData = abi.encode(path3, poolFees_500, wethAmount, 0);
-                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap += swapWithUniV3(swapData, address(this), WETH, USDC);
 
                 swapAmount = assetsToSwap / 2;
                 swapData = abi.encode(path0, poolFees_500, swapAmount, 0);
-                daiAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, DAI);
+                daiAmount = swapWithUniV3(swapData, address(this), USDC, DAI);
                 swapData = abi.encode(path1, poolFees_3000, swapAmount, 0);
-                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path2, poolFees_500, daiAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), DAI, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), DAI, USDC);
                 swapData = abi.encode(path3, poolFees_3000, wethAmount, 0);
-                assetsToSwap += swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap += swapWithUniV3(swapData, address(this), WETH, USDC);
 
                 swapAmount = assetsToSwap;
                 swapData = abi.encode(path1, poolFees_10000, swapAmount, 0);
-                wethAmount = swapRouter.swapWithUniV3(swapData, address(this), USDC, WETH);
+                wethAmount = swapWithUniV3(swapData, address(this), USDC, WETH);
                 swapData = abi.encode(path3, poolFees_10000, wethAmount, 0);
-                assetsToSwap = swapRouter.swapWithUniV3(swapData, address(this), WETH, USDC);
+                assetsToSwap = swapWithUniV3(swapData, address(this), WETH, USDC);
             }
         }
 
@@ -1003,15 +954,12 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         {
             bytes[] memory adaptorCalls = new bytes[](2);
 
-            adaptorCalls[0] = _createBytesDataForSwap(DAI, USDC, 100, DAI.balanceOf(address(cellar)));
-            adaptorCalls[1] = _createBytesDataForSwap(WETH, USDC, 500, WETH.balanceOf(address(cellar)));
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(DAI, USDC, 100, DAI.balanceOf(address(cellar)));
+            adaptorCalls[1] = _createBytesDataForSwapWithUniv3(WETH, USDC, 500, WETH.balanceOf(address(cellar)));
 
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
         cellar.callOnAdaptor(data);
-
-        // Advance time so users can withdraw.
-        vm.roll(block.timestamp + cellar.shareLockPeriod());
 
         // Have users exit the cellar.
         uint256 whaleAssetsToWithdraw = cellar.maxWithdraw(whale);
@@ -1164,7 +1112,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -1258,7 +1206,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -1303,7 +1251,7 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataForSwap(USDC, DAI, 100, 50_500e6);
+            adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, DAI, 100, 50_500e6);
             data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
         }
 
@@ -1339,11 +1287,13 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         );
 
         // Strategist can remove the unowned tracked position.
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRemoveTrackedPositionNotOwned(idToRemove, DAI, USDC);
-        data = new Cellar.AdaptorCall[](1);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveTrackedPositionNotOwned(idToRemove, DAI, USDC);
+            data = new Cellar.AdaptorCall[](1);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
         positions = tracker.getTokens(address(cellar), DAI, USDC);
 
@@ -1367,6 +1317,38 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
     }
 
     // ========================================= HELPER FUNCTIONS =========================================
+
+    function swapWithUniV3(
+        bytes memory swapData,
+        address receiver,
+        ERC20 assetIn,
+        ERC20
+    ) public returns (uint256 amountOut) {
+        (address[] memory path, uint24[] memory poolFees, uint256 amount, uint256 amountOutMin) = abi.decode(
+            swapData,
+            (address[], uint24[], uint256, uint256)
+        );
+
+        // Approve assets to be swapped through the router.
+        assetIn.safeApprove(address(uniswapV3Router), amount);
+
+        // Encode swap parameters.
+        bytes memory encodePackedPath = abi.encodePacked(address(assetIn));
+        for (uint256 i = 1; i < path.length; i++)
+            encodePackedPath = abi.encodePacked(encodePackedPath, poolFees[i - 1], path[i]);
+
+        // Execute the swap.
+        amountOut = uniswapV3Router.exactInput(
+            IUniswapV3Router.ExactInputParams({
+                path: encodePackedPath,
+                recipient: receiver,
+                deadline: block.timestamp + 60,
+                amountIn: amount,
+                amountOutMinimum: amountOutMin
+            })
+        );
+    }
+
     function _sqrt(uint256 _x) internal pure returns (uint256 y) {
         uint256 z = (_x + 1) / 2;
         y = _x;
@@ -1404,20 +1386,6 @@ contract UniswapV3AdaptorTest is Test, ERC721Holder {
         lower = tick - (tick % spacing);
         lower = lower - ((spacing * size) / 2);
         upper = lower + spacing * size;
-    }
-
-    function _createBytesDataForSwap(
-        ERC20 from,
-        ERC20 to,
-        uint24 poolFee,
-        uint256 fromAmount
-    ) internal pure returns (bytes memory) {
-        address[] memory path = new address[](2);
-        path[0] = address(from);
-        path[1] = address(to);
-        uint24[] memory poolFees = new uint24[](1);
-        poolFees[0] = poolFee;
-        return abi.encodeWithSelector(SwapWithUniswapAdaptor.swapWithUniV3.selector, path, poolFees, fromAmount, 0);
     }
 
     function _createBytesDataToOpenLP(

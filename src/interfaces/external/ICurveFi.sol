@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 interface ICurveFi {
     function get_virtual_price() external view returns (uint256);
@@ -54,11 +54,7 @@ interface ICurveFi {
 
     function remove_liquidity(uint256 _amount, uint256[2] calldata amounts) external;
 
-    function remove_liquidity_one_coin(
-        uint256 _token_amount,
-        int128 i,
-        uint256 min_amount
-    ) external;
+    function remove_liquidity_one_coin(uint256 _token_amount, int128 i, uint256 min_amount) external;
 
     function exchange(
         // CRV-ETH and CVX-ETH
@@ -81,11 +77,7 @@ interface ICurveFi {
 
     function price_oracle() external view returns (uint256);
 
-    function get_dy(
-        int128 from,
-        int128 to,
-        uint256 _from_amount
-    ) external view returns (uint256);
+    function get_dy(int128 from, int128 to, uint256 _from_amount) external view returns (uint256);
 
     // EURt
     function calc_token_amount(uint256[2] calldata _amounts, bool _is_deposit) external view returns (uint256);

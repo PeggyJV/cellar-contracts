@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { Extension, PriceRouter, ERC20 } from "src/modules/price-router/Extensions/Extension.sol";
 import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
@@ -75,7 +75,6 @@ contract RedstonePriceFeedExtension is Extension {
         uint256 timeSinceLastUpdate = block.timestamp - updatedAt;
         if (timeSinceLastUpdate > stor.heartbeat) revert RedstonePriceFeedExtension__STALE_PRICE();
 
-        // TODO confirm that answer is given in USD with 8 decimals.
         uint256 price = stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
         if (price == 0) revert RedstonePriceFeedExtension__ZERO_PRICE();
         return price;

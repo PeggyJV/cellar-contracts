@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
-import { ERC20, SafeTransferLib, Math } from "src/base/ERC4626.sol";
+import { Math } from "src/utils/Math.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Registry } from "src/Registry.sol";
 import { Cellar } from "src/base/Cellar.sol";
-import { SwapRouter } from "src/modules/swap-router/SwapRouter.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 
 /**

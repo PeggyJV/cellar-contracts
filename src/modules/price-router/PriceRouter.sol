@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
-import { ERC20, SafeTransferLib } from "src/base/ERC4626.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
@@ -42,9 +43,10 @@ contract PriceRouter is Ownable {
     Registry public immutable registry;
     ERC20 public immutable WETH;
 
-    constructor(Registry _registry, ERC20 _weth) {
+    constructor(address newOwner, Registry _registry, ERC20 _weth) {
         registry = _registry;
         WETH = _weth;
+        transferOwnership(newOwner);
     }
 
     // =========================================== ASSETS CONFIG ===========================================

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
-import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, SwapRouter, Registry, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
+import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, Registry, PriceRouter } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IBalancerQueries } from "src/interfaces/external/Balancer/IBalancerQueries.sol";
-import { IVault, IERC20, IAsset } from "src/interfaces/external/Balancer/IVault.sol";
+import { IVault, IERC20, IAsset, IFlashLoanRecipient } from "src/interfaces/external/Balancer/IVault.sol";
 import { IStakingLiquidityGauge } from "src/interfaces/external/Balancer/IStakingLiquidityGauge.sol";
 import { ILiquidityGaugev3Custom } from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
 import { IBasePool } from "src/interfaces/external/Balancer/typically-npm/IBasePool.sol";
@@ -147,11 +147,9 @@ contract BalancerPoolAdaptor is BaseAdaptor {
     //============================================ Implement Base Functions ===========================================
 
     /**
-     * @notice User deposits are NOT allowed into this position.
+     * @notice User deposits are allowed into this position.
      */
-    function deposit(uint256, bytes memory, bytes memory) public pure override {
-        revert BaseAdaptor__UserDepositsNotAllowed();
-    }
+    function deposit(uint256, bytes memory, bytes memory) public pure override {}
 
     /**
      * @notice If a user withdraw needs more BPTs than what is in the Cellar's
@@ -459,6 +457,13 @@ contract BalancerPoolAdaptor is BaseAdaptor {
      */
     function claimRewards(address gauge) public {
         minter.mint(gauge);
+    }
+
+    /**
+     * @notice Start a flash loan using Balancer.
+     */
+    function makeFlashLoan(IERC20[] memory tokens, uint256[] memory amounts, bytes memory data) public {
+        vault.flashLoan(IFlashLoanRecipient(address(this)), tokens, amounts, data);
     }
 
     //============================================ Helper Functions ===========================================

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib } from "src/modules/adaptors/BaseAdaptor.sol";
 
@@ -35,11 +35,7 @@ contract ERC20Adaptor is BaseAdaptor {
      * @notice Cellar already has possession of users ERC20 assets by the time this function is called,
      *         so there is nothing to do.
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public override {}
+    function deposit(uint256, bytes memory, bytes memory) public override {}
 
     /**
      * @notice Cellar just needs to transfer ERC20 token to `receiver`.
@@ -49,12 +45,7 @@ contract ERC20Adaptor is BaseAdaptor {
      * @param adaptorData data needed to withdraw from this position
      * @dev configurationData is NOT used
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         _externalReceiverCheck(receiver);
         ERC20 token = abi.decode(adaptorData, (ERC20));
         token.safeTransfer(receiver, assets);

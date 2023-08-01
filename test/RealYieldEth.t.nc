@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { Cellar, ERC4626, ERC20, SafeTransferLib } from "src/base/Cellar.sol";
 import { CellarInitializable } from "src/base/CellarInitializable.sol";
 import { CellarFactory } from "src/CellarFactory.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";
-import { SwapRouter, IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
+import {  IUniswapV2Router, IUniswapV3Router } from "src/modules/swap-router/SwapRouter.sol";
 import { VestingSimple } from "src/modules/vesting/VestingSimple.sol";
 import { TEnv } from "script/test/TEnv.sol";
 

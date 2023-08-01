@@ -1,30 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
-import { Registry } from "src/Registry.sol";
-import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
-import { ERC20, Cellar, PriceRouter } from "src/base/Cellar.sol";
-import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+import { ERC20DebtAdaptor } from "src/mocks/ERC20DebtAdaptor.sol";
 
-import { Test, console } from "@forge-std/Test.sol";
-import { Math } from "src/utils/Math.sol";
+// Import Everything from Starter file.
+import "test/resources/MainnetStarter.t.sol";
 
-contract RegistryTest is Test {
-    Registry public registry;
+import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
-    ERC20 private USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    ERC20 private WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-
-    address public gravityBridge = vm.addr(1);
+contract RegistryTest is MainnetStarterTest, AdaptorHelperFunctions {
     address public swapRouter = vm.addr(2);
-    PriceRouter public priceRouter;
-
-    uint8 private constant CHAINLINK_DERIVATIVE = 1;
-    address private USDC_USD_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
 
     function setUp() external {
-        priceRouter = new PriceRouter(registry, WETH);
-        registry = new Registry(gravityBridge, swapRouter, address(priceRouter));
+        // Setup forked environment.
+        string memory rpcKey = "MAINNET_RPC_URL";
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
+
+        // Run Starter setUp code.
+        _setUp();
+
+        registry.setAddress(0, gravityBridgeAddress);
+        registry.setAddress(1, swapRouter);
+        registry.setAddress(2, address(priceRouter));
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -38,7 +36,7 @@ contract RegistryTest is Test {
     // ========================================= INITIALIZATION TEST =========================================
 
     function testInitialization() external {
-        assertEq(registry.getAddress(0), gravityBridge, "Should initialize gravity bridge");
+        assertEq(registry.getAddress(0), gravityBridgeAddress, "Should initialize gravity bridge");
         assertEq(registry.getAddress(1), swapRouter, "Should initialize swap router");
         assertEq(registry.getAddress(2), address(priceRouter), "Should initialize price router");
         assertEq(registry.nextId(), 3, "Should have incremented ID");
@@ -70,7 +68,7 @@ contract RegistryTest is Test {
         registry.setAddress(0, address(this));
 
         // But it can be set by the current Zero Id.
-        vm.prank(gravityBridge);
+        vm.prank(gravityBridgeAddress);
         registry.setAddress(0, address(this));
     }
 
@@ -94,7 +92,7 @@ contract RegistryTest is Test {
     }
 
     function testTrustingAndDistrustingAdaptor() external {
-        ERC20Adaptor adaptor = new ERC20Adaptor();
+        ERC20DebtAdaptor adaptor = new ERC20DebtAdaptor();
 
         registry.trustAdaptor(address(adaptor));
 
@@ -105,19 +103,29 @@ contract RegistryTest is Test {
     }
 
     function testTrustingAndDistrustingPosition() external {
-        ERC20Adaptor adaptor = new ERC20Adaptor();
+        ERC20DebtAdaptor adaptor = new ERC20DebtAdaptor();
+
+        uint32 id = 10;
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__AdaptorNotTrusted.selector, address(adaptor))));
-        registry.trustPosition(address(adaptor), abi.encode(USDC));
+        registry.trustPosition(id, address(adaptor), abi.encode(USDC));
 
         registry.trustAdaptor(address(adaptor));
 
-        uint32 id = registry.trustPosition(address(adaptor), abi.encode(USDC));
+        registry.trustPosition(id, address(adaptor), abi.encode(USDC));
+
+        // Try reusing the same id.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__InvalidPositionInput.selector)));
+        registry.trustPosition(id, address(adaptor), abi.encode(USDT));
+
+        // Try reusing the 0 id.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__InvalidPositionInput.selector)));
+        registry.trustPosition(0, address(adaptor), abi.encode(USDT));
 
         registry.distrustPosition(id);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__InvalidPositionInput.selector)));
-        registry.trustPosition(address(adaptor), abi.encode(USDC));
+        registry.trustPosition(id, address(adaptor), abi.encode(USDC));
     }
 
     // ============================================= OWNERSHIP TRANSITION TEST =============================================
@@ -127,13 +135,13 @@ contract RegistryTest is Test {
         // Current owner has been misbehaving, so governance wants to kick them out.
 
         // Governance accidentally passes in zero address for new owner.
-        vm.startPrank(gravityBridge);
+        vm.startPrank(gravityBridgeAddress);
         vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__NewOwnerCanNotBeZero.selector)));
         registry.transitionOwner(address(0));
         vm.stopPrank();
 
         // Governance actually uses the right address.
-        vm.prank(gravityBridge);
+        vm.prank(gravityBridgeAddress);
         registry.transitionOwner(newOwner);
 
         // Old owner tries to call onlyOwner functions.
@@ -162,12 +170,12 @@ contract RegistryTest is Test {
 
         address doug = vm.addr(13);
         // Governance decides to recover ownership and transfer it to doug.
-        vm.prank(gravityBridge);
+        vm.prank(gravityBridgeAddress);
         registry.transitionOwner(doug);
 
         // Half way through transition governance learns doug is evil, so they cancel the transition.
         vm.warp(block.timestamp + registry.TRANSITION_PERIOD() / 2);
-        vm.prank(gravityBridge);
+        vm.prank(gravityBridgeAddress);
         registry.cancelTransition();
 
         // doug still tries to claim ownership.
@@ -178,14 +186,14 @@ contract RegistryTest is Test {
         vm.stopPrank();
 
         // Governance accidentally calls cancel transition again, but call reverts.
-        vm.startPrank(gravityBridge);
+        vm.startPrank(gravityBridgeAddress);
         vm.expectRevert(bytes(abi.encodeWithSelector(Registry.Registry__TransitionNotPending.selector)));
         registry.cancelTransition();
         vm.stopPrank();
 
         // Governance finds the best owner and starts the process.
         address bestOwner = vm.addr(7777);
-        vm.prank(gravityBridge);
+        vm.prank(gravityBridgeAddress);
         registry.transitionOwner(bestOwner);
 
         // New owner waits an extra week.
@@ -197,13 +205,13 @@ contract RegistryTest is Test {
         assertEq(registry.owner(), bestOwner, "Registry should be owned by best owner.");
 
         // Governance starts another ownership transfer back to doug.
-        vm.prank(gravityBridge);
+        vm.prank(gravityBridgeAddress);
         registry.transitionOwner(doug);
 
         vm.warp(block.timestamp + 2 * registry.TRANSITION_PERIOD());
 
         // Doug still has not completed the transfer, so Governance decides to cancel it.
-        vm.prank(gravityBridge);
+        vm.prank(gravityBridgeAddress);
         registry.cancelTransition();
 
         // Doug tries completing it.

@@ -13,6 +13,8 @@ jobs:
 
     name: Foundry project
     runs-on: ubuntu-latest
+    env:
+      MAINNET_RPC_URL: https://eth-mainnet.alchemyapi.io/v2/${{ secrets.ALCHEMY_API_KEY }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -25,5 +27,5 @@ jobs:
 
       - name: Run Forge tests
         run: |
-          forge test -vvv --fork-url https://eth-mainnet.alchemyapi.io/v2/${{ secrets.ALCHEMY_API_KEY }} --etherscan-api-key ${{ secrets.ETHERSCAN_API_KEY }} --fork-block-number 16869780
+          forge test
         id: forge-test
