@@ -51,7 +51,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     /**
      * @notice Decimals used to scale share price for internal calculations.
      */
-    uint8 public constant ORACLE_DECIMALS = 18;
+    uint8 public constant decimals = 18;
 
     //============================== ERRORS ===============================
 
@@ -404,8 +404,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     function _getTargetSharePrice() internal view returns (uint216 sharePrice) {
         uint256 totalShares = target.totalSupply();
-        // Get total Assets but scale it up to ORACLE_DECIMALS decimals of precision.
-        uint256 totalAssets = target.totalAssets().changeDecimals(targetDecimals, ORACLE_DECIMALS);
+        // Get total Assets but scale it up to decimals decimals of precision.
+        uint256 totalAssets = target.totalAssets().changeDecimals(targetDecimals, decimals);
 
         if (totalShares == 0) return 0;
 

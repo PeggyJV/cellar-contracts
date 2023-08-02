@@ -1000,7 +1000,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         uint256 oneShare = 10 ** target.decimals();
         uint256 totalAssets = target.totalAssets().changeDecimals(
             target.decimals(),
-            sharePriceOracle.ORACLE_DECIMALS()
+            sharePriceOracle.decimals()
         );
         return previous + totalAssets.mulDivDown(oneShare * timePassed, target.totalSupply());
     }

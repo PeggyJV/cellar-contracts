@@ -62,7 +62,7 @@ contract CellarWithOracle is Cellar {
      */
     function setSharePriceOracle(uint256 _registryId, ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
         _checkRegistryAddressAgainstExpected(_registryId, address(_sharePriceOracle));
-        if (_sharePriceOracle.ORACLE_DECIMALS() != ORACLE_DECIMALS) revert Cellar__OracleFailure();
+        if (_sharePriceOracle.decimals() != ORACLE_DECIMALS) revert Cellar__OracleFailure();
         sharePriceOracle = _sharePriceOracle;
         emit SharePriceOracleUpdated(address(_sharePriceOracle));
     }

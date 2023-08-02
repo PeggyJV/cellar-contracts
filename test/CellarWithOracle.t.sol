@@ -601,7 +601,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // ------------------------------------- Revert Tests -------------------------------------------------
     // Implement Decimals so that `setSharePriceOracle` reverts for the right reason.
-    uint256 public ORACLE_DECIMALS = 6;
+    uint256 public decimals = 6;
 
     function testAddingOracleWithWrongDecimalsReverts() external {
         vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
