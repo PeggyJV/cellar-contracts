@@ -6,9 +6,6 @@ import { Math } from "src/utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
-// TODO
-import { console } from "@forge-std/Test.sol";
-
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
 
