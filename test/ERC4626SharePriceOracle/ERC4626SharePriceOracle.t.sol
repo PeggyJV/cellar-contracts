@@ -18,6 +18,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
     AaveATokenAdaptor private aaveATokenAdaptor;
     MockDataFeed private usdcMockFeed;
+    MockDataFeed private wethMockFeed;
     Cellar private cellar;
     ERC4626SharePriceOracle private sharePriceOracle;
 
@@ -26,6 +27,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
     uint32 private usdcPosition = 1;
     uint32 private aV2USDCPosition = 2;
     uint32 private debtUSDCPosition = 3;
+    uint32 private wethPosition = 4;
 
     uint256 private initialAssets;
 
@@ -39,14 +41,15 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         _setUp();
 
         usdcMockFeed = new MockDataFeed(USDC_USD_FEED);
+        wethMockFeed = new MockDataFeed(WETH_USD_FEED);
         aaveATokenAdaptor = new AaveATokenAdaptor(address(pool), address(WETH), 1.05e18);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
         PriceRouter.AssetSettings memory settings;
 
-        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        uint256 price = uint256(IChainlinkAggregator(address(wethMockFeed)).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(wethMockFeed));
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
         price = uint256(IChainlinkAggregator(address(usdcMockFeed)).latestAnswer());
@@ -60,6 +63,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
         registry.trustPosition(aV2USDCPosition, address(aaveATokenAdaptor), abi.encode(address(aV2USDC)));
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(address(USDC)));
+        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(address(WETH)));
 
         uint256 minHealthFactor = 1.1e18;
 
@@ -984,6 +988,91 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         sharePriceOracle.performUpkeep(performData);
     }
 
+    function testSharePriceOracleWorkingWithLargeNumbers() external {
+        uint256 assets = 1_000_000_000_000_000e18;
+        uint256 sharePriceMultiplier = 1_000_000_000_000e4;
+
+        // Create a new cellar that has WETH as accounting asset.
+        string memory cellarName = "WETH Cellar V0.0";
+        uint64 platformCut = 0.75e18;
+
+        cellar = _createCellar(cellarName, WETH, wethPosition, abi.encode(0), assets, platformCut);
+
+        // Create new share price oracle for it.
+        {
+            ERC4626 _target = ERC4626(address(cellar));
+            uint64 _heartbeat = 1 days;
+            uint64 _deviationTrigger = 0.0005e4;
+            uint64 _gracePeriod = 60 * 60; // 1 hr
+            uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+            address _automationRegistry = address(this);
+
+            // Setup share price oracle.
+            sharePriceOracle = new ERC4626SharePriceOracle(
+                _target,
+                _heartbeat,
+                _deviationTrigger,
+                _gracePeriod,
+                _observationsToUse,
+                _automationRegistry,
+                1e18,
+                0,
+                1_000_000_000_000_000_000e4
+            );
+        }
+
+        // Call first performUpkeep on Cellar.
+        {
+            bool upkeepNeeded;
+            bytes memory performData;
+            (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+            assertTrue(upkeepNeeded, "Upkeep should be needed.");
+            sharePriceOracle.performUpkeep(performData);
+        }
+
+        // Fill with observations so oracle is safe to use.
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+
+        // Shoot the share price to the stratosphere.
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, sharePriceMultiplier);
+
+        // Have TWAA catch up to change in share price.
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+
+        (uint256 ans, uint256 twaa, ) = sharePriceOracle.getLatest();
+
+        uint256 expectedSharePrice = assets.mulDivDown(sharePriceMultiplier, 1e4) / cellar.totalSupply();
+        // To convert it into 1 share.
+        expectedSharePrice = expectedSharePrice * 1e18;
+
+        assertEq(ans, expectedSharePrice, "Answer should equal expected.");
+        assertEq(ans, twaa, "Answer should equal TWAA.");
+
+        // User can deposit and withdraw.
+        assets = 1e18;
+        deal(address(WETH), address(this), assets);
+        WETH.approve(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+        cellar.withdraw(assets, address(this), address(this));
+    }
+
+    function _passTimeAlterSharePriceAndUpkeepForWethCellar(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
+        vm.warp(block.timestamp + timeToPass);
+        wethMockFeed.setMockUpdatedAt(block.timestamp);
+        deal(address(WETH), address(cellar), WETH.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+    }
+
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
         vm.warp(block.timestamp + timeToPass);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -998,10 +1087,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
     function _calcCumulative(Cellar target, uint256 previous, uint256 timePassed) internal view returns (uint256) {
         uint256 oneShare = 10 ** target.decimals();
-        uint256 totalAssets = target.totalAssets().changeDecimals(
-            target.decimals(),
-            sharePriceOracle.decimals()
-        );
+        uint256 totalAssets = target.totalAssets().changeDecimals(target.decimals(), sharePriceOracle.decimals());
         return previous + totalAssets.mulDivDown(oneShare * timePassed, target.totalSupply());
     }
 }

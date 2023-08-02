@@ -1067,6 +1067,12 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
         cellar.setAutomationActions(3, automationActions);
+
+        // Try setting automation actions to registry id 0.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__SettingValueToRegistryIdZeroIsProhibited.selector))
+        );
+        cellar.setAutomationActions(0, automationActions);
     }
 
     // ======================================== DEPEGGING ASSET TESTS ========================================

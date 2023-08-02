@@ -86,11 +86,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // ========================================= PRICE ROUTER CACHE =========================================
 
     /**
-     * @notice Attempted to use an address from the registry, but address was not expected.
-     */
-    error Cellar__ExpectedAddressDoesNotMatchActual();
-
-    /**
      * @notice Cached price router contract.
      * @dev This way cellar has to "opt in" to price router changes.
      */
@@ -1475,9 +1470,20 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     /**
+     * @notice Attempted to use an address from the registry, but address was not expected.
+     */
+    error Cellar__ExpectedAddressDoesNotMatchActual();
+
+    /**
+     * @notice Attempted to set an address to registry Id 0.
+     */
+    error Cellar__SettingValueToRegistryIdZeroIsProhibited();
+
+    /**
      * @notice Verify that `_registryId` in registry corresponds to expected address.
      */
     function _checkRegistryAddressAgainstExpected(uint256 _registryId, address _expected) internal view {
+        if (_registryId == 0) revert Cellar__SettingValueToRegistryIdZeroIsProhibited();
         if (registry.getAddress(_registryId) != _expected) revert Cellar__ExpectedAddressDoesNotMatchActual();
     }
 
