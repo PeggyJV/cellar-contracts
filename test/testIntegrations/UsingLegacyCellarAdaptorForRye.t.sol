@@ -51,7 +51,10 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry
+            _automationRegistry,
+            1.02e18,
+            0.1e4,
+            10e4
         );
 
         // Call first performUpkeep on Cellar.

@@ -135,11 +135,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         }
     }
 
-    // TODO
-    function _checkRegistryAddressAgainstExpected(uint256 _registryId, address _expected) internal view {
-        if (registry.getAddress(_registryId) != _expected) revert Cellar__ExpectedAddressDoesNotMatchActual();
-    }
-
     // ========================================= POSITIONS CONFIG =========================================
 
     /**
@@ -1482,6 +1477,13 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function _assetOf(uint32 position) internal view returns (ERC20) {
         address adaptor = getPositionData[position].adaptor;
         return BaseAdaptor(adaptor).assetOf(getPositionData[position].adaptorData);
+    }
+
+    /**
+     * @notice Verify that `_registryId` in registry corresponds to expected address.
+     */
+    function _checkRegistryAddressAgainstExpected(uint256 _registryId, address _expected) internal view {
+        if (registry.getAddress(_registryId) != _expected) revert Cellar__ExpectedAddressDoesNotMatchActual();
     }
 
     /**

@@ -73,7 +73,10 @@ contract LegacyCellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry
+            _automationRegistry,
+            1e18,
+            0.1e4,
+            10e4
         );
 
         registry.trustAdaptor(address(cellarAdaptor));

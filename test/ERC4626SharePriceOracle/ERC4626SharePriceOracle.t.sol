@@ -99,7 +99,10 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry
+            _automationRegistry,
+            1e18,
+            0.01e4,
+            10e4
         );
     }
 
@@ -616,7 +619,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         }
 
         cellar.setHoldingPosition(usdcPosition);
-        sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.2e4, 0.94e4);
+        sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.7e4, 0.94e4);
         sharePriceMultiplier1 = bound(sharePriceMultiplier1, 1.06e4, 1.5e4);
         uint256 sharePriceMultiplier2 = sharePriceMultiplier0 / 2;
         uint256 sharePriceMultiplier3 = sharePriceMultiplier0 / 3;
@@ -825,11 +828,21 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         // Try calling performUpkeep when no upkeep condition is met.
         (ans, timestamp) = abi.decode(performData, (uint224, uint64));
         timestamp = timestamp + 1_000;
+        vm.warp(timestamp);
         performData = abi.encode(ans, timestamp);
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__NoUpkeepConditionMet.selector)
             )
+        );
+        sharePriceOracle.performUpkeep(performData);
+
+        // Try calling performUpkeep using a future timestamp.
+        (ans, timestamp) = abi.decode(performData, (uint224, uint64));
+        timestamp = timestamp + 1_000;
+        performData = abi.encode(ans, timestamp);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__FuturePerformData.selector))
         );
         sharePriceOracle.performUpkeep(performData);
 
@@ -845,6 +858,130 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         );
         sharePriceOracle.performUpkeep(performData);
         vm.stopPrank();
+    }
+
+    function testExtremeLowAnswerTriggersKillSwitch() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 0.0001e4);
+
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+    }
+
+    function testExtremeHighAnswerTriggersKillSwitch() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 11e4);
+
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+    }
+
+    function testMaliciousChainlinkAnswersUpdateAnswerToRightBelowTheExtreme() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Fill with observations so oracle is safe to use.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        // Large proposed answer is passed in, but it is not large enough to trigger kill switch
+        _passTimeAlterSharePriceAndUpkeep(1 days, 9e4);
+        assertTrue(!sharePriceOracle.killSwitch(), "Kill Switch should not be active.");
+
+        // But if another large answer is provided immediately after, kill switch should be triggered.
+        // Eventhough the proposed answer to last saved answer deviation is well below the threshold,
+        // the proposed answer compared to TWAA is EXTREME.
+        _passTimeAlterSharePriceAndUpkeep(1, 2e4);
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+    }
+
+    function testKillSwitchEffects() external {
+        // Activate Kill Switch.
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Fill with observations so oracle is safe to use.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        bool isNotSafeToUse;
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!isNotSafeToUse, "Oracle should be safe to use.");
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertTrue(!isNotSafeToUse, "Oracle should be safe to use.");
+
+        // 5 Min pass, but reported answer is extreme.
+        _passTimeAlterSharePriceAndUpkeep(300, 11e4);
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+
+        // Trying to use the oracle should result in error bool set to true.
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(isNotSafeToUse, "Oracle should not be safe to use.");
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertTrue(isNotSafeToUse, "Oracle should not be safe to use.");
+
+        (uint216 ans, uint64 time) = abi.decode(performData, (uint216, uint64));
+        time = uint64(block.timestamp);
+        performData = abi.encode(ans, time);
+
+        // Checkupkeep should return false.
+        vm.warp(block.timestamp + 1 days);
+        (upkeepNeeded, ) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed.");
+
+        // Perform Upkeep should revert.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__ContractKillSwitch.selector))
+        );
+        sharePriceOracle.performUpkeep(performData);
     }
 
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {

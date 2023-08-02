@@ -6,6 +6,9 @@ import { Math } from "src/utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
+// TODO
+import { console } from "@forge-std/Test.sol";
+
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
 
@@ -31,11 +34,16 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice The length of the observations array.
      * @dev `observations` will never change its length once set in the constructor.
      *      By saving this value here, we can take advantage of variable packing to make reads cheaper.
+     * @dev This is not immutable to make it easier in the future to create oracles that can expand their observations.
      */
     uint16 public observationsLength;
 
-    // TODO
-    bool public isShutdown;
+    /**
+     * @notice Triggered when answer provided by Chainlink Automation is extreme.
+     * @dev true: No further upkeeps are allowed, `getLatest` and `getLatestAnswer` will return true error bools.
+     *      false: Continue as normal.
+     */
+    bool public killSwitch;
 
     /**
      * @notice Stores the observations this contract uses to derive a
@@ -56,7 +64,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     error ERC4626SharePriceOracle__NoUpkeepConditionMet();
     error ERC4626SharePriceOracle__SharePriceTooLarge();
     error ERC4626SharePriceOracle__FuturePerformData();
-    error ERC4626SharePriceOracle__ContractIsShutdown();
+    error ERC4626SharePriceOracle__ContractKillSwitch();
 
     //============================== EVENTS ===============================
 
@@ -77,6 +85,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 timeWeightedAverageAnswer,
         bool isNotSafeToUse
     );
+
+    event KillSwitchActivated(uint256 reportedAnswer, uint256 minAnswer, uint256 maxAnswer);
 
     //============================== IMMUTABLES ===============================
 
@@ -154,6 +164,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint64 _gracePeriod,
         uint16 _observationsToUse,
         address _automationRegistry,
+        uint216 _startingAnswer,
         uint256 _allowedAnswerChangeLower,
         uint256 _allowedAnswerChangeUpper
     ) {
@@ -171,10 +182,13 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // Grow Observations array to required length, and fill it with observations that use 1 for timestamp and cumulative.
         // That way the initial upkeeps won't need to change state from 0 which is more expensive.
         for (uint256 i; i < _observationsToUse; ++i) observations.push(Observation({ timestamp: 1, cumulative: 1 }));
-        // Set to one so slot is dirty for first upkeep.
-        answer = 1;
 
+        // Set to _startingAnswer so slot is dirty for first upkeep, and does not trigger kill switch.
+        answer = _startingAnswer;
+
+        if (_allowedAnswerChangeLower > 1e4) revert("Illogical Lower");
         allowedAnswerChangeLower = _allowedAnswerChangeLower;
+        if (_allowedAnswerChangeUpper < 1e4) revert("Illogical Upper");
         allowedAnswerChangeUpper = _allowedAnswerChangeUpper;
     }
 
@@ -191,9 +205,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 _answer = answer;
         uint16 _currentIndex = currentIndex;
         uint16 _observationsLength = observationsLength;
-        bool _isShutdown = isShutdown;
+        bool _killSwitch = killSwitch;
 
-        if (!_isShutdown) {
+        if (!_killSwitch) {
             // See if we need to update because answer is stale or outside deviation.
             // Time since answer was last updated.
             uint256 timeDeltaCurrentAnswer = block.timestamp - observations[_currentIndex].timestamp;
@@ -228,18 +242,12 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint256 _answer = answer;
         uint16 _currentIndex = currentIndex;
         uint16 _observationsLength = observationsLength;
-        bool _isShutdown = isShutdown;
+        bool _killSwitch = killSwitch;
 
-        if (_isShutdown) revert ERC4626SharePriceOracle__ContractIsShutdown();
+        if (_killSwitch) revert ERC4626SharePriceOracle__ContractKillSwitch();
 
-        // See if contract should be shutdown.
-        if (
-            sharePrice < _answer.mulDivDown(allowedAnswerChangeLower, 1e4) ||
-            sharePrice > _answer.mulDivDown(allowedAnswerChangeUpper, 1e4)
-        ) {
-            isShutdown = true;
-            return;
-        }
+        // See if kill switch should be activated based on change between answers.
+        if (_checkIfKillSwitchShouldBeTriggered(sharePrice, _answer)) return;
 
         // See if we are upkeeping because of deviation.
         if (
@@ -253,7 +261,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         // Update current observation.
         Observation storage currentObservation = observations[_currentIndex];
         // Make sure time is larger than previous time.
-        if (currentObservation.timestamp >= currentTime) revert ERC4626SharePriceOracle__StalePerformData();
+        if (currentTime <= currentObservation.timestamp) revert ERC4626SharePriceOracle__StalePerformData();
+
+        // Make sure time is not in the future.
         if (currentTime > block.timestamp) revert ERC4626SharePriceOracle__FuturePerformData();
 
         // See if we are updating because of staleness.
@@ -288,6 +298,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
             _currentIndex,
             _observationsLength
         );
+
+        // See if kill switch should be activated based on change between proposed answer and time weighted average answer.
+        if (!isNotSafeToUse && _checkIfKillSwitchShouldBeTriggered(sharePrice, timeWeightedAverageAnswer)) return;
         emit OracleUpdated(block.timestamp, currentTime, sharePrice, timeWeightedAverageAnswer, isNotSafeToUse);
     }
 
@@ -301,9 +314,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         ans = answer;
         uint16 _currentIndex = currentIndex;
         uint16 _observationsLength = observationsLength;
-        bool _isShutdown = isShutdown;
+        bool _killSwitch = killSwitch;
 
-        if (_isShutdown) return (0, 0, true);
+        if (_killSwitch) return (0, 0, true);
 
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
@@ -323,9 +336,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     function getLatestAnswer() external view returns (uint256, bool) {
         uint256 _answer = answer;
-        bool _isShutdown = isShutdown;
+        bool _killSwitch = killSwitch;
 
-        if (_isShutdown) return (0, true);
+        if (_killSwitch) return (0, true);
 
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
@@ -403,5 +416,28 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
         if (_sharePrice > type(uint216).max) revert ERC4626SharePriceOracle__SharePriceTooLarge();
         sharePrice = uint216(_sharePrice);
+    }
+
+    /**
+     * @notice Activate the kill switch if `proposedAnswer` is extreme when compared to `answerToCompareAgainst`
+     * @return bool indicating whether calling function should immediately exit or not.
+     */
+    function _checkIfKillSwitchShouldBeTriggered(
+        uint256 proposedAnswer,
+        uint256 answerToCompareAgainst
+    ) internal returns (bool) {
+        if (
+            proposedAnswer < answerToCompareAgainst.mulDivDown(allowedAnswerChangeLower, 1e4) ||
+            proposedAnswer > answerToCompareAgainst.mulDivDown(allowedAnswerChangeUpper, 1e4)
+        ) {
+            killSwitch = true;
+            emit KillSwitchActivated(
+                proposedAnswer,
+                answerToCompareAgainst.mulDivDown(allowedAnswerChangeLower, 1e4),
+                answerToCompareAgainst.mulDivDown(allowedAnswerChangeUpper, 1e4)
+            );
+            return true;
+        }
+        return false;
     }
 }

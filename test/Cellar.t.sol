@@ -621,8 +621,10 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
         cellar.removePosition(2, false);
 
+        // Try forcing out a position that is trusted
+        // TODO
         // Try forcing out the wrong position.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ForcingOutWrongPosition.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__FailedToForceOutPosition.selector)));
         cellar.forcePositionOut(4, wethPosition, false);
 
         // When correct index is used, call works.

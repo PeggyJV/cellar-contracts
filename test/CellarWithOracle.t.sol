@@ -118,7 +118,10 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry
+            _automationRegistry,
+            1e18,
+            0.1e4,
+            10e4
         );
 
         // Call first performUpkeep on Cellar.
@@ -134,7 +137,11 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         (, , bool notSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(!notSafeToUse);
 
-        cellar.setSharePriceOracle(sharePriceOracle);
+        registry.register(address(this));
+
+        registry.register(address(sharePriceOracle));
+
+        cellar.setSharePriceOracle(4, sharePriceOracle);
     }
 
     function testDeposit(uint256 assets) external {
@@ -505,7 +512,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function testAddingOracleWithWrongDecimalsReverts() external {
         vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
-        cellar.setSharePriceOracle(ERC4626SharePriceOracle(address(this)));
+        cellar.setSharePriceOracle(3, ERC4626SharePriceOracle(address(this)));
     }
 
     // Make sure if oracle answer is not safe to use deposits revert
@@ -520,7 +527,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
         cellar.deposit(assets, address(this));
 
-        cellar.setSharePriceOracle(sharePriceOracle);
+        cellar.setSharePriceOracle(4, sharePriceOracle);
 
         vm.warp(block.timestamp + 1 days + 3_601);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -531,8 +538,11 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function testSettingSharePriceOracleToZeroAddressReverts() external {
         vm.expectRevert();
-        cellar.setSharePriceOracle(ERC4626SharePriceOracle(address(0)));
+        cellar.setSharePriceOracle(10, ERC4626SharePriceOracle(address(0)));
     }
+
+    // TODO check that if killswitch is active, strategist can still rebalance, but users can not enter/exit
+    // Also that the cellar cna be recovered by updating the share price oracle.
 
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
         vm.warp(block.timestamp + timeToPass);
