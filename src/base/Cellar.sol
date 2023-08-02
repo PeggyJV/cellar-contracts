@@ -405,7 +405,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Get position being removed.
         uint32 _positionId = inDebtArray ? debtPositions[index] : creditPositions[index];
         // Make sure position id right, and is distrusted.
-        if (positionId != _positionId || !registry.isPositionTrusted(positionId))
+        if (positionId != _positionId || registry.isPositionTrusted(positionId))
             revert Cellar__FailedToForceOutPosition();
 
         _removePosition(index, positionId, inDebtArray);
