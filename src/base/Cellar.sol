@@ -460,13 +460,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // =============================================== FEES CONFIG ===============================================
 
     /**
-     * @notice Emitted when platform fees is changed.
-     * @param oldPlatformFee value platform fee was changed from
-     * @param newPlatformFee value platform fee was changed to
-     */
-    event PlatformFeeChanged(uint64 oldPlatformFee, uint64 newPlatformFee);
-
-    /**
      * @notice Emitted when strategist platform fee cut is changed.
      * @param oldPlatformCut value strategist platform fee cut was changed from
      * @param newPlatformCut value strategist platform fee cut was changed to
@@ -710,13 +703,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // =========================================== CORE LOGIC ===========================================
 
     /**
-     * @notice Emitted when share locking period is changed.
-     * @param oldPeriod the old locking period
-     * @param newPeriod the new locking period
-     */
-    event ShareLockingPeriodChanged(uint256 oldPeriod, uint256 newPeriod);
-
-    /**
      * @notice Attempted an action with zero shares.
      */
     error Cellar__ZeroShares();
@@ -761,6 +747,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _checkIfPaused();
     }
 
+    /**
+     * @notice Called when users enter the cellar via deposit or mint.
+     */
     function _enter(uint256 assets, uint256 shares, address receiver) internal {
         beforeDeposit(assets, shares, receiver);
 
@@ -809,6 +798,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _enter(assets, shares, receiver);
     }
 
+    /**
+     * @notice Called when users exit the cellar via withdraw or redeem.
+     */
     function _exit(uint256 assets, uint256 shares, address receiver, address owner) internal {
         beforeWithdraw(assets, shares, receiver, owner);
 
@@ -1283,6 +1275,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         bytes[] callData;
     }
 
+    /**
+     * @notice Emitted when adaptor calls are made.
+     */
     event AdaptorCalled(address adaptor, bytes data);
 
     /**
@@ -1332,7 +1327,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Run all adaptor calls.
         _makeAdaptorCalls(data);
 
-        // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
+        // After making every external call, check that the totalAssets has not deviated significantly, and that totalShares is the same.
         uint256 assets = _calculateTotalAssetsOrTotalAssetsWithdrawable(false);
         if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
@@ -1486,15 +1481,15 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         if (registry.getAddress(_registryId) != _expected) revert Cellar__ExpectedAddressDoesNotMatchActual();
     }
 
-    /**
-     * @notice Get all the credit positions underlying assets.
-     */
-    function getPositionAssets() external view returns (ERC20[] memory assets) {
-        assets = new ERC20[](creditPositions.length);
-        for (uint256 i = 0; i < creditPositions.length; ++i) {
-            assets[i] = _assetOf(creditPositions[i]);
-        }
-    }
+    // /**
+    //  * @notice Get all the credit positions underlying assets.
+    //  */
+    // function getPositionAssets() external view returns (ERC20[] memory assets) {
+    //     assets = new ERC20[](creditPositions.length);
+    //     for (uint256 i = 0; i < creditPositions.length; ++i) {
+    //         assets[i] = _assetOf(creditPositions[i]);
+    //     }
+    // }
 
     /**
      * @notice View the amount of assets in each Cellar Position.
