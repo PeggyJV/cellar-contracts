@@ -20,7 +20,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     /**
      * @notice The latest stored onchain answer.
      */
-    uint224 public answer;
+    uint216 public answer;
 
     /**
      * @notice Stores the index of observations with the pending Observation.
@@ -33,6 +33,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      *      By saving this value here, we can take advantage of variable packing to make reads cheaper.
      */
     uint16 public observationsLength;
+
+    // TODO
+    bool public isShutdown;
 
     /**
      * @notice Stores the observations this contract uses to derive a
@@ -52,6 +55,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     error ERC4626SharePriceOracle__CumulativeTooLarge();
     error ERC4626SharePriceOracle__NoUpkeepConditionMet();
     error ERC4626SharePriceOracle__SharePriceTooLarge();
+    error ERC4626SharePriceOracle__FuturePerformData();
+    error ERC4626SharePriceOracle__ContractIsShutdown();
 
     //============================== EVENTS ===============================
 
@@ -126,6 +131,18 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     uint8 public immutable targetDecimals;
 
     /**
+     * @notice Multiplier with 4 decimals that determines the acceptable lower band
+     *         for a performUpkeep answer.
+     */
+    uint256 public immutable allowedAnswerChangeLower;
+
+    /**
+     * @notice Multiplier with 4 decimals that determines the acceptable upper band
+     *         for a performUpkeep answer.
+     */
+    uint256 public immutable allowedAnswerChangeUpper;
+
+    /**
      * @notice TWAA Minimum Duration = `_observationsToUse` * `_heartbeat`.
      * @notice TWAA Maximum Duration = `_observationsToUse` * `_heartbeat` + `gracePeriod` + `_heartbeat`.
      * @notice TWAA calculations will use the current pending observation, and then `_observationsToUse` observations.
@@ -136,7 +153,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
         uint16 _observationsToUse,
-        address _automationRegistry
+        address _automationRegistry,
+        uint256 _allowedAnswerChangeLower,
+        uint256 _allowedAnswerChangeUpper
     ) {
         target = _target;
         targetDecimals = target.decimals();
@@ -154,6 +173,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         for (uint256 i; i < _observationsToUse; ++i) observations.push(Observation({ timestamp: 1, cumulative: 1 }));
         // Set to one so slot is dirty for first upkeep.
         answer = 1;
+
+        allowedAnswerChangeLower = _allowedAnswerChangeLower;
+        allowedAnswerChangeUpper = _allowedAnswerChangeUpper;
     }
 
     //============================== CHAINLINK AUTOMATION ===============================
@@ -164,29 +186,32 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
         // Get target share price.
-        uint224 sharePrice = _getTargetSharePrice();
+        uint216 sharePrice = _getTargetSharePrice();
         // Read state from one slot.
-        uint224 _answer = answer;
+        uint256 _answer = answer;
         uint16 _currentIndex = currentIndex;
         uint16 _observationsLength = observationsLength;
+        bool _isShutdown = isShutdown;
 
-        // See if we need to update because answer is stale or outside deviation.
-        // Time since answer was last updated.
-        uint256 timeDeltaCurrentAnswer = block.timestamp - observations[_currentIndex].timestamp;
-        uint256 timeDeltaSincePreviousObservation = block.timestamp -
-            observations[_getPreviousIndex(_currentIndex, _observationsLength)].timestamp;
-        uint64 _heartbeat = heartbeat;
+        if (!_isShutdown) {
+            // See if we need to update because answer is stale or outside deviation.
+            // Time since answer was last updated.
+            uint256 timeDeltaCurrentAnswer = block.timestamp - observations[_currentIndex].timestamp;
+            uint256 timeDeltaSincePreviousObservation = block.timestamp -
+                observations[_getPreviousIndex(_currentIndex, _observationsLength)].timestamp;
+            uint64 _heartbeat = heartbeat;
 
-        if (
-            timeDeltaCurrentAnswer >= _heartbeat ||
-            timeDeltaSincePreviousObservation >= _heartbeat ||
-            sharePrice > uint256(_answer).mulDivDown(1e4 + deviationTrigger, 1e4) ||
-            sharePrice < uint256(_answer).mulDivDown(1e4 - deviationTrigger, 1e4)
-        ) {
-            // We need to update answer.
-            upkeepNeeded = true;
-            performData = abi.encode(sharePrice, uint64(block.timestamp));
-        }
+            if (
+                timeDeltaCurrentAnswer >= _heartbeat ||
+                timeDeltaSincePreviousObservation >= _heartbeat ||
+                sharePrice > _answer.mulDivDown(1e4 + deviationTrigger, 1e4) ||
+                sharePrice < _answer.mulDivDown(1e4 - deviationTrigger, 1e4)
+            ) {
+                // We need to update answer.
+                upkeepNeeded = true;
+                performData = abi.encode(sharePrice, uint64(block.timestamp));
+            }
+        } // else no upkeep is needed
     }
 
     /**
@@ -194,15 +219,27 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     function performUpkeep(bytes calldata performData) external {
         if (msg.sender != automationRegistry) revert ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry();
-        (uint224 sharePrice, uint64 currentTime) = abi.decode(performData, (uint224, uint64));
+        (uint216 sharePrice, uint64 currentTime) = abi.decode(performData, (uint216, uint64));
 
         // Verify atleast one of the upkeep conditions was met.
         bool upkeepConditionMet;
 
         // Read state from one slot.
-        uint224 _answer = answer;
+        uint256 _answer = answer;
         uint16 _currentIndex = currentIndex;
         uint16 _observationsLength = observationsLength;
+        bool _isShutdown = isShutdown;
+
+        if (_isShutdown) revert ERC4626SharePriceOracle__ContractIsShutdown();
+
+        // See if contract should be shutdown.
+        if (
+            sharePrice < _answer.mulDivDown(allowedAnswerChangeLower, 1e4) ||
+            sharePrice > _answer.mulDivDown(allowedAnswerChangeUpper, 1e4)
+        ) {
+            isShutdown = true;
+            return;
+        }
 
         // See if we are upkeeping because of deviation.
         if (
@@ -217,6 +254,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         Observation storage currentObservation = observations[_currentIndex];
         // Make sure time is larger than previous time.
         if (currentObservation.timestamp >= currentTime) revert ERC4626SharePriceOracle__StalePerformData();
+        if (currentTime > block.timestamp) revert ERC4626SharePriceOracle__FuturePerformData();
 
         // See if we are updating because of staleness.
         uint256 timeDelta = currentTime - currentObservation.timestamp;
@@ -259,15 +297,18 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Get the latest answer, time weighted average answer, and bool indicating whether they can be safely used.
      */
     function getLatest() external view returns (uint256 ans, uint256 timeWeightedAverageAnswer, bool notSafeToUse) {
-        // Check if answer is stale, if so set notSafeToUse to true, and return.
-        uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
-        // Note add in the grace period here, because it can take time for the upkeep TX to go through.
-        if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, 0, true);
-
         // Read state from one slot.
         ans = answer;
         uint16 _currentIndex = currentIndex;
         uint16 _observationsLength = observationsLength;
+        bool _isShutdown = isShutdown;
+
+        if (_isShutdown) return (0, 0, true);
+
+        // Check if answer is stale, if so set notSafeToUse to true, and return.
+        uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
+        // Note add in the grace period here, because it can take time for the upkeep TX to go through.
+        if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, 0, true);
 
         (timeWeightedAverageAnswer, notSafeToUse) = _getTimeWeightedAverageAnswer(
             ans,
@@ -281,12 +322,17 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Get the latest answer, and bool indicating whether answer is safe to use or not.
      */
     function getLatestAnswer() external view returns (uint256, bool) {
+        uint256 _answer = answer;
+        bool _isShutdown = isShutdown;
+
+        if (_isShutdown) return (0, true);
+
         // Check if answer is stale, if so set notSafeToUse to true, and return.
         uint256 timeDeltaSinceLastUpdated = block.timestamp - observations[currentIndex].timestamp;
         // Note add in the grace period here, because it can take time for the upkeep TX to go through.
         if (timeDeltaSinceLastUpdated > (heartbeat + gracePeriod)) return (0, true);
 
-        return (answer, false);
+        return (_answer, false);
     }
 
     //============================== INTERNAL HELPER FUNCTIONS ===============================
@@ -346,7 +392,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     /**
      * @notice Get the target ERC4626's share price using totalAssets, and totalSupply.
      */
-    function _getTargetSharePrice() internal view returns (uint224 sharePrice) {
+    function _getTargetSharePrice() internal view returns (uint216 sharePrice) {
         uint256 totalShares = target.totalSupply();
         // Get total Assets but scale it up to ORACLE_DECIMALS decimals of precision.
         uint256 totalAssets = target.totalAssets().changeDecimals(targetDecimals, ORACLE_DECIMALS);
@@ -355,7 +401,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
         uint256 _sharePrice = ONE_SHARE.mulDivDown(totalAssets, totalShares);
 
-        if (_sharePrice > type(uint224).max) revert ERC4626SharePriceOracle__SharePriceTooLarge();
-        sharePrice = uint224(_sharePrice);
+        if (_sharePrice > type(uint216).max) revert ERC4626SharePriceOracle__SharePriceTooLarge();
+        sharePrice = uint216(_sharePrice);
     }
 }

@@ -123,14 +123,21 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             maxAssets = assetsBefore.mulDivDown(1e4 + allowableRange, 1e4);
         }
 
-        priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-        if (address(priceRouter) != expectedPriceRouter) revert Cellar__ExpectedAddressDoesNotMatchActual();
+        // Make sure expected price router is equal to price router grabbed from registry.
+        _checkRegistryAddressAgainstExpected(PRICE_ROUTER_REGISTRY_SLOT, expectedPriceRouter);
+
+        priceRouter = PriceRouter(expectedPriceRouter);
         uint256 assetsAfter = totalAssets();
 
         if (checkTotalAssets) {
             if (assetsAfter < minAssets || assetsAfter > maxAssets)
                 revert Cellar__TotalAssetDeviatedOutsideRange(assetsAfter, minAssets, maxAssets);
         }
+    }
+
+    // TODO
+    function _checkRegistryAddressAgainstExpected(uint256 _registryId, address _expected) internal view {
+        if (registry.getAddress(_registryId) != _expected) revert Cellar__ExpectedAddressDoesNotMatchActual();
     }
 
     // ========================================= POSITIONS CONFIG =========================================
@@ -226,7 +233,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Attempted to force out the wrong position.
      */
-    error Cellar__ForcingOutWrongPosition();
+    error Cellar__FailedToForceOutPosition();
 
     /**
      * @notice Array of uint32s made up of cellars credit positions Ids.
@@ -402,7 +409,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function forcePositionOut(uint32 index, uint32 positionId, bool inDebtArray) external onlyOwner {
         // Get position being removed.
         uint32 _positionId = inDebtArray ? debtPositions[index] : creditPositions[index];
-        if (positionId != _positionId) revert Cellar__ForcingOutWrongPosition();
+        // Make sure position id right, and is distrusted.
+        if (positionId != _positionId || !registry.isPositionTrusted(positionId))
+            revert Cellar__FailedToForceOutPosition();
 
         _removePosition(index, positionId, inDebtArray);
     }
@@ -1201,12 +1210,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param _registryId Registry Id to get the automation action.
      * @param _expectedAutomationActions The registry automation actions differed from the expected automation actions.
      * @dev Callable by Sommelier Governance.
-
      */
     function setAutomationActions(uint256 _registryId, address _expectedAutomationActions) external onlyOwner {
-        address registryAutomationActions = registry.getAddress(_registryId);
-        if (registryAutomationActions != _expectedAutomationActions) revert Cellar__ExpectedAddressDoesNotMatchActual();
-        automationActions = registryAutomationActions;
+        _checkRegistryAddressAgainstExpected(_registryId, _expectedAutomationActions);
+        automationActions = _expectedAutomationActions;
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================
