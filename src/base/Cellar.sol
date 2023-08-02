@@ -1481,16 +1481,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         if (registry.getAddress(_registryId) != _expected) revert Cellar__ExpectedAddressDoesNotMatchActual();
     }
 
-    // /**
-    //  * @notice Get all the credit positions underlying assets.
-    //  */
-    // function getPositionAssets() external view returns (ERC20[] memory assets) {
-    //     assets = new ERC20[](creditPositions.length);
-    //     for (uint256 i = 0; i < creditPositions.length; ++i) {
-    //         assets[i] = _assetOf(creditPositions[i]);
-    //     }
-    // }
-
     /**
      * @notice View the amount of assets in each Cellar Position.
      */
