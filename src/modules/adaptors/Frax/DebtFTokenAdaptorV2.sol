@@ -9,8 +9,10 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
  * @notice Allows Cellars to borrow assets from FraxLend pairs.
  * @author crispymangoes, 0xEinCodes
  * TODO: remove this when done -> NOTE: toAssetAmount() has 3 vars in newest version, in older version it only has two.
+ * TODO: get code compiling && then troubleshoot test implementation code.
+ * TODO: Carry out setup and tests for v1Adaptors too
  */
-contract DebtFTokenAdaptor is BaseAdaptor {
+contract DebtFTokenAdaptorV2 is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -46,6 +48,17 @@ contract DebtFTokenAdaptor is BaseAdaptor {
     error DebtFTokenAdaptor__RepaymentShareAmountDecrementedIncorrectly(address fraxlendPair);
 
     /**
+     * @notice The FRAX contract on current network.
+     * @notice For mainnet use 0x853d955aCEf822Db058eb8505911ED77F175b99e.
+     */
+    ERC20 public immutable FRAX;
+
+    /**
+     * @notice maxLTV that is actually lower than the LTV allowed by Fraxlend. This prevents cellar lending positions from being too at risk.
+     */
+    uint256 public immutable maxLTV;
+
+    /**
      * @notice This bool determines how this adaptor accounts for interest.
      *         True: Account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
      *         False: Do not account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
@@ -66,9 +79,15 @@ contract DebtFTokenAdaptor is BaseAdaptor {
      */
     ERC20 public immutable FRAX;
 
-    constructor(bool _accountForInterest, address _frax) {
+    constructor(
+        bool _accountForInterest,
+        address _frax,
+        uint256 _maxLTV
+    ) {
+        _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
         ACCOUNT_FOR_INTEREST = _accountForInterest; //TODO: I think we need this, but need to double check for lending/borrowing setup in Fraxlend.
         FRAX = ERC20(_frax);
+        maxLTV = _maxLTV;
     }
 
     //============================================ Global Functions ===========================================
@@ -177,6 +196,7 @@ contract DebtFTokenAdaptor is BaseAdaptor {
      * NOTE: this version of repayFraxlendDebt is meant to offer an alternative to doing it similar to the AaveDebtTokenAdaptor (see notes below)
      * TODO: CRISPY --> from `FraxlendCore.sol` functions `repayAsset()` and `_repayAsset()` I don't see specific responses from the contracts if the amount of shares repaid >> amount of borrowShares even owed. Unless `-=` takes care of that.
      * Assuming the above is true, then we'll need to check how much borrowShares we need to pay. Then we can get the total amount of Frax we need to repay. So we could specify the amount of FRAX we're willing to repay (could be max), and then we calculate the amount of FRAX owing from fraxlend, then we check the two values to make sure it is less than the amount we're willing to repay. From there we can simply repay the shares. We then check that we have the expected change in borrowShares as per FraxLend accounting.
+     * TODO: possibly add a bool and logic that will take the amount of FRAX required to repay the debt. I guess this could be unecessary since if we just do maxAvailable we'll pay with all the FRAX possible.
      */
     function repayFraxlendDebt(
         IFToken fraxlendPair,
@@ -184,6 +204,9 @@ contract DebtFTokenAdaptor is BaseAdaptor {
         uint256 maxAmountToRepay,
         uint256 sharesToRepay
     ) public {
+        // TODO: add a maxAvailable check to see how much is needed to repay off entire loan
+        // amountToRepay = _maxAvailable(FRAX, maxAmountToRepay);
+
         // Check that max amount to repay from FraxlendPair is less than specified maxAmountToRepay
         uint256 fraxlendRepayAmount = _toBorrowAmount(fraxlendPair, sharesToRepay, false, ACCOUNT_FOR_INTEREST);
         if (fraxlendRepayAmount > maxAmountToRepay)

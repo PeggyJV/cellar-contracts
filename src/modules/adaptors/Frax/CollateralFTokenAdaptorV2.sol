@@ -14,8 +14,9 @@ interface ICollateralFToken {
  * @title FraxLend Collateral Adaptor
  * @notice Allows addition and removal of collateralAssets to Fraxlend pairs for a Cellar.
  * @author crispymangoes, 0xEinCodes
+ * NOTE: implement a max LTV that has a buffer compared to the LTV from fraxlend pairs.
  */
-contract CollateralFTokenAdaptor is BaseAdaptor {
+contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -44,8 +45,15 @@ contract CollateralFTokenAdaptor is BaseAdaptor {
      */
     ERC20 public immutable FRAX;
 
-    constructor(address _frax) {
+    /**
+     * @notice maxLTV that is actually lower than the LTV allowed by Fraxlend. This prevents cellar lending positions from being too at risk.
+     */
+    uint256 public immutable maxLTV;
+
+    constructor(address _frax, uint256 _maxLTV) {
+        _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
         FRAX = ERC20(_frax);
+        maxLTV = _maxLTV;
     }
 
     //============================================ Global Functions ===========================================
