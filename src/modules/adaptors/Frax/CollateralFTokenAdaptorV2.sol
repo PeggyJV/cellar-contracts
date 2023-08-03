@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
@@ -7,7 +7,7 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
 // bespoke interface to access collateralBalancer getter.
 // TODO: add into IFToken.sol unless we do not want to change the interface contract now that it has been deployed.
 interface ICollateralFToken {
-    function userCollateralBalance(address _user) external;
+    function userCollateralBalance(address _user) external view returns (uint256);
 }
 
 /**
@@ -50,8 +50,9 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      */
     uint256 public immutable maxLTV;
 
+    // TODO: use health factor so it's uniform among
     constructor(address _frax, uint256 _maxLTV) {
-        _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
+        // _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
         FRAX = ERC20(_frax);
         maxLTV = _maxLTV;
     }
@@ -85,10 +86,10 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
         _validateCollateral(collateralToken);
         address fraxlendPairAddress = address(fraxlendPair);
         collateralToken.safeApprove(fraxlendPairAddress, assets);
-        fraxlendPair.addCollateral(collateralToken, address(this));
+        fraxlendPair.addCollateral(assets, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(address(collateralToken), fraxlendPairAddress);
+        _revokeExternalApproval(collateralToken, fraxlendPairAddress);
     }
 
     /**
@@ -120,7 +121,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      * TODO: confirm that there is no need to typeCast on the decoded adaptorData when needing address, ERC20 or vice versa.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (IFToken fraxlendPair, ) = abi.decode(adaptorData, IFToken);
+        (IFToken fraxlendPair, ) = abi.decode(adaptorData, (IFToken, ERC20));
         ICollateralFToken fraxlendPairCollateral = ICollateralFToken(address(fraxlendPair));
         return fraxlendPairCollateral.userCollateralBalance(msg.sender);
     }
@@ -128,8 +129,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice Returns collateral asset
      */
-    function assetOf(bytes memory) public view override returns (ERC20) {
-        IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
+    function assetOf(bytes memory _adaptorData) public view override returns (ERC20) {
+        IFToken fraxlendPair = abi.decode(_adaptorData, (IFToken));
         return ERC20(fraxlendPair.collateralContract());
     }
 
@@ -155,27 +156,23 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
         // amountToDeposit = _maxAvailable(collateralToken, amountToDeposit); // TODO: CRISPY QUESTION - not sure if we want to deposit the max or not by default... It depends if the strategist wants to do uint256.max or not for these cellars.
         address fraxlendPair = address(_fraxlendPair);
         _collateralToken.safeApprove(fraxlendPair, _collateralToDeposit);
-        _fraxLendPair.addCollateral(_collateralToDeposit, address(this));
+        _fraxlendPair.addCollateral(_collateralToDeposit, address(this));
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(address(_collateralToken), fraxlendPair);
+        _revokeExternalApproval(_collateralToken, fraxlendPair);
     }
 
     /**
      * @notice Allows strategists to remove collateral from the respective cellar position on FraxLend.
      */
-    function removeCollateral(
-        ERC20 _collateralToken,
-        uint256 _collateralAmount,
-        IFToken _fraxlendPair
-    ) public {
+    function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
         // TODO: I don't think that Fraxlend pairs check whether or not cellar even has a position to start with. So we need to add a check/revert to disallow Strategists from calling this when they have zero collateral in fraxlend pair position. Otherwise, it just reverts I assume, could protect strategist from wasting gas.
 
         // remove collateral
         _fraxlendPair.removeCollateral(_collateralAmount, address(this));
-        (, uint256 _exchangeRate, ) = _fraxlendPair._updateExchangeRate(); // need to calculate LTV
+        (, uint256 _exchangeRate, ) = _fraxlendPair.updateExchangeRate(); // need to calculate LTV
         // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
-        if (!_isSolvent(_fraxlendPair, address(this), _exchangeRate)) {
+        if (!_isSolvent(_fraxlendPair, _exchangeRate)) {
             revert CollateralFTokenAdaptor__LTVTooLow(address(_fraxlendPair));
         }
     }
@@ -202,18 +199,18 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice Converts a given number of borrow shares to debtToken amount from specified 'v2' FraxLendPair
      * @dev This is one of the adjusted functions from v1 to v2. fraxlendPair.toBorrowAmount() calls into the respective version (v2 by default) of FraxLendPair
-     * @param fraxlendPair The specified FraxLendPair
-     * @param shares Shares of debtToken
-     * @param roundUp Whether to round up after division
-     * @param previewInterest Whether to preview interest accrual before calculation
+     * @param _fraxlendPair The specified FraxLendPair
+     * @param _shares Shares of debtToken
+     * @param _roundUp Whether to round up after division
+     * @param _previewInterest Whether to preview interest accrual before calculation
      */
     function _toBorrowAmount(
-        IFToken fraxlendPair,
+        IFToken _fraxlendPair,
         uint256 _shares,
         bool _roundUp,
         bool _previewInterest
     ) internal view virtual returns (uint256) {
-        return fraxlendPair.toBorrowAmount(_shares, _roundUp, _previewInterest);
+        return _fraxlendPair.toBorrowAmount(_shares, _roundUp, _previewInterest);
     }
 
     // /**
@@ -227,24 +224,21 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     // }
 
     /// @notice The ```_isSolvent``` function determines if a given borrower is solvent given an exchange rate
-    /// @param _borrower The borrower address to check
     /// @param _exchangeRate The exchange rate, i.e. the amount of collateral to buy 1e18 asset
     /// @return Whether borrower is solvent
     /// NOTE: in theory, this should work. It calls `_toBorrowAmount()` which ends up calling `toBorrowAmount()` directly from the `FraxlendPair.sol` contract per pair. It generates the borrowAmount based on interest-adjusted totalBorrow and shares within that pair. `_collateralAmount` is also pulled directly via getters in the pair contracts themselves.
     /// @dev NOTE: TODO: EIN - TEST - this needs to be tested in comparison the `_isSolvent` calcs in Fraxlend so we are calculating the same thing at all times.
     /// NOTE:  TODO: This is not working yet, convert this in a gas efficient manner to work with this adaptor. Not sure about it though...
-    function _isSolvent(
-        IFToken _fraxlendPair,
-        address _borrower,
-        uint256 _exchangeRate
-    ) internal view returns (bool) {
+    function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view returns (bool) {
         if (maxLTV == 0) return true;
         // calculate the borrowShares
-        uint256 borrowerShares = _fraxlendPair.userBorrowShares[address(this)];
+        uint256 borrowerShares = _fraxlendPair.userBorrowShares(address(this));
         uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `_isSolvent()` function in actual Fraxlend contracts.
         if (_borrowerAmount == 0) return true;
-        uint256 _collateralAmount = _fraxlendPair.userCollateralBalance[address(this)];
+        uint256 _collateralAmount = _fraxlendPair.userCollateralBalance(address(this));
         if (_collateralAmount == 0) return false;
+
+        (uint256 LTV_PRECISION, , , , uint256 EXCHANGE_PRECISION, , , ) = _fraxlendPair.getConstants();
 
         uint256 _ltv = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) / _collateralAmount;
         return _ltv <= maxLTV;
@@ -258,7 +252,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_fraxlendPair))));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert FTokenAdaptor__FTokenPositionsMustBeTracked(address(_fraxlendPair));
+            revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_fraxlendPair));
     }
 
     /**
@@ -269,6 +263,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_collateralToken))));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert FTokenAdaptor__TokenPositionsMustBeTracked(address(_collateralToken));
+            revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_collateralToken));
     }
 }

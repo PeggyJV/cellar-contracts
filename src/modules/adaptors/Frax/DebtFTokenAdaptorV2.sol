@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16;
+pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
@@ -9,7 +9,6 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
  * @notice Allows Cellars to borrow assets from FraxLend pairs.
  * @author crispymangoes, 0xEinCodes
  * TODO: remove this when done -> NOTE: toAssetAmount() has 3 vars in newest version, in older version it only has two.
- * TODO: get code compiling && then troubleshoot test implementation code.
  * TODO: Carry out setup and tests for v1Adaptors too
  */
 contract DebtFTokenAdaptorV2 is BaseAdaptor {
@@ -73,18 +72,12 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      */
     uint256 public immutable minimumHealthFactor;
 
-    /**
-     * @notice The FRAX contract on current network.
-     * @notice For mainnet use 0x853d955aCEf822Db058eb8505911ED77F175b99e.
-     */
-    ERC20 public immutable FRAX;
-
     constructor(
         bool _accountForInterest,
         address _frax,
         uint256 _maxLTV
     ) {
-        _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
+        // _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
         ACCOUNT_FOR_INTEREST = _accountForInterest; //TODO: I think we need this, but need to double check for lending/borrowing setup in Fraxlend.
         FRAX = ERC20(_frax);
         maxLTV = _maxLTV;
@@ -174,14 +167,14 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(address(fraxlendPair))));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert DebtFTokenAdaptor__FTokenPositionsMustBeTracked(address(fraxlendPair));
+            revert DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(fraxlendPair));
 
         fraxlendPair.borrowAsset(amountToBorrow, 0, msg.sender); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
 
         // Check LTV is still satisfactory
-        (, uint256 _exchangeRate, ) = fraxlendPair._updateExchangeRate(); // needed to calculate LTV in next line
+        (, uint256 _exchangeRate, ) = fraxlendPair.updateExchangeRate(); // needed to calculate LTV in next line
         // Check if borrower is insolvent after this borrow tx, revert if they are
-        if (!_isSolvent(address(this), _exchangeRate)) {
+        if (!_isSolvent(fraxlendPair, _exchangeRate)) {
             revert DebtFTokenAdaptor__LTVTooLow(address(fraxlendPair));
         }
     }
@@ -191,36 +184,37 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice Allows strategists to repay loan debt on Fraxlend Pair.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * @param tokenToRepay the underlying ERC20 token you want to repay, NOT the debtToken. TODO: not sure if we want this to be pulling from the fraxlendPair the assetToken, or to just have this be FRAX since it always is FRAX and doesn't sound like it will change.
-     * @param amountToRepay the amount of `tokenToRepay` to repay with.
-     * NOTE: this version of repayFraxlendDebt is meant to offer an alternative to doing it similar to the AaveDebtTokenAdaptor (see notes below)
+     * @param _fraxlendPair the Fraxlend Pair to repay debt from.
+     * @param _tokenToRepay the underlying ERC20 token you want to repay, NOT the debtToken. TODO: not sure if we want this to be pulling from the fraxlendPair the assetToken, or to just have this be FRAX since it always is FRAX and doesn't sound like it will change.
+     * @param _maxAmountToRepay the amount of `tokenToRepay` to repay with.
+     * @param _sharesToRepay the amount of borrowShares to repay within Fraxlend pair.
      * TODO: CRISPY --> from `FraxlendCore.sol` functions `repayAsset()` and `_repayAsset()` I don't see specific responses from the contracts if the amount of shares repaid >> amount of borrowShares even owed. Unless `-=` takes care of that.
      * Assuming the above is true, then we'll need to check how much borrowShares we need to pay. Then we can get the total amount of Frax we need to repay. So we could specify the amount of FRAX we're willing to repay (could be max), and then we calculate the amount of FRAX owing from fraxlend, then we check the two values to make sure it is less than the amount we're willing to repay. From there we can simply repay the shares. We then check that we have the expected change in borrowShares as per FraxLend accounting.
      * TODO: possibly add a bool and logic that will take the amount of FRAX required to repay the debt. I guess this could be unecessary since if we just do maxAvailable we'll pay with all the FRAX possible.
      */
     function repayFraxlendDebt(
-        IFToken fraxlendPair,
-        ERC20 tokenToRepay,
-        uint256 maxAmountToRepay,
-        uint256 sharesToRepay
+        IFToken _fraxlendPair,
+        ERC20 _tokenToRepay,
+        uint256 _maxAmountToRepay,
+        uint256 _sharesToRepay
     ) public {
         // TODO: add a maxAvailable check to see how much is needed to repay off entire loan
         // amountToRepay = _maxAvailable(FRAX, maxAmountToRepay);
 
         // Check that max amount to repay from FraxlendPair is less than specified maxAmountToRepay
-        uint256 fraxlendRepayAmount = _toBorrowAmount(fraxlendPair, sharesToRepay, false, ACCOUNT_FOR_INTEREST);
-        if (fraxlendRepayAmount > maxAmountToRepay)
-            revert DebtFTokenAdaptor__AmountOwingExceedsSpecifiedRepaymentMax(address(fraxlendPair));
+        uint256 fraxlendRepayAmount = _toBorrowAmount(_fraxlendPair, _sharesToRepay, false, ACCOUNT_FOR_INTEREST);
+        if (fraxlendRepayAmount > _maxAmountToRepay)
+            revert DebtFTokenAdaptor__AmountOwingExceedsSpecifiedRepaymentMax(address(_fraxlendPair));
 
-        tokenToRepay.safeApprove(address(fraxlendPair), fraxlendRepayAmount);
+        _tokenToRepay.safeApprove(address(_fraxlendPair), fraxlendRepayAmount);
 
-        uint256 expectedBorrowShares = fraxlendPair.userBorrowShares[msg.sender] - sharesToRepay; // TODO: see note in comment above
-        fraxlendPair.repayAsset(sharesToRepay, msg.sender);
+        uint256 expectedBorrowShares = _fraxlendPair.userBorrowShares(msg.sender) - _sharesToRepay; // TODO: see note in comment above
+        _fraxlendPair.repayAsset(_sharesToRepay, msg.sender);
         // double check that the borrowShares have reduced by proper amount for cellar
-        if (fraxlendPair.userBorrowShares[msg.sender] != expectedBorrowShares)
-            revert DebtFTokenAdaptor__RepaymentShareAmountDecrementedIncorrectly(address(fraxlendPair)); // TODO: see note in comment above
+        if (_fraxlendPair.userBorrowShares(msg.sender) != expectedBorrowShares)
+            revert DebtFTokenAdaptor__RepaymentShareAmountDecrementedIncorrectly(address(_fraxlendPair)); // TODO: see note in comment above
         // Zero out approvals if necessary.
-        _revokeExternalApproval(tokenToRepay, address(fraxlendPair));
+        _revokeExternalApproval(_tokenToRepay, address(_fraxlendPair));
     }
 
     /**
@@ -244,7 +238,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(fraxlendPair))));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert FTokenAdaptor__FTokenPositionsMustBeTracked(address(fraxlendPair));
+            revert DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(fraxlendPair));
     }
 
     //============================================ Interface Helper Functions ===========================================
@@ -269,18 +263,18 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice Converts a given number of borrow shares to debtToken amount from specified 'v2' FraxLendPair
      * @dev This is one of the adjusted functions from v1 to v2. fraxlendPair.toBorrowAmount() calls into the respective version (v2 by default) of FraxLendPair
-     * @param fraxlendPair The specified FraxLendPair
-     * @param shares Shares of debtToken
-     * @param roundUp Whether to round up after division
-     * @param previewInterest Whether to preview interest accrual before calculation
+     * @param _fraxlendPair The specified FraxLendPair
+     * @param _shares Shares of debtToken
+     * @param _roundUp Whether to round up after division
+     * @param _previewInterest Whether to preview interest accrual before calculation
      */
     function _toBorrowAmount(
-        IFToken fraxlendPair,
+        IFToken _fraxlendPair,
         uint256 _shares,
         bool _roundUp,
         bool _previewInterest
     ) internal view virtual returns (uint256) {
-        return fraxlendPair.toBorrowAmount(_shares, _roundUp, _previewInterest);
+        return _fraxlendPair.toBorrowAmount(_shares, _roundUp, _previewInterest);
     }
 
     /**
@@ -294,24 +288,21 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     }
 
     /// @notice The ```_isSolvent``` function determines if a given borrower is solvent given an exchange rate
-    /// @param _borrower The borrower address to check
     /// @param _exchangeRate The exchange rate, i.e. the amount of collateral to buy 1e18 asset
     /// @return Whether borrower is solvent
     /// NOTE: in theory, this should work. It calls `_toBorrowAmount()` which ends up calling `toBorrowAmount()` directly from the `FraxlendPair.sol` contract per pair. It generates the borrowAmount based on interest-adjusted totalBorrow and shares within that pair. `_collateralAmount` is also pulled directly via getters in the pair contracts themselves.
     /// @dev NOTE: TODO: EIN - TEST - this needs to be tested in comparison the `_isSolvent` calcs in Fraxlend so we are calculating the same thing at all times.
     /// NOTE:  TODO: This is not working yet, convert this in a gas efficient manner to work with this adaptor. Not sure about it though...
-    function _isSolvent(
-        IFToken _fraxlendPair,
-        address _borrower,
-        uint256 _exchangeRate
-    ) internal view returns (bool) {
+    function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view returns (bool) {
         if (maxLTV == 0) return true;
         // calculate the borrowShares
-        uint256 borrowerShares = _fraxlendPair.userBorrowShares[address(this)];
+        uint256 borrowerShares = _fraxlendPair.userBorrowShares(address(this));
         uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `_isSolvent()` function in actual Fraxlend contracts.
         if (_borrowerAmount == 0) return true;
-        uint256 _collateralAmount = _fraxlendPair.userCollateralBalance[address(this)];
+        uint256 _collateralAmount = _fraxlendPair.userCollateralBalance(address(this));
         if (_collateralAmount == 0) return false;
+
+        (uint256 LTV_PRECISION, , , , uint256 EXCHANGE_PRECISION, , , ) = _fraxlendPair.getConstants();
 
         uint256 _ltv = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) / _collateralAmount;
         return _ltv <= maxLTV;

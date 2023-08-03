@@ -53,7 +53,7 @@ contract MainnetAddresses {
     address public CBETH_ETH_FEED = 0xF017fcB346A1885194689bA23Eff2fE6fA5C483b;
     address public STETH_ETH_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
     address public MKR_USD_FEED = 0xec1D1B3b0443256cc3860e24a46F108e699484Aa;
-    address public UNI_ETH_FEED = 0xd6aa3d25116d8da79ea0246c4826eb951872e02e;
+    address public UNI_ETH_FEED = 0xD6aA3D25116d8dA79Ea0246c4826EB951872e02e;
 
     // Aave V2 Tokens
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);

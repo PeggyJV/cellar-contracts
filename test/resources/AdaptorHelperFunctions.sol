@@ -40,6 +40,10 @@ import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellar
 
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
+import {CollateralFTokenAdaptorV2} from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV2.sol";
+
+import {DebtFTokenAdaptorV2} from "src/modules/adaptors/Frax/DebtFTokenAdaptorV2.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -458,12 +462,6 @@ contract AdaptorHelperFunctions {
         return abi.encodeWithSelector(LegacyCellarAdaptor.withdrawFromCellar.selector, cellar, assets, oracle);
     }
 
-    // ========================================= FraxLend FUNCTIONS =========================================
-
-    function _createBytesDataToDepositToCellar(address cellar, uint256 assets) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(CellarAdaptor.depositToCellar.selector, cellar, assets);
-    }
-
     // ========================================= FraxLend COLLATERAL FUNCTIONS =========================================
 
     function _createBytesDataToAddCollateralWithFraxlendV2(
@@ -473,7 +471,7 @@ contract AdaptorHelperFunctions {
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
-                CollateralFTokenAdaptor.addCollateral.selector,
+                CollateralFTokenAdaptorV2.addCollateral.selector,
                 _fraxlendPair,
                 _collateralToken,
                 _collateralToDeposit
