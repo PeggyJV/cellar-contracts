@@ -1182,6 +1182,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     error Cellar__CallerNotApprovedToRebalance();
 
     /**
+     * @notice Emitted when `setAutomationActions` is called.
+     */
+    event Cellar__AutomationActionsUpdated(address newAutomationActions);
+
+    /**
      * @notice The Automation Actions contract that can rebalance this Cellar.
      * @dev Set to zero address if not in use.
      */
@@ -1196,6 +1201,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function setAutomationActions(uint256 _registryId, address _expectedAutomationActions) external onlyOwner {
         _checkRegistryAddressAgainstExpected(_registryId, _expectedAutomationActions);
         automationActions = _expectedAutomationActions;
+        emit Cellar__AutomationActionsUpdated(_expectedAutomationActions);
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================
@@ -1300,7 +1306,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @dev Since `totalAssets` is allowed to deviate slightly, strategists could abuse this by sending
      *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
-     * @dev Callable by Sommelier Strategist.
+     * @dev Callable by Sommelier Strategist, and Automation Actions contract.
      */
     function callOnAdaptor(AdaptorCall[] calldata data) external virtual nonReentrant {
         if (msg.sender != owner && msg.sender != automationActions) revert Cellar__CallerNotApprovedToRebalance();
