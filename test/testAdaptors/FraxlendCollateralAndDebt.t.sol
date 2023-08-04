@@ -9,8 +9,9 @@ import "test/resources/MainnetStarter.t.sol";
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
+
 // Import Testing Resources
-import { Test, stdStorage, StdStorage, stdError, console } from "lib/forge-std/src/Test.sol";
+// import { Test, stdStorage, StdStorage, stdError, console } from "lib/forge-std/src/Test.sol";
 
 /**
  * @notice test provision of collateral and borrowing on Fraxlend
@@ -18,7 +19,7 @@ import { Test, stdStorage, StdStorage, stdError, console } from "lib/forge-std/s
  * NOTE: Initial tests revolve around providing MKR as collateral and borrowing FRAX. This fraxlend pair was used because it is a Fraxlend v2 pair.
  * TODO: write v1 tests w/ WETH.
  */
-contract CellarFraxLendCollateralAndDebtTest is Test, MainnetStarterTest, AdaptorHelperFunctions {
+contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     CollateralFTokenAdaptorV2 public collateralFTokenAdaptorV2;
@@ -59,7 +60,7 @@ contract CellarFraxLendCollateralAndDebtTest is Test, MainnetStarterTest, Adapto
     function setUp() public {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 16869780;
+        uint256 blockNumber = 17843162;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -183,13 +184,13 @@ contract CellarFraxLendCollateralAndDebtTest is Test, MainnetStarterTest, Adapto
     }
 
     // test that holding position for adding collateral is being tracked properly and works upon user deposits
-    // TODO: EIN - WHERE I LEFT OFF, TEST IS FAILING FOR SOME REASON. ALSO WEIRD THAT I NEED TO IMPORT FOUNDRY FILES INTO THIS WHEN IT'S IN THE HELPER IMPORT.
+    // TODO: carry out a total assets test checking that balanceOf works for adaptors.
     function testDeposit(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         console.log("Cellar MKR balance: %s, initialAssets: %s", MKR.balanceOf(address(cellar)), initialAssets);
         deal(address(MKR), address(this), assets);
-        cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
+        cellar.deposit(assets, address(this));
         assertApproxEqAbs(
             MKR.balanceOf(address(cellar)),
             assets + initialAssets,
@@ -197,90 +198,91 @@ contract CellarFraxLendCollateralAndDebtTest is Test, MainnetStarterTest, Adapto
             "Cellar should have all deposited MKR assets"
         );
 
-        // TODO: carry out a proper deposit
+        // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
+        bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
-
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
-
         cellar.callOnAdaptor(data);
-
-        assertApproxEqAbs(MKR.balanceOf(address(cellar)), 0, 1, "Assets should not be within Cellar.");
-
-        bytes memory adaptorData = abi.encode(MKR_FRAX_PAIR, MKR);
-        uint256 collateralAdaptorBalanceOf = collateralFTokenAdaptorV2.balanceOf(adaptorData);
-        uint256 newCellarCollateralBalance = mkrCollateralFToken.userCollateralBalance(address(cellar));
-
         assertApproxEqAbs(
-            collateralAdaptorBalanceOf,
-            assets + initialAssets,
+            MKR.balanceOf(address(cellar)),
+            initialAssets,
             1,
-            "Assets should be collateral provided to Fraxlend Pair."
+            "Only initialAssets should be within Cellar."
         );
 
-        // TODO: decide to use this assert or the above one. This one reads directly from the fraxlendpair in the test, the other goes off the Adaptor balanceOf(). There should be specific tests for balanceOf() elsewhere, so we can use it in our tests.
-        assertApproxEqAbs(
+        uint256 newCellarCollateralBalance = mkrCollateralFToken.userCollateralBalance(address(cellar));
+        assertEq(
             newCellarCollateralBalance,
-            assets + initialAssets,
-            1,
-            "Assets should be collateral provided to Fraxlend Pair."
+            assets,
+            "`fraxlendPairCore.userCollateralBalance()` check: Assets should be collateral provided to Fraxlend Pair."
         );
     }
 
-    // // TODO: get it working
-    // function testTotalAssets(uint256 assets) external {
-    //     assets = bound(assets, 0.1e18, 100_000e18);
-    //     uint256 initialAssets = cellar.totalAssets();
-    //     deal(address(MKR), address(this), assets);
-    //     cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
+    // TODO: get it working
+    function testTotalAssets(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+        initialAssets = cellar.totalAssets();
+        console.log("Cellar MKR balance: %s, initialAssets: %s", MKR.balanceOf(address(cellar)), initialAssets);
+        deal(address(MKR), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     // TODO: carry out a proper deposit
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
-    //     adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        // carry out a proper addCollateral() call
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        assertApproxEqAbs(
+            cellar.totalAssets(),
+            (assets + initialAssets),
+            1,
+            "Cellar.totalAssets() && CollateralFTokenAdaptorV2.balanceOf() check: Total assets should not have changed."
+        );
+    }
 
-    //     cellar.callOnAdaptor(data);
+    // test taking loans w/ v2 fraxlend pairs
+    function testTakingOutLoansV2(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100e18);
+        initialAssets = cellar.totalAssets();
+        console.log("Cellar MKR balance: %s, initialAssets: %s", MKR.balanceOf(address(cellar)), initialAssets);
+        deal(address(MKR), address(this), assets);
+        cellar.deposit(assets, address(this));
 
-    //     assertApproxEqAbs(
-    //         cellar.totalAssets(),
-    //         (assets + initialAssets),
-    //         1,
-    //         "Total assets should equal assets deposited."
-    //     );
-    // }
+        // carry out a proper addCollateral() call
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
-    // // test taking loans w/ v2 fraxlend pairs
-    // function testTakingOutLoansV2(uint256 assets) external {
-    //     assets = bound(assets, 0.1e18, 100_000e18);
-    //     uint256 initialAssets = cellar.totalAssets();
-    //     deal(address(MKR), address(this), assets);
-    //     cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
+        // Take out a FRAX loan.
+        uint256 fraxToBorrow = priceRouter.getValue(MKR, assets/2, FRAX);
 
-    //     // Take out a FRAX loan.
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, assets / 2); //TODO: this will be interesting cause LTV maximums, etc.
+        adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow); //TODO: this will be interesting cause LTV maximums, etc.
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+        bytes memory adaptorData = abi.encode(MKR_FRAX_PAIR);
+        vm.prank(address(cellar));
+        uint256 newBalance = debtFTokenAdaptorV2.balanceOf(adaptorData);
+        assertApproxEqAbs(
+            newBalance,
+            assets / 2,
+            1,
+            "Cellar should have debt recorded within Fraxlend Pair of assets / 2"
+        );
+        assertApproxEqAbs(
+            FRAX.balanceOf(address(cellar)),
+            fraxToBorrow,
+            1,
+            "Cellar should have FRAX equal to assets / 2"
+        );
 
-    //     data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
-    //     cellar.callOnAdaptor(data);
+        console.log("newBalance %s, FRAX balanceOf() %s", newBalance, FRAX.balanceOf(address(cellar)));
+        revert("ein");
 
-    //     bytes memory adaptorData = abi.encode(MKR_FRAX_PAIR);
-    //     assertApproxEqAbs(
-    //         debtFTokenAdaptorV2.balanceOf(adaptorData),
-    //         assets / 2,
-    //         1,
-    //         "Cellar should have debt recorded within Fraxlend Pair of assets / 2"
-    //     );
-    //     assertApproxEqAbs(
-    //         FRAX.balanceOf(address(cellar)),
-    //         assets / 2,
-    //         1,
-    //         "Cellar should have FRAX equal to assets / 2"
-    //     );
-    // }
+    }
 
     // // test taking loan w/ providing collateral to the wrong pair
     // function testTakingOutLoanInUntrackedPositionV2() external {

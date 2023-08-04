@@ -146,6 +146,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
 
     /**
      * @notice Allows strategists to add collateral to the respective cellar position on FraxLend, enabling borrowing.
+     * TODO: use _fraxlendPair.collateralContract() instead of the collateralToken.
      */
     function addCollateral(
         IFToken _fraxlendPair,
