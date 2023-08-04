@@ -8,11 +8,9 @@ import { DebtFTokenAdaptorV2 } from "src/modules/adaptors/Frax/DebtFTokenAdaptor
 import "test/resources/MainnetStarter.t.sol";
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
-
-// bespoke interface to access collateralBalancer getter.
-interface ICollateralFToken {
-    function userCollateralBalance(address _user) external;
-}
+import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
+// Import Testing Resources
+import { Test, stdStorage, StdStorage, stdError, console } from "lib/forge-std/src/Test.sol";
 
 /**
  * @notice test provision of collateral and borrowing on Fraxlend
@@ -20,216 +18,231 @@ interface ICollateralFToken {
  * NOTE: Initial tests revolve around providing MKR as collateral and borrowing FRAX. This fraxlend pair was used because it is a Fraxlend v2 pair.
  * TODO: write v1 tests w/ WETH.
  */
-contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFunctions {
-    // using SafeTransferLib for ERC20;
-    // using Math for uint256;
-    // CollateralFTokenAdaptorV2 public fraxlendCollateralTokenAdaptor;
-    // DebtFTokenAdaptorV2 public fraxlendDebtTokenAdaptor;
-    // Cellar public cellar;
-    // IFToken mkrFraxLendPair = IFToken(MKR_FRAX_PAIR);
+contract CellarFraxLendCollateralAndDebtTest is Test, MainnetStarterTest, AdaptorHelperFunctions {
+    using SafeTransferLib for ERC20;
+    using Math for uint256;
+    CollateralFTokenAdaptorV2 public collateralFTokenAdaptorV2;
+    DebtFTokenAdaptorV2 public debtFTokenAdaptorV2;
+    Cellar public cellar;
+    IFToken mkrFraxLendPair = IFToken(MKR_FRAX_PAIR);
 
-    // uint32 public fraxlendCollateralMKRPosition = 1_000_001; // fraxlendV2
-    // uint32 public fraxlendDebtMKRPosition = 1_000_002; // fraxlendV2
-    // uint32 public fraxlendCollateralAPEPosition = 1_000_003; // fralendV2
-    // uint32 public fraxlendDebtAPEPosition = 1_000_004; // fralendV2
-    // uint32 public fraxlendDebtWETHPosition = 1_000_005; // fralendV1
+    uint32 public fraxlendCollateralMKRPosition = 1_000_001; // fraxlendV2
+    uint32 public fraxlendDebtMKRPosition = 1_000_002; // fraxlendV2
+    uint32 public fraxlendCollateralAPEPosition = 1_000_003; // fralendV2
+    uint32 public fraxlendDebtAPEPosition = 1_000_004; // fralendV2
+    uint32 public fraxlendDebtWETHPosition = 1_000_005; // fralendV1
 
-    // // Chainlink PriceFeeds
-    // MockDataFeed private mockFraxUsd;
-    // MockDataFeed private mockWethUsd;
+    // Chainlink PriceFeeds
+    MockDataFeed private mockFraxUsd;
+    MockDataFeed private mockWethUsd;
+    MockDataFeed private mockMkrUsd;
 
-    // uint32 private fraxPosition = 1;
-    // uint32 private mkrPosition = 2;
-    // uint32 private wethPosition = 3;
-    // // uint32 private sfrxETHPosition = 4;
+    uint32 private fraxPosition = 1;
+    uint32 private mkrPosition = 2;
+    uint32 private wethPosition = 3;
+    // uint32 private sfrxETHPosition = 4;
 
-    // // uint32 private fxsFraxPairPosition = 2;
-    // // uint32 private fpiFraxPairPosition = 3;
-    // // uint32 private sfrxEthFraxPairPosition = 4;
-    // // uint32 private wEthFraxPairPosition = 5;
+    // uint32 private fxsFraxPairPosition = 2;
+    // uint32 private fpiFraxPairPosition = 3;
+    // uint32 private sfrxEthFraxPairPosition = 4;
+    // uint32 private wEthFraxPairPosition = 5;
 
-    // // Mock Positions
-    // uint32 private mockFxsFraxPairPosition = 6;
-    // uint32 private mockSfrxEthFraxPairPosition = 7;
+    // Mock Positions
+    uint32 private mockFxsFraxPairPosition = 6;
+    uint32 private mockSfrxEthFraxPairPosition = 7;
 
-    // uint256 initialAssets;
-    // uint256 maxLTV = 0.5e18;
+    uint256 initialAssets;
+    uint256 maxLTV = 0.5e18;
 
-    // ICollateralFToken mkrCollateralFToken = ICollateralFToken(address(MKR_FRAX_PAIR));
+    IFToken mkrCollateralFToken = IFToken(address(MKR_FRAX_PAIR));
 
-    // function setUp() public {
-    //     // Setup forked environment.
-    //     string memory rpcKey = "MAINNET_RPC_URL";
-    //     uint256 blockNumber = 16869780;
-    //     _startFork(rpcKey, blockNumber);
+    function setUp() public {
+        // Setup forked environment.
+        string memory rpcKey = "MAINNET_RPC_URL";
+        uint256 blockNumber = 16869780;
+        _startFork(rpcKey, blockNumber);
 
-    //     // Run Starter setUp code.
-    //     _setUp();
+        // Run Starter setUp code.
+        _setUp();
 
-    //     mockFraxUsd = new MockDataFeed(FRAX_USD_FEED);
-    //     mockMkrUsd = new MockDataFeed(MKR_USD_FEED);
-    //     mockWethUsd = new MockDataFeed(WETH_USD_FEED);
+        mockFraxUsd = new MockDataFeed(FRAX_USD_FEED);
+        mockMkrUsd = new MockDataFeed(MKR_USD_FEED);
+        mockWethUsd = new MockDataFeed(WETH_USD_FEED);
 
-    //     // mockFTokenAdaptorV2 = new MockFTokenAdaptor(false, address(FRAX));
-    //     // mockFTokenAdaptor = new MockFTokenAdaptorV1(false, address(FRAX));
+        // mockFTokenAdaptorV2 = new MockFTokenAdaptor(false, address(FRAX));
+        // mockFTokenAdaptor = new MockFTokenAdaptorV1(false, address(FRAX));
 
-    //     bytes memory creationCode;
-    //     bytes memory constructorArgs;
-    //     creationCode = type(CollateralFTokenAdaptorV2).creationCode;
-    //     constructorArgs = abi.encode(address(FRAX), maxLTV);
-    //     collateralFTokenAdaptorV2 = CollateralFTokenAdaptorV2(
-    //         deployer.deployContract("FraxLend Collateral fToken Adaptor V 0.1", creationCode, constructorArgs, 0)
-    //     );
+        bytes memory creationCode;
+        bytes memory constructorArgs;
+        creationCode = type(CollateralFTokenAdaptorV2).creationCode;
+        constructorArgs = abi.encode(address(FRAX), maxLTV);
+        collateralFTokenAdaptorV2 = CollateralFTokenAdaptorV2(
+            deployer.deployContract("FraxLend Collateral fToken Adaptor V 0.1", creationCode, constructorArgs, 0)
+        );
 
-    //     creationCode = type(DebtFTokenAdaptorV2).creationCode;
-    //     constructorArgs = abi.encode(true, address(FRAX), maxLTV);
-    //     debtFTokenAdaptorV2 = DebtFTokenAdaptorV2(
-    //         deployer.deployContract("FraxLend debtToken Adaptor V 1.0", creationCode, constructorArgs, 0)
-    //     );
+        creationCode = type(DebtFTokenAdaptorV2).creationCode;
+        constructorArgs = abi.encode(true, address(FRAX), maxLTV);
+        debtFTokenAdaptorV2 = DebtFTokenAdaptorV2(
+            deployer.deployContract("FraxLend debtToken Adaptor V 1.0", creationCode, constructorArgs, 0)
+        );
 
-    //     PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
 
-    //     PriceRouter.AssetSettings memory settings;
+        PriceRouter.AssetSettings memory settings;
 
-    //     uint256 price = uint256(mockFraxUsd.latestAnswer());
-    //     settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockFraxUsd));
-    //     priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
+        uint256 price = uint256(mockFraxUsd.latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockFraxUsd));
+        priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
 
-    //     price = uint256(mockMkrUsd.latestAnswer());
-    //     settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockMkrUsd));
-    //     priceRouter.addAsset(MKR, settings, abi.encode(stor), price);
+        price = uint256(mockMkrUsd.latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockMkrUsd));
+        priceRouter.addAsset(MKR, settings, abi.encode(stor), price);
 
-    //     price = uint256(mockWethUsd.latestAnswer());
-    //     settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockWethUsd));
-    //     priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+        price = uint256(mockWethUsd.latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockWethUsd));
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
-    //     // uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-    //     // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
-    //     // priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+        // uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        // priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
-    //     // Setup Cellar:
+        // Setup Cellar:
 
-    //     // Add adaptors and positions to the registry.
-    //     registry.trustAdaptor(address(collateralFTokenAdaptorV2));
-    //     registry.trustAdaptor(address(debtFTokenAdaptorV2));
+        // Add adaptors and positions to the registry.
+        registry.trustAdaptor(address(collateralFTokenAdaptorV2));
+        registry.trustAdaptor(address(debtFTokenAdaptorV2));
 
-    //     registry.trustPosition(fraxPosition, address(erc20Adaptor), abi.encode(USDC));
-    //     registry.trustPosition(mkrPosition, address(erc20Adaptor), abi.encode(MKR));
-    //     registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
-    //     // registry.trustPosition(sfrxETHPosition, address(erc20Adaptor), abi.encode());
-    //     registry.trustPosition(
-    //         fraxlendCollateralMKRPosition,
-    //         address(collateralFTokenAdaptorV2),
-    //         abi.encode(MKR_FRAX_PAIR, address(MKR))
-    //     );
-    //     registry.trustPosition(
-    //         fraxlendDebtMKRPosition,
-    //         address(debtFTokenAdaptorV2),
-    //         abi.encode(address(MKR_FRAX_PAIR))
-    //     );
-    //     registry.trustPosition(
-    //         fraxlendDebtAPEPosition,
-    //         address(collateralFTokenAdaptorV2),
-    //         abi.encode(APE_FRAX_PAIR, address(APE))
-    //     );
-    //     registry.trustPosition(
-    //         fraxlendDebtAPEPosition,
-    //         address(debtFTokenAdaptorV2),
-    //         abi.encode(address(MKR_FRAX_PAIR))
-    //     );
+        registry.trustPosition(fraxPosition, address(erc20Adaptor), abi.encode(FRAX));
+        registry.trustPosition(mkrPosition, address(erc20Adaptor), abi.encode(MKR));
+        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
+        // registry.trustPosition(sfrxETHPosition, address(erc20Adaptor), abi.encode());
+        registry.trustPosition(
+            fraxlendCollateralMKRPosition,
+            address(collateralFTokenAdaptorV2),
+            abi.encode(MKR_FRAX_PAIR, address(MKR))
+        );
+        registry.trustPosition(
+            fraxlendDebtMKRPosition,
+            address(debtFTokenAdaptorV2),
+            abi.encode(address(MKR_FRAX_PAIR))
+        );
+        // registry.trustPosition(
+        //     fraxlendDebtAPEPosition,
+        //     address(collateralFTokenAdaptorV2),
+        //     abi.encode(APE_FRAX_PAIR, address(APE))
+        // );
+        // registry.trustPosition(
+        //     fraxlendDebtAPEPosition,
+        //     address(debtFTokenAdaptorV2),
+        //     abi.encode(address(MKR_FRAX_PAIR))
+        // );
 
-    //     uint256 maxLTV = e18;
+        string memory cellarName = "Fraxlend Collateral & Debt Cellar V0.0";
+        uint256 initialDeposit = 1e18;
+        uint64 platformCut = 0.75e18;
 
-    //     string memory cellarName = "Fraxlend Collateral & Debt Cellar V0.0";
-    //     uint256 initialDeposit = 1e18;
-    //     uint64 platformCut = 0.75e18;
+        // Approve new cellar to spend assets.
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(address(MKR), address(this), initialDeposit);
+        MKR.approve(cellarAddress, initialDeposit);
 
-    //     // Approve new cellar to spend assets.
-    //     address cellarAddress = deployer.getAddress(cellarName);
-    //     deal(address(MKR), address(this), initialDeposit);
-    //     MKR.approve(cellarAddress, initialDeposit);
+        creationCode = type(Cellar).creationCode;
+        constructorArgs = abi.encode(
+            address(this),
+            registry,
+            MKR,
+            cellarName,
+            cellarName,
+            mkrPosition,
+            abi.encode(MKR),
+            initialDeposit,
+            platformCut,
+            type(uint192).max
+        );
 
-    //     creationCode = type(Cellar).creationCode;
-    //     constructorArgs = abi.encode(
-    //         address(this),
-    //         registry,
-    //         MKR,
-    //         cellarName,
-    //         cellarName,
-    //         fraxlendCollateralMKRPosition,
-    //         abi.encode(MKR_FRAX_PAIR, MKR),
-    //         initialDeposit,
-    //         platformCut,
-    //         type(uint192).max
-    //     );
+        cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
 
-    //     cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
+        cellar.addAdaptorToCatalogue(address(collateralFTokenAdaptorV2));
+        cellar.addAdaptorToCatalogue(address(debtFTokenAdaptorV2));
+        // TODO: add V1 adaptors
 
-    //     cellar.addAdaptorToCatalogue(address(collateralFTokenAdaptorV2));
-    //     cellar.addAdaptorToCatalogue(address(debtFTokenAdaptorV2));
-    //     // TODO: add V1 adaptors
+        cellar.addPositionToCatalogue(wethPosition);
+        cellar.addPositionToCatalogue(fraxlendCollateralMKRPosition);
+        cellar.addPositionToCatalogue(fraxlendDebtMKRPosition);
 
-    //     cellar.addPositionToCatalogue(mkrPosition);
-    //     cellar.addPositionToCatalogue(wethPosition);
-    //     cellar.addPositionToCatalogue(fraxlendCollateralMKRPosition);
-    //     cellar.addPositionTocatalogue(fraxlendDebtMKRPosition);
+        cellar.addPosition(1, wethPosition, abi.encode(0), false);
+        cellar.addPosition(2, fraxlendCollateralMKRPosition, abi.encode(0), false);
+        cellar.addPosition(0, fraxlendDebtMKRPosition, abi.encode(0), true);
 
-    //     cellar.addPosition(1, mkrPosition, abi.encode(0), false);
-    //     cellar.addPosition(2, wethPosition, abi.encode(0), false);
-    //     cellar.addPosition(3, fraxlendCollateralMKRPosition, abi.encode(0), false);
-    //     cellar.addPosition(0, fraxlendDebtMKRPosition, abi.encode(0), true);
+        MKR.safeApprove(address(cellar), type(uint256).max);
+        FRAX.safeApprove(address(cellar), type(uint256).max);
+        WETH.safeApprove(address(cellar), type(uint256).max);
 
-    //     MKR.safeApprove(address(cellar), type(uint256).max);
-    //     FRAX.safeApprove(address(cellar), type(uint256).max);
-    //     WETH.safeApprove(address(cellar), type(uint256).max);
+        // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
+        // stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
+    }
 
-    //     // Manipulate test contracts storage so that minimum shareLockPeriod is zero blocks.
-    //     // stdstore.target(address(cellar)).sig(cellar.shareLockPeriod.selector).checked_write(uint256(0));
-    // }
+    // test that holding position for adding collateral is being tracked properly and works upon user deposits
+    // TODO: EIN - WHERE I LEFT OFF, TEST IS FAILING FOR SOME REASON. ALSO WEIRD THAT I NEED TO IMPORT FOUNDRY FILES INTO THIS WHEN IT'S IN THE HELPER IMPORT.
+    function testDeposit(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+        initialAssets = cellar.totalAssets();
+        console.log("Cellar MKR balance: %s, initialAssets: %s", MKR.balanceOf(address(cellar)), initialAssets);
+        deal(address(MKR), address(this), assets);
+        cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
+        assertApproxEqAbs(
+            MKR.balanceOf(address(cellar)),
+            assets + initialAssets,
+            1,
+            "Cellar should have all deposited MKR assets"
+        );
 
-    // // test that holding position for adding collateral is being tracked properly and works upon user deposits
-    // function testDeposit(uint256 assets) external {
-    //     assets = bound(assets, 0.1e18, 100_000e18);
-    //     uint256 initialAssets = cellar.totalAssets();
-    //     deal(address(MKR), address(this), assets);
-    //     cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
-    //     assertApproxEqAbs(MKR.balanceOf(), 0, 1, "Assets should not be within Cellar.");
+        // TODO: carry out a proper deposit
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
 
-    //     bytes memory adaptorData = abi.encode(MKR_FRAX_PAIR, MKR);
-    //     assertApproxEqAbs(
-    //         collateralFTokenAdaptorV2.balanceOf(adaptorData),
-    //         assets + initialAssets,
-    //         1,
-    //         "Assets should be collateral provided to Fraxlend Pair."
-    //     );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
 
-    //     // TODO: decide to use this assert or the above one. This one reads directly from the fraxlendpair in the test, the other goes off the Adaptor balanceOf(). There should be specific tests for balanceOf() elsewhere, so we can use it in our tests.
-    //     assertApproxEqAbs(
-    //         mkrCollateralFToken.userCollateralBalance(address(cellar)),
-    //         assets + initialAssets,
-    //         1,
-    //         "Assets should be collateral provided to Fraxlend Pair."
-    //     );
-    // }
+        cellar.callOnAdaptor(data);
 
-    // // deposit into cellar - provide collateral, withdraw collateral --> should get all back.
-    // function testWithdraw(uint256 assets) external {
-    //     assets = bound(assets, 0.1e18, 100_000e18);
-    //     deal(address(MKR), address(this), assets);
-    //     cellar.deposit(assets, address(this));
+        assertApproxEqAbs(MKR.balanceOf(address(cellar)), 0, 1, "Assets should not be within Cellar.");
 
-    //     deal(address(MKR), address(this), 0);
-    //     uint256 amountToWithdraw = cellar.maxWithdraw(address(this)) - 1; // -1 accounts for rounding errors when supplying liquidity to aTokens.
-    //     cellar.withdraw(amountToWithdraw, address(this), address(this));
+        bytes memory adaptorData = abi.encode(MKR_FRAX_PAIR, MKR);
+        uint256 collateralAdaptorBalanceOf = collateralFTokenAdaptorV2.balanceOf(adaptorData);
+        uint256 newCellarCollateralBalance = mkrCollateralFToken.userCollateralBalance(address(cellar));
 
-    //     assertEq(MKR.balanceOf(address(this)), amountToWithdraw, "Amount withdrawn should equal callers MKR balance.");
-    // }
+        assertApproxEqAbs(
+            collateralAdaptorBalanceOf,
+            assets + initialAssets,
+            1,
+            "Assets should be collateral provided to Fraxlend Pair."
+        );
 
+        // TODO: decide to use this assert or the above one. This one reads directly from the fraxlendpair in the test, the other goes off the Adaptor balanceOf(). There should be specific tests for balanceOf() elsewhere, so we can use it in our tests.
+        assertApproxEqAbs(
+            newCellarCollateralBalance,
+            assets + initialAssets,
+            1,
+            "Assets should be collateral provided to Fraxlend Pair."
+        );
+    }
+
+    // // TODO: get it working
     // function testTotalAssets(uint256 assets) external {
     //     assets = bound(assets, 0.1e18, 100_000e18);
     //     uint256 initialAssets = cellar.totalAssets();
     //     deal(address(MKR), address(this), assets);
     //     cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
+
+    //     // TODO: carry out a proper deposit
+    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    //     bytes[] memory adaptorCalls = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
+    //     adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+
+    //     data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+
+    //     cellar.callOnAdaptor(data);
 
     //     assertApproxEqAbs(
     //         cellar.totalAssets(),

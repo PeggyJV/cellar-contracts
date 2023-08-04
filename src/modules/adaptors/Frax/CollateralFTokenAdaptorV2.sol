@@ -82,8 +82,9 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     ) public override {
         // use addCollateral() from fraxlendCore.sol
         (IFToken fraxlendPair, ERC20 collateralToken) = abi.decode(adaptorData, (IFToken, ERC20));
-        _validateFToken(fraxlendPair);
-        _validateCollateral(collateralToken);
+        _validateInputs(fraxlendPair, collateralToken);
+        // _validateFToken(fraxlendPair);
+        // _validateCollateral(collateralToken);
         address fraxlendPairAddress = address(fraxlendPair);
         collateralToken.safeApprove(fraxlendPairAddress, assets);
         fraxlendPair.addCollateral(assets, address(this));
@@ -151,12 +152,12 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
         ERC20 _collateralToken,
         uint256 _collateralToDeposit
     ) public {
-        _validateFToken(_fraxlendPair);
-        _validateCollateral(_collateralToken);
-        // amountToDeposit = _maxAvailable(collateralToken, amountToDeposit); // TODO: CRISPY QUESTION - not sure if we want to deposit the max or not by default... It depends if the strategist wants to do uint256.max or not for these cellars.
+        _validateInputs(_fraxlendPair, _collateralToken);
+
+        uint256 amountToDeposit = _maxAvailable(_collateralToken, _collateralToDeposit); 
         address fraxlendPair = address(_fraxlendPair);
-        _collateralToken.safeApprove(fraxlendPair, _collateralToDeposit);
-        _fraxlendPair.addCollateral(_collateralToDeposit, address(this));
+        _collateralToken.safeApprove(fraxlendPair, amountToDeposit);
+        _fraxlendPair.addCollateral(amountToDeposit, address(this));
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(_collateralToken, fraxlendPair);
@@ -248,21 +249,21 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      * @notice Validates that a given fToken is set up as a position in the Cellar.
      * @dev This function uses `address(this)` as the address of the Cellar.
      */
-    function _validateFToken(IFToken _fraxlendPair) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_fraxlendPair))));
+    function _validateInputs(IFToken _fraxlendPair, ERC20 _collateralToken) internal view {
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_fraxlendPair), address(_collateralToken))));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_fraxlendPair));
     }
 
-    /**
-     * @notice Validates that a given collateralToken is set up as a position in the Cellar.
-     * @dev This function uses `address(this)` as the address of the Cellar.
-     */
-    function _validateCollateral(ERC20 _collateralToken) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_collateralToken))));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_collateralToken));
-    }
+    // /**
+    //  * @notice Validates that a given collateralToken is set up as a position in the Cellar.
+    //  * @dev This function uses `address(this)` as the address of the Cellar.
+    //  */
+    // function _validateCollateral(ERC20 _collateralToken) internal view {
+    //     bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_collateralToken))));
+    //     uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+    //     if (!Cellar(address(this)).isPositionUsed(positionId))
+    //         revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_collateralToken));
+    // }
 }
