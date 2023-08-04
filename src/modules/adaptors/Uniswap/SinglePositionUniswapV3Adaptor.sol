@@ -28,8 +28,8 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(address pool, uint256 index)
     // Where:
-    // `token0` is the token0 of the UniV3 LP pair this adaptor is working with
-    // `token1` is the token1 of the UniV3 LP pair this adaptor is working with
+    // `pool` is UniV3 pool address
+    // `index` is index to use in the tracker
     //================= Configuration Data Specification =================
     // configurationData = abi.encode(bool isLiquid)
     // Where:
