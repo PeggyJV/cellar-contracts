@@ -89,9 +89,16 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
      */
     SinglePositionUniswapV3PositionTracker public immutable tracker;
 
-    constructor(address _positionManager, address _tracker) {
+    /**
+     * @dev Since this check is done on sqrtPriceX96, a 1% divergence tolerance corresponds to
+     *      a (1.01)^0.5 and a (0.99)^0.5 tolerance on the actual price.
+     */
+    uint16 public immutable allowedSqrtPriceDeviation;
+
+    constructor(address _positionManager, address _tracker, uint16 _allowedSqrtPriceDeviation) {
         positionManager = INonfungiblePositionManager(_positionManager);
         tracker = SinglePositionUniswapV3PositionTracker(_tracker);
+        allowedSqrtPriceDeviation = _allowedSqrtPriceDeviation;
     }
 
     //============================================ Global Functions ===========================================
@@ -486,6 +493,9 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
         }
     }
 
+    error UniswapV3Adaptor__SqrtPriceDivergence();
+
+    // TODO adaptor data could also store the allowed sqrt price divergence value....
     function _positionData(
         address caller,
         bytes memory adaptorData
@@ -497,10 +507,31 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
 
             token0 = ERC20(pool.token0());
             token1 = ERC20(pool.token1());
-            // Calculate current sqrtPrice.
+            // Get current sqrtPrice.
             (sqrtPriceX96, , , , , , ) = pool.slot0();
             position = tracker.getTokenAtIndex(caller, address(pool), index);
         }
+
+        // Make sure that Uniswap Tick, and PriceRouter derived tick are close enough.
+        {
+            uint256 precisionPrice;
+            PriceRouter priceRouter = Cellar(msg.sender).priceRouter();
+            uint256 baseToUSD = priceRouter.getPriceInUSD(token1);
+            uint256 quoteToUSD = priceRouter.getPriceInUSD(token0);
+            baseToUSD = baseToUSD * 1e18; // Multiply by 1e18 to keep some precision.
+            precisionPrice = baseToUSD.mulDivDown(10 ** token0.decimals(), quoteToUSD);
+            uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (precisionPrice / 1e18);
+            uint256 safeSqrtPriceX96 = _sqrt(ratioX192);
+
+            // Convert ticks into absolute values.
+            if (sqrtPriceX96 > safeSqrtPriceX96.mulDivDown(1e4 + allowedSqrtPriceDeviation, 1e4))
+                revert UniswapV3Adaptor__SqrtPriceDivergence();
+            if (sqrtPriceX96 < safeSqrtPriceX96.mulDivDown(1e4 - allowedSqrtPriceDeviation, 1e4))
+                revert UniswapV3Adaptor__SqrtPriceDivergence();
+        }
+
+        // Calculate current sqrtPrice.
+        // use TickMath.getTickAtSqrtRatio to get the chainlink derived tick
 
         if (position == 0 || positionManager.ownerOf(position) != caller) return (0, 0, position, token0, token1);
 
