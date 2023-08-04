@@ -90,13 +90,6 @@ contract SinglePositionUniswapV3PositionTracker {
 
     //============================== View Functions ===============================
 
-    /**
-     * @notice Return an array of tokens a caller owns for a given token0 and token1.
-     */
-    function getCallerTokenAtIndex(address pool, uint256 index) external view returns (uint256) {
-        return callerToPoolToIndexToPositionId[msg.sender][pool][index];
-    }
-
     function getTokenAtIndex(address user, address pool, uint256 index) external view returns (uint256) {
         return callerToPoolToIndexToPositionId[user][pool][index];
     }

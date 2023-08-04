@@ -216,7 +216,7 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
         int24 tickLower,
         int24 tickUpper
     ) public {
-        if (tracker.getCallerTokenAtIndex(address(pool), index) != 0)
+        if (tracker.getTokenAtIndex(address(this), address(pool), index) != 0)
             revert UniswapV3Adaptor__TrackerIndexAlreadyUsed(index);
 
         // Check that Uniswap V3 position is properly set up to be tracked in the Cellar.
@@ -266,7 +266,7 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
      * @param min1 the minimum amount of `token1` to get from closing this position
      */
     function closePosition(IUniswapV3Pool pool, uint256 index, uint256 min0, uint256 min1) public {
-        uint256 tokenId = tracker.getCallerTokenAtIndex(address(pool), index);
+        uint256 tokenId = tracker.getTokenAtIndex(address(this), address(pool), index);
         if (tokenId == 0) revert UniswapV3Adaptor__PositionNotInTracker(index);
 
         // Pass in true for `collectFees` since the token will be sent to the dead address.
@@ -299,7 +299,7 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
         /// Note we do not check if the position is setup to be used with the Cellar
         // because we enfroce that tokenId is non zero, which can only happen
         // if openPosition is called first.
-        uint256 tokenId = tracker.getCallerTokenAtIndex(address(pool), index);
+        uint256 tokenId = tracker.getTokenAtIndex(address(this), address(pool), index);
         if (tokenId == 0) revert UniswapV3Adaptor__PositionNotInTracker(index);
 
         // Read `token0` and `token1` from position manager.
@@ -373,7 +373,7 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
      * @dev Collect fees from position before purging.
      */
     function purgeSinglePosition(address pool, uint256 index) public {
-        uint256 tokenId = tracker.getCallerTokenAtIndex(address(pool), index);
+        uint256 tokenId = tracker.getTokenAtIndex(address(this), address(pool), index);
 
         (, , , , , , , uint128 liquidity, , , , ) = positionManager.positions(tokenId);
         if (liquidity == 0) {
