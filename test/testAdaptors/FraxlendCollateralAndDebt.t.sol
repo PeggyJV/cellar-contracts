@@ -458,71 +458,71 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
     //     // );
     // }
 
-    // // okay just seeing if we can handle multiple fraxlend positions
-    // // tests adding new positions too for new markets I guess
-    // function testMultipleATokensAndDebtTokens() external {
-    //     cellar.setRebalanceDeviation(0.004e18); // TODO: double check why setting rebalanceDeviation is needed
+    // okay just seeing if we can handle multiple fraxlend positions
+    // tests adding new positions too for new markets I guess
+    function testMultipleFraxlendPositions();() external {
+        // cellar.setRebalanceDeviation(0.004e18); // TODO: double check why setting rebalanceDeviation is needed
 
-    //     // Add new assets related to new fraxlendMarket; UNI_FRAX
-    //     uint32 uniPosition = 1_000_006;
-    //     registry.trustPosition(uniPosition, address(erc20Adaptor), abi.encode(UNI));
+        // // Add new assets related to new fraxlendMarket; UNI_FRAX
+        // uint32 uniPosition = 1_000_006;
+        // registry.trustPosition(uniPosition, address(erc20Adaptor), abi.encode(UNI));
 
-    //     mockUniEth = new MockDataFeed(UNI_ETH_FEED);
-    //     price = uint256(mockUniEth.latestAnswer());
-    //     settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockUniEth));
-    //     priceRouter.addAsset(UNI, settings, abi.encode(stor), price);
+        // mockUniEth = new MockDataFeed(UNI_ETH_FEED);
+        // price = uint256(mockUniEth.latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockUniEth));
+        // priceRouter.addAsset(UNI, settings, abi.encode(stor), price);
 
-    //     uint32 fraxlendCollateralUNIPosition = 1_000_007; // fralendV2
-    //     uint32 fraxlendDebtUNIPosition = 1_000_008; // fralendV2
-    //     registry.trustPosition(
-    //         fraxlendCollateralUNIPosition,
-    //         address(collateralFTokenAdaptorV2),
-    //         abi.encode(UNI_FRAX_PAIR, address(UNI))
-    //     );
-    //     registry.trustPosition(
-    //         fraxlendDebtUNIPosition,
-    //         address(debtFTokenAdaptorV2),
-    //         abi.encode(address(UNI_FRAX_PAIR))
-    //     );
-    //     cellar.addPositionToCatalogue(fraxlendCollateralUNIPosition);
-    //     cellar.addPositionToCatalogue(fraxlendDebtUNIPosition);
-    //     cellar.addPosition(4, fraxlendCollateralUNIPosition, abi.encode(0), false);
-    //     cellar.addPosition(1, fraxlendDebtUNIPosition, abi.encode(0), true);
+        // uint32 fraxlendCollateralUNIPosition = 1_000_007; // fralendV2
+        // uint32 fraxlendDebtUNIPosition = 1_000_008; // fralendV2
+        // registry.trustPosition(
+        //     fraxlendCollateralUNIPosition,
+        //     address(collateralFTokenAdaptorV2),
+        //     abi.encode(UNI_FRAX_PAIR, address(UNI))
+        // );
+        // registry.trustPosition(
+        //     fraxlendDebtUNIPosition,
+        //     address(debtFTokenAdaptorV2),
+        //     abi.encode(address(UNI_FRAX_PAIR))
+        // );
+        // cellar.addPositionToCatalogue(fraxlendCollateralUNIPosition);
+        // cellar.addPositionToCatalogue(fraxlendDebtUNIPosition);
+        // cellar.addPosition(4, fraxlendCollateralUNIPosition, abi.encode(0), false);
+        // cellar.addPosition(1, fraxlendDebtUNIPosition, abi.encode(0), true);
 
-    //     // multiple adaptor calls
-    //     // deposit MKR
-    //     // borrow FRAX
-    //     // deposit UNI
-    //     // borrow FRAX
-    //     assets = 100_000e18;
-    //     // uint256 initialAssets = cellar.totalAssets();
-    //     deal(address(MKR), address(this), assets);
-    //     deal(address(UNI), address(cellar), assets);
+        // // multiple adaptor calls
+        // // deposit MKR
+        // // borrow FRAX
+        // // deposit UNI
+        // // borrow FRAX
+        // assets = 100_000e18;
+        // // uint256 initialAssets = cellar.totalAssets();
+        // deal(address(MKR), address(this), assets);
+        // deal(address(UNI), address(cellar), assets);
 
-    //     cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
-    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
-    //     bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
-    //     bytes[] memory adaptorCallsSecondAdaptor = new bytes[](2); // debtAdaptor
-    //     adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralWithFraxlendV2(UNI_FRAX_PAIR, assets);
-    //     adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, assets / 2);
-    //     adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowWithFraxlendV2(UNI_FRAX_PAIR, assets / 2);
-    //     data[0] = Cellar.AdaptorCall({
-    //         adaptor: address(collateralFTokenAdaptorV2),
-    //         callData: adaptorCallsFirstAdaptor
-    //     });
-    //     data[1] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCallsSecondAdaptor });
-    //     cellar.callOnAdaptor(data);
+        // cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
+        // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
+        // bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
+        // bytes[] memory adaptorCallsSecondAdaptor = new bytes[](2); // debtAdaptor
+        // adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralWithFraxlendV2(UNI_FRAX_PAIR, assets);
+        // adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, assets / 2);
+        // adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowWithFraxlendV2(UNI_FRAX_PAIR, assets / 2);
+        // data[0] = Cellar.AdaptorCall({
+        //     adaptor: address(collateralFTokenAdaptorV2),
+        //     callData: adaptorCallsFirstAdaptor
+        // });
+        // data[1] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCallsSecondAdaptor });
+        // cellar.callOnAdaptor(data);
 
-    //     // TODO: checks showing that we have:
-    //     // 1. Check that we have the right amount of FRAX borrowed, the right amount of Collateral provided, the right LTV per position.
+        // // TODO: checks showing that we have:
+        // // 1. Check that we have the right amount of FRAX borrowed, the right amount of Collateral provided, the right LTV per position.
 
-    //     // TODO: carry out a repayment for one of the positions
-    //     // TODO: check that the repayment resulted in only one of the pairs LTV being improved.
-    //     // TODO: check cellar generic checks (totalAssets, withdrawableFrom, etc.)
+        // // TODO: carry out a repayment for one of the positions
+        // // TODO: check that the repayment resulted in only one of the pairs LTV being improved.
+        // // TODO: check cellar generic checks (totalAssets, withdrawableFrom, etc.)
 
-    //     uint256 maxAssets = cellar.maxWithdraw(address(this));
-    //     cellar.withdraw(maxAssets, address(this), address(this));
-    // }
+        // uint256 maxAssets = cellar.maxWithdraw(address(this));
+        // cellar.withdraw(maxAssets, address(this), address(this));
+    }
 
     // // This check stops strategists from taking on any debt in positions they do not set up properly.
     // // This stops the attack vector or strategists opening up an untracked debt position then depositing the funds into a vesting contract.

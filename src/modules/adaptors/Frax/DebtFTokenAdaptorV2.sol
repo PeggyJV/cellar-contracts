@@ -191,6 +191,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      * TODO: CRISPY --> from `FraxlendCore.sol` functions `repayAsset()` and `_repayAsset()` I don't see specific responses from the contracts if the amount of shares repaid >> amount of borrowShares even owed. Unless `-=` takes care of that.
      * Assuming the above is true, then we'll need to check how much borrowShares we need to pay. Then we can get the total amount of Frax we need to repay. So we could specify the amount of FRAX we're willing to repay (could be max), and then we calculate the amount of FRAX owing from fraxlend, then we check the two values to make sure it is less than the amount we're willing to repay. From there we can simply repay the shares. We then check that we have the expected change in borrowShares as per FraxLend accounting.
      * TODO: possibly add a bool and logic that will take the amount of FRAX required to repay the debt. I guess this could be unecessary since if we just do maxAvailable we'll pay with all the FRAX possible.
+     * TODO: remove params _tokenToRepay, and _sharesToRepay
      */
     function repayFraxlendDebt(
         IFToken _fraxlendPair,
