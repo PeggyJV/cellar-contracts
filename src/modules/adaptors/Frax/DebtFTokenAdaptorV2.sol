@@ -169,7 +169,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(fraxlendPair));
 
-        fraxlendPair.borrowAsset(amountToBorrow, 0, msg.sender); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
+        fraxlendPair.borrowAsset(amountToBorrow, 0, address(this)); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
 
         // Check LTV is still satisfactory
         (, uint256 _exchangeRate, ) = fraxlendPair.updateExchangeRate(); // needed to calculate LTV in next line
