@@ -118,7 +118,10 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry
+            _automationRegistry,
+            1e18,
+            0.1e4,
+            3e4
         );
 
         // Call first performUpkeep on Cellar.
@@ -134,7 +137,11 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         (, , bool notSafeToUse) = sharePriceOracle.getLatest();
         assertTrue(!notSafeToUse);
 
-        cellar.setSharePriceOracle(sharePriceOracle);
+        registry.register(address(this));
+
+        registry.register(address(sharePriceOracle));
+
+        cellar.setSharePriceOracle(4, sharePriceOracle);
     }
 
     function testDeposit(uint256 assets) external {
@@ -499,13 +506,112 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
+    function testCellarHandlingAnOracleWithKillSwitchActivated() external {
+        (, , bool isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!isNotSafeToUse, "Oracle should be safe to use.");
+
+        // User joins Cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), 4 * assets);
+        USDC.safeApprove(address(cellar), 4 * assets);
+        cellar.deposit(assets, address(this));
+
+        // But if oracle is updated with extreme value.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 4e4);
+
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(isNotSafeToUse, "Oracle should not be safe to use.");
+
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+
+        // Users are not able to enter or exit the Cellar.
+        vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
+        cellar.deposit(1, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
+        cellar.mint(1, address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
+        cellar.withdraw(1, address(this), address(this));
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
+        cellar.redeem(1, address(this), address(this));
+
+        // Strategist can still manage the cellar.
+        cellar.setRebalanceDeviation(0.01e18);
+        cellar.addPosition(1, usdtPosition, abi.encode(0), false);
+        cellar.addAdaptorToCatalogue(address(swapWithUniswapAdaptor));
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataForSwapWithUniv3(USDC, USDT, 100, type(uint256).max);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(swapWithUniswapAdaptor), callData: adaptorCalls });
+
+        cellar.callOnAdaptor(data);
+
+        // A new share price oracle is deployed and filled with observations.
+        ERC4626 _target = ERC4626(address(cellar));
+        uint64 _heartbeat = 1 days;
+        uint64 _deviationTrigger = 0.0005e4;
+        uint64 _gracePeriod = 60 * 60; // 1 hr
+        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+        address _automationRegistry = address(this);
+
+        // Deploy new share price oracle.
+        sharePriceOracle = new ERC4626SharePriceOracle(
+            _target,
+            _heartbeat,
+            _deviationTrigger,
+            _gracePeriod,
+            _observationsToUse,
+            _automationRegistry,
+            4e18,
+            0.1e4,
+            3e4
+        );
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!isNotSafeToUse, "Oracle should be safe to use.");
+
+        // Multisig trusts new share price oracle.
+        registry.register(address(sharePriceOracle));
+
+        // Governance trusts new share price oracle.
+        cellar.setSharePriceOracle(5, sharePriceOracle);
+
+        // Users are now able to exit/enter the Cellar.
+        uint256 shares = cellar.deposit(assets, address(this));
+
+        cellar.mint(shares, address(this));
+
+        shares = cellar.withdraw(assets, address(this), address(this));
+
+        cellar.redeem(shares, address(this), address(this));
+    }
+
     // ------------------------------------- Revert Tests -------------------------------------------------
     // Implement Decimals so that `setSharePriceOracle` reverts for the right reason.
-    uint256 public ORACLE_DECIMALS = 6;
+    uint256 public decimals = 6;
 
     function testAddingOracleWithWrongDecimalsReverts() external {
         vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
-        cellar.setSharePriceOracle(ERC4626SharePriceOracle(address(this)));
+        cellar.setSharePriceOracle(3, ERC4626SharePriceOracle(address(this)));
+    }
+
+    function testAddingOracleWithWrongRegistryIdReverts() external {
+        // Share price oracle is really at id 4.
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
+        cellar.setSharePriceOracle(2, ERC4626SharePriceOracle(address(sharePriceOracle)));
     }
 
     // Make sure if oracle answer is not safe to use deposits revert
@@ -520,7 +626,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.expectRevert(bytes(abi.encodeWithSelector(CellarWithOracle.Cellar__OracleFailure.selector)));
         cellar.deposit(assets, address(this));
 
-        cellar.setSharePriceOracle(sharePriceOracle);
+        cellar.setSharePriceOracle(4, sharePriceOracle);
 
         vm.warp(block.timestamp + 1 days + 3_601);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -531,7 +637,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function testSettingSharePriceOracleToZeroAddressReverts() external {
         vm.expectRevert();
-        cellar.setSharePriceOracle(ERC4626SharePriceOracle(address(0)));
+        cellar.setSharePriceOracle(10, ERC4626SharePriceOracle(address(0)));
     }
 
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {

@@ -27,8 +27,8 @@ contract StEthExtension is Extension {
     uint32 public constant MINIMUM_SECONDS_AGO = 900;
 
     /**
-     * @notice The bps the curve and chainlink answer can differ by, and still use the curve answer.
-     * @dev If curve and chainlink answers differ by more than this, chainlink is used by default.
+     * @notice The bps the uniswap and chainlink answer can differ by, and still use the uniswap answer.
+     * @dev If uniswap and chainlink answers differ by more than this, chainlink is used by default.
      */
     uint256 public immutable allowedDivergence;
 
@@ -114,7 +114,7 @@ contract StEthExtension is Extension {
      */
     function setupSource(ERC20 asset, bytes memory) external view override onlyPriceRouter {
         if (address(asset) != address(stEth)) revert StEthExtension__ASSET_NOT_STETH();
-        // Make sure we can get prices from above sources
+        // Make sure we can get prices from above sources.
         getAnswerFromChainlink();
         getAnswerFromUniswap();
     }
@@ -134,7 +134,7 @@ contract StEthExtension is Extension {
 
         uint256 answerToUse;
 
-        // Compare the two, if they are within allowed divergence, use curve ema, otherwise use chainlink value.
+        // Compare the two, if they are within allowed divergence, use uniswap twap, otherwise use chainlink value.
         if (uniswapAnswer > 0) {
             if (uniswapAnswer > chainlinkAnswer) {
                 if (chainlinkAnswer.mulDivDown(1e4 + allowedDivergence, 1e4) < uniswapAnswer)
@@ -166,7 +166,7 @@ contract StEthExtension is Extension {
     }
 
     /**
-     * @notice Get Curve Answer, validating price is reasonable.
+     * @notice Get Uniswap answer, validating price is reasonable.
      * @dev Below call to `consult` would revert with error "OLD" if oldest observation is not old enough, but in this case,
      *      we do not want to revert, instead we want to default to use the Chainlink Answer.
      */

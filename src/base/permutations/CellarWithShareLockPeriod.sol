@@ -33,6 +33,13 @@ contract CellarWithShareLockPeriod is Cellar {
     {}
 
     /**
+     * @notice Emitted when share locking period is changed.
+     * @param oldPeriod the old locking period
+     * @param newPeriod the new locking period
+     */
+    event ShareLockingPeriodChanged(uint256 oldPeriod, uint256 newPeriod);
+
+    /**
      * @notice Attempted to set `shareLockPeriod` to an invalid number.
      */
     error Cellar__InvalidShareLockPeriod();

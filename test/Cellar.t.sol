@@ -582,6 +582,8 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
             bytes(abi.encodeWithSelector(Cellar.Cellar__InvalidHoldingPosition.selector, debtUsdcPosition))
         );
         cellar.setHoldingPosition(debtUsdcPosition);
+
+        registry.distrustPosition(debtUsdcPosition);
         cellar.forcePositionOut(0, debtUsdcPosition, true);
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__DebtMismatch.selector, debtWethPosition)));
@@ -622,10 +624,15 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.removePosition(2, false);
 
         // Try forcing out the wrong position.
-        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ForcingOutWrongPosition.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__FailedToForceOutPosition.selector)));
         cellar.forcePositionOut(4, wethPosition, false);
 
-        // When correct index is used, call works.
+        // Try forcing out a position that is trusted
+        vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__FailedToForceOutPosition.selector)));
+        cellar.forcePositionOut(2, wethPosition, false);
+
+        // When correct index is used, and position is distrusted call works.
+        registry.distrustPosition(wethPosition);
         cellar.forcePositionOut(2, wethPosition, false);
 
         assertTrue(!cellar.isPositionUsed(wethPosition), "WETH Position should have been forced out.");
@@ -1060,6 +1067,12 @@ contract CellarTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(Cellar.Cellar__ExpectedAddressDoesNotMatchActual.selector)));
         cellar.setAutomationActions(3, automationActions);
+
+        // Try setting automation actions to registry id 0.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Cellar.Cellar__SettingValueToRegistryIdZeroIsProhibited.selector))
+        );
+        cellar.setAutomationActions(0, automationActions);
     }
 
     // ======================================== DEPEGGING ASSET TESTS ========================================
