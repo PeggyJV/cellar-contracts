@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 // Import Adaptors
-import { DSRAdaptor, DSRManager } from "src/modules/adaptors/Maker/DSRAdaptor.sol";
+import { DSRAdaptor, DSRManager, Pot } from "src/modules/adaptors/Maker/DSRAdaptor.sol";
 
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 
@@ -120,8 +120,6 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(DAI), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        console.log("TA", cellar.totalAssets());
-
         uint256 assetsBefore = cellar.totalAssets();
 
         vm.warp(block.timestamp + 1 days);
@@ -136,7 +134,82 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 maxRedeem = cellar.maxRedeem(address(this));
         cellar.redeem(maxRedeem, address(this), address(this));
 
+        assertApproxEqAbs(DAI.balanceOf(address(this)), assets, 3, "Should have sent DAI to the user.");
+
         uint256 bal = manager.daiBalance(address(cellar));
         assertGt(bal, 0, "Balance should have left pending yield in DSR.");
+    }
+
+    function testStrategistFunctions(uint256 assets) external {
+        cellar.setHoldingPosition(daiPosition);
+
+        assets = bound(assets, 0.1e18, 1_000_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Deposit half the DAI into DSR.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToJoinDsr(assets / 2);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(dsrAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        uint256 cellarDsrBalance = manager.daiBalance(address(cellar));
+
+        assertApproxEqAbs(cellarDsrBalance, assets / 2, 2, "Should have deposited half the assets into the DSR.");
+
+        // Advance some time.
+        vm.warp(block.timestamp + 1 days);
+        mockDaiUsd.setMockUpdatedAt(block.timestamp);
+
+        console.log(Pot(manager.pot()).chi());
+
+        // Deposit remaining assets into DSR.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToJoinDsr(type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(dsrAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        console.log(Pot(manager.pot()).chi());
+
+        cellarDsrBalance = manager.daiBalance(address(cellar));
+        assertGt(cellarDsrBalance, assets + initialAssets, "Should have deposited all the assets into the DSR.");
+
+        // Advance some time.
+        vm.warp(block.timestamp + 10 days);
+        mockDaiUsd.setMockUpdatedAt(block.timestamp);
+
+        // Withdraw half the assets.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToExitDsr(assets / 2);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(dsrAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqAbs(
+            DAI.balanceOf(address(cellar)),
+            assets / 2,
+            1,
+            "Should have withdrawn half the assets from the DSR."
+        );
+
+        // Withdraw remaining  assets.
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToExitDsr(type(uint256).max);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(dsrAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        assertGt(
+            DAI.balanceOf(address(cellar)),
+            assets + initialAssets,
+            "Should have withdrawn all the assets from the DSR."
+        );
     }
 }

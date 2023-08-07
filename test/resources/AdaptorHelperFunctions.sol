@@ -38,6 +38,9 @@ import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellarAdaptor.sol";
 
+// Maker
+import { DSRAdaptor } from "src/modules/adaptors/Maker/DSRAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 contract AdaptorHelperFunctions {
@@ -435,5 +438,15 @@ contract AdaptorHelperFunctions {
         address oracle
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(LegacyCellarAdaptor.withdrawFromCellar.selector, cellar, assets, oracle);
+    }
+
+    // ========================================= Maker FUNCTIONS =========================================
+
+    function _createBytesDataToJoinDsr(uint256 assets) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(DSRAdaptor.join.selector, assets);
+    }
+
+    function _createBytesDataToExitDsr(uint256 assets) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(DSRAdaptor.exit.selector, assets);
     }
 }
