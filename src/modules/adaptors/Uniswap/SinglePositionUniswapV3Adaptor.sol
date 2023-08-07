@@ -89,16 +89,9 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
      */
     SinglePositionUniswapV3PositionTracker public immutable tracker;
 
-    /**
-     * @dev Since this check is done on sqrtPriceX96, a 1% divergence tolerance corresponds to
-     *      a (1.01)^0.5 and a (0.99)^0.5 tolerance on the actual price.
-     */
-    uint16 public immutable allowedSqrtPriceDeviation;
-
-    constructor(address _positionManager, address _tracker, uint16 _allowedSqrtPriceDeviation) {
+    constructor(address _positionManager, address _tracker) {
         positionManager = INonfungiblePositionManager(_positionManager);
         tracker = SinglePositionUniswapV3PositionTracker(_tracker);
-        allowedSqrtPriceDeviation = _allowedSqrtPriceDeviation;
     }
 
     //============================================ Global Functions ===========================================
@@ -493,9 +486,6 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
         }
     }
 
-    error UniswapV3Adaptor__SqrtPriceDivergence();
-
-    // TODO adaptor data could also store the allowed sqrt price divergence value....
     function _positionData(
         address caller,
         bytes memory adaptorData
@@ -512,7 +502,7 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
             position = tracker.getTokenAtIndex(caller, address(pool), index);
         }
 
-        // Make sure that Uniswap Tick, and PriceRouter derived tick are close enough.
+        // Use chainlink derived sqrt price.
         {
             uint256 precisionPrice;
             PriceRouter priceRouter = Cellar(msg.sender).priceRouter();
@@ -521,13 +511,7 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
             baseToUSD = baseToUSD * 1e18; // Multiply by 1e18 to keep some precision.
             precisionPrice = baseToUSD.mulDivDown(10 ** token0.decimals(), quoteToUSD);
             uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (precisionPrice / 1e18);
-            uint256 safeSqrtPriceX96 = _sqrt(ratioX192);
-
-            // Convert ticks into absolute values.
-            if (sqrtPriceX96 > safeSqrtPriceX96.mulDivDown(1e4 + allowedSqrtPriceDeviation, 1e4))
-                revert UniswapV3Adaptor__SqrtPriceDivergence();
-            if (sqrtPriceX96 < safeSqrtPriceX96.mulDivDown(1e4 - allowedSqrtPriceDeviation, 1e4))
-                revert UniswapV3Adaptor__SqrtPriceDivergence();
+            sqrtPriceX96 = _sqrt(ratioX192).toUint160();
         }
 
         // Calculate current sqrtPrice.
@@ -549,11 +533,6 @@ contract SinglePositionUniswapV3Adaptor is BaseAdaptor {
             TickMath.getSqrtRatioAtTick(tickUpper),
             liquidity
         );
-
-        // TODO we could add a check here to make sure the pool tick is not being manipulated. Like if we use the
-        // Chainlink price we could derive a safe pool tick.
-        // TODO could calcualte swrtPriceX96 from chainlink, then enforce it is within 1% or maybe base it off the pool fee.
-        // TODO could be config data that is bounded based off the pool fee
 
         return (
             amount0 + Cellar(caller).priceRouter().getValue(token1, amount1, token0),

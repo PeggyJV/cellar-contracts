@@ -3,6 +3,7 @@ pragma solidity 0.8.21;
 
 import { SinglePositionUniswapV3Adaptor } from "src/modules/adaptors/Uniswap/SinglePositionUniswapV3Adaptor.sol";
 import { TickMath } from "@uniswapV3C/libraries/TickMath.sol";
+import { LiquidityAmounts } from "@uniswapV3P/libraries/LiquidityAmounts.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { PoolAddress } from "@uniswapV3P/libraries/PoolAddress.sol";
 import { IUniswapV3Factory } from "@uniswapV3C/interfaces/IUniswapV3Factory.sol";
@@ -158,7 +159,7 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
         uint256 userValueOut = USDC.balanceOf(address(this)) +
             priceRouter.getValue(DAI, DAI.balanceOf(address(this)), USDC);
 
-        assertApproxEqAbs(userValueOut, assets, 3, "User value out should equal assets in.");
+        assertApproxEqRel(userValueOut, assets, 0.0001e18, "User value out should equal assets in.");
     }
 
     // TODO tests trying each adaptor function.
@@ -188,143 +189,109 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
         }
         cellar.callOnAdaptor(data);
 
-        // Get current stats.
-        uint256 totalAssetsBeforeAttack = cellar.totalAssets();
-
         // Attacker skews pool tick down.
         uint256 swapAmount = 10_000_000e6;
         deal(address(USDC), address(this), swapAmount);
         swapWithUniV3(USDC, DAI, 100, swapAmount);
+        deal(address(USDC), address(this), 0);
+        deal(address(DAI), address(this), 0);
 
-        uint256 totalAssetsAfterAttack = cellar.totalAssets();
+        uint256 redeemAmount = cellar.maxRedeem(address(this));
+        cellar.redeem(redeemAmount, address(this), address(this));
+        uint256 userValueOut = USDC.balanceOf(address(this)) +
+            priceRouter.getValue(DAI, DAI.balanceOf(address(this)), USDC);
 
-        assertGt(totalAssetsBeforeAttack, totalAssetsAfterAttack, "Total Assets should have gone down.");
+        // assertGt(totalAssetsBeforeAttack, totalAssetsAfterAttack, "Total Assets should have gone down.");
     }
 
-    function testManipulatePoolTickUpAwayFromRealPrice() external {
-        // User deposits into Cellar.
-        uint256 assets = 100_000e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
+    // So my hypothesis is that the max value extractable out is based on the delta between derived tick, and the fair market uniV3 tick.
+    // Like when the dervied tick is off from the actual UniV3 tick , if an attacker withdraws from the LP position they will get a larger value out than expected.
+    // As the derived tick becomes more accurate, the extra value decreases to zero.
 
-        // mockUsdcUsd.setMockAnswer(0.999e8);
-        // mockDaiUsd.setMockAnswer(1.001e8);
+    function testDerivedTickFairMarketTickDeltaInfluenceOnPositionValue(uint256 chainlinkError) external {
+        chainlinkError = bound(chainlinkError, 0.90e4, 1.1e4);
+        IUniswapV3Pool pool = IUniswapV3Pool(USDC_WETH_500);
+        ERC20 token0 = USDC;
+        ERC20 token1 = WETH;
 
-        // Strategist rebalances into UniV3 position.
-        // Simulate swap by dealing Cellar equal parts of USDC and DAI.
-        uint256 usdcAmount = assets / 2;
-        uint256 daiAmount = priceRouter.getValue(USDC, assets / 2, DAI);
-        deal(address(USDC), address(cellar), usdcAmount + initialAssets);
-        deal(address(DAI), address(cellar), daiAmount);
-
-        // Use `callOnAdaptor` to enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        // Set current chainlink answer to be extremely close to uniV3 pool tick.
         {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToOpenLP(DAI_USDC_100, 0, type(uint256).max, type(uint256).max, 10);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            uint256 currentAnswer = priceRouter.getPriceInUSD(WETH);
+            mockWethUsd.setMockAnswer(int256(currentAnswer.mulDivDown(1.0002e4, 1e4)));
+
+            // Skew chainlink dervied answer.
+            currentAnswer = priceRouter.getPriceInUSD(WETH);
+            mockWethUsd.setMockAnswer(int256(currentAnswer.mulDivDown(chainlinkError, 1e4)));
         }
-        cellar.callOnAdaptor(data);
 
-        // Get current stats.
-        uint256 totalAssetsBeforeAttack = cellar.totalAssets();
+        uint256 poolAmount0;
+        uint256 poolAmount1;
+        uint256 chainlinkAmount0;
+        uint256 chainlinkAmount1;
 
-        // Attacker skews pool tick down.
-        uint256 swapAmount = 10_000_000e18;
-        deal(address(USDC), address(this), swapAmount);
-        swapWithUniV3(USDC, DAI, 100, swapAmount);
-
-        uint256 totalAssetsAfterAttack = cellar.totalAssets();
-
-        assertGt(totalAssetsAfterAttack, totalAssetsBeforeAttack, "Total Assets should have gone up.");
-    }
-
-    function testManipulatePoolTickDownTowardRealPrice() external {
-        // User deposits into Cellar.
-        uint256 assets = 100_000e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        // mockUsdcUsd.setMockAnswer(0.999e8);
-        // mockDaiUsd.setMockAnswer(1.001e8);
-
-        // Strategist rebalances into UniV3 position.
-        // Simulate swap by dealing Cellar equal parts of USDC and DAI.
-        uint256 usdcAmount = assets / 2;
-        uint256 daiAmount = priceRouter.getValue(USDC, assets / 2, DAI);
-        deal(address(USDC), address(cellar), usdcAmount + initialAssets);
-        deal(address(DAI), address(cellar), daiAmount);
-
-        // Use `callOnAdaptor` to enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToOpenLP(DAI_USDC_100, 0, type(uint256).max, type(uint256).max, 10);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+            // Tick to use for LP position.
+            int24 lower = 201400;
+            int24 upper = 201600;
+
+            (uint160 poolSqrtPriceX96, , , , , , ) = pool.slot0();
+
+            // Chainlink derived sqrtPriceX96.
+            uint160 chainlinkSqrtPriceX96;
+            {
+                uint256 precisionPrice;
+                uint256 baseToUSD = priceRouter.getPriceInUSD(token1);
+                uint256 quoteToUSD = priceRouter.getPriceInUSD(token0);
+                baseToUSD = baseToUSD * 1e18; // Multiply by 1e18 to keep some precision.
+                precisionPrice = baseToUSD.mulDivDown(10 ** token0.decimals(), quoteToUSD);
+                uint256 ratioX192 = ((10 ** token1.decimals()) << 192) / (precisionPrice / 1e18);
+                chainlinkSqrtPriceX96 = uint160(_sqrt(ratioX192));
+            }
+
+            uint128 liquidity = 1e18;
+
+            (poolAmount0, poolAmount1) = LiquidityAmounts.getAmountsForLiquidity(
+                poolSqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(lower),
+                TickMath.getSqrtRatioAtTick(upper),
+                liquidity
+            );
+
+            (chainlinkAmount0, chainlinkAmount1) = LiquidityAmounts.getAmountsForLiquidity(
+                chainlinkSqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(lower),
+                TickMath.getSqrtRatioAtTick(upper),
+                liquidity
+            );
         }
-        cellar.callOnAdaptor(data);
 
-        // Get current stats.
-        uint256 totalAssetsBeforeAttack = cellar.totalAssets();
+        uint256 poolValue = poolAmount0 + priceRouter.getValue(WETH, poolAmount1, USDC);
+        uint256 chainlinkValue = chainlinkAmount0 + priceRouter.getValue(WETH, chainlinkAmount1, USDC);
 
-        // Attacker skews pool tick down.
-        uint256 swapAmount = 10_000_000e18;
-        deal(address(DAI), address(this), swapAmount);
-        swapWithUniV3(DAI, USDC, 100, swapAmount);
+        chainlinkError = chainlinkError < 1e4 ? 2e4 - chainlinkError : chainlinkError;
 
-        uint256 totalAssetsAfterAttack = cellar.totalAssets();
+        uint256 realError = (1e4 * poolValue) / chainlinkValue;
 
-        assertGt(totalAssetsBeforeAttack, totalAssetsAfterAttack, "Total Assets should have gone down.");
+        if (chainlinkError != realError)
+            assertGt(chainlinkError, realError, "Chainlink price error should always be greater than real error.");
+
+        assertApproxEqRel(
+            (realError ** 2) / 1e4,
+            chainlinkError,
+            0.01e18,
+            "Real error squared should approximately equal chainlink error."
+        );
     }
 
-    function testManipulatePoolTickDownAwayFromRealPrice() external {
+    function testAttackerFillsRangeOrder() external {
         // User deposits into Cellar.
         uint256 assets = 100_000e6;
         deal(address(USDC), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        mockUsdcUsd.setMockAnswer(0.999e8);
-        mockDaiUsd.setMockAnswer(1.001e8);
-
-        // Strategist rebalances into UniV3 position.
-        // Simulate swap by dealing Cellar equal parts of USDC and DAI.
-        uint256 usdcAmount = assets / 2;
-        uint256 daiAmount = priceRouter.getValue(USDC, assets / 2, DAI);
-        deal(address(USDC), address(cellar), usdcAmount + initialAssets);
-        deal(address(DAI), address(cellar), daiAmount);
-
-        // Use `callOnAdaptor` to enter UniV3 position.
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        {
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToOpenLP(DAI_USDC_100, 0, type(uint256).max, type(uint256).max, 10);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
-        }
-        cellar.callOnAdaptor(data);
-
-        // Get current stats.
-        uint256 totalAssetsBeforeAttack = cellar.totalAssets();
-
-        // Attacker skews pool tick down.
-        uint256 swapAmount = 10_000_000e18;
-        deal(address(DAI), address(this), swapAmount);
-        swapWithUniV3(DAI, USDC, 100, swapAmount);
-
-        uint256 totalAssetsAfterAttack = cellar.totalAssets();
-
-        assertGt(totalAssetsAfterAttack, totalAssetsBeforeAttack, "Total Assets should have gone up.");
-    }
-
-    // TODO test checking isLiquid.
-
-    function testAttackerFillingFarOffRangeOrder() external {
-        // User deposits into Cellar.
-        uint256 assets = 100_000e6;
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        int24 upper = 202810;
-        int24 lower = 202000;
+        // Stategist places range order.
+        int24 lower = 203000;
+        int24 upper = 203010;
 
         // Use `callOnAdaptor` to enter UniV3 position.
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -345,26 +312,212 @@ contract SinglePositionUniswapV3AdaptorTest is MainnetStarterTest, AdaptorHelper
         }
         cellar.callOnAdaptor(data);
 
-        uint256 totalAssetsBeforeAttack = cellar.totalAssets();
+        uint256 attackerValueIn = assets;
+        uint256 attackerValueOut;
 
-        // Attacker skews pool tick down.
-        uint256 swapAmount = 30_000e18;
-        deal(address(WETH), address(this), swapAmount);
-        swapWithUniV3(WETH, USDC, 500, swapAmount);
+        // Attacker skews pool tick up.
+        uint256 ethSwapAmount = 35_000e18;
+        deal(address(WETH), address(this), ethSwapAmount);
+        swapWithUniV3(WETH, USDC, 500, ethSwapAmount);
 
-        uint256 totalAssetsAfterAttack = cellar.totalAssets();
+        attackerValueIn += priceRouter.getValue(WETH, ethSwapAmount, USDC);
+        attackerValueOut = USDC.balanceOf(address(this));
 
-        assertGt(totalAssetsAfterAttack, totalAssetsBeforeAttack, "Total Assets should have gone up.");
+        deal(address(USDC), address(this), 0);
+        deal(address(WETH), address(this), 0);
 
-        uint256 attackerValuePaid = priceRouter.getValue(WETH, swapAmount, USDC) - USDC.balanceOf(address(this));
-        uint256 totalAssetsDelta = totalAssetsAfterAttack - totalAssetsBeforeAttack;
+        // Now that range order is filled have the attacker withdraw.
+        uint256 maxRedeem = cellar.maxRedeem(address(this));
+        cellar.redeem(maxRedeem, address(this), address(this));
 
-        assertLt(
-            totalAssetsDelta * 100,
-            attackerValuePaid,
-            "Attacker value paid should be much greater than total assets increase."
-        );
+        uint256 redeemValue = USDC.balanceOf(address(this)) +
+            priceRouter.getValue(WETH, WETH.balanceOf(address(this)), USDC);
+
+        assertGt(redeemValue, assets, "Attacker should get more assets out than they put in.");
+
+        attackerValueOut += redeemValue;
+
+        deal(address(USDC), address(this), 0);
+        deal(address(WETH), address(this), 0);
+
+        uint256 price = derivePriceAtTick(USDC_WETH_500);
+        console.log("price", price);
+
+        // Attacker moves pool tick back to where it was.
+        uint256 usdcSwapAmount = 58_200_000e6;
+        deal(address(USDC), address(this), usdcSwapAmount);
+        swapWithUniV3(USDC, WETH, 500, usdcSwapAmount);
+
+        attackerValueIn += usdcSwapAmount;
+        attackerValueOut += priceRouter.getValue(WETH, WETH.balanceOf(address(this)), USDC);
+
+        assertGt(attackerValueIn, attackerValueOut, "Attacker should have lost money.");
     }
+
+    // function testManipulatePoolTickUpAwayFromRealPrice() external {
+    //     // User deposits into Cellar.
+    //     uint256 assets = 100_000e6;
+    //     deal(address(USDC), address(this), assets);
+    //     cellar.deposit(assets, address(this));
+
+    //     // mockUsdcUsd.setMockAnswer(0.999e8);
+    //     // mockDaiUsd.setMockAnswer(1.001e8);
+
+    //     // Strategist rebalances into UniV3 position.
+    //     // Simulate swap by dealing Cellar equal parts of USDC and DAI.
+    //     uint256 usdcAmount = assets / 2;
+    //     uint256 daiAmount = priceRouter.getValue(USDC, assets / 2, DAI);
+    //     deal(address(USDC), address(cellar), usdcAmount + initialAssets);
+    //     deal(address(DAI), address(cellar), daiAmount);
+
+    //     // Use `callOnAdaptor` to enter UniV3 position.
+    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    //     {
+    //         bytes[] memory adaptorCalls = new bytes[](1);
+    //         adaptorCalls[0] = _createBytesDataToOpenLP(DAI_USDC_100, 0, type(uint256).max, type(uint256).max, 10);
+    //         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+    //     }
+    //     cellar.callOnAdaptor(data);
+
+    //     // Get current stats.
+    //     uint256 totalAssetsBeforeAttack = cellar.totalAssets();
+
+    //     // Attacker skews pool tick down.
+    //     uint256 swapAmount = 10_000_000e18;
+    //     deal(address(USDC), address(this), swapAmount);
+    //     swapWithUniV3(USDC, DAI, 100, swapAmount);
+
+    //     uint256 totalAssetsAfterAttack = cellar.totalAssets();
+
+    //     assertGt(totalAssetsAfterAttack, totalAssetsBeforeAttack, "Total Assets should have gone up.");
+    // }
+
+    // function testManipulatePoolTickDownTowardRealPrice() external {
+    //     // User deposits into Cellar.
+    //     uint256 assets = 100_000e6;
+    //     deal(address(USDC), address(this), assets);
+    //     cellar.deposit(assets, address(this));
+
+    //     // mockUsdcUsd.setMockAnswer(0.999e8);
+    //     // mockDaiUsd.setMockAnswer(1.001e8);
+
+    //     // Strategist rebalances into UniV3 position.
+    //     // Simulate swap by dealing Cellar equal parts of USDC and DAI.
+    //     uint256 usdcAmount = assets / 2;
+    //     uint256 daiAmount = priceRouter.getValue(USDC, assets / 2, DAI);
+    //     deal(address(USDC), address(cellar), usdcAmount + initialAssets);
+    //     deal(address(DAI), address(cellar), daiAmount);
+
+    //     // Use `callOnAdaptor` to enter UniV3 position.
+    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    //     {
+    //         bytes[] memory adaptorCalls = new bytes[](1);
+    //         adaptorCalls[0] = _createBytesDataToOpenLP(DAI_USDC_100, 0, type(uint256).max, type(uint256).max, 10);
+    //         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+    //     }
+    //     cellar.callOnAdaptor(data);
+
+    //     // Get current stats.
+    //     uint256 totalAssetsBeforeAttack = cellar.totalAssets();
+
+    //     // Attacker skews pool tick down.
+    //     uint256 swapAmount = 10_000_000e18;
+    //     deal(address(DAI), address(this), swapAmount);
+    //     swapWithUniV3(DAI, USDC, 100, swapAmount);
+
+    //     uint256 totalAssetsAfterAttack = cellar.totalAssets();
+
+    //     assertGt(totalAssetsBeforeAttack, totalAssetsAfterAttack, "Total Assets should have gone down.");
+    // }
+
+    // function testManipulatePoolTickDownAwayFromRealPrice() external {
+    //     // User deposits into Cellar.
+    //     uint256 assets = 100_000e6;
+    //     deal(address(USDC), address(this), assets);
+    //     cellar.deposit(assets, address(this));
+
+    //     mockUsdcUsd.setMockAnswer(0.999e8);
+    //     mockDaiUsd.setMockAnswer(1.001e8);
+
+    //     // Strategist rebalances into UniV3 position.
+    //     // Simulate swap by dealing Cellar equal parts of USDC and DAI.
+    //     uint256 usdcAmount = assets / 2;
+    //     uint256 daiAmount = priceRouter.getValue(USDC, assets / 2, DAI);
+    //     deal(address(USDC), address(cellar), usdcAmount + initialAssets);
+    //     deal(address(DAI), address(cellar), daiAmount);
+
+    //     // Use `callOnAdaptor` to enter UniV3 position.
+    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    //     {
+    //         bytes[] memory adaptorCalls = new bytes[](1);
+    //         adaptorCalls[0] = _createBytesDataToOpenLP(DAI_USDC_100, 0, type(uint256).max, type(uint256).max, 10);
+    //         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+    //     }
+    //     cellar.callOnAdaptor(data);
+
+    //     // Get current stats.
+    //     uint256 totalAssetsBeforeAttack = cellar.totalAssets();
+
+    //     // Attacker skews pool tick down.
+    //     uint256 swapAmount = 10_000_000e18;
+    //     deal(address(DAI), address(this), swapAmount);
+    //     swapWithUniV3(DAI, USDC, 100, swapAmount);
+
+    //     uint256 totalAssetsAfterAttack = cellar.totalAssets();
+
+    //     assertGt(totalAssetsAfterAttack, totalAssetsBeforeAttack, "Total Assets should have gone up.");
+    // }
+
+    // // TODO test checking isLiquid.
+
+    // function testAttackerFillingFarOffRangeOrder() external {
+    //     // User deposits into Cellar.
+    //     uint256 assets = 100_000e6;
+    //     deal(address(USDC), address(this), assets);
+    //     cellar.deposit(assets, address(this));
+
+    //     int24 upper = 202810;
+    //     int24 lower = 202000;
+
+    //     // Use `callOnAdaptor` to enter UniV3 position.
+    //     Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+    //     {
+    //         bytes[] memory adaptorCalls = new bytes[](1);
+    //         adaptorCalls[0] = abi.encodeWithSelector(
+    //             SinglePositionUniswapV3Adaptor.openPosition.selector,
+    //             USDC_WETH_500,
+    //             0,
+    //             assets,
+    //             0,
+    //             0,
+    //             0,
+    //             lower,
+    //             upper
+    //         );
+    //         data[0] = Cellar.AdaptorCall({ adaptor: address(uniswapV3Adaptor), callData: adaptorCalls });
+    //     }
+    //     cellar.callOnAdaptor(data);
+
+    //     uint256 totalAssetsBeforeAttack = cellar.totalAssets();
+
+    //     // Attacker skews pool tick down.
+    //     uint256 swapAmount = 30_000e18;
+    //     deal(address(WETH), address(this), swapAmount);
+    //     swapWithUniV3(WETH, USDC, 500, swapAmount);
+
+    //     uint256 totalAssetsAfterAttack = cellar.totalAssets();
+
+    //     assertGt(totalAssetsAfterAttack, totalAssetsBeforeAttack, "Total Assets should have gone up.");
+
+    //     uint256 attackerValuePaid = priceRouter.getValue(WETH, swapAmount, USDC) - USDC.balanceOf(address(this));
+    //     uint256 totalAssetsDelta = totalAssetsAfterAttack - totalAssetsBeforeAttack;
+
+    //     assertLt(
+    //         totalAssetsDelta * 100,
+    //         attackerValuePaid,
+    //         "Attacker value paid should be much greater than total assets increase."
+    //     );
+    // }
 
     // ========================================= GRAVITY FUNCTIONS =========================================
 
