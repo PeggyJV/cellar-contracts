@@ -200,18 +200,21 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     ) public {
         // TODO: add a maxAvailable check to see how much is needed to repay off entire loan
         // amountToRepay = _maxAvailable(FRAX, maxAmountToRepay);
-
+        uint256 sharesToRepay = _fraxlendPair.userBorrowShares(address(this)); 
+        if(_sharesToRepay < sharesToRepay) sharesToRepay = _sharesToRepay;
         // Check that max amount to repay from FraxlendPair is less than specified maxAmountToRepay
-        uint256 fraxlendRepayAmount = _toBorrowAmount(_fraxlendPair, _sharesToRepay, false, ACCOUNT_FOR_INTEREST);
+        uint256 fraxlendRepayAmount = _toBorrowAmount(_fraxlendPair, sharesToRepay, false, ACCOUNT_FOR_INTEREST);
+        // TODO: console.log fraxlendRepayAmount
         if (fraxlendRepayAmount > _maxAmountToRepay)
             revert DebtFTokenAdaptor__AmountOwingExceedsSpecifiedRepaymentMax(address(_fraxlendPair));
 
-        _tokenToRepay.safeApprove(address(_fraxlendPair), fraxlendRepayAmount);
+        // _tokenToRepay.safeApprove(address(_fraxlendPair), fraxlendRepayAmount);
+        _tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max);
 
-        uint256 expectedBorrowShares = _fraxlendPair.userBorrowShares(msg.sender) - _sharesToRepay; // TODO: see note in comment above
-        _fraxlendPair.repayAsset(_sharesToRepay, msg.sender);
+        uint256 expectedBorrowShares = _fraxlendPair.userBorrowShares(address(this)) - sharesToRepay; // TODO: see note in comment above
+        _fraxlendPair.repayAsset(sharesToRepay, address(this));
         // double check that the borrowShares have reduced by proper amount for cellar
-        if (_fraxlendPair.userBorrowShares(msg.sender) != expectedBorrowShares)
+        if (_fraxlendPair.userBorrowShares(address(this)) != expectedBorrowShares)
             revert DebtFTokenAdaptor__RepaymentShareAmountDecrementedIncorrectly(address(_fraxlendPair)); // TODO: see note in comment above
         // Zero out approvals if necessary.
         _revokeExternalApproval(_tokenToRepay, address(_fraxlendPair));
