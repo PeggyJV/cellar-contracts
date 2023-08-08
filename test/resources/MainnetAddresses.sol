@@ -10,6 +10,7 @@ contract MainnetAddresses {
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
     address public cosmos = address(0xCAAA);
     address public multisig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
+    address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
 
     // DeFi Ecosystem
     address public uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
