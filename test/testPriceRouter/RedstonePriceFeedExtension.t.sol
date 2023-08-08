@@ -18,7 +18,6 @@ contract RedstonePriceFeedExtensionTest is MainnetStarterTest, AdaptorHelperFunc
     MockRedstoneClassicAdapter private mockRedstoneClassicAdapter;
 
     IRedstoneAdapter private swEthRedstoneAdapter = IRedstoneAdapter(0x68ba9602B2AeE30847412109D2eE89063bf08Ec2);
-    bytes32 private swEthDataFeedId = 0x5357455448000000000000000000000000000000000000000000000000000000;
 
     function setUp() external {
         // Setup forked environment.

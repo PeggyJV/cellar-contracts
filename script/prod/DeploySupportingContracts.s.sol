@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
+import { Math } from "src/utils/Math.sol";
 import { Deployer } from "src/Deployer.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
-import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
+import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
+
+import { StEthExtension } from "src/modules/price-router/Extensions/Lido/StEthExtension.sol";
+import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
+import { RedstonePriceFeedExtension } from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
+import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
 
 import { MainnetAddresses } from "test/resources/MainnetAddresses.sol";
 
@@ -17,45 +23,148 @@ import "forge-std/Script.sol";
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeploySupportingContractsScript is Script, MainnetAddresses {
+    using Math for uint256;
+
     address public sommDev = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
-    address public sommDeployerDeployer = 0x61bfcdAFA35999FA93C10Ec746589EB93817a8b9;
 
     Deployer public deployer = Deployer(deployerAddress);
-    ERC4626SharePriceOracle public oracle;
+
+    Registry public registry = Registry(0xEED68C267E9313a6ED6ee08de08c9F68dee44476);
+    PriceRouter public priceRouter = PriceRouter(0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92);
+
+    uint8 public constant CHAINLINK_DERIVATIVE = 1;
+    uint8 public constant TWAP_DERIVATIVE = 2;
+    uint8 public constant EXTENSION_DERIVATIVE = 3;
+
+    StEthExtension public stEthExtension;
+    WstEthExtension public wstEthExtension;
+    RedstonePriceFeedExtension public redstonePriceFeedExtension;
 
     function run() external {
-        address rye = 0xb5b29320d2Dde5BA5BAFA1EbcD270052070483ec;
-        ERC4626 _target = ERC4626(rye);
-        uint64 _heartbeat = 1 days;
-        uint64 _deviationTrigger = 0.0010e4;
-        uint64 _gracePeriod = 8 * 60 * 60; // 8 hrs
-        uint16 _observationsToUse = 7; // TWAA duration is heartbeat * (observationsToUse - 1), so ~6 days.
-        address _automationRegistry = 0xd746F3601eA520Baf3498D61e1B7d976DbB33310;
-        uint256 startingAnswer = 1.020e18;
-        uint256 allowedAnswerChangeLower = 0.8e4;
-        uint256 allowedAnswerChangeUpper = 10e4;
-
-        vm.startBroadcast();
-
         bytes memory creationCode;
         bytes memory constructorArgs;
 
-        creationCode = type(ERC4626SharePriceOracle).creationCode;
-        constructorArgs = abi.encode(
-            _target,
-            _heartbeat,
-            _deviationTrigger,
-            _gracePeriod,
-            _observationsToUse,
-            _automationRegistry,
-            startingAnswer,
-            allowedAnswerChangeLower,
-            allowedAnswerChangeUpper
-        );
+        vm.startBroadcast();
 
-        oracle = ERC4626SharePriceOracle(
-            deployer.deployContract("Real Yield Eth Share Price Oracle V0.0", creationCode, constructorArgs, 0)
-        );
+        // Deploy the price router.
+        // creationCode = type(PriceRouter).creationCode;
+        // constructorArgs = abi.encode(sommDev, registry, WETH);
+        // priceRouter = PriceRouter(deployer.deployContract("PriceRouter V0.0", creationCode, constructorArgs, 0));
+
+        // Deploy stETH extension.
+        {
+            uint256 _allowedDivergence = 50;
+            address _uniV3WstEthWethPool = WSTETH_WETH_100;
+            address _stEthToEthDataFeed = STETH_ETH_FEED;
+            uint24 _heartbeat = 1 days;
+            address _weth = address(WETH);
+            address _steth = address(STETH);
+            uint32 _twapDuration = 1 days / 4;
+            uint128 _minimumMeanLiquidity = 0.5e25;
+            creationCode = type(StEthExtension).creationCode;
+            constructorArgs = abi.encode(
+                priceRouter,
+                _allowedDivergence,
+                _uniV3WstEthWethPool,
+                _stEthToEthDataFeed,
+                _heartbeat,
+                _weth,
+                _steth,
+                _twapDuration,
+                _minimumMeanLiquidity
+            );
+            stEthExtension = StEthExtension(
+                deployer.deployContract("stETH Extension V0.0", creationCode, constructorArgs, 0)
+            );
+        }
+
+        // Deploy WSTETH Extension.
+        {
+            creationCode = type(WstEthExtension).creationCode;
+            constructorArgs = abi.encode(priceRouter);
+            wstEthExtension = WstEthExtension(
+                deployer.deployContract("wstETH Extension V0.0", creationCode, constructorArgs, 0)
+            );
+        }
+
+        // Deploy redstone extension.
+        {
+            creationCode = type(RedstonePriceFeedExtension).creationCode;
+            constructorArgs = abi.encode(priceRouter);
+            redstonePriceFeedExtension = RedstonePriceFeedExtension(
+                deployer.deployContract("Redstone Extension V0.0", creationCode, constructorArgs, 0)
+            );
+        }
+
+        // Add Chainlink USD assets.
+        PriceRouter.ChainlinkDerivativeStorage memory stor;
+        PriceRouter.AssetSettings memory settings;
+
+        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(WBTC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WBTC_USD_FEED);
+        priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(GHO_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, GHO_USD_FEED);
+        priceRouter.addAsset(GHO, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(FRAX_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, FRAX_USD_FEED);
+        priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
+        priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDT_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
+        priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(COMP_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, COMP_USD_FEED);
+        priceRouter.addAsset(COMP, settings, abi.encode(stor), price);
+
+        // Add Chainlink USD assets.
+        stor.inETH = true;
+
+        price = uint256(IChainlinkAggregator(RETH_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, RETH_ETH_FEED);
+        priceRouter.addAsset(rETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(CBETH_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, CBETH_ETH_FEED);
+        priceRouter.addAsset(cbETH, settings, abi.encode(stor), price);
+
+        // Add stETH
+        price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(stEthExtension));
+        priceRouter.addAsset(STETH, settings, abi.encode(0), price);
+
+        // Add wstEth.
+        uint256 wstethToStethConversion = wstEthExtension.stEth().getPooledEthByShares(1e18);
+        price = price.mulDivDown(wstethToStethConversion, 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstEthExtension));
+        priceRouter.addAsset(WSTETH, settings, abi.encode(0), price);
+
+        // Add swEth.
+        RedstonePriceFeedExtension.ExtensionStorage memory redstoneStor;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstonePriceFeedExtension));
+        redstoneStor.dataFeedId = swEthDataFeedId;
+        redstoneStor.heartbeat = 1 days;
+        redstoneStor.redstoneAdapter = IRedstoneAdapter(swEthAdapter);
+        priceRouter.addAsset(SWETH, settings, abi.encode(redstoneStor), 1902e8);
 
         vm.stopBroadcast();
     }
