@@ -88,7 +88,8 @@ interface IFToken {
     function userCollateralBalance(address) external view returns (uint256);
 
     function getConstants()
-        external view
+        external
+        view
         returns (
             uint256 _LTV_PRECISION,
             uint256 _LIQ_PRECISION,
@@ -101,4 +102,8 @@ interface IFToken {
         );
 
     function asset() external view returns (address);
+
+    function callAddInterest(IFToken fraxlendPair) external;
+
+    function convertToShares(uint256 _assets) external view returns (uint256 _shares);
 }

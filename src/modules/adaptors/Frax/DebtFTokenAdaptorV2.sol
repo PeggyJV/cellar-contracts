@@ -72,11 +72,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(
-        bool _accountForInterest,
-        address _frax,
-        uint256 _maxLTV
-    ) {
+    constructor(bool _accountForInterest, address _frax, uint256 _maxLTV) {
         // _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
         ACCOUNT_FOR_INTEREST = _accountForInterest; //TODO: I think we need this, but need to double check for lending/borrowing setup in Fraxlend.
         FRAX = ERC20(_frax);
@@ -99,23 +95,14 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are NOT allowed from this position.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -185,40 +172,35 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      * @notice Allows strategists to repay loan debt on Fraxlend Pair.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
      * @param _fraxlendPair the Fraxlend Pair to repay debt from.
-     * @param _tokenToRepay the underlying ERC20 token you want to repay, NOT the debtToken. TODO: not sure if we want this to be pulling from the fraxlendPair the assetToken, or to just have this be FRAX since it always is FRAX and doesn't sound like it will change.
-     * @param _maxAmountToRepay the amount of `tokenToRepay` to repay with.
-     * @param _sharesToRepay the amount of borrowShares to repay within Fraxlend pair.
-     * TODO: CRISPY --> from `FraxlendCore.sol` functions `repayAsset()` and `_repayAsset()` I don't see specific responses from the contracts if the amount of shares repaid >> amount of borrowShares even owed. Unless `-=` takes care of that.
-     * Assuming the above is true, then we'll need to check how much borrowShares we need to pay. Then we can get the total amount of Frax we need to repay. So we could specify the amount of FRAX we're willing to repay (could be max), and then we calculate the amount of FRAX owing from fraxlend, then we check the two values to make sure it is less than the amount we're willing to repay. From there we can simply repay the shares. We then check that we have the expected change in borrowShares as per FraxLend accounting.
-     * TODO: possibly add a bool and logic that will take the amount of FRAX required to repay the debt. I guess this could be unecessary since if we just do maxAvailable we'll pay with all the FRAX possible.
-     * TODO: remove params _tokenToRepay, and _sharesToRepay
+     * @param _debtTokenRepayAmount the amount of `debtToken` to repay with.
+     * NOTE: call addInterest() beforehand to ensure we are repaying what is required.
      */
     function repayFraxlendDebt(
         IFToken _fraxlendPair,
-        ERC20 _tokenToRepay,
-        uint256 _maxAmountToRepay,
-        uint256 _sharesToRepay
+        uint256 _debtTokenRepayAmount
     ) public {
-        // TODO: add a maxAvailable check to see how much is needed to repay off entire loan
-        // amountToRepay = _maxAvailable(FRAX, maxAmountToRepay);
-        uint256 sharesToRepay = _fraxlendPair.userBorrowShares(address(this)); 
-        if(_sharesToRepay < sharesToRepay) sharesToRepay = _sharesToRepay;
-        // Check that max amount to repay from FraxlendPair is less than specified maxAmountToRepay
-        uint256 fraxlendRepayAmount = _toBorrowAmount(_fraxlendPair, sharesToRepay, false, ACCOUNT_FOR_INTEREST);
-        // TODO: console.log fraxlendRepayAmount
-        if (fraxlendRepayAmount > _maxAmountToRepay)
-            revert DebtFTokenAdaptor__AmountOwingExceedsSpecifiedRepaymentMax(address(_fraxlendPair));
+        // amountToRepay = _maxAvailable(FRAX, _maxAmountToRepay); // TODO: add a maxAvailable check to see how much is needed to repay off entire loan
 
-        // _tokenToRepay.safeApprove(address(_fraxlendPair), fraxlendRepayAmount);
-        _tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max);
+        uint256 sharesToRepay = _fraxlendPair.convertToShares(_debtTokenRepayAmount); // initial assign & convert param to shares
+        uint256 sharesAccToFraxlend = _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
+        uint256 debtTokenToRepay = _debtTokenRepayAmount;
+        ERC20 tokenToRepay = ERC20(_fraxlendPair.asset());
 
-        uint256 expectedBorrowShares = _fraxlendPair.userBorrowShares(address(this)) - sharesToRepay; // TODO: see note in comment above
+        // take the smaller btw sharesToRepay and sharesAccToFraxlend
+        if (sharesAccToFraxlend < sharesToRepay) {
+            sharesToRepay = sharesAccToFraxlend;
+            debtTokenToRepay; // TODO: make helper to calculate the amount of FRAX to approve.
+        }
+        tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max); // TODO: delete this line after making helper discussed below.
+        // tokenToRepay.safeApprove(address(_fraxlendPair), debtTokenToRepay); // TODO: make helper to calculate the amount of FRAX to approve.
+
+        uint256 expectedBorrowShares = _fraxlendPair.userBorrowShares(address(this)) - sharesToRepay;
         _fraxlendPair.repayAsset(sharesToRepay, address(this));
-        // double check that the borrowShares have reduced by proper amount for cellar
+
         if (_fraxlendPair.userBorrowShares(address(this)) != expectedBorrowShares)
             revert DebtFTokenAdaptor__RepaymentShareAmountDecrementedIncorrectly(address(_fraxlendPair)); // TODO: see note in comment above
         // Zero out approvals if necessary.
-        _revokeExternalApproval(_tokenToRepay, address(_fraxlendPair));
+        _revokeExternalApproval(tokenToRepay, address(_fraxlendPair));
     }
 
     /**

@@ -300,7 +300,7 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
     }
 
     // test taking loan w/ providing collateral to the wrong pair
-    // TODO: troubleshoot
+    // TODO: double check logic
     function testTakingOutLoanInUntrackedPositionV2() external {
         // assets = bound(assets, 0.1e18, 100_000e18);
         uint256 assets = 1e18;
@@ -325,6 +325,7 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
     // // TODO: not sure how this one would apply with Fraxlend Pairs
     // function testTakingOutLoansInUntrackedPositionV2() external {}
 
+    // TODO: see TODO below about evm error w/ addInterest()
     function testRepayingLoans() external {
         // assets = bound(assets, 0.1e18, 100_000e18);
         uint256 assets = 1e18;
@@ -346,21 +347,19 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        uint256 maxAmountToRepay = type(uint256).max; 
-        uint256 cellarBorrowShares = mkrFraxLendPair.userBorrowShares(address(cellar)); // TODO: double check this works
+        // start repayment sequence
+        debtFTokenAdaptorV2.callAddInterest(mkrFraxLendPair); // TODO: EIN - getting an error here for some reason.
+        uint256 maxAmountToRepay = type(uint256).max; // set up repayment amount to be cellar's total FRAX.
+        // uint256 cellarBorrowShares = mkrFraxLendPair.userBorrowShares(address(cellar)); // TODO: double check this works
         deal(address(FRAX), address(cellar), fraxToBorrow * 2);
         
         // Repay the loan.
-        adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrCollateralFToken, FRAX, maxAmountToRepay, cellarBorrowShares);
+        adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrCollateralFToken, maxAmountToRepay);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        bytes memory adaptorData = abi.encode(MKR_FRAX_PAIR);
-
-        // TODO: interest should be taken out too - it is done within the adaptor logic. Check with a console.log
-        // TODO: EIN WHERE I LEFT OFF
         assertApproxEqAbs(
-            debtFTokenAdaptorV2.balanceOf(adaptorData),
+            getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar)),
             0,
             1,
             "Cellar should have zero debt recorded within Fraxlend Pair"
@@ -368,99 +367,16 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         assertApproxEqAbs(FRAX.balanceOf(address(cellar)), 0, 1, "Cellar should have zero debtAsset");
     }
 
-    // // TODO: is this testing the withdrawableFrom() associated to the creditPosition? Cause the debtPosition should just revert.
-    // // Test implementation below is still from AAVE.t.sol
-    // function testWithdrawableFromaV2USDC() external {
-    //     // uint256 assets = 100e6;
-    //     // deal(address(USDC), address(this), assets);
-    //     // cellar.deposit(assets, address(this));
-    //     // // Take out a USDC loan.
-    //     // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     // bytes[] memory adaptorCalls = new bytes[](1);
-    //     // adaptorCalls[0] = _createBytesDataToBorrowFromAaveV2(dV2USDC, assets / 2);
-    //     // data[0] = Cellar.AdaptorCall({ adaptor: address(aaveDebtTokenAdaptor), callData: adaptorCalls });
-    //     // cellar.callOnAdaptor(data);
-    //     // uint256 maxAssets = cellar.maxWithdraw(address(this));
-    //     // cellar.withdraw(maxAssets, address(this), address(this));
-    //     // assertEq(USDC.balanceOf(address(this)), maxAssets, "Should have withdraw max assets possible.");
-    //     // maxAssets = cellar.maxWithdraw(address(this));
-    //     // cellar.withdraw(maxAssets, address(this), address(this));
-    //     // assertEq(
-    //     //     cellar.totalAssetsWithdrawable(),
-    //     //     0,
-    //     //     "Cellar should have remaining assets locked until strategist rebalances."
-    //     // );
-    // }
-
-    // // TODO: EIN - review with Crispy relevance for Fraxlend tests
-    // // Test implementation below is still from AAVE.t.sol
-    // function testWithdrawableFromaV2WETH() external {
-    //     // // First adjust cellar to work primarily with WETH.
-    //     // // Make vanilla USDC the holding position.
-    //     // cellar.swapPositions(0, 1, false);
-    //     // cellar.setHoldingPosition(usdcPosition);
-    //     // // Adjust rebalance deviation so we can swap full amount of USDC for WETH.
-    //     // cellar.setRebalanceDeviation(0.003e18);
-    //     // // Add WETH, aV2WETH, and dV2WETH as trusted positions to the registry.
-    //     // uint32 wethPosition = 2;
-    //     // registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
-    //     // uint32 aV2WETHPosition = 1_000_003;
-    //     // registry.trustPosition(aV2WETHPosition, address(aaveATokenAdaptor), abi.encode(address(aV2WETH)));
-    //     // uint32 debtWETHPosition = 1_000_004;
-    //     // registry.trustPosition(debtWETHPosition, address(aaveDebtTokenAdaptor), abi.encode(address(dV2WETH)));
-    //     // cellar.addPositionToCatalogue(wethPosition);
-    //     // cellar.addPositionToCatalogue(aV2WETHPosition);
-    //     // cellar.addPositionToCatalogue(debtWETHPosition);
-    //     // // Pull USDC out of Aave.
-    //     // Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-    //     // {
-    //     //     bytes[] memory adaptorCalls = new bytes[](1);
-    //     //     adaptorCalls[0] = _createBytesDataToWithdrawFromAaveV2(USDC, type(uint256).max);
-    //     //     data[0] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCalls });
-    //     // }
-    //     // cellar.callOnAdaptor(data);
-    //     // // Remove dV2USDC and aV2USDC positions.
-    //     // cellar.removePosition(1, false);
-    //     // cellar.removePosition(0, true);
-    //     // cellar.addPosition(1, aV2WETHPosition, abi.encode(1.1e18), false);
-    //     // cellar.addPosition(0, debtWETHPosition, abi.encode(0), true);
-    //     // cellar.addPosition(2, wethPosition, abi.encode(0), false);
-    //     // // Deposit into the cellar.
-    //     // uint256 assets = 10_000e6 + cellar.totalAssets();
-    //     // deal(address(USDC), address(this), assets);
-    //     // cellar.deposit(assets, address(this));
-    //     // // Perform several adaptor calls.
-    //     // // - Swap all USDC for WETH.
-    //     // // - Deposit all WETH into Aave.
-    //     // // - Take out a WETH loan on Aave.
-    //     // data = new Cellar.AdaptorCall[](3);
-    //     // bytes[] memory adaptorCallsForFirstAdaptor = new bytes[](1);
-    //     // adaptorCallsForFirstAdaptor[0] = _createBytesDataForSwapWithUniv3(USDC, WETH, 500, assets);
-    //     // data[0] = Cellar.AdaptorCall({
-    //     //     adaptor: address(swapWithUniswapAdaptor),
-    //     //     callData: adaptorCallsForFirstAdaptor
-    //     // });
-    //     // bytes[] memory adaptorCallsForSecondAdaptor = new bytes[](1);
-    //     // adaptorCallsForSecondAdaptor[0] = _createBytesDataToLendOnAaveV2(WETH, type(uint256).max);
-    //     // data[1] = Cellar.AdaptorCall({ adaptor: address(aaveATokenAdaptor), callData: adaptorCallsForSecondAdaptor });
-    //     // // Figure out roughly how much WETH the cellar has on Aave.
-    //     // uint256 approxWETHCollateral = priceRouter.getValue(USDC, assets, WETH);
-    //     // bytes[] memory adaptorCallsForThirdAdaptor = new bytes[](1);
-    //     // adaptorCallsForThirdAdaptor[0] = _createBytesDataToBorrowFromAaveV2(dV2WETH, approxWETHCollateral / 2);
-    //     // data[2] = Cellar.AdaptorCall({ adaptor: address(aaveDebtTokenAdaptor), callData: adaptorCallsForThirdAdaptor });
-    //     // cellar.callOnAdaptor(data);
-    //     // uint256 maxAssets = cellar.maxWithdraw(address(this));
-    //     // cellar.withdraw(maxAssets, address(this), address(this));
-    //     // assertEq(
-    //     //     cellar.totalAssetsWithdrawable(),
-    //     //     0,
-    //     //     "Cellar should have remaining assets locked until strategist rebalances."
-    //     // );
-    // }
+    // TODO: delete this test probably cause it just reverts
+    function testWithdrawableFrom() external {
+        // uint256 withdrawableFrom = debtFTokenAdaptorV2.withdrawableFrom();
+        // assertEq(withdrawableFrom, 0);
+    }
 
     // okay just seeing if we can handle multiple fraxlend positions
     // tests adding new positions too for new markets I guess
-    function testMultipleFraxlendPositions();() external {
+    // TODO: EIN WHERE I LEFT OFF ON TROUBLESHOOTING
+    function testMultipleFraxlendPositions() external {
         // cellar.setRebalanceDeviation(0.004e18); // TODO: double check why setting rebalanceDeviation is needed
 
         // // Add new assets related to new fraxlendMarket; UNI_FRAX
@@ -845,4 +761,25 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
     //     //     "There should a significant amount of assets withdrawable."
     //     // );
     // }
+
+    /// Fraxlend Collateral and Debt Specific Helpers
+
+    // function getFraxlendCollateralBalance(address _fraxlendPair, address _user) internal view returns (uint256) {
+
+    // }
+
+    function getFraxlendDebtBalance(address _fraxlendPair, address _user) internal view returns (uint256) {
+        IFToken fraxlendPair = IFToken(_fraxlendPair);
+        return _toBorrowAmount(fraxlendPair, fraxlendPair.userBorrowShares(_user), false, ACCOUNT_FOR_INTEREST);
+    }
+
+    function _toBorrowAmount(
+        IFToken _fraxlendPair,
+        uint256 _shares,
+        bool _roundUp,
+        bool _previewInterest
+    ) internal view virtual returns (uint256) {
+        return _fraxlendPair.toBorrowAmount(_shares, _roundUp, _previewInterest);
+    }
+
 }

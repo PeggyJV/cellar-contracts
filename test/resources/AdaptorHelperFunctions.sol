@@ -492,17 +492,13 @@ contract AdaptorHelperFunctions {
     // TODO: calculate the HF and determine how much can be withdrawn before we get to a certain point
     function _createBytesDataToRepayWithFraxlendV2(
         IFToken _fraxlendPair,
-        ERC20 _tokenToRepay,
-        uint256 _maxAmountToRepay,
-        uint256 _sharesToRepay
+        uint256 _debtTokenRepayAmount
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 DebtFTokenAdaptorV2.repayFraxlendDebt.selector,
                 _fraxlendPair,
-                _tokenToRepay,
-                _maxAmountToRepay,
-                _sharesToRepay
+                _debtTokenRepayAmount
             );
     }
 }
