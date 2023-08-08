@@ -47,9 +47,10 @@ contract DSRAdaptor is BaseAdaptor {
     ERC20 public immutable dai;
 
     constructor(address _dsrManager) {
-        dsrManager = DSRManager(_dsrManager);
-        pot = Pot(dsrManager.pot());
-        dai = ERC20(dsrManager.dai());
+        DSRManager manager = DSRManager(_dsrManager);
+        dsrManager = manager;
+        pot = Pot(manager.pot());
+        dai = ERC20(manager.dai());
     }
 
     //============================================ Implement Base Functions ===========================================
