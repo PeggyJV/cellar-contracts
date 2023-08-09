@@ -121,6 +121,13 @@ contract DSRAdaptor is BaseAdaptor {
         else dsrManager.exit(address(this), assets);
     }
 
+    /**
+     * @notice Allows strategist to update `chi`.
+     */
+    function drip() external {
+        pot.drip();
+    }
+
     //============================================ Helper Functions ===========================================
 
     /**

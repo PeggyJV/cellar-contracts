@@ -449,4 +449,8 @@ contract AdaptorHelperFunctions {
     function _createBytesDataToExitDsr(uint256 assets) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(DSRAdaptor.exit.selector, assets);
     }
+
+    function _createBytesDataToDrip() internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(DSRAdaptor.drip.selector);
+    }
 }

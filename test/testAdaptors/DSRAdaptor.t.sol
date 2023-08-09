@@ -86,7 +86,9 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         uint256 maxRedeem = cellar.maxRedeem(address(this));
 
-        cellar.redeem(maxRedeem, address(this), address(this));
+        assets = cellar.redeem(maxRedeem, address(this), address(this));
+
+        assertApproxEqAbs(DAI.balanceOf(address(this)), assets, 2, "User should have been sent DAI.");
     }
 
     function testInterestAccrual(uint256 assets) external {
@@ -211,5 +213,37 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
             assets + initialAssets,
             "Should have withdrawn all the assets from the DSR."
         );
+    }
+
+    function testDrip(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 1_000_000_000e18);
+        deal(address(DAI), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        console.log("TA", cellar.totalAssets());
+
+        uint256 assetsBefore = cellar.totalAssets();
+
+        vm.warp(block.timestamp + 1 days);
+        mockDaiUsd.setMockUpdatedAt(block.timestamp);
+
+        assertEq(
+            cellar.totalAssets(),
+            assetsBefore,
+            "Assets should not have increased because nothing has interacted with dsr."
+        );
+
+        // Strategist calls drip.
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        {
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToDrip();
+            data[0] = Cellar.AdaptorCall({ adaptor: address(dsrAdaptor), callData: adaptorCalls });
+        }
+        cellar.callOnAdaptor(data);
+
+        uint256 assetsAfter = cellar.totalAssets();
+
+        assertGt(assetsAfter, assetsBefore, "Total Assets should have increased.");
     }
 }
