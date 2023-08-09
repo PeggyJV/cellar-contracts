@@ -99,6 +99,9 @@ contract MainnetAddresses {
     ERC20 public bb_a_USDC_BPT = ERC20(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692);
     ERC20 public bb_a_DAI_BPT = ERC20(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
     ERC20 public bb_a_USDT_BPT = ERC20(0xA1697F9Af0875B63DdC472d6EeBADa8C1fAB8568);
+    // Rate Providers
+    address public cbethRateProvider = 0x7311E4BB8a72e7B300c5B8BDE4de6CdaA822a5b1;
+    address public rethRateProvider = 0x1a8F81c256aee9C640e14bB0453ce247ea0DFE6F;
 
     // Compound V2
     CErc20 public cDAI = CErc20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);

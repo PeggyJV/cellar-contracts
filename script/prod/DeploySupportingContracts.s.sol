@@ -12,6 +12,7 @@ import { StEthExtension } from "src/modules/price-router/Extensions/Lido/StEthEx
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 import { RedstonePriceFeedExtension } from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
 import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
+import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
 
 import { MainnetAddresses } from "test/resources/MainnetAddresses.sol";
 
@@ -39,6 +40,7 @@ contract DeploySupportingContractsScript is Script, MainnetAddresses {
     StEthExtension public stEthExtension;
     WstEthExtension public wstEthExtension;
     RedstonePriceFeedExtension public redstonePriceFeedExtension;
+    BalancerStablePoolExtension public balancerStablePoolExtension;
 
     function run() external {
         bytes memory creationCode;
@@ -132,7 +134,9 @@ contract DeploySupportingContractsScript is Script, MainnetAddresses {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, COMP_USD_FEED);
         priceRouter.addAsset(COMP, settings, abi.encode(stor), price);
 
-        // Add Chainlink USD assets.
+        // TODO price RYGOV assets.
+
+        // Add Chainlink ETH assets.
         stor.inETH = true;
 
         price = uint256(IChainlinkAggregator(RETH_ETH_FEED).latestAnswer());
@@ -165,6 +169,35 @@ contract DeploySupportingContractsScript is Script, MainnetAddresses {
         redstoneStor.heartbeat = 1 days;
         redstoneStor.redstoneAdapter = IRedstoneAdapter(swEthAdapter);
         priceRouter.addAsset(SWETH, settings, abi.encode(redstoneStor), 1902e8);
+
+        // Add Balancer Assets.
+        // WETH RETH BPT
+        uint8[8] memory rateProviderDecimals;
+        rateProviderDecimals[1] = 18;
+        address[8] memory rateProviders;
+        rateProviders[1] = rethRateProvider;
+        ERC20[8] memory underlyings;
+        underlyings[0] = WETH;
+        underlyings[1] = rETH;
+        BalancerStablePoolExtension.ExtensionStorage memory balancerStor = BalancerStablePoolExtension
+            .ExtensionStorage({
+                poolId: bytes32(0),
+                poolDecimals: 18,
+                rateProviderDecimals: rateProviderDecimals,
+                rateProviders: rateProviders,
+                underlyingOrConstituent: underlyings
+            });
+
+        priceRouter.addAsset(rETH_wETH_BPT, settings, abi.encode(balancerStor), 1915e8);
+
+        // TODO BB A USD
+        // TODO GHO BB A USD
+        // TODO GHO LUSD
+        // TODO WSTETH BB A WETH
+        // TODO SWETH BB A WETH
+        // TODO WETH cbETH
+        // TODO WETH SWETH?????
+        // TODO WSTETH WETH BPT????
 
         vm.stopBroadcast();
     }
