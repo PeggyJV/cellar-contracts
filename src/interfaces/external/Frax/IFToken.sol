@@ -106,4 +106,6 @@ interface IFToken {
     function callAddInterest(IFToken fraxlendPair) external;
 
     function convertToShares(uint256 _assets) external view returns (uint256 _shares);
+
+    function maxLTV() external view returns (uint256 maxLTV);
 }

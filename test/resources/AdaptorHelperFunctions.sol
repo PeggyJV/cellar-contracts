@@ -501,4 +501,15 @@ contract AdaptorHelperFunctions {
                 _debtTokenRepayAmount
             );
     }
+
+    function _createBytesDataToRemoveCollateralWithFraxlendV2(
+        uint256 _collateralAmount, IFToken _fraxlendPair
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                DebtFTokenAdaptorV2.removeCollateral.selector,
+                _collateralAmount,
+                _fraxlendPair
+            );
+    }
 }

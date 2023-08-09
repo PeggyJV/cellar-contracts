@@ -32,7 +32,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice Attempted tx that results in unhealthy cellar LTV
      */
-    error DebtFTokenAdaptor__LTVTooLow(address fraxlendPair);
+    error DebtFTokenAdaptor__LTVTooHigh(address fraxlendPair);
 
     /**
      * @notice Fraxlend Pair contract reporting higher repayment amount than Strategist is comfortable with according to Strategist params.
@@ -52,10 +52,10 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      */
     ERC20 public immutable FRAX;
 
-    /**
-     * @notice maxLTV that is actually lower than the LTV allowed by Fraxlend. This prevents cellar lending positions from being too at risk.
-     */
-    uint256 public immutable maxLTV;
+    // /**
+    //  * @notice maxLTV that is actually lower than the LTV allowed by Fraxlend. This prevents cellar lending positions from being too at risk.
+    //  */
+    // uint256 public immutable maxLTV;
 
     /**
      * @notice This bool determines how this adaptor accounts for interest.
@@ -72,11 +72,25 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(bool _accountForInterest, address _frax, uint256 _maxLTV) {
-        // _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
+    constructor(bool _accountForInterest, address _frax, uint256 _healthFactor) {
+        _verifyConstructorMinimumHealthFactor(_healthFactor); // TODO: EIN - figure out best way to convert this.
+        // TODO: Crispy stated how I should get the health factor 
+        // okay, so do it similar to aave. health factor is amultiplier on the respective health var. So in our case...
+
+        // recall: hf = collateral * liquidationThreshold / borrow
+        // recall: ltv = borrow/collateral
+        // thus ltv = liquidationThreshold / hf
+        // for fraxlend, we have some ltv defined.
+        // we want the adaptor to have some constructor-defined hf_adaptor.
+        // hf_adaptor = liquidationThreshold / ltv_adaptor
+
+        // recall if hf < 1, liquidation ensues
+        // so the idea is that we have some hf that is safer than liquidation amount. This prevents the cellar from every going under water.
+        // thus hf_adaptor > 1, let's say it is 1.1
+        // 
         ACCOUNT_FOR_INTEREST = _accountForInterest; //TODO: I think we need this, but need to double check for lending/borrowing setup in Fraxlend.
         FRAX = ERC20(_frax);
-        maxLTV = _maxLTV;
+        minimumHealthFactor = _healthFactor;
     }
 
     //============================================ Global Functions ===========================================
@@ -162,7 +176,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
         (, uint256 _exchangeRate, ) = fraxlendPair.updateExchangeRate(); // needed to calculate LTV in next line
         // Check if borrower is insolvent after this borrow tx, revert if they are
         if (!_isSolvent(fraxlendPair, _exchangeRate)) {
-            revert DebtFTokenAdaptor__LTVTooLow(address(fraxlendPair));
+            revert DebtFTokenAdaptor__LTVTooHigh(address(fraxlendPair));
         }
     }
 
@@ -280,7 +294,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     /// @dev NOTE: TODO: EIN - TEST - this needs to be tested in comparison the `_isSolvent` calcs in Fraxlend so we are calculating the same thing at all times.
     /// NOTE:  TODO: This is not working yet, convert this in a gas efficient manner to work with this adaptor. Not sure about it though...
     function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view returns (bool) {
-        if (maxLTV == 0) return true;
+        // if (maxLTV == 0) return true;
         // calculate the borrowShares
         uint256 borrowerShares = _fraxlendPair.userBorrowShares(address(this));
         uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `_isSolvent()` function in actual Fraxlend contracts.
@@ -290,7 +304,13 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
 
         (uint256 LTV_PRECISION, , , , uint256 EXCHANGE_PRECISION, , , ) = _fraxlendPair.getConstants();
 
-        uint256 _ltv = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) / _collateralAmount;
-        return _ltv <= maxLTV;
+        uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) / _collateralAmount;
+
+        // get maxLTV from fraxlendPair
+        uint256 fraxlendPairMaxLTV = _fraxlendPair.maxLTV();
+        // convert LTVs to HF
+        uint256 currentHF = (1 / currentPositionLTV) * fraxlendPairMaxLTV;
+        // compare HF to current HF.
+        return currentHF > minimumHealthFactor; 
     }
 }
