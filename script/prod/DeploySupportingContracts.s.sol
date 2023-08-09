@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { Math } from "src/utils/Math.sol";
 import { Deployer } from "src/Deployer.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
 import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregator.sol";
@@ -98,6 +99,15 @@ contract DeploySupportingContractsScript is Script, MainnetAddresses {
             );
         }
 
+        // Deploy balancer stable extension.
+        {
+            creationCode = type(BalancerStablePoolExtension).creationCode;
+            constructorArgs = abi.encode(priceRouter, vault);
+            balancerStablePoolExtension = BalancerStablePoolExtension(
+                deployer.deployContract("Balancer Stable Pool Extension V0.0", creationCode, constructorArgs, 0)
+            );
+        }
+
         // Add Chainlink USD assets.
         PriceRouter.ChainlinkDerivativeStorage memory stor;
         PriceRouter.AssetSettings memory settings;
@@ -134,6 +144,10 @@ contract DeploySupportingContractsScript is Script, MainnetAddresses {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, COMP_USD_FEED);
         priceRouter.addAsset(COMP, settings, abi.encode(stor), price);
 
+        price = uint256(IChainlinkAggregator(LUSD_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, LUSD_USD_FEED);
+        priceRouter.addAsset(LUSD, settings, abi.encode(stor), price);
+
         // TODO price RYGOV assets.
 
         // Add Chainlink ETH assets.
@@ -150,6 +164,12 @@ contract DeploySupportingContractsScript is Script, MainnetAddresses {
         price = price.changeDecimals(6, 8);
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, CBETH_ETH_FEED);
         priceRouter.addAsset(cbETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(OHM_ETH_FEED).latestAnswer());
+        price = priceRouter.getValue(WETH, price, USDC);
+        price = price.changeDecimals(6, 8);
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, OHM_ETH_FEED);
+        priceRouter.addAsset(OHM, settings, abi.encode(stor), price);
 
         // Add stETH
         price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
@@ -168,36 +188,114 @@ contract DeploySupportingContractsScript is Script, MainnetAddresses {
         redstoneStor.dataFeedId = swEthDataFeedId;
         redstoneStor.heartbeat = 1 days;
         redstoneStor.redstoneAdapter = IRedstoneAdapter(swEthAdapter);
-        priceRouter.addAsset(SWETH, settings, abi.encode(redstoneStor), 1902e8);
+        priceRouter.addAsset(SWETH, settings, abi.encode(redstoneStor), 1889e8);
 
-        // Add Balancer Assets.
-        // WETH RETH BPT
-        uint8[8] memory rateProviderDecimals;
-        rateProviderDecimals[1] = 18;
-        address[8] memory rateProviders;
-        rateProviders[1] = rethRateProvider;
-        ERC20[8] memory underlyings;
-        underlyings[0] = WETH;
-        underlyings[1] = rETH;
-        BalancerStablePoolExtension.ExtensionStorage memory balancerStor = BalancerStablePoolExtension
-            .ExtensionStorage({
-                poolId: bytes32(0),
-                poolDecimals: 18,
-                rateProviderDecimals: rateProviderDecimals,
-                rateProviders: rateProviders,
-                underlyingOrConstituent: underlyings
-            });
+        // // Add Balancer Assets.
+        // settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
 
-        priceRouter.addAsset(rETH_wETH_BPT, settings, abi.encode(balancerStor), 1915e8);
+        // {
+        //     // BB A USD V3
+        //     uint8[8] memory rateProviderDecimals;
+        //     address[8] memory rateProviders;
+        //     ERC20[8] memory underlyings;
+        //     underlyings[0] = USDC;
+        //     underlyings[1] = DAI;
+        //     underlyings[2] = USDT;
+        //     BalancerStablePoolExtension.ExtensionStorage memory balancerStor = BalancerStablePoolExtension
+        //         .ExtensionStorage({
+        //             poolId: bytes32(0),
+        //             poolDecimals: 18,
+        //             rateProviderDecimals: rateProviderDecimals,
+        //             rateProviders: rateProviders,
+        //             underlyingOrConstituent: underlyings
+        //         });
 
-        // TODO BB A USD
-        // TODO GHO BB A USD
-        // TODO GHO LUSD
-        // TODO WSTETH BB A WETH
-        // TODO SWETH BB A WETH
-        // TODO WETH cbETH
-        // TODO WETH SWETH?????
-        // TODO WSTETH WETH BPT????
+        //     settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        //     priceRouter.addAsset(BB_A_USD_V3, settings, abi.encode(balancerStor), 1e8);
+        // }
+
+        // {
+        //     // TODO is this right? Or do we need to divide by the bb a usd rate provider.
+        //     // GHO BB A USD V3
+        //     uint8[8] memory rateProviderDecimals;
+        //     address[8] memory rateProviders;
+        //     ERC20[8] memory underlyings;
+        //     underlyings[0] = GHO;
+        //     underlyings[1] = BB_A_USD_V3;
+        //     BalancerStablePoolExtension.ExtensionStorage memory balancerStor = BalancerStablePoolExtension
+        //         .ExtensionStorage({
+        //             poolId: bytes32(0),
+        //             poolDecimals: 18,
+        //             rateProviderDecimals: rateProviderDecimals,
+        //             rateProviders: rateProviders,
+        //             underlyingOrConstituent: underlyings
+        //         });
+
+        //     settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        //     priceRouter.addAsset(GHO_bb_a_USD_BPT, settings, abi.encode(balancerStor), 1e8);
+        // }
+
+        // {
+        //     // GHO LUSD
+        //     uint8[8] memory rateProviderDecimals;
+        //     address[8] memory rateProviders;
+        //     ERC20[8] memory underlyings;
+        //     underlyings[0] = GHO;
+        //     underlyings[1] = LUSD;
+        //     BalancerStablePoolExtension.ExtensionStorage memory balancerStor = BalancerStablePoolExtension
+        //         .ExtensionStorage({
+        //             poolId: bytes32(0),
+        //             poolDecimals: 18,
+        //             rateProviderDecimals: rateProviderDecimals,
+        //             rateProviders: rateProviders,
+        //             underlyingOrConstituent: underlyings
+        //         });
+
+        //     settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        //     priceRouter.addAsset(GHO_LUSD_BPT, settings, abi.encode(balancerStor), 1e8);
+        // }
+
+        // {
+        //     // New WstEth BB A WETH
+        //     uint8[8] memory rateProviderDecimals;
+        //     address[8] memory rateProviders;
+        //     ERC20[8] memory underlyings;
+        //     underlyings[0] = WETH;
+        //     underlyings[1] = STETH;
+        //     BalancerStablePoolExtension.ExtensionStorage memory extensionStor = BalancerStablePoolExtension
+        //         .ExtensionStorage({
+        //             poolId: bytes32(0),
+        //             poolDecimals: 18,
+        //             rateProviderDecimals: rateProviderDecimals,
+        //             rateProviders: rateProviders,
+        //             underlyingOrConstituent: underlyings
+        //         });
+
+        //     settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        //     priceRouter.addAsset(new_wstETH_bbaWETH, settings, abi.encode(extensionStor), 1.866e11);
+        // }
+
+        // {
+        //     // swEth BB A WETH
+        //     uint8[8] memory rateProviderDecimals;
+        //     address[8] memory rateProviders;
+        //     ERC20[8] memory underlyings;
+        //     underlyings[0] = WETH;
+        //     underlyings[1] = SWETH;
+        //     rateProviders[1] = address(SWETH); // swEth contract implemtns `getRate`.
+        //     rateProviderDecimals[1] = 18;
+        //     BalancerStablePoolExtension.ExtensionStorage memory extensionStor = BalancerStablePoolExtension
+        //         .ExtensionStorage({
+        //             poolId: bytes32(0),
+        //             poolDecimals: 18,
+        //             rateProviderDecimals: rateProviderDecimals,
+        //             rateProviders: rateProviders,
+        //             underlyingOrConstituent: underlyings
+        //         });
+
+        //     settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(balancerStablePoolExtension));
+        //     priceRouter.addAsset(swETH_bbaWETH, settings, abi.encode(extensionStor), 1.843e11);
+        // }
 
         vm.stopBroadcast();
     }
