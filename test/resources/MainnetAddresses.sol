@@ -149,4 +149,6 @@ contract MainnetAddresses {
     // Redstone
     address public swEthAdapter = 0x68ba9602B2AeE30847412109D2eE89063bf08Ec2;
     bytes32 public swEthDataFeedId = 0x5357455448000000000000000000000000000000000000000000000000000000;
+    // Maker
+    address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
 }
