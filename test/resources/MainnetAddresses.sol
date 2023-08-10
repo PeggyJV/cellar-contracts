@@ -129,4 +129,7 @@ contract MainnetAddresses {
     address public WSTETH_WETH_500 = 0xD340B57AAcDD10F96FC1CF10e15921936F41E29c;
     address public DAI_USDC_100 = 0x5777d92f208679DB4b9778590Fa3CAB3aC9e2168;
     address public USDC_WETH_500 = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640;
+
+    // Maker
+    address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
 }

@@ -86,11 +86,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // ========================================= PRICE ROUTER CACHE =========================================
 
     /**
-     * @notice Attempted to use an address from the registry, but address was not expected.
-     */
-    error Cellar__ExpectedAddressDoesNotMatchActual();
-
-    /**
      * @notice Cached price router contract.
      * @dev This way cellar has to "opt in" to price router changes.
      */
@@ -123,8 +118,10 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
             maxAssets = assetsBefore.mulDivDown(1e4 + allowableRange, 1e4);
         }
 
-        priceRouter = PriceRouter(registry.getAddress(PRICE_ROUTER_REGISTRY_SLOT));
-        if (address(priceRouter) != expectedPriceRouter) revert Cellar__ExpectedAddressDoesNotMatchActual();
+        // Make sure expected price router is equal to price router grabbed from registry.
+        _checkRegistryAddressAgainstExpected(PRICE_ROUTER_REGISTRY_SLOT, expectedPriceRouter);
+
+        priceRouter = PriceRouter(expectedPriceRouter);
         uint256 assetsAfter = totalAssets();
 
         if (checkTotalAssets) {
@@ -226,7 +223,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     /**
      * @notice Attempted to force out the wrong position.
      */
-    error Cellar__ForcingOutWrongPosition();
+    error Cellar__FailedToForceOutPosition();
 
     /**
      * @notice Array of uint32s made up of cellars credit positions Ids.
@@ -402,7 +399,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function forcePositionOut(uint32 index, uint32 positionId, bool inDebtArray) external onlyOwner {
         // Get position being removed.
         uint32 _positionId = inDebtArray ? debtPositions[index] : creditPositions[index];
-        if (positionId != _positionId) revert Cellar__ForcingOutWrongPosition();
+        // Make sure position id right, and is distrusted.
+        if (positionId != _positionId || registry.isPositionTrusted(positionId))
+            revert Cellar__FailedToForceOutPosition();
 
         _removePosition(index, positionId, inDebtArray);
     }
@@ -454,13 +453,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     // =============================================== FEES CONFIG ===============================================
-
-    /**
-     * @notice Emitted when platform fees is changed.
-     * @param oldPlatformFee value platform fee was changed from
-     * @param newPlatformFee value platform fee was changed to
-     */
-    event PlatformFeeChanged(uint64 oldPlatformFee, uint64 newPlatformFee);
 
     /**
      * @notice Emitted when strategist platform fee cut is changed.
@@ -706,13 +698,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     // =========================================== CORE LOGIC ===========================================
 
     /**
-     * @notice Emitted when share locking period is changed.
-     * @param oldPeriod the old locking period
-     * @param newPeriod the new locking period
-     */
-    event ShareLockingPeriodChanged(uint256 oldPeriod, uint256 newPeriod);
-
-    /**
      * @notice Attempted an action with zero shares.
      */
     error Cellar__ZeroShares();
@@ -757,6 +742,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _checkIfPaused();
     }
 
+    /**
+     * @notice Called when users enter the cellar via deposit or mint.
+     */
     function _enter(uint256 assets, uint256 shares, address receiver) internal {
         beforeDeposit(assets, shares, receiver);
 
@@ -805,6 +793,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         _enter(assets, shares, receiver);
     }
 
+    /**
+     * @notice Called when users exit the cellar via withdraw or redeem.
+     */
     function _exit(uint256 assets, uint256 shares, address receiver, address owner) internal {
         beforeWithdraw(assets, shares, receiver, owner);
 
@@ -1191,6 +1182,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     error Cellar__CallerNotApprovedToRebalance();
 
     /**
+     * @notice Emitted when `setAutomationActions` is called.
+     */
+    event Cellar__AutomationActionsUpdated(address newAutomationActions);
+
+    /**
      * @notice The Automation Actions contract that can rebalance this Cellar.
      * @dev Set to zero address if not in use.
      */
@@ -1201,12 +1197,11 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @param _registryId Registry Id to get the automation action.
      * @param _expectedAutomationActions The registry automation actions differed from the expected automation actions.
      * @dev Callable by Sommelier Governance.
-
      */
     function setAutomationActions(uint256 _registryId, address _expectedAutomationActions) external onlyOwner {
-        address registryAutomationActions = registry.getAddress(_registryId);
-        if (registryAutomationActions != _expectedAutomationActions) revert Cellar__ExpectedAddressDoesNotMatchActual();
-        automationActions = registryAutomationActions;
+        _checkRegistryAddressAgainstExpected(_registryId, _expectedAutomationActions);
+        automationActions = _expectedAutomationActions;
+        emit Cellar__AutomationActionsUpdated(_expectedAutomationActions);
     }
 
     // =========================================== ADAPTOR LOGIC ===========================================
@@ -1281,6 +1276,9 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         bytes[] callData;
     }
 
+    /**
+     * @notice Emitted when adaptor calls are made.
+     */
     event AdaptorCalled(address adaptor, bytes data);
 
     /**
@@ -1308,7 +1306,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @dev Since `totalAssets` is allowed to deviate slightly, strategists could abuse this by sending
      *      multiple `callOnAdaptor` calls rapidly, to gradually change the share price.
      *      To mitigate this, rate limiting will be put in place on the Sommelier side.
-     * @dev Callable by Sommelier Strategist.
+     * @dev Callable by Sommelier Strategist, and Automation Actions contract.
      */
     function callOnAdaptor(AdaptorCall[] calldata data) external virtual nonReentrant {
         if (msg.sender != owner && msg.sender != automationActions) revert Cellar__CallerNotApprovedToRebalance();
@@ -1330,7 +1328,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         // Run all adaptor calls.
         _makeAdaptorCalls(data);
 
-        // After making every external call, check that the totalAssets haas not deviated significantly, and that totalShares is the same.
+        // After making every external call, check that the totalAssets has not deviated significantly, and that totalShares is the same.
         uint256 assets = _calculateTotalAssetsOrTotalAssetsWithdrawable(false);
         if (assets < minimumAllowedAssets || assets > maximumAllowedAssets) {
             revert Cellar__TotalAssetDeviatedOutsideRange(assets, minimumAllowedAssets, maximumAllowedAssets);
@@ -1478,13 +1476,21 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     }
 
     /**
-     * @notice Get all the credit positions underlying assets.
+     * @notice Attempted to use an address from the registry, but address was not expected.
      */
-    function getPositionAssets() external view returns (ERC20[] memory assets) {
-        assets = new ERC20[](creditPositions.length);
-        for (uint256 i = 0; i < creditPositions.length; ++i) {
-            assets[i] = _assetOf(creditPositions[i]);
-        }
+    error Cellar__ExpectedAddressDoesNotMatchActual();
+
+    /**
+     * @notice Attempted to set an address to registry Id 0.
+     */
+    error Cellar__SettingValueToRegistryIdZeroIsProhibited();
+
+    /**
+     * @notice Verify that `_registryId` in registry corresponds to expected address.
+     */
+    function _checkRegistryAddressAgainstExpected(uint256 _registryId, address _expected) internal view {
+        if (_registryId == 0) revert Cellar__SettingValueToRegistryIdZeroIsProhibited();
+        if (registry.getAddress(_registryId) != _expected) revert Cellar__ExpectedAddressDoesNotMatchActual();
     }
 
     /**

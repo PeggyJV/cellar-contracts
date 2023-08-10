@@ -32,7 +32,10 @@ contract DeployTestOracleScript is Script {
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry
+            _automationRegistry,
+            1.025e18,
+            0.9e4,
+            3e4
         );
 
         vm.stopBroadcast();
