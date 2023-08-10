@@ -58,11 +58,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      */
     ERC20 public immutable FRAX;
 
-    // /**
-    //  * @notice maxLTV that is actually lower than the LTV allowed by Fraxlend. This prevents cellar lending positions from being too at risk.
-    //  */
-    // uint256 public immutable maxLTV;
-
     /**
      * @notice This bool determines how this adaptor accounts for interest.
      *         True: Account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
@@ -74,25 +69,14 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice Minimum Health Factor enforced after every borrow.
      * @notice Overwrites strategist set minimums if they are lower.
-     * TODO: This was from AaveDebtTokenAdaptor. IMO this is unecessary since Fraxlend has its own immutable LTV value. That said, we can have this as an extra safety measure if we really want. I think that it would lean on the LTV getter from FraxlendPair, and then it would check it against the minimum value in here. Whichever is more conservative, it goes with.
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(bool _accountForInterest, address _frax, uint256 _healthFactor) {
-        // TODO: Crispy stated how I should get the health factor
-        // okay, so do it similar to aave. health factor is amultiplier on the respective health var. So in our case...
-
-        // recall: hf = collateral * liquidationThreshold / borrow
-        // recall: ltv = borrow/collateral
-        // thus ltv = liquidationThreshold / hf
-        // for fraxlend, we have some ltv defined.
-        // we want the adaptor to have some constructor-defined hf_adaptor.
-        // hf_adaptor = liquidationThreshold / ltv_adaptor
-
-        // recall if hf < 1, liquidation ensues
-        // so the idea is that we have some hf that is safer than liquidation amount. This prevents the cellar from every going under water.
-        // thus hf_adaptor > 1, let's say it is 1.1
-        //
+    constructor(
+        bool _accountForInterest,
+        address _frax,
+        uint256 _healthFactor
+    ) {
         ACCOUNT_FOR_INTEREST = _accountForInterest; //TODO: I think we need this, but need to double check for lending/borrowing setup in Fraxlend.
         FRAX = ERC20(_frax);
         if (_healthFactor > 1.05e18) {
@@ -118,14 +102,23 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(uint256, bytes memory, bytes memory) public pure override {
+    function deposit(
+        uint256,
+        bytes memory,
+        bytes memory
+    ) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are NOT allowed from this position.
      */
-    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
+    function withdraw(
+        uint256,
+        address,
+        bytes memory,
+        bytes memory
+    ) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -170,7 +163,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      * @param fraxlendPair the Fraxlend Pair to borrow from.
      * @param amountToBorrow the amount of `debtTokenToBorrow` to borrow on Fraxlend.
      * NOTE: `borrowAsset` is the same btw v1 and v2 FraxlendPairs
-     * TODO: See helper `_isSolvent` --> NOTE that it is the same helper in CollateralFTokenAdaptor, so once either is figured out just copy and paste the proper solution.
      */
     function borrowFromFraxlend(IFToken fraxlendPair, uint256 amountToBorrow) public {
         // Check that debt position is properly set up to be tracked in the Cellar.
@@ -211,7 +203,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
         // take the smaller btw sharesToRepay and sharesAccToFraxlend
         if (sharesAccToFraxlend < sharesToRepay) {
             sharesToRepay = sharesAccToFraxlend;
-            debtTokenToRepay; // TODO: make helper to calculate the amount of FRAX to approve.
+            debtTokenToRepay;
         }
         tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max); // TODO: delete this line after making helper discussed below.
         // tokenToRepay.safeApprove(address(_fraxlendPair), debtTokenToRepay); // TODO: make helper to calculate the amount of FRAX to approve.
@@ -300,7 +292,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     /// @return Whether borrower is solvent
     /// NOTE: in theory, this should work. It calls `_toBorrowAmount()` which ends up calling `toBorrowAmount()` directly from the `FraxlendPair.sol` contract per pair. It generates the borrowAmount based on interest-adjusted totalBorrow and shares within that pair. `_collateralAmount` is also pulled directly via getters in the pair contracts themselves.
     /// @dev NOTE: TODO: EIN - TEST - this needs to be tested in comparison the `_isSolvent` calcs in Fraxlend so we are calculating the same thing at all times.
-    /// NOTE:  TODO: This is not working yet, convert this in a gas efficient manner to work with this adaptor. Not sure about it though...
     function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view returns (bool) {
         // if (maxLTV == 0) return true;
         // calculate the borrowShares
@@ -322,7 +313,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
         // convert LTVs to HF
         uint256 currentHF = fraxlendPairMaxLTV.mulDivDown(1e18, currentPositionLTV);
 
-        // (1 / currentPositionLTV) * fraxlendPairMaxLTV;
         // compare HF to current HF.
         return currentHF > minimumHealthFactor;
     }

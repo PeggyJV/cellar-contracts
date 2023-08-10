@@ -4,17 +4,10 @@ pragma solidity 0.8.21;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
 
-// bespoke interface to access collateralBalancer getter.
-// TODO: add into IFToken.sol unless we do not want to change the interface contract now that it has been deployed.
-interface ICollateralFToken {
-    function userCollateralBalance(address _user) external view returns (uint256);
-}
-
 /**
  * @title FraxLend Collateral Adaptor
  * @notice Allows addition and removal of collateralAssets to Fraxlend pairs for a Cellar.
  * @author crispymangoes, 0xEinCodes
- * NOTE: implement a max LTV that has a buffer compared to the LTV from fraxlend pairs.
  */
 contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     using SafeTransferLib for ERC20;
@@ -50,7 +43,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      */
     uint256 public immutable minimumHealthFactor;
 
-    // TODO: use health factor so it's uniform among
     constructor(address _frax, uint256 _healthFactor) {
         // _verifyConstructorMinimumHealthFactor(1.mulDivDown(1, _maxLTV)); // TODO: EIN - figure out best way to convert this.
         FRAX = ERC20(_frax);
@@ -75,7 +67,11 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      * @param adaptorData adaptor data containing the abi encoded fraxlendPair
      * @dev configurationData is NOT used
      */
-    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
+    function deposit(
+        uint256 assets,
+        bytes memory adaptorData,
+        bytes memory
+    ) public override {
         // use addCollateral() from fraxlendCore.sol
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
         ERC20 collateralToken = ERC20(fraxlendPair.collateralContract());
@@ -95,7 +91,12 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      * @notice User withdraws are NOT allowed from this position.
      * NOTE: collateral withdrawal calls directly from users disallowed for now.
      */
-    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
+    function withdraw(
+        uint256,
+        address,
+        bytes memory,
+        bytes memory
+    ) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -111,13 +112,12 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice Returns the cellar's balance of the collateralAsset position.
      * @param adaptorData the collateral asset deposited into Fraxlend
-     * NOTE: CRISPY QUESTION - TODO: confirm that this works... EIN - FraxlendCore doesn't have an interface to access the getter. So we'll have to have it here.
      * TODO: confirm that there is no need to typeCast on the decoded adaptorData when needing address, ERC20 or vice versa.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
-        ICollateralFToken fraxlendPairCollateral = ICollateralFToken(address(fraxlendPair));
-        return fraxlendPairCollateral.userCollateralBalance(msg.sender);
+        // ICollateralFToken fraxlendPairCollateral = ICollateralFToken(address(fraxlendPair));
+        return fraxlendPair.userCollateralBalance(msg.sender);
     }
 
     /**
@@ -139,7 +139,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
 
     /**
      * @notice Allows strategists to add collateral to the respective cellar position on FraxLend, enabling borrowing.
-     * TODO: use _fraxlendPair.collateralContract() instead of the collateralToken.
      */
     function addCollateral(IFToken _fraxlendPair, uint256 _collateralToDeposit) public {
         ERC20 _collateralToken = ERC20(_fraxlendPair.collateralContract());
@@ -167,12 +166,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
         if (!_isSolvent(_fraxlendPair, _exchangeRate)) {
             revert CollateralFTokenAdaptor__HealthFactorTooLow(address(_fraxlendPair));
         }
-
-        // if (minHealthFactor == 0) {
-        //         revert BaseAdaptor__UserWithdrawsNotAllowed();
-        //     }
-        //     // Check if adaptor minimum health factor is more conservative than strategist set.
-        //     if (minHealthFactor < minimumHealthFactor) minHealthFactor = minimumHealthFactor;
     }
 
     //============================================ Interface Helper Functions ===========================================
@@ -225,9 +218,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     /// @param _exchangeRate The exchange rate, i.e. the amount of collateral to buy 1e18 asset
     /// @return Whether borrower is solvent
     /// @dev NOTE: TODO: EIN - TEST - this needs to be tested in comparison the `_isSolvent` calcs in Fraxlend so we are calculating the same thing at all times.
-    /// NOTE:  TODO: This is not working yet, convert this in a gas efficient manner to work with this adaptor. Not sure about it though...
     function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view returns (bool) {
-        // if (maxLTV == 0) return true;
         // calculate the borrowShares
         uint256 borrowerShares = _fraxlendPair.userBorrowShares(address(this));
         uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `_isSolvent()` function in actual Fraxlend contracts.
@@ -260,15 +251,4 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_fraxlendPair));
     }
-
-    // /**
-    //  * @notice Validates that a given collateralToken is set up as a position in the Cellar.
-    //  * @dev This function uses `address(this)` as the address of the Cellar.
-    //  */
-    // function _validateCollateral(ERC20 _collateralToken) internal view {
-    //     bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_collateralToken))));
-    //     uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-    //     if (!Cellar(address(this)).isPositionUsed(positionId))
-    //         revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_collateralToken));
-    // }
 }
