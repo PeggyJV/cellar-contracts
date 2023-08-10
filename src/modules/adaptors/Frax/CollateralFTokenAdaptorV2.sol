@@ -21,10 +21,9 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(IFToken fraxlendPair, ERC20 collateralToken)
+    // adaptorData = abi.encode(IFToken fraxlendPair)
     // Where:
     // `fraxlendPair` is the fraxlend pair this adaptor position is working with. It is also synomous to fToken used in `FTokenAdaptor.sol` and `FTokenAdaptorV1.sol`
-    // `collateralToken` is the ERC20 that is used as collateral in the respective `fraxlendPair`
     //================= Configuration Data Specification =================
     // N/A because the DebtFTokenAdaptor handles actual deposits and withdrawals.
     // ==================================================================
@@ -73,12 +72,14 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice User deposits collateralToken to Fraxlend pair
      * @param assets the amount of assets to provide as collateral on FraxLend
-     * @param adaptorData adaptor data containing the abi encoded fraxlendPair & collateralToken
+     * @param adaptorData adaptor data containing the abi encoded fraxlendPair
      * @dev configurationData is NOT used
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // use addCollateral() from fraxlendCore.sol
-        (IFToken fraxlendPair, ERC20 collateralToken) = abi.decode(adaptorData, (IFToken, ERC20));
+        IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
+        ERC20 collateralToken = ERC20(fraxlendPair.collateralContract());
+
         _validateInputs(fraxlendPair, collateralToken);
         // _validateFToken(fraxlendPair);
         // _validateCollateral(collateralToken);
@@ -114,7 +115,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      * TODO: confirm that there is no need to typeCast on the decoded adaptorData when needing address, ERC20 or vice versa.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (IFToken fraxlendPair, ) = abi.decode(adaptorData, (IFToken, ERC20));
+        IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
         ICollateralFToken fraxlendPairCollateral = ICollateralFToken(address(fraxlendPair));
         return fraxlendPairCollateral.userCollateralBalance(msg.sender);
     }
@@ -140,7 +141,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      * @notice Allows strategists to add collateral to the respective cellar position on FraxLend, enabling borrowing.
      * TODO: use _fraxlendPair.collateralContract() instead of the collateralToken.
      */
-    function addCollateral(IFToken _fraxlendPair, ERC20 _collateralToken, uint256 _collateralToDeposit) public {
+    function addCollateral(IFToken _fraxlendPair, uint256 _collateralToDeposit) public {
+        ERC20 _collateralToken = ERC20(_fraxlendPair.collateralContract());
         _validateInputs(_fraxlendPair, _collateralToken);
 
         uint256 amountToDeposit = _maxAvailable(_collateralToken, _collateralToDeposit);
@@ -155,8 +157,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     /**
      * @notice Allows strategists to remove collateral from the respective cellar position on FraxLend.
      */
-    function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair, uint256 _strategistHealthFactor
-) public {
+    function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
         // TODO: I don't think that Fraxlend pairs check whether or not cellar even has a position to start with. So we need to add a check/revert to disallow Strategists from calling this when they have zero collateral in fraxlend pair position. Otherwise, it just reverts I assume, could protect strategist from wasting gas.
 
         // remove collateral
@@ -226,7 +227,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
     /// @dev NOTE: TODO: EIN - TEST - this needs to be tested in comparison the `_isSolvent` calcs in Fraxlend so we are calculating the same thing at all times.
     /// NOTE:  TODO: This is not working yet, convert this in a gas efficient manner to work with this adaptor. Not sure about it though...
     function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view returns (bool) {
-
         // if (maxLTV == 0) return true;
         // calculate the borrowShares
         uint256 borrowerShares = _fraxlendPair.userBorrowShares(address(this));
@@ -237,15 +237,15 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
 
         (uint256 LTV_PRECISION, , , , uint256 EXCHANGE_PRECISION, , , ) = _fraxlendPair.getConstants();
 
-        uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) / _collateralAmount;
+        uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) /
+            _collateralAmount;
 
         // get maxLTV from fraxlendPair
         uint256 fraxlendPairMaxLTV = _fraxlendPair.maxLTV();
         // convert LTVs to HF
         uint256 currentHF = (1 / currentPositionLTV) * fraxlendPairMaxLTV;
         // compare HF to current HF.
-        return currentHF > minimumHealthFactor; 
-        
+        return currentHF > minimumHealthFactor;
     }
 
     /**

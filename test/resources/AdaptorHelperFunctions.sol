@@ -466,14 +466,12 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToAddCollateralWithFraxlendV2(
         address _fraxlendPair,
-        address _collateralToken,
         uint256 _collateralToDeposit
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 CollateralFTokenAdaptorV2.addCollateral.selector,
                 _fraxlendPair,
-                _collateralToken,
                 _collateralToDeposit
             );
     }
@@ -507,7 +505,7 @@ contract AdaptorHelperFunctions {
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
-                DebtFTokenAdaptorV2.removeCollateral.selector,
+                CollateralFTokenAdaptorV2.removeCollateral.selector,
                 _collateralAmount,
                 _fraxlendPair
             );

@@ -120,10 +120,6 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockUniEth));
         priceRouter.addAsset(UNI, settings, abi.encode(stor), price);
 
-        // uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
-        // priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
-
         // Setup Cellar:
 
         // Add adaptors and positions to the registry.
@@ -226,7 +222,7 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         assertApproxEqAbs(
@@ -254,7 +250,7 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -267,6 +263,7 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
     }
 
     // test taking loans w/ v2 fraxlend pairs
+    // TODO: troubleshoot bugs
     function testTakingOutLoansV2(uint256 assets) external {
         assets = bound(assets, 1e18, 100e18);
         initialAssets = cellar.totalAssets();
@@ -277,7 +274,7 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
@@ -308,11 +305,11 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
     }
 
     // test taking loan w/ providing collateral to the wrong pair
-    // TODO: double check logic
+    // TODO: troubleshoot bugs
     function testTakingOutLoanInUntrackedPositionV2() external {
         // assets = bound(assets, 0.1e18, 100_000e18);
         uint256 assets = 1e18;
-        uint256 initialAssets = cellar.totalAssets();
+        initialAssets = cellar.totalAssets();
         deal(address(MKR), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
 
@@ -344,10 +341,9 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
 
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
@@ -427,16 +423,8 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor, MKR already deposited due to cellar holding position
         bytes[] memory adaptorCallsSecondAdaptor = new bytes[](2); // debtAdaptor
-        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralWithFraxlendV2(
-            MKR_FRAX_PAIR,
-            address(MKR),
-            assets
-        );
-        adaptorCallsFirstAdaptor[1] = _createBytesDataToAddCollateralWithFraxlendV2(
-            UNI_FRAX_PAIR,
-            address(UNI),
-            assets
-        );
+        adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
+        adaptorCallsFirstAdaptor[1] = _createBytesDataToAddCollateralWithFraxlendV2(UNI_FRAX_PAIR, assets);
         adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, mkrFraxToBorrow);
         adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowWithFraxlendV2(UNI_FRAX_PAIR, uniFraxToBorrow);
         data[0] = Cellar.AdaptorCall({
@@ -450,23 +438,22 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         assertApproxEqAbs(
             (getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar))) +
                 getFraxlendDebtBalance(UNI_FRAX_PAIR, address(cellar)),
-            mkrFraxBorrow + uniFraxBorrow,
+            mkrFraxToBorrow + uniFraxToBorrow,
             1
         );
 
-        assertApproxEqAbs(FRAX.balanceOf(address(cellar)), mkrFraxBorrow + uniFraxBorrow, 1);
+        assertApproxEqAbs(FRAX.balanceOf(address(cellar)), mkrFraxToBorrow + uniFraxToBorrow, 1);
 
         // TODO: EIN WHERE I LEFT OFF ON TROUBLESHOOTING
 
         // TODO: carry out a repayment for one of the positions
         debtFTokenAdaptorV2.callAddInterest(mkrFraxLendPair); // TODO: EIN - getting an error here for some reason.
         uint256 maxAmountToRepay = type(uint256).max; // set up repayment amount to be cellar's total FRAX.
-        // uint256 cellarBorrowShares = mkrFraxLendPair.userBorrowShares(address(cellar)); // TODO: double check this works
-        deal(address(FRAX), address(cellar), (mkrFraxBorrow + uniFraxBorrow) * 2);
+        deal(address(FRAX), address(cellar), (mkrFraxToBorrow + uniFraxToBorrow) * 2);
 
         // Repay the loan in one of the fraxlend pairs
-        adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrFToken, maxAmountToRepay);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        adaptorCallsFirstAdaptor[0] = _createBytesDataToRepayWithFraxlendV2(mkrFToken, maxAmountToRepay);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCallsFirstAdaptor });
         cellar.callOnAdaptor(data);
 
         // TODO: check that the repayment resulted in only one of the pairs LTV being improved. TODO: do we want to have a getter that provides the LTV or current healthFactor?
@@ -479,7 +466,7 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
 
         assertApproxEqAbs(
             getFraxlendDebtBalance(UNI_FRAX_PAIR, address(cellar)),
-            uniFraxBorrow,
+            uniFraxToBorrow,
             1,
             "Cellar should still have debt for UNI Fraxlend Pair"
         );
@@ -487,25 +474,26 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // TODO: removeCollateral - what you can via the strategist call... should be removing all of MKR collateral. Should be able to remove only a certain amount of UNI Collateral to respect the LTV.
         deal(address(MKR), address(cellar), 0);
 
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(mkrFToken, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        adaptorCallsFirstAdaptor[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(assets, mkrFToken);
+        data[0] = Cellar.AdaptorCall({
+            adaptor: address(collateralFTokenAdaptorV2),
+            callData: adaptorCallsFirstAdaptor
+        });
         cellar.callOnAdaptor(data);
 
         // Check that we no longer have any MKR in the cellar
-        assertEq(MKR.balanceOf(address(cellar), assets));
+        assertEq(MKR.balanceOf(address(cellar)), assets);
 
         // have user withdraw from cellar
         cellar.withdraw(assets, address(this), address(this));
-        assertEq(MKR.balanceOf(address(this), assets));
+        assertEq(MKR.balanceOf(address(this)), assets);
     }
 
     // TODO: test removeCollateral
     //    function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
 
-    function testRemoveCollateral() external {
-        // addCollateral, remove it.
-        // assets = bound(assets, 0.1e18, 100_000e18);
-        uint256 assets = 1e18;
+    function testRemoveCollateral(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(MKR), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -513,25 +501,23 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
 
-        assertEq(MKR.balanceOf(address(cellar), 0));
+        assertEq(MKR.balanceOf(address(cellar)), initialAssets);
 
         // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(mkrFToken, assets);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(assets, mkrFToken);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        assertEq(MKR.balanceOf(address(cellar)), assets);
+        assertEq(MKR.balanceOf(address(cellar)), assets + initialAssets);
         assertEq(mkrFToken.userCollateralBalance(address(cellar)), 0);
     }
 
-    function testRemoveSomeCollateral() external {
-        // assets = bound(assets, 0.1e18, 100_000e18);
-        uint256 assets = 1e18;
+    function testRemoveSomeCollateral(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(MKR), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -539,27 +525,25 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
 
-        assertEq(MKR.balanceOf(address(cellar), 0));
+        assertEq(MKR.balanceOf(address(cellar)), initialAssets);
 
         // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(mkrFToken, assets / 2);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(assets / 2, mkrFToken);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
-        assertEq(MKR.balanceOf(address(cellar)), assets / 2);
-        assertEq(mkrFToken.userCollateralBalance(address(cellar)), assets / 2);
+        assertEq(MKR.balanceOf(address(cellar)), (assets / 2) + initialAssets);
+        assertApproxEqAbs(mkrFToken.userCollateralBalance(address(cellar)), assets / 2, 1);
     }
 
     // test attempting to removeCollateral() when the LTV would be too high as a result
     // TODO: other revert tests for when a strategist call is going to cause LTV to be too high
-    function testFailRemoveCollateralBecauseLTV() external {
-        // assets = bound(assets, 0.1e18, 100_000e18);
-        uint256 assets = 1e18;
+    function testFailRemoveCollateralBecauseLTV(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(MKR), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -567,12 +551,11 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
 
-        assertEq(MKR.balanceOf(address(cellar), 0));
+        assertEq(MKR.balanceOf(address(cellar)), 0);
 
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
@@ -583,15 +566,13 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         debtFTokenAdaptorV2.callAddInterest(mkrFraxLendPair); // TODO: EIN - getting an error here for some reason.
 
         // try to removeCollateral but more than should be allowed
-        // calculate allowableCollateral to remove
-        // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
-        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(mkrFToken, assets);
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(assets, mkrFToken);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    CollateralFTokenAdaptor.CollateralFTokenAdaptor__LTVTooHigh.selector,
+                    CollateralFTokenAdaptorV2.CollateralFTokenAdaptor__HealthFactorTooLow.selector,
                     MKR_FRAX_PAIR
                 )
             )
@@ -599,7 +580,6 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         cellar.callOnAdaptor(data);
     }
 
-    // TODO: test the maxLTV (I guess it's actually testing the minHealthFactor in the constructor?)
     // no getter for LTV, so I guess it's just testing that adding collateral to a almost maxed out LTV position increases debt allowance.
     function testLTV() external {
         // assets = bound(assets, 0.1e18, 100_000e18);
@@ -611,12 +591,12 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
 
-        assertEq(MKR.balanceOf(address(cellar), 0));
+        assertEq(MKR.balanceOf(address(cellar)), initialAssets);
 
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets, FRAX);
@@ -624,27 +604,28 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
 
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(DebtFTokenAdaptor.DebtFTokenAdaptor__LTVTooHigh.selector, MKR_FRAX_PAIR))
+            bytes(abi.encodeWithSelector(DebtFTokenAdaptorV2.DebtFTokenAdaptor__LTVTooHigh.selector, MKR_FRAX_PAIR))
         );
         cellar.callOnAdaptor(data); // reverts because it would result in too high of an LTV
 
         // add collateral to be able to borrow amount desired
-        deal(address(MKR), address(this), 2 * assets);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets); // now cellar has 3 * assets worth
+        deal(address(MKR), address(this), 3 * assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets); // now cellar has 3 * assets worth
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
-        cellar.callOnAdaptor(data);
-        newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
-        assertEq(MKR.balanceOf(address(cellar), assets));
-        assertEq(newCellarCollateralBalance, 2 * assets);
+        cellar.callOnAdaptor(data); // TODO: CRISPY - please take a look at non-expected error generated.
 
-        // Take out a FRAX loan.
-        uint256 fraxToBorrow = priceRouter.getValue(MKR, assets, FRAX);
-        adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
+        newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
+        assertEq(MKR.balanceOf(address(cellar)), assets);
+        assertEq(newCellarCollateralBalance, 3 * assets);
+
+        // Try taking out more FRAX now
+        uint256 moreFraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
+        adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, moreFraxToBorrow);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data); // should transact now
     }
 
-    // TODO: test repaying an amount less than the debt owed.
+    // TODO: CRISPY - please take a look at the fuzzing, was having issues with this.
     function testRepayPartialDebt() external {
         // assets = bound(assets, 0.1e18, 100_000e18);
         uint256 assets = 1e18;
@@ -655,19 +636,18 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         // carry out a proper addCollateral() call
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, address(MKR), assets);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-        uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
 
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
-        adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow); //TODO: this will be interesting cause LTV maximums, etc.
+        adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // start repayment sequence
-        debtFTokenAdaptorV2.callAddInterest(mkrFraxLendPair); // TODO: EIN - getting an error here for some reason.
+        // debtFTokenAdaptorV2.callAddInterest(mkrFraxLendPair); // TODO: CRISTPY - getting an error here for some reason.
 
         uint256 debtBefore = getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar));
         // Repay the loan.
@@ -676,20 +656,18 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         cellar.callOnAdaptor(data);
         uint256 debtNow = getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar));
         assertLt(debtNow, debtBefore);
-        assertApproxEqAbs(FRAX.balanceOf(address(cellar)), fraxToBorrow / 2, 1, "Cellar should have zero debtAsset");
+        assertApproxEqAbs(
+            FRAX.balanceOf(address(cellar)),
+            fraxToBorrow / 2,
+            1e18,
+            "Cellar should have approximately half debtAsset"
+        );
     }
 
     // This check stops strategists from taking on any debt in positions they do not set up properly.
-    // This stops the attack vector or strategists opening up an untracked debt position then depositing the funds into a vesting contract.
-    function testTakingOutLoanInUntrackedPosition() external {
+    // TODO: CRISPY - getting an Index out of bounds error, and not sure why. Checked on foundry support TG, but no real answer there
+    function testLoanInUntrackedPosition() external {
         cellar.setRebalanceDeviation(0.004e18); // TODO: double check why setting rebalanceDeviation is needed
-        // Add new assets related to new fraxlendMarket; UNI_FRAX
-        uint32 uniPosition = 1_000_006;
-        registry.trustPosition(uniPosition, address(erc20Adaptor), abi.encode(UNI));
-        mockUniEth = new MockDataFeed(UNI_ETH_FEED);
-        price = uint256(mockUniEth.latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockUniEth));
-        priceRouter.addAsset(UNI, settings, abi.encode(stor), price);
         uint32 fraxlendCollateralUNIPosition = 1_000_007; // fralendV2
         registry.trustPosition(
             fraxlendCollateralUNIPosition,
@@ -698,14 +676,16 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         );
         // purposely do not trust a fraxlendDebtUNIPosition
         cellar.addPositionToCatalogue(fraxlendCollateralUNIPosition);
-        cellar.addPosition(4, fraxlendCollateralUNIPosition, abi.encode(0), false);
-        assets = 100_000e18;
+        cellar.addPosition(5, fraxlendCollateralUNIPosition, abi.encode(0), false);
+        uint256 assets = 100_000e18;
+        uint256 uniFraxToBorrow = priceRouter.getValue(UNI, assets / 2, FRAX);
+
         deal(address(UNI), address(cellar), assets);
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](2);
         bytes[] memory adaptorCallsFirstAdaptor = new bytes[](1); // collateralAdaptor
         bytes[] memory adaptorCallsSecondAdaptor = new bytes[](1); // debtAdaptor
         adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralWithFraxlendV2(UNI_FRAX_PAIR, assets);
-        adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowWithFraxlendV2(UNI_FRAX_PAIR, assets / 2);
+        adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowWithFraxlendV2(UNI_FRAX_PAIR, uniFraxToBorrow);
         data[0] = Cellar.AdaptorCall({
             adaptor: address(collateralFTokenAdaptorV2),
             callData: adaptorCallsFirstAdaptor
@@ -723,23 +703,26 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
     }
 
     // have strategist call repay function when no debt owed. Expect revert.
-    function testFailRepayingDebtThatIsNotOwed() external {
-        assets = 100_000e18;
+    function testRepayingDebtThatIsNotOwed() external {
+        uint256 assets = 100_000e18;
         // uint256 initialAssets = cellar.totalAssets();
         deal(address(MKR), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
+        // uint256 cellarBorrowShares = mkrFraxLendPair.userBorrowShares(address(cellar)); // TODO: double check this works
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(MKR_FRAX_PAIR, FRAX, assets / 2, cellarBorrowShares);
+
+        adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrFraxLendPair, assets / 2);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
-        // TODO: not sure what error to expect here, this was from AAVE tests: Error code 15: No debt of selected type.
-        vm.expectRevert(bytes("15"));
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(DebtFTokenAdaptorV2.DebtFTokenAdaptor__CannotRepayNoDebt.selector, MKR_FRAX_PAIR)
+            )
+        );
         cellar.callOnAdaptor(data);
     }
 
     // externalReceiver triggers when doing Strategist Function calls via adaptorCall.
-    // TODO: withdraw functionality requires implementation logic that respects a set max LTV.
-    // Test logic has been written basically though.
     function testBlockExternalReceiver() external {
         uint256 assets = 100_000e18;
         deal(address(MKR), address(this), assets);

@@ -3,6 +3,7 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
+import { Test, stdStorage, StdStorage, stdError, console } from "lib/forge-std/src/Test.sol";
 
 /**
  * @title FraxLend Debt Token Adaptor
@@ -33,6 +34,11 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      * @notice Attempted tx that results in unhealthy cellar LTV
      */
     error DebtFTokenAdaptor__LTVTooHigh(address fraxlendPair);
+
+    /**
+     * @notice Attempted repayment when no debt position in fraxlendPair for cellar
+     */
+    error DebtFTokenAdaptor__CannotRepayNoDebt(address fraxlendPair);
 
     /**
      * @notice Fraxlend Pair contract reporting higher repayment amount than Strategist is comfortable with according to Strategist params.
@@ -73,8 +79,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
     uint256 public immutable minimumHealthFactor;
 
     constructor(bool _accountForInterest, address _frax, uint256 _healthFactor) {
-        _verifyConstructorMinimumHealthFactor(_healthFactor); // TODO: EIN - figure out best way to convert this.
-        // TODO: Crispy stated how I should get the health factor 
+        // TODO: Crispy stated how I should get the health factor
         // okay, so do it similar to aave. health factor is amultiplier on the respective health var. So in our case...
 
         // recall: hf = collateral * liquidationThreshold / borrow
@@ -87,10 +92,14 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
         // recall if hf < 1, liquidation ensues
         // so the idea is that we have some hf that is safer than liquidation amount. This prevents the cellar from every going under water.
         // thus hf_adaptor > 1, let's say it is 1.1
-        // 
+        //
         ACCOUNT_FOR_INTEREST = _accountForInterest; //TODO: I think we need this, but need to double check for lending/borrowing setup in Fraxlend.
         FRAX = ERC20(_frax);
-        minimumHealthFactor = _healthFactor;
+        if (_healthFactor > 1.05e18) {
+            minimumHealthFactor = _healthFactor;
+        } else {
+            minimumHealthFactor = 1.05e18;
+        }
     }
 
     //============================================ Global Functions ===========================================
@@ -189,14 +198,13 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      * @param _debtTokenRepayAmount the amount of `debtToken` to repay with.
      * NOTE: call addInterest() beforehand to ensure we are repaying what is required.
      */
-    function repayFraxlendDebt(
-        IFToken _fraxlendPair,
-        uint256 _debtTokenRepayAmount
-    ) public {
+    function repayFraxlendDebt(IFToken _fraxlendPair, uint256 _debtTokenRepayAmount) public {
         // amountToRepay = _maxAvailable(FRAX, _maxAmountToRepay); // TODO: add a maxAvailable check to see how much is needed to repay off entire loan
 
         uint256 sharesToRepay = _fraxlendPair.convertToShares(_debtTokenRepayAmount); // initial assign & convert param to shares
         uint256 sharesAccToFraxlend = _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
+        if (sharesAccToFraxlend == 0) revert DebtFTokenAdaptor__CannotRepayNoDebt(address(_fraxlendPair)); // TODO: confirm that fraxlendpair doesn't check / revert if repayment is tried with no position. --> from checking it out, unless `userBorrowShares[_borrower] -= _shares;` reverts, then fraxlendCore lets users repay FRAX w/ no limiters.
+
         uint256 debtTokenToRepay = _debtTokenRepayAmount;
         ERC20 tokenToRepay = ERC20(_fraxlendPair.asset());
 
@@ -304,13 +312,18 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
 
         (uint256 LTV_PRECISION, , , , uint256 EXCHANGE_PRECISION, , , ) = _fraxlendPair.getConstants();
 
-        uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) / _collateralAmount;
+        uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) /
+            _collateralAmount;
 
         // get maxLTV from fraxlendPair
         uint256 fraxlendPairMaxLTV = _fraxlendPair.maxLTV();
+        console.log("maxLTV: %s && currentPositionLTV: %s", fraxlendPairMaxLTV, currentPositionLTV);
+
         // convert LTVs to HF
-        uint256 currentHF = (1 / currentPositionLTV) * fraxlendPairMaxLTV;
+        uint256 currentHF = fraxlendPairMaxLTV.mulDivDown(1e18, currentPositionLTV);
+
+        // (1 / currentPositionLTV) * fraxlendPairMaxLTV;
         // compare HF to current HF.
-        return currentHF > minimumHealthFactor; 
+        return currentHF > minimumHealthFactor;
     }
 }
