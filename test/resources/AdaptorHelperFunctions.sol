@@ -510,4 +510,14 @@ contract AdaptorHelperFunctions {
                 _fraxlendPair
             );
     }
+
+    function _createBytesDataToAddInterestWithFraxlendV2(
+        IFToken fraxlendPair
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                DebtFTokenAdaptorV2.callAddInterest.selector,
+                fraxlendPair
+            );
+    }
 }
