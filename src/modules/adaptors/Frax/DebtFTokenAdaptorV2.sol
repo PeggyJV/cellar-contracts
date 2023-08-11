@@ -11,6 +11,7 @@ import { Test, stdStorage, StdStorage, stdError, console } from "lib/forge-std/s
  * @author crispymangoes, 0xEinCodes
  * TODO: remove this when done -> NOTE: toAssetAmount() has 3 vars in newest version, in older version it only has two.
  * TODO: Carry out setup and tests for v1Adaptors too
+ * Move shared functions to a shared file. Good example is morpho?
  */
 contract DebtFTokenAdaptorV2 is BaseAdaptor {
     using SafeTransferLib for ERC20;
@@ -191,14 +192,12 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      * NOTE: call addInterest() beforehand to ensure we are repaying what is required.
      */
     function repayFraxlendDebt(IFToken _fraxlendPair, uint256 _debtTokenRepayAmount) public {
-        // amountToRepay = _maxAvailable(FRAX, _maxAmountToRepay); // TODO: add a maxAvailable check to see how much is needed to repay off entire loan
+        ERC20 tokenToRepay = ERC20(_fraxlendPair.asset());
+        uint256 debtTokenToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount); // TODO: add a maxAvailable check to see how much is needed to repay off entire loan
 
-        uint256 sharesToRepay = _fraxlendPair.convertToShares(_debtTokenRepayAmount); // initial assign & convert param to shares
+        uint256 sharesToRepay = _fraxlendPair.convertToShares(debtTokenToRepay); // initial assign & convert param to shares
         uint256 sharesAccToFraxlend = _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
         if (sharesAccToFraxlend == 0) revert DebtFTokenAdaptor__CannotRepayNoDebt(address(_fraxlendPair)); // TODO: confirm that fraxlendpair doesn't check / revert if repayment is tried with no position. --> from checking it out, unless `userBorrowShares[_borrower] -= _shares;` reverts, then fraxlendCore lets users repay FRAX w/ no limiters.
-
-        uint256 debtTokenToRepay = _debtTokenRepayAmount;
-        ERC20 tokenToRepay = ERC20(_fraxlendPair.asset());
 
         // take the smaller btw sharesToRepay and sharesAccToFraxlend
         if (sharesAccToFraxlend < sharesToRepay) {
@@ -235,7 +234,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor {
      * @dev This function uses `address(this)` as the address of the Cellar.
      */
     function _validateFToken(IFToken fraxlendPair) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(fraxlendPair))));
+        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(address(fraxlendPair))));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(fraxlendPair));

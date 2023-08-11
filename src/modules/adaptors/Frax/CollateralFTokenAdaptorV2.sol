@@ -142,7 +142,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      */
     function addCollateral(IFToken _fraxlendPair, uint256 _collateralToDeposit) public {
         ERC20 _collateralToken = ERC20(_fraxlendPair.collateralContract());
-        _validateInputs(_fraxlendPair, _collateralToken);
+        _validateInputs(_fraxlendPair, _collateralToken); //  * TODO: refactor so this just validates fraxlendPair
 
         uint256 amountToDeposit = _maxAvailable(_collateralToken, _collateralToDeposit);
         address fraxlendPair = address(_fraxlendPair);
