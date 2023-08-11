@@ -60,7 +60,6 @@ contract DeployCellarsScript is Script, MainnetAddresses {
 
     CellarWithOracleWithBalancerFlashLoans public ghoCellar;
     CellarWithOracleWithBalancerFlashLoans public swethCellar;
-    CellarWithOracleWithBalancerFlashLoans public ohmCellar;
 
     INonfungiblePositionManager internal positionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
@@ -73,14 +72,11 @@ contract DeployCellarsScript is Script, MainnetAddresses {
     uint32 usdtPositionId = 5;
     uint32 ghoPositionId = 6;
     uint32 swethPositionId = 7;
-    uint32 ohmPositionId = 8;
 
     // Uniswap Positions.
     uint32 wETH_swETH_PositionId = 1_000_001;
     uint32 GHO_USDC_PositionId = 1_000_002;
     uint32 GHO_USDT_PositionId = 1_000_003;
-    uint32 OHM_USDC_PositionId = 1_000_004;
-    uint32 OHM_DAI_PositionId = 1_000_005;
 
     function run() external {
         bytes memory creationCode;
@@ -125,19 +121,15 @@ contract DeployCellarsScript is Script, MainnetAddresses {
         registry.trustPosition(usdtPositionId, address(erc20Adaptor), abi.encode(USDT));
         registry.trustPosition(ghoPositionId, address(erc20Adaptor), abi.encode(GHO));
         registry.trustPosition(swethPositionId, address(erc20Adaptor), abi.encode(SWETH));
-        registry.trustPosition(ohmPositionId, address(erc20Adaptor), abi.encode(OHM));
 
         // Add Uniswap positions to Registry.
         registry.trustPosition(wETH_swETH_PositionId, address(uniswapV3Adaptor), abi.encode(WETH, SWETH));
         registry.trustPosition(GHO_USDC_PositionId, address(uniswapV3Adaptor), abi.encode(GHO, USDC));
         registry.trustPosition(GHO_USDT_PositionId, address(uniswapV3Adaptor), abi.encode(GHO, USDT));
-        registry.trustPosition(OHM_USDC_PositionId, address(uniswapV3Adaptor), abi.encode(OHM, USDC));
-        registry.trustPosition(OHM_DAI_PositionId, address(uniswapV3Adaptor), abi.encode(OHM, DAI));
 
         // Create Cellars and Share Price Oracles.
-        ghoCellar = _createCellar("1", "", GHO, ghoPositionId, abi.encode(0), 1e18, 0.8e18);
-        swethCellar = _createCellar("2", "", SWETH, swethPositionId, abi.encode(0), 0.001e18, 0.8e18);
-        ohmCellar = _createCellar("3", "", OHM, ohmPositionId, abi.encode(0), 0.1e9, 0.8e18);
+        ghoCellar = _createCellar("Turbo GHO", "TurboGHO", GHO, ghoPositionId, abi.encode(0), 1e18, 0.8e18);
+        swethCellar = _createCellar("Turbo SWETH", "TurboSWETH", WETH, wethPositionId, abi.encode(0), 0.001e18, 0.8e18);
 
         uint64 heartbeat = 1 days;
         uint64 deviationTrigger = 0.0010e4;
@@ -148,7 +140,7 @@ contract DeployCellarsScript is Script, MainnetAddresses {
         uint256 allowedAnswerChangeLower = 0.8e4;
         uint256 allowedAnswerChangeUpper = 10e4;
         _createSharePriceOracle(
-            "Oracle 1",
+            "Turbo GHO Share Price Oracle V0.0",
             address(ghoCellar),
             heartbeat,
             deviationTrigger,
@@ -161,7 +153,7 @@ contract DeployCellarsScript is Script, MainnetAddresses {
         );
 
         _createSharePriceOracle(
-            "Oracle 2",
+            "Turbo SWETH Share Price Oracle V0.0",
             address(swethCellar),
             heartbeat,
             deviationTrigger,
@@ -173,18 +165,6 @@ contract DeployCellarsScript is Script, MainnetAddresses {
             allowedAnswerChangeUpper
         );
 
-        _createSharePriceOracle(
-            "Oracle 3",
-            address(ohmCellar),
-            heartbeat,
-            deviationTrigger,
-            gracePeriod,
-            observationsToUse,
-            automationRegistry,
-            startingAnswer,
-            allowedAnswerChangeLower,
-            allowedAnswerChangeUpper
-        );
         vm.stopBroadcast();
     }
 
@@ -220,7 +200,7 @@ contract DeployCellarsScript is Script, MainnetAddresses {
 
         return
             CellarWithOracleWithBalancerFlashLoans(
-                deployer.deployContract(cellarName, creationCode, constructorArgs, 0)
+                deployer.deployContract(string.concat(cellarName, " V0.0"), creationCode, constructorArgs, 0)
             );
     }
 
