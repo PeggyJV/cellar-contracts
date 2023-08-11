@@ -131,4 +131,5 @@ contract MainnetAddresses {
 
     // Maker
     address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
+    address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
 }
