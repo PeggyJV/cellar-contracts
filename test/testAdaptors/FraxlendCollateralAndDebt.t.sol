@@ -298,17 +298,19 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         deal(address(MKR), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ MKR FraxlendPair
 
-        cellar.addPositionToCatalogue(fraxlendCollateralAPEPosition);
-        cellar.addPosition(0, fraxlendCollateralAPEPosition, abi.encode(0), false);
-        cellar.addPositionToCatalogue(fraxlendDebtAPEPosition);
-        cellar.addPosition(0, fraxlendDebtAPEPosition, abi.encode(0), true);
-
         // Try taking out a loan incorrectly where we have provided MKR, but are trying to access the APE_FRAX pair (which we shouldn't be able to).
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(APE_FRAX_PAIR, assets / 2);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
-        // TODO: EIN - I anticipate a reversion from the fraxlend side since the position is trusted but we do not have any collateral in that pair specifically.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    DebtFTokenAdaptorV2.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
+                    APE_FRAX_PAIR
+                )
+            )
+        );
         cellar.callOnAdaptor(data);
     }
 
@@ -339,6 +341,7 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         cellar.callOnAdaptor(data);
 
         // debtFTokenAdaptorV2.callAddInterest(mkrFraxLendPair); // TODO: EIN - getting an error here for some reason.
+        mkrFraxLendPair.addInterest(false);
         uint256 maxAmountToRepay = type(uint256).max; // set up repayment amount to be cellar's total FRAX.
         deal(address(FRAX), address(cellar), fraxToBorrow * 2);
 
@@ -573,20 +576,20 @@ contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelpe
         assertEq(MKR.balanceOf(address(cellar)), initialAssets);
 
         // Take out a FRAX loan.
-        uint256 fraxToBorrow = priceRouter.getValue(MKR, assets * 2, FRAX);
+        uint256 fraxToBorrow = priceRouter.getValue(MKR, assets.mulDivDown(1e4, 1.35e4), FRAX);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
 
         vm.expectRevert(
             bytes(abi.encodeWithSelector(DebtFTokenAdaptorV2.DebtFTokenAdaptor__LTVTooHigh.selector, MKR_FRAX_PAIR))
         );
-        cellar.callOnAdaptor(data); // TODO: CRISPY - it is reverting in a different way which I'm not sure about.
+        cellar.callOnAdaptor(data);
 
         // add collateral to be able to borrow amount desired
         deal(address(MKR), address(cellar), 3 * assets);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
-        cellar.callOnAdaptor(data); // TODO: CRISPY - please take a look at non-expected error generated.
+        cellar.callOnAdaptor(data);
 
         assertEq(MKR.balanceOf(address(cellar)), assets * 2);
 
