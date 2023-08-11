@@ -67,11 +67,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      * @param adaptorData adaptor data containing the abi encoded fraxlendPair
      * @dev configurationData is NOT used
      */
-    function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // use addCollateral() from fraxlendCore.sol
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
         ERC20 collateralToken = ERC20(fraxlendPair.collateralContract());
@@ -91,12 +87,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
      * @notice User withdraws are NOT allowed from this position.
      * NOTE: collateral withdrawal calls directly from users disallowed for now.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -147,10 +138,14 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor {
         uint256 amountToDeposit = _maxAvailable(_collateralToken, _collateralToDeposit);
         address fraxlendPair = address(_fraxlendPair);
         _collateralToken.safeApprove(fraxlendPair, amountToDeposit);
-        _fraxlendPair.addCollateral(amountToDeposit, address(this));
+        _addCollateral(_fraxlendPair, amountToDeposit);
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(_collateralToken, fraxlendPair);
+    }
+
+    function _addCollateral(IFToken _fraxlendPair, uint256 amountToDeposit) internal {
+        _fraxlendPair.addCollateral(amountToDeposit, address(this));
     }
 
     /**
