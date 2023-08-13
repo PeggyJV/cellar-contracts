@@ -83,6 +83,8 @@ interface IFToken {
         bool _previewInterest
     ) external view returns (uint256 _amount);
 
+    function toBorrowAmount(uint256 _shares, bool _roundUp) external view returns (uint256 _amount);
+
     function userBorrowShares(address) external view returns (uint256);
 
     function userCollateralBalance(address) external view returns (uint256);

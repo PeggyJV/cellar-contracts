@@ -169,10 +169,22 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         }
     }
 
-    //============================================ Interface Helper Functions ===========================================
+    //============================================ Helper Functions ===========================================
+
+     /**
+     * @notice Validates that a given fToken is set up as a position in the Cellar.
+     * @dev This function uses `address(this)` as the address of the Cellar.
+     */
+    function _validateFToken(IFToken _fraxlendPair) internal view virtual {
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_fraxlendPair))));
+        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        if (!Cellar(address(this)).isPositionUsed(positionId))
+            revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_fraxlendPair));
+    }
+
 
     //============================== Interface Details ==============================
-    // The Frax Pair interface can slightly change between versions.
+    // TODO: remove this or update it stating that functions specific to FraxlendV2 are in the FraxlendHealthFactorLogic.sol file. The Frax Pair interface can slightly change between versions.
     // To account for this, FTokenAdaptors (including debt and collateral adaptors) will use the below internal functions when
     // interacting with Frax Pairs, this way new pairs can be added by creating a
     // new contract that inherits from this one, and overrides any function it needs
@@ -188,14 +200,4 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     // then the described inheritance pattern above will be used.
     //===============================================================================
 
-    /**
-     * @notice Validates that a given fToken is set up as a position in the Cellar.
-     * @dev This function uses `address(this)` as the address of the Cellar.
-     */
-    function _validateFToken(IFToken _fraxlendPair) internal view virtual {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(address(_fraxlendPair))));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_fraxlendPair));
-    }
 }

@@ -164,10 +164,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         // Check health factor is still satisfactory
         (, uint256 _exchangeRate, ) = fraxlendPair.updateExchangeRate();
         // Check if borrower is insolvent after this borrow tx, revert if they are
-        // if (!_isSolvent(fraxlendPair, _exchangeRate)) {
-        //     revert DebtFTokenAdaptor__HealthFactorTooLow(address(fraxlendPair));
-        // }
-
         if (minimumHealthFactor > (_isSolvent(fraxlendPair, _exchangeRate))) {
             revert DebtFTokenAdaptor__HealthFactorTooLow(address(fraxlendPair));
         }
@@ -184,7 +180,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     function repayFraxlendDebt(IFToken _fraxlendPair, uint256 _debtTokenRepayAmount) public {
         ERC20 tokenToRepay = ERC20(_fraxlendPair.asset());
         uint256 debtTokenToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
-        uint256 sharesToRepay = _fraxlendPair.convertToShares(debtTokenToRepay);
+        uint256 sharesToRepay = _toAssetShares(_fraxlendPair, debtTokenToRepay, false, true);
         uint256 sharesAccToFraxlend = _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
         if (sharesAccToFraxlend == 0) revert DebtFTokenAdaptor__CannotRepayNoDebt(address(_fraxlendPair)); // NOTE: from checking it out, unless `userBorrowShares[_borrower] -= _shares;` reverts, then fraxlendCore lets users repay FRAX w/ no limiters.
 
@@ -255,4 +251,23 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     function _addInterest(IFToken fraxlendPair) internal virtual {
         fraxlendPair.addInterest(false);
     }
+
+    /**
+     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified 'v2' FraxLendPair
+     * @dev This is one of the adjusted functions from v1 to v2. ftoken.toAssetShares() calls into the respective version (v2 by default) of FraxLendPair
+     * @param fToken The specified FraxLendPair
+     * @param amount The amount of asset
+     * @param roundUp Whether to round up after division
+     * @param previewInterest Whether to preview interest accrual before calculation
+     */
+    function _toAssetShares(
+        IFToken fToken,
+        uint256 amount,
+        bool roundUp,
+        bool previewInterest
+    ) internal view virtual returns (uint256) {
+        return fToken.toAssetShares(amount, roundUp, previewInterest);
+    }
+
+    
 }

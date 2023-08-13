@@ -9,7 +9,7 @@ import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
  * @notice Implements health factor logic used by both
  *         the CollateralFTokenAdaptor && DebtFTokenAdaptor.
  * @author crispymangoes, 0xEinCodes
- * NOTE: helper functions made virtual in case future Fraxlend Pair versions require different implementation logic
+ * NOTE: helper functions made virtual in case future Fraxlend Pair versions require different implementation logic. The logic here is written in compliance with FraxlendV2; specifically the helper `_toBorrowAmount()`
  */
 contract FraxlendHealthFactorLogic {
     using Math for uint256;
