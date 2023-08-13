@@ -44,6 +44,9 @@ import {CollateralFTokenAdaptorV2} from "src/modules/adaptors/Frax/CollateralFTo
 
 import {DebtFTokenAdaptorV2} from "src/modules/adaptors/Frax/DebtFTokenAdaptorV2.sol";
 
+import {CollateralFTokenAdaptorV1} from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV1.sol";
+
+import {DebtFTokenAdaptorV1} from "src/modules/adaptors/Frax/DebtFTokenAdaptorV1.sol";
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -462,7 +465,7 @@ contract AdaptorHelperFunctions {
         return abi.encodeWithSelector(LegacyCellarAdaptor.withdrawFromCellar.selector, cellar, assets, oracle);
     }
 
-    // ========================================= FraxLend COLLATERAL FUNCTIONS =========================================
+    // ========================================= FraxLendV2 COLLATERAL FUNCTIONS =========================================
 
     function _createBytesDataToAddCollateralWithFraxlendV2(
         address _fraxlendPair,
@@ -476,7 +479,7 @@ contract AdaptorHelperFunctions {
             );
     }
 
-    // ========================================= FraxLend DEBT FUNCTIONS =========================================
+    // ========================================= FraxLendV2 DEBT FUNCTIONS =========================================
 
     // TODO: calculate the HF and determine how much can be withdrawn before we get to a certain point
     function _createBytesDataToBorrowWithFraxlendV2(address _fraxlendPair, uint256 _amountToBorrow)
@@ -512,6 +515,65 @@ contract AdaptorHelperFunctions {
     }
 
     function _createBytesDataToAddInterestWithFraxlendV2(
+        IFToken fraxlendPair
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                DebtFTokenAdaptorV2.callAddInterest.selector,
+                fraxlendPair
+            );
+    }
+
+    // ========================================= FraxLendV1 COLLATERAL FUNCTIONS =========================================
+
+    function _createBytesDataToAddCollateralWithFraxlendV1(
+        address _fraxlendPair,
+        uint256 _collateralToDeposit
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CollateralFTokenAdaptorV2.addCollateral.selector,
+                _fraxlendPair,
+                _collateralToDeposit
+            );
+    }
+
+    // ========================================= FraxLendV1 DEBT FUNCTIONS =========================================
+
+    // TODO: calculate the HF and determine how much can be withdrawn before we get to a certain point
+    function _createBytesDataToBorrowWithFraxlendV1(address _fraxlendPair, uint256 _amountToBorrow)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeWithSelector(DebtFTokenAdaptorV2.borrowFromFraxlend.selector, _fraxlendPair, _amountToBorrow);
+    }
+
+    // TODO: calculate the HF and determine how much can be withdrawn before we get to a certain point
+    function _createBytesDataToRepayWithFraxlendV1(
+        IFToken _fraxlendPair,
+        uint256 _debtTokenRepayAmount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                DebtFTokenAdaptorV2.repayFraxlendDebt.selector,
+                _fraxlendPair,
+                _debtTokenRepayAmount
+            );
+    }
+
+    function _createBytesDataToRemoveCollateralWithFraxlendV1(
+        uint256 _collateralAmount, IFToken _fraxlendPair
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CollateralFTokenAdaptorV2.removeCollateral.selector,
+                _collateralAmount,
+                _fraxlendPair
+            );
+    }
+
+    function _createBytesDataToAddInterestWithFraxlendV1(
         IFToken fraxlendPair
     ) internal pure returns (bytes memory) {
         return

@@ -9,11 +9,10 @@ import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.
 import "test/resources/MainnetStarter.t.sol";
 
 /**
- * @notice test provision of collateral and borrowing on Fraxlend
+ * @notice Test provision of collateral and borrowing on Fraxlend v2 pairs
  * @author 0xEinCodes, crispymangoes
- * NOTE: Initial tests revolve around providing MKR as collateral and borrowing FRAX. This fraxlend pair was used because it is a Fraxlend v2 pair.
  */
-contract CellarFraxLendCollateralAndDebtTest is MainnetStarterTest, AdaptorHelperFunctions {
+contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     CollateralFTokenAdaptorV2 public collateralFTokenAdaptorV2;

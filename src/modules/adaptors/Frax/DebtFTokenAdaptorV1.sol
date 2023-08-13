@@ -19,7 +19,11 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
     // This can be mitigated by calling `callAddInterest` on Frax Lend pairs
     // that are not frequently interacted with.
 
-    constructor(bool _accountForInterest, address _frax, uint256 _healthFactor) DebtFTokenAdaptorV2(_accountForInterest, _frax, _healthFactor) {}
+    constructor(
+        bool _accountForInterest,
+        address _frax,
+        uint256 _healthFactor
+    ) DebtFTokenAdaptorV2(_accountForInterest, _frax, _healthFactor) {}
 
     //============================================ Interface Helper Functions ===========================================
 
