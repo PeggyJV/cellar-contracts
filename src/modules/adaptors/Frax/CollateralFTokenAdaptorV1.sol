@@ -4,6 +4,10 @@ pragma solidity 0.8.21;
 import { IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
 import { CollateralFTokenAdaptorV2 } from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV2.sol";
 
+interface V1FToken {
+    function updateExchangeRate() external returns (uint256 _exchangeRate);
+}
+
 /**
  * @title FraxLend Collateral Adaptor
  * @notice Allows addition and removal of collateralAssets to Fraxlend pairs for a Cellar.
@@ -65,5 +69,9 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
         bool
     ) internal view override returns (uint256) {
         return _fraxlendPair.toBorrowAmount(_shares, _roundUp);
+    }
+
+    function _getExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
+        exchangeRate = V1FToken(address(fraxlendPair)).updateExchangeRate();
     }
 }

@@ -157,6 +157,10 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         }
     }
 
+    function _getExchangeRate(IFToken fraxlendPair) internal virtual returns (uint256 exchangeRate) {
+        (, exchangeRate, ) = fraxlendPair.updateExchangeRate();
+    }
+
     //============================================ Helper Functions ===========================================
 
     /**
@@ -201,7 +205,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     function _userCollateralBalance(
         IFToken _fraxlendPair,
         address _user
-    ) internal virtual view returns (uint256 collateralBalance) {
+    ) internal view virtual returns (uint256 collateralBalance) {
         return _fraxlendPair.userCollateralBalance(_user);
     }
 
@@ -209,7 +213,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @notice Get current collateral contract for caller in fraxlend pair
      * @return collateralContract for fraxlend pair
      */
-    function _userCollateralContract(IFToken _fraxlendPair) internal virtual view returns (ERC20 collateralContract) {
+    function _userCollateralContract(IFToken _fraxlendPair) internal view virtual returns (ERC20 collateralContract) {
         return ERC20(_fraxlendPair.collateralContract());
     }
 

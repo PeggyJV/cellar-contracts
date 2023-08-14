@@ -64,11 +64,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(
-        bool _accountForInterest,
-        address _frax,
-        uint256 _healthFactor
-    ) {
+    constructor(bool _accountForInterest, address _frax, uint256 _healthFactor) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         ACCOUNT_FOR_INTEREST = _accountForInterest;
         FRAX = ERC20(_frax);
@@ -91,23 +87,14 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     /**
      * @notice User deposits are NOT allowed into this position.
      */
-    function deposit(
-        uint256,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function deposit(uint256, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserDepositsNotAllowed();
     }
 
     /**
      * @notice User withdraws are NOT allowed from this position.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -162,11 +149,15 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         fraxlendPair.borrowAsset(amountToBorrow, 0, address(this)); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
 
         // Check health factor is still satisfactory
-        (, uint256 _exchangeRate, ) = fraxlendPair.updateExchangeRate();
+        uint256 _exchangeRate = _getExchangeRate(fraxlendPair);
         // Check if borrower is insolvent after this borrow tx, revert if they are
         if (minimumHealthFactor > (_isSolvent(fraxlendPair, _exchangeRate))) {
             revert DebtFTokenAdaptor__HealthFactorTooLow(address(fraxlendPair));
         }
+    }
+
+    function _getExchangeRate(IFToken fraxlendPair) internal virtual returns (uint256 exchangeRate) {
+        (, exchangeRate, ) = fraxlendPair.updateExchangeRate();
     }
 
     // `repayDebt`
@@ -191,11 +182,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         }
         tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max); // TODO: do we need to have the exact amount approved? I don't think so. It's good practice in case there are some wonky things happening in the fraxlend pairs, but that would be unlikely passed through governance as trusted positions.
 
-        uint256 expectedBorrowShares = _fraxlendPair.userBorrowShares(address(this)) - sharesToRepay;
         _fraxlendPair.repayAsset(sharesToRepay, address(this));
-
-        if (_fraxlendPair.userBorrowShares(address(this)) != expectedBorrowShares)
-            revert DebtFTokenAdaptor__RepaymentShareAmountDecrementedIncorrectly(address(_fraxlendPair)); // TODO: maybe delete, see comment on error
 
         _revokeExternalApproval(tokenToRepay, address(_fraxlendPair));
     }
@@ -268,6 +255,4 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     ) internal view virtual returns (uint256) {
         return fToken.toAssetShares(amount, roundUp, previewInterest);
     }
-
-    
 }
