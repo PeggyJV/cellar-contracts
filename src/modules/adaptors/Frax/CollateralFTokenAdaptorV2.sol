@@ -68,11 +68,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param adaptorData adaptor data containing the abi encoded fraxlendPair
      * @dev configurationData is NOT used
      */
-    function deposit(
-        uint256 assets,
-        bytes memory adaptorData,
-        bytes memory
-    ) public override {
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // use addCollateral() from fraxlendCore.sol
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
         ERC20 collateralToken = ERC20(fraxlendPair.collateralContract());
@@ -80,7 +76,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         _validateFToken(fraxlendPair);
         address fraxlendPairAddress = address(fraxlendPair);
         collateralToken.safeApprove(fraxlendPairAddress, assets);
-        fraxlendPair.addCollateral(assets, address(this));
+
+        _addCollateral(fraxlendPair, assets);
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(collateralToken, fraxlendPairAddress);
@@ -90,12 +87,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @notice User withdraws are NOT allowed from this position.
      * NOTE: collateral withdrawal calls directly from users disallowed for now.
      */
-    function withdraw(
-        uint256,
-        address,
-        bytes memory,
-        bytes memory
-    ) public pure override {
+    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
     }
 
@@ -114,7 +106,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
-        return fraxlendPair.userCollateralBalance(msg.sender);
+        return _userCollateralBalance(fraxlendPair, msg.sender);
     }
 
     /**
@@ -122,7 +114,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     function assetOf(bytes memory _adaptorData) public view override returns (ERC20) {
         IFToken fraxlendPair = abi.decode(_adaptorData, (IFToken));
-        return ERC20(fraxlendPair.collateralContract());
+        return _userCollateralContract(fraxlendPair);
     }
 
     /**
@@ -138,7 +130,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @notice Allows strategists to add collateral to the respective cellar position on FraxLend, enabling borrowing.
      */
     function addCollateral(IFToken _fraxlendPair, uint256 _collateralToDeposit) public {
-        ERC20 _collateralToken = ERC20(_fraxlendPair.collateralContract());
+        ERC20 _collateralToken = _userCollateralContract(_fraxlendPair);
         _validateFToken(_fraxlendPair);
 
         uint256 amountToDeposit = _maxAvailable(_collateralToken, _collateralToDeposit);
@@ -150,10 +142,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         _revokeExternalApproval(_collateralToken, fraxlendPair);
     }
 
-    function _addCollateral(IFToken _fraxlendPair, uint256 amountToDeposit) internal {
-        _fraxlendPair.addCollateral(amountToDeposit, address(this));
-    }
-
     /**
      * @notice Allows strategists to remove collateral from the respective cellar position on FraxLend.
      */
@@ -161,8 +149,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         // TODO: I don't think that Fraxlend pairs check whether or not cellar even has a position to start with. So we need to add a check/revert to disallow Strategists from calling this when they have zero collateral in fraxlend pair position. Otherwise, it just reverts I assume, could protect strategist from wasting gas.
 
         // remove collateral
-        _fraxlendPair.removeCollateral(_collateralAmount, address(this));
-        (, uint256 _exchangeRate, ) = _fraxlendPair.updateExchangeRate(); // need to calculate LTV
+        _removeCollateral(_collateralAmount, _fraxlendPair);
+        uint256 _exchangeRate = _updateExchangeRate(_fraxlendPair); // need to calculate LTV
         // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
         if (minimumHealthFactor > (_isSolvent(_fraxlendPair, _exchangeRate))) {
             revert CollateralFTokenAdaptor__HealthFactorTooLow(address(_fraxlendPair));
@@ -171,7 +159,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     //============================================ Helper Functions ===========================================
 
-     /**
+    /**
      * @notice Validates that a given fToken is set up as a position in the Cellar.
      * @dev This function uses `address(this)` as the address of the Cellar.
      */
@@ -181,7 +169,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert CollateralFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(_fraxlendPair));
     }
-
 
     //============================== Interface Details ==============================
     // TODO: remove this or update it stating that functions specific to FraxlendV2 are in the FraxlendHealthFactorLogic.sol file. The Frax Pair interface can slightly change between versions.
@@ -200,4 +187,44 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     // then the described inheritance pattern above will be used.
     //===============================================================================
 
+    /**
+     * @notice Increment collateral amount in cellar account within fraxlend pair
+     */
+    function _addCollateral(IFToken _fraxlendPair, uint256 amountToDeposit) internal {
+        _fraxlendPair.addCollateral(amountToDeposit, address(this));
+    }
+
+    /**
+     * @notice Get current collateral balance for caller in fraxlend pair
+     * @return collateralBalance of user in fraxlend pair
+     */
+    function _userCollateralBalance(
+        IFToken _fraxlendPair,
+        address _user
+    ) internal virtual view returns (uint256 collateralBalance) {
+        return _fraxlendPair.userCollateralBalance(_user);
+    }
+
+    /**
+     * @notice Get current collateral contract for caller in fraxlend pair
+     * @return collateralContract for fraxlend pair
+     */
+    function _userCollateralContract(IFToken _fraxlendPair) internal virtual view returns (ERC20 collateralContract) {
+        return ERC20(_fraxlendPair.collateralContract());
+    }
+
+    /**
+     * @notice Decrement collateral amount in cellar account within fraxlend pair
+     */
+    function _removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) internal virtual {
+        // fraxlendPair.addCollateral(_assets, address(this));
+        _fraxlendPair.removeCollateral(_collateralAmount, address(this));
+    }
+
+    /**
+     * @notice Update exchange rate
+     */
+    function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
+        (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();
+    }
 }
