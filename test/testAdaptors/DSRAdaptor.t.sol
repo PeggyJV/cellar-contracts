@@ -13,6 +13,10 @@ import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.so
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { IRYUSDRegistry } from "src/interfaces/IRYUSDRegistry.sol";
 
+interface IRYUSDCellar {
+    function setupAdaptor(address adaptor) external;
+}
+
 contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     DSRAdaptor public dsrAdaptor;
@@ -30,7 +34,7 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
     function setUp() public {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 16869780;
+        uint256 blockNumber = 17914165;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -147,6 +151,8 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
     function testStrategistFunctions(uint256 assets) external {
         cellar.setHoldingPosition(daiPosition);
 
+        cellar.setRebalanceDeviation(0.005e18);
+
         assets = bound(assets, 0.1e18, 1_000_000_000e18);
         deal(address(DAI), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -168,8 +174,6 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
         vm.warp(block.timestamp + 1 days);
         mockDaiUsd.setMockUpdatedAt(block.timestamp);
 
-        console.log(Pot(manager.pot()).chi());
-
         // Deposit remaining assets into DSR.
         {
             bytes[] memory adaptorCalls = new bytes[](1);
@@ -178,7 +182,7 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
         cellar.callOnAdaptor(data);
 
-        console.log(Pot(manager.pot()).chi());
+        // console.log(Pot(manager.pot()).chi());
 
         cellarDsrBalance = manager.daiBalance(address(cellar));
         assertGt(cellarDsrBalance, assets + initialAssets, "Should have deposited all the assets into the DSR.");
@@ -222,8 +226,6 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(DAI), address(this), assets);
         cellar.deposit(assets, address(this));
 
-        console.log("TA", cellar.totalAssets());
-
         uint256 assetsBefore = cellar.totalAssets();
 
         vm.warp(block.timestamp + 1 days);
@@ -257,7 +259,7 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
         // assets = bound(assets, 0.1e18, 1_000_000_000e18);
         uint256 assets = 1e18;
         ERC4626 sDai = ERC4626(savingsDaiAddress);
-        uint32 sDaiPosition = 4;
+        uint32 sDaiPosition = 29; // Take current position count and add 1.
 
         CellarAdaptor cellarAdaptor = new CellarAdaptor();
         IRYUSDRegistry ryusdRegistryInterface = IRYUSDRegistry(ryusdRegistry);
@@ -272,7 +274,9 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // addPosition on RYUSD cellar
         vm.startPrank(gravityBridgeAddress);
+        RYUSDCellar.removePosition(15, false);
         RYUSDCellar.addPosition(0, sDaiPosition, abi.encode(true), false);
+        IRYUSDCellar(address(ryusdCellar)).setupAdaptor(address(cellarAdaptor));
         vm.stopPrank();
 
         // At this point you can deal RYUSD some DAI, and make sure it can enter/exit sDAI
@@ -287,16 +291,10 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
             data[0] = Cellar.AdaptorCall({ adaptor: address(cellarAdaptor), callData: adaptorCalls });
         }
 
-        RYUSDCellar.callOnAdaptor(data); // TODO: CRISPY - getting an evm error here in delegateCall
-
-        // TODO: test _externalReceiverCheck? This probably isn't needed, since there should be compliance tests already btw RYUSD (older cellar) && new cellar / new adaptor architectures.
+        RYUSDCellar.callOnAdaptor(data);
 
         uint256 assetsInSDai = sDai.maxWithdraw(ryusdCellar);
         assertApproxEqAbs(assetsInSDai, assets / 2, 2, "Should have deposited half the assets into the DSR.");
-
-        // Advance some time.
-        vm.warp(block.timestamp + 1 days);
-        mockDaiUsd.setMockUpdatedAt(block.timestamp);
 
         // Deposit remaining assets into DSR.
         {
@@ -307,11 +305,7 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
         RYUSDCellar.callOnAdaptor(data);
 
         assetsInSDai = sDai.maxWithdraw(ryusdCellar);
-        assertGt(assetsInSDai, assets + initialAssets, "Should have deposited all the assets into the DSR.");
-
-        // Advance some time.
-        vm.warp(block.timestamp + 10 days);
-        mockDaiUsd.setMockUpdatedAt(block.timestamp);
+        assertApproxEqAbs(assetsInSDai, assets, 10, "Should have deposited all the assets into the DSR.");
 
         // Withdraw half the assets.
         {
@@ -336,9 +330,10 @@ contract CellarDSRTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
         RYUSDCellar.callOnAdaptor(data);
 
-        assertGt(
+        assertApproxEqAbs(
             DAI.balanceOf(address(ryusdCellar)),
-            assets + initialAssets,
+            assets,
+            10,
             "Should have withdrawn all the assets from the DSR."
         );
 
