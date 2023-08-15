@@ -14,9 +14,6 @@ import "test/resources/MainnetStarter.t.sol";
  * @notice Test provision of collateral and borrowing on Fraxlend v1 pairs
  * @author 0xEinCodes, crispymangoes
  * @dev These are applied to FraxlendV1 Pair types and are the same tests carried out for FraxlendV1 pairs and the respective debt and collateral adaptors.
- * // TODO: replace CRV w/ CRV
- * // TODO: replace WBTC w/ WBTC
- * // TODO: replace CVX w/ CVX
  */
 contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -161,7 +158,6 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
 
         cellar.addAdaptorToCatalogue(address(collateralFTokenAdaptorV1));
         cellar.addAdaptorToCatalogue(address(debtFTokenAdaptorV1));
-        // TODO: add V1 adaptors
 
         cellar.addPositionToCatalogue(wethPosition);
         cellar.addPositionToCatalogue(fraxlendCollateralCRVPosition);
@@ -411,7 +407,6 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         newData2[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV1), callData: adaptorCalls2 });
         cellar.callOnAdaptor(newData2);
 
-        // TODO: check that the repayment resulted in only one of the pairs LTV being improved. TODO: do we want to have a getter that provides the LTV or current healthFactor?
         assertApproxEqAbs(
             getFraxlendDebtBalance(CRV_FRAX_PAIR, address(cellar)),
             0,
@@ -616,7 +611,6 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
 
     // This check stops strategists from taking on any debt in positions they do not set up properly.
     function testLoanInUntrackedPosition() external {
-        // cellar.setRebalanceDeviation(0.004e18); // TODO: double check why setting rebalanceDeviation is needed
         uint32 fraxlendCollateralCVXPosition = 1_000_007; // fralendV1
         registry.trustPosition(
             fraxlendCollateralCVXPosition,
@@ -701,7 +695,7 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         IFToken _fraxlendPair,
         uint256 _shares,
         bool _roundUp,
-        bool _previewInterest
+        bool
     ) internal view virtual returns (uint256) {
         return _fraxlendPair.toBorrowAmount(_shares, _roundUp);
     }

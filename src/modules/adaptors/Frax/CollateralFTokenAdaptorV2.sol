@@ -128,6 +128,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Allows strategists to add collateral to the respective cellar position on FraxLend, enabling borrowing.
+     * @param _fraxlendPair The specified Fraxlend Pair
+     * @param _collateralToDeposit The amount of collateral to add to Fraxlend Pair position
      */
     function addCollateral(IFToken _fraxlendPair, uint256 _collateralToDeposit) public {
         ERC20 _collateralToken = _userCollateralContract(_fraxlendPair);
@@ -144,10 +146,10 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Allows strategists to remove collateral from the respective cellar position on FraxLend.
+     * @param _collateralAmount The amount of collateral to remove from fraxlend pair position
+     * @param _fraxlendPair The specified Fraxlend Pair
      */
     function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
-        // TODO: I don't think that Fraxlend pairs check whether or not cellar even has a position to start with. So we need to add a check/revert to disallow Strategists from calling this when they have zero collateral in fraxlend pair position. Otherwise, it just reverts I assume, could protect strategist from wasting gas.
-
         // remove collateral
         _removeCollateral(_collateralAmount, _fraxlendPair);
         uint256 _exchangeRate = _updateExchangeRate(_fraxlendPair); // need to calculate LTV
@@ -157,6 +159,11 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         }
     }
 
+    /**
+     * @notice Caller calls `updateExchangeRate()` on specified FraxlendV2 Pair
+     * @param fraxlendPair The specified FraxLendPair
+     * @return exchangeRate needed to calculate the current health factor
+     */
     function _getExchangeRate(IFToken fraxlendPair) internal virtual returns (uint256 exchangeRate) {
         (, exchangeRate, ) = fraxlendPair.updateExchangeRate();
     }
@@ -175,7 +182,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     }
 
     //============================== Interface Details ==============================
-    // TODO: remove this or update it stating that functions specific to FraxlendV2 are in the FraxlendHealthFactorLogic.sol file. The Frax Pair interface can slightly change between versions.
+    // The Frax Pair interface can slightly change between versions.
     // To account for this, FTokenAdaptors (including debt and collateral adaptors) will use the below internal functions when
     // interacting with Frax Pairs, this way new pairs can be added by creating a
     // new contract that inherits from this one, and overrides any function it needs
@@ -183,12 +190,16 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     // Current versions in use for `FraxLendPair` include v1 and v2.
 
-    // IMPORTANT: TODO: This `CollateralFTokenAdaptorV2.sol` is associated to the v2 version of `FraxLendPair`
+    // IMPORTANT: This `CollateralFTokenAdaptorV2.sol` is associated to the v2 version of `FraxLendPair`
     // whereas CollateralFTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
     // The reasoning to name it like this was to set up the base CollateralFTokenAdaptorV2 for the
     // most current version, v2. This is in anticipation that more FraxLendPairs will
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
+
+    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
+    // This function has a helper `_toBorrow()` that corresponds to v2 by default, but is virtual and overwritten for
+    // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
 
     /**
@@ -201,6 +212,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Increment collateral amount in cellar account within fraxlend pair
+     * @param _fraxlendPair The specified Fraxlend Pair
+     * @param amountToDeposit The amount of collateral to add to Fraxlend Pair position
      */
     function _addCollateral(IFToken _fraxlendPair, uint256 amountToDeposit) internal {
         _fraxlendPair.addCollateral(amountToDeposit, address(this));
@@ -208,6 +221,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Get current collateral balance for caller in fraxlend pair
+     * @param _fraxlendPair The specified Fraxlend Pair
+     * @param _user The specified user
      * @return collateralBalance of user in fraxlend pair
      */
     function _userCollateralBalance(
@@ -219,6 +234,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Get current collateral contract for caller in fraxlend pair
+     * @param _fraxlendPair The specified Fraxlend Pair
      * @return collateralContract for fraxlend pair
      */
     function _userCollateralContract(IFToken _fraxlendPair) internal view virtual returns (ERC20 collateralContract) {
@@ -227,14 +243,17 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Decrement collateral amount in cellar account within fraxlend pair
+     * @param _collateralAmount The amount of collateral to remove from fraxlend pair position
+     * @param _fraxlendPair The specified Fraxlend Pair
      */
     function _removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) internal virtual {
-        // fraxlendPair.addCollateral(_assets, address(this));
         _fraxlendPair.removeCollateral(_collateralAmount, address(this));
     }
 
     /**
-     * @notice Update exchange rate
+     * @notice Caller calls `updateExchangeRate()` on specified FraxlendV2 Pair
+     * @param _fraxlendPair The specified FraxLendPair
+     * @return exchangeRate needed to calculate the current health factor
      */
     function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
         (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();

@@ -12,7 +12,6 @@ interface V1FToken {
  * @title FraxLend Collateral Adaptor
  * @notice Allows addition and removal of collateralAssets to Fraxlend pairs for a Cellar.
  * @author crispymangoes, 0xEinCodes
- *  * TODO: change CollateralFTokenAdaptorV2 to CollateralFTokenAdaptor in naming
  */
 contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
     //============================================ Notice ===========================================
@@ -44,6 +43,10 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
     // most current version, v2. This is in anticipation that more FraxLendPairs will
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
+
+    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
+    // This function has a helper `_toBorrow()` that corresponds to v2 by default, but is virtual and overwritten for
+    // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
 
     /**
@@ -61,6 +64,7 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
      * @param _fraxlendPair The specified FraxLendPair
      * @param _shares Shares of debtToken
      * @param _roundUp Whether to round up after division
+     * @return amount of debtToken
      */
     function _toBorrowAmount(
         IFToken _fraxlendPair,
@@ -71,6 +75,11 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
         return _fraxlendPair.toBorrowAmount(_shares, _roundUp);
     }
 
+    /**
+     * @notice Caller calls `updateExchangeRate()` on specified FraxlendV1 Pair
+     * @param fraxlendPair The specified FraxLendPair
+     * @return exchangeRate needed to calculate the current health factor
+     */
     function _updateExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
         exchangeRate = V1FToken(address(fraxlendPair)).updateExchangeRate();
     }

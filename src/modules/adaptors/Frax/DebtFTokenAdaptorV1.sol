@@ -12,7 +12,6 @@ interface V1FToken {
  * @title FraxLend Debt Token Adaptor for FraxlendV1 pairs
  * @notice Allows Cellars to borrow assets from FraxLendV1 Pairs
  * @author crispymangoes, 0xEinCodes
- * TODO: change DebtFTokenAdaptorV2 to DebtFTokenAdaptor in naming
  */
 contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
     //============================================ Notice ===========================================
@@ -48,6 +47,10 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
     // most current version, v2. This is in anticipation that more FraxLendPairs will
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
+
+    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
+    // This function has a helper `_toBorrow()` that corresponds to v2 by default, but is virtual and overwritten for
+    // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
 
     /**
@@ -60,21 +63,12 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
         return keccak256(abi.encode("FraxLend debtTokenV1 Adaptor V 1.0"));
     }
 
-    // /**
-    //  * @notice Returns the cellar's balance of the respective Fraxlend debtToken calculated from cellar borrow shares
-    //  * @param adaptorData encoded fraxlendPair (fToken) for this position
-    //  * TODO: EIN
-    //  */
-    // function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-    //     IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
-    //     return _toBorrowAmount(fraxlendPair, fraxlendPair.userBorrowShares(msg.sender), false, ACCOUNT_FOR_INTEREST);
-    // }
-
     /**
-     * @notice Converts a given number of borrow shares to debtToken amount from specified 'v1' FraxLendPair
+     * @notice Converts a given number of borrow shares to debtToken amount from specified FraxlendV1 Pair
      * @param _fraxlendPair The specified FraxLendPair
      * @param _shares Shares of debtToken
      * @param _roundUp Whether to round up after division
+     * @return amount of debtToken to receive
      */
     function _toBorrowAmount(
         IFToken _fraxlendPair,
@@ -86,11 +80,12 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
     }
 
     /**
-     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified 'v1' FraxLendPair
+     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified FraxlendV1 Pair
      * @dev versions of FraxLendPair do not have a fourth param whereas v2 does
      * @param fToken The specified FraxLendPair
      * @param amount The amount of asset
      * @param roundUp Whether to round up after division
+     * @return number of asset shares
      */
     function _toAssetShares(
         IFToken fToken,
@@ -102,13 +97,18 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
     }
 
     /**
-     * @notice Caller calls `addInterest` on specified 'v1' FraxLendPair
+     * @notice Caller calls `addInterest` on specified FraxlendV1 Pair
+     * @param fToken The specified FraxlendPair
      */
     function _addInterest(IFToken fToken) internal override {
         fToken.addInterest();
     }
 
-    // TODO
+    /**
+     * @notice Caller calls `updateExchangeRate()` on specified FraxlendV1 Pair
+     * @param fraxlendPair The specified FraxLendPair
+     * @return exchangeRate needed to calculate the current health factor
+     */
     function _updateExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
         exchangeRate = V1FToken(address(fraxlendPair)).updateExchangeRate();
     }

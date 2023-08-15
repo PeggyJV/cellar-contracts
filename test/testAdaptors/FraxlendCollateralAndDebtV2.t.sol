@@ -154,7 +154,6 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
 
         cellar.addAdaptorToCatalogue(address(collateralFTokenAdaptorV2));
         cellar.addAdaptorToCatalogue(address(debtFTokenAdaptorV2));
-        // TODO: add V1 adaptors
 
         cellar.addPositionToCatalogue(wethPosition);
         cellar.addPositionToCatalogue(fraxlendCollateralMKRPosition);
@@ -404,7 +403,6 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         newData2[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls2 });
         cellar.callOnAdaptor(newData2);
 
-        // TODO: check that the repayment resulted in only one of the pairs LTV being improved. TODO: do we want to have a getter that provides the LTV or current healthFactor?
         assertApproxEqAbs(
             getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar)),
             0,
@@ -609,7 +607,6 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
 
     // This check stops strategists from taking on any debt in positions they do not set up properly.
     function testLoanInUntrackedPosition() external {
-        // cellar.setRebalanceDeviation(0.004e18); // TODO: double check why setting rebalanceDeviation is needed
         uint32 fraxlendCollateralUNIPosition = 1_000_007; // fralendV2
         registry.trustPosition(
             fraxlendCollateralUNIPosition,

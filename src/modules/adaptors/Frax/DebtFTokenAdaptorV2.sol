@@ -40,12 +40,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     error DebtFTokenAdaptor__CannotRepayNoDebt(address fraxlendPair);
 
     /**
-     * @notice Unexpected result in borrow shares within fraxlend pair after repayment
-     * TODO: not sure if we want it like this, this basically blocks repayments if the accounting is different btw this adaptor and the fraxlend pair.
-     */
-    error DebtFTokenAdaptor__RepaymentShareAmountDecrementedIncorrectly(address fraxlendPair);
-
-    /**
      * @notice The FRAX contract on current network.
      * @notice For mainnet use 0x853d955aCEf822Db058eb8505911ED77F175b99e.
      */
@@ -116,7 +110,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     }
 
     /**
-     * @notice Returns `assetContract` from respective fraxlendPair, but this is most likely going to be FRAX.
+     * @notice Returns `assetContract` from respective fraxlend pair, but this is most likely going to be FRAX.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
@@ -176,7 +170,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
             sharesToRepay = sharesAccToFraxlend;
             debtTokenToRepay;
         }
-        tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max); // TODO: do we need to have the exact amount approved? I don't think so. It's good practice in case there are some wonky things happening in the fraxlend pairs, but that would be unlikely passed through governance as trusted positions.
+        tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max);
 
         _repayAsset(_fraxlendPair, sharesToRepay);
 
@@ -185,6 +179,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Allows a strategist to call `addInterest` on a Frax Pair they are using.
+     * @param _fraxlendPair The specified Fraxlend Pair
      * @dev A strategist might want to do this if a Frax Lend pair has not been interacted
      *      in a while, and the strategist does not plan on interacting with it during a
      *      rebalance.
@@ -198,6 +193,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Validates that a given fraxlendPair is set up as a position in the Cellar.
+     * @param _fraxlendPair The specified Fraxlend Pair
      * @dev This function uses `address(this)` as the address of the Cellar.
      */
     function _validateFToken(IFToken _fraxlendPair) internal view {
@@ -216,18 +212,23 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     // new contract that inherits from this one, and overrides any function it needs
     // so it conforms with the new Frax Pair interface.
 
-    // Current versions in use for `FraxLendPair` include v1 and v2.
+    // Current versions in use for `Fraxlend Pair` include v1 and v2.
 
-    // IMPORTANT: This `DebtFTokenAdaptorV2.sol` is associated to the v2 version of `FraxLendPair`
+    // IMPORTANT: This `DebtFTokenAdaptorV2.sol` is associated to the v2 version of `Fraxlend Pair`
     // whereas DebtFTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
     // The reasoning to name it like this was to set up the base DebtFTokenAdaptor for the
     // most current version, v2. This is in anticipation that more FraxLendPairs will
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
+
+    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
+    // This function has a helper `_toBorrow()` that corresponds to v2 by default, but is virtual and overwritten for
+    // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
 
     /**
      * @notice gets the asset of the specified fraxlend pair
+     * @param _fraxlendPair The specified Fraxlend Pair
      * @return asset of fraxlend pair
      */
     function _fraxlendPairAsset(IFToken _fraxlendPair) internal virtual returns (address asset) {
@@ -235,21 +236,22 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     }
 
     /**
-     * @notice Caller calls `addInterest` on specified 'v2' FraxLendPair
-     * @dev fraxlendPair.addInterest() calls into the respective version (v2 by default) of FraxLendPair
-     * @param fraxlendPair The specified FraxLendPair
+     * @notice Caller calls `addInterest` on specified 'v2' Fraxlend Pair
+     * @dev fraxlendPair.addInterest() calls into the respective version (v2 by default) of Fraxlend Pair
+     * @param fraxlendPair The specified Fraxlend Pair
      */
     function _addInterest(IFToken fraxlendPair) internal virtual {
         fraxlendPair.addInterest(false);
     }
 
     /**
-     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified 'v2' FraxLendPair
-     * @dev This is one of the adjusted functions from v1 to v2. ftoken.toAssetShares() calls into the respective version (v2 by default) of FraxLendPair
-     * @param fToken The specified FraxLendPair
+     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified 'v2' Fraxlend Pair
+     * @dev This is one of the adjusted functions from v1 to v2. ftoken.toAssetShares() calls into the respective version (v2 by default) of Fraxlend Pair
+     * @param fToken The specified Fraxlend Pair
      * @param amount The amount of asset
      * @param roundUp Whether to round up after division
      * @param previewInterest Whether to preview interest accrual before calculation
+     * @return number of asset shares
      */
     function _toAssetShares(
         IFToken fToken,
@@ -262,13 +264,17 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Borrow amount of borrowAsset in cellar account within fraxlend pair
+     * @param _borrowAmount The amount of borrowAsset to borrow
+     * @param _fraxlendPair The specified Fraxlend Pair
      */
     function _borrowAsset(uint256 _borrowAmount, IFToken _fraxlendPair) internal virtual {
         _fraxlendPair.borrowAsset(_borrowAmount, 0, address(this)); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
     }
 
     /**
-     * @notice Update exchange rate
+     * @notice Caller calls `updateExchangeRate()` on specified FraxlendV2 Pair
+     * @param _fraxlendPair The specified Fraxlend Pair
+     * @return exchangeRate needed to calculate the current health factor
      */
     function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
         (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();
@@ -276,6 +282,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Get current collateral balance for caller in fraxlend pair
+     * @param _fraxlendPair The specified Fraxlend Pair
      * @return sharesAccToFraxlend of user in fraxlend pair
      */
     function _userBorrowShares(IFToken _fraxlendPair) internal view virtual returns (uint256 sharesAccToFraxlend) {
@@ -284,6 +291,8 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Repay fraxlend pair debt by an amount
+     * @param _fraxlendPair The specified Fraxlend Pair
+     * @param sharesToRepay The amount of shares to repay
      */
     function _repayAsset(IFToken _fraxlendPair, uint256 sharesToRepay) internal virtual {
         _fraxlendPair.repayAsset(sharesToRepay, address(this));
