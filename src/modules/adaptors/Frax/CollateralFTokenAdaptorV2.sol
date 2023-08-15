@@ -58,7 +58,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend Collateral fToken Adaptor V 0.1"));
+        return keccak256(abi.encode("FraxLend Collateral fTokenV2 Adaptor V 0.1"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -71,16 +71,16 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // use addCollateral() from fraxlendCore.sol
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
-        ERC20 collateralToken = ERC20(fraxlendPair.collateralContract());
+        ERC20 userCollateralContract = ERC20(fraxlendPair.collateralContract());
 
         _validateFToken(fraxlendPair);
         address fraxlendPairAddress = address(fraxlendPair);
-        collateralToken.safeApprove(fraxlendPairAddress, assets);
+        userCollateralContract.safeApprove(fraxlendPairAddress, assets);
 
         _addCollateral(fraxlendPair, assets);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(collateralToken, fraxlendPairAddress);
+        _revokeExternalApproval(userCollateralContract, fraxlendPairAddress);
     }
 
     /**
@@ -159,15 +159,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         }
     }
 
-    /**
-     * @notice Caller calls `updateExchangeRate()` on specified FraxlendV2 Pair
-     * @param fraxlendPair The specified FraxLendPair
-     * @return exchangeRate needed to calculate the current health factor
-     */
-    function _getExchangeRate(IFToken fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-        (, exchangeRate, ) = fraxlendPair.updateExchangeRate();
-    }
-
     //============================================ Helper Functions ===========================================
 
     /**
@@ -198,7 +189,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     // then the described inheritance pattern above will be used.
 
     // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
-    // This function has a helper `_toBorrow()` that corresponds to v2 by default, but is virtual and overwritten for
+    // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
     // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
 
@@ -217,19 +208,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     function _addCollateral(IFToken _fraxlendPair, uint256 amountToDeposit) internal {
         _fraxlendPair.addCollateral(amountToDeposit, address(this));
-    }
-
-    /**
-     * @notice Get current collateral balance for caller in fraxlend pair
-     * @param _fraxlendPair The specified Fraxlend Pair
-     * @param _user The specified user
-     * @return collateralBalance of user in fraxlend pair
-     */
-    function _userCollateralBalance(
-        IFToken _fraxlendPair,
-        address _user
-    ) internal view virtual returns (uint256 collateralBalance) {
-        return _fraxlendPair.userCollateralBalance(_user);
     }
 
     /**

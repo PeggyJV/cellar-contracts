@@ -23,19 +23,18 @@ contract FraxlendHealthFactorLogic {
      */
     function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view virtual returns (uint256) {
         // calculate the borrowShares
-        uint256 borrowerShares = _fraxlendPair.userBorrowShares(address(this));
+        uint256 borrowerShares = _userBorrowShares(_fraxlendPair);
         uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `_isSolvent()` function in actual Fraxlend contracts.
         if (_borrowerAmount == 0) return 1.05e18;
-        uint256 _collateralAmount = _fraxlendPair.userCollateralBalance(address(this));
+        uint256 _collateralAmount = _userCollateralBalance(_fraxlendPair, address(this));
         if (_collateralAmount == 0) return 0;
 
-        (uint256 LTV_PRECISION, , , , uint256 EXCHANGE_PRECISION, , , ) = _fraxlendPair.getConstants();
-
+        (uint256 LTV_PRECISION, uint256 EXCHANGE_PRECISION) = _getConstants(_fraxlendPair);
         uint256 currentPositionLTV = (((_borrowerAmount * _exchangeRate) / EXCHANGE_PRECISION) * LTV_PRECISION) /
             _collateralAmount;
 
         // get maxLTV from fraxlendPair
-        uint256 fraxlendPairMaxLTV = _fraxlendPair.maxLTV();
+        uint256 fraxlendPairMaxLTV = _maxLTV(_fraxlendPair);
 
         // convert LTVs to HF
         uint256 currentHF = fraxlendPairMaxLTV.mulDivDown(1e18, currentPositionLTV);
@@ -60,5 +59,37 @@ contract FraxlendHealthFactorLogic {
         bool _previewInterest
     ) internal view virtual returns (uint256) {
         return _fraxlendPair.toBorrowAmount(_shares, _roundUp, _previewInterest);
+    }
+
+    /**
+     * @notice Get current collateral balance for caller in fraxlend pair
+     * @param _fraxlendPair The specified Fraxlend Pair
+     * @return sharesAccToFraxlend of user in fraxlend pair
+     */
+    function _userBorrowShares(IFToken _fraxlendPair) internal view virtual returns (uint256 sharesAccToFraxlend) {
+        return _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
+    }
+
+    /**
+     * @notice Get current collateral balance for caller in fraxlend pair
+     * @param _fraxlendPair The specified Fraxlend Pair
+     * @param _user The specified user
+     * @return collateralBalance of user in fraxlend pair
+     */
+    function _userCollateralBalance(
+        IFToken _fraxlendPair,
+        address _user
+    ) internal view virtual returns (uint256 collateralBalance) {
+        return _fraxlendPair.userCollateralBalance(_user);
+    }
+
+    function _getConstants(
+        IFToken _fraxlendPair
+    ) internal view virtual returns (uint256 LTV_PRECISION, uint256 EXCHANGE_PRECISION) {
+        (LTV_PRECISION, , , , EXCHANGE_PRECISION, , , ) = _fraxlendPair.getConstants();
+    }
+
+    function _maxLTV(IFToken _fraxlendPair) internal view virtual returns (uint256 maxLTV) {
+        maxLTV = _fraxlendPair.maxLTV();
     }
 }

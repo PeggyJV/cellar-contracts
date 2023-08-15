@@ -4,6 +4,11 @@ pragma solidity 0.8.21;
 import { IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
 import { CollateralFTokenAdaptorV2 } from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV2.sol";
 
+/**
+ * @title V1FToken Interface
+ * @author crispymangoes, 0xEinCodes
+ * @notice Extra interface for FraxlendV1 pairs for `updateExchangeRate()` access. Originally was thought to be all included into the `updateExchangeRate()` defined within interface IFToken.sol, but solidity requires that there are separate interfaces because `updateExchangeRate()` differs between Fraxlend v1 and v2 Pairs in the return values.
+ */
 interface V1FToken {
     function updateExchangeRate() external returns (uint256 _exchangeRate);
 }
@@ -45,7 +50,7 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
     // then the described inheritance pattern above will be used.
 
     // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
-    // This function has a helper `_toBorrow()` that corresponds to v2 by default, but is virtual and overwritten for
+    // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
     // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
 

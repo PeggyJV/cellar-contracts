@@ -73,7 +73,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend debtToken Adaptor V 1.0"));
+        return keccak256(abi.encode("FraxLend debtTokenV2 Adaptor V 1.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -135,11 +135,11 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * NOTE: `borrowAsset` is the same btw v1 and v2 FraxlendPairs
      */
     function borrowFromFraxlend(IFToken fraxlendPair, uint256 amountToBorrow) public {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(address(fraxlendPair))));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(fraxlendPair));
-
+        // bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(address(fraxlendPair))));
+        // uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        // if (!Cellar(address(this)).isPositionUsed(positionId))
+        //     revert DebtFTokenAdaptor__FraxlendPairPositio
+        _validateFToken(fraxlendPair);
         _borrowAsset(amountToBorrow, fraxlendPair);
 
         // Check health factor is still satisfactory
@@ -222,7 +222,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     // then the described inheritance pattern above will be used.
 
     // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
-    // This function has a helper `_toBorrow()` that corresponds to v2 by default, but is virtual and overwritten for
+    // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
     // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
 
@@ -278,15 +278,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
         (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();
-    }
-
-    /**
-     * @notice Get current collateral balance for caller in fraxlend pair
-     * @param _fraxlendPair The specified Fraxlend Pair
-     * @return sharesAccToFraxlend of user in fraxlend pair
-     */
-    function _userBorrowShares(IFToken _fraxlendPair) internal view virtual returns (uint256 sharesAccToFraxlend) {
-        return _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
     }
 
     /**
