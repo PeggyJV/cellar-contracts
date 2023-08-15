@@ -109,7 +109,7 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
     }
 
     // TODO
-    function _getExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
+    function _updateExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
         exchangeRate = V1FToken(address(fraxlendPair)).updateExchangeRate();
     }
 }

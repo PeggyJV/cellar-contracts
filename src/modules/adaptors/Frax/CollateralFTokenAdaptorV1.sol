@@ -71,7 +71,7 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
         return _fraxlendPair.toBorrowAmount(_shares, _roundUp);
     }
 
-    function _getExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
+    function _updateExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
         exchangeRate = V1FToken(address(fraxlendPair)).updateExchangeRate();
     }
 }

@@ -149,15 +149,11 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         _borrowAsset(amountToBorrow, fraxlendPair);
 
         // Check health factor is still satisfactory
-        uint256 _exchangeRate = _getExchangeRate(fraxlendPair);
+        uint256 _exchangeRate = _updateExchangeRate(fraxlendPair);
         // Check if borrower is insolvent after this borrow tx, revert if they are
         if (minimumHealthFactor > (_isSolvent(fraxlendPair, _exchangeRate))) {
             revert DebtFTokenAdaptor__HealthFactorTooLow(address(fraxlendPair));
         }
-    }
-
-    function _getExchangeRate(IFToken fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-        (, exchangeRate, ) = fraxlendPair.updateExchangeRate();
     }
 
     // `repayDebt`
