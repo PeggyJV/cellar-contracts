@@ -23,7 +23,7 @@ contract FraxlendHealthFactorLogic {
      */
     function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view virtual returns (uint256) {
         // calculate the borrowShares
-        uint256 borrowerShares = _userBorrowShares(_fraxlendPair);
+        uint256 borrowerShares = _userBorrowShares(_fraxlendPair, address(this));
         uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `_isSolvent()` function in actual Fraxlend contracts.
         if (_borrowerAmount == 0) return 1.05e18;
         uint256 _collateralAmount = _userCollateralBalance(_fraxlendPair, address(this));
@@ -66,8 +66,11 @@ contract FraxlendHealthFactorLogic {
      * @param _fraxlendPair The specified Fraxlend Pair
      * @return sharesAccToFraxlend of user in fraxlend pair
      */
-    function _userBorrowShares(IFToken _fraxlendPair) internal view virtual returns (uint256 sharesAccToFraxlend) {
-        return _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
+    function _userBorrowShares(
+        IFToken _fraxlendPair,
+        address _user
+    ) internal view virtual returns (uint256 sharesAccToFraxlend) {
+        return _fraxlendPair.userBorrowShares(_user); // get fraxlendPair's record of borrowShares atm
     }
 
     /**

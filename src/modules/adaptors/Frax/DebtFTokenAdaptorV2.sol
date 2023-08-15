@@ -106,7 +106,8 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
-        return _toBorrowAmount(fraxlendPair, fraxlendPair.userBorrowShares(msg.sender), false, ACCOUNT_FOR_INTEREST);
+        uint256 borrowShares = _userBorrowShares(fraxlendPair, msg.sender);
+        return _toBorrowAmount(fraxlendPair, borrowShares, false, ACCOUNT_FOR_INTEREST);
     }
 
     /**
@@ -135,10 +136,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * NOTE: `borrowAsset` is the same btw v1 and v2 FraxlendPairs
      */
     function borrowFromFraxlend(IFToken fraxlendPair, uint256 amountToBorrow) public {
-        // bytes32 positionHash = keccak256(abi.encode(identifier(), true, abi.encode(address(fraxlendPair))));
-        // uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        // if (!Cellar(address(this)).isPositionUsed(positionId))
-        //     revert DebtFTokenAdaptor__FraxlendPairPositio
         _validateFToken(fraxlendPair);
         _borrowAsset(amountToBorrow, fraxlendPair);
 
@@ -162,7 +159,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         ERC20 tokenToRepay = ERC20(_fraxlendPairAsset(_fraxlendPair));
         uint256 debtTokenToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
         uint256 sharesToRepay = _toAssetShares(_fraxlendPair, debtTokenToRepay, false, true);
-        uint256 sharesAccToFraxlend = _userBorrowShares(_fraxlendPair); // get fraxlendPair's record of borrowShares atm
+        uint256 sharesAccToFraxlend = _userBorrowShares(_fraxlendPair, address(this)); // get fraxlendPair's record of borrowShares atm
         if (sharesAccToFraxlend == 0) revert DebtFTokenAdaptor__CannotRepayNoDebt(address(_fraxlendPair)); // NOTE: from checking it out, unless `userBorrowShares[_borrower] -= _shares;` reverts, then fraxlendCore lets users repay FRAX w/ no limiters.
 
         // take the smaller btw sharesToRepay and sharesAccToFraxlend

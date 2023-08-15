@@ -548,7 +548,7 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToAddInterestWithFraxlendV1(IFToken fraxlendPair) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(DebtFTokenAdaptorV2.callAddInterest.selector, fraxlendPair);
-    } 
+    }
 
     // ========================================= Maker FUNCTIONS =========================================
 

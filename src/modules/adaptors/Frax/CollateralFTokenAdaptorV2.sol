@@ -69,18 +69,17 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @dev configurationData is NOT used
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
-        // use addCollateral() from fraxlendCore.sol
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
-        ERC20 userCollateralContract = ERC20(fraxlendPair.collateralContract());
+        ERC20 collateralToken = _userCollateralContract(fraxlendPair);
 
         _validateFToken(fraxlendPair);
         address fraxlendPairAddress = address(fraxlendPair);
-        userCollateralContract.safeApprove(fraxlendPairAddress, assets);
+        collateralToken.safeApprove(fraxlendPairAddress, assets);
 
         _addCollateral(fraxlendPair, assets);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(userCollateralContract, fraxlendPairAddress);
+        _revokeExternalApproval(collateralToken, fraxlendPairAddress);
     }
 
     /**

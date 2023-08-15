@@ -5,8 +5,6 @@ import { IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
 import { DebtFTokenAdaptorV2 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV2.sol";
 
 /**
- * @title V1FToken Interface
- * @author crispymangoes, 0xEinCodes
  * @notice Extra interface for FraxlendV1 pairs for `updateExchangeRate()` access. Originally was thought to be all included into the `updateExchangeRate()` defined within interface IFToken.sol, but solidity requires that there are separate interfaces because `updateExchangeRate()` differs between Fraxlend v1 and v2 Pairs in the return values.
  */
 interface V1FToken {
