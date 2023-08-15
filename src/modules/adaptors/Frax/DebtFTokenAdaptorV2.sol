@@ -146,7 +146,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked(address(fraxlendPair));
 
-        fraxlendPair.borrowAsset(amountToBorrow, 0, address(this)); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
+        _borrowAsset(amountToBorrow, fraxlendPair);
 
         // Check health factor is still satisfactory
         uint256 _exchangeRate = _getExchangeRate(fraxlendPair);
@@ -169,10 +169,10 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _debtTokenRepayAmount the amount of `debtToken` to repay with.
      */
     function repayFraxlendDebt(IFToken _fraxlendPair, uint256 _debtTokenRepayAmount) public {
-        ERC20 tokenToRepay = ERC20(_fraxlendPair.asset());
+        ERC20 tokenToRepay = ERC20(_fraxlendPairAsset(_fraxlendPair));
         uint256 debtTokenToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
         uint256 sharesToRepay = _toAssetShares(_fraxlendPair, debtTokenToRepay, false, true);
-        uint256 sharesAccToFraxlend = _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
+        uint256 sharesAccToFraxlend = _userBorrowShares(_fraxlendPair); // get fraxlendPair's record of borrowShares atm
         if (sharesAccToFraxlend == 0) revert DebtFTokenAdaptor__CannotRepayNoDebt(address(_fraxlendPair)); // NOTE: from checking it out, unless `userBorrowShares[_borrower] -= _shares;` reverts, then fraxlendCore lets users repay FRAX w/ no limiters.
 
         // take the smaller btw sharesToRepay and sharesAccToFraxlend
@@ -182,7 +182,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         }
         tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max); // TODO: do we need to have the exact amount approved? I don't think so. It's good practice in case there are some wonky things happening in the fraxlend pairs, but that would be unlikely passed through governance as trusted positions.
 
-        _fraxlendPair.repayAsset(sharesToRepay, address(this));
+        _repayAsset(_fraxlendPair, sharesToRepay);
 
         _revokeExternalApproval(tokenToRepay, address(_fraxlendPair));
     }
@@ -231,6 +231,14 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     //===============================================================================
 
     /**
+     * @notice gets the asset of the specified fraxlend pair
+     * @return asset of fraxlend pair
+     */
+    function _fraxlendPairAsset(IFToken _fraxlendPair) internal virtual returns (address asset) {
+        return _fraxlendPair.asset();
+    }
+
+    /**
      * @notice Caller calls `addInterest` on specified 'v2' FraxLendPair
      * @dev fraxlendPair.addInterest() calls into the respective version (v2 by default) of FraxLendPair
      * @param fraxlendPair The specified FraxLendPair
@@ -254,5 +262,34 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         bool previewInterest
     ) internal view virtual returns (uint256) {
         return fToken.toAssetShares(amount, roundUp, previewInterest);
+    }
+
+    /**
+     * @notice Borrow amount of borrowAsset in cellar account within fraxlend pair
+     */
+    function _borrowAsset(uint256 _borrowAmount, IFToken _fraxlendPair) internal virtual {
+        _fraxlendPair.borrowAsset(_borrowAmount, 0, address(this)); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
+    }
+
+    /**
+     * @notice Update exchange rate
+     */
+    function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
+        (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();
+    }
+
+    /**
+     * @notice Get current collateral balance for caller in fraxlend pair
+     * @return sharesAccToFraxlend of user in fraxlend pair
+     */
+    function _userBorrowShares(IFToken _fraxlendPair) internal view virtual returns (uint256 sharesAccToFraxlend) {
+        return _fraxlendPair.userBorrowShares(address(this)); // get fraxlendPair's record of borrowShares atm
+    }
+
+    /**
+     * @notice Repay fraxlend pair debt by an amount
+     */
+    function _repayAsset(IFToken _fraxlendPair, uint256 sharesToRepay) internal virtual {
+        _fraxlendPair.repayAsset(sharesToRepay, address(this));
     }
 }

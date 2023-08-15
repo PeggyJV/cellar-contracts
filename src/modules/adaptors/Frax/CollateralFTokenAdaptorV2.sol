@@ -192,6 +192,14 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     //===============================================================================
 
     /**
+     * @notice gets the asset of the specified fraxlend pair
+     * @return asset of fraxlend pair
+     */
+    function _fraxlendPairAsset(IFToken _fraxlendPair) internal view virtual returns (address asset) {
+        return _fraxlendPair.asset();
+    }
+
+    /**
      * @notice Increment collateral amount in cellar account within fraxlend pair
      */
     function _addCollateral(IFToken _fraxlendPair, uint256 amountToDeposit) internal {
