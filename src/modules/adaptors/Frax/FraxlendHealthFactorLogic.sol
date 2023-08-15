@@ -19,6 +19,7 @@ contract FraxlendHealthFactorLogic {
      * @notice The ```_isSolvent``` function returns the current health factor of a respective position given an exchange rate
      * @param _fraxlendPair The specified Fraxlend Pair
      * @param _exchangeRate The exchange rate, i.e. the amount of collateral to buy 1e18 asset
+     * @return currentHF The health factor of the position atm
      */
     function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view virtual returns (uint256) {
         // calculate the borrowShares
