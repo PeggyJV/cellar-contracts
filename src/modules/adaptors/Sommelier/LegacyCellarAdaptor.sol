@@ -79,7 +79,7 @@ contract LegacyCellarAdaptor is BaseAdaptor {
         (uint256 latest, bool isNotSafeToUse) = oracle.getLatestAnswer();
         // If oracle is not safe to use, default to calculating share price on chain.
         if (!isNotSafeToUse) {
-            balance = balance.mulDivDown(latest, 10 ** oracle.ORACLE_DECIMALS());
+            balance = balance.mulDivDown(latest, 10 ** oracle.decimals());
             // Convert balance from share decimals to asset decimals.
             return balance.changeDecimals(cellar.decimals(), cellar.asset().decimals());
         } else return cellar.previewRedeem(balance);

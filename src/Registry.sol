@@ -356,7 +356,13 @@ contract Registry is Ownable {
      * @param isDebt bool indicating whether this position takes on debt or not
      * @param adaptorData arbitrary bytes used to configure this position
      */
-    event PositionAdded(uint32 id, address adaptor, bool isDebt, bytes adaptorData);
+    event Registry__PositionTrusted(uint32 id, address adaptor, bool isDebt, bytes adaptorData);
+
+    /**
+     * @notice Emitted when a position is distrusted.
+     * @param id the positions id
+     */
+    event Registry__PositionDistrusted(uint32 id);
 
     /**
      * @notice Attempted to trust a position not being used.
@@ -383,12 +389,6 @@ contract Registry is Ownable {
      * @notice Addresses of the positions currently used by the cellar.
      */
     uint256 public constant PRICE_ROUTER_REGISTRY_SLOT = 2;
-
-    /**
-     * @notice Stores the number of positions that have been added to the registry.
-     *         Starts at 101.
-     */
-    uint32 public positionCount = 100;
 
     /**
      * @notice Maps a position hash to a position Id.
@@ -449,7 +449,7 @@ contract Registry is Ownable {
             if (!priceRouter.isSupported(assets[i])) revert Registry__PositionPricingNotSetUp(address(assets[i]));
         }
 
-        emit PositionAdded(positionId, adaptor, isDebt, adaptorData);
+        emit Registry__PositionTrusted(positionId, adaptor, isDebt, adaptorData);
     }
 
     /**
@@ -460,6 +460,7 @@ contract Registry is Ownable {
     function distrustPosition(uint32 positionId) external onlyOwner {
         if (!isPositionTrusted[positionId]) revert Registry__PositionIsNotTrusted(positionId);
         isPositionTrusted[positionId] = false;
+        emit Registry__PositionDistrusted(positionId);
     }
 
     /**

@@ -18,6 +18,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
     AaveATokenAdaptor private aaveATokenAdaptor;
     MockDataFeed private usdcMockFeed;
+    MockDataFeed private wethMockFeed;
     Cellar private cellar;
     ERC4626SharePriceOracle private sharePriceOracle;
 
@@ -26,6 +27,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
     uint32 private usdcPosition = 1;
     uint32 private aV2USDCPosition = 2;
     uint32 private debtUSDCPosition = 3;
+    uint32 private wethPosition = 4;
 
     uint256 private initialAssets;
 
@@ -39,14 +41,15 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         _setUp();
 
         usdcMockFeed = new MockDataFeed(USDC_USD_FEED);
+        wethMockFeed = new MockDataFeed(WETH_USD_FEED);
         aaveATokenAdaptor = new AaveATokenAdaptor(address(pool), address(WETH), 1.05e18);
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
         PriceRouter.AssetSettings memory settings;
 
-        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
+        uint256 price = uint256(IChainlinkAggregator(address(wethMockFeed)).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(wethMockFeed));
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
         price = uint256(IChainlinkAggregator(address(usdcMockFeed)).latestAnswer());
@@ -60,6 +63,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
         registry.trustPosition(aV2USDCPosition, address(aaveATokenAdaptor), abi.encode(address(aV2USDC)));
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(address(USDC)));
+        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(address(WETH)));
 
         uint256 minHealthFactor = 1.1e18;
 
@@ -99,7 +103,10 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry
+            _automationRegistry,
+            1e18,
+            0.01e4,
+            10e4
         );
     }
 
@@ -616,7 +623,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         }
 
         cellar.setHoldingPosition(usdcPosition);
-        sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.2e4, 0.94e4);
+        sharePriceMultiplier0 = bound(sharePriceMultiplier0, 0.7e4, 0.94e4);
         sharePriceMultiplier1 = bound(sharePriceMultiplier1, 1.06e4, 1.5e4);
         uint256 sharePriceMultiplier2 = sharePriceMultiplier0 / 2;
         uint256 sharePriceMultiplier3 = sharePriceMultiplier0 / 3;
@@ -825,11 +832,21 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         // Try calling performUpkeep when no upkeep condition is met.
         (ans, timestamp) = abi.decode(performData, (uint224, uint64));
         timestamp = timestamp + 1_000;
+        vm.warp(timestamp);
         performData = abi.encode(ans, timestamp);
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__NoUpkeepConditionMet.selector)
             )
+        );
+        sharePriceOracle.performUpkeep(performData);
+
+        // Try calling performUpkeep using a future timestamp.
+        (ans, timestamp) = abi.decode(performData, (uint224, uint64));
+        timestamp = timestamp + 1_000;
+        performData = abi.encode(ans, timestamp);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__FuturePerformData.selector))
         );
         sharePriceOracle.performUpkeep(performData);
 
@@ -847,6 +864,215 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         vm.stopPrank();
     }
 
+    function testExtremeLowAnswerTriggersKillSwitch() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 0.0001e4);
+
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+    }
+
+    function testExtremeHighAnswerTriggersKillSwitch() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        _passTimeAlterSharePriceAndUpkeep(1 days, 11e4);
+
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+    }
+
+    function testMaliciousChainlinkAnswersUpdateAnswerToRightBelowTheExtreme() external {
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Fill with observations so oracle is safe to use.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        // Large proposed answer is passed in, but it is not large enough to trigger kill switch
+        _passTimeAlterSharePriceAndUpkeep(1 days, 9e4);
+        assertTrue(!sharePriceOracle.killSwitch(), "Kill Switch should not be active.");
+
+        // But if another large answer is provided immediately after, kill switch should be triggered.
+        // Eventhough the proposed answer to last saved answer deviation is well below the threshold,
+        // the proposed answer compared to TWAA is EXTREME.
+        _passTimeAlterSharePriceAndUpkeep(1, 2e4);
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+    }
+
+    function testKillSwitchEffects() external {
+        // Activate Kill Switch.
+        cellar.setHoldingPosition(usdcPosition);
+
+        // Have user deposit into cellar.
+        uint256 assets = 100_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Call first performUpkeep on Cellar.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+
+        // Fill with observations so oracle is safe to use.
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeep(1 days, 1e4);
+
+        bool isNotSafeToUse;
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(!isNotSafeToUse, "Oracle should be safe to use.");
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertTrue(!isNotSafeToUse, "Oracle should be safe to use.");
+
+        // 5 Min pass, but reported answer is extreme.
+        _passTimeAlterSharePriceAndUpkeep(300, 11e4);
+        assertTrue(sharePriceOracle.killSwitch(), "Kill Switch should be active.");
+
+        // Trying to use the oracle should result in error bool set to true.
+        (, , isNotSafeToUse) = sharePriceOracle.getLatest();
+        assertTrue(isNotSafeToUse, "Oracle should not be safe to use.");
+        (, isNotSafeToUse) = sharePriceOracle.getLatestAnswer();
+        assertTrue(isNotSafeToUse, "Oracle should not be safe to use.");
+
+        (uint216 ans, uint64 time) = abi.decode(performData, (uint216, uint64));
+        time = uint64(block.timestamp);
+        performData = abi.encode(ans, time);
+
+        // Checkupkeep should return false.
+        vm.warp(block.timestamp + 1 days);
+        (upkeepNeeded, ) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(!upkeepNeeded, "Upkeep should not be needed.");
+
+        // Perform Upkeep should revert.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__ContractKillSwitch.selector))
+        );
+        sharePriceOracle.performUpkeep(performData);
+    }
+
+    function testSharePriceOracleWorkingWithLargeNumbers() external {
+        uint256 assets = 1_000_000_000_000_000e18;
+        uint256 sharePriceMultiplier = 1_000_000_000_000e4;
+
+        // Create a new cellar that has WETH as accounting asset.
+        string memory cellarName = "WETH Cellar V0.0";
+        uint64 platformCut = 0.75e18;
+
+        cellar = _createCellar(cellarName, WETH, wethPosition, abi.encode(0), assets, platformCut);
+
+        // Create new share price oracle for it.
+        {
+            ERC4626 _target = ERC4626(address(cellar));
+            uint64 _heartbeat = 1 days;
+            uint64 _deviationTrigger = 0.0005e4;
+            uint64 _gracePeriod = 60 * 60; // 1 hr
+            uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+            address _automationRegistry = address(this);
+
+            // Setup share price oracle.
+            sharePriceOracle = new ERC4626SharePriceOracle(
+                _target,
+                _heartbeat,
+                _deviationTrigger,
+                _gracePeriod,
+                _observationsToUse,
+                _automationRegistry,
+                1e18,
+                0,
+                1_000_000_000_000_000_000e4
+            );
+        }
+
+        // Call first performUpkeep on Cellar.
+        {
+            bool upkeepNeeded;
+            bytes memory performData;
+            (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+            assertTrue(upkeepNeeded, "Upkeep should be needed.");
+            sharePriceOracle.performUpkeep(performData);
+        }
+
+        // Fill with observations so oracle is safe to use.
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+
+        // Shoot the share price to the stratosphere.
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, sharePriceMultiplier);
+
+        // Have TWAA catch up to change in share price.
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+        _passTimeAlterSharePriceAndUpkeepForWethCellar(1 days, 1e4);
+
+        (uint256 ans, uint256 twaa, ) = sharePriceOracle.getLatest();
+
+        uint256 expectedSharePrice = assets.mulDivDown(sharePriceMultiplier, 1e4) / cellar.totalSupply();
+        // To convert it into 1 share.
+        expectedSharePrice = expectedSharePrice * 1e18;
+
+        assertEq(ans, expectedSharePrice, "Answer should equal expected.");
+        assertEq(ans, twaa, "Answer should equal TWAA.");
+
+        // User can deposit and withdraw.
+        assets = 1e18;
+        deal(address(WETH), address(this), assets);
+        WETH.approve(address(cellar), assets);
+        cellar.deposit(assets, address(this));
+        cellar.withdraw(assets, address(this), address(this));
+    }
+
+    function _passTimeAlterSharePriceAndUpkeepForWethCellar(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
+        vm.warp(block.timestamp + timeToPass);
+        wethMockFeed.setMockUpdatedAt(block.timestamp);
+        deal(address(WETH), address(cellar), WETH.balanceOf(address(cellar)).mulDivDown(sharePriceMultiplier, 1e4));
+
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+        sharePriceOracle.performUpkeep(performData);
+    }
+
     function _passTimeAlterSharePriceAndUpkeep(uint256 timeToPass, uint256 sharePriceMultiplier) internal {
         vm.warp(block.timestamp + timeToPass);
         usdcMockFeed.setMockUpdatedAt(block.timestamp);
@@ -861,10 +1087,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
     function _calcCumulative(Cellar target, uint256 previous, uint256 timePassed) internal view returns (uint256) {
         uint256 oneShare = 10 ** target.decimals();
-        uint256 totalAssets = target.totalAssets().changeDecimals(
-            target.decimals(),
-            sharePriceOracle.ORACLE_DECIMALS()
-        );
+        uint256 totalAssets = target.totalAssets().changeDecimals(target.decimals(), sharePriceOracle.decimals());
         return previous + totalAssets.mulDivDown(oneShare * timePassed, target.totalSupply());
     }
 }

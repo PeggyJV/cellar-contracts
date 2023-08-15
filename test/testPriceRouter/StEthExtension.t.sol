@@ -98,7 +98,6 @@ contract StEthExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Deviate chainlink answer up 51bps above uniswap answer.
         // Deviation makes chainlink answer report a value greater than 1:1 peg, so extension should default to use 1:1.
-        // TODO this was commented out for now
         chainlinkAnswer = uniswapAnswer.mulDivDown(1.0051e4, 1e4);
 
         stethMockFeed.setMockAnswer(int256(chainlinkAnswer));

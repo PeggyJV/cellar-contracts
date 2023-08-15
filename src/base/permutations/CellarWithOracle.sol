@@ -60,8 +60,10 @@ contract CellarWithOracle is Cellar {
      * @dev Trying to set the share price oracle to the zero address will revert here.
      * @dev Callable by Sommelier Governance.
      */
-    function setSharePriceOracle(ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
-        if (_sharePriceOracle.ORACLE_DECIMALS() != ORACLE_DECIMALS) revert Cellar__OracleFailure();
+    function setSharePriceOracle(uint256 _registryId, ERC4626SharePriceOracle _sharePriceOracle) external onlyOwner {
+        _checkRegistryAddressAgainstExpected(_registryId, address(_sharePriceOracle));
+        if (_sharePriceOracle.decimals() != ORACLE_DECIMALS || address(_sharePriceOracle.target()) != address(this))
+            revert Cellar__OracleFailure();
         sharePriceOracle = _sharePriceOracle;
         emit SharePriceOracleUpdated(address(_sharePriceOracle));
     }
