@@ -115,7 +115,8 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         IFToken fraxlendPair = abi.decode(adaptorData, (IFToken));
-        return ERC20(fraxlendPair.asset());
+        return ERC20(_fraxlendPairAsset(fraxlendPair));
+        // return ERC20(fraxlendPair.asset());
     }
 
     /**
@@ -228,7 +229,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _fraxlendPair The specified Fraxlend Pair
      * @return asset of fraxlend pair
      */
-    function _fraxlendPairAsset(IFToken _fraxlendPair) internal virtual returns (address asset) {
+    function _fraxlendPairAsset(IFToken _fraxlendPair) internal view virtual returns (address asset) {
         return _fraxlendPair.asset();
     }
 
