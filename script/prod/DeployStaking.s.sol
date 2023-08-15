@@ -41,14 +41,14 @@ contract DeployStakingScript is Script, MainnetAddresses {
 
         address _owner = multisig;
         ERC20 _stakingToken = stakingToken;
-        ERC20 _distributionToken; // pearls
-        uint256 _epochDuration = 30 * 1 days;
-        uint256 shortBoost = 1.1e18;
-        uint256 mediumBoost = 1.4e18;
-        uint256 longBoost = 1.5e18;
-        uint256 shortBoostTime = 3 days;
-        uint256 mediumBoostTime = 7 days;
-        uint256 longBoostTime = 14 days;
+        ERC20 _distributionToken = ERC20(0x677365Ac7ca3E9efE12a29a001737A3Db265E8aF); // black pearls
+        uint256 _epochDuration = 7 * 1 days;
+        uint256 shortBoost = 0;
+        uint256 mediumBoost = 0.25e18;
+        uint256 longBoost = 0.5e18;
+        uint256 shortBoostTime = 7 days;
+        uint256 mediumBoostTime = 21 days;
+        uint256 longBoostTime = 30 days;
 
         vm.startBroadcast();
 
