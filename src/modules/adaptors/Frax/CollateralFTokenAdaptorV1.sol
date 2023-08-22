@@ -17,13 +17,6 @@ interface V1FToken {
  * @author crispymangoes, 0xEinCodes
  */
 contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
-    //============================================ Notice ===========================================
-    // Since there is no way to calculate pending interest for this positions balanceOf,
-    // The positions balance is only updated when accounts interact with the
-    // Frax Lend pair this position is working with.
-    // This can lead to a divergence from the Cellars share price, and its real value.
-    // This can be mitigated by calling `callAddInterest` on Frax Lend pairs
-    // that are not frequently interacted with.
 
     constructor(address _frax, uint256 _healthFactor) CollateralFTokenAdaptorV2(_frax, _healthFactor) {}
 
@@ -47,7 +40,7 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
 
-    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
+    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_getHealthFactor()`).
     // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
     // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================

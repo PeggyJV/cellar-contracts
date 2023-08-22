@@ -16,15 +16,15 @@ contract FraxlendHealthFactorLogic {
     using Math for uint256;
 
     /**
-     * @notice The ```_isSolvent``` function returns the current health factor of a respective position given an exchange rate
+     * @notice The ```_getHealthFactor``` function returns the current health factor of a respective position given an exchange rate
      * @param _fraxlendPair The specified Fraxlend Pair
      * @param _exchangeRate The exchange rate, i.e. the amount of collateral to buy 1e18 asset
      * @return currentHF The health factor of the position atm
      */
-    function _isSolvent(IFToken _fraxlendPair, uint256 _exchangeRate) internal view virtual returns (uint256) {
+    function _getHealthFactor(IFToken _fraxlendPair, uint256 _exchangeRate) internal view virtual returns (uint256) {
         // calculate the borrowShares
         uint256 borrowerShares = _userBorrowShares(_fraxlendPair, address(this));
-        uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `_isSolvent()` function in actual Fraxlend contracts.
+        uint256 _borrowerAmount = _toBorrowAmount(_fraxlendPair, borrowerShares, true, true); // need interest-adjusted and conservative amount (round-up) similar to `_getHealthFactor()` function in actual Fraxlend contracts.
         if (_borrowerAmount == 0) return 1.05e18;
         uint256 _collateralAmount = _userCollateralBalance(_fraxlendPair, address(this));
         if (_collateralAmount == 0) return 0;

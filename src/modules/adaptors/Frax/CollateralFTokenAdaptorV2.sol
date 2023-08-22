@@ -153,7 +153,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         _removeCollateral(_collateralAmount, _fraxlendPair);
         uint256 _exchangeRate = _updateExchangeRate(_fraxlendPair); // need to calculate LTV
         // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
-        if (minimumHealthFactor > (_isSolvent(_fraxlendPair, _exchangeRate))) {
+        if (minimumHealthFactor > (_getHealthFactor(_fraxlendPair, _exchangeRate))) {
             revert CollateralFTokenAdaptor__HealthFactorTooLow(address(_fraxlendPair));
         }
     }
@@ -187,7 +187,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
 
-    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
+    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_getHealthFactor()`).
     // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
     // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================

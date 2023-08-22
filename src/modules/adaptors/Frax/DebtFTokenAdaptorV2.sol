@@ -15,6 +15,14 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
+    //============================================ Notice ===========================================
+    // Since there is no way to calculate pending interest for this positions balanceOf,
+    // The positions balance is only updated when accounts interact with the
+    // Frax Lend pair this position is working with.
+    // This can lead to a divergence from the Cellars share price, and its real value.
+    // This can be mitigated by calling `callAddInterest` on Frax Lend pairs
+    // that are not frequently interacted with.
+
     //==================== Adaptor Data Specification ====================
     //
     // adaptorData = abi.encode(address fraxlendPair)
@@ -142,7 +150,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         // Check health factor is still satisfactory
         uint256 _exchangeRate = _updateExchangeRate(fraxlendPair);
         // Check if borrower is insolvent after this borrow tx, revert if they are
-        if (minimumHealthFactor > (_isSolvent(fraxlendPair, _exchangeRate))) {
+        if (minimumHealthFactor > (_getHealthFactor(fraxlendPair, _exchangeRate))) {
             revert DebtFTokenAdaptor__HealthFactorTooLow(address(fraxlendPair));
         }
     }
@@ -156,6 +164,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _debtTokenRepayAmount the amount of `debtToken` to repay with.
      */
     function repayFraxlendDebt(IFToken _fraxlendPair, uint256 _debtTokenRepayAmount) public {
+        _validateFToken(_fraxlendPair);
         ERC20 tokenToRepay = ERC20(_fraxlendPairAsset(_fraxlendPair));
         uint256 debtTokenToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
         uint256 sharesToRepay = _toAssetShares(_fraxlendPair, debtTokenToRepay, false, true);
@@ -165,7 +174,6 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         // take the smaller btw sharesToRepay and sharesAccToFraxlend
         if (sharesAccToFraxlend < sharesToRepay) {
             sharesToRepay = sharesAccToFraxlend;
-            debtTokenToRepay;
         }
         tokenToRepay.safeApprove(address(_fraxlendPair), type(uint256).max);
 
@@ -218,7 +226,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
 
-    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
+    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_getHealthFactor()`).
     // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
     // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================

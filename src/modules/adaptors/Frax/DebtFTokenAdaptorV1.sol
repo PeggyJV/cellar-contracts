@@ -51,7 +51,7 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
 
-    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_isSolvent()`).
+    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_getHealthFactor()`).
     // This function has a helper `_toBorrow()` that corresponds to v2 by default, but is virtual and overwritten for
     // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
