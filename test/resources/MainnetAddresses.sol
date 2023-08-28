@@ -97,6 +97,9 @@ contract MainnetAddresses {
     ERC20 public bb_a_DAI_BPT = ERC20(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
     ERC20 public bb_a_USDT_BPT = ERC20(0xA1697F9Af0875B63DdC472d6EeBADa8C1fAB8568);
 
+    // Mainnet Aura Specific Addresses
+    
+    address auraPoolExampleAddress = 0x032B676d5D55e8ECbAe88ebEE0AA10fB5f72F6CB;
     // Compound V2
     CErc20 public cDAI = CErc20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);
     CErc20 public cUSDC = CErc20(0x39AA39c021dfbaE8faC545936693aC917d5E7563);
