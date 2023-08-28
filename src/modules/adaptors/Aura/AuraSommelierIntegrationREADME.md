@@ -12,15 +12,17 @@ This README outlines how the basic functionality of the Sommelier and Aura proto
 
 ## **Basic Functionality Details**
 
-Part of the due diligence for any integration involves understanding the transaction details cellars conduct, including into the underlying new protocol in question.
+Part of the due diligence for any integration involves understanding the transaction details cellars carry out, including into the underlying new protocol in question.
 
 Since basic functions into Aura protocol are carried out using a `CellarAdaptor` position, this document will outline what is happening within the Aura smart contracts.
+
+> NOTE: See `AuraExtraAdaptor.md` for how we are considering integrating Cellars with the capability for staking `AuraBal` and vote-locking `AURA`.
 
 ---
 
 # Setup / Example Walk-Through
 
-Say there is a cellar that accepts BPTs, call it bptCellar. bptCellar adds a `CellarAdaptor` position that specifies an AURA `BaseRewardPool4626` address that matches the accepted BPT `asset`.
+Let's start with a hypothetical scenario where there is a cellar that accepts BPTs, call it bptCellar. bptCellar adds a `CellarAdaptor` position that specifies an AURA `BaseRewardPool4626` address that matches the accepted BPT `asset`.
 
 ## **Base Functions**
 
@@ -30,16 +32,16 @@ Let's assume that the CellarAdaptorPosition is the holding position. The BPTs wo
 
 1. `deposit()` hooks activated and `assets` sent from Cellar to Aura using `deposit()` within the AURA contract. Within this function there are a couple of takeaways:
 
-- `operator` is the `Booster.sol` contract (copied from Convex) that is associated to this pool. This contract mints `aura-BPT` to the cellar.
-- `_processStake()` is called immediately, where the `BPTs` from the cellar are staked within Balancer to earn Aura protocol rewards (that are distributed to participants and the protocol itself).
-- Steps included:
-  - safeTransfers BPT to aura pool
-  - Uses `booster` (called `operator` in this function) to get aura-BPT (copied code from Convex)
-    - TODO: diff check on this
-  - Checks that 1:1 for auraBPT:BPT is obtained, or more auraBPT. This is bc it is a 1:1 relationship, unless there are lots of reward auraBPT in the pool, then you get more auraBPT per BPT I think.
-    - otherwise reverts
-  - Stakes aura-BPT, via `IRewards.sol` on `extraRewards` array of addresses. I believe this is from Synthetix (convex used it too). Implicitly it looks like `stake()` actually stakes the `underlyingBPT` into the respective `BalancerGauge`.
-    - Here user gets `aura-BPT-vault` token which represent staked underlying BPT into aura protocol I think. OR they get `staked-aura-BPT`. TODO: confirm this
+   - `operator` is the `Booster.sol` contract (copied from Convex) that is associated to this pool. This contract mints `aura-BPT` to the cellar.
+   - `_processStake()` is called immediately, where the `BPTs` from the cellar are staked within Balancer to earn Aura protocol rewards (that are distributed to participants and the protocol itself).
+   - Steps included:
+   - safeTransfers BPT to aura pool
+   - Uses `booster` (called `operator` in this function) to get aura-BPT (copied code from Convex)
+     - TODO: diff check on this
+   - Checks that 1:1 for auraBPT:BPT is obtained, or more auraBPT. This is bc it is a 1:1 relationship, unless there are lots of reward auraBPT in the pool, then you get more auraBPT per BPT I think.
+     - otherwise reverts
+   - Stakes aura-BPT, via `IRewards.sol` on `extraRewards` array of addresses. I believe this is from Synthetix (convex used it too). Implicitly it looks like `stake()` actually stakes the `underlyingBPT` into the respective `BalancerGauge`.
+     - Here user gets `aura-BPT-vault` token which represent staked underlying BPT into aura protocol I think. OR they get `staked-aura-BPT`. TODO: confirm this
 
 ### **`withdraw()`**
 
@@ -47,14 +49,14 @@ User wants to exit their position within the cellar and get BPTs back. These aur
 
 1. `withdraw()` hooks activated and `assets` are withdrawn from AURA using `withdraw()` within the AURA contract. Within this function there are a couple of takeaways:
 
-`_withdrawAndUnwrapTo()` is the helper called from `BaseRewardPoolERC4626` `withdraw()` function. It is a helper in `BaseRewardPool.sol`.
+   `_withdrawAndUnwrapTo()` is the helper called from `BaseRewardPoolERC4626` `withdraw()` function. It is a helper in `BaseRewardPool.sol`.
 
-- extraRewards contracts are withdrawn from
-- internal accounting adjusted: totalSupply, balances[from]
-- `booster` contract called to `withdraw()` BPTs directly to user
-  - TODO: look over this more, but ultimately `_withdraw()` is called in `booster` and it calls `IStaker(address staker)` which I believe unstakes any BPTs staked in the `staker` address which I think is the BPT gauge.
-- Then it claims any rewards in any related `stash` contracts
-- Then it transfers the BPTs out to the user.
+   - extraRewards contracts are withdrawn from
+   - internal accounting adjusted: totalSupply, balances[from]
+   - `booster` contract called to `withdraw()` BPTs directly to user
+   - TODO: look over this more, but ultimately `_withdraw()` is called in `booster` and it calls `IStaker(address staker)` which I believe unstakes any BPTs staked in the `staker` address which I think is the BPT gauge.
+   - Then it claims any rewards in any related `stash` contracts
+   - Then it transfers the BPTs out to the user.
 
 ### **`balanceOf()`**
 
