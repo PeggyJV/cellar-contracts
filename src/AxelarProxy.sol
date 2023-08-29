@@ -67,38 +67,34 @@ contract AxelarProxy is AxelarExecutable {
      * @dev Verifies message is from Sommelier, otherwise reverts.
      * @dev Verifies message is a valid Axelar message, otherwise reverts.
      *      See `AxelarExecutable.sol`.
+     * TODO: Currently, the problem that we are solving is that we need the msgId from the payload and then we want to have conditional logic branch off to decode the payloads (which differ in structure based on msgId). The issue is that the msgId is part of the payload, so we'd need to decode it. We thought to typecast it thinking that the first word of the bytes array of the payload would be a bytes32, but it is actually a bytes1. Now we are considering other options. One possible solution: import BytesLib, slice the bytes array to get the first two words (recall the first word is the length, so we want the second one). Then we can typecast (decode) that slice to get the msgId.
+     * TODO: Either way, we'll need to run tests --> mock contract should be created that takes an encoding, passes it in, and it responds as expected.
      */
     function _execute(string calldata sourceChain, string calldata sender, bytes calldata payload) internal override {
         // Validate Source Chain
         if (keccak256(bytes(sourceChain)) != SOMMELIER_CHAIN_HASH) revert AxelarProxy__WrongSource();
         if (keccak256(bytes(sender)) != SENDER_HASH) revert AxelarProxy__WrongSender();
 
-        (uint8 msgId, address target, uint256 nonce, bytes memory callData, address[] memory targets, uint256[] memory nonces, address newAxelarProxy) = abi
-            .decode(payload, (uint8, address, uint256, bytes, address[], uint256[], address)); // TODO: confirm that this is the decoded data we want to move forward with now.
-
-        // Execute function call.
+        uint16 msgId = uint16(uint256(payload[0])); // TODO: This is the first idea but it is coming up with errors when trying to compile.
 
         if ((msgId != logicCallMsgId) || (msgId != upgradeMsgId)) revert AxelarProxy__WrongMsgId();
-        if (nonce <= lastRecordedNonce[target]) revert AxelarProxy__NonceTooOld();
 
         if (msgId == upgradeMsgId) {
-            
-            if ((targets.length != nonces.length)) revert AxelarProxy__UpgradeArrayLengthMismatch();
+            (, address newAxelarProxy, address[] memory targets) = abi.decode(payload, (uint16, address, address[])); // TODO: should we include nonce here (aka is it a requirement or easier with payload data from protocol. As well, do we want to consider a nonce array --> aka if we want to do the similar check with lastRecordedNonce stuff. On the latter, auditor and sc team think no, but good to get protocol team thoughts here.
 
             for (uint256 i = 0; i < targets.length; i++) {
-                target = targets[i];
-                lastRecordedNonce[target] = nonce; // TODO: possibly don't need this.
+                address target = targets[i];
                 IOwned(target).transferOwnership(newAxelarProxy); // owner transference emits events to track.
-                // TODO: do we have the callData decoded to check the details of it, or do we have an interface, or do we just trust it? I lean towards having an interface (see the top of this file). 
-
-                // TODO: ALT route we likely have to do if we have to use: `target.callContract()` involves decoding the callData to confirm that the calldata corresponds to a function call to transfer the owner of the target to the newAxelarProxy.
             }
         } else {
-
-        lastRecordedNonce[target] = nonce;
-        target.functionCall(callData);
-        emit LogicCallEvent(target, nonce, callData);
-
+            (, address target, uint256 nonce, bytes memory callData) = abi.decode(
+                payload,
+                (uint16, address, uint256, bytes)
+            );
+            if (nonce <= lastRecordedNonce[target]) revert AxelarProxy__NonceTooOld();
+            lastRecordedNonce[target] = nonce;
+            target.functionCall(callData);
+            emit LogicCallEvent(target, nonce, callData);
         }
     }
 
