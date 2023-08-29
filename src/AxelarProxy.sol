@@ -5,11 +5,19 @@ import { AxelarExecutable } from "lib/axelar-gmp-sdk-solidity/contracts/executab
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 /**
+ * @notice Interface to process transferOwnership calls when upgrading to a new AxelarProxyCellar. This transfers ownership of the target chain's cellars specified in the call.
+ */
+interface IOwned {
+    function transferOwnership(address newOwner) external;
+}
+
+/**
  * @title Axelar Proxy
  * @notice Allows for Cellars deployed on L2s to be controlled by the Sommelier Chain using Axelar messages.
  * @dev This contract will be deployed on some L2, then to run a Cellar on that L2,
  *      deploy the Cellar, and make this contract the owner.
  * @author crispymangoes, 0xEinCodes
+ * NOTE: AxelarProxy accepts different types of msgIds. logicCalls && transferrance of ownership calls. This is where the cellars on a target chain would have to have their owners changed to the new AxelarProxy during an upgrade.
  */
 contract AxelarProxy is AxelarExecutable {
     using Address for address;
@@ -20,17 +28,22 @@ contract AxelarProxy is AxelarExecutable {
     error AxelarProxy__NoTokens();
     error AxelarProxy__WrongSender();
     error AxelarProxy__WrongMsgId();
-    error AxelarProxy__MinimumNonceUnmet();
     error AxelarProxy__NonceTooOld();
+    error AxelarProxy__IncorrectUpgradeCallData();
+    error AxelarProxy__UpgradeArrayLengthMismatch();
 
-    uint256 public immutable minimumNonce;
     mapping(address => uint256) public lastRecordedNonce;
 
     /**
-     * @notice Identifier for the expected msg type from the source chain.
+     * @notice Identifier for the expected msg type from the source chain to execute logicCalls on target chains.
      * NOTE: contract calls are the first type, thus starting at 0.
      */
     uint16 public immutable logicCallMsgId = 0;
+
+    /**
+     * @notice Identifier for the expeted msg type from the source chain to upgrade ownership of target chain cellars to new AxelarProxy.
+     */
+    uint16 public immutable upgradeMsgId = 1;
 
     /**
      * @notice Constant ensuring that the source chain is the anticipated Sommelier chain.
@@ -45,12 +58,9 @@ contract AxelarProxy is AxelarExecutable {
 
     /**
      * @param gateway_ address for respective EVM acting as source of truth for approved messaging
-     * @param minimumNonce_ where at time of proxy contract deployment, contract calls that are below this nonce value will be invalidated. Upgrading the proxy is the scenario where this is mainly used so as to not allow contract calls created prior to the usage of this new proxy.
-     * TODO: adjust any deployment scripts with new minimumNonce_ param
+     * NOTE: TODO: Possibly add a bound to the nonce.
      */
-    constructor(address gateway_, uint256 minimumNonce_) AxelarExecutable(gateway_) {
-        minimumNonce = minimumNonce_;
-    }
+    constructor(address gateway_) AxelarExecutable(gateway_) {}
 
     /**
      * @notice Execution logic.
@@ -63,20 +73,33 @@ contract AxelarProxy is AxelarExecutable {
         if (keccak256(bytes(sourceChain)) != SOMMELIER_CHAIN_HASH) revert AxelarProxy__WrongSource();
         if (keccak256(bytes(sender)) != SENDER_HASH) revert AxelarProxy__WrongSender();
 
-        (uint8 msgId, address target, uint256 nonce, bytes memory callData) = abi.decode(
-            payload,
-            (uint8, address, uint256, bytes)
-        );
+        (uint8 msgId, address target, uint256 nonce, bytes memory callData, address[] memory targets, uint256[] memory nonces, address newAxelarProxy) = abi
+            .decode(payload, (uint8, address, uint256, bytes, address[], uint256[], address)); // TODO: confirm that this is the decoded data we want to move forward with now.
 
         // Execute function call.
 
-        if (msgId != logicCallMsgId) revert AxelarProxy__WrongMsgId();
-        if (nonce < minimumNonce) revert AxelarProxy__MinimumNonceUnmet();
+        if ((msgId != logicCallMsgId) || (msgId != upgradeMsgId)) revert AxelarProxy__WrongMsgId();
         if (nonce <= lastRecordedNonce[target]) revert AxelarProxy__NonceTooOld();
+
+        if (msgId == upgradeMsgId) {
+            
+            if ((targets.length != nonces.length)) revert AxelarProxy__UpgradeArrayLengthMismatch();
+
+            for (uint256 i = 0; i < targets.length; i++) {
+                target = targets[i];
+                lastRecordedNonce[target] = nonce; // TODO: possibly don't need this.
+                IOwned(target).transferOwnership(newAxelarProxy); // owner transference emits events to track.
+                // TODO: do we have the callData decoded to check the details of it, or do we have an interface, or do we just trust it? I lean towards having an interface (see the top of this file). 
+
+                // TODO: ALT route we likely have to do if we have to use: `target.callContract()` involves decoding the callData to confirm that the calldata corresponds to a function call to transfer the owner of the target to the newAxelarProxy.
+            }
+        } else {
 
         lastRecordedNonce[target] = nonce;
         target.functionCall(callData);
         emit LogicCallEvent(target, nonce, callData);
+
+        }
     }
 
     /**
