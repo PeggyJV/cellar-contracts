@@ -282,7 +282,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @return exchangeRate needed to calculate the current health factor
      */
     function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-        (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();
+        (, , exchangeRate) = _fraxlendPair.updateExchangeRate();
     }
 
     /**

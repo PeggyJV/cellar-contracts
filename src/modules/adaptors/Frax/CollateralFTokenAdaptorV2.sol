@@ -131,8 +131,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _collateralToDeposit The amount of collateral to add to Fraxlend Pair position
      */
     function addCollateral(IFToken _fraxlendPair, uint256 _collateralToDeposit) public {
-        ERC20 _collateralToken = _userCollateralContract(_fraxlendPair);
         _validateFToken(_fraxlendPair);
+        ERC20 _collateralToken = _userCollateralContract(_fraxlendPair);
 
         uint256 amountToDeposit = _maxAvailable(_collateralToken, _collateralToDeposit);
         address fraxlendPair = address(_fraxlendPair);
@@ -149,6 +149,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _fraxlendPair The specified Fraxlend Pair
      */
     function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
+        _validateFToken(_fraxlendPair);
         // remove collateral
         _removeCollateral(_collateralAmount, _fraxlendPair);
         uint256 _exchangeRate = _updateExchangeRate(_fraxlendPair); // need to calculate LTV
@@ -195,6 +196,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     /**
      * @notice gets the asset of the specified fraxlend pair
      * @return asset of fraxlend pair
+     * TODO: discuss internally if this should be removed or not.
      */
     function _fraxlendPairAsset(IFToken _fraxlendPair) internal view virtual returns (address asset) {
         return _fraxlendPair.asset();
@@ -233,6 +235,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @return exchangeRate needed to calculate the current health factor
      */
     function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-        (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();
+        (, , exchangeRate) = _fraxlendPair.updateExchangeRate();
     }
 }
