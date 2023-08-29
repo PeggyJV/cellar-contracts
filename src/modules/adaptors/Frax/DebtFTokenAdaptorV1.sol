@@ -8,7 +8,12 @@ import { DebtFTokenAdaptorV2 } from "src/modules/adaptors/Frax/DebtFTokenAdaptor
  * @notice Extra interface for FraxlendV1 pairs for `updateExchangeRate()` access. Originally was thought to be all included into the `updateExchangeRate()` defined within interface IFToken.sol, but solidity requires that there are separate interfaces because `updateExchangeRate()` differs between Fraxlend v1 and v2 Pairs in the return values.
  */
 interface V1FToken {
-    function updateExchangeRate() external returns (uint256 _exchangeRate);
+    function exchangeRateInfo() external view returns (ExchangeRateInfo memory exchangeRateInfo);
+
+    struct ExchangeRateInfo {
+        uint32 lastTimestamp;
+        uint224 exchangeRate; // collateral:asset ratio. i.e. how much collateral to buy 1e18 asset
+    }
 }
 
 /**
@@ -112,7 +117,7 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
      * @param fraxlendPair The specified FraxLendPair
      * @return exchangeRate needed to calculate the current health factor
      */
-    function _updateExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
-        exchangeRate = V1FToken(address(fraxlendPair)).updateExchangeRate();
+    function _getExchangeRateInfo(IFToken fraxlendPair) internal override view returns (uint256 exchangeRate) {
+        exchangeRate = V1FToken(address(fraxlendPair)).exchangeRateInfo().exchangeRate;
     }
 }

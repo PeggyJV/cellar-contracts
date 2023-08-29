@@ -152,7 +152,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         _validateFToken(_fraxlendPair);
         // remove collateral
         _removeCollateral(_collateralAmount, _fraxlendPair);
-        uint256 _exchangeRate = _updateExchangeRate(_fraxlendPair); // need to calculate LTV
+        uint256 _exchangeRate = _getExchangeRateInfo(_fraxlendPair); // needed to calculate LTV
         // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
         if (minimumHealthFactor > (_getHealthFactor(_fraxlendPair, _exchangeRate))) {
             revert CollateralFTokenAdaptor__HealthFactorTooLow(address(_fraxlendPair));
@@ -194,15 +194,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     //===============================================================================
 
     /**
-     * @notice gets the asset of the specified fraxlend pair
-     * @return asset of fraxlend pair
-     * TODO: discuss internally if this should be removed or not.
-     */
-    function _fraxlendPairAsset(IFToken _fraxlendPair) internal view virtual returns (address asset) {
-        return _fraxlendPair.asset();
-    }
-
-    /**
      * @notice Increment collateral amount in cellar account within fraxlend pair
      * @param _fraxlendPair The specified Fraxlend Pair
      * @param amountToDeposit The amount of collateral to add to Fraxlend Pair position
@@ -234,7 +225,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _fraxlendPair The specified FraxLendPair
      * @return exchangeRate needed to calculate the current health factor
      */
-    function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-        (, , exchangeRate) = _fraxlendPair.updateExchangeRate();
+    function _getExchangeRateInfo(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
+        exchangeRate = _fraxlendPair.exchangeRateInfo().highExchangeRate;
     }
 }
