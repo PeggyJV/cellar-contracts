@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
-import { DebtFTokenAdaptorV2 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV2.sol";
+import { DebtFTokenAdaptor } from "src/modules/adaptors/Frax/DebtFTokenAdaptor.sol";
 
 /**
  * @notice Extra interface for FraxlendV1 pairs for `updateExchangeRate()` access. Originally was thought to be all included into the `updateExchangeRate()` defined within interface IFToken.sol, but solidity requires that there are separate interfaces because `updateExchangeRate()` differs between Fraxlend v1 and v2 Pairs in the return values.
@@ -21,7 +21,7 @@ interface V1FToken {
  * @notice Allows Cellars to borrow assets from FraxLendV1 Pairs
  * @author crispymangoes, 0xEinCodes
  */
-contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
+contract DebtFTokenAdaptorV1 is DebtFTokenAdaptor {
     //============================================ Notice ===========================================
     // Since there is no way to calculate pending interest for this positions balanceOf,
     // The positions balance is only updated when accounts interact with the
@@ -34,7 +34,7 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
         bool _accountForInterest,
         address _frax,
         uint256 _healthFactor
-    ) DebtFTokenAdaptorV2(_accountForInterest, _frax, _healthFactor) {}
+    ) DebtFTokenAdaptor(_accountForInterest, _frax, _healthFactor) {}
 
     //============================================ Interface Helper Functions ===========================================
 
@@ -50,8 +50,8 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
     // Current versions in use for `FraxLendPair` include v1 and v2.
 
     // IMPORTANT: This `DebtFTokenAdaptorV1.sol` is associated to the v1 version of `FraxLendPair`
-    // whereas the inherited `DebtFTokenAdaptorV2.sol` is actually associated to `FraxLendPairv2`.
-    // The reasoning to name it like this was to set up the base DebtFTokenAdaptorV2 for the
+    // whereas the inherited `DebtFTokenAdaptor.sol` is actually associated to `FraxLendPairv2`.
+    // The reasoning to name it like this was to set up the base DebtFTokenAdaptor for the
     // most current version, v2. This is in anticipation that more FraxLendPairs will
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
@@ -117,7 +117,7 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptorV2 {
      * @param fraxlendPair The specified FraxLendPair
      * @return exchangeRate needed to calculate the current health factor
      */
-    function _getExchangeRateInfo(IFToken fraxlendPair) internal override view returns (uint256 exchangeRate) {
+    function _getExchangeRateInfo(IFToken fraxlendPair) internal view override returns (uint256 exchangeRate) {
         exchangeRate = V1FToken(address(fraxlendPair)).exchangeRateInfo().exchangeRate;
     }
 }

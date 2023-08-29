@@ -10,7 +10,7 @@ import { FraxlendHealthFactorLogic } from "src/modules/adaptors/Frax/FraxlendHea
  * @notice Allows addition and removal of collateralAssets to Fraxlend pairs for a Cellar.
  * @author crispymangoes, 0xEinCodes
  */
-contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
+contract CollateralFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -181,9 +181,9 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     // Current versions in use for `FraxLendPair` include v1 and v2.
 
-    // IMPORTANT: This `CollateralFTokenAdaptorV2.sol` is associated to the v2 version of `FraxLendPair`
+    // IMPORTANT: This `CollateralFTokenAdaptor.sol` is associated to the v2 version of `FraxLendPair`
     // whereas CollateralFTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
-    // The reasoning to name it like this was to set up the base CollateralFTokenAdaptorV2 for the
+    // The reasoning to name it like this was to set up the base CollateralFTokenAdaptor for the
     // most current version, v2. This is in anticipation that more FraxLendPairs will
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.

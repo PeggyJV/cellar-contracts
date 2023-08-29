@@ -43,9 +43,9 @@ import { DSRAdaptor } from "src/modules/adaptors/Maker/DSRAdaptor.sol";
 
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
-import { CollateralFTokenAdaptorV2 } from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV2.sol";
+import { CollateralFTokenAdaptor } from "src/modules/adaptors/Frax/CollateralFTokenAdaptor.sol";
 
-import { DebtFTokenAdaptorV2 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV2.sol";
+import { DebtFTokenAdaptor } from "src/modules/adaptors/Frax/DebtFTokenAdaptor.sol";
 
 import { CollateralFTokenAdaptorV1 } from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV1.sol";
 
@@ -455,11 +455,7 @@ contract AdaptorHelperFunctions {
         uint256 _collateralToDeposit
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSelector(
-                CollateralFTokenAdaptorV2.addCollateral.selector,
-                _fraxlendPair,
-                _collateralToDeposit
-            );
+            abi.encodeWithSelector(CollateralFTokenAdaptor.addCollateral.selector, _fraxlendPair, _collateralToDeposit);
     }
 
     function _createBytesDataToRemoveCollateralWithFraxlendV2(
@@ -467,11 +463,7 @@ contract AdaptorHelperFunctions {
         IFToken _fraxlendPair
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSelector(
-                CollateralFTokenAdaptorV2.removeCollateral.selector,
-                _collateralAmount,
-                _fraxlendPair
-            );
+            abi.encodeWithSelector(CollateralFTokenAdaptor.removeCollateral.selector, _collateralAmount, _fraxlendPair);
     }
 
     // ========================================= FraxLendV2 DEBT FUNCTIONS =========================================
@@ -480,7 +472,7 @@ contract AdaptorHelperFunctions {
         address _fraxlendPair,
         uint256 _amountToBorrow
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(DebtFTokenAdaptorV2.borrowFromFraxlend.selector, _fraxlendPair, _amountToBorrow);
+        return abi.encodeWithSelector(DebtFTokenAdaptor.borrowFromFraxlend.selector, _fraxlendPair, _amountToBorrow);
     }
 
     function _createBytesDataToRepayWithFraxlendV2(
@@ -488,15 +480,11 @@ contract AdaptorHelperFunctions {
         uint256 _debtTokenRepayAmount
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSelector(
-                DebtFTokenAdaptorV2.repayFraxlendDebt.selector,
-                _fraxlendPair,
-                _debtTokenRepayAmount
-            );
+            abi.encodeWithSelector(DebtFTokenAdaptor.repayFraxlendDebt.selector, _fraxlendPair, _debtTokenRepayAmount);
     }
 
     function _createBytesDataToAddInterestWithFraxlendV2(IFToken fraxlendPair) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(DebtFTokenAdaptorV2.callAddInterest.selector, fraxlendPair);
+        return abi.encodeWithSelector(DebtFTokenAdaptor.callAddInterest.selector, fraxlendPair);
     }
 
     // ========================================= FraxLendV1 COLLATERAL FUNCTIONS =========================================
@@ -506,11 +494,7 @@ contract AdaptorHelperFunctions {
         uint256 _collateralToDeposit
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSelector(
-                CollateralFTokenAdaptorV2.addCollateral.selector,
-                _fraxlendPair,
-                _collateralToDeposit
-            );
+            abi.encodeWithSelector(CollateralFTokenAdaptor.addCollateral.selector, _fraxlendPair, _collateralToDeposit);
     }
 
     function _createBytesDataToRemoveCollateralWithFraxlendV1(
@@ -518,11 +502,7 @@ contract AdaptorHelperFunctions {
         IFToken _fraxlendPair
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSelector(
-                CollateralFTokenAdaptorV2.removeCollateral.selector,
-                _collateralAmount,
-                _fraxlendPair
-            );
+            abi.encodeWithSelector(CollateralFTokenAdaptor.removeCollateral.selector, _collateralAmount, _fraxlendPair);
     }
 
     // ========================================= FraxLendV1 DEBT FUNCTIONS =========================================
@@ -531,7 +511,7 @@ contract AdaptorHelperFunctions {
         address _fraxlendPair,
         uint256 _amountToBorrow
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(DebtFTokenAdaptorV2.borrowFromFraxlend.selector, _fraxlendPair, _amountToBorrow);
+        return abi.encodeWithSelector(DebtFTokenAdaptor.borrowFromFraxlend.selector, _fraxlendPair, _amountToBorrow);
     }
 
     function _createBytesDataToRepayWithFraxlendV1(
@@ -539,15 +519,11 @@ contract AdaptorHelperFunctions {
         uint256 _debtTokenRepayAmount
     ) internal pure returns (bytes memory) {
         return
-            abi.encodeWithSelector(
-                DebtFTokenAdaptorV2.repayFraxlendDebt.selector,
-                _fraxlendPair,
-                _debtTokenRepayAmount
-            );
+            abi.encodeWithSelector(DebtFTokenAdaptor.repayFraxlendDebt.selector, _fraxlendPair, _debtTokenRepayAmount);
     }
 
     function _createBytesDataToAddInterestWithFraxlendV1(IFToken fraxlendPair) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(DebtFTokenAdaptorV2.callAddInterest.selector, fraxlendPair);
+        return abi.encodeWithSelector(DebtFTokenAdaptor.callAddInterest.selector, fraxlendPair);
     }
 
     // ========================================= Maker FUNCTIONS =========================================
