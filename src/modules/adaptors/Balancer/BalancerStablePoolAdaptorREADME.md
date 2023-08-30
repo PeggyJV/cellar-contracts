@@ -25,7 +25,9 @@ The associated files for the Stable Pool Balancer Adaptor Integration include:
 
 # **TODOs:**
 
-- [ ] Create standalone repo with: `IBalancerStablePoolAdaptor.sol`, `BalancerPoolAdaptor.sol` (from Sommelier Protocol), `Interfaces`, ``, ``
+- [ ] Create standalone repo with: `IBalancerStablePoolAdaptor.sol`, `BalancerPoolAdaptor.sol` (from Sommelier Protocol), `Interfaces`, etc.
+- [ ] Add in foundry to start developing tests to work with standalone ERC4626s, etc. and simplest pricing mechanics
+- [ ] Create docs outlining how to use the adaptor, though it should be just a one pager since the adaptor and interface should be well written for developers
 
 # **Discussion Topics**
 
