@@ -12,6 +12,7 @@ import { SingleSwap, JoinPoolRequest, SwapKind, FundManagement, ExitPoolRequest 
  * NOTE: This adaptor and pricing derivatives focus on stablepool BPTs
  */
 interface IBalancerStablePoolAdaptor {
+
     /**
      * @notice Allows strategists to join Balancer pools using EXACT_TOKENS_IN_FOR_BPT_OUT joins.
      * @dev `swapsBeforeJoin` MUST match up with expected token array returned from `_getPoolTokensWithNoPremintedBpt`.
@@ -28,11 +29,11 @@ interface IBalancerStablePoolAdaptor {
         IVault.SingleSwap[] memory swapsBeforeJoin,
         SwapData memory swapData,
         uint256 minimumBpt
-    ) external;
-
+    ) external
+    
     /**
      * @notice Allows strategists to exit Balancer pools using any exit.
-     * @dev The amounts in `swapsAfterExit` are overwritten by the actual amount out received from the swap.
+    //  * @dev The amounts in `swapsAfterExit` are overwritten by the actual amount out received from the swap.
      * @dev `swapsAfterExit` MUST match up with expected token array returned from `_getPoolTokensWithNoPremintedBpt`.
      *      IE if the first token in expected token array is BB A DAI, the first swap in `swapsBeforeJoin` MUST be to
      *      swap BB A DAI.
