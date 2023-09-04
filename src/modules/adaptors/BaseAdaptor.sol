@@ -212,4 +212,5 @@ abstract contract BaseAdaptor {
     function revokeApproval(ERC20 asset, address spender) public {
         asset.safeApprove(spender, 0);
     }
+
 }
