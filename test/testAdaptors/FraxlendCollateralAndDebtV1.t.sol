@@ -3,8 +3,8 @@ pragma solidity 0.8.21;
 
 import { CollateralFTokenAdaptorV1 } from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV1.sol";
 import { DebtFTokenAdaptorV1 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV1.sol";
-import { CollateralFTokenAdaptorV2 } from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV2.sol";
-import { DebtFTokenAdaptorV2 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV2.sol";
+import { CollateralFTokenAdaptor } from "src/modules/adaptors/Frax/CollateralFTokenAdaptor.sol";
+import { DebtFTokenAdaptor } from "src/modules/adaptors/Frax/DebtFTokenAdaptor.sol";
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
@@ -291,7 +291,7 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    DebtFTokenAdaptorV2.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
+                    DebtFTokenAdaptor.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
                     WBTC_FRAX_PAIR
                 )
             )
@@ -512,7 +512,7 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    CollateralFTokenAdaptorV2.CollateralFTokenAdaptor__HealthFactorTooLow.selector,
+                    CollateralFTokenAdaptor.CollateralFTokenAdaptor__HealthFactorTooLow.selector,
                     CRV_FRAX_PAIR
                 )
             )
@@ -544,10 +544,7 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
 
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(
-                    DebtFTokenAdaptorV2.DebtFTokenAdaptor__HealthFactorTooLow.selector,
-                    CRV_FRAX_PAIR
-                )
+                abi.encodeWithSelector(DebtFTokenAdaptor.DebtFTokenAdaptor__HealthFactorTooLow.selector, CRV_FRAX_PAIR)
             )
         );
         cellar.callOnAdaptor(data);
@@ -637,7 +634,7 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    DebtFTokenAdaptorV2.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
+                    DebtFTokenAdaptor.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
                     address(CVX_FRAX_PAIR)
                 )
             )
@@ -657,7 +654,7 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV1), callData: adaptorCalls });
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(DebtFTokenAdaptorV2.DebtFTokenAdaptor__CannotRepayNoDebt.selector, CRV_FRAX_PAIR)
+                abi.encodeWithSelector(DebtFTokenAdaptor.DebtFTokenAdaptor__CannotRepayNoDebt.selector, CRV_FRAX_PAIR)
             )
         );
         cellar.callOnAdaptor(data);
@@ -673,7 +670,7 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = abi.encodeWithSelector(
-            CollateralFTokenAdaptorV2.withdraw.selector,
+            CollateralFTokenAdaptor.withdraw.selector,
             100_000e18,
             maliciousStrategist,
             abi.encode(CRV_FRAX_PAIR, CRV),

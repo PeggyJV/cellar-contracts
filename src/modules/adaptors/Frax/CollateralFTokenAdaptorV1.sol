@@ -2,13 +2,18 @@
 pragma solidity 0.8.21;
 
 import { IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
-import { CollateralFTokenAdaptorV2 } from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV2.sol";
+import { CollateralFTokenAdaptor } from "src/modules/adaptors/Frax/CollateralFTokenAdaptor.sol";
 
 /**
  * @notice Extra interface for FraxlendV1 pairs for `updateExchangeRate()` access. Originally was thought to be all included into the `updateExchangeRate()` defined within interface IFToken.sol, but solidity requires that there are separate interfaces because `updateExchangeRate()` differs between Fraxlend v1 and v2 Pairs in the return values.
  */
 interface V1FToken {
-    function updateExchangeRate() external returns (uint256 _exchangeRate);
+    function exchangeRateInfo() external view returns (ExchangeRateInfo memory exchangeRateInfo);
+
+    struct ExchangeRateInfo {
+        uint32 lastTimestamp;
+        uint224 exchangeRate; // collateral:asset ratio. i.e. how much collateral to buy 1e18 asset
+    }
 }
 
 /**
@@ -16,9 +21,8 @@ interface V1FToken {
  * @notice Allows addition and removal of collateralAssets to Fraxlend pairs for a Cellar.
  * @author crispymangoes, 0xEinCodes
  */
-contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
-
-    constructor(address _frax, uint256 _healthFactor) CollateralFTokenAdaptorV2(_frax, _healthFactor) {}
+contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptor {
+    constructor(address _frax, uint256 _healthFactor) CollateralFTokenAdaptor(_frax, _healthFactor) {}
 
     //============================================ Interface Helper Functions ===========================================
 
@@ -34,8 +38,8 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
     // Current versions in use for `FraxLendPair` include v1 and v2.
 
     // IMPORTANT: This `CollateralFTokenAdaptorV1.sol` is associated to the v1 version of `FraxLendPair`
-    // whereas the inherited `CollateralFTokenAdaptorV2.sol` is actually associated to `FraxLendPairv2`.
-    // The reasoning to name it like this was to set up the base CollateralFTokenAdaptorV2 for the
+    // whereas the inherited `CollateralFTokenAdaptor.sol` is actually associated to `FraxLendPairv2`.
+    // The reasoning to name it like this was to set up the base CollateralFTokenAdaptor for the
     // most current version, v2. This is in anticipation that more FraxLendPairs will
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
@@ -76,7 +80,7 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptorV2 {
      * @param fraxlendPair The specified FraxLendPair
      * @return exchangeRate needed to calculate the current health factor
      */
-    function _updateExchangeRate(IFToken fraxlendPair) internal override returns (uint256 exchangeRate) {
-        exchangeRate = V1FToken(address(fraxlendPair)).updateExchangeRate();
+    function _getExchangeRateInfo(IFToken fraxlendPair) internal view override returns (uint256 exchangeRate) {
+        exchangeRate = V1FToken(address(fraxlendPair)).exchangeRateInfo().exchangeRate;
     }
 }

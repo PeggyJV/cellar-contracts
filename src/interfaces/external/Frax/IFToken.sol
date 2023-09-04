@@ -110,4 +110,14 @@ interface IFToken {
     function convertToShares(uint256 _assets) external view returns (uint256 _shares);
 
     function maxLTV() external view returns (uint256 maxLTV);
+
+    struct ExchangeRateInfo {
+        address oracle;
+        uint32 maxOracleDeviation; // % of larger number, 1e5 precision
+        uint184 lastTimestamp;
+        uint256 lowExchangeRate;
+        uint256 highExchangeRate;
+    }
+
+    function exchangeRateInfo() external view returns (ExchangeRateInfo memory exchangeRateInfo);
 }

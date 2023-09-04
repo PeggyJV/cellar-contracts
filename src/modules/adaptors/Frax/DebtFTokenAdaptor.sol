@@ -11,7 +11,7 @@ import { FraxlendHealthFactorLogic } from "src/modules/adaptors/Frax/FraxlendHea
  * @author crispymangoes, 0xEinCodes
  * NOTE: repayAssetWithCollateral() is not allowed from strategist to call in FraxlendCore for cellar.
  */
-contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
+contract DebtFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -148,7 +148,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
         _borrowAsset(amountToBorrow, fraxlendPair);
 
         // Check health factor is still satisfactory
-        uint256 _exchangeRate = _updateExchangeRate(fraxlendPair);
+        uint256 _exchangeRate = _getExchangeRateInfo(fraxlendPair);
         // Check if borrower is insolvent after this borrow tx, revert if they are
         if (minimumHealthFactor > (_getHealthFactor(fraxlendPair, _exchangeRate))) {
             revert DebtFTokenAdaptor__HealthFactorTooLow(address(fraxlendPair));
@@ -219,7 +219,7 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     // Current versions in use for `Fraxlend Pair` include v1 and v2.
 
-    // IMPORTANT: This `DebtFTokenAdaptorV2.sol` is associated to the v2 version of `Fraxlend Pair`
+    // IMPORTANT: This `DebtFTokenAdaptor.sol` is associated to the v2 version of `Fraxlend Pair`
     // whereas DebtFTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
     // The reasoning to name it like this was to set up the base DebtFTokenAdaptor for the
     // most current version, v2. This is in anticipation that more FraxLendPairs will
@@ -278,11 +278,11 @@ contract DebtFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     /**
      * @notice Caller calls `updateExchangeRate()` on specified FraxlendV2 Pair
-     * @param _fraxlendPair The specified Fraxlend Pair
+     * @param _fraxlendPair The specified FraxLendPair
      * @return exchangeRate needed to calculate the current health factor
      */
-    function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-        (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();
+    function _getExchangeRateInfo(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
+        exchangeRate = _fraxlendPair.exchangeRateInfo().highExchangeRate;
     }
 
     /**

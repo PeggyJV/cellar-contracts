@@ -10,7 +10,7 @@ import { FraxlendHealthFactorLogic } from "src/modules/adaptors/Frax/FraxlendHea
  * @notice Allows addition and removal of collateralAssets to Fraxlend pairs for a Cellar.
  * @author crispymangoes, 0xEinCodes
  */
-contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
+contract CollateralFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -131,8 +131,8 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _collateralToDeposit The amount of collateral to add to Fraxlend Pair position
      */
     function addCollateral(IFToken _fraxlendPair, uint256 _collateralToDeposit) public {
-        ERC20 _collateralToken = _userCollateralContract(_fraxlendPair);
         _validateFToken(_fraxlendPair);
+        ERC20 _collateralToken = _userCollateralContract(_fraxlendPair);
 
         uint256 amountToDeposit = _maxAvailable(_collateralToken, _collateralToDeposit);
         address fraxlendPair = address(_fraxlendPair);
@@ -149,9 +149,10 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _fraxlendPair The specified Fraxlend Pair
      */
     function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
+        _validateFToken(_fraxlendPair);
         // remove collateral
         _removeCollateral(_collateralAmount, _fraxlendPair);
-        uint256 _exchangeRate = _updateExchangeRate(_fraxlendPair); // need to calculate LTV
+        uint256 _exchangeRate = _getExchangeRateInfo(_fraxlendPair); // needed to calculate LTV
         // Check if borrower is insolvent (AKA they have bad LTV), revert if they are
         if (minimumHealthFactor > (_getHealthFactor(_fraxlendPair, _exchangeRate))) {
             revert CollateralFTokenAdaptor__HealthFactorTooLow(address(_fraxlendPair));
@@ -180,9 +181,9 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
 
     // Current versions in use for `FraxLendPair` include v1 and v2.
 
-    // IMPORTANT: This `CollateralFTokenAdaptorV2.sol` is associated to the v2 version of `FraxLendPair`
+    // IMPORTANT: This `CollateralFTokenAdaptor.sol` is associated to the v2 version of `FraxLendPair`
     // whereas CollateralFTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
-    // The reasoning to name it like this was to set up the base CollateralFTokenAdaptorV2 for the
+    // The reasoning to name it like this was to set up the base CollateralFTokenAdaptor for the
     // most current version, v2. This is in anticipation that more FraxLendPairs will
     // be deployed following v2 in the near future. When later versions are deployed,
     // then the described inheritance pattern above will be used.
@@ -191,14 +192,6 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
     // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
     // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
     //===============================================================================
-
-    /**
-     * @notice gets the asset of the specified fraxlend pair
-     * @return asset of fraxlend pair
-     */
-    function _fraxlendPairAsset(IFToken _fraxlendPair) internal view virtual returns (address asset) {
-        return _fraxlendPair.asset();
-    }
 
     /**
      * @notice Increment collateral amount in cellar account within fraxlend pair
@@ -232,7 +225,7 @@ contract CollateralFTokenAdaptorV2 is BaseAdaptor, FraxlendHealthFactorLogic {
      * @param _fraxlendPair The specified FraxLendPair
      * @return exchangeRate needed to calculate the current health factor
      */
-    function _updateExchangeRate(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-        (, exchangeRate, ) = _fraxlendPair.updateExchangeRate();
+    function _getExchangeRateInfo(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
+        exchangeRate = _fraxlendPair.exchangeRateInfo().highExchangeRate;
     }
 }

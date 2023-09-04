@@ -90,6 +90,7 @@ contract FTokenAdaptor is BaseAdaptor {
 
         // Withdraw assets from Frax.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
+        _validateFToken(fToken);
         _withdraw(fToken, assets, receiver, address(this));
     }
 

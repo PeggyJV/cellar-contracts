@@ -3,6 +3,7 @@ pragma solidity 0.8.21;
 
 import { AxelarExecutable } from "lib/axelar-gmp-sdk-solidity/contracts/executable/AxelarExecutable.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { Owned } from "@solmate/auth/Owned.sol";
 
 /**
  * @title Axelar Proxy
@@ -10,6 +11,7 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
  * @dev This contract will be deployed on some L2, then to run a Cellar on that L2,
  *      deploy the Cellar, and make this contract the owner.
  * @author crispymangoes, 0xEinCodes
+ * NOTE: AxelarProxy accepts different types of msgIds. logicCalls && transferrance of ownership calls. This is where the cellars on a target chain would have to have their owners changed to the new AxelarProxy during an upgrade.
  */
 contract AxelarProxy is AxelarExecutable {
     using Address for address;
@@ -20,17 +22,21 @@ contract AxelarProxy is AxelarExecutable {
     error AxelarProxy__NoTokens();
     error AxelarProxy__WrongSender();
     error AxelarProxy__WrongMsgId();
-    error AxelarProxy__MinimumNonceUnmet();
     error AxelarProxy__NonceTooOld();
+    error AxelarProxy__PastDeadline();
 
-    uint256 public immutable minimumNonce;
     mapping(address => uint256) public lastRecordedNonce;
 
     /**
-     * @notice Identifier for the expected msg type from the source chain.
+     * @notice Identifier for the expected msg type from the source chain to execute logicCalls on target chains.
      * NOTE: contract calls are the first type, thus starting at 0.
      */
-    uint16 public immutable logicCallMsgId = 0;
+    uint256 public constant LOGIC_CALL_MSG_ID = 0;
+
+    /**
+     * @notice Identifier for the expected msg type from the source chain to upgrade ownership of target chain cellars to new AxelarProxy.
+     */
+    uint256 public constant UPGRADE_MSG_ID = 1;
 
     /**
      * @notice Constant ensuring that the source chain is the anticipated Sommelier chain.
@@ -41,15 +47,13 @@ contract AxelarProxy is AxelarExecutable {
     /**
      * @notice Trusted sender hash from Sommelier <> Axelar module.
      */
-    bytes32 public immutable SENDER_HASH = keccak256(bytes("___")); // TODO: Get correct string value from protocol team
+    bytes32 public immutable SENDER_HASH;
 
     /**
      * @param gateway_ address for respective EVM acting as source of truth for approved messaging
-     * @param minimumNonce_ where at time of proxy contract deployment, contract calls that are below this nonce value will be invalidated. Upgrading the proxy is the scenario where this is mainly used so as to not allow contract calls created prior to the usage of this new proxy.
-     * TODO: adjust any deployment scripts with new minimumNonce_ param
      */
-    constructor(address gateway_, uint256 minimumNonce_) AxelarExecutable(gateway_) {
-        minimumNonce = minimumNonce_;
+    constructor(address gateway_, string memory sender_) AxelarExecutable(gateway_) {
+        SENDER_HASH = keccak256(bytes(sender_));
     }
 
     /**
@@ -63,20 +67,26 @@ contract AxelarProxy is AxelarExecutable {
         if (keccak256(bytes(sourceChain)) != SOMMELIER_CHAIN_HASH) revert AxelarProxy__WrongSource();
         if (keccak256(bytes(sender)) != SENDER_HASH) revert AxelarProxy__WrongSender();
 
-        (uint8 msgId, address target, uint256 nonce, bytes memory callData) = abi.decode(
-            payload,
-            (uint8, address, uint256, bytes)
-        );
+        uint256 msgId = abi.decode(payload, (uint256));
 
-        // Execute function call.
-
-        if (msgId != logicCallMsgId) revert AxelarProxy__WrongMsgId();
-        if (nonce < minimumNonce) revert AxelarProxy__MinimumNonceUnmet();
-        if (nonce <= lastRecordedNonce[target]) revert AxelarProxy__NonceTooOld();
-
-        lastRecordedNonce[target] = nonce;
-        target.functionCall(callData);
-        emit LogicCallEvent(target, nonce, callData);
+        if (msgId == UPGRADE_MSG_ID) {
+            (, address newAxelarProxy, address[] memory targets) = abi.decode(payload, (uint256, address, address[]));
+            for (uint256 i = 0; i < targets.length; i++) {
+                Owned(targets[i]).transferOwnership(newAxelarProxy); // owner transference emits events to track.
+            }
+        } else if (msgId == LOGIC_CALL_MSG_ID) {
+            (, address target, uint256 nonce, uint256 deadline, bytes memory callData) = abi.decode(
+                payload,
+                (uint256, address, uint256, uint256, bytes)
+            );
+            if (nonce <= lastRecordedNonce[target]) revert AxelarProxy__NonceTooOld();
+            if (block.timestamp > deadline) revert AxelarProxy__PastDeadline();
+            lastRecordedNonce[target] = nonce;
+            target.functionCall(callData);
+            emit LogicCallEvent(target, nonce, callData);
+        } else {
+            revert AxelarProxy__WrongMsgId();
+        }
     }
 
     /**

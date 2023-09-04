@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { CollateralFTokenAdaptorV2 } from "src/modules/adaptors/Frax/CollateralFTokenAdaptorV2.sol";
-import { DebtFTokenAdaptorV2 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV2.sol";
+import { CollateralFTokenAdaptor } from "src/modules/adaptors/Frax/CollateralFTokenAdaptor.sol";
+import { DebtFTokenAdaptor } from "src/modules/adaptors/Frax/DebtFTokenAdaptor.sol";
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { FTokenAdaptor, IFToken } from "src/modules/adaptors/Frax/FTokenAdaptor.sol";
@@ -15,8 +15,8 @@ import "test/resources/MainnetStarter.t.sol";
 contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
-    CollateralFTokenAdaptorV2 public collateralFTokenAdaptorV2;
-    DebtFTokenAdaptorV2 public debtFTokenAdaptorV2;
+    CollateralFTokenAdaptor public collateralFTokenAdaptor;
+    DebtFTokenAdaptor public debtFTokenAdaptor;
     Cellar public cellar;
     IFToken mkrFraxLendPair = IFToken(MKR_FRAX_PAIR);
 
@@ -66,15 +66,15 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
 
         bytes memory creationCode;
         bytes memory constructorArgs;
-        creationCode = type(CollateralFTokenAdaptorV2).creationCode;
+        creationCode = type(CollateralFTokenAdaptor).creationCode;
         constructorArgs = abi.encode(address(FRAX), minHealthFactor);
-        collateralFTokenAdaptorV2 = CollateralFTokenAdaptorV2(
+        collateralFTokenAdaptor = CollateralFTokenAdaptor(
             deployer.deployContract("FraxLend Collateral fToken Adaptor V 0.1", creationCode, constructorArgs, 0)
         );
 
-        creationCode = type(DebtFTokenAdaptorV2).creationCode;
+        creationCode = type(DebtFTokenAdaptor).creationCode;
         constructorArgs = abi.encode(ACCOUNT_FOR_INTEREST, address(FRAX), minHealthFactor);
-        debtFTokenAdaptorV2 = DebtFTokenAdaptorV2(
+        debtFTokenAdaptor = DebtFTokenAdaptor(
             deployer.deployContract("FraxLend debtToken Adaptor V 1.0", creationCode, constructorArgs, 0)
         );
 
@@ -105,8 +105,8 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         // Setup Cellar:
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(collateralFTokenAdaptorV2));
-        registry.trustAdaptor(address(debtFTokenAdaptorV2));
+        registry.trustAdaptor(address(collateralFTokenAdaptor));
+        registry.trustAdaptor(address(debtFTokenAdaptor));
 
         registry.trustPosition(fraxPosition, address(erc20Adaptor), abi.encode(FRAX));
         registry.trustPosition(mkrPosition, address(erc20Adaptor), abi.encode(MKR));
@@ -116,16 +116,16 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
 
         registry.trustPosition(
             fraxlendCollateralMKRPosition,
-            address(collateralFTokenAdaptorV2),
+            address(collateralFTokenAdaptor),
             abi.encode(MKR_FRAX_PAIR)
         );
-        registry.trustPosition(fraxlendDebtMKRPosition, address(debtFTokenAdaptorV2), abi.encode(MKR_FRAX_PAIR));
+        registry.trustPosition(fraxlendDebtMKRPosition, address(debtFTokenAdaptor), abi.encode(MKR_FRAX_PAIR));
         registry.trustPosition(
             fraxlendCollateralAPEPosition,
-            address(collateralFTokenAdaptorV2),
+            address(collateralFTokenAdaptor),
             abi.encode(APE_FRAX_PAIR)
         );
-        registry.trustPosition(fraxlendDebtAPEPosition, address(debtFTokenAdaptorV2), abi.encode(APE_FRAX_PAIR));
+        registry.trustPosition(fraxlendDebtAPEPosition, address(debtFTokenAdaptor), abi.encode(APE_FRAX_PAIR));
 
         string memory cellarName = "Fraxlend Collateral & Debt Cellar V0.0";
         uint256 initialDeposit = 1e18;
@@ -152,8 +152,8 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
 
         cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
 
-        cellar.addAdaptorToCatalogue(address(collateralFTokenAdaptorV2));
-        cellar.addAdaptorToCatalogue(address(debtFTokenAdaptorV2));
+        cellar.addAdaptorToCatalogue(address(collateralFTokenAdaptor));
+        cellar.addAdaptorToCatalogue(address(debtFTokenAdaptor));
 
         cellar.addPositionToCatalogue(wethPosition);
         cellar.addPositionToCatalogue(fraxlendCollateralMKRPosition);
@@ -194,7 +194,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         assertApproxEqAbs(
             MKR.balanceOf(address(cellar)),
@@ -223,14 +223,14 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertApproxEqAbs(
             cellar.totalAssets(),
             (assets + initialAssets),
             1,
-            "Cellar.totalAssets() && CollateralFTokenAdaptorV2.balanceOf() check: Total assets should not have changed."
+            "Cellar.totalAssets() && CollateralFTokenAdaptor.balanceOf() check: Total assets should not have changed."
         );
     }
 
@@ -246,18 +246,18 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         bytes memory adaptorData = abi.encode(MKR_FRAX_PAIR);
 
         vm.prank(address(cellar));
-        uint256 newBalance = debtFTokenAdaptorV2.balanceOf(adaptorData);
+        uint256 newBalance = debtFTokenAdaptor.balanceOf(adaptorData);
         assertApproxEqAbs(
             newBalance,
             fraxToBorrow,
@@ -283,11 +283,11 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(APE_FRAX_PAIR, assets / 2);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    DebtFTokenAdaptorV2.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
+                    DebtFTokenAdaptor.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
                     APE_FRAX_PAIR
                 )
             )
@@ -306,13 +306,13 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // start repayment sequence
@@ -322,7 +322,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
 
         // Repay the loan.
         adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrFToken, maxAmountToRepay);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertApproxEqAbs(
@@ -344,10 +344,10 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         uint32 fraxlendDebtUNIPosition = 1_000_008; // fralendV2
         registry.trustPosition(
             fraxlendCollateralUNIPosition,
-            address(collateralFTokenAdaptorV2),
+            address(collateralFTokenAdaptor),
             abi.encode(UNI_FRAX_PAIR)
         );
-        registry.trustPosition(fraxlendDebtUNIPosition, address(debtFTokenAdaptorV2), abi.encode(UNI_FRAX_PAIR));
+        registry.trustPosition(fraxlendDebtUNIPosition, address(debtFTokenAdaptor), abi.encode(UNI_FRAX_PAIR));
         cellar.addPositionToCatalogue(uniPosition);
         cellar.addPositionToCatalogue(fraxlendCollateralUNIPosition);
         cellar.addPositionToCatalogue(fraxlendDebtUNIPosition);
@@ -375,11 +375,8 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         adaptorCallsFirstAdaptor[1] = _createBytesDataToAddCollateralWithFraxlendV2(UNI_FRAX_PAIR, assets);
         adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, mkrFraxToBorrow);
         adaptorCallsSecondAdaptor[1] = _createBytesDataToBorrowWithFraxlendV2(UNI_FRAX_PAIR, uniFraxToBorrow);
-        data[0] = Cellar.AdaptorCall({
-            adaptor: address(collateralFTokenAdaptorV2),
-            callData: adaptorCallsFirstAdaptor
-        });
-        data[1] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCallsSecondAdaptor });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCallsFirstAdaptor });
+        data[1] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCallsSecondAdaptor });
         cellar.callOnAdaptor(data);
 
         // Check that we have the right amount of FRAX borrowed
@@ -400,7 +397,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory newData2 = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls2 = new bytes[](1);
         adaptorCalls2[0] = _createBytesDataToRepayWithFraxlendV2(mkrFToken, maxAmountToRepay);
-        newData2[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls2 });
+        newData2[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls2 });
         cellar.callOnAdaptor(newData2);
 
         assertApproxEqAbs(
@@ -420,7 +417,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         deal(address(MKR), address(cellar), 0);
 
         adaptorCalls2[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(assets, mkrFToken);
-        newData2[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls2 });
+        newData2[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls2 });
         cellar.callOnAdaptor(newData2);
 
         // Check that we no longer have any MKR in the collateralPosition
@@ -441,14 +438,14 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertEq(MKR.balanceOf(address(cellar)), initialAssets);
 
         // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
         adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(assets, mkrFToken);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertEq(MKR.balanceOf(address(cellar)), assets + initialAssets);
@@ -465,13 +462,13 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertEq(MKR.balanceOf(address(cellar)), initialAssets);
 
         adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(assets / 2, mkrFToken);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertEq(MKR.balanceOf(address(cellar)), (assets / 2) + initialAssets);
@@ -489,7 +486,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertEq(MKR.balanceOf(address(cellar)), 0);
@@ -497,18 +494,18 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         mkrFraxLendPair.addInterest(false);
         // try to removeCollateral but more than should be allowed
         adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(assets, mkrFToken);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    CollateralFTokenAdaptorV2.CollateralFTokenAdaptor__HealthFactorTooLow.selector,
+                    CollateralFTokenAdaptor.CollateralFTokenAdaptor__HealthFactorTooLow.selector,
                     MKR_FRAX_PAIR
                 )
             )
@@ -527,7 +524,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         uint256 newCellarCollateralBalance = mkrFToken.userCollateralBalance(address(cellar));
 
@@ -536,14 +533,11 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets.mulDivDown(1e4, 1.35e4), FRAX);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(
-                    DebtFTokenAdaptorV2.DebtFTokenAdaptor__HealthFactorTooLow.selector,
-                    MKR_FRAX_PAIR
-                )
+                abi.encodeWithSelector(DebtFTokenAdaptor.DebtFTokenAdaptor__HealthFactorTooLow.selector, MKR_FRAX_PAIR)
             )
         );
         cellar.callOnAdaptor(data);
@@ -551,7 +545,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         // add collateral to be able to borrow amount desired
         deal(address(MKR), address(cellar), 3 * assets);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         assertEq(MKR.balanceOf(address(cellar)), assets * 2);
@@ -562,7 +556,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         // Try taking out more FRAX now
         uint256 moreFraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, moreFraxToBorrow);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data); // should transact now
     }
 
@@ -578,13 +572,13 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // Take out a FRAX loan.
         uint256 fraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
         adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         // start repayment sequence
@@ -593,7 +587,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         uint256 debtBefore = getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar));
         // Repay the loan.
         adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrFToken, fraxToBorrow / 2);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
         uint256 debtNow = getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar));
         assertLt(debtNow, debtBefore);
@@ -610,7 +604,7 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         uint32 fraxlendCollateralUNIPosition = 1_000_007; // fralendV2
         registry.trustPosition(
             fraxlendCollateralUNIPosition,
-            address(collateralFTokenAdaptorV2),
+            address(collateralFTokenAdaptor),
             abi.encode(UNI_FRAX_PAIR)
         );
         // purposely do not trust a fraxlendDebtUNIPosition
@@ -625,15 +619,12 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         bytes[] memory adaptorCallsSecondAdaptor = new bytes[](1); // debtAdaptor
         adaptorCallsFirstAdaptor[0] = _createBytesDataToAddCollateralWithFraxlendV2(UNI_FRAX_PAIR, assets);
         adaptorCallsSecondAdaptor[0] = _createBytesDataToBorrowWithFraxlendV2(UNI_FRAX_PAIR, uniFraxToBorrow);
-        data[0] = Cellar.AdaptorCall({
-            adaptor: address(collateralFTokenAdaptorV2),
-            callData: adaptorCallsFirstAdaptor
-        });
-        data[1] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCallsSecondAdaptor });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCallsFirstAdaptor });
+        data[1] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCallsSecondAdaptor });
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    DebtFTokenAdaptorV2.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
+                    DebtFTokenAdaptor.DebtFTokenAdaptor__FraxlendPairPositionsMustBeTracked.selector,
                     address(UNI_FRAX_PAIR)
                 )
             )
@@ -650,10 +641,10 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         bytes[] memory adaptorCalls = new bytes[](1);
 
         adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrFraxLendPair, assets / 2);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(DebtFTokenAdaptorV2.DebtFTokenAdaptor__CannotRepayNoDebt.selector, MKR_FRAX_PAIR)
+                abi.encodeWithSelector(DebtFTokenAdaptor.DebtFTokenAdaptor__CannotRepayNoDebt.selector, MKR_FRAX_PAIR)
             )
         );
         cellar.callOnAdaptor(data);
@@ -669,13 +660,13 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
         bytes[] memory adaptorCalls = new bytes[](1);
         adaptorCalls[0] = abi.encodeWithSelector(
-            CollateralFTokenAdaptorV2.withdraw.selector,
+            CollateralFTokenAdaptor.withdraw.selector,
             100_000e18,
             maliciousStrategist,
             abi.encode(MKR_FRAX_PAIR, MKR),
             abi.encode(0)
         );
-        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV2), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
         vm.expectRevert(bytes(abi.encodeWithSelector(BaseAdaptor.BaseAdaptor__UserWithdrawsNotAllowed.selector)));
         cellar.callOnAdaptor(data);
     }
