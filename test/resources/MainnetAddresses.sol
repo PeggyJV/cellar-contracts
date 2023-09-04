@@ -10,6 +10,8 @@ contract MainnetAddresses {
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
     address public cosmos = address(0xCAAA);
     address public multisig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
+    address public ryusdRegistry = 0x2Cbd27E034FEE53f79b607430dA7771B22050741;
+    address public ryusdRegistryOwner = 0xaDa78a5E01325B91Bc7879a63c309F7D54d42950;
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
 
     // DeFi Ecosystem
@@ -168,4 +170,10 @@ contract MainnetAddresses {
     bytes32 public swEthDataFeedId = 0x5357455448000000000000000000000000000000000000000000000000000000;
     // Maker
     address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
+
+    // Current Active Cellars
+    address public ryusdCellar = 0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E;
+
+    // Maker
+    address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
 }
