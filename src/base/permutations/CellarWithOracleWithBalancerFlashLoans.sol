@@ -53,7 +53,7 @@ contract CellarWithOracleWithBalancerFlashLoans is CellarWithOracle, IFlashLoanR
     error Cellar__ExternalInitiator();
 
     /**
-     * @notice executeOperation was not called by the Aave Pool.
+     * @notice receiveFlashLoan was not called by Balancer Vault.
      */
     error Cellar__CallerNotBalancerVault();
 
