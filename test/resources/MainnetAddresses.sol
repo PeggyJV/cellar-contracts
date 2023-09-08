@@ -8,6 +8,7 @@ contract MainnetAddresses {
     // Sommelier
     address public gravityBridgeAddress = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
+    address public testStrategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
     address public cosmos = address(0xCAAA);
     address public multisig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
     address public ryusdRegistry = 0x2Cbd27E034FEE53f79b607430dA7771B22050741;

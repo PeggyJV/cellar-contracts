@@ -35,9 +35,7 @@ contract DeployLegacyCellarAdaptorScript is Script, MainnetAddresses {
 
         creationCode = type(LegacyCellarAdaptor).creationCode;
         constructorArgs = hex"";
-        LegacyCellarAdaptor legacyCellarAdaptor = LegacyCellarAdaptor(
-            deployer.deployContract("Legacy Cellar Adaptor V0.0", creationCode, constructorArgs, 0)
-        );
+        deployer.deployContract("Legacy Cellar Adaptor V0.0", creationCode, constructorArgs, 0);
 
         vm.stopBroadcast();
     }

@@ -30,8 +30,8 @@ contract DeployStakingScript is Script, MainnetAddresses {
     Registry public registry = Registry(0xEED68C267E9313a6ED6ee08de08c9F68dee44476);
     PriceRouter public priceRouter = PriceRouter(0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92);
 
-    // Turbo swETH.
-    ERC20 public stakingToken = ERC20(0xd33dAd974b938744dAC81fE00ac67cb5AA13958E);
+    // Turbo GHO.
+    ERC20 public stakingToken = ERC20(0x0C190DEd9Be5f512Bd72827bdaD4003e9Cc7975C);
 
     CellarStaking public staker;
 
@@ -39,16 +39,16 @@ contract DeployStakingScript is Script, MainnetAddresses {
         bytes memory creationCode;
         bytes memory constructorArgs;
 
-        address _owner = multisig;
+        address _owner = testStrategist;
         ERC20 _stakingToken = stakingToken;
-        ERC20 _distributionToken = ERC20(0x677365Ac7ca3E9efE12a29a001737A3Db265E8aF); // black pearls
-        uint256 _epochDuration = 7 * 1 days;
-        uint256 shortBoost = 0;
-        uint256 mediumBoost = 0.25e18;
-        uint256 longBoost = 0.5e18;
+        ERC20 _distributionToken = ERC20(0xa670d7237398238DE01267472C6f13e5B8010FD1); // somm
+        uint256 _epochDuration = 3 days;
+        uint256 shortBoost = 0.10e18;
+        uint256 mediumBoost = 0.30e18;
+        uint256 longBoost = 0.50e18;
         uint256 shortBoostTime = 7 days;
-        uint256 mediumBoostTime = 21 days;
-        uint256 longBoostTime = 30 days;
+        uint256 mediumBoostTime = 14 days;
+        uint256 longBoostTime = 21 days;
 
         vm.startBroadcast();
 
@@ -67,7 +67,7 @@ contract DeployStakingScript is Script, MainnetAddresses {
             longBoostTime
         );
         priceRouter = PriceRouter(
-            deployer.deployContract("Turbo SWETH Staking Contract V0.0", creationCode, constructorArgs, 0)
+            deployer.deployContract("Turbo GHO Staking Contract V0.0", creationCode, constructorArgs, 0)
         );
         vm.stopBroadcast();
     }
