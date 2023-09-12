@@ -15,16 +15,11 @@ interface IRYUSDRegistry {
         uint128 protocolRisk
     ) external returns (uint32 positionId);
 
-    function trustAdaptor(
-        address adaptor,
-        uint128 assetRisk,
-        uint128 protocolRisk
-    ) external;
+    function trustAdaptor(address adaptor, uint128 assetRisk, uint128 protocolRisk) external;
 
-    function addPosition(
-        uint32 index,
-        uint32 positionId,
-        bytes memory configurationData,
-        bool inDebtArray
-    ) external;
+    function addPosition(uint32 index, uint32 positionId, bytes memory configurationData, bool inDebtArray) external;
+
+    function setAddress(uint256 id, address newAddress) external;
+
+    function getAddress(uint256) external returns (address);
 }
