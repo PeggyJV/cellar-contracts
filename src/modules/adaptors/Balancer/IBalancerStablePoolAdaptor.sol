@@ -33,7 +33,7 @@ interface IBalancerStablePoolAdaptor {
     
     /**
      * @notice Allows strategists to exit Balancer pools using any exit.
-    //  * @dev The amounts in `swapsAfterExit` are overwritten by the actual amount out received from the swap.
+     * @dev The amounts in `swapsAfterExit` are overwritten by the actual amount out received from the swap.
      * @dev `swapsAfterExit` MUST match up with expected token array returned from `_getPoolTokensWithNoPremintedBpt`.
      *      IE if the first token in expected token array is BB A DAI, the first swap in `swapsBeforeJoin` MUST be to
      *      swap BB A DAI.
