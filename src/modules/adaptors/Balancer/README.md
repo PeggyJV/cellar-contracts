@@ -2,7 +2,7 @@
 
 > \*\*tl;dr - THE PURPOSE OF THIS REPO IS TO FACILITATE DISCUSSION AROUND A UNIVERSAL BALANCER POOL ADAPTOR. THIS PR FOCUSES ON USING A STABLEPOOL ADAPTOR AS THE FIRST EXAMPLE AS OTHER ADAPTORS CAN BE CREATED FOR DIFFERENT POOL TYPES. The end result will be an interface, and implementation code w/ a couple specific virtual (override-able) functions for bespoke aspects per Yield Aggregator project (such as pricing, whitelisting mutative contracts, etc.).
 
-> Questions are to be discussed async within "Issues" or informally within the private TG chat. Reach out to 0xEinCodes if you are interested in being involved with general, open-source ERC 4626 Adaptor work with this initiative.\*\*
+> Questions are to be discussed async within "Issues" or informally within the private Telegram chat. Reach out to 0xEinCodes (@EinCodes on Telegram) if you are interested in being involved with general, open-source ERC 4626 Adaptor work with this initiative.\*\*
 
 > _Also, this is a wip integration. None of this code or concepts are to be used, and are not finalized (thus the TODOs scattered through the markdown right now)._
 

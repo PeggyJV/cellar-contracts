@@ -2,6 +2,7 @@
 pragma solidity 0.8.21;
 
 import { SingleSwap, JoinPoolRequest, SwapKind, FundManagement, ExitPoolRequest } from "src/interfaces/external/Balancer/IVault.sol";
+import {ILiquidityGaugev3Custom} from "src/interfaces/external/Balancer/ILiquidityGaugev3Custom.sol";
 
 /**
  * @title IBalancerPoolAdaptor
