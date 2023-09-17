@@ -18,10 +18,10 @@ import { IBalancerStablePoolAdaptor } from "src/modules/adaptors/Balancer/IBalan
  * @notice Allows ERC4626 Vaults to interact with Stable and Boosted Stable Balancer Pools (BPs).
  * @author 0xEinCodes and CrispyMangoes
  * NOTE: IMPORTANT - THIS IS A WIP, WHERE MOST OF THE CODE HAS BEEN TAKEN FROM THE ACTUAL `BalancerPoolAdaptor.sol` THAT IS USED WITHIN THE SOMMELIER ARCHITECTURE. THERE ARE ASPECTS OF THE SOMMELIER ARCHITECTURE THAT ARE NOT NEEDED, THOUGH MAY BE INCLUDED TO HELP PROMPT OTHER YIELD AGGREGATORS TO PROPERLY ACCOUNT FOR `assetOf()` AND `totalAssets()`, ETC. FOR THE RESPECTIVE ERC 4626 VAULT'S POSITION USING THIS ADAPTOR. FOR NOW IT IS REMOVED TO SHOWCASE THE MAIN FUNCTIONS THAT INTERACT WITH THE BALANCER STABLE POOL AS PER `IBalancerStablePoolAdaptor.sol`
- * NOTE: Possibly do not need `BaseAdaptor.sol` inheritted but again, this is just a wip and can be assessed if the Balancer Grant is approved.
  * NOTE: Actual implementation mentioned, `BalancerPoolAdaptor.sol` can be found here: https://github.com/PeggyJV/cellar-contracts/blob/main/src/modules/adaptors/Balancer/BalancerPoolAdaptor.sol && tests here: https://github.com/PeggyJV/cellar-contracts/blob/main/test/testAdaptors/BalancerPoolAdaptor.t.sol
+ * NOTE: removed inheritance of BaseAdaptor, a Sommelier-Specific base adaptor, but there may be more tweaks to be done to ensure that it is truly ERC4626 agnostic (and not biased to Sommelier codebase). This will come as the grant develops.
  */
-contract BalancerStablePoolAdaptor is IBalancerStablePoolAdaptor, BaseAdaptor {
+contract BalancerStablePoolAdaptor is IBalancerStablePoolAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -376,5 +376,24 @@ contract BalancerStablePoolAdaptor is IBalancerStablePoolAdaptor, BaseAdaptor {
         bytes32 poolId = IBasePool(address(targetBpt)).getPoolId();
         (IERC20[] memory poolTokens, , ) = vault.getPoolTokens(poolId);
         return _getPoolTokensWithNoPremintedBpt(address(targetBpt), poolTokens);
+    }
+
+    /**
+     * @notice Helper function that allows adaptor calls to use the max available of an ERC20 asset
+     * by passing in type(uint256).max
+     * @param token the ERC20 asset to work with
+     * @param amount when `type(uint256).max` is used, this function returns `token`s `balanceOf`
+     * otherwise this function returns amount.
+     */
+    function _maxAvailable(ERC20 token, uint256 amount) internal view virtual returns (uint256) {
+        if (amount == type(uint256).max) return token.balanceOf(address(this));
+        else return amount;
+    }
+
+    /**
+     * @notice Helper function that checks if `spender` has any more approval for `asset`, and if so revokes it.
+     */
+    function _revokeExternalApproval(ERC20 asset, address spender) internal {
+        if (asset.allowance(address(this), spender) > 0) asset.safeApprove(spender, 0);
     }
 }
