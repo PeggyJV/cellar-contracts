@@ -25,11 +25,9 @@ contract AuraExtrasAdaptor is BaseAdaptor {
     //====================================================================
 
     /**
-     * @notice Attempted to interact with an fToken the Cellar is not using.
+     * @notice Attempted to interact with an auraPool the Cellar is not using.
      */
     error AuraExtrasAdaptor__AuraPoolPositionsMustBeTracked(address auraPool);
-
-    constructor() {}
 
     //============================================ Global Functions ===========================================
     /**
@@ -66,7 +64,7 @@ contract AuraExtrasAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice rewardTokens are to be accounted by other adaptors based on how Strategist decides on handling reward tokens withiin the Cellar.
+     * @notice rewardTokens are to be accounted by other adaptors based on how Strategist decides on handling reward tokens withiin the Cellar. Amount of BPTs are accounted for via a CellarAdaptor position also.
      * NOTE: An example of how a Strategist could handle the rewards is to simply have trusted `erc20Adaptor positions` for the rewards tokens.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
@@ -97,7 +95,7 @@ contract AuraExtrasAdaptor is BaseAdaptor {
      * @param _claimExtras Whether or not to claim extra rewards associated to the AuraPool (outside of rewardToken for AuraPool)
      */
     function getRewards(IBaseRewardPool _auraPool, bool _claimExtras) public {
-        _validateAuraPool(_auraPool);
+        _validateAuraPool(address(_auraPool));
         _getRewards(_auraPool, _claimExtras);
     }
 
