@@ -41,7 +41,7 @@ contract ERC4626Adaptor is BaseAdaptor {
      * Identifier is needed during Cellar Delegate Call Operations, so getting the address
      * of the adaptor is more difficult.
      */
-    function identifier() public pure override returns (bytes32) {
+    function identifier() public pure virtual override returns (bytes32) {
         return keccak256(abi.encode("Sommelier General ERC4626 Adaptor V 0.0"));
     }
 
@@ -52,7 +52,7 @@ contract ERC4626Adaptor is BaseAdaptor {
      * @param adaptorData adaptor data containining the abi encoded Cellar
      * @dev configurationData is NOT used
      */
-    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public virtual override {
         // Deposit assets to `cellar`.
         Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
         _verifyCellarPositionIsUsed(address(erc4626Vault));
@@ -77,7 +77,7 @@ contract ERC4626Adaptor is BaseAdaptor {
         address receiver,
         bytes memory adaptorData,
         bytes memory configurationData
-    ) public override {
+    ) public virtual override {
         // Check that position is setup to be liquid.
         bool isLiquid = abi.decode(configurationData, (bool));
         if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
@@ -97,7 +97,7 @@ contract ERC4626Adaptor is BaseAdaptor {
     function withdrawableFrom(
         bytes memory adaptorData,
         bytes memory configurationData
-    ) public view override returns (uint256) {
+    ) public view virtual override returns (uint256) {
         bool isLiquid = abi.decode(configurationData, (bool));
         if (isLiquid) {
             Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
@@ -108,7 +108,7 @@ contract ERC4626Adaptor is BaseAdaptor {
     /**
      * @notice Uses ERC4626 `previewRedeem` to determine Cellars balance in Cellar position.
      */
-    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
+    function balanceOf(bytes memory adaptorData) public view virtual override returns (uint256) {
         Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
         return erc4626Vault.previewRedeem(erc4626Vault.balanceOf(msg.sender));
     }
@@ -116,7 +116,7 @@ contract ERC4626Adaptor is BaseAdaptor {
     /**
      * @notice Returns the asset the Cellar position uses.
      */
-    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+    function assetOf(bytes memory adaptorData) public view virtual override returns (ERC20) {
         Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
         return erc4626Vault.asset();
     }
@@ -124,7 +124,7 @@ contract ERC4626Adaptor is BaseAdaptor {
     /**
      * @notice This adaptor returns collateral, and not debt.
      */
-    function isDebt() public pure override returns (bool) {
+    function isDebt() public pure virtual override returns (bool) {
         return false;
     }
 
@@ -132,7 +132,7 @@ contract ERC4626Adaptor is BaseAdaptor {
     /**
      * @notice Allows strategists to deposit into Cellar positions.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * @param cellar the Cellar to deposit `assets` into
+     * @param erc4626Vault the Cellar to deposit `assets` into
      * @param assets the amount of assets to deposit into `cellar`
      */
     function depositToCellar(Cellar erc4626Vault, uint256 assets) public {
@@ -148,7 +148,7 @@ contract ERC4626Adaptor is BaseAdaptor {
 
     /**
      * @notice Allows strategists to withdraw from Cellar positions.
-     * @param cellar the Cellar to withdraw `assets` from
+     * @param erc4626Vault the Cellar to withdraw `assets` from
      * @param assets the amount of assets to withdraw from `cellar`
      */
     function withdrawFromCellar(Cellar erc4626Vault, uint256 assets) public {

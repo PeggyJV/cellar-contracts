@@ -42,6 +42,8 @@ import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUni
 
 import { AuraExtrasAdaptor } from "src/modules/adaptors/Aura/AuraExtraAdaptor.sol";
 
+import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -419,8 +421,19 @@ contract AdaptorHelperFunctions {
 
     // ========================================= AURA FUNCTIONS =========================================
 
-    function _createBytesDataToCallGetRewards(address _auraPool, bool _claimExtras) internal pure returns (bytes memory) {
+    // TODO: Delete
+    function _createBytesDataToCallGetRewards(
+        address _auraPool,
+        bool _claimExtras
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AuraExtrasAdaptor.getRewards.selector, _auraPool, _claimExtras);
+    }
+
+    function _createBytesDataToCallGetRewards(
+        address _auraPool,
+        bool _claimExtras
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AuraERC4626Adaptor.getRewards.selector, _auraPool, _claimExtras);
     }
 
     // ========================================= Sommelier FUNCTIONS =========================================

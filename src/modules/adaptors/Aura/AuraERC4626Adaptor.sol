@@ -13,7 +13,7 @@ import { ERC4626Adaptor } from "src/modules/adaptors/Sommelier/ERC4626Adaptor.so
  * @notice Allows Cellars to claim rewards from AURA pools
  * @author crispymangoes, 0xEinCodes
  */
-contract AuraExtrasAdaptor is BaseAdaptor {
+contract AuraERC4626Adaptor is ERC4626Adaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -42,35 +42,6 @@ contract AuraExtrasAdaptor is BaseAdaptor {
     }
 
     //============================================ Implement Base Functions ===========================================
-    /**
-     * @notice User deposits are NOT allowed into this position.
-     */
-    function deposit(uint256, bytes memory, bytes memory) public pure override {
-        revert BaseAdaptor__UserDepositsNotAllowed();
-    }
-
-    /**
-     * @notice User withdraws are NOT allowed from this position.
-     */
-    function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
-        revert BaseAdaptor__UserWithdrawsNotAllowed();
-    }
-
-    /**
-     * @notice This position is a debt position, and user withdraws are not allowed so
-     *         this position must return 0 for withdrawableFrom.
-     */
-    function withdrawableFrom(bytes memory, bytes memory) public pure override returns (uint256) {
-        return 0;
-    }
-
-    /**
-     * @notice rewardTokens are to be accounted by other adaptors based on how Strategist decides on handling reward tokens withiin the Cellar. Amount of BPTs are accounted for via a CellarAdaptor position also.
-     * NOTE: An example of how a Strategist could handle the rewards is to simply have trusted `erc20Adaptor positions` for the rewards tokens.
-     */
-    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        return 0;
-    }
 
     /**
      * @notice Returns the positions underlying asset.
@@ -79,13 +50,6 @@ contract AuraExtrasAdaptor is BaseAdaptor {
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
         ERC4626 auraPool = ERC4626(abi.decode(adaptorData, (address)));
         return ERC20(auraPool.asset());
-    }
-
-    /**
-     * @notice Whether this adaptor reports values in terms of debt.
-     */
-    function isDebt() public pure override returns (bool) {
-        return false;
     }
 
     //============================================ Strategist Functions ===========================================
