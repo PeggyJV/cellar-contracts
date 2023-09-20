@@ -98,11 +98,11 @@ contract MainnetAddresses {
     ERC20 public bb_a_USDC_BPT = ERC20(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692);
     ERC20 public bb_a_DAI_BPT = ERC20(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
     ERC20 public bb_a_USDT_BPT = ERC20(0xA1697F9Af0875B63DdC472d6EeBADa8C1fAB8568);
-    // ERC20 public aura_rETH_wETH_BPT = ERC20(0xDd1fE5AD401D4777cE89959b7fa587e569Bf125D);
+    ERC20 public aura_rETH_wETH_BPT = ERC20(0xDd1fE5AD401D4777cE89959b7fa587e569Bf125D);
 
     // Mainnet Aura Specific Addresses
 
-    address aura_rETH_wETH_BPT = 0xDd1fE5AD401D4777cE89959b7fa587e569Bf125D; // aura_rETH_wETH_BPT Aura Deposit Vault
+    // address aura_rETH_wETH_BPT_Address = 0xDd1fE5AD401D4777cE89959b7fa587e569Bf125D; // aura_rETH_wETH_BPT Aura Deposit Vault
 
     // Compound V2
     CErc20 public cDAI = CErc20(0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643);

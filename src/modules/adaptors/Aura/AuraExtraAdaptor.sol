@@ -3,13 +3,13 @@ pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IBaseRewardPool } from "src/interfaces/external/Aura/IBaseRewardPool.sol";
+import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 
 /**
  * @title Aura "Extras" Adaptor
- * @dev This adaptor is specifically for AuraV? contracts.
+ * @dev This adaptor is specifically for AuraV? contracts. TODO: update version with final reformat
  * NOTE: (may remove this comment) To interact with a different version, inherit from this adaptor and override the interface helper functions.
  * @notice Allows Cellars to claim rewards from AURA pools
- * TODO: Add integrations for vote-locking w/ AURA w/ AURA vote proxy contract.
  * @author crispymangoes, 0xEinCodes
  */
 contract AuraExtrasAdaptor is BaseAdaptor {
@@ -76,8 +76,8 @@ contract AuraExtrasAdaptor is BaseAdaptor {
      * NOTE: setup to not cause any reversions but accounting is really done for rewardsTokens via other adaptors.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        address auraPool = abi.decode(adaptorData, (address));
-        return ERC20(auraPool);
+        ERC4626 auraPool = ERC4626(abi.decode(adaptorData, (address)));
+        return ERC20(auraPool.asset());
     }
 
     /**
@@ -105,9 +105,9 @@ contract AuraExtrasAdaptor is BaseAdaptor {
      */
     function _validateAuraPool(address _auraPool) internal view {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_auraPool)));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert AuraExtrasAdaptor__AuraPoolPositionsMustBeTracked(_auraPool);
+        // uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+        // if (!Cellar(address(this)).isPositionUsed(positionId))
+        //     revert AuraExtrasAdaptor__AuraPoolPositionsMustBeTracked(_auraPool); // TODO: troubleshoot uncommented implementation code here
     }
 
     //============================================ Interface Helper Functions ===========================================

@@ -40,6 +40,8 @@ import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellar
 
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
+import { AuraExtrasAdaptor } from "src/modules/adaptors/Aura/AuraExtraAdaptor.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -413,6 +415,12 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToCallAddInterestOnFraxLend(address fToken) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FTokenAdaptor.callAddInterest.selector, fToken);
+    }
+
+    // ========================================= AURA FUNCTIONS =========================================
+
+    function _createBytesDataToCallGetRewards(address _auraPool, bool _claimExtras) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(AuraExtrasAdaptor.getRewards.selector, _auraPool, _claimExtras);
     }
 
     // ========================================= Sommelier FUNCTIONS =========================================
