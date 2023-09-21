@@ -26,15 +26,13 @@ import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor
  * TODO: test with other AuraPools perhaps?
  * TODO: carry out stateful fuzzing?
  */
-contract CellarAdaptorWithAuraTest is MainnetStarterTest, AdaptorHelperFunctions {
+contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
     AuraERC4626Adaptor private auraERC4626Adaptor;
 
-    CellarAdaptor private cellarAdaptor; // TODO: delete
-    AuraExtrasAdaptor private auraExtrasAdaptor;
     ERC4626 public auraRETHWETHBPTVault = ERC4626(address(aura_rETH_wETH_BPT));
     Cellar private cellar;
 
@@ -62,8 +60,7 @@ contract CellarAdaptorWithAuraTest is MainnetStarterTest, AdaptorHelperFunctions
         // Run Starter setUp code.
         _setUp();
 
-        cellarAdaptor = new CellarAdaptor(); // TODO: delete
-        auraExtrasAdaptor = new AuraExtrasAdaptor(); // TODO: delete
+        auraERC4626Adaptor = new AuraERC4626Adaptor();
 
         balancerStablePoolExtension = new BalancerStablePoolExtension(priceRouter, IVault(vault));
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -113,8 +110,6 @@ contract CellarAdaptorWithAuraTest is MainnetStarterTest, AdaptorHelperFunctions
         // Setup Cellar:
 
         // Add adaptors and positions to the registry.
-        registry.trustAdaptor(address(cellarAdaptor)); // TODO: delete
-        registry.trustAdaptor(address(auraExtrasAdaptor)); // TODO: delete
         registry.trustAdaptor(address(auraERC4626Adaptor));
 
         registry.trustPosition(rETH_wETH_BPT_Position, address(erc20Adaptor), abi.encode(rETH_wETH_BPT));
@@ -125,11 +120,6 @@ contract CellarAdaptorWithAuraTest is MainnetStarterTest, AdaptorHelperFunctions
             address(auraERC4626Adaptor),
             abi.encode(address(aura_rETH_wETH_BPT))
         ); // TODO: discuss and fix this with Crispy the error that is coming up here. It should just work because the underlying BPT is what bubbles up when checking `asset()` of the auraPool "as a Cellar".
-        registry.trustPosition(
-            auraExtras_RETH_WETH_BPT_Position,
-            address(auraExtrasAdaptor),
-            abi.encode(address(aura_rETH_wETH_BPT))
-        );
 
         string memory cellarName = "rETH-wETH BPT Aura Pool Cellar V0.0";
         uint256 initialDeposit = 1e18;
@@ -146,11 +136,8 @@ contract CellarAdaptorWithAuraTest is MainnetStarterTest, AdaptorHelperFunctions
 
         cellar.setRebalanceDeviation(0.01e18);
 
-        cellar.addAdaptorToCatalogue(address(cellarAdaptor)); // TODO: delete
         cellar.addAdaptorToCatalogue(address(auraERC4626Adaptor));
         cellar.addPositionToCatalogue(auraRethWethBptPoolPosition); // auraERC4626 for rETH_wETH_BPT
-        cellar.addAdaptorToCatalogue(address(auraExtrasAdaptor)); // TODO: delete
-        cellar.addPositionToCatalogue(auraExtras_RETH_WETH_BPT_Position); // TODO: delete
 
         cellar.addPosition(0, auraRethWethBptPoolPosition, abi.encode(true), false);
 
@@ -262,8 +249,8 @@ contract CellarAdaptorWithAuraTest is MainnetStarterTest, AdaptorHelperFunctions
         bool claimExtras = true;
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToCallGetRewards(address(aura_rETH_wETH_BPT), claimExtras);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(auraExtrasAdaptor), callData: adaptorCalls });
+            adaptorCalls[0] = _createBytesDataGetRewardsFromAuraPoolERC4626(address(aura_rETH_wETH_BPT), claimExtras);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(auraERC4626Adaptor), callData: adaptorCalls });
         }
 
         // Perform callOnAdaptor.
@@ -288,8 +275,8 @@ contract CellarAdaptorWithAuraTest is MainnetStarterTest, AdaptorHelperFunctions
         bool claimExtras = true;
         {
             bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToCallGetRewards(address(aura_rETH_wETH_BPT), claimExtras);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(auraExtrasAdaptor), callData: adaptorCalls });
+            adaptorCalls[0] = _createBytesDataGetRewardsFromAuraPoolERC4626(address(aura_rETH_wETH_BPT), claimExtras);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(auraERC4626Adaptor), callData: adaptorCalls });
         }
 
         uint256 newBALRewards = BAL.balanceOf(address(cellar));

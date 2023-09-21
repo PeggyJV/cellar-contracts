@@ -429,7 +429,7 @@ contract AdaptorHelperFunctions {
         return abi.encodeWithSelector(AuraExtrasAdaptor.getRewards.selector, _auraPool, _claimExtras);
     }
 
-    function _createBytesDataToCallGetRewards(
+    function _createBytesDataGetRewardsFromAuraPoolERC4626(
         address _auraPool,
         bool _claimExtras
     ) internal pure returns (bytes memory) {
