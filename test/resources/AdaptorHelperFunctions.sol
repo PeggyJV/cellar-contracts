@@ -40,8 +40,6 @@ import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellar
 
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
-import { AuraExtrasAdaptor } from "src/modules/adaptors/Aura/AuraExtraAdaptor.sol";
-
 import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor.sol";
 
 contract AdaptorHelperFunctions {
@@ -420,14 +418,6 @@ contract AdaptorHelperFunctions {
     }
 
     // ========================================= AURA FUNCTIONS =========================================
-
-    // TODO: Delete
-    function _createBytesDataToCallGetRewards(
-        address _auraPool,
-        bool _claimExtras
-    ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(AuraExtrasAdaptor.getRewards.selector, _auraPool, _claimExtras);
-    }
 
     function _createBytesDataGetRewardsFromAuraPoolERC4626(
         address _auraPool,

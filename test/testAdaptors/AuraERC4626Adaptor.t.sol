@@ -14,7 +14,6 @@ import { MockBalancerPoolAdaptor } from "src/mocks/adaptors/MockBalancerPoolAdap
 import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
 import { CellarWithBalancerFlashLoans } from "src/base/permutations/CellarWithBalancerFlashLoans.sol";
 import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
-import { AuraExtrasAdaptor } from "src/modules/adaptors/Aura/AuraExtraAdaptor.sol";
 import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor.sol";
 
 /**
