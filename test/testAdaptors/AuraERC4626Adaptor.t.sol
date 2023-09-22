@@ -17,8 +17,8 @@ import { IUniswapV3Pool } from "@uniswapV3C/interfaces/IUniswapV3Pool.sol";
 import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor.sol";
 
 /**
- * @title CellarAdaptorWithAuraTest
- * @author 0xEinCodes
+ * @title AuraERC4626AdaptorTest
+ * @author crispymangoes, 0xEinCodes
  * @notice Cellar Adaptor tests with Aura BPT Pools
  * @dev Mock datafeeds to be used for underlying BPTs. For tests, we'll go with rETH / wETH BPT pair. We'll use mock datafeeds for the constituent assets of this pair so we can warp forward to simulate reward accrual.
  * TODO: review with Crispy comments outlined within test code

@@ -2,6 +2,7 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar } from "src/modules/adaptors/BaseAdaptor.sol";
+import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 
 /**
  * @title Generic ERC4626 Vault Adaptor (basically a copy of Cellar Adaptor w/ virtual function sigs to enable inheritance and overriding).
@@ -15,9 +16,9 @@ contract ERC4626Adaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(Cellar erc4626Vault)
+    // adaptorData = abi.encode(ERC4626 erc4626Vault)
     // Where:
-    // `erc4626Vault` is the underling Cellar this adaptor is working with
+    // `erc4626Vault` is the underling ERC4626 this adaptor is working with
     //================= Configuration Data Specification =================
     // configurationData = abi.encode(bool isLiquid)
     // Where:
@@ -47,15 +48,15 @@ contract ERC4626Adaptor is BaseAdaptor {
 
     //============================================ Implement Base Functions ===========================================
     /**
-     * @notice Cellar must approve Cellar position to spend its assets, then deposit into the Cellar position.
-     * @param assets the amount of assets to deposit into the Cellar position
-     * @param adaptorData adaptor data containining the abi encoded Cellar
+     * @notice Cellar must approve ERC4626 position to spend its assets, then deposit into the ERC4626 position.
+     * @param assets the amount of assets to deposit into the ERC4626 position
+     * @param adaptorData adaptor data containining the abi encoded ERC4626
      * @dev configurationData is NOT used
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public virtual override {
         // Deposit assets to `cellar`.
-        Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
-        _verifyCellarPositionIsUsed(address(erc4626Vault));
+        ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
+        _verifyERC4626PositionIsUsed(address(erc4626Vault));
         ERC20 asset = erc4626Vault.asset();
         asset.safeApprove(address(erc4626Vault), assets);
         erc4626Vault.deposit(assets, address(this));
@@ -65,11 +66,11 @@ contract ERC4626Adaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Cellar needs to call withdraw on Cellar position.
+     * @notice Cellar needs to call withdraw on ERC4626 position.
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
-     * @param assets the amount of assets to withdraw from the Cellar position
+     * @param assets the amount of assets to withdraw from the ERC4626 position
      * @param receiver address to send assets to'
-     * @param adaptorData data needed to withdraw from the Cellar position
+     * @param adaptorData data needed to withdraw from the ERC4626 position
      * @param configurationData abi encoded bool indicating whether the position is liquid or not
      */
     function withdraw(
@@ -86,8 +87,8 @@ contract ERC4626Adaptor is BaseAdaptor {
         _externalReceiverCheck(receiver);
 
         // Withdraw assets from `cellar`.
-        Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
-        _verifyCellarPositionIsUsed(address(erc4626Vault));
+        ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
+        _verifyERC4626PositionIsUsed(address(erc4626Vault));
         erc4626Vault.withdraw(assets, receiver, address(this));
     }
 
@@ -100,24 +101,24 @@ contract ERC4626Adaptor is BaseAdaptor {
     ) public view virtual override returns (uint256) {
         bool isLiquid = abi.decode(configurationData, (bool));
         if (isLiquid) {
-            Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
+            ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
             return erc4626Vault.maxWithdraw(msg.sender);
         } else return 0;
     }
 
     /**
-     * @notice Uses ERC4626 `previewRedeem` to determine Cellars balance in Cellar position.
+     * @notice Uses ERC4626 `previewRedeem` to determine Cellars balance in ERC4626 position.
      */
     function balanceOf(bytes memory adaptorData) public view virtual override returns (uint256) {
-        Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
+        ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
         return erc4626Vault.previewRedeem(erc4626Vault.balanceOf(msg.sender));
     }
 
     /**
-     * @notice Returns the asset the Cellar position uses.
+     * @notice Returns the asset the ERC4626 position uses.
      */
     function assetOf(bytes memory adaptorData) public view virtual override returns (ERC20) {
-        Cellar erc4626Vault = abi.decode(adaptorData, (Cellar));
+        ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
         return erc4626Vault.asset();
     }
 
@@ -130,13 +131,13 @@ contract ERC4626Adaptor is BaseAdaptor {
 
     //============================================ Strategist Functions ===========================================
     /**
-     * @notice Allows strategists to deposit into Cellar positions.
+     * @notice Allows strategists to deposit into ERC4626 positions.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
-     * @param erc4626Vault the Cellar to deposit `assets` into
+     * @param erc4626Vault the ERC4626 to deposit `assets` into
      * @param assets the amount of assets to deposit into `cellar`
      */
-    function depositToCellar(Cellar erc4626Vault, uint256 assets) public {
-        _verifyCellarPositionIsUsed(address(erc4626Vault));
+    function depositToCellar(ERC4626 erc4626Vault, uint256 assets) public {
+        _verifyERC4626PositionIsUsed(address(erc4626Vault));
         ERC20 asset = erc4626Vault.asset();
         assets = _maxAvailable(asset, assets);
         asset.safeApprove(address(erc4626Vault), assets);
@@ -147,12 +148,12 @@ contract ERC4626Adaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Allows strategists to withdraw from Cellar positions.
-     * @param erc4626Vault the Cellar to withdraw `assets` from
+     * @notice Allows strategists to withdraw from ERC4626 positions.
+     * @param erc4626Vault the ERC4626 to withdraw `assets` from
      * @param assets the amount of assets to withdraw from `cellar`
      */
-    function withdrawFromCellar(Cellar erc4626Vault, uint256 assets) public {
-        _verifyCellarPositionIsUsed(address(erc4626Vault));
+    function withdrawFromCellar(ERC4626 erc4626Vault, uint256 assets) public {
+        _verifyERC4626PositionIsUsed(address(erc4626Vault));
         if (assets == type(uint256).max) assets = erc4626Vault.maxWithdraw(address(this));
         erc4626Vault.withdraw(assets, address(this), address(this));
     }
@@ -164,7 +165,7 @@ contract ERC4626Adaptor is BaseAdaptor {
      * @dev This function is only used in a delegate call context, hence why address(this) is used
      *      to get the calling Cellar.
      */
-    function _verifyCellarPositionIsUsed(address erc4626Vault) internal view {
+    function _verifyERC4626PositionIsUsed(address erc4626Vault) internal view {
         // Check that erc4626Vault position is setup to be used in the calling cellar.
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(erc4626Vault)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
