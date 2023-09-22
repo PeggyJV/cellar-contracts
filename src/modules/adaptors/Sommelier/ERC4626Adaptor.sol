@@ -119,7 +119,7 @@ contract ERC4626Adaptor is BaseAdaptor {
      */
     function assetOf(bytes memory adaptorData) public view virtual override returns (ERC20) {
         ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
-        return erc4626Vault.asset();
+        return ERC20(erc4626Vault.asset());
     }
 
     /**

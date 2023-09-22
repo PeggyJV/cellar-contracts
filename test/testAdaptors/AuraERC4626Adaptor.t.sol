@@ -21,6 +21,7 @@ import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor
  * @author crispymangoes, 0xEinCodes
  * @notice Cellar Adaptor tests with Aura BPT Pools
  * @dev Mock datafeeds to be used for underlying BPTs. For tests, we'll go with rETH / wETH BPT pair. We'll use mock datafeeds for the constituent assets of this pair so we can warp forward to simulate reward accrual.
+ * NOTE: transferrance of aura-wrapped BPT is not alowed as per their contracts
  * TODO: review with Crispy comments outlined within test code
  * TODO: test with other AuraPools perhaps?
  * TODO: carry out stateful fuzzing?
@@ -88,7 +89,7 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Add rETH_wETH_BPT pricing.
         uint8[8] memory rateProviderDecimals;
         address[8] memory rateProviders;
-        ERC20[8] memory underlyings; // TODO: get underlying order correct
+        ERC20[8] memory underlyings; // TODO: check with CRISPY to get underlying order correct
         underlyings[0] = WETH;
         underlyings[1] = rETH;
         BalancerStablePoolExtension.ExtensionStorage memory extensionStor = BalancerStablePoolExtension
@@ -118,7 +119,7 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             auraRethWethBptPoolPosition,
             address(auraERC4626Adaptor),
             abi.encode(address(aura_rETH_wETH_BPT))
-        ); // TODO: discuss and fix this with Crispy the error that is coming up here. It should just work because the underlying BPT is what bubbles up when checking `asset()` of the auraPool "as a Cellar".
+        );
 
         string memory cellarName = "rETH-wETH BPT Aura Pool Cellar V0.0";
         uint256 initialDeposit = 1e18;
@@ -148,8 +149,6 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     // deposit test: ensure that cellar deposit leads to transferance of BPT to aura pool. Cellar should get back aura-vault or aura-pool tokens back as receipts/shares to the auraPool.
-    // TODO: confirm that auraBPTs shares are received back, but that the internal accounting is just done with the mapping since the shares are 1:1.
-    // TODO: confirm whether you can/cannot transfer auraBalTokens actually. See (BaseRewardPool4626.sol https://etherscan.io/address/0xDd1fE5AD401D4777cE89959b7fa587e569Bf125D#code). If you can't transfer them... then these cellar positions are stationary positions. We get BPT, we put the BPT into Aura, we can't move them further from there.
     function testDeposit(uint256 assets) external {
         assets = bound(assets, 0.1e18, 1_000_000_000e18);
         deal(address(rETH_wETH_BPT), address(this), assets);
@@ -229,7 +228,6 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
-    // TODO: rewards are going to be handled by other Aura adaptor: `AuraExtrasAdaptor.sol` so this test may not be here. Rewards are in the form of tokens that are not the base asset BPT. There could be scenarios where AuraPools make BPTs the reward token. In that case, I believe it would claim it as necessary following the same function calls.
     function testInterestAccrual(uint256 assets) external {
         assets = bound(assets, 0.1e18, 1_000_000_000e18);
         deal(address(rETH_wETH_BPT), address(this), assets);
