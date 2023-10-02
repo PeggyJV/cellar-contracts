@@ -33,7 +33,7 @@ contract DeployCellarWithShareLockPeriodScript is Script, MainnetAddresses {
         uint64 strategistPlatformCut = 0.75e18;
         uint192 shareSupplyCap = type(uint192).max;
 
-        USDC.approve(deployer.getAddress(string.concat(name, " V0.0")), initialDeposit);
+        // USDC.approve(deployer.getAddress(string.concat(name, " V0.0")), initialDeposit);
 
         CellarWithShareLockPeriod cellar = _createCellarWithShareLockPeriod(
             owner,
@@ -48,7 +48,7 @@ contract DeployCellarWithShareLockPeriodScript is Script, MainnetAddresses {
             shareSupplyCap
         );
 
-        cellar.transferOwnership(strategist);
+        cellar.transferOwnership(testStrategist);
 
         vm.stopBroadcast();
     }

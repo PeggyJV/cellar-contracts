@@ -18,6 +18,8 @@ import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions
 import { MorphoAaveV2ATokenAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV2ATokenAdaptor.sol";
 import { MorphoAaveV3ATokenP2PAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3ATokenP2PAdaptor.sol";
 
+import { DebtFTokenAdaptorV1 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV1.sol";
+
 import { MainnetAddresses } from "test/resources/MainnetAddresses.sol";
 
 import "forge-std/Script.sol";
@@ -54,31 +56,33 @@ contract DeploySupportingContractsScript is Script, MainnetAddresses {
     MorphoAaveV2ATokenAdaptor public morphoAaveV2ATokenAdaptor;
     MorphoAaveV3ATokenP2PAdaptor public morphoAaveV3ATokenP2PAdaptor;
 
+    DebtFTokenAdaptorV1 public debtFTokenAdaptorV1;
+
     uint32 public morphoAaveV2AWeth = 5_000_001;
     uint32 public morphoAaveV3AWeth = 5_000_002;
 
     function run() external {
-        // bytes memory creationCode;
-        // bytes memory constructorArgs;
+        bytes memory creationCode;
+        bytes memory constructorArgs;
 
         vm.startBroadcast();
 
-        registry.transferOwnership(multisig);
-        priceRouter.transferOwnership(multisig);
+        // registry.transferOwnership(multisig);
+        // priceRouter.transferOwnership(multisig);
 
         // Deploy the price router.
         // creationCode = type(PriceRouter).creationCode;
         // constructorArgs = abi.encode(sommDev, registry, WETH);
         // priceRouter = PriceRouter(deployer.deployContract("PriceRouter V0.0", creationCode, constructorArgs, 0));
 
-        // // Deploy WSTETH Extension.
-        // {
-        //     creationCode = type(WstEthExtension).creationCode;
-        //     constructorArgs = abi.encode(priceRouter);
-        //     wstEthExtension = WstEthExtension(
-        //         deployer.deployContract("wstETH Extension V0.0", creationCode, constructorArgs, 0)
-        //     );
-        // }
+        // Deploy WSTETH Extension.
+        {
+            creationCode = type(DebtFTokenAdaptorV1).creationCode;
+            constructorArgs = abi.encode(true, FRAX, 1.05e18);
+            debtFTokenAdaptorV1 = DebtFTokenAdaptorV1(
+                deployer.deployContract("FraxLend debtTokenV1 Adaptor V 0.2", creationCode, constructorArgs, 0)
+            );
+        }
 
         // Deploy Morpho Aave V2 AToken Adaptor.
         // {
