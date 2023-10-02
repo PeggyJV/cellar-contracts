@@ -14,7 +14,7 @@ import "forge-std/Script.sol";
 contract CreateVestingTimelockScript is Script {
     // TimelockController private controller = TimelockController(payable(0xAa71f75fb6948a6c814A28675241FC5E3bCaC355));
     address private somm = 0xa670d7237398238DE01267472C6f13e5B8010FD1;
-    address private dest = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
+    address private dest = 0xf449eede7c26a1a051fd9f3a4dd29eba42782904;
     address private devOwner = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
 
     TimelockController private timelock;
