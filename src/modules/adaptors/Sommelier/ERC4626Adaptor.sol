@@ -136,7 +136,7 @@ contract ERC4626Adaptor is BaseAdaptor {
      * @param erc4626Vault the ERC4626 to deposit `assets` into
      * @param assets the amount of assets to deposit into `cellar`
      */
-    function depositToCellar(ERC4626 erc4626Vault, uint256 assets) public {
+    function depositToVault(ERC4626 erc4626Vault, uint256 assets) public {
         _verifyERC4626PositionIsUsed(address(erc4626Vault));
         ERC20 asset = erc4626Vault.asset();
         assets = _maxAvailable(asset, assets);
@@ -152,7 +152,7 @@ contract ERC4626Adaptor is BaseAdaptor {
      * @param erc4626Vault the ERC4626 to withdraw `assets` from
      * @param assets the amount of assets to withdraw from `cellar`
      */
-    function withdrawFromCellar(ERC4626 erc4626Vault, uint256 assets) public {
+    function withdrawFromVault(ERC4626 erc4626Vault, uint256 assets) public {
         _verifyERC4626PositionIsUsed(address(erc4626Vault));
         if (assets == type(uint256).max) assets = erc4626Vault.maxWithdraw(address(this));
         erc4626Vault.withdraw(assets, address(this), address(this));
