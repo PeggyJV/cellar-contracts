@@ -194,7 +194,6 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(rETH_wETH_BPT), address(this), assets);
         cellar.deposit(assets, address(this)); // bpts sent to aura pool as seen in deposit() tests
 
-        // vm.warp(block.timestamp + 100 days);
         skip(100 days);
         mockWethUsd.setMockUpdatedAt(block.timestamp);
         mockRethUsd.setMockUpdatedAt(block.timestamp);

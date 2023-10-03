@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IBaseRewardPool } from "src/interfaces/external/Aura/IBaseRewardPool.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
-import { ERC4626Adaptor } from "src/modules/adaptors/Sommelier/ERC4626Adaptor.sol";
+import { ERC4626Adaptor } from "src/modules/adaptors/ERC4626Adaptor.sol";
 
 /**
  * @title Aura ERC4626 Adaptor

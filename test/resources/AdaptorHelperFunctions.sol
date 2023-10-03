@@ -42,6 +42,8 @@ import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUni
 
 import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor.sol";
 
+import { ERC4626Adaptor } from "src/modules/adaptors/ERC4626Adaptor.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -446,5 +448,12 @@ contract AdaptorHelperFunctions {
         address oracle
     ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(LegacyCellarAdaptor.withdrawFromCellar.selector, cellar, assets, oracle);
+    }
+
+    function _createBytesDataToDepositToERC4626Vault(
+        address vault,
+        uint256 assets
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(ERC4626Adaptor.depositToVault.selector, vault, assets);
     }
 }
