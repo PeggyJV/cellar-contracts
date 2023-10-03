@@ -66,4 +66,58 @@ interface IFToken {
             VaultAccount memory _totalAsset,
             VaultAccount memory _totalBorrow
         );
+
+    function addCollateral(uint256 _collateralAmount, address _borrower) external;
+
+    function collateralContract() external view returns (address);
+
+    function removeCollateral(uint256 _collateralAmount, address _receiver) external;
+
+    function updateExchangeRate()
+        external
+        returns (bool _isBorrowAllowed, uint256 _lowExchangeRate, uint256 _highExchangeRate);
+
+    function toBorrowAmount(
+        uint256 _shares,
+        bool _roundUp,
+        bool _previewInterest
+    ) external view returns (uint256 _amount);
+
+    function toBorrowAmount(uint256 _shares, bool _roundUp) external view returns (uint256 _amount);
+
+    function userBorrowShares(address) external view returns (uint256);
+
+    function userCollateralBalance(address) external view returns (uint256);
+
+    function getConstants()
+        external
+        view
+        returns (
+            uint256 _LTV_PRECISION,
+            uint256 _LIQ_PRECISION,
+            uint256 _UTIL_PREC,
+            uint256 _FEE_PRECISION,
+            uint256 _EXCHANGE_PRECISION,
+            uint256 _DEVIATION_PRECISION,
+            uint256 _RATE_PRECISION,
+            uint256 _MAX_PROTOCOL_FEE
+        );
+
+    function asset() external view returns (address);
+
+    function callAddInterest(IFToken fraxlendPair) external;
+
+    function convertToShares(uint256 _assets) external view returns (uint256 _shares);
+
+    function maxLTV() external view returns (uint256 maxLTV);
+
+    struct ExchangeRateInfo {
+        address oracle;
+        uint32 maxOracleDeviation; // % of larger number, 1e5 precision
+        uint184 lastTimestamp;
+        uint256 lowExchangeRate;
+        uint256 highExchangeRate;
+    }
+
+    function exchangeRateInfo() external view returns (ExchangeRateInfo memory exchangeRateInfo);
 }

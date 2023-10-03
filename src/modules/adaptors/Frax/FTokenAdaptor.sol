@@ -68,6 +68,7 @@ contract FTokenAdaptor is BaseAdaptor {
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         // Deposit assets to Frax Lend.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
+        _validateFToken(fToken);
         FRAX.safeApprove(address(fToken), assets);
         _deposit(fToken, assets, address(this));
 
@@ -89,6 +90,7 @@ contract FTokenAdaptor is BaseAdaptor {
 
         // Withdraw assets from Frax.
         IFToken fToken = abi.decode(adaptorData, (IFToken));
+        _validateFToken(fToken);
         _withdraw(fToken, assets, receiver, address(this));
     }
 
