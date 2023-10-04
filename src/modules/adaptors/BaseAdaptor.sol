@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { Math } from "src/utils/Math.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
@@ -212,5 +212,4 @@ abstract contract BaseAdaptor {
     function revokeApproval(ERC20 asset, address spender) public {
         asset.safeApprove(spender, 0);
     }
-
 }

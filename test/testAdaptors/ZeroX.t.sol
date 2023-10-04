@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { ZeroXAdaptor } from "src/modules/adaptors/ZeroX/ZeroXAdaptor.sol";
 import { MockZeroXAdaptor } from "src/mocks/adaptors/MockZeroXAdaptor.sol";

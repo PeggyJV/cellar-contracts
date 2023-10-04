@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 
@@ -81,35 +81,31 @@ contract AdaptorHelperFunctions {
 
     // ========================================= Aave V2 FUNCTIONS =========================================
 
-    function _createBytesDataToLendOnAaveV2(ERC20 tokenToLend, uint256 amountToLend)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToLendOnAaveV2(
+        ERC20 tokenToLend,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveATokenAdaptor.depositToAave.selector, tokenToLend, amountToLend);
     }
 
-    function _createBytesDataToWithdrawFromAaveV2(ERC20 tokenToWithdraw, uint256 amountToWithdraw)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawFromAaveV2(
+        ERC20 tokenToWithdraw,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveATokenAdaptor.withdrawFromAave.selector, tokenToWithdraw, amountToWithdraw);
     }
 
-    function _createBytesDataToBorrowFromAaveV2(ERC20 debtToken, uint256 amountToBorrow)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToBorrowFromAaveV2(
+        ERC20 debtToken,
+        uint256 amountToBorrow
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveDebtTokenAdaptor.borrowFromAave.selector, debtToken, amountToBorrow);
     }
 
-    function _createBytesDataToRepayToAaveV2(ERC20 tokenToRepay, uint256 amountToRepay)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToRepayToAaveV2(
+        ERC20 tokenToRepay,
+        uint256 amountToRepay
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveDebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
     }
 
@@ -123,19 +119,17 @@ contract AdaptorHelperFunctions {
 
     // ========================================= Morpho Aave V2 FUNCTIONS =========================================
 
-    function _createBytesDataToLendToMorphoAaveV2(address aToken, uint256 amountToLend)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToLendToMorphoAaveV2(
+        address aToken,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(MorphoAaveV2ATokenAdaptor.depositToAaveV2Morpho.selector, aToken, amountToLend);
     }
 
-    function _createBytesDataToWithdrawFromMorphoAaveV2(address aToken, uint256 amountToWithdraw)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawFromMorphoAaveV2(
+        address aToken,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 MorphoAaveV2ATokenAdaptor.withdrawFromAaveV2Morpho.selector,
@@ -144,11 +138,10 @@ contract AdaptorHelperFunctions {
             );
     }
 
-    function _createBytesDataToBorrowFromMorphoAaveV2(address debtToken, uint256 amountToBorrow)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToBorrowFromMorphoAaveV2(
+        address debtToken,
+        uint256 amountToBorrow
+    ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 MorphoAaveV2DebtTokenAdaptor.borrowFromAaveV2Morpho.selector,
@@ -157,11 +150,10 @@ contract AdaptorHelperFunctions {
             );
     }
 
-    function _createBytesDataToRepayToMorphoAaveV2(address debtToken, uint256 amountToRepay)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToRepayToMorphoAaveV2(
+        address debtToken,
+        uint256 amountToRepay
+    ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 MorphoAaveV2DebtTokenAdaptor.repayAaveV2MorphoDebt.selector,
@@ -172,11 +164,10 @@ contract AdaptorHelperFunctions {
 
     // ========================================= Aave V3 FUNCTIONS =========================================
 
-    function _createBytesDataToLendOnAaveV3(ERC20 tokenToLend, uint256 amountToLend)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToLendOnAaveV3(
+        ERC20 tokenToLend,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveV3ATokenAdaptor.depositToAave.selector, tokenToLend, amountToLend);
     }
 
@@ -184,27 +175,24 @@ contract AdaptorHelperFunctions {
         return abi.encodeWithSelector(AaveV3ATokenAdaptor.changeEMode.selector, category);
     }
 
-    function _createBytesDataToWithdrawFromAaveV3(ERC20 tokenToWithdraw, uint256 amountToWithdraw)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawFromAaveV3(
+        ERC20 tokenToWithdraw,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveV3ATokenAdaptor.withdrawFromAave.selector, tokenToWithdraw, amountToWithdraw);
     }
 
-    function _createBytesDataToBorrowFromAaveV3(ERC20 debtToken, uint256 amountToBorrow)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToBorrowFromAaveV3(
+        ERC20 debtToken,
+        uint256 amountToBorrow
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveV3DebtTokenAdaptor.borrowFromAave.selector, debtToken, amountToBorrow);
     }
 
-    function _createBytesDataToRepayToAaveV3(ERC20 tokenToRepay, uint256 amountToRepay)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToRepayToAaveV3(
+        ERC20 tokenToRepay,
+        uint256 amountToRepay
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(AaveV3DebtTokenAdaptor.repayAaveDebt.selector, tokenToRepay, amountToRepay);
     }
 
@@ -232,11 +220,10 @@ contract AdaptorHelperFunctions {
             );
     }
 
-    function _createBytesDataToLendCollateralOnMorphoAaveV3(ERC20 tokenToLend, uint256 amountToLend)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToLendCollateralOnMorphoAaveV3(
+        ERC20 tokenToLend,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 MorphoAaveV3ATokenCollateralAdaptor.depositToAaveV3Morpho.selector,
@@ -259,11 +246,10 @@ contract AdaptorHelperFunctions {
             );
     }
 
-    function _createBytesDataToWithdrawCollateralFromMorphoAaveV3(ERC20 tokenToWithdraw, uint256 amountToWithdraw)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawCollateralFromMorphoAaveV3(
+        ERC20 tokenToWithdraw,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 MorphoAaveV3ATokenCollateralAdaptor.withdrawFromAaveV3Morpho.selector,
@@ -286,11 +272,10 @@ contract AdaptorHelperFunctions {
             );
     }
 
-    function _createBytesDataToRepayToMorphoAaveV3(ERC20 tokenToRepay, uint256 amountToRepay)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToRepayToMorphoAaveV3(
+        ERC20 tokenToRepay,
+        uint256 amountToRepay
+    ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 MorphoAaveV3DebtTokenAdaptor.repayAaveV3MorphoDebt.selector,
@@ -366,30 +351,27 @@ contract AdaptorHelperFunctions {
 
     // ========================================= Compound V2 FUNCTIONS =========================================
 
-    function _createBytesDataToLendOnComnpoundV2(CErc20 market, uint256 amountToLend)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToLendOnComnpoundV2(
+        CErc20 market,
+        uint256 amountToLend
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.depositToCompound.selector, market, amountToLend);
     }
 
-    function _createBytesDataToWithdrawFromCompoundV2(CErc20 market, uint256 amountToWithdraw)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawFromCompoundV2(
+        CErc20 market,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CTokenAdaptor.withdrawFromCompound.selector, market, amountToWithdraw);
     }
 
     // ========================================= Fees And Reserves FUNCTIONS =========================================
 
     // Make sure that if a strategists makes a huge deposit before calling log fees, it doesn't affect fee pay out
-    function _createBytesDataToSetupFeesAndReserves(uint32 targetAPR, uint32 performanceFee)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToSetupFeesAndReserves(
+        uint32 targetAPR,
+        uint32 performanceFee
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FeesAndReservesAdaptor.setupMetaData.selector, targetAPR, performanceFee);
     }
 
@@ -419,27 +401,24 @@ contract AdaptorHelperFunctions {
 
     // ========================================= FraxLend FUNCTIONS =========================================
 
-    function _createBytesDataToLendOnFraxLend(address fToken, uint256 amountToDeposit)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToLendOnFraxLend(
+        address fToken,
+        uint256 amountToDeposit
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FTokenAdaptor.lendFrax.selector, fToken, amountToDeposit);
     }
 
-    function _createBytesDataToRedeemFromFraxLend(address fToken, uint256 amountToRedeem)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToRedeemFromFraxLend(
+        address fToken,
+        uint256 amountToRedeem
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FTokenAdaptor.redeemFraxShare.selector, fToken, amountToRedeem);
     }
 
-    function _createBytesDataToWithdrawFromFraxLend(address fToken, uint256 amountToWithdraw)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _createBytesDataToWithdrawFromFraxLend(
+        address fToken,
+        uint256 amountToWithdraw
+    ) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(FTokenAdaptor.withdrawFrax.selector, fToken, amountToWithdraw);
     }
 

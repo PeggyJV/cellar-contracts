@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 interface RewardsDistributor {
     function claim(address user, uint256 claimable, bytes32[] memory proof) external;

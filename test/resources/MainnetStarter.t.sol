@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 // Import Protocol Resources
 import { Deployer } from "src/Deployer.sol";

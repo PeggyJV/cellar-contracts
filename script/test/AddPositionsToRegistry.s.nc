@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { TEnv } from "script/test/TEnv.sol";
 import { Registry, PriceRouter } from "src/base/Cellar.sol";

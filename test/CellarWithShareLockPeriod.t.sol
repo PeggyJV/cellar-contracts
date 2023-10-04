@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { CellarWithShareLockPeriod } from "src/base/permutations/CellarWithShareLockPeriod.sol";

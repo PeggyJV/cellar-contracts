@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { MockAxelarGateway } from "src/mocks/MockAxelarGateway.sol";
 import { AxelarProxy } from "src/AxelarProxy.sol";

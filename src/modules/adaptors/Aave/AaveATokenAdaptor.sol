@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
@@ -168,7 +168,7 @@ contract AaveATokenAdaptor is BaseAdaptor {
         // If not the strategist does not want users to withdraw from this position.
         if (minHealthFactor == 0) return 0;
         // Check if adaptor minimum health factor is more conservative than strategist set.
-        if (minHealthFactor < minimumHealthFactor) minHealthFactor = minimumHealthFactor; // minimum set in adaptor constructor. We use the conservative of the two values. 
+        if (minHealthFactor < minimumHealthFactor) minHealthFactor = minimumHealthFactor; // minimum set in adaptor constructor. We use the conservative of the two values.
 
         uint256 maxBorrowableWithMin;
 

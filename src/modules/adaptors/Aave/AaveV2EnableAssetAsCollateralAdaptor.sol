@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.21;
+pragma solidity 0.8.19;
 
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { PositionlessAdaptor } from "src/modules/adaptors/PositionlessAdaptor.sol";
