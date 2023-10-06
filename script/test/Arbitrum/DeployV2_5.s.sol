@@ -2,11 +2,15 @@
 pragma solidity 0.8.19;
 
 import "forge-std/Script.sol";
+import { Deployer } from "src/Deployer.sol";
 import { Math } from "src/utils/Math.sol";
 import { ArbitrumAddresses } from "test/resources/ArbitrumAddresses.sol";
 import { Deployer } from "src/Deployer.sol";
 import { Registry } from "src/Registry.sol";
 import { PriceRouter } from "src/modules/price-router/PriceRouter.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
+import { CellarWithOracleWithBalancerFlashLoans } from "src/base/permutations/CellarWithOracleWithBalancerFlashLoans.sol";
 
 import { ERC20Adaptor } from "src/modules/adaptors/ERC20Adaptor.sol";
 import { UniswapV3Adaptor } from "src/modules/adaptors/Uniswap/UniswapV3Adaptor.sol";
@@ -20,7 +24,7 @@ import { IChainlinkAggregator } from "src/interfaces/external/IChainlinkAggregat
 
 /**
  * @dev Run
- *      `source .env && forge script script/test/Arbitrum/DeployV2_5.s.sol:DeployV2_5Script --rpc-url $ARBITRUM_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --verify --etherscan-api-key $ARBISCAN_KEY --slow --broadcast`
+ *      `source .env && forge script script/test/Arbitrum/DeployV2_5.s.sol:DeployV2_5Script --rpc-url $ARBITRUM_RPC_URL  --private-key $PRIVATE_KEY —optimize —optimizer-runs 200 --with-gas-price 100000000 --verify --etherscan-api-key $ARBISCAN_KEY --slow --broadcast`
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract DeployV2_5Script is Script, ArbitrumAddresses {
@@ -28,8 +32,9 @@ contract DeployV2_5Script is Script, ArbitrumAddresses {
     uint8 public constant TWAP_DERIVATIVE = 2;
     uint8 public constant EXTENSION_DERIVATIVE = 3;
 
-    Registry public registry;
+    Registry public registry = Registry(0x43BD96931A47FBABd50727F6982c796B3C9A974C);
     PriceRouter public priceRouter;
+    Deployer public deployer = Deployer(deployerAddress);
 
     ERC20Adaptor public erc20Adaptor;
     UniswapV3PositionTracker public uniswapV3PositionTracker;
@@ -41,8 +46,44 @@ contract DeployV2_5Script is Script, ArbitrumAddresses {
     OneInchAdaptor public oneInchAdaptor;
     ZeroXAdaptor public zeroXAdaptor;
 
+    CellarWithOracleWithBalancerFlashLoans public ryUsdCellar;
+
+    // Define positions.
+
+    // ERC20
+    uint32 public wethPosition = 1;
+    uint32 public usdcPosition = 2;
+    uint32 public usdcePosition = 3;
+    uint32 public daiPosition = 4;
+    uint32 public usdtPosition = 5;
+
+    // Uniswap
+    uint32 public usdcUsdceUniPosition = 1_000_001;
+    uint32 public usdcDaiUniPosition = 1_000_002;
+    uint32 public usdcUsdtUniPosition = 1_000_003;
+    uint32 public daiUsdceUniPosition = 1_000_004;
+    uint32 public usdtUsdceUniPosition = 1_000_005;
+
+    // Sushi
+    uint32 public usdcUsdceSushiPosition = 1_250_001;
+    uint32 public usdcDaiSushiPosition = 1_250_002;
+    uint32 public usdcUsdtSushiPosition = 1_250_003;
+    uint32 public daiUsdceSushiPosition = 1_250_004;
+    uint32 public usdtUsdceSushiPosition = 1_250_005;
+
+    // Aave
+    uint32 public aV3WethPosition = 2_000_001;
+    uint32 public aV3UsdcPosition = 2_000_002;
+    uint32 public aV3UsdcePosition = 2_000_003;
+    uint32 public aV3DaiPosition = 2_000_004;
+    uint32 public aV3UsdtPosition = 2_000_005;
+    uint32 public dV3WethPosition = 2_500_001;
+    uint32 public dV3UsdcPosition = 2_500_002;
+    uint32 public dV3UsdcePosition = 2_500_003;
+    uint32 public dV3DaiPosition = 2_500_004;
+    uint32 public dV3UsdtPosition = 2_500_005;
+
     function run() external {
-        Deployer deployer = Deployer(deployerAddress);
         bytes memory creationCode;
         bytes memory constructorArgs;
         vm.startBroadcast();
@@ -154,10 +195,132 @@ contract DeployV2_5Script is Script, ArbitrumAddresses {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(CBETH_ETH_FEED));
         priceRouter.addAsset(cbETH, settings, abi.encode(stor), price);
 
+        // Trust adaptors
+        registry.trustAdaptor(address(erc20Adaptor));
+        registry.trustAdaptor(address(uniswapV3Adaptor));
+        registry.trustAdaptor(address(sushiswapV3Adaptor));
+        registry.trustAdaptor(address(aaveV3ATokenAdaptor));
+        registry.trustAdaptor(address(aaveV3DebtTokenAdaptor));
+        registry.trustAdaptor(address(oneInchAdaptor));
+        registry.trustAdaptor(address(zeroXAdaptor));
         // Add positions to the registry
+        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
+        registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
+        registry.trustPosition(usdcePosition, address(erc20Adaptor), abi.encode(USDCe));
+        registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
+        registry.trustPosition(usdtPosition, address(erc20Adaptor), abi.encode(USDT));
+        registry.trustPosition(usdcUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, USDCe));
+        registry.trustPosition(usdcDaiUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, DAI));
+        registry.trustPosition(usdcUsdtUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, USDT));
+        registry.trustPosition(daiUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(DAI, USDCe));
+        registry.trustPosition(usdtUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(USDT, USDCe));
+        registry.trustPosition(aV3WethPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3WETH));
+        registry.trustPosition(aV3UsdcPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDC));
+        registry.trustPosition(aV3UsdcePosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDCe));
+        registry.trustPosition(aV3DaiPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3DAI));
+        registry.trustPosition(aV3UsdtPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDT));
+        registry.trustPosition(dV3WethPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3WETH));
+        registry.trustPosition(dV3UsdcPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDC));
+        registry.trustPosition(dV3UsdcePosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDCe));
+        registry.trustPosition(dV3DaiPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3DAI));
+        registry.trustPosition(dV3UsdtPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDT));
+
+        registry.trustPosition(usdcUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, USDCe));
+        registry.trustPosition(usdcDaiSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, DAI));
+        registry.trustPosition(usdcUsdtSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, USDT));
+        registry.trustPosition(daiUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(DAI, USDCe));
+        registry.trustPosition(usdtUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDT, USDCe));
 
         // Deploy Cellar.
+        ryUsdCellar = _createCellar("Test Real Yield USD", "TRYUSD", USDCe, usdcePosition, abi.encode(0), 1e6, 0.8e18);
+
+        uint64 heartbeat = 1 days;
+        uint64 deviationTrigger = 0.0010e4;
+        uint64 gracePeriod = 1 days / 6;
+        uint16 observationsToUse = 4;
+        uint216 startingAnswer = 1e18;
+        uint256 allowedAnswerChangeLower = 0.8e4;
+        uint256 allowedAnswerChangeUpper = 10e4;
+        _createSharePriceOracle(
+            "Test Real Yield USD Share Price Oracle V0.0",
+            address(ryUsdCellar),
+            heartbeat,
+            deviationTrigger,
+            gracePeriod,
+            observationsToUse,
+            automationRegistry,
+            startingAnswer,
+            allowedAnswerChangeLower,
+            allowedAnswerChangeUpper
+        );
 
         vm.stopBroadcast();
+    }
+
+    function _createCellar(
+        string memory cellarName,
+        string memory cellarSymbol,
+        ERC20 holdingAsset,
+        uint32 holdingPosition,
+        bytes memory holdingPositionConfig,
+        uint256 initialDeposit,
+        uint64 platformCut
+    ) internal returns (CellarWithOracleWithBalancerFlashLoans) {
+        // Approve new cellar to spend assets.
+        string memory nameToUse = string.concat(cellarName, " V0.0");
+        address cellarAddress = deployer.getAddress(nameToUse);
+        holdingAsset.approve(cellarAddress, initialDeposit);
+
+        bytes memory creationCode;
+        bytes memory constructorArgs;
+        creationCode = type(CellarWithOracleWithBalancerFlashLoans).creationCode;
+        constructorArgs = abi.encode(
+            dev,
+            registry,
+            holdingAsset,
+            cellarName,
+            cellarSymbol,
+            holdingPosition,
+            holdingPositionConfig,
+            initialDeposit,
+            platformCut,
+            type(uint192).max,
+            address(vault)
+        );
+
+        return
+            CellarWithOracleWithBalancerFlashLoans(
+                deployer.deployContract(nameToUse, creationCode, constructorArgs, 0)
+            );
+    }
+
+    function _createSharePriceOracle(
+        string memory _name,
+        address _target,
+        uint64 _heartbeat,
+        uint64 _deviationTrigger,
+        uint64 _gracePeriod,
+        uint16 _observationsToUse,
+        address _automationRegistry,
+        uint216 _startingAnswer,
+        uint256 _allowedAnswerChangeLower,
+        uint256 _allowedAnswerChangeUpper
+    ) internal returns (ERC4626SharePriceOracle) {
+        bytes memory creationCode;
+        bytes memory constructorArgs;
+        creationCode = type(ERC4626SharePriceOracle).creationCode;
+        constructorArgs = abi.encode(
+            _target,
+            _heartbeat,
+            _deviationTrigger,
+            _gracePeriod,
+            _observationsToUse,
+            _automationRegistry,
+            _startingAnswer,
+            _allowedAnswerChangeLower,
+            _allowedAnswerChangeUpper
+        );
+
+        return ERC4626SharePriceOracle(deployer.deployContract(_name, creationCode, constructorArgs, 0));
     }
 }

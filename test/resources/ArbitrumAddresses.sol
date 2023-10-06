@@ -73,4 +73,7 @@ contract ArbitrumAddresses {
 
     // 0x
     address public zeroXRouter = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
+
+    // Balancer
+    address public vault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 }
