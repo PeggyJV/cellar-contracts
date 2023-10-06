@@ -16,6 +16,7 @@ contract MainnetAddresses {
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
     address public priceRouterV1 = 0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA;
     address public priceRouterV2 = 0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92;
+    address public ryusdAddress = 0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E;
 
     // DeFi Ecosystem
     address public uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
