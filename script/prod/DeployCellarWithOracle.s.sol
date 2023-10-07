@@ -99,48 +99,49 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
         //     0.0001e18,
         //     0.75e18
         // );
+        stethCellar = CellarWithOracleWithBalancerFlashLoans(0xfd6db5011b171B05E1Ea3b92f9EAcaEEb055e971);
 
-        // uint64 heartbeat = 1 days;
-        // uint64 deviationTrigger = 0.0030e4;
-        // uint64 gracePeriod = 1 days / 6;
-        // uint16 observationsToUse = 4;
-        // address automationRegistry = 0x6593c7De001fC8542bB1703532EE1E5aA0D458fD;
-        // uint216 startingAnswer = 1e18;
-        // uint256 allowedAnswerChangeLower = 0.8e4;
-        // uint256 allowedAnswerChangeUpper = 10e4;
-        // _createSharePriceOracle(
-        //     "Turbo STETH Share Price Oracle V0.0",
-        //     address(stethCellar),
-        //     heartbeat,
-        //     deviationTrigger,
-        //     gracePeriod,
-        //     observationsToUse,
-        //     automationRegistry,
-        //     startingAnswer,
-        //     allowedAnswerChangeLower,
-        //     allowedAnswerChangeUpper
-        // );
+        uint64 heartbeat = 1 days;
+        uint64 deviationTrigger = 0.0040e4;
+        uint64 gracePeriod = 1 days / 6;
+        uint16 observationsToUse = 4;
+        address automationRegistry = 0xd746F3601eA520Baf3498D61e1B7d976DbB33310;
+        uint216 startingAnswer = 1e18;
+        uint256 allowedAnswerChangeLower = 0.8e4;
+        uint256 allowedAnswerChangeUpper = 10e4;
+        _createSharePriceOracle(
+            "Turbo STETH Share Price Oracle V0.2",
+            address(stethCellar),
+            heartbeat,
+            deviationTrigger,
+            gracePeriod,
+            observationsToUse,
+            automationRegistry,
+            startingAnswer,
+            allowedAnswerChangeLower,
+            allowedAnswerChangeUpper
+        );
 
-        // heartbeat = 1 days;
-        // deviationTrigger = 0.0030e4;
-        // gracePeriod = 1 days / 4;
-        // observationsToUse = 6;
-        // automationRegistry = 0x6593c7De001fC8542bB1703532EE1E5aA0D458fD;
-        // startingAnswer = 1e18;
-        // allowedAnswerChangeLower = 0.8e4;
-        // allowedAnswerChangeUpper = 10e4;
-        // _createSharePriceOracle(
-        //     "Turbo STETH Share Price Oracle V0.1",
-        //     address(stethCellar),
-        //     heartbeat,
-        //     deviationTrigger,
-        //     gracePeriod,
-        //     observationsToUse,
-        //     automationRegistry,
-        //     startingAnswer,
-        //     allowedAnswerChangeLower,
-        //     allowedAnswerChangeUpper
-        // );
+        heartbeat = 1 days;
+        deviationTrigger = 0.0040e4;
+        gracePeriod = 1 days / 4;
+        observationsToUse = 6;
+        automationRegistry = 0xd746F3601eA520Baf3498D61e1B7d976DbB33310;
+        startingAnswer = 1e18;
+        allowedAnswerChangeLower = 0.8e4;
+        allowedAnswerChangeUpper = 10e4;
+        _createSharePriceOracle(
+            "Turbo STETH Share Price Oracle V0.3",
+            address(stethCellar),
+            heartbeat,
+            deviationTrigger,
+            gracePeriod,
+            observationsToUse,
+            automationRegistry,
+            startingAnswer,
+            allowedAnswerChangeLower,
+            allowedAnswerChangeUpper
+        );
 
         // stethCellar.addAdaptorToCatalogue(uniswapAdaptor);
         // stethCellar.addAdaptorToCatalogue(vestingSimpleAdaptor);
@@ -148,37 +149,36 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
         // stethCellar.addAdaptorToCatalogue(aaveV3DebtTokenAdaptor);
         // stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV3_P2P_ADAPTOR_NAME);
 
-        stethCellar = CellarWithOracleWithBalancerFlashLoans(0xfd6db5011b171B05E1Ea3b92f9EAcaEEb055e971);
-        stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV3_ATOKEN_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV3_DEBTTOKEN_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV2_ATOKEN_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV2_DEBTTOKEN_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(AAVE_ENABLE_ASSET_AS_COLLATERAL_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(AAVE_ATOKEN_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(AAVE_DEBTTOKEN_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(ONE_INCH_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(ZEROX_ADAPTOR_NAME);
-        stethCellar.addAdaptorToCatalogue(feesAndReservesAdaptor);
+        // stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV3_ATOKEN_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV3_DEBTTOKEN_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV2_ATOKEN_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(MORPHO_AAVEV2_DEBTTOKEN_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(AAVE_ENABLE_ASSET_AS_COLLATERAL_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(AAVE_ATOKEN_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(AAVE_DEBTTOKEN_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(ONE_INCH_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(ZEROX_ADAPTOR_NAME);
+        // stethCellar.addAdaptorToCatalogue(feesAndReservesAdaptor);
 
-        stethCellar.addPositionToCatalogue(wstethPositionId);
-        stethCellar.addPositionToCatalogue(stethPositionId);
-        stethCellar.addPositionToCatalogue(WSTETH_WETH_PositionId);
-        stethCellar.addPositionToCatalogue(aV3WETHPosition);
-        stethCellar.addPositionToCatalogue(aV3WstEthPosition);
-        stethCellar.addPositionToCatalogue(dV3WethPosition);
-        stethCellar.addPositionToCatalogue(dV3WstEthPosition);
-        stethCellar.addPositionToCatalogue(aV2WethPosition);
-        stethCellar.addPositionToCatalogue(aV2StethPosition);
-        stethCellar.addPositionToCatalogue(dV2WethPosition);
-        stethCellar.addPositionToCatalogue(morphoV2AWeth);
-        stethCellar.addPositionToCatalogue(morphoV3P2PWeth);
-        stethCellar.addPositionToCatalogue(morphoV2ASteth);
-        stethCellar.addPositionToCatalogue(morphoV3AWsteth);
-        stethCellar.addPositionToCatalogue(morphoV2DebtWeth);
-        stethCellar.addPositionToCatalogue(morphoV3DebtWeth);
-        stethCellar.addPositionToCatalogue(wstEthVestor);
+        // stethCellar.addPositionToCatalogue(wstethPositionId);
+        // stethCellar.addPositionToCatalogue(stethPositionId);
+        // stethCellar.addPositionToCatalogue(WSTETH_WETH_PositionId);
+        // stethCellar.addPositionToCatalogue(aV3WETHPosition);
+        // stethCellar.addPositionToCatalogue(aV3WstEthPosition);
+        // stethCellar.addPositionToCatalogue(dV3WethPosition);
+        // stethCellar.addPositionToCatalogue(dV3WstEthPosition);
+        // stethCellar.addPositionToCatalogue(aV2WethPosition);
+        // stethCellar.addPositionToCatalogue(aV2StethPosition);
+        // stethCellar.addPositionToCatalogue(dV2WethPosition);
+        // stethCellar.addPositionToCatalogue(morphoV2AWeth);
+        // stethCellar.addPositionToCatalogue(morphoV3P2PWeth);
+        // stethCellar.addPositionToCatalogue(morphoV2ASteth);
+        // stethCellar.addPositionToCatalogue(morphoV3AWsteth);
+        // stethCellar.addPositionToCatalogue(morphoV2DebtWeth);
+        // stethCellar.addPositionToCatalogue(morphoV3DebtWeth);
+        // stethCellar.addPositionToCatalogue(wstEthVestor);
 
-        stethCellar.transferOwnership(testStrategist);
+        // stethCellar.transferOwnership(testStrategist);
 
         vm.stopBroadcast();
     }
