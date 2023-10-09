@@ -74,7 +74,7 @@ contract MorphoAaveV2ATokenAdaptor is BaseAdaptor, MorphoRewardHandler {
      * of the adaptor is more difficult.
      */
     function identifier() public pure override returns (bytes32) {
-        return keccak256(abi.encode("Morpho Aave V2 aToken Adaptor V 1.2"));
+        return keccak256(abi.encode("Morpho Aave V2 aToken Adaptor V 1.3"));
     }
 
     //============================================ Implement Base Functions ===========================================
