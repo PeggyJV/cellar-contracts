@@ -48,6 +48,7 @@ contract MainnetAddresses {
     ERC20 public UNI = ERC20(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
     ERC20 public CRV = ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
     ERC20 public CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
+    ERC20 public FRXETH = ERC20(0x5E8422345238F34275888049021821E8E08CAa1f);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -186,4 +187,7 @@ contract MainnetAddresses {
 
     // Maker
     address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
+
+    // Curve
+    address public EthFrxEthCurvePool = 0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577;
 }
