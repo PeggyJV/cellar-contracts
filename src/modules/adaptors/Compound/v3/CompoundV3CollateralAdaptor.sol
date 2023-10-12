@@ -67,7 +67,7 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("CompoundV3 Supply Adaptor V 0.1"));
+        return keccak256(abi.encode("CompoundV3 Collateral Adaptor V 0.1"));
     }
 
     //============================================ Implement Base Functions ===========================================

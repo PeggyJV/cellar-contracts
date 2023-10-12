@@ -72,6 +72,7 @@ contract MainnetAddresses {
     address public CRV_USD_FEED = 0xCd627aA160A6fA45Eb793D19Ef54f5062F20f33f;
     address public CVX_USD_FEED = 0xd962fC30A72A84cE50161031391756Bf2876Af5D;
     address public CVX_ETH_FEED = 0xC9CbF687f43176B302F03f5e58470b77D07c61c6;
+    address public ETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
 
     // Aave V2 Tokens
     ERC20 public aV2WETH = ERC20(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e);
@@ -185,4 +186,8 @@ contract MainnetAddresses {
 
     // Maker
     address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
+
+    // CompoundV3
+    address public cUSDCv3Address = 0xc3d688B66703497DAA19211EEdff47f25384cdc3;
+    address public cWETHv3Address = 0xA17581A9E3356d9A858b789D68B4d866e593aE94;
 }
