@@ -191,6 +191,12 @@ contract CellarCompoundV3CollateralAndDebtAdaptorTest is MainnetStarterTest, Ada
         pool.withdraw(address(WSTETH), 1_000e18, aWstEthWhale);
     }
 
+    /// SUPPLYADAPTOR TESTS
+
+    // TODO: If the calling cellar already has an open borrow position or collateral position, we need to revert because Strategist must use other adaptors when dealing with collateral and borrow positions. CHECK to see if it reverts on its own within Compound via testing.
+
+    /// DEBTADAPTOR TESTS
+
     //============================================ TODO: BELOW TESTS ARE COPIED FROM FRAXLEND DEBT AND COLLATERAL TESTS AND WILL BE OVERWRITTEN. THEY ARE JUST PLACEHOLDERS. ===========================================
 
     // Tests will consist of entering and exiting CompoundV3 lending markets on mainnet. So that means: USDC and ETH lending markets. Will test sending a couple of different collaterals to each lending market to make sure that it is working as planned. We'll test to see that they have different CRs, that they are responding as we thought they would, etc.

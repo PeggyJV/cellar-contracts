@@ -3,7 +3,7 @@ pragma solidity 0.8.16; // TODO: update to 0.8.21
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { CometInterface } from "src/interfaces/external/Compound/CometInterface.sol";
-import { CompoundHealthFactorLogic } from "src/modules/adaptors/Compound/v3/CompoundHealthFactorLogic.sol";
+import { CompoundV3ExtraLogic } from "src/modules/adaptors/Compound/v3/CompoundV3ExtraLogic.sol";
 
 /**
  * @title Compound Lending Adaptor
@@ -22,15 +22,10 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(address CompoundMarket, address asset)
     // Where:
-    // `CompoundMarket` is the CompoundV3 Lending Market address and `asset` is the address of the ERC20 that this adaptor is working with,
+    // `CompoundMarket` is the CompoundV3 Lending Market address and `asset` is the address of the ERC20 that this adaptor is working with
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
-
-    /**
-     * @notice Attempted to interact with a Compound Lending Market (compMarket) and asset combination the Cellar is not using.
-     */
-    error CompoundV3CollateralAdaptor__MarketAndAssetPositionsMustBeTracked(address compMarket, address asset);
 
     /**
      * @notice Attempted a tx that would result in the Cellar to have too low of a health factor in the respective account with the specified Compound Lending Market (compMarket) and asset combination.
@@ -73,7 +68,7 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
     /**
      * @notice Cellar must approve CompoundV3 Lending Market to spend its assets, then call supply to supply its assets.
      * @param amount the amount of assets to supply  to specified CompoundV3 Lending Market
-     * @param adaptorData adaptor data containing the abi encoded fToken
+     * @param adaptorData the CompMarket and Asset combo the Cellar position corresponds to
      * @dev configurationData is NOT used
      * TODO: If the `asset` is the `baseAsset` we may have to change this adaptor to not allow it. This is ONLY if we are having a separate adaptor to handle supplying the `baseAsset` to the CompMarket. Recall that `BaseAssets` are handled differently within CompoundV3: src (cellar) gets receiptToken, and more `baseAssets` over time upon redemption due to lending APY.
      */
@@ -163,19 +158,4 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
         // TODO: add logic (incl. helper functions likely in HealthFactorLogic.sol) to calculate the new CR with this adjustment to compare against the `minimumHealthFactor` which should be higher than the minHealthFactor_CompMarket
     }
 
-    //============================================ Helper Functions ===========================================
-
-    /**
-     * @notice Validates that a given CompMarket and Asset are set up as a position in the Cellar.
-     * @dev This function uses `address(this)` as the address of the Cellar.
-     */
-    function _validateCompMarketAndAsset(CometInterface _compMarket, ERC20 _asset) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_compMarket, _asset)));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert CompoundV3CollateralAdaptor__MarketAndAssetPositionsMustBeTracked(
-                address(_compMarket),
-                address(_asset)
-            );
-    }
 }

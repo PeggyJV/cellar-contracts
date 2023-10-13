@@ -3,9 +3,10 @@ pragma solidity 0.8.16; // TODO: update to 0.8.21
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { CometInterface } from "src/interfaces/external/Compound/CometInterface.sol";
+import { CompoundV3ExtraLogic } from "src/modules/adaptors/Compound/v3/CompoundV3ExtraLogic.sol";
 
 /**
- * @title Compound Supply Adaptor
+ * @title CompoundV3 Supply Adaptor
  * @dev This adaptor is specifically for CompoundV3 contracts. Recall that accounts within CompoundV3 cannot hold a 'supplyBaseAsset' position AND open a borrow position.
  *      See other Compound Adaptors if looking to interact with a different version.
  *      See CompoundV3DebtAdaptor for borrowing functionality.
@@ -14,7 +15,7 @@ import { CometInterface } from "src/interfaces/external/Compound/CometInterface.
  * @author crispymangoes, 0xEinCodes
  * NOTE: is it better to query for the `baseAsset` per compound lending market or have it stored in here? I guess just query cause there could be more lending markets in the future? Also we want this to be agnostic to other chains too.
  */
-contract CompoundV3SupplyAdaptor is BaseAdaptor {
+contract CompoundV3SupplyAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -25,11 +26,6 @@ contract CompoundV3SupplyAdaptor is BaseAdaptor {
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
-
-    /**
-     * @notice Attempted to interact with a Compound Lending Market (compMarket) the Cellar is not using.
-     */
-    error CompoundV3SupplyAdaptor__MarketPositionsMustBeTracked(address compMarket);
 
     /**
      * @notice Attempted to supply `baseAsset` when Cellar has an open borrow position.
@@ -160,18 +156,5 @@ contract CompoundV3SupplyAdaptor is BaseAdaptor {
         _amount = availableBaseAsset > _amount ? availableBaseAsset : _amount;
         // withdraw collateral
         _compMarket.withdraw(address(baseAsset), _amount);
-    }
-
-    //============================================ Helper Functions ===========================================
-
-    /**
-     * @notice Validates that a given CompMarket and Asset are set up as a position in the Cellar.
-     * @dev This function uses `address(this)` as the address of the Cellar.
-     */
-    function _validateCompMarket(CometInterface _compMarket) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_compMarket)));
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert CompoundV3SupplyAdaptor__MarketPositionsMustBeTracked(address(_compMarket));
     }
 }
