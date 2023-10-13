@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { RedstonePriceFeedExtensionEth } from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtensionEth.sol";
+import { RedstoneEthPriceFeedExtension } from "src/modules/price-router/Extensions/Redstone/RedstoneEthPriceFeedExtension.sol";
 import { MockRedstoneClassicAdapter } from "src/mocks/MockRedstoneClassicAdapter.sol";
 import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
 
@@ -10,11 +10,11 @@ import "test/resources/MainnetStarter.t.sol";
 
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
-contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperFunctions {
+contract RedstoneEthPriceFeedExtensionTest is MainnetStarterTest, AdaptorHelperFunctions {
     using Math for uint256;
     using stdStorage for StdStorage;
 
-    RedstonePriceFeedExtensionEth private redstonePriceFeedExtensionEth;
+    RedstoneEthPriceFeedExtension private redstoneEthPriceFeedExtension;
     MockRedstoneClassicAdapter private mockRedstoneClassicAdapter;
 
     IRedstoneAdapter private swEthRedstoneAdapter = IRedstoneAdapter(0x68ba9602B2AeE30847412109D2eE89063bf08Ec2);
@@ -22,18 +22,19 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 17735270;
+        uint256 blockNumber = 18342280;
+
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
         _setUp();
 
         mockRedstoneClassicAdapter = new MockRedstoneClassicAdapter();
-        redstonePriceFeedExtensionEth = new RedstonePriceFeedExtensionEth(priceRouter, address(WETH));
+        redstoneEthPriceFeedExtension = new RedstoneEthPriceFeedExtension(priceRouter, address(WETH));
     }
 
     // ======================================= HAPPY PATH =======================================
-    function testRedstonePriceFeedExtensionEth() external {
+    function testRedstoneEthPriceFeedExtension() external {
         _addWethToPriceRouter();
         // Setup mock contract to price SWETH, and WSTETH.
         bytes32 swethDataFeedId = bytes32("SWETH");
@@ -42,14 +43,14 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
         uint256 swethEthPrice = 1.01e18;
         uint256 wstethEthPrice = 1.14e18;
 
-        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, swethEthPrice);
-        mockRedstoneClassicAdapter.setValueForDataFeed(wstethDataFeedId, wstethEthPrice);
+        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, swethEthPrice.changeDecimals(18, 8));
+        mockRedstoneClassicAdapter.setValueForDataFeed(wstethDataFeedId, wstethEthPrice.changeDecimals(18, 8));
         mockRedstoneClassicAdapter.setTimestampsFromLatestUpdate(uint128(block.timestamp));
 
         PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstonePriceFeedExtensionEth));
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstoneEthPriceFeedExtension));
 
-        RedstonePriceFeedExtensionEth.ExtensionStorage memory stor;
+        RedstoneEthPriceFeedExtension.ExtensionStorage memory stor;
         stor.dataFeedId = swethDataFeedId;
         stor.heartbeat = 1 days;
         stor.redstoneAdapter = IRedstoneAdapter(address(mockRedstoneClassicAdapter));
@@ -76,19 +77,34 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
         );
     }
 
+    function testUsingActualSwethEthFeed() external {
+        _addWethToPriceRouter();
+        PriceRouter.AssetSettings memory settings;
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstoneEthPriceFeedExtension));
+        uint256 swethEthPrice = 1e18;
+
+        RedstoneEthPriceFeedExtension.ExtensionStorage memory stor;
+        stor.dataFeedId = swEthEthDataFeedId;
+        stor.heartbeat = 1 days;
+        stor.redstoneAdapter = IRedstoneAdapter(swEthAdapter);
+
+        uint256 expectedSwethPrice = swethEthPrice.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
+        priceRouter.addAsset(SWETH, settings, abi.encode(stor), expectedSwethPrice);
+    }
+
     // ======================================= REVERTS =======================================
     function testUsingExtensionWithStalePrice() external {
         _addWethToPriceRouter();
         bytes32 swethDataFeedId = bytes32("SWETH");
         uint256 swethEthPrice = 1.01e18;
 
-        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, swethEthPrice);
+        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, swethEthPrice.changeDecimals(18, 8));
         mockRedstoneClassicAdapter.setTimestampsFromLatestUpdate(uint128(block.timestamp - 2 days));
 
         PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstonePriceFeedExtensionEth));
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstoneEthPriceFeedExtension));
 
-        RedstonePriceFeedExtensionEth.ExtensionStorage memory stor;
+        RedstoneEthPriceFeedExtension.ExtensionStorage memory stor;
         stor.dataFeedId = swethDataFeedId;
         stor.heartbeat = 1 days;
         stor.redstoneAdapter = IRedstoneAdapter(address(mockRedstoneClassicAdapter));
@@ -98,7 +114,7 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    RedstonePriceFeedExtensionEth.RedstonePriceFeedExtensionEth__STALE_PRICE.selector
+                    RedstoneEthPriceFeedExtension.RedstoneEthPriceFeedExtension__STALE_PRICE.selector
                 )
             )
         );
@@ -115,7 +131,7 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    RedstonePriceFeedExtensionEth.RedstonePriceFeedExtensionEth__STALE_PRICE.selector
+                    RedstoneEthPriceFeedExtension.RedstoneEthPriceFeedExtension__STALE_PRICE.selector
                 )
             )
         );
@@ -130,9 +146,9 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
         mockRedstoneClassicAdapter.setTimestampsFromLatestUpdate(uint128(block.timestamp));
 
         PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstonePriceFeedExtensionEth));
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstoneEthPriceFeedExtension));
 
-        RedstonePriceFeedExtensionEth.ExtensionStorage memory stor;
+        RedstoneEthPriceFeedExtension.ExtensionStorage memory stor;
         stor.dataFeedId = swethDataFeedId;
         stor.heartbeat = 1 days;
         stor.redstoneAdapter = IRedstoneAdapter(address(mockRedstoneClassicAdapter));
@@ -141,13 +157,13 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
 
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(RedstonePriceFeedExtensionEth.RedstonePriceFeedExtensionEth__ZERO_PRICE.selector)
+                abi.encodeWithSelector(RedstoneEthPriceFeedExtension.RedstoneEthPriceFeedExtension__ZERO_PRICE.selector)
             )
         );
         priceRouter.addAsset(SWETH, settings, abi.encode(stor), expectedSwethPrice);
 
         // Update price to non-zero value.
-        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, 1.01e18);
+        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, 1.01e8);
 
         // Asset can be added now.
         priceRouter.addAsset(SWETH, settings, abi.encode(stor), expectedSwethPrice);
@@ -157,7 +173,7 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
 
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(RedstonePriceFeedExtensionEth.RedstonePriceFeedExtensionEth__ZERO_PRICE.selector)
+                abi.encodeWithSelector(RedstoneEthPriceFeedExtension.RedstoneEthPriceFeedExtension__ZERO_PRICE.selector)
             )
         );
         priceRouter.getValue(SWETH, 1e18, WETH);
@@ -170,13 +186,13 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
         bytes32 wstethDataFeedId = bytes32("WSTETH");
         uint256 swethEthPrice = 1.01e18;
 
-        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, swethEthPrice);
+        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, swethEthPrice.changeDecimals(18, 8));
         mockRedstoneClassicAdapter.setTimestampsFromLatestUpdate(uint128(block.timestamp));
 
         PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstonePriceFeedExtensionEth));
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstoneEthPriceFeedExtension));
 
-        RedstonePriceFeedExtensionEth.ExtensionStorage memory stor;
+        RedstoneEthPriceFeedExtension.ExtensionStorage memory stor;
         stor.dataFeedId = wstethDataFeedId;
         stor.heartbeat = 1 days;
         stor.redstoneAdapter = IRedstoneAdapter(address(mockRedstoneClassicAdapter));
@@ -185,7 +201,7 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
 
         vm.expectRevert(
             bytes(
-                abi.encodeWithSelector(RedstonePriceFeedExtensionEth.RedstonePriceFeedExtensionEth__ZERO_PRICE.selector)
+                abi.encodeWithSelector(RedstoneEthPriceFeedExtension.RedstoneEthPriceFeedExtension__ZERO_PRICE.selector)
             )
         );
         priceRouter.addAsset(SWETH, settings, abi.encode(stor), expectedSwethPrice);
@@ -200,12 +216,12 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
         uint256 swethEthPrice = 1.01e18;
 
         mockRedstoneClassicAdapter.setTimestampsFromLatestUpdate(uint128(block.timestamp));
-        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, swethEthPrice);
+        mockRedstoneClassicAdapter.setValueForDataFeed(swethDataFeedId, swethEthPrice.changeDecimals(18, 8));
 
         PriceRouter.AssetSettings memory settings;
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstonePriceFeedExtensionEth));
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(redstoneEthPriceFeedExtension));
 
-        RedstonePriceFeedExtensionEth.ExtensionStorage memory stor;
+        RedstoneEthPriceFeedExtension.ExtensionStorage memory stor;
         stor.dataFeedId = swethDataFeedId;
         stor.heartbeat = 1 days;
         stor.redstoneAdapter = IRedstoneAdapter(address(mockRedstoneClassicAdapter));
@@ -213,7 +229,7 @@ contract RedstonePriceFeedExtensionEthTest is MainnetStarterTest, AdaptorHelperF
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    RedstonePriceFeedExtensionEth.RedstonePriceFeedExtensionEth_WETH_NOT_SUPPORTED.selector
+                    RedstoneEthPriceFeedExtension.RedstoneEthPriceFeedExtension_WETH_NOT_SUPPORTED.selector
                 )
             )
         );

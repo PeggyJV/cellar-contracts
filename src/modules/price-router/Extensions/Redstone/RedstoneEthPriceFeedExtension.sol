@@ -9,7 +9,7 @@ import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdap
  * @notice Allows the Price Router to price assets using Redstone Classic oracles.
  * @author crispymangoes
  */
-contract RedstonePriceFeedExtensionEth is Extension {
+contract RedstoneEthPriceFeedExtension is Extension {
     using Math for uint256;
     ERC20 public immutable WETH;
 
@@ -20,17 +20,17 @@ contract RedstonePriceFeedExtensionEth is Extension {
     /**
      * @notice Redstone Classic price feed is stale.
      */
-    error RedstonePriceFeedExtensionEth__STALE_PRICE();
+    error RedstoneEthPriceFeedExtension__STALE_PRICE();
 
     /**
      * @notice Redstone Classic price feed price is zero.
      */
-    error RedstonePriceFeedExtensionEth__ZERO_PRICE();
+    error RedstoneEthPriceFeedExtension__ZERO_PRICE();
 
     /**
      * @notice WETH is not supported in the price router.
      */
-    error RedstonePriceFeedExtensionEth_WETH_NOT_SUPPORTED();
+    error RedstoneEthPriceFeedExtension_WETH_NOT_SUPPORTED();
 
     /**
      * @notice Extension storage
@@ -64,14 +64,14 @@ contract RedstonePriceFeedExtensionEth is Extension {
         (, uint128 updatedAt) = stor.redstoneAdapter.getTimestampsFromLatestUpdate();
 
         uint256 timeSinceLastUpdate = block.timestamp - updatedAt;
-        if (timeSinceLastUpdate > stor.heartbeat) revert RedstonePriceFeedExtensionEth__STALE_PRICE();
+        if (timeSinceLastUpdate > stor.heartbeat) revert RedstoneEthPriceFeedExtension__STALE_PRICE();
 
         uint256 price = stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
 
-        if (price == 0) revert RedstonePriceFeedExtensionEth__ZERO_PRICE();
+        if (price == 0) revert RedstoneEthPriceFeedExtension__ZERO_PRICE();
 
         // Make sure price router supports WETH.
-        if (!priceRouter.isSupported(WETH)) revert RedstonePriceFeedExtensionEth_WETH_NOT_SUPPORTED();
+        if (!priceRouter.isSupported(WETH)) revert RedstoneEthPriceFeedExtension_WETH_NOT_SUPPORTED();
 
         extensionStorage[asset] = stor;
     }
@@ -86,10 +86,14 @@ contract RedstonePriceFeedExtensionEth is Extension {
         (, uint128 updatedAt) = stor.redstoneAdapter.getTimestampsFromLatestUpdate();
 
         uint256 timeSinceLastUpdate = block.timestamp - updatedAt;
-        if (timeSinceLastUpdate > stor.heartbeat) revert RedstonePriceFeedExtensionEth__STALE_PRICE();
+        if (timeSinceLastUpdate > stor.heartbeat) revert RedstoneEthPriceFeedExtension__STALE_PRICE();
 
         uint256 price = stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
-        if (price == 0) revert RedstonePriceFeedExtensionEth__ZERO_PRICE();
+        if (price == 0) revert RedstoneEthPriceFeedExtension__ZERO_PRICE();
+
+        // ETH price is given in 8 decimals, scale it up by 10 decimals,
+        // so it has the same decimals as WETH.
+        price = price.changeDecimals(8, 18); // 18 being how many decimals WETH has.
 
         // Convert price from ETH to USD.
         uint256 ethPrice = priceRouter.getPriceInUSD(WETH);
