@@ -2,7 +2,6 @@
 pragma solidity 0.8.16; // TODO: update to 0.8.21
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IFToken } from "src/interfaces/external/Frax/IFToken.sol";
 import { CometInterface } from "src/interfaces/external/Compound/CometInterface.sol";
 import { CompoundHealthFactorLogic } from "src/modules/adaptors/Compound/v3/CompoundHealthFactorLogic.sol";
 
@@ -73,7 +72,7 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice Cellar must approve CompoundV3 Lending Market to spend its assets, then call supply to supply its assets.
-     * @param amount the amount of assets to lend on FraxLend
+     * @param amount the amount of assets to supply  to specified CompoundV3 Lending Market
      * @param adaptorData adaptor data containing the abi encoded fToken
      * @dev configurationData is NOT used
      * TODO: If the `asset` is the `baseAsset` we may have to change this adaptor to not allow it. This is ONLY if we are having a separate adaptor to handle supplying the `baseAsset` to the CompMarket. Recall that `BaseAssets` are handled differently within CompoundV3: src (cellar) gets receiptToken, and more `baseAssets` over time upon redemption due to lending APY.
@@ -83,7 +82,7 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
         (CometInterface compMarket, ERC20 asset) = abi.decode(adaptorData, (CometInterface, ERC20));
         _validateCompMarketAndAsset(compMarket, asset);
         asset.safeApprove(address(compMarket), amount);
-        _supply(compMarket, asset, amount);
+        compMarket.supply(asset, amount);
 
         // Zero out approvals if necessary.
         _revokeExternalApproval(asset, address(compMarket));
@@ -142,7 +141,7 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
     function addCollateral(CometInterface _compMarket, ERC20 _asset, uint256 _amount) public {
         _validateCompMarketAndAsset(_compMarket, _asset);
         uint256 amountToAdd = _maxAvailable(_asset, _amount);
-        address compMarketAddress = address(_fraxlendPair);
+        address compMarketAddress = address(_compMarket);
         asset.safeApprove(compMarketAddress, amountToAdd);
         _compMarket.supply(_asset, amountToAdd);
 
@@ -174,6 +173,9 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_compMarket, _asset)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert CompoundV3CollateralAdaptor__MarketAndAssetPositionsMustBeTracked(address(_compMarket), address(_asset));
+            revert CompoundV3CollateralAdaptor__MarketAndAssetPositionsMustBeTracked(
+                address(_compMarket),
+                address(_asset)
+            );
     }
 }
