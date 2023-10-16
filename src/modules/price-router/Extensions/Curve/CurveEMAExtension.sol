@@ -45,13 +45,13 @@ contract CurveEMAExtension is Extension {
     }
 
     /**
-     * @notice Redstone PriceFeed Extension Storage
+     * @notice Curve EMA Extension Storage
      */
     mapping(ERC20 => ExtensionStorage) public extensionStorage;
 
     /**
      * @notice Called by the price router during `_updateAsset` calls.
-     * @param asset the ERC4626 vault share to price
+     * @param asset the ERC20 asset to price using a Curve EMA
      */
     function setupSource(ERC20 asset, bytes memory _storage) external override onlyPriceRouter {
         ExtensionStorage memory stor = abi.decode(_storage, (ExtensionStorage));
