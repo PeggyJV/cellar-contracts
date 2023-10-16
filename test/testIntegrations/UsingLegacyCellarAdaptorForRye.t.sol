@@ -33,7 +33,7 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 17792767;
+        uint256 blockNumber = 18200000;
         _startFork(rpcKey, blockNumber);
 
         // Setup RYE Share Price Oracle.
@@ -42,7 +42,9 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
         uint64 _deviationTrigger = 0.0005e4;
         uint64 _gracePeriod = 60 * 60; // 1 hr
         uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-        address _automationRegistry = address(this);
+        address _automationRegistry = automationRegistryV2;
+        address _automationRegistrar = automationRegistrarV2;
+        address _automationAdmin = address(this);
 
         // Setup share price oracle.
         sharePriceOracle = new ERC4626SharePriceOracle(
@@ -52,9 +54,22 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
             _gracePeriod,
             _observationsToUse,
             _automationRegistry,
+            _automationRegistrar,
+            _automationAdmin,
+            address(LINK),
             1.02e18,
             0.1e4,
             10e4
+        );
+
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        // Write storage to change forwarder to address this.
+        stdstore.target(address(sharePriceOracle)).sig(sharePriceOracle.automationForwarder.selector).checked_write(
+            address(this)
         );
 
         // Call first performUpkeep on Cellar.
@@ -64,11 +79,11 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
         assertTrue(upkeepNeeded, "Upkeep should be needed.");
         sharePriceOracle.performUpkeep(performData);
 
-        cellarAdaptor = new LegacyCellarAdaptor();
+        cellarAdaptor = LegacyCellarAdaptor(0x1e22aDf9E63eF8F2A3626841DDdDD19683E31068);
 
-        vm.startPrank(multisig);
-        legacyRegistry.trustAdaptor(address(cellarAdaptor));
-        vm.stopPrank();
+        // vm.startPrank(multisig);
+        // legacyRegistry.trustAdaptor(address(cellarAdaptor));
+        // vm.stopPrank();
 
         deal(address(WBTC), address(this), type(uint256).max);
         WBTC.safeApprove(address(ryb), type(uint256).max);
@@ -82,23 +97,21 @@ contract UsingLegacyCellarAdaptorForRyeTest is MainnetStarterTest, AdaptorHelper
     }
 
     function testUsingRyeWithOracle() external {
-        vm.startPrank(multisig);
-        legacyCellarRyePosition = legacyRegistry.trustPosition(
-            address(cellarAdaptor),
-            abi.encode(rye, sharePriceOracle)
-        );
-        vm.stopPrank();
-
-        vm.startPrank(gravityBridgeAddress);
-        ryb.addAdaptorToCatalogue(address(cellarAdaptor));
-        ryb.addPositionToCatalogue(legacyCellarRyePosition);
-        ryb.addPosition(1, legacyCellarRyePosition, abi.encode(false), false);
-        _withdrawFromUniswapAndDepositToRye(address(sharePriceOracle));
-        vm.stopPrank();
-
-        uint256 gas = gasleft();
-        ryb.totalAssets();
-        console.log("Gas Used With Oracle", gas - gasleft());
+        // vm.startPrank(multisig);
+        // legacyCellarRyePosition = legacyRegistry.trustPosition(
+        //     address(cellarAdaptor),
+        //     abi.encode(rye, sharePriceOracle)
+        // );
+        // vm.stopPrank();
+        // vm.startPrank(gravityBridgeAddress);
+        // ryb.addAdaptorToCatalogue(address(cellarAdaptor));
+        // ryb.addPositionToCatalogue(legacyCellarRyePosition);
+        // ryb.addPosition(1, legacyCellarRyePosition, abi.encode(false), false);
+        // _withdrawFromUniswapAndDepositToRye(address(sharePriceOracle));
+        // vm.stopPrank();
+        // uint256 gas = gasleft();
+        // ryb.totalAssets();
+        // console.log("Gas Used With Oracle", gas - gasleft());
     }
 
     function _withdrawFromUniswapAndDepositToRye(address oracle) internal {

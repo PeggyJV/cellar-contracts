@@ -31,7 +31,7 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 16869780;
+        uint256 blockNumber = 18364794;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -109,7 +109,9 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint64 _deviationTrigger = 0.0005e4;
         uint64 _gracePeriod = 60 * 60; // 1 hr
         uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-        address _automationRegistry = address(this);
+        address _automationRegistry = automationRegistryV2;
+        address _automationRegistrar = automationRegistrarV2;
+        address _automationAdmin = address(this);
 
         // Setup share price oracle.
         sharePriceOracle = new ERC4626SharePriceOracle(
@@ -119,12 +121,24 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
             _gracePeriod,
             _observationsToUse,
             _automationRegistry,
+            _automationRegistrar,
+            _automationAdmin,
+            address(LINK),
             1e18,
             0.1e4,
             3e4
         );
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
 
-        // Call first performUpkeep on Cellar.
+        // Write storage to change forwarder to address this.
+        stdstore.target(address(sharePriceOracle)).sig(sharePriceOracle.automationForwarder.selector).checked_write(
+            address(this)
+        );
+
+        // // Call first performUpkeep on Cellar.
         bool upkeepNeeded;
         bytes memory performData;
         (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
@@ -548,25 +562,42 @@ contract CellarWithOracleTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         cellar.callOnAdaptor(data);
 
-        // A new share price oracle is deployed and filled with observations.
-        ERC4626 _target = ERC4626(address(cellar));
-        uint64 _heartbeat = 1 days;
-        uint64 _deviationTrigger = 0.0005e4;
-        uint64 _gracePeriod = 60 * 60; // 1 hr
-        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-        address _automationRegistry = address(this);
+        {
+            // A new share price oracle is deployed and filled with observations.
+            ERC4626 _target = ERC4626(address(cellar));
+            uint64 _heartbeat = 1 days;
+            uint64 _deviationTrigger = 0.0005e4;
+            uint64 _gracePeriod = 60 * 60; // 1 hr
+            uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+            address _automationRegistry = automationRegistryV2;
+            address _automationRegistrar = automationRegistrarV2;
+            address _automationAdmin = address(this);
 
-        // Deploy new share price oracle.
-        sharePriceOracle = new ERC4626SharePriceOracle(
-            _target,
-            _heartbeat,
-            _deviationTrigger,
-            _gracePeriod,
-            _observationsToUse,
-            _automationRegistry,
-            4e18,
-            0.1e4,
-            3e4
+            // Deploy new share price oracle.
+            sharePriceOracle = new ERC4626SharePriceOracle(
+                _target,
+                _heartbeat,
+                _deviationTrigger,
+                _gracePeriod,
+                _observationsToUse,
+                _automationRegistry,
+                _automationRegistrar,
+                _automationAdmin,
+                address(LINK),
+                4e18,
+                0.1e4,
+                3e4
+            );
+        }
+
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        // Write storage to change forwarder to address this.
+        stdstore.target(address(sharePriceOracle)).sig(sharePriceOracle.automationForwarder.selector).checked_write(
+            address(this)
         );
 
         // Call first performUpkeep on Cellar.

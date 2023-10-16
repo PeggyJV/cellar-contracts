@@ -61,6 +61,8 @@ contract ArbitrumAddresses {
 
     // Chainlink Automation Registry
     address public automationRegistry = 0x37D9dC70bfcd8BC77Ec2858836B923c560E891D1;
+    address public automationRegistryV2 = 0x37D9dC70bfcd8BC77Ec2858836B923c560E891D1;
+    address public automationRegistrarV2 = 0x86EFBD0b6736Bed994962f9797049422A3A8E8Ad;
 
     // Uniswap V3
     address public uniPositionManager = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;

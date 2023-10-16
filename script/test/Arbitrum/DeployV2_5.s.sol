@@ -88,151 +88,152 @@ contract DeployV2_5Script is Script, ArbitrumAddresses {
         bytes memory constructorArgs;
         vm.startBroadcast();
 
-        // Deploy registry.
-        creationCode = type(Registry).creationCode;
-        constructorArgs = abi.encode(dev, dev, dev, dev);
-        registry = Registry(deployer.deployContract("Test Registry V0.0", creationCode, constructorArgs, 0));
+        // // Deploy registry.
+        // creationCode = type(Registry).creationCode;
+        // constructorArgs = abi.encode(dev, dev, dev, dev);
+        // registry = Registry(deployer.deployContract("Test Registry V0.0", creationCode, constructorArgs, 0));
 
-        // Deploy price router.
-        creationCode = type(PriceRouter).creationCode;
-        constructorArgs = abi.encode(dev, registry, WETH);
-        priceRouter = PriceRouter(deployer.deployContract("Test PriceRouter V0.0", creationCode, constructorArgs, 0));
+        // // Deploy price router.
+        // creationCode = type(PriceRouter).creationCode;
+        // constructorArgs = abi.encode(dev, registry, WETH);
+        // priceRouter = PriceRouter(deployer.deployContract("Test PriceRouter V0.0", creationCode, constructorArgs, 0));
 
-        // Update price router in registry.
-        registry.setAddress(2, address(priceRouter));
+        // // Update price router in registry.
+        // registry.setAddress(2, address(priceRouter));
 
-        // Deploy ERC20Adaptor
-        creationCode = type(ERC20Adaptor).creationCode;
-        constructorArgs = hex"";
-        erc20Adaptor = ERC20Adaptor(
-            deployer.deployContract("Test ERC20 Adaptor V0.0", creationCode, constructorArgs, 0)
-        );
-        // Deploy UniswapAdaptor
-        creationCode = type(UniswapV3PositionTracker).creationCode;
-        constructorArgs = abi.encode(uniPositionManager);
-        uniswapV3PositionTracker = UniswapV3PositionTracker(
-            deployer.deployContract("Test Uniswap Position Tracker V0.0", creationCode, constructorArgs, 0)
-        );
-        creationCode = type(UniswapV3Adaptor).creationCode;
-        constructorArgs = abi.encode(uniPositionManager, address(uniswapV3PositionTracker));
-        uniswapV3Adaptor = UniswapV3Adaptor(
-            deployer.deployContract("Test UniswapV3 Adaptor V0.0", creationCode, constructorArgs, 0)
-        );
+        // // Deploy ERC20Adaptor
+        // creationCode = type(ERC20Adaptor).creationCode;
+        // constructorArgs = hex"";
+        // erc20Adaptor = ERC20Adaptor(
+        //     deployer.deployContract("Test ERC20 Adaptor V0.0", creationCode, constructorArgs, 0)
+        // );
+        // // Deploy UniswapAdaptor
+        // creationCode = type(UniswapV3PositionTracker).creationCode;
+        // constructorArgs = abi.encode(uniPositionManager);
+        // uniswapV3PositionTracker = UniswapV3PositionTracker(
+        //     deployer.deployContract("Test Uniswap Position Tracker V0.0", creationCode, constructorArgs, 0)
+        // );
+        // creationCode = type(UniswapV3Adaptor).creationCode;
+        // constructorArgs = abi.encode(uniPositionManager, address(uniswapV3PositionTracker));
+        // uniswapV3Adaptor = UniswapV3Adaptor(
+        //     deployer.deployContract("Test UniswapV3 Adaptor V0.0", creationCode, constructorArgs, 0)
+        // );
 
-        // Deploy SushiswapAdaptor
-        creationCode = type(UniswapV3PositionTracker).creationCode;
-        constructorArgs = abi.encode(sushiPositionManager);
-        sushiswapV3PositionTracker = UniswapV3PositionTracker(
-            deployer.deployContract("Test Sushiswap Position Tracker V0.0", creationCode, constructorArgs, 0)
-        );
-        creationCode = type(UniswapV3Adaptor).creationCode;
-        constructorArgs = abi.encode(sushiPositionManager, address(sushiswapV3PositionTracker));
-        sushiswapV3Adaptor = UniswapV3Adaptor(
-            deployer.deployContract("Test SushiswapV3 Adaptor V0.0", creationCode, constructorArgs, 0)
-        );
-        // Deploy Aave AToken Adaptor
-        creationCode = type(AaveV3ATokenAdaptor).creationCode;
-        constructorArgs = abi.encode(aaveV3Pool, aaveV3Oracle, 1.05e18);
-        aaveV3ATokenAdaptor = AaveV3ATokenAdaptor(
-            deployer.deployContract("Test Aave V3 AToken Adaptor V0.0", creationCode, constructorArgs, 0)
-        );
-        // Deploy Aave Debt Token Adaptor
-        creationCode = type(AaveV3DebtTokenAdaptor).creationCode;
-        constructorArgs = abi.encode(aaveV3Pool, 1.05e18);
-        aaveV3DebtTokenAdaptor = AaveV3DebtTokenAdaptor(
-            deployer.deployContract("Test Aave V3 DebtToken Adaptor V0.0", creationCode, constructorArgs, 0)
-        );
-        // Deploy 1inch aggregator
-        creationCode = type(OneInchAdaptor).creationCode;
-        constructorArgs = abi.encode(oneInchRouter);
-        oneInchAdaptor = OneInchAdaptor(
-            deployer.deployContract("Test 1Inch Adaptor V0.0", creationCode, constructorArgs, 0)
-        );
-        // Deploy 0x Aggregator
-        creationCode = type(ZeroXAdaptor).creationCode;
-        constructorArgs = abi.encode(oneInchRouter);
-        zeroXAdaptor = ZeroXAdaptor(deployer.deployContract("Test 0x Adaptor V0.0", creationCode, constructorArgs, 0));
+        // // Deploy SushiswapAdaptor
+        // creationCode = type(UniswapV3PositionTracker).creationCode;
+        // constructorArgs = abi.encode(sushiPositionManager);
+        // sushiswapV3PositionTracker = UniswapV3PositionTracker(
+        //     deployer.deployContract("Test Sushiswap Position Tracker V0.0", creationCode, constructorArgs, 0)
+        // );
+        // creationCode = type(UniswapV3Adaptor).creationCode;
+        // constructorArgs = abi.encode(sushiPositionManager, address(sushiswapV3PositionTracker));
+        // sushiswapV3Adaptor = UniswapV3Adaptor(
+        //     deployer.deployContract("Test SushiswapV3 Adaptor V0.0", creationCode, constructorArgs, 0)
+        // );
+        // // Deploy Aave AToken Adaptor
+        // creationCode = type(AaveV3ATokenAdaptor).creationCode;
+        // constructorArgs = abi.encode(aaveV3Pool, aaveV3Oracle, 1.05e18);
+        // aaveV3ATokenAdaptor = AaveV3ATokenAdaptor(
+        //     deployer.deployContract("Test Aave V3 AToken Adaptor V0.0", creationCode, constructorArgs, 0)
+        // );
+        // // Deploy Aave Debt Token Adaptor
+        // creationCode = type(AaveV3DebtTokenAdaptor).creationCode;
+        // constructorArgs = abi.encode(aaveV3Pool, 1.05e18);
+        // aaveV3DebtTokenAdaptor = AaveV3DebtTokenAdaptor(
+        //     deployer.deployContract("Test Aave V3 DebtToken Adaptor V0.0", creationCode, constructorArgs, 0)
+        // );
+        // // Deploy 1inch aggregator
+        // creationCode = type(OneInchAdaptor).creationCode;
+        // constructorArgs = abi.encode(oneInchRouter);
+        // oneInchAdaptor = OneInchAdaptor(
+        //     deployer.deployContract("Test 1Inch Adaptor V0.0", creationCode, constructorArgs, 0)
+        // );
+        // // Deploy 0x Aggregator
+        // creationCode = type(ZeroXAdaptor).creationCode;
+        // constructorArgs = abi.encode(oneInchRouter);
+        // zeroXAdaptor = ZeroXAdaptor(deployer.deployContract("Test 0x Adaptor V0.0", creationCode, constructorArgs, 0));
 
-        // Add assets to the price router
-        PriceRouter.ChainlinkDerivativeStorage memory stor;
-        PriceRouter.AssetSettings memory settings;
+        // // Add assets to the price router
+        // PriceRouter.ChainlinkDerivativeStorage memory stor;
+        // PriceRouter.AssetSettings memory settings;
 
-        uint256 ethUsdPrice = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(WETH_USD_FEED));
-        priceRouter.addAsset(WETH, settings, abi.encode(stor), ethUsdPrice);
+        // uint256 ethUsdPrice = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(WETH_USD_FEED));
+        // priceRouter.addAsset(WETH, settings, abi.encode(stor), ethUsdPrice);
 
-        uint256 price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(USDC_USD_FEED));
-        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+        // uint256 price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(USDC_USD_FEED));
+        // priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
 
-        price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(USDC_USD_FEED));
-        priceRouter.addAsset(USDCe, settings, abi.encode(stor), price);
+        // price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(USDC_USD_FEED));
+        // priceRouter.addAsset(USDCe, settings, abi.encode(stor), price);
 
-        price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(DAI_USD_FEED));
-        priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
+        // price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(DAI_USD_FEED));
+        // priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
 
-        price = uint256(IChainlinkAggregator(USDT_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(USDT_USD_FEED));
-        priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
+        // price = uint256(IChainlinkAggregator(USDT_USD_FEED).latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(USDT_USD_FEED));
+        // priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
 
-        price = uint256(IChainlinkAggregator(FRAX_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(FRAX_USD_FEED));
-        priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
+        // price = uint256(IChainlinkAggregator(FRAX_USD_FEED).latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(FRAX_USD_FEED));
+        // priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
 
-        price = uint256(IChainlinkAggregator(WBTC_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(WBTC_USD_FEED));
-        priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
+        // price = uint256(IChainlinkAggregator(WBTC_USD_FEED).latestAnswer());
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(WBTC_USD_FEED));
+        // priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
 
-        stor.inETH = true;
+        // stor.inETH = true;
 
-        price = (ethUsdPrice * uint256(IChainlinkAggregator(WSTETH_ETH_FEED).latestAnswer())) / 1e18;
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(WSTETH_ETH_FEED));
-        priceRouter.addAsset(WSTETH, settings, abi.encode(stor), price);
+        // price = (ethUsdPrice * uint256(IChainlinkAggregator(WSTETH_ETH_FEED).latestAnswer())) / 1e18;
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(WSTETH_ETH_FEED));
+        // priceRouter.addAsset(WSTETH, settings, abi.encode(stor), price);
 
-        price = (ethUsdPrice * uint256(IChainlinkAggregator(CBETH_ETH_FEED).latestAnswer())) / 1e18;
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(CBETH_ETH_FEED));
-        priceRouter.addAsset(cbETH, settings, abi.encode(stor), price);
+        // price = (ethUsdPrice * uint256(IChainlinkAggregator(CBETH_ETH_FEED).latestAnswer())) / 1e18;
+        // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(CBETH_ETH_FEED));
+        // priceRouter.addAsset(cbETH, settings, abi.encode(stor), price);
 
-        // Trust adaptors
-        registry.trustAdaptor(address(erc20Adaptor));
-        registry.trustAdaptor(address(uniswapV3Adaptor));
-        registry.trustAdaptor(address(sushiswapV3Adaptor));
-        registry.trustAdaptor(address(aaveV3ATokenAdaptor));
-        registry.trustAdaptor(address(aaveV3DebtTokenAdaptor));
-        registry.trustAdaptor(address(oneInchAdaptor));
-        registry.trustAdaptor(address(zeroXAdaptor));
-        // Add positions to the registry
-        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
-        registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
-        registry.trustPosition(usdcePosition, address(erc20Adaptor), abi.encode(USDCe));
-        registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
-        registry.trustPosition(usdtPosition, address(erc20Adaptor), abi.encode(USDT));
-        registry.trustPosition(usdcUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, USDCe));
-        registry.trustPosition(usdcDaiUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, DAI));
-        registry.trustPosition(usdcUsdtUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, USDT));
-        registry.trustPosition(daiUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(DAI, USDCe));
-        registry.trustPosition(usdtUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(USDT, USDCe));
-        registry.trustPosition(aV3WethPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3WETH));
-        registry.trustPosition(aV3UsdcPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDC));
-        registry.trustPosition(aV3UsdcePosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDCe));
-        registry.trustPosition(aV3DaiPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3DAI));
-        registry.trustPosition(aV3UsdtPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDT));
-        registry.trustPosition(dV3WethPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3WETH));
-        registry.trustPosition(dV3UsdcPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDC));
-        registry.trustPosition(dV3UsdcePosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDCe));
-        registry.trustPosition(dV3DaiPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3DAI));
-        registry.trustPosition(dV3UsdtPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDT));
+        // // Trust adaptors
+        // registry.trustAdaptor(address(erc20Adaptor));
+        // registry.trustAdaptor(address(uniswapV3Adaptor));
+        // registry.trustAdaptor(address(sushiswapV3Adaptor));
+        // registry.trustAdaptor(address(aaveV3ATokenAdaptor));
+        // registry.trustAdaptor(address(aaveV3DebtTokenAdaptor));
+        // registry.trustAdaptor(address(oneInchAdaptor));
+        // registry.trustAdaptor(address(zeroXAdaptor));
+        // // Add positions to the registry
+        // registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
+        // registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
+        // registry.trustPosition(usdcePosition, address(erc20Adaptor), abi.encode(USDCe));
+        // registry.trustPosition(daiPosition, address(erc20Adaptor), abi.encode(DAI));
+        // registry.trustPosition(usdtPosition, address(erc20Adaptor), abi.encode(USDT));
+        // registry.trustPosition(usdcUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, USDCe));
+        // registry.trustPosition(usdcDaiUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, DAI));
+        // registry.trustPosition(usdcUsdtUniPosition, address(uniswapV3Adaptor), abi.encode(USDC, USDT));
+        // registry.trustPosition(daiUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(DAI, USDCe));
+        // registry.trustPosition(usdtUsdceUniPosition, address(uniswapV3Adaptor), abi.encode(USDT, USDCe));
+        // registry.trustPosition(aV3WethPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3WETH));
+        // registry.trustPosition(aV3UsdcPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDC));
+        // registry.trustPosition(aV3UsdcePosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDCe));
+        // registry.trustPosition(aV3DaiPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3DAI));
+        // registry.trustPosition(aV3UsdtPosition, address(aaveV3ATokenAdaptor), abi.encode(aV3USDT));
+        // registry.trustPosition(dV3WethPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3WETH));
+        // registry.trustPosition(dV3UsdcPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDC));
+        // registry.trustPosition(dV3UsdcePosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDCe));
+        // registry.trustPosition(dV3DaiPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3DAI));
+        // registry.trustPosition(dV3UsdtPosition, address(aaveV3DebtTokenAdaptor), abi.encode(dV3USDT));
 
-        registry.trustPosition(usdcUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, USDCe));
-        registry.trustPosition(usdcDaiSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, DAI));
-        registry.trustPosition(usdcUsdtSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, USDT));
-        registry.trustPosition(daiUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(DAI, USDCe));
-        registry.trustPosition(usdtUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDT, USDCe));
+        // registry.trustPosition(usdcUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, USDCe));
+        // registry.trustPosition(usdcDaiSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, DAI));
+        // registry.trustPosition(usdcUsdtSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDC, USDT));
+        // registry.trustPosition(daiUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(DAI, USDCe));
+        // registry.trustPosition(usdtUsdceSushiPosition, address(sushiswapV3Adaptor), abi.encode(USDT, USDCe));
 
-        // Deploy Cellar.
-        ryUsdCellar = _createCellar("Test Real Yield USD", "TRYUSD", USDCe, usdcePosition, abi.encode(0), 1e6, 0.8e18);
+        // // Deploy Cellar.
+        // ryUsdCellar = _createCellar("Test Real Yield USD", "TRYUSD", USDCe, usdcePosition, abi.encode(0), 1e6, 0.8e18);
+        ryUsdCellar = CellarWithOracleWithBalancerFlashLoans(0xA73B0B48E26E4B8B24CeaD149252cc275deE99A6);
 
         uint64 heartbeat = 1 days;
         uint64 deviationTrigger = 0.0010e4;
@@ -242,13 +243,13 @@ contract DeployV2_5Script is Script, ArbitrumAddresses {
         uint256 allowedAnswerChangeLower = 0.8e4;
         uint256 allowedAnswerChangeUpper = 10e4;
         _createSharePriceOracle(
-            "Test Real Yield USD Share Price Oracle V0.0",
+            "Test Real Yield USD Share Price Oracle V0.2",
             address(ryUsdCellar),
             heartbeat,
             deviationTrigger,
             gracePeriod,
             observationsToUse,
-            automationRegistry,
+            testStrategist,
             startingAnswer,
             allowedAnswerChangeLower,
             allowedAnswerChangeUpper
@@ -301,7 +302,7 @@ contract DeployV2_5Script is Script, ArbitrumAddresses {
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
         uint16 _observationsToUse,
-        address _automationRegistry,
+        address _automationAdmin,
         uint216 _startingAnswer,
         uint256 _allowedAnswerChangeLower,
         uint256 _allowedAnswerChangeUpper
@@ -315,7 +316,10 @@ contract DeployV2_5Script is Script, ArbitrumAddresses {
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry,
+            automationRegistryV2,
+            automationRegistrarV2,
+            _automationAdmin,
+            address(LINK),
             _startingAnswer,
             _allowedAnswerChangeLower,
             _allowedAnswerChangeUpper

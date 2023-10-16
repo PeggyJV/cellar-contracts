@@ -29,7 +29,7 @@ contract LegacyCellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 17792767;
+        uint256 blockNumber = 18364794;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -65,7 +65,10 @@ contract LegacyCellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint64 _deviationTrigger = 0.0005e4;
         uint64 _gracePeriod = 60 * 60; // 1 hr
         uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-        address _automationRegistry = address(this);
+        address _automationRegistry = automationRegistryV2;
+        address _automationRegistrar = automationRegistrarV2;
+        address _automationAdmin = address(this);
+
         // Setup share price oracle.
         sharePriceOracle = new ERC4626SharePriceOracle(
             _target,
@@ -74,9 +77,22 @@ contract LegacyCellarAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             _gracePeriod,
             _observationsToUse,
             _automationRegistry,
+            _automationRegistrar,
+            _automationAdmin,
+            address(LINK),
             1e18,
             0.1e4,
             10e4
+        );
+
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        // Write storage to change forwarder to address this.
+        stdstore.target(address(sharePriceOracle)).sig(sharePriceOracle.automationForwarder.selector).checked_write(
+            address(this)
         );
 
         registry.trustAdaptor(address(cellarAdaptor));
