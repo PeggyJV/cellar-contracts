@@ -63,8 +63,8 @@ contract DeployAutomationV1UpkeepScript is Script, MainnetAddresses {
         uint8 source = 97;
         address sender = upkeepOwner;
 
-        bytes memory data = abi.encodeWithSelector(
-            ILINK.transferAndCall.selector,
+        bytes memory registerData = abi.encodeWithSelector(
+            IRegistrar.register.selector,
             name,
             encryptedEmail,
             upkeepContract,
@@ -75,11 +75,12 @@ contract DeployAutomationV1UpkeepScript is Script, MainnetAddresses {
             source,
             sender
         );
+
         vm.startBroadcast();
 
         erc677Link.approve(automationRegistrarV1, amount);
 
-        erc677Link.transferAndCall(automationRegistrarV1, amount, data);
+        erc677Link.transferAndCall(automationRegistrarV1, amount, registerData);
 
         vm.stopBroadcast();
     }
