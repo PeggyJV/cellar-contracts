@@ -16,6 +16,7 @@ contract MainnetAddresses {
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
     address public priceRouterV1 = 0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA;
     address public priceRouterV2 = 0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92;
+    address public ryusdAddress = 0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E;
 
     // DeFi Ecosystem
     address public uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -47,6 +48,7 @@ contract MainnetAddresses {
     ERC20 public UNI = ERC20(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
     ERC20 public CRV = ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
     ERC20 public CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
+    ERC20 public FRXETH = ERC20(0x5E8422345238F34275888049021821E8E08CAa1f);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -177,6 +179,7 @@ contract MainnetAddresses {
     // Redstone
     address public swEthAdapter = 0x68ba9602B2AeE30847412109D2eE89063bf08Ec2;
     bytes32 public swEthDataFeedId = 0x5357455448000000000000000000000000000000000000000000000000000000;
+    bytes32 public swEthEthDataFeedId = 0x53574554482f4554480000000000000000000000000000000000000000000000;
     // Maker
     address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
 
@@ -185,4 +188,7 @@ contract MainnetAddresses {
 
     // Maker
     address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
+
+    // Curve
+    address public EthFrxEthCurvePool = 0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577;
 }
