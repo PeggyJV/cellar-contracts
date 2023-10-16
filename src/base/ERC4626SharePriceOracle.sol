@@ -29,6 +29,11 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint32 public constant UPKEEP_GAS_LIMIT = 50_000;
 
+    /**
+     * @notice Decimals used to scale share price for internal calculations.
+     */
+    uint8 public constant decimals = 18;
+
     // ========================================= GLOBAL STATE =========================================
     /**
      * @notice The latest stored onchain answer.
@@ -60,11 +65,6 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      *         time weighted average answer.
      */
     Observation[] public observations;
-
-    /**
-     * @notice Decimals used to scale share price for internal calculations.
-     */
-    uint8 public constant decimals = 18;
 
     /**
      * @notice The Automation V2 Forwarder address for this contract.
@@ -234,6 +234,10 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
     //============================== INITIALIZATION ===============================
 
+    /**
+     * @notice Should be called after contract creation.
+     * @dev Creates a Chainlink Automation Upkeep, and set the `automationForwarder` address.
+     */
     function initialize(uint96 initialUpkeepFunds) external {
         // This function is only callable once.
         if (automationForwarder != address(0)) revert ERC4626SharePriceOracle__ForwarderAlreadySet();

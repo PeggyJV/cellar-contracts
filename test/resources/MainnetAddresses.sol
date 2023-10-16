@@ -143,6 +143,8 @@ contract MainnetAddresses {
 
     // Chainlink Automation Registry
     address public automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+    address public automationRegistryV2 = 0x6593c7De001fC8542bB1703532EE1E5aA0D458fD;
+    address public automationRegistrarV2 = 0x6B0B234fB2f380309D47A7E9391E29E9a179395a;
 
     // FraxLend Pairs
     address public FXS_FRAX_PAIR = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
