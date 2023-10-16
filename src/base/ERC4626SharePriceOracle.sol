@@ -5,6 +5,8 @@ import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { Math } from "src/utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
+import { IRegistrar } from "src/interfaces/external/Chainlink/IRegistrar.sol";
+import { IRegistry } from "src/interfaces/external/Chainlink/IRegistry.sol";
 
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
@@ -121,10 +123,12 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint256 public immutable ONE_SHARE;
 
+    // TODO
     /**
      * @notice Chainlink's Automation Registry contract address.
      * @notice For mainnet use 0x02777053d6764996e594c3E88AF1D58D5363a2e6.
      */
+    // address public immutable automationForwarder;
     address public immutable automationRegistry;
 
     /**
@@ -160,7 +164,10 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
         uint16 _observationsToUse,
+        // address _automationRegistrar,
         address _automationRegistry,
+        // address _admin,
+        // uint96 _initialUpkeepFunds,
         uint216 _startingAnswer,
         uint256 _allowedAnswerChangeLower,
         uint256 _allowedAnswerChangeUpper
@@ -171,7 +178,6 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         heartbeat = _heartbeat;
         deviationTrigger = _deviationTrigger;
         gracePeriod = _gracePeriod;
-        automationRegistry = _automationRegistry;
         // Add 1 to observations to use.
         _observationsToUse = _observationsToUse + 1;
         observationsLength = _observationsToUse;
@@ -187,6 +193,30 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         allowedAnswerChangeLower = _allowedAnswerChangeLower;
         if (_allowedAnswerChangeUpper < 1e4) revert("Illogical Upper");
         allowedAnswerChangeUpper = _allowedAnswerChangeUpper;
+
+        automationRegistry = _automationRegistry;
+
+        // Create the upkeep.
+
+        // IRegistrar registrar = IRegistrar(_automationRegistrar);
+        // IRegistry registry = IRegistry(_automationRegistry);
+        // IRegistrar.RegistrationParams memory params = IRegistrar.RegistrationParams{
+        //     name: string.concat(_target.name(), " Share Price Oracle"),
+        //     encryptedEmail: hex"",
+        //     upkeepContract: address(this),
+        //     gasLimit: 50_000,
+        //     adminAddress: _admin,
+        //     triggerType: 0,
+        //     checkData: hex"",
+        //     triggerConfig: hex"",
+        //     offchainConfig: hex"",
+        //     amount: _initialUpkeepFunds
+        // };
+
+        // // TODO need to approve registrar to spend LINK.
+        // uint256 upkeepID = registrar.registerUpkeep(params);
+        // automationForwarder = registry.getForwarder(upkeepID);
+        // msg.data;
     }
 
     //============================== CHAINLINK AUTOMATION ===============================
