@@ -2,6 +2,8 @@
 pragma solidity 0.8.21;
 
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Math } from "src/utils/Math.sol";
 import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
@@ -10,6 +12,7 @@ import { IRegistry } from "src/interfaces/external/Chainlink/IRegistry.sol";
 
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     using Math for uint256;
+    using SafeTransferLib for ERC20;
 
     // ========================================= STRUCTS =========================================
 
@@ -17,6 +20,14 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint64 timestamp;
         uint192 cumulative;
     }
+
+    // ========================================= CONSTANTS =========================================
+    /**
+     * @notice Gas Limit to use for Upkeep created in `initialize`.
+     * @dev Should be fairly constant between networks, but 50_000 is a safe limit in
+     *      most situations.
+     */
+    uint32 public constant UPKEEP_GAS_LIMIT = 50_000;
 
     // ========================================= GLOBAL STATE =========================================
     /**
@@ -55,15 +66,21 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint8 public constant decimals = 18;
 
+    /**
+     * @notice The Automation V2 Forwarder address for this contract.
+     */
+    address public automationForwarder;
+
     //============================== ERRORS ===============================
 
-    error ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry();
+    error ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
     error ERC4626SharePriceOracle__StalePerformData();
     error ERC4626SharePriceOracle__CumulativeTooLarge();
     error ERC4626SharePriceOracle__NoUpkeepConditionMet();
     error ERC4626SharePriceOracle__SharePriceTooLarge();
     error ERC4626SharePriceOracle__FuturePerformData();
     error ERC4626SharePriceOracle__ContractKillSwitch();
+    error ERC4626SharePriceOracle__ForwarderAlreadySet();
 
     //============================== EVENTS ===============================
 
@@ -123,13 +140,28 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     uint256 public immutable ONE_SHARE;
 
-    // TODO
+    /**
+     * @notice The admin address for the Automation Upkeep.
+     */
+    address public immutable automationAdmin;
+
     /**
      * @notice Chainlink's Automation Registry contract address.
-     * @notice For mainnet use 0x02777053d6764996e594c3E88AF1D58D5363a2e6.
+     * @notice For mainnet use 0x6593c7De001fC8542bB1703532EE1E5aA0D458fD.
      */
-    // address public immutable automationForwarder;
     address public immutable automationRegistry;
+
+    /**
+     * @notice Chainlink's Automation Registrar contract address.
+     * @notice For mainnet use 0x6B0B234fB2f380309D47A7E9391E29E9a179395a.
+     */
+    address public immutable automationRegistrar;
+
+    /**
+     * @notice Link Token.
+     * @notice For mainnet use 0x514910771AF9Ca656af840dff83E8264EcF986CA.
+     */
+    ERC20 public immutable link;
 
     /**
      * @notice ERC4626 target vault this contract is an oracle for.
@@ -164,10 +196,10 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
         uint16 _observationsToUse,
-        // address _automationRegistrar,
         address _automationRegistry,
-        // address _admin,
-        // uint96 _initialUpkeepFunds,
+        address _automationRegistrar,
+        address _automationAdmin,
+        address _link,
         uint216 _startingAnswer,
         uint256 _allowedAnswerChangeLower,
         uint256 _allowedAnswerChangeUpper
@@ -195,28 +227,38 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         allowedAnswerChangeUpper = _allowedAnswerChangeUpper;
 
         automationRegistry = _automationRegistry;
+        automationRegistrar = _automationRegistrar;
+        automationAdmin = _automationAdmin;
+        link = ERC20(_link);
+    }
+
+    //============================== INITIALIZATION ===============================
+
+    function initialize(uint96 initialUpkeepFunds) external {
+        // This function is only callable once.
+        if (automationForwarder != address(0)) revert ERC4626SharePriceOracle__ForwarderAlreadySet();
+
+        link.safeTransferFrom(msg.sender, address(this), initialUpkeepFunds);
 
         // Create the upkeep.
+        IRegistrar registrar = IRegistrar(automationRegistrar);
+        IRegistry registry = IRegistry(automationRegistry);
+        IRegistrar.RegistrationParams memory params = IRegistrar.RegistrationParams({
+            name: string.concat(target.name(), " Share Price Oracle"),
+            encryptedEmail: hex"",
+            upkeepContract: address(this),
+            gasLimit: UPKEEP_GAS_LIMIT,
+            adminAddress: automationAdmin,
+            triggerType: 0,
+            checkData: hex"",
+            triggerConfig: hex"",
+            offchainConfig: hex"",
+            amount: initialUpkeepFunds
+        });
 
-        // IRegistrar registrar = IRegistrar(_automationRegistrar);
-        // IRegistry registry = IRegistry(_automationRegistry);
-        // IRegistrar.RegistrationParams memory params = IRegistrar.RegistrationParams{
-        //     name: string.concat(_target.name(), " Share Price Oracle"),
-        //     encryptedEmail: hex"",
-        //     upkeepContract: address(this),
-        //     gasLimit: 50_000,
-        //     adminAddress: _admin,
-        //     triggerType: 0,
-        //     checkData: hex"",
-        //     triggerConfig: hex"",
-        //     offchainConfig: hex"",
-        //     amount: _initialUpkeepFunds
-        // };
-
-        // // TODO need to approve registrar to spend LINK.
-        // uint256 upkeepID = registrar.registerUpkeep(params);
-        // automationForwarder = registry.getForwarder(upkeepID);
-        // msg.data;
+        link.safeApprove(automationRegistrar, initialUpkeepFunds);
+        uint256 upkeepID = registrar.registerUpkeep(params);
+        automationForwarder = registry.getForwarder(upkeepID);
     }
 
     //============================== CHAINLINK AUTOMATION ===============================
@@ -259,7 +301,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Save answer on chain, and update observations if needed.
      */
     function performUpkeep(bytes calldata performData) external {
-        if (msg.sender != automationRegistry) revert ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry();
+        if (msg.sender != automationForwarder) revert ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
         (uint216 sharePrice, uint64 currentTime) = abi.decode(performData, (uint216, uint64));
 
         // Verify atleast one of the upkeep conditions was met.
