@@ -7,6 +7,19 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 
 contract DestinationMinter is ERC20 {
-    // Supplied by a special CCIP Recieve to create the contract
-    constructor(string memory _name, string memory _symbol, uint8 _decimals) ERC20(_name, _symbol, _decimals) {}
+    address public immutable targetSource;
+
+    constructor(
+        address _targetSource,
+        string memory _name,
+        string memory _symbol,
+        uint8 _decimals
+    ) ERC20(_name, _symbol, _decimals) {
+        targetSource = _targetSource;
+    }
+
+    // CCIP Receive, sender must be targetSource
+    // mint shares to some address
+
+    // On token burn, send CCIP message to targetSource with amount, and to address
 }
