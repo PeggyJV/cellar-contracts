@@ -27,7 +27,7 @@ contract RedstonePriceFeedExtension is Extension {
      * @param dataFeedId the id of the datafeed to pull
      * @param heartbeat heartbeat in seconds
      *        - How often the price feed must be updated.
-     *        - If timestamp of last pricefeed is updated was more than heartbeat seconds ago
+     *        - If timestamp of last price feed is updated was more than heartbeat seconds ago
      *          revert.
      * @param IRedstoneAdapter the Redstone classic price feed address
      */
