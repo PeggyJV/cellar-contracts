@@ -12,6 +12,7 @@ import { CompoundV3ExtraLogic } from "src/modules/adaptors/Compound/v3/CompoundV
  * @notice Allows Cellars to borrow assets from CompoundV3 Lending Markets.
  * @author crispymangoes, 0xEinCodes
  * NOTE: In efforts to keep the smart contracts simple, the three main services for accounts with CompoundV3; supplying `BaseAssets`, supplying `Collateral`, and `Borrowing` against `Collateral` are isolated to three separate adaptor contracts. Therefore, repayment of open `borrow` positions are done within this adaptor, and cannot be carried out through the use of `CompoundV3SupplyAdaptor`.
+ * TODO: health factor logic. Adaptor checks the resulting health factor of the account position within CompoundV3 Lending Market after: increasing borrow, or decreasing collateral.
  */
 contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
     using SafeTransferLib for ERC20;
@@ -54,7 +55,7 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      */
     uint256 public immutable minimumHealthFactor;
 
-    constructor(bool _accountForInterest, uint256 _healthFactor) {
+    constructor(bool _accountForInterest, uint256 _healthFactor) CompoundV3ExtraLogic(_healthFactor) {
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         ACCOUNT_FOR_INTEREST = _accountForInterest;
         minimumHealthFactor = _healthFactor;
@@ -102,7 +103,8 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (CometInterface compMarket, ERC20 asset) = abi.decode(adaptorData, (CometInterface, ERC20));
 
-        _validateCompMarketAndAsset(compMarket, asset);
+        _validateCompMarket(compMarket);
+
         return compMarket.borrowBalanceOf(address(this)); // RETURNS: The balance of the base asset, including interest, borrowed by the specified account as an unsigned integer scaled up by 10 to the “decimals” integer in the asset’s contract. TODO: assess how we need to work with this return value, decimals-wise.
     }
 
@@ -132,8 +134,9 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      * NOTE: need to take the higher value btw minBorrowAmount and amountToBorrow or else will revert
      */
     function borrowFromCompoundV3(CometInterface _compMarket, uint256 amountToBorrow) public {
-        _validateCompMarketAndAsset(compMarket, asset); // TODO: fix - see other TODOs here re: health factor calcs.
-        ERC20 baseToken = ERC20(compMarket.baseToken());
+        _validateCompMarket(_compMarket);
+        // TODO: check that there is an active collateral position? Check that the resulting borrow wouldn't result in a liquidatable position? EIN - I think we do it after mutative  part of the tx cause then we can query what we need from the compound contracts vs incorrectly replicating it.
+        ERC20 baseToken = ERC20(_compMarket.baseToken());
 
         // TODO: do we want to have conditional logic handle when the strategist passes in `type(uint256).max`?
 
@@ -142,11 +145,12 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
 
         amountToBorrow = minBorrowAmount > amountToBorrow ? minBorrowAmount : amountToBorrow;
 
-        // TODO: do we want to compare requested `amountToBorrow` against what is allowed to be borrowed?
+        // TODO: do we want to compare requested `amountToBorrow` against what is allowed to be borrowed? We need to check how Compound V3 lending markets go about this. If there's not enough being supplied, do they just give you what is possible or...?
 
-        compMarket.withdraw(address(baseToken), amountToBorrow);
+        _compMarket.withdraw(address(baseToken), amountToBorrow);
 
-        // TODO: Health Factor logic implementation.
+        // Check if borrower is insolvent after this borrow tx, revert if they are
+        if (_checkLiquidity(_compMarket) < 0) revert CompoundV3DebtAdaptor_HealthFactorTooLow(address(_compMarket));
     }
 
     // `repayDebt`
@@ -157,8 +161,8 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      * @param _compMarket the Fraxlend Pair to repay debt from.
      * @param _debtTokenRepayAmount the amount of `debtToken` (`baseAsset`) to repay with.
      */
-    function repayFraxlendDebt(CometInterface _compMarket, uint256 _debtTokenRepayAmount) public {
-        _validateCompMarketAndAsset(_compMarket, asset); // TODO: fix - see other TODOs here re: health factor calcs.
+    function repayCompoundV3Debt(CometInterface _compMarket, uint256 _debtTokenRepayAmount) public {
+        _validateCompMarket(_compMarket); // TODO: fix - see other TODOs here re: health factor calcs.
         ERC20 baseToken = ERC20(compMarket.baseToken());
 
         _debtTokenRepayAmount = _maxAvailable(baseToken, _debtTokenRepayAmount); // TODO: check what happens when one tries to repay more than what they owe in CompoundV3, and what happens if they try to repay on an account that shows zero for their collateral, or for their loan?
@@ -175,91 +179,5 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
         _compMarket.supply(address(baseToken), _debtTokenRepayAmount);
 
         _revokeExternalApproval(tokenToRepay, address(_compMarket));
-    }
-
-    //============================================ Interface Helper Functions ===========================================
-
-    //============================== Interface Details ==============================
-    // The Frax Pair interface can slightly change between versions.
-    // To account for this, FTokenAdaptors (including debt and collateral adaptors) will use the below internal functions when
-    // interacting with Frax Pairs, this way new pairs can be added by creating a
-    // new contract that inherits from this one, and overrides any function it needs
-    // so it conforms with the new Frax Pair interface.
-
-    // Current versions in use for `Fraxlend Pair` include v1 and v2.
-
-    // IMPORTANT: This `DebtFTokenAdaptor.sol` is associated to the v2 version of `Fraxlend Pair`
-    // whereas DebtFTokenAdaptorV1 is actually associated to `FraxLendPairv1`.
-    // The reasoning to name it like this was to set up the base DebtFTokenAdaptor for the
-    // most current version, v2. This is in anticipation that more FraxLendPairs will
-    // be deployed following v2 in the near future. When later versions are deployed,
-    // then the described inheritance pattern above will be used.
-
-    // NOTE: FraxlendHealthFactorLogic.sol has helper functions used for both v1 and v2 fraxlend pairs (`_getHealthFactor()`).
-    // This function has a helper `_toBorrowAmount()` that corresponds to v2 by default, but is virtual and overwritten for
-    // fraxlendV1 pairs as seen in Collateral and Debt adaptors for v1 pairs.
-    //===============================================================================
-
-    /**
-     * @notice gets the asset of the specified fraxlend pair
-     * @param _fraxlendPair The specified Fraxlend Pair
-     * @return asset of fraxlend pair
-     */
-    function _fraxlendPairAsset(IFToken _fraxlendPair) internal view virtual returns (address asset) {
-        return _fraxlendPair.asset();
-    }
-
-    /**
-     * @notice Caller calls `addInterest` on specified 'v2' Fraxlend Pair
-     * @dev fraxlendPair.addInterest() calls into the respective version (v2 by default) of Fraxlend Pair
-     * @param fraxlendPair The specified Fraxlend Pair
-     */
-    function _addInterest(IFToken fraxlendPair) internal virtual {
-        fraxlendPair.addInterest(false);
-    }
-
-    /**
-     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified 'v2' Fraxlend Pair
-     * @dev This is one of the adjusted functions from v1 to v2. ftoken.toAssetShares() calls into the respective version (v2 by default) of Fraxlend Pair
-     * @param fToken The specified Fraxlend Pair
-     * @param amount The amount of asset
-     * @param roundUp Whether to round up after division
-     * @param previewInterest Whether to preview interest accrual before calculation
-     * @return number of asset shares
-     */
-    function _toAssetShares(
-        IFToken fToken,
-        uint256 amount,
-        bool roundUp,
-        bool previewInterest
-    ) internal view virtual returns (uint256) {
-        return fToken.toAssetShares(amount, roundUp, previewInterest);
-    }
-
-    /**
-     * @notice Borrow amount of borrowAsset in cellar account within fraxlend pair
-     * @param _borrowAmount The amount of borrowAsset to borrow
-     * @param _fraxlendPair The specified Fraxlend Pair
-     */
-    function _borrowAsset(uint256 _borrowAmount, IFToken _fraxlendPair) internal virtual {
-        _fraxlendPair.borrowAsset(_borrowAmount, 0, address(this)); // NOTE: explitly have the collateral var as zero so Strategists must do collateral increasing tx via the CollateralFTokenAdaptor for this fraxlendPair
-    }
-
-    /**
-     * @notice Caller calls `updateExchangeRate()` on specified FraxlendV2 Pair
-     * @param _fraxlendPair The specified FraxLendPair
-     * @return exchangeRate needed to calculate the current health factor
-     */
-    function _getExchangeRateInfo(IFToken _fraxlendPair) internal virtual returns (uint256 exchangeRate) {
-        exchangeRate = _fraxlendPair.exchangeRateInfo().highExchangeRate;
-    }
-
-    /**
-     * @notice Repay fraxlend pair debt by an amount
-     * @param _fraxlendPair The specified Fraxlend Pair
-     * @param sharesToRepay The amount of shares to repay
-     */
-    function _repayAsset(IFToken _fraxlendPair, uint256 sharesToRepay) internal virtual {
-        _fraxlendPair.repayAsset(sharesToRepay, address(this));
     }
 }

@@ -47,7 +47,7 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
     uint256 public immutable minimumHealthFactor;
 
     // TODO: might need a mapping of health factors for different assets because Compound accounts have different HFs for different assets (collateral). If this is needed it would be more-so for the internal calcs we do to ensure that any collateral adjustments don't affect the `minimumHealthFactor` which is a buffer above the minHealthFactor from Compound itself.
-    constructor(bool _accountForInterest, uint256 _healthFactor) {
+    constructor(bool _accountForInterest, uint256 _healthFactor) CompoundV3ExtraLogic(_healthFactor) {
         ACCOUNT_FOR_INTEREST = _accountForInterest;
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         minimumHealthFactor = _healthFactor;
@@ -155,7 +155,8 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
         // withdraw collateral
         _compMarket.withdraw(address(_asset), _amount); // Collateral adjustment is checked against `isBorrowCollateralized(src)` in CompoundV3 and will revert if uncollateralized result. See `withdrawCollateral()` for more context in `Comet.sol`
 
-        // TODO: add logic (incl. helper functions likely in HealthFactorLogic.sol) to calculate the new CR with this adjustment to compare against the `minimumHealthFactor` which should be higher than the minHealthFactor_CompMarket
+        // Check if cellar account is unsafe after this collateral withdrawal tx, revert if they are
+        if (_checkLiquidity(_compMarket) < 0)
+            revert CompoundV3CollateralAdaptor__HealthFactorTooLow(address(_compMarket));
     }
-
 }

@@ -9,11 +9,6 @@ import "./CometCore.sol";
  * @author Compound
  */
 abstract contract CometMainInterface is CometCore {
-    struct UserCollateral {
-        uint128 balance;
-        uint128 _reserved;
-    }
-
     error Absurd();
     error AlreadyInitialized();
     error BadAsset();
@@ -210,5 +205,12 @@ abstract contract CometMainInterface is CometCore {
     function initializeStorage() external virtual;
 
     // extra functions to access public vars as needed for Sommelier integration
+
+    /// @notice Mapping of users to collateral data per collateral asset
+    /// @dev See CometStorage.sol for struct UserCollateral
     function userCollateral(address, address) external returns (UserCollateral);
+
+    /// @notice Mapping of users to base principal and other basic data
+    /// @dev See CometStorage.sol for struct UserBasic
+    function userBasic(address) external returns (UserBasic);
 }
