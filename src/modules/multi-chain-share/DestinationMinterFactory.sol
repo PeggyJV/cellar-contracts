@@ -9,8 +9,11 @@ import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPRec
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { DestinationMinter } from "./DestinationMinter.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
 contract DestinationMinterFactory is Owned, CCIPReceiver {
+    using SafeTransferLib for ERC20;
+
     address public immutable sourceLockerFactory;
     uint64 public immutable sourceChainSelector;
     uint64 public immutable destinationChainSelector;
@@ -89,5 +92,7 @@ contract DestinationMinterFactory is Owned, CCIPReceiver {
         emit CallBackMessageId(messageId);
     }
 
-    // TODO function to withdraw ERC20s from this, so owner can withdraw LINK.
+    function adminWithdraw(ERC20 token, uint256 amount, address to) external onlyOwner {
+        token.safeTransfer(to, amount);
+    }
 }

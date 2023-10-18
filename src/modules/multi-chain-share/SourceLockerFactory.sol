@@ -8,8 +8,11 @@ import { CCIPReceiver } from "@ccip/contracts/src/v0.8/ccip/applications/CCIPRec
 import { Client } from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import { IRouterClient } from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 
 contract SourceLockerFactory is Owned, CCIPReceiver {
+    using SafeTransferLib for ERC20;
+
     address public destinationMinterFactory;
     uint64 public immutable sourceChainSelector;
     uint64 public immutable destinationChainSelector;
@@ -24,6 +27,11 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
         _;
     }
 
+    function setDestinationMinterFactory(address _destinationMinterFactory) external onlyOwner {
+        if (destinationMinterFactory != address(0)) revert("Factory already set");
+        destinationMinterFactory = _destinationMinterFactory;
+    }
+
     constructor(
         address _owner,
         address _router,
@@ -36,7 +44,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
         LINK = ERC20(_link);
     }
 
-    function deploy(ERC4626 target) external onlyOwner returns (bytes32 messageId) {
+    function deploy(ERC20 target) external onlyOwner returns (bytes32 messageId, address newLocker) {
         // Deploy a new Source Target
         SourceLocker locker = new SourceLocker(
             this.getRouter(),
@@ -53,7 +61,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit and non-strict sequencing mode
-                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
+                Client.EVMExtraArgsV1({ gasLimit: 2_000_000 /*, strict: false*/ })
             ),
             feeToken: address(LINK)
         });
@@ -67,6 +75,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
         LINK.approve(address(router), fees);
 
         messageId = router.ccipSend(destinationChainSelector, message);
+        newLocker = address(locker);
     }
 
     // CCIP Receive function will accept new DestinationMinter address, and corresponding source locker, and call SourceLocker:setTargetDestination()
@@ -84,5 +93,7 @@ contract SourceLockerFactory is Owned, CCIPReceiver {
         locker.setTargetDestination(targetDestination);
     }
 
-    // TODO function to withdraw ERC20s from this, so owner can withdraw LINK.
+    function adminWithdraw(ERC20 token, uint256 amount, address to) external onlyOwner {
+        token.safeTransfer(to, amount);
+    }
 }

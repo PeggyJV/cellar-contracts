@@ -58,7 +58,15 @@ contract SourceLocker is CCIPReceiver {
         onlyAllowlisted(any2EvmMessage.sourceChainSelector, abi.decode(any2EvmMessage.sender, (address)))
     {
         (uint256 amount, address to) = abi.decode(any2EvmMessage.data, (uint256, address));
-        shareToken.safeTransferFrom(address(this), to, amount);
+        shareToken.safeTransfer(to, amount);
+    }
+
+    function previewFee(uint256 amount, address to) public view returns (uint256 fee) {
+        Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
+
+        IRouterClient router = IRouterClient(this.getRouter());
+
+        fee = router.getFee(destinationChainSelector, message);
     }
 
     // on shareToken lock, transfer shareTokens in, and CCIP Send to targetDestination amount and to address
@@ -70,16 +78,7 @@ contract SourceLocker is CCIPReceiver {
         if (to == address(0)) revert("Invalid to");
         shareToken.safeTransferFrom(msg.sender, address(this), amount);
 
-        Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(targetDestination),
-            data: abi.encode(amount, to),
-            tokenAmounts: new Client.EVMTokenAmount[](0),
-            extraArgs: Client._argsToBytes(
-                // Additional arguments, setting gas limit and non-strict sequencing mode
-                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
-            ),
-            feeToken: address(LINK)
-        });
+        Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
 
         IRouterClient router = IRouterClient(this.getRouter());
 
@@ -92,5 +91,18 @@ contract SourceLocker is CCIPReceiver {
         LINK.approve(address(router), fees);
 
         messageId = router.ccipSend(destinationChainSelector, message);
+    }
+
+    function _buildMessage(uint256 amount, address to) internal view returns (Client.EVM2AnyMessage memory message) {
+        message = Client.EVM2AnyMessage({
+            receiver: abi.encode(targetDestination),
+            data: abi.encode(amount, to),
+            tokenAmounts: new Client.EVMTokenAmount[](0),
+            extraArgs: Client._argsToBytes(
+                // Additional arguments, setting gas limit and non-strict sequencing mode
+                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
+            ),
+            feeToken: address(LINK)
+        });
     }
 }

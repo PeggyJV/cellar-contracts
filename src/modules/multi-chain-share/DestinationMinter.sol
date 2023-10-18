@@ -54,21 +54,20 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         _mint(to, amount);
     }
 
+    function previewFee(uint256 amount, address to) public view returns (uint256 fee) {
+        Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
+
+        IRouterClient router = IRouterClient(this.getRouter());
+
+        fee = router.getFee(sourceChainSelector, message);
+    }
+
     // On token burn, send CCIP message to targetSource with amount, and to address
     function bridgeToSource(uint256 amount, address to, uint256 maxLinkToPay) external returns (bytes32 messageId) {
         if (to == address(0)) revert("Invalid to");
         _burn(msg.sender, amount);
 
-        Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(targetSource),
-            data: abi.encode(amount, to),
-            tokenAmounts: new Client.EVMTokenAmount[](0),
-            extraArgs: Client._argsToBytes(
-                // Additional arguments, setting gas limit and non-strict sequencing mode
-                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
-            ),
-            feeToken: address(LINK)
-        });
+        Client.EVM2AnyMessage memory message = _buildMessage(amount, to);
 
         IRouterClient router = IRouterClient(this.getRouter());
 
@@ -81,5 +80,18 @@ contract DestinationMinter is ERC20, CCIPReceiver {
         LINK.approve(address(router), fees);
 
         messageId = router.ccipSend(sourceChainSelector, message);
+    }
+
+    function _buildMessage(uint256 amount, address to) internal view returns (Client.EVM2AnyMessage memory message) {
+        message = Client.EVM2AnyMessage({
+            receiver: abi.encode(targetSource),
+            data: abi.encode(amount, to),
+            tokenAmounts: new Client.EVMTokenAmount[](0),
+            extraArgs: Client._argsToBytes(
+                // Additional arguments, setting gas limit and non-strict sequencing mode
+                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
+            ),
+            feeToken: address(LINK)
+        });
     }
 }
