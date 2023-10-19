@@ -84,8 +84,6 @@ abstract contract CompoundV3ExtraLogic is CometInterface {
     /**
      * @notice Validates that a given CompMarket and Asset are set up as a position in the Cellar.
      * @dev This function uses `address(this)` as the address of the Cellar.
-     * TODO: When calling this helper within txs from the CompoundV3DebtAdaptor, we assume that there are collateral positions within respective CompoundV3 lending market. If not then it should revert within ext. call to Compound contracts.
-     * This assumption is fine, because the health factor logic that compound carries out loops through all assets the respective account has as collateral within lending market.
      */
     function _validateCompMarket(CometInterface _compMarket) internal view virtual {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_compMarket)));
@@ -105,7 +103,6 @@ abstract contract CompoundV3ExtraLogic is CometInterface {
             revert CompoundV3ExtraLogic__MarketAndAssetPositionsMustBeTracked(address(_compMarket), address(_asset));
     }
 
-    // TODO: EIN THIS IS WHERE YOU LEFT OFF - YOU JUST BROUGHT IN THE MATH METHODS AND EVERYTHING ELSE NEEDED TO MAKE THIS WORK... IN THEORY. YOU'LL NEED TO GET IT TO COMPILE, BUT ALSO YOU NEED TO PASS IN A PARAM OR SET THE HEALTH FACTOR AND MULTIPLY IT BY THE LOOPED INCREMENTAL SUM IN THIS FUNCTION'S IMPLEMENTATION.
     function _checkLiquidity(CometInterface _compMarket) internal view virtual returns (int liquidity) {
         UserBasic userBasic = _compMarket.userBasic(address(this)); // struct should be accessible via extensions/inheritance within CometMainInterface
         int104 principal = userBasic.principal;
@@ -121,10 +118,6 @@ abstract contract CompoundV3ExtraLogic is CometInterface {
 
         for (uint8 i = 0; i < numAssets; ) {
             if (isInAsset(assetsIn, i)) {
-                if (liquidity >= 0) {
-                    return false;
-                }
-
                 AssetInfo memory asset = getAssetInfo(i);
                 uint newAmount = mulPrice(
                     userCollateral[account][asset.asset].balance,
@@ -133,7 +126,7 @@ abstract contract CompoundV3ExtraLogic is CometInterface {
                 );
                 liquidity += signed256(
                     mulFactor(newAmount, (asset.liquidateCollateralFactor) * (1 / minimumHealthFactor))
-                ); // TODO: EIN - Thinking of having a health factor applied to this to get a buffered amount. So that means it's either a constructor specified amount in this contract, or it is a constant in this contract. Leaning towards a constructor.
+                ); // TODO: EIN - just need to get the math to compile and work in tests.
             }
             unchecked {
                 i++;

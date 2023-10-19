@@ -13,16 +13,15 @@ import { CompoundV3ExtraLogic } from "src/modules/adaptors/Compound/v3/CompoundV
  *      See CompoundV3CollateralAdaptor for collateral provision functionality.
  * @notice Allows Cellars to supply `BaseAsset` to CompoundV3 Lending Markets. When adding `BaseAsset`, CompoundV3 mints receiptTokens to the Cellar.
  * @author crispymangoes, 0xEinCodes
- * NOTE: is it better to query for the `baseAsset` per compound lending market or have it stored in here? I guess just query cause there could be more lending markets in the future? Also we want this to be agnostic to other chains too.
  */
 contract CompoundV3SupplyAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address CompoundMarket)
+    // adaptorData = abi.encode(address compMarket)
     // Where:
-    // `CompoundMarket` is the CompoundV3 Lending Market address that this adaptor is working with
+    // `compMarket` is the CompoundV3 Lending Market address that this adaptor is working with
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -31,6 +30,11 @@ contract CompoundV3SupplyAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      * @notice Attempted to supply `baseAsset` when Cellar has an open borrow position.
      */
     error CompoundV3SupplyAdaptor__AccountHasOpenBorrow(address compMarket);
+
+    /**
+     * @notice Attempted to withdraw `baseAsset` when Cellar has no open supply position in lending market.
+     */
+    error CompoundV3SupplyAdaptor__AccountHasNoSupplyPosition(address compMarket);
 
     //============================================ Global Functions ===========================================
     /**
@@ -49,17 +53,16 @@ contract CompoundV3SupplyAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      * @param amount the amount of `baseAssets` to lend on CompoundV3
      * @param adaptorData adaptor data containing the abi encoded fToken
      * @dev configurationData is NOT used
-     * TODO: If the `asset` isn't the `baseAsset` then this function will revert.
-     * TODO: If the calling cellar already has an open borrow position or collateral position, we need to revert because Strategist must use other adaptors when dealing with collateral and borrow positions. CHECK to see if it reverts on its own within Compound via testing.
+     * TODO: sort out if it is a good design to have strategists able to supply baseAsset even if they have collateral, BUT NOT a borrow position. Alternatively, we have it so they cannot supply BaseAsset if they even have a collateral position (meaning collateral position leads to borrow position). For now, I'll design it so it only checks if there is debt already, if not, then we'll allow supply of the baseAsset. But if it wants to open a borrow position, it has to have a supply balance of zero.
      */
     function deposit(uint256 amount, bytes memory adaptorData, bytes memory) public override {
         // Supply assets to CompoundV3 Lending Market
         CometInterface compMarket = abi.decode(adaptorData, (CometInterface));
         _validateCompMarket(compMarket);
+        _checkBorrowPosition(compMarket);
         ERC20 baseAsset = ERC20(compMarket.baseToken());
         baseAsset.safeApprove(address(compMarket), amount);
         compMarket.supply(baseAsset, amount);
-
         // Zero out approvals if necessary.
         _revokeExternalApproval(asset, address(compMarket));
     }
@@ -75,10 +78,11 @@ contract CompoundV3SupplyAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
     function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public pure override {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
-
         // Withdraw assets from CompoundV3 Lending Market
         CometInterface compMarket = abi.decode(adaptorData, CometInterface);
+
         _validateCompMarket(compMarket);
+        _checkSupplyPosition(compMarket);
         ERC20 baseAsset = ERC20(compMarket.baseToken());
 
         uint256 availableBaseAsset = compMarket.balanceOf(address(this));
@@ -131,30 +135,41 @@ contract CompoundV3SupplyAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      */
     function supply(CometInterface _compMarket, uint256 _amount) public {
         _validateCompMarket(_compMarket);
+        _checkBorrowPosition(_compMarket);
         ERC20 baseAsset = ERC20(_compMarket.baseToken());
-
         uint256 amountToAdd = _maxAvailable(baseAsset, _amount);
-
         address compMarketAddress = address(_compMarket);
         asset.safeApprove(compMarketAddress, amountToAdd);
         _compMarket.supply(baseAsset, amountToAdd);
-
         // Zero out approvals if necessary.
         _revokeExternalApproval(baseAsset, compMarketAddress);
     }
 
     /**
-     * @notice Allows strategists to withdraw Collateral
+     * @notice Allows strategists to withdraw supply assets
      * @param _compMarket The specified CompoundV3 Lending Market
      * @param _asset The specified asset (ERC20) to withdraw as collateral
      * @param _amount The amount of `asset` token to transfer to CompMarket as collateral
      */
-    function withdrawCollateral(CometInterface _compMarket, uint256 _amount) public {
+    function withdrawSupply(CometInterface _compMarket, uint256 _amount) public {
         _validateCompMarket(_compMarket);
+        _checkSupplyPosition(_compMarket);
         ERC20 baseAsset = ERC20(_compMarket.baseToken());
         uint256 availableBaseAsset = _compMarket.balanceOf(address(this));
         _amount = availableBaseAsset > _amount ? availableBaseAsset : _amount;
         // withdraw collateral
         _compMarket.withdraw(address(baseAsset), _amount);
+    }
+
+    /// helpers
+
+    function _checkSupplyPosition(CometInterface _compMarket) internal {
+        if (_compMarket.balanceOf(address(this)) == 0)
+            revert CompoundV3SupplyAdaptor__AccountHasNoSupplyPosition(address(_compMarket));
+    }
+
+    function _checkBorrowPosition(CometInterface _compMarket) internal {
+        if (_compMarket.borrowBalanceOf(address(this)) != 0)
+            revert CompoundV3SupplyAdaptor__AccountHasOpenBorrow(address(_compMarket));
     }
 }

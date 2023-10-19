@@ -12,17 +12,15 @@ import { CompoundV3ExtraLogic } from "src/modules/adaptors/Compound/v3/CompoundV
  *      See CompoundV3DebtAdaptor for borrowing functionality.
  * @notice Allows Cellars to add Collateral to CompoundV3 Lending Markets. When adding collateral, CompoundV3 does not mint receiptTokens and keeps tracks via internal accounting in Proxy contract.
  * @author crispymangoes, 0xEinCodes
- * TODO: depending on what Compound team says back to us, we may switch to add functionality to supply `baseAsset` to lending markets vs just being a dedicated  CollateralAdaptor. For now, we are making a separate adaptor to handle supplying the `baseAsset` though.
- * TODO: use or remove minimumHealthFactor aspects
  */
 contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address CompoundMarket, address asset)
+    // adaptorData = abi.encode(address compMarket, address asset)
     // Where:
-    // `CompoundMarket` is the CompoundV3 Lending Market address and `asset` is the address of the ERC20 that this adaptor is working with
+    // `compMarket` is the CompoundV3 Lending Market address and `asset` is the address of the ERC20 that this adaptor is working with
     //================= Configuration Data Specification =================
     // NA
     //====================================================================
@@ -33,10 +31,14 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
     error CompoundV3CollateralAdaptor__HealthFactorTooLow(address compMarket, address asset);
 
     /**
+     * @notice Attempted to deposit base token for respective lending market with collateral adaptor.
+     */
+    error CompoundV3CollateralAdaptor__CannotUseCollateralAdaptorForBaseToken(address compMarket, address asset);
+
+    /**
      * @notice This bool determines how this adaptor accounts for interest.
      *         True: Account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
      *         False: Do not account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
-     * TODO: I believe it would be false.
      */
     bool public immutable ACCOUNT_FOR_INTEREST;
 
@@ -46,9 +48,8 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
      */
     uint256 public immutable minimumHealthFactor;
 
-    // TODO: might need a mapping of health factors for different assets because Compound accounts have different HFs for different assets (collateral). If this is needed it would be more-so for the internal calcs we do to ensure that any collateral adjustments don't affect the `minimumHealthFactor` which is a buffer above the minHealthFactor from Compound itself.
     constructor(bool _accountForInterest, uint256 _healthFactor) CompoundV3ExtraLogic(_healthFactor) {
-        ACCOUNT_FOR_INTEREST = _accountForInterest;
+        ACCOUNT_FOR_INTEREST = _accountForInterest; // should be set to true since CompoundV3 protocol keeps amounts up to date.
         _verifyConstructorMinimumHealthFactor(_healthFactor);
         minimumHealthFactor = _healthFactor;
     }
@@ -70,11 +71,11 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
      * @param amount the amount of assets to supply  to specified CompoundV3 Lending Market
      * @param adaptorData the CompMarket and Asset combo the Cellar position corresponds to
      * @dev configurationData is NOT used
-     * TODO: If the `asset` is the `baseAsset` we may have to change this adaptor to not allow it. This is ONLY if we are having a separate adaptor to handle supplying the `baseAsset` to the CompMarket. Recall that `BaseAssets` are handled differently within CompoundV3: src (cellar) gets receiptToken, and more `baseAssets` over time upon redemption due to lending APY.
      */
     function deposit(uint256 amount, bytes memory adaptorData, bytes memory) public override {
         // Supply assets to CompoundV3 Lending Market
         (CometInterface compMarket, ERC20 asset) = abi.decode(adaptorData, (CometInterface, ERC20));
+        _checkForBaseToken(compMarket, asset);
         _validateCompMarketAndAsset(compMarket, asset);
         asset.safeApprove(address(compMarket), amount);
         compMarket.supply(asset, amount);
@@ -86,7 +87,6 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
     /**
      * @notice User withdraws are NOT allowed from this position.
      * NOTE: collateral withdrawal calls directly from users disallowed for now.
-     * TODO: don't allow user withdrawals, strategist has to unwind out of positions involving CompoundV3.
      */
     function withdraw(uint256, address, bytes memory, bytes memory) public pure override {
         revert BaseAdaptor__UserWithdrawsNotAllowed();
@@ -135,6 +135,8 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
      */
     function addCollateral(CometInterface _compMarket, ERC20 _asset, uint256 _amount) public {
         _validateCompMarketAndAsset(_compMarket, _asset);
+        _checkForBaseToken(_compMarket, _asset);
+
         uint256 amountToAdd = _maxAvailable(_asset, _amount);
         address compMarketAddress = address(_compMarket);
         asset.safeApprove(compMarketAddress, amountToAdd);
@@ -152,11 +154,21 @@ contract CompoundV3CollateralAdaptor is BaseAdaptor, CompoundHealthFactorLogic {
      */
     function withdrawCollateral(CometInterface _compMarket, ERC20 _asset, uint256 _amount) public {
         _validateCompMarketAndAsset(_compMarket, _asset);
+        _checkForBaseToken(_compMarket, _asset);
         // withdraw collateral
         _compMarket.withdraw(address(_asset), _amount); // Collateral adjustment is checked against `isBorrowCollateralized(src)` in CompoundV3 and will revert if uncollateralized result. See `withdrawCollateral()` for more context in `Comet.sol`
 
         // Check if cellar account is unsafe after this collateral withdrawal tx, revert if they are
         if (_checkLiquidity(_compMarket) < 0)
             revert CompoundV3CollateralAdaptor__HealthFactorTooLow(address(_compMarket));
+    }
+
+    /// helpers
+    function _checkForBaseToken(CometInterface _compMarket, ERC20 _asset) internal {
+        if (address(asset) == _compMarket.baseToken())
+            revert CompoundV3CollateralAdaptor__CannotUseCollateralAdaptorForBaseToken(
+                address(_compMarket),
+                address(_asset)
+            );
     }
 }

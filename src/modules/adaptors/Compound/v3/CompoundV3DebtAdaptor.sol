@@ -12,19 +12,15 @@ import { CompoundV3ExtraLogic } from "src/modules/adaptors/Compound/v3/CompoundV
  * @notice Allows Cellars to borrow assets from CompoundV3 Lending Markets.
  * @author crispymangoes, 0xEinCodes
  * NOTE: In efforts to keep the smart contracts simple, the three main services for accounts with CompoundV3; supplying `BaseAssets`, supplying `Collateral`, and `Borrowing` against `Collateral` are isolated to three separate adaptor contracts. Therefore, repayment of open `borrow` positions are done within this adaptor, and cannot be carried out through the use of `CompoundV3SupplyAdaptor`.
- * TODO: health factor logic. Adaptor checks the resulting health factor of the account position within CompoundV3 Lending Market after: increasing borrow, or decreasing collateral.
  */
 contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
-    //============================================ Notice ===========================================
-    // TODO: populate if needed for things like "kick" required, etc.
-
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address CompoundMarket, address asset)
+    // adaptorData = abi.encode(address compMarket)
     // Where:
-    // `CompoundMarket` is the CompoundV3 Lending Market address and `asset` is the address of the ERC20 that this adaptor is working with
+    // `compMarket` is the CompoundV3 Lending Market address that this adaptor is working with
     //================= Configuration Data Specification =================
     // NA
     //
@@ -37,15 +33,18 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
 
     /**
      * @notice Attempted repayment when no debt position in compMarket for cellar
-     * TODO: see if compound even allows this, like how Fraxlend seemed to allow it. I guess it shouldn't because it shouldn't allow a `supply` to be open when a `borrow` is open, and that logic should extend to if a `collateral` position is open.
      */
     error CompoundV3DebtAdaptor_CannotRepayNoDebt(address compMarket);
+
+    /**
+     * @notice
+     */
+    error CompoundV3DebtAdaptor_NotEnoughCollateralToBorrow(address compMarket);
 
     /**
      * @notice This bool determines how this adaptor accounts for interest.
      *         True: Account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
      *         False: Do not account for pending interest to be paid when calling `balanceOf` or `withdrawableFrom`.
-     * TODO: if account's debt balance is updated constantly then it always accounts for interest. If not, then we need to plan accordingly.
      */
     bool public immutable ACCOUNT_FOR_INTEREST;
 
@@ -101,7 +100,7 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      * @param adaptorData the CompMarket and Asset combo the Cellar position corresponds to
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (CometInterface compMarket, ERC20 asset) = abi.decode(adaptorData, (CometInterface, ERC20));
+        CometInterface compMarket = abi.decode(adaptorData, (CometInterface));
 
         _validateCompMarket(compMarket);
 
@@ -110,10 +109,9 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
 
     /**
      * @notice Returns `assetContract` from respective fraxlend pair, but this is most likely going to be FRAX.
-     * TODO: calculating the CR or health factor will determine if we need to have the collateralAsset as an adaptorData param. The question revolves around how the protocol keeps track of the different ceilings of each asset for the protocol vs the account balance of said collateral, and then the resultant `baseAsset` balance.
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        (CometInterface compMarket, ) = abi.decode(adaptorData, CometInterface, ERC20);
+        CometInterface compMarket = abi.decode(adaptorData, CometInterface);
         return ERC20(compMarket.baseToken());
     }
 
@@ -135,18 +133,19 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      */
     function borrowFromCompoundV3(CometInterface _compMarket, uint256 amountToBorrow) public {
         _validateCompMarket(_compMarket);
-        // TODO: check that there is an active collateral position? Check that the resulting borrow wouldn't result in a liquidatable position? EIN - I think we do it after mutative  part of the tx cause then we can query what we need from the compound contracts vs incorrectly replicating it.
+        int liquidity = _checkLiquidity(_compMarket);
+        if (liquidity < 0) revert CompoundV3DebtAdaptor_NotEnoughCollateralToBorrow(address(_compMarket));
         ERC20 baseToken = ERC20(_compMarket.baseToken());
 
-        // TODO: do we want to have conditional logic handle when the strategist passes in `type(uint256).max`?
-
+        if (amountToBorrow == type(uint256).max) {
+            amountToBorrow = uint256(liquidity); // liquidity, if a positive int, is the total amount of baseAsset borrowable from lending market for this respective account (cellar) atm
+        }
         // query compMarket to assess minBorrowAmount
         uint256 minBorrowAmount = uint256((_compMarket.getConfiguration(_compMarket)).baseBorrowMin); // see `CometConfiguration.sol` for `struct Configuration`
 
         amountToBorrow = minBorrowAmount > amountToBorrow ? minBorrowAmount : amountToBorrow;
 
-        // TODO: do we want to compare requested `amountToBorrow` against what is allowed to be borrowed? We need to check how Compound V3 lending markets go about this. If there's not enough being supplied, do they just give you what is possible or...?
-
+        // TODO: see how Compound handles a request for withdrawal but all of the baseAsset is being supplied. IIRC they give you what they have or revert... and they increase the supply APY exponentially to get enough to meet withdrawals. 
         _compMarket.withdraw(address(baseToken), amountToBorrow);
 
         // Check if borrower is insolvent after this borrow tx, revert if they are
@@ -162,12 +161,13 @@ contract CompoundV3DebtAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
      * @param _debtTokenRepayAmount the amount of `debtToken` (`baseAsset`) to repay with.
      */
     function repayCompoundV3Debt(CometInterface _compMarket, uint256 _debtTokenRepayAmount) public {
-        _validateCompMarket(_compMarket); // TODO: fix - see other TODOs here re: health factor calcs.
-        ERC20 baseToken = ERC20(compMarket.baseToken());
-
-        _debtTokenRepayAmount = _maxAvailable(baseToken, _debtTokenRepayAmount); // TODO: check what happens when one tries to repay more than what they owe in CompoundV3, and what happens if they try to repay on an account that shows zero for their collateral, or for their loan?
+        _validateCompMarket(_compMarket);
 
         uint256 debtToRepayAccCompoundV3 = _compMarket.borrowBalanceOf(address(this));
+        if (debtToRepayAccCompoundV3 == 0) revert CompoundV3DebtAdaptor_CannotRepayNoDebt(address(_compMarket));
+
+        ERC20 baseToken = ERC20(compMarket.baseToken());
+        _debtTokenRepayAmount = _maxAvailable(baseToken, _debtTokenRepayAmount); // TODO: check what happens when one tries to repay more than what they owe in CompoundV3, and what happens if they try to repay on an account that shows zero for their collateral, or for their loan?
 
         _debtTokenRepayAmount = debtToRepayAccCompoundV3 < _debtTokenRepayAmount
             ? debtToRepayAccCompoundV3
