@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16; // TODO: update to 0.8.21
+pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { CometInterface } from "src/interfaces/external/Compound/CometInterface.sol";
@@ -148,7 +148,6 @@ contract CompoundV3SupplyAdaptor is BaseAdaptor, CompoundV3ExtraLogic {
     /**
      * @notice Allows strategists to withdraw supply assets
      * @param _compMarket The specified CompoundV3 Lending Market
-     * @param _asset The specified asset (ERC20) to withdraw as collateral
      * @param _amount The amount of `asset` token to transfer to CompMarket as collateral
      */
     function withdrawSupply(CometInterface _compMarket, uint256 _amount) public {

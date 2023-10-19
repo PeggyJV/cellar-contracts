@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.16; // TODO: update to 0.8.21
+pragma solidity 0.8.21;
 import { ERC20 } from "src/modules/adaptors/BaseAdaptor.sol";
 
 import { Math } from "src/utils/Math.sol";
@@ -45,21 +45,11 @@ abstract contract CompoundV3ExtraLogic is CometInterface {
     }
 
     /**
-     * @notice Minimum Health Factor enforced after every borrow.
-     * @notice Overwrites strategist set minimums if they are lower.
-     */
-    uint256 public immutable minimumHealthFactor;
-
-    constructor(bool _accountForInterest, address _frax, uint256 _healthFactor) {
-        minimumHealthFactor = _healthFactor;
-    }
-
-    /**
      * @notice Get current collateral balance for caller in specified CompMarket and Collateral Asset.
      * @dev Queries the `CometStorage.sol` nested mapping for struct UserCollateral.
-     * @param _fraxlendPair The specified Fraxlend Pair
-     * @param _user The specified user
-     * @return collateralBalance of user in fraxlend pair
+     * @param _compMarket The specified CompoundV3 lending market
+     * @param _asset The specified asset being used as collateral
+     * @return collateralBalance of user in CompoundV3 lending market
      */
     function _userCollateralBalance(
         CometInterface _compMarket,
@@ -112,7 +102,7 @@ abstract contract CompoundV3ExtraLogic is CometInterface {
         } // EIN: this just means that it was a non-borrow position, because `principal` is a signed integer, so if it's greater than 0, it is not a borrow position.
 
         uint16 assetsIn = userBasic[account].assetsIn; // EIN - collateral indices
-        int liquidity = signedMulPrice(presentValue(principal), getPrice(baseTokenPriceFeed), uint64(baseScale));
+        liquidity = signedMulPrice(presentValue(principal), getPrice(baseTokenPriceFeed), uint64(baseScale));
 
         numAssets = _compMarket.numAssets();
 
