@@ -48,7 +48,7 @@ contract DeployCellarWithShareLockPeriodScript is Script, MainnetAddresses {
             shareSupplyCap
         );
 
-        cellar.transferOwnership(testStrategist);
+        cellar.transferOwnership(devStrategist);
 
         vm.stopBroadcast();
     }

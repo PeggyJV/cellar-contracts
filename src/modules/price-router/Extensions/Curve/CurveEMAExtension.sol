@@ -2,14 +2,7 @@
 pragma solidity 0.8.21;
 
 import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Extensions/Extension.sol";
-
-interface CurvePool {
-    function price_oracle() external view returns (uint256);
-
-    function price_oracle(uint256 k) external view returns (uint256);
-
-    function coins(uint256 i) external view returns (address);
-}
+import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 
 /**
  * @title Sommelier Price Router Curve EMA Extension
@@ -84,6 +77,10 @@ contract CurveEMAExtension is Extension {
         price = assetPrice.mulDivDown(priceInAsset, 10 ** coins0.decimals());
     }
 
+    /**
+     * @notice Helper functions to get the zero index of coins.
+     * @dev Handles cases where Curve Pool uses ETH instead of WETH.
+     */
     function getCoinsZero(CurvePool pool) public view returns (ERC20) {
         ERC20 coins0 = ERC20(pool.coins(0));
         // Handle Curve Pools that use Curve ETH instead of WETH.

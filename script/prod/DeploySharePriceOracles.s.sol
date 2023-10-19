@@ -81,7 +81,7 @@ contract DeploySharePriceOraclesScript is Script, MainnetAddresses {
                 _observationsToUse,
                 automationRegistryV2,
                 automationRegistrarV2,
-                testStrategist,
+                devStrategist,
                 address(LINK),
                 _startingAnswer,
                 _allowedAnswerChangeLower,
