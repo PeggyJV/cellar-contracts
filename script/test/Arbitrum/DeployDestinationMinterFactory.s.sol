@@ -14,10 +14,10 @@ import "forge-std/Script.sol";
 contract DeployDestinationMinterFactoryScript is Script {
     address public owner = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
     address public router = 0xD0daae2231E9CB96b94C8512223533293C3693Bf;
-    uint64 public sourceChainSelector = 6101244977088475029;
+    uint64 public sourceChainSelector = 14767482510784806043;
     uint64 public destinationChainSelector = 16015286601757825753;
     address public LINK = 0x779877A7B0D9E8603169DdbD7836e478b4624789;
-    address public sourceLockerFactory = 0xe78D206DE3ef350FC66c0933c6c0B5fD16029D49;
+    address public sourceLockerFactory = 0xDD429e2A21057D5740FE146aCE6d16E54912Bb72;
 
     function run() external {
         vm.startBroadcast();
@@ -30,6 +30,7 @@ contract DeployDestinationMinterFactoryScript is Script {
             LINK
         );
         ERC20(LINK).transfer(address(minterFactory), 10e18);
+
         vm.stopBroadcast();
     }
 }

@@ -89,7 +89,7 @@ contract DestinationMinter is ERC20, CCIPReceiver {
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit and non-strict sequencing mode
-                Client.EVMExtraArgsV1({ gasLimit: 200_000 /*, strict: false*/ })
+                Client.EVMExtraArgsV1({ gasLimit: 200_000, strict: false })
             ),
             feeToken: address(LINK)
         });
