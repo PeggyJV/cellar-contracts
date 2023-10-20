@@ -482,6 +482,31 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         assertApproxEqAbs(crvFToken.userCollateralBalance(address(cellar)), assets / 2, 1);
     }
 
+    // test strategist input param for _collateralAmount to be type(uint256).max
+    function testRemoveAllCollateralWithTypeUINT256Max(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+        initialAssets = cellar.totalAssets();
+        deal(address(CRV), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // carry out a proper addCollateral() call
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV1(CRV_FRAX_PAIR, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV1), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertEq(CRV.balanceOf(address(cellar)), initialAssets);
+
+        // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV1(type(uint256).max, crvFToken);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV1), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertEq(CRV.balanceOf(address(cellar)), assets + initialAssets);
+        assertEq(crvFToken.userCollateralBalance(address(cellar)), 0);
+    }
+
     // test attempting to removeCollateral() when the LTV would be too high as a result
     function testFailRemoveCollateralBecauseLTV(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
@@ -507,6 +532,20 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         crvFraxLendPair.addInterest();
         // try to removeCollateral but more than should be allowed
         adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV1(assets, crvFToken);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV1), callData: adaptorCalls });
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    CollateralFTokenAdaptor.CollateralFTokenAdaptor__HealthFactorTooLow.selector,
+                    CRV_FRAX_PAIR
+                )
+            )
+        );
+        cellar.callOnAdaptor(data);
+
+        // try again with type(uint256).max as specified amount
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV1(type(uint256).max, crvFToken);
         data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV1), callData: adaptorCalls });
 
         vm.expectRevert(
