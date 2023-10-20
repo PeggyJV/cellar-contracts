@@ -220,6 +220,7 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function testInterestAccrual(uint256 assets) external {
         assets = bound(assets, 0.1e18, 1_000_000_000e18);
+
         deal(address(rETH_wETH_BPT), address(this), assets);
         cellar.deposit(assets, address(this)); // bpts sent to aura pool as seen in deposit() tests
 
@@ -240,26 +241,7 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         // Perform callOnAdaptor.
-        cellar.callOnAdaptor(data); // TODO: EIN, check the logs to see what reward tokens are claimed with bool set to false. Then compare to what it is as true.
-
-        console.log(
-            "OldBALRewards: %s,  NewBALRewards: %s, Delta: %s",
-            oldBALRewards,
-            BAL.balanceOf(address(cellar)),
-            BAL.balanceOf(address(cellar)) - oldBALRewards
-        ); // Deleta should be positive
-        console.log(
-            "OldAURARewards: %s,  NewAURARewards: %s, Delta: %s",
-            oldAURARewards,
-            AURA.balanceOf(address(cellar)),
-            AURA.balanceOf(address(cellar)) - oldAURARewards
-        ); // Delta shoudl be positive
-        console.log(
-            "OldBPTBalance: %s, NewBPTBalance: %s, Delta: %s",
-            oldBPTBalance,
-            rETH_wETH_BPT.balanceOf(address(cellar)),
-            rETH_wETH_BPT.balanceOf(address(cellar)) - oldBPTBalance
-        ); // Delta should be 0
+        cellar.callOnAdaptor(data); 
 
         assertGt(BAL.balanceOf(address(cellar)), oldBALRewards);
         assertGt(AURA.balanceOf(address(cellar)), oldAURARewards);
