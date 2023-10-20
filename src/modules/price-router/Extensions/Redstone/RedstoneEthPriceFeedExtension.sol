@@ -1,33 +1,43 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Extension, PriceRouter, ERC20 } from "src/modules/price-router/Extensions/Extension.sol";
+import { Extension, PriceRouter, ERC20, Math } from "src/modules/price-router/Extensions/Extension.sol";
 import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
 
 /**
- * @title Sommelier Price Router Redstone Classic Extension
+ * @title Sommelier Price Router Redstone Classic Extension Eth
  * @notice Allows the Price Router to price assets using Redstone Classic oracles.
  * @author crispymangoes
  */
-contract RedstonePriceFeedExtension is Extension {
-    constructor(PriceRouter _priceRouter) Extension(_priceRouter) {}
+contract RedstoneEthPriceFeedExtension is Extension {
+    using Math for uint256;
+    ERC20 public immutable WETH;
+
+    constructor(PriceRouter _priceRouter, address _weth) Extension(_priceRouter) {
+        WETH = ERC20(_weth);
+    }
 
     /**
      * @notice Redstone Classic price feed is stale.
      */
-    error RedstonePriceFeedExtension__STALE_PRICE();
+    error RedstoneEthPriceFeedExtension__STALE_PRICE();
 
     /**
      * @notice Redstone Classic price feed price is zero.
      */
-    error RedstonePriceFeedExtension__ZERO_PRICE();
+    error RedstoneEthPriceFeedExtension__ZERO_PRICE();
+
+    /**
+     * @notice WETH is not supported in the price router.
+     */
+    error RedstoneEthPriceFeedExtension_WETH_NOT_SUPPORTED();
 
     /**
      * @notice Extension storage
      * @param dataFeedId the id of the datafeed to pull
      * @param heartbeat heartbeat in seconds
      *        - How often the price feed must be updated.
-     *        - If timestamp of last price feed is updated was more than heartbeat seconds ago
+     *        - If timestamp of last pricefeed is updated was more than heartbeat seconds ago
      *          revert.
      * @param IRedstoneAdapter the Redstone classic price feed address
      */
@@ -54,11 +64,14 @@ contract RedstonePriceFeedExtension is Extension {
         (, uint128 updatedAt) = stor.redstoneAdapter.getTimestampsFromLatestUpdate();
 
         uint256 timeSinceLastUpdate = block.timestamp - updatedAt;
-        if (timeSinceLastUpdate > stor.heartbeat) revert RedstonePriceFeedExtension__STALE_PRICE();
+        if (timeSinceLastUpdate > stor.heartbeat) revert RedstoneEthPriceFeedExtension__STALE_PRICE();
 
         uint256 price = stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
 
-        if (price == 0) revert RedstonePriceFeedExtension__ZERO_PRICE();
+        if (price == 0) revert RedstoneEthPriceFeedExtension__ZERO_PRICE();
+
+        // Make sure price router supports WETH.
+        if (!priceRouter.isSupported(WETH)) revert RedstoneEthPriceFeedExtension_WETH_NOT_SUPPORTED();
 
         extensionStorage[asset] = stor;
     }
@@ -73,10 +86,19 @@ contract RedstonePriceFeedExtension is Extension {
         (, uint128 updatedAt) = stor.redstoneAdapter.getTimestampsFromLatestUpdate();
 
         uint256 timeSinceLastUpdate = block.timestamp - updatedAt;
-        if (timeSinceLastUpdate > stor.heartbeat) revert RedstonePriceFeedExtension__STALE_PRICE();
+        if (timeSinceLastUpdate > stor.heartbeat) revert RedstoneEthPriceFeedExtension__STALE_PRICE();
 
         uint256 price = stor.redstoneAdapter.getValueForDataFeed(stor.dataFeedId);
-        if (price == 0) revert RedstonePriceFeedExtension__ZERO_PRICE();
+        if (price == 0) revert RedstoneEthPriceFeedExtension__ZERO_PRICE();
+
+        // ETH price is given in 8 decimals, scale it up by 10 decimals,
+        // so it has the same decimals as WETH.
+        price = price.changeDecimals(8, 18); // 18 being how many decimals WETH has.
+
+        // Convert price from ETH to USD.
+        uint256 ethPrice = priceRouter.getPriceInUSD(WETH);
+        price = price.mulDivDown(ethPrice, 1e18);
+
         return price;
     }
 }
