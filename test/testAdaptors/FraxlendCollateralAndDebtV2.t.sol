@@ -500,6 +500,55 @@ contract CellarFraxLendCollateralAndDebtTestV2 is MainnetStarterTest, AdaptorHel
         assertEq(mkrFToken.userCollateralBalance(address(cellar)), 0);
     }
 
+    // Test removal of collateral but with taking a loan out and repaying it in full first. Also tests type(uint256).max with removeCollateral.
+    // TODO: add stateless fuzzing, it is reverting when testing with 1000e18 for assets for example. Need to further investigate.
+    function testRemoveCollateralWithTypeUINT256MaxAfterRepay() external {
+        // assets = bound(assets, 0.1e18, 100_000e18);
+        uint256 assets = 100e18;
+        initialAssets = cellar.totalAssets();
+        deal(address(MKR), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // addCollateral() call
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV2(MKR_FRAX_PAIR, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Take out a FRAX loan.
+        uint256 fraxToBorrow = priceRouter.getValue(MKR, assets / 2, FRAX);
+        adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV2(MKR_FRAX_PAIR, fraxToBorrow);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // start repayment sequence
+        mkrFraxLendPair.addInterest(false);
+        uint256 maxAmountToRepay = type(uint256).max; // set up repayment amount to be cellar's total FRAX.
+        deal(address(FRAX), address(cellar), fraxToBorrow * 2);
+
+        // Repay the loan.
+        adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV2(mkrFToken, maxAmountToRepay);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqAbs(
+            getFraxlendDebtBalance(MKR_FRAX_PAIR, address(cellar)),
+            0,
+            1,
+            "Cellar should have zero debt recorded within Fraxlend Pair"
+        );
+        assertLt(FRAX.balanceOf(address(cellar)), fraxToBorrow * 2, "Cellar should have zero debtAsset");
+
+        // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV2(type(uint256).max, mkrFToken);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertEq(MKR.balanceOf(address(cellar)), assets + initialAssets);
+        assertEq(mkrFToken.userCollateralBalance(address(cellar)), 0);
+    }
+
     // test attempting to removeCollateral() when the LTV would be too high as a result
     function testFailRemoveCollateralBecauseLTV(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);

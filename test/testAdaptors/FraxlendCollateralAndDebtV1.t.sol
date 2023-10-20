@@ -507,6 +507,54 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         assertEq(crvFToken.userCollateralBalance(address(cellar)), 0);
     }
 
+    // Test removal of collateral but with taking a loan out and repaying it in full first. Also tests type(uint256).max with removeCollateral.
+    function testRemoveCollateralWithTypeUINT256MaxAfterRepay() external {
+        // assets = bound(assets, 0.1e18, 100_000e18);
+        uint256 assets = 1e18;
+        initialAssets = cellar.totalAssets();
+        deal(address(CRV), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // addCollateral() call
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddCollateralWithFraxlendV1(CRV_FRAX_PAIR, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV1), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // Take out a FRAX loan.
+        uint256 fraxToBorrow = priceRouter.getValue(CRV, assets / 2, FRAX);
+        adaptorCalls[0] = _createBytesDataToBorrowWithFraxlendV1(CRV_FRAX_PAIR, fraxToBorrow);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV1), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // start repayment sequence
+        crvFraxLendPair.addInterest();
+        uint256 maxAmountToRepay = type(uint256).max; // set up repayment amount to be cellar's total FRAX.
+        deal(address(FRAX), address(cellar), fraxToBorrow * 2);
+
+        // Repay the loan.
+        adaptorCalls[0] = _createBytesDataToRepayWithFraxlendV1(crvFToken, maxAmountToRepay);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(debtFTokenAdaptorV1), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertApproxEqAbs(
+            getFraxlendDebtBalance(CRV_FRAX_PAIR, address(cellar)),
+            0,
+            1,
+            "Cellar should have zero debt recorded within Fraxlend Pair"
+        );
+        assertLt(FRAX.balanceOf(address(cellar)), fraxToBorrow * 2, "Cellar should have zero debtAsset");
+
+        // no collateral interest or anything has accrued, should be able to withdraw everything and have nothing left in it.
+        adaptorCalls[0] = _createBytesDataToRemoveCollateralWithFraxlendV1(type(uint256).max, crvFToken);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(collateralFTokenAdaptorV1), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        assertEq(CRV.balanceOf(address(cellar)), assets + initialAssets);
+        assertEq(crvFToken.userCollateralBalance(address(cellar)), 0);
+    }
+
     // test attempting to removeCollateral() when the LTV would be too high as a result
     function testFailRemoveCollateralBecauseLTV(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
