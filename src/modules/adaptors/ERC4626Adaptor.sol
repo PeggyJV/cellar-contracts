@@ -8,7 +8,6 @@ import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
  * @title Generic ERC4626 Vault Adaptor (basically a copy of Cellar Adaptor w/ virtual function sigs to enable inheritance and overriding).
  * @notice Allows Cellars to interact with other ERC4626 contracts.
  * @author crispymangoes, 0xEinCodes
- * @dev this is a WIP and not audited yet.
  * NOTE: `CellarAdaptor.sol` was used, and is still used for nested Cellar positions for Sommelier Cellars (ERC4626 Vaults). Integrations into Aura, among other ERC4626 contracts outside of Sommelier have led to using a separate ERC4626Vault.sol file that allows more flexibility via inheritance.
  * NOTE: `Cellar` is still used throughout this contract at times because it is a contract made for the Sommelier protocol (has extra pricing and accounting mechanics, etc.)
  */
@@ -33,7 +32,7 @@ contract ERC4626Adaptor is BaseAdaptor {
     /**
      * @notice Strategist attempted to interact with a erc4626Vault with no position setup for it.
      */
-    error ERC4626Adaptor__CellarPositionNotUsed(address erc4626Vault);
+    error ERC4626Adaptor__ERC4626PositionNotUsed(address erc4626Vault);
 
     //============================================ Global Functions ===========================================
     /**
@@ -54,7 +53,7 @@ contract ERC4626Adaptor is BaseAdaptor {
      * @dev configurationData is NOT used
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public virtual override {
-        // Deposit assets to `cellar`.
+        // Deposit assets to `vault`.
         ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
         _verifyERC4626PositionIsUsed(address(erc4626Vault));
         ERC20 asset = erc4626Vault.asset();
@@ -86,7 +85,7 @@ contract ERC4626Adaptor is BaseAdaptor {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        // Withdraw assets from `cellar`.
+        // Withdraw assets from `Vault`.
         ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
         _verifyERC4626PositionIsUsed(address(erc4626Vault));
         erc4626Vault.withdraw(assets, receiver, address(this));
@@ -134,7 +133,7 @@ contract ERC4626Adaptor is BaseAdaptor {
      * @notice Allows strategists to deposit into ERC4626 positions.
      * @dev Uses `_maxAvailable` helper function, see BaseAdaptor.sol
      * @param erc4626Vault the ERC4626 to deposit `assets` into
-     * @param assets the amount of assets to deposit into `cellar`
+     * @param assets the amount of assets to deposit into `Vault`
      */
     function depositToVault(ERC4626 erc4626Vault, uint256 assets) public {
         _verifyERC4626PositionIsUsed(address(erc4626Vault));
@@ -150,7 +149,7 @@ contract ERC4626Adaptor is BaseAdaptor {
     /**
      * @notice Allows strategists to withdraw from ERC4626 positions.
      * @param erc4626Vault the ERC4626 to withdraw `assets` from
-     * @param assets the amount of assets to withdraw from `cellar`
+     * @param assets the amount of assets to withdraw from `Vault`
      */
     function withdrawFromVault(ERC4626 erc4626Vault, uint256 assets) public {
         _verifyERC4626PositionIsUsed(address(erc4626Vault));
@@ -170,6 +169,6 @@ contract ERC4626Adaptor is BaseAdaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(erc4626Vault)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert ERC4626Adaptor__CellarPositionNotUsed(erc4626Vault);
+            revert ERC4626Adaptor__ERC4626PositionNotUsed(erc4626Vault);
     }
 }

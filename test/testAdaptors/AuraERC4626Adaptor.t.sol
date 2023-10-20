@@ -16,9 +16,6 @@ import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor
  * @notice Cellar Adaptor tests with Aura BPT Pools
  * @dev Mock datafeeds to be used for underlying BPTs. For tests, we'll go with rETH / wETH BPT pair. We'll use mock datafeeds for the constituent assets of this pair so we can warp forward to simulate reward accrual.
  * NOTE: transferrance of aura-wrapped BPT is not alowed as per their contracts
- * TODO: review with Crispy comments outlined within test code
- * TODO: test with other AuraPools perhaps?
- * TODO: carry out stateful fuzzing?
  */
 contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -75,7 +72,6 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, BAL_USD_FEED);
         priceRouter.addAsset(BAL, settings, abi.encode(stor), price);
 
-        // TODO: AURA doesn't have an AURA_USD Chainlink Feed. For now, we'll make it a mock price feed with WETH FEED
         price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
         priceRouter.addAsset(AURA, settings, abi.encode(stor), price);
@@ -83,7 +79,7 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Add rETH_wETH_BPT pricing.
         uint8[8] memory rateProviderDecimals;
         address[8] memory rateProviders;
-        ERC20[8] memory underlyings; // TODO: check with CRISPY to get underlying order correct
+        ERC20[8] memory underlyings;
         underlyings[0] = WETH;
         underlyings[1] = rETH;
         BalancerStablePoolExtension.ExtensionStorage memory extensionStor = BalancerStablePoolExtension
@@ -236,7 +232,6 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 oldBPTBalance = rETH_wETH_BPT.balanceOf(address(cellar));
 
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        // Withdraw FRAX from FraxLend.
         bool claimExtras = true;
         {
             bytes[] memory adaptorCalls = new bytes[](1);
@@ -246,6 +241,25 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Perform callOnAdaptor.
         cellar.callOnAdaptor(data); // TODO: EIN, check the logs to see what reward tokens are claimed with bool set to false. Then compare to what it is as true.
+
+        console.log(
+            "OldBALRewards: %s,  NewBALRewards: %s, Delta: %s",
+            oldBALRewards,
+            BAL.balanceOf(address(cellar)),
+            BAL.balanceOf(address(cellar)) - oldBALRewards
+        ); // Deleta should be positive
+        console.log(
+            "OldAURARewards: %s,  NewAURARewards: %s, Delta: %s",
+            oldAURARewards,
+            AURA.balanceOf(address(cellar)),
+            AURA.balanceOf(address(cellar)) - oldAURARewards
+        ); // Delta shoudl be positive
+        console.log(
+            "OldBPTBalance: %s, NewBPTBalance: %s, Delta: %s",
+            oldBPTBalance,
+            rETH_wETH_BPT.balanceOf(address(cellar)),
+            rETH_wETH_BPT.balanceOf(address(cellar)) - oldBPTBalance
+        ); // Delta should be 0
 
         assertGt(BAL.balanceOf(address(cellar)), oldBALRewards);
         assertGt(AURA.balanceOf(address(cellar)), oldAURARewards);
@@ -262,7 +276,6 @@ contract AuraERC4626AdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         mockRethUsd.setMockUpdatedAt(block.timestamp);
 
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        // Withdraw FRAX from FraxLend.
         bool claimExtras = true;
         {
             bytes[] memory adaptorCalls = new bytes[](1);
