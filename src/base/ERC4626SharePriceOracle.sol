@@ -3,7 +3,6 @@ pragma solidity 0.8.21;
 
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { Math } from "src/utils/Math.sol";
-import { Owned } from "@solmate/auth/Owned.sol";
 import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
 contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
@@ -195,7 +194,13 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      * @notice Leverages Automation V2 secure offchain computation to run expensive share price calculations offchain,
      *         then inject them onchain using `performUpkeep`.
      */
-    function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
+    function checkUpkeep(
+        bytes calldata checkData
+    ) external view virtual returns (bool upkeepNeeded, bytes memory performData) {
+        (upkeepNeeded, performData) = _checkUpkeep(checkData);
+    }
+
+    function _checkUpkeep(bytes calldata) internal view returns (bool upkeepNeeded, bytes memory performData) {
         // Get target share price.
         uint216 sharePrice = _getTargetSharePrice();
         // Read state from one slot.
@@ -228,7 +233,11 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     /**
      * @notice Save answer on chain, and update observations if needed.
      */
-    function performUpkeep(bytes calldata performData) external {
+    function performUpkeep(bytes calldata performData) external virtual {
+        _performUpkeep(performData);
+    }
+
+    function _performUpkeep(bytes calldata performData) internal {
         if (msg.sender != automationRegistry) revert ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry();
         (uint216 sharePrice, uint64 currentTime) = abi.decode(performData, (uint216, uint64));
 
