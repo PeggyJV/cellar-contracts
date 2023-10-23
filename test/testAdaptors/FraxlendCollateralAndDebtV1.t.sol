@@ -14,6 +14,7 @@ import "test/resources/MainnetStarter.t.sol";
  * @notice Test provision of collateral and borrowing on Fraxlend v1 pairs
  * @author 0xEinCodes, crispymangoes
  * @dev These are applied to FraxlendV1 Pair types and are the same tests carried out for FraxlendV1 pairs and the respective debt and collateral adaptors.
+ * @dev test with blocknumber = 18414005 bc of fraxlend pair conditions at this block otherwise modify fuzz test limits
  */
 contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -277,9 +278,8 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
     }
 
     // test taking loan w/ providing collateral to the wrong pair
-    function testTakingOutLoanInUntrackedPositionV1() external {
-        // assets = bound(assets, 0.1e18, 100_000e18);
-        uint256 assets = 1e18;
+    function testTakingOutLoanInUntrackedPositionV1(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(CRV), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -299,9 +299,8 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         cellar.callOnAdaptor(data);
     }
 
-    function testRepayingLoans() external {
-        // assets = bound(assets, 0.1e18, 100_000e18);
-        uint256 assets = 1e18;
+    function testRepayingLoans(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(CRV), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -339,7 +338,7 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
     }
 
     // okay just seeing if we can handle multiple fraxlend positions
-    // TODO: EIN - Reformat adaptorCall var names and troubleshoot why cvxFraxToBorrow has to be 1e18 right now
+    // TODO: EIN - Reformat adaptorCall var names and troubleshoot why cvxFraxToBorrow has to be 1e18 right now --> Theory: it has to do with the CVX pricing in the cellars?
     function testMultipleFraxlendPositions() external {
         uint256 assets = 1e18;
 
@@ -508,9 +507,8 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
     }
 
     // Test removal of collateral but with taking a loan out and repaying it in full first. Also tests type(uint256).max with removeCollateral.
-    function testRemoveCollateralWithTypeUINT256MaxAfterRepay() external {
-        // assets = bound(assets, 0.1e18, 100_000e18);
-        uint256 assets = 1e18;
+    function testRemoveCollateralWithTypeUINT256MaxAfterRepay(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(CRV), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -607,9 +605,8 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         cellar.callOnAdaptor(data);
     }
 
-    function testLTV() external {
-        // assets = bound(assets, 0.1e18, 100_000e18);
-        uint256 assets = 1e18;
+    function testLTV(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(CRV), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -655,9 +652,8 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
     }
 
     // TODO: CRISPY - please take a look at the fuzzing, was having issues with this.
-    function testRepayPartialDebt() external {
-        // assets = bound(assets, 0.1e18, 100_000e18);
-        uint256 assets = 1e18;
+    function testRepayPartialDebt(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         initialAssets = cellar.totalAssets();
         deal(address(CRV), address(this), assets);
         cellar.deposit(assets, address(this));
@@ -694,7 +690,9 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
     }
 
     // This check stops strategists from taking on any debt in positions they do not set up properly.
-    function testLoanInUntrackedPosition() external {
+    function testLoanInUntrackedPosition(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+
         uint32 fraxlendCollateralCVXPosition = 1_000_007; // fralendV1
         registry.trustPosition(
             fraxlendCollateralCVXPosition,
@@ -704,7 +702,6 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
         // purposely do not trust a fraxlendDebtCVXPosition
         cellar.addPositionToCatalogue(fraxlendCollateralCVXPosition);
         cellar.addPosition(5, fraxlendCollateralCVXPosition, abi.encode(0), false);
-        uint256 assets = 100_000e18;
         uint256 cvxFraxToBorrow = priceRouter.getValue(CVX, assets / 2, FRAX);
 
         deal(address(CVX), address(cellar), assets);
@@ -730,8 +727,9 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
     }
 
     // have strategist call repay function when no debt owed. Expect revert.
-    function testRepayingDebtThatIsNotOwed() external {
-        uint256 assets = 100_000e18;
+    function testRepayingDebtThatIsNotOwed(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+
         deal(address(CRV), address(this), assets);
         cellar.deposit(assets, address(this));
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
@@ -748,8 +746,8 @@ contract CellarFraxLendCollateralAndDebtTestV1 is MainnetStarterTest, AdaptorHel
     }
 
     // externalReceiver triggers when doing Strategist Function calls via adaptorCall.
-    function testBlockExternalReceiver() external {
-        uint256 assets = 100_000e18;
+    function testBlockExternalReceiver(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
         deal(address(CRV), address(this), assets);
         cellar.deposit(assets, address(this)); // holding position == collateralPosition w/ CRV FraxlendPair
         // Strategist tries to withdraw USDC to their own wallet using Adaptor's `withdraw` function.
