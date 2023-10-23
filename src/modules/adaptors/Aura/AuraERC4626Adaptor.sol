@@ -18,7 +18,7 @@ contract AuraERC4626Adaptor is ERC4626Adaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address auraPool) // TODO: CRISPY, the adaptor data comes out as an address even if we specify a different interface such as IERC4626 or ERC4626 right? So this should stay as `address auraPool` or should it be `ERC4626 auraPool`
+    // adaptorData = abi.encode(address auraPool)
     // Where:
     // `auraPool` is the AURA pool address position this adaptor is working with.
     //================= Configuration Data Specification =================
@@ -61,7 +61,7 @@ contract AuraERC4626Adaptor is ERC4626Adaptor {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_auraPool)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert AuraExtrasAdaptor__AuraPoolPositionsMustBeTracked(_auraPool); // TODO: troubleshoot uncommented implementation code here
+            revert AuraExtrasAdaptor__AuraPoolPositionsMustBeTracked(_auraPool);
     }
 
     //============================================ Interface Helper Functions ===========================================
@@ -73,7 +73,6 @@ contract AuraERC4626Adaptor is ERC4626Adaptor {
     //===============================================================================
 
     function _getRewards(IBaseRewardPool _auraPool, bool _claimExtras) internal virtual {
-        _auraPool.getReward(address(this), _claimExtras); // TODO: confirm that any and all reward tokens associated to this position will be transferred from this external call.
-        // emit event so there is a record of the strategist claiming rewards, marking down a clear record.
+        _auraPool.getReward(address(this), _claimExtras);
     }
 }
