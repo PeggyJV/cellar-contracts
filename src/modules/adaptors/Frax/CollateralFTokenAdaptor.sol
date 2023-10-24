@@ -150,6 +150,11 @@ contract CollateralFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
         _validateFToken(_fraxlendPair);
+
+        if (_collateralAmount == type(uint256).max) {
+            _collateralAmount = _userCollateralBalance(_fraxlendPair, address(this));
+        }
+
         // remove collateral
         _removeCollateral(_collateralAmount, _fraxlendPair);
         uint256 _exchangeRate = _getExchangeRateInfo(_fraxlendPair); // needed to calculate LTV

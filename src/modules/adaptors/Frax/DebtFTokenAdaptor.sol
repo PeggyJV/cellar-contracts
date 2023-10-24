@@ -167,7 +167,7 @@ contract DebtFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
         _validateFToken(_fraxlendPair);
         ERC20 tokenToRepay = ERC20(_fraxlendPairAsset(_fraxlendPair));
         uint256 debtTokenToRepay = _maxAvailable(tokenToRepay, _debtTokenRepayAmount);
-        uint256 sharesToRepay = _toAssetShares(_fraxlendPair, debtTokenToRepay, false, true);
+        uint256 sharesToRepay = _toBorrowShares(_fraxlendPair, debtTokenToRepay, false, true);
         uint256 sharesAccToFraxlend = _userBorrowShares(_fraxlendPair, address(this)); // get fraxlendPair's record of borrowShares atm
         if (sharesAccToFraxlend == 0) revert DebtFTokenAdaptor__CannotRepayNoDebt(address(_fraxlendPair)); // NOTE: from checking it out, unless `userBorrowShares[_borrower] -= _shares;` reverts, then fraxlendCore lets users repay FRAX w/ no limiters.
 
@@ -250,21 +250,21 @@ contract DebtFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
     }
 
     /**
-     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified 'v2' Fraxlend Pair
-     * @dev This is one of the adjusted functions from v1 to v2. ftoken.toAssetShares() calls into the respective version (v2 by default) of Fraxlend Pair
+     * @notice Converts a given asset amount to a number of borrow shares from specified 'v2' Fraxlend Pair
+     * @dev This is one of the adjusted functions from v1 to v2. ftoken.toBorrowAmount() calls into the respective version (v2 by default) of Fraxlend Pair
      * @param fToken The specified Fraxlend Pair
      * @param amount The amount of asset
      * @param roundUp Whether to round up after division
      * @param previewInterest Whether to preview interest accrual before calculation
-     * @return number of asset shares
+     * @return number of borrow shares
      */
-    function _toAssetShares(
+    function _toBorrowShares(
         IFToken fToken,
         uint256 amount,
         bool roundUp,
         bool previewInterest
     ) internal view virtual returns (uint256) {
-        return fToken.toAssetShares(amount, roundUp, previewInterest);
+        return fToken.toBorrowShares(amount, roundUp, previewInterest);
     }
 
     /**
