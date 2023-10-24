@@ -196,4 +196,7 @@ contract MainnetAddresses {
 
     // Curve
     address public EthFrxEthCurvePool = 0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577;
+
+    // Frax
+    address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;
 }
