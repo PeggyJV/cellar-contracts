@@ -13,11 +13,13 @@ contract CurveEMAExtension is Extension {
     using Math for uint256;
 
     address public constant CURVE_ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    uint8 public immutable curveEMADecimals;
 
     ERC20 public immutable WETH;
 
-    constructor(PriceRouter _priceRouter, address _weth) Extension(_priceRouter) {
+    constructor(PriceRouter _priceRouter, address _weth, uint8 _curveEMADecimals) Extension(_priceRouter) {
         WETH = ERC20(_weth);
+        curveEMADecimals = _curveEMADecimals;
     }
 
     /**
@@ -74,7 +76,7 @@ contract CurveEMAExtension is Extension {
         uint256 priceInAsset = getPriceFromCurvePool(pool, stor.index, stor.needIndex);
 
         uint256 assetPrice = priceRouter.getPriceInUSD(coins0);
-        price = assetPrice.mulDivDown(priceInAsset, 10 ** coins0.decimals());
+        price = assetPrice.mulDivDown(priceInAsset, 10 ** curveEMADecimals);
     }
 
     /**
