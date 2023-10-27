@@ -71,6 +71,12 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     address public automationForwarder;
 
+    /**
+     * @notice keccak256 hash of the parameters used to create this upkeep.
+     * @dev Only set if `initialize` leads to a pending upkeep.
+     */
+    bytes32 public pendingUpkeepParamHash;
+
     //============================== ERRORS ===============================
 
     error ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
@@ -80,7 +86,7 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     error ERC4626SharePriceOracle__SharePriceTooLarge();
     error ERC4626SharePriceOracle__FuturePerformData();
     error ERC4626SharePriceOracle__ContractKillSwitch();
-    error ERC4626SharePriceOracle__ForwarderAlreadySet();
+    error ERC4626SharePriceOracle__AlreadyInitialized();
 
     //============================== EVENTS ===============================
 
@@ -102,7 +108,15 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         bool isNotSafeToUse
     );
 
+    /**
+     * @notice Emitted when the oracles kill switch is activated.
+     * @dev If this happens, then the proposed performData lead to extremely volatile share price,
+     *      so we need to investigate why that happened, mitigate it, then launch a new share price oracle.
+     */
     event KillSwitchActivated(uint256 reportedAnswer, uint256 minAnswer, uint256 maxAnswer);
+
+    event UpkeepRegistered(uint256 upkeepId, address forwarder);
+    event UpkeepPending(bytes32 upkeepParamHash);
 
     //============================== IMMUTABLES ===============================
 
@@ -240,7 +254,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     function initialize(uint96 initialUpkeepFunds) external {
         // This function is only callable once.
-        if (automationForwarder != address(0)) revert ERC4626SharePriceOracle__ForwarderAlreadySet();
+        if (automationForwarder != address(0) || pendingUpkeepParamHash != bytes32(0))
+            revert ERC4626SharePriceOracle__AlreadyInitialized();
 
         link.safeTransferFrom(msg.sender, address(this), initialUpkeepFunds);
 
@@ -262,7 +277,17 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
         link.safeApprove(automationRegistrar, initialUpkeepFunds);
         uint256 upkeepID = registrar.registerUpkeep(params);
-        automationForwarder = registry.getForwarder(upkeepID);
+        if (upkeepID > 0) {
+            // Upkeep was successfully registered.
+            address forwarder = registry.getForwarder(upkeepID);
+            automationForwarder = forwarder;
+            emit UpkeepRegistered(upkeepID, forwarder);
+        } else {
+            // Upkeep is pending.
+            bytes32 paramHash = keccak256(abi.encode(params));
+            pendingUpkeepParamHash = paramHash;
+            emit UpkeepPending(paramHash);
+        }
     }
 
     //============================== CHAINLINK AUTOMATION ===============================

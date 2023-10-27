@@ -1128,7 +1128,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
 
         // Trying to inialtize again should revert.
         vm.expectRevert(
-            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__ForwarderAlreadySet.selector))
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__AlreadyInitialized.selector))
         );
         sharePriceOracle.initialize(initialUpkeepFunds);
 
