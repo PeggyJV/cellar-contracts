@@ -56,7 +56,7 @@ contract CollateralFTokenAdaptorV1 is CollateralFTokenAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend Collateral fTokenV1 Adaptor V 0.1"));
+        return keccak256(abi.encode("FraxLend Collateral fTokenV1 Adaptor V 0.2"));
     }
 
     /**
