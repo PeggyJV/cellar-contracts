@@ -8,7 +8,7 @@ contract MainnetAddresses {
     // Sommelier
     address public gravityBridgeAddress = 0x69592e6f9d21989a043646fE8225da2600e5A0f7;
     address public strategist = 0xA9962a5BfBea6918E958DeE0647E99fD7863b95A;
-    address public testStrategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
+    address public devStrategist = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
     address public cosmos = address(0xCAAA);
     address public multisig = 0x7340D1FeCD4B64A4ac34f826B21c945d44d7407F;
     address public ryusdRegistry = 0x2Cbd27E034FEE53f79b607430dA7771B22050741;
@@ -16,6 +16,7 @@ contract MainnetAddresses {
     address public deployerAddress = 0x70832E3e9a3268Fe9A5a47803e945fC34280B976;
     address public priceRouterV1 = 0x138a6d8c49428D4c71dD7596571fbd4699C7D3DA;
     address public priceRouterV2 = 0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92;
+    address public ryusdAddress = 0x97e6E0a40a3D02F12d1cEC30ebfbAE04e37C119E;
 
     // DeFi Ecosystem
     address public uniV3Router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -39,6 +40,7 @@ contract MainnetAddresses {
     ERC20 public RPL = ERC20(0xD33526068D116cE69F19A9ee46F0bd304F21A51f);
     ERC20 public BOND = ERC20(0x0391D2021f89DC339F60Fff84546EA23E337750f);
     ERC20 public SWETH = ERC20(0xf951E335afb289353dc249e82926178EaC7DEd78);
+    ERC20 public AURA = ERC20(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
     ERC20 public GHO = ERC20(0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f);
     ERC20 public LUSD = ERC20(0x5f98805A4E8be255a32880FDeC7F6728C6568bA0);
     ERC20 public OHM = ERC20(0x64aa3364F17a4D01c6f1751Fd97C2BD3D7e7f1D5);
@@ -47,6 +49,7 @@ contract MainnetAddresses {
     ERC20 public UNI = ERC20(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
     ERC20 public CRV = ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
     ERC20 public CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
+    ERC20 public FRXETH = ERC20(0x5E8422345238F34275888049021821E8E08CAa1f);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -63,6 +66,7 @@ contract MainnetAddresses {
     address public BOND_ETH_FEED = 0xdd22A54e05410D8d1007c38b5c7A3eD74b855281;
     address public CBETH_ETH_FEED = 0xF017fcB346A1885194689bA23Eff2fE6fA5C483b;
     address public STETH_ETH_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
+    address public BAL_USD_FEED = 0xdF2917806E30300537aEB49A7663062F4d1F2b5F;
     address public GHO_USD_FEED = 0x3f12643D3f6f874d39C2a4c9f2Cd6f2DbAC877FC;
     address public LUSD_USD_FEED = 0x3D7aE7E594f2f2091Ad8798313450130d0Aba3a0;
     address public OHM_ETH_FEED = 0x9a72298ae3886221820B1c878d12D872087D3a23;
@@ -130,6 +134,7 @@ contract MainnetAddresses {
     ERC20 public bb_a_USDC_BPT = ERC20(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692);
     ERC20 public bb_a_DAI_BPT = ERC20(0x6667c6fa9f2b3Fc1Cc8D85320b62703d938E4385);
     ERC20 public bb_a_USDT_BPT = ERC20(0xA1697F9Af0875B63DdC472d6EeBADa8C1fAB8568);
+    ERC20 public aura_rETH_wETH_BPT = ERC20(0xDd1fE5AD401D4777cE89959b7fa587e569Bf125D);
     ERC20 public GHO_bb_a_USD_BPT = ERC20(0xc2B021133D1b0cF07dba696fd5DD89338428225B);
 
     // Rate Providers
@@ -143,6 +148,8 @@ contract MainnetAddresses {
 
     // Chainlink Automation Registry
     address public automationRegistry = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
+    address public automationRegistryV2 = 0x6593c7De001fC8542bB1703532EE1E5aA0D458fD;
+    address public automationRegistrarV2 = 0x6B0B234fB2f380309D47A7E9391E29E9a179395a;
 
     // FraxLend Pairs
     address public FXS_FRAX_PAIR = 0xDbe88DBAc39263c47629ebbA02b3eF4cf0752A72;
@@ -177,6 +184,7 @@ contract MainnetAddresses {
     // Redstone
     address public swEthAdapter = 0x68ba9602B2AeE30847412109D2eE89063bf08Ec2;
     bytes32 public swEthDataFeedId = 0x5357455448000000000000000000000000000000000000000000000000000000;
+    bytes32 public swEthEthDataFeedId = 0x53574554482f4554480000000000000000000000000000000000000000000000;
     // Maker
     address public dsrManager = 0x373238337Bfe1146fb49989fc222523f83081dDb;
 
@@ -185,4 +193,11 @@ contract MainnetAddresses {
 
     // Maker
     address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
+
+    // Curve
+    address public EthFrxEthCurvePool = 0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577;
+    address public triCrypto2 = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
+
+    // Frax
+    address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;
 }

@@ -58,7 +58,7 @@ contract CollateralFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend Collateral fTokenV2 Adaptor V 0.1"));
+        return keccak256(abi.encode("FraxLend Collateral fTokenV2 Adaptor V 0.2"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -150,6 +150,11 @@ contract CollateralFTokenAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     function removeCollateral(uint256 _collateralAmount, IFToken _fraxlendPair) public {
         _validateFToken(_fraxlendPair);
+
+        if (_collateralAmount == type(uint256).max) {
+            _collateralAmount = _userCollateralBalance(_fraxlendPair, address(this));
+        }
+
         // remove collateral
         _removeCollateral(_collateralAmount, _fraxlendPair);
         uint256 _exchangeRate = _getExchangeRateInfo(_fraxlendPair); // needed to calculate LTV
