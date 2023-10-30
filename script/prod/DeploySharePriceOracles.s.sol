@@ -28,7 +28,6 @@ contract DeploySharePriceOraclesScript is Script, MainnetAddresses {
         uint64 deviationTrigger = 0.0010e4;
         uint64 gracePeriod = 1 days / 6;
         uint16 observationsToUse = 4;
-        address automationRegistry = 0xd746F3601eA520Baf3498D61e1B7d976DbB33310;
         uint216 startingAnswer = 1e18;
         uint256 allowedAnswerChangeLower = 0.8e4;
         uint256 allowedAnswerChangeUpper = 10e4;
@@ -39,7 +38,6 @@ contract DeploySharePriceOraclesScript is Script, MainnetAddresses {
             deviationTrigger,
             gracePeriod,
             observationsToUse,
-            automationRegistry,
             startingAnswer,
             allowedAnswerChangeLower,
             allowedAnswerChangeUpper
@@ -52,7 +50,6 @@ contract DeploySharePriceOraclesScript is Script, MainnetAddresses {
             deviationTrigger,
             gracePeriod,
             observationsToUse,
-            automationRegistry,
             startingAnswer,
             allowedAnswerChangeLower,
             allowedAnswerChangeUpper
@@ -68,25 +65,29 @@ contract DeploySharePriceOraclesScript is Script, MainnetAddresses {
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
         uint16 _observationsToUse,
-        address _automationRegistry,
         uint216 _startingAnswer,
         uint256 _allowedAnswerChangeLower,
         uint256 _allowedAnswerChangeUpper
-    ) internal returns (ERC4626SharePriceOracle) {
+    ) public returns (ERC4626SharePriceOracle) {
         bytes memory creationCode;
         bytes memory constructorArgs;
-        creationCode = type(ERC4626SharePriceOracle).creationCode;
-        constructorArgs = abi.encode(
-            _target,
-            _heartbeat,
-            _deviationTrigger,
-            _gracePeriod,
-            _observationsToUse,
-            _automationRegistry,
-            _startingAnswer,
-            _allowedAnswerChangeLower,
-            _allowedAnswerChangeUpper
-        );
+        {
+            creationCode = type(ERC4626SharePriceOracle).creationCode;
+            constructorArgs = abi.encode(
+                _target,
+                _heartbeat,
+                _deviationTrigger,
+                _gracePeriod,
+                _observationsToUse,
+                automationRegistryV2,
+                automationRegistrarV2,
+                devStrategist,
+                address(LINK),
+                _startingAnswer,
+                _allowedAnswerChangeLower,
+                _allowedAnswerChangeUpper
+            );
+        }
 
         return ERC4626SharePriceOracle(deployer.deployContract(_name, creationCode, constructorArgs, 0));
     }

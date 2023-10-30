@@ -68,7 +68,7 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend debtTokenV1 Adaptor V 1.0"));
+        return keccak256(abi.encode("FraxLend debtTokenV1 Adaptor V 1.1"));
     }
 
     /**
@@ -88,20 +88,20 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptor {
     }
 
     /**
-     * @notice Converts a given asset amount to a number of asset shares (fTokens) from specified FraxlendV1 Pair
+     * @notice Converts a given asset amount to a number of borrow shares from specified FraxlendV1 Pair
      * @dev versions of FraxLendPair do not have a fourth param whereas v2 does
      * @param fToken The specified FraxLendPair
      * @param amount The amount of asset
      * @param roundUp Whether to round up after division
-     * @return number of asset shares
+     * @return number of borrow shares
      */
-    function _toAssetShares(
+    function _toBorrowShares(
         IFToken fToken,
         uint256 amount,
         bool roundUp,
         bool
     ) internal view override returns (uint256) {
-        return fToken.toAssetShares(amount, roundUp);
+        return fToken.toBorrowShares(amount, roundUp);
     }
 
     /**

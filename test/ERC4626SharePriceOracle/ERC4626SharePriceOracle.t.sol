@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { AaveATokenAdaptor } from "src/modules/adaptors/Aave/AaveATokenAdaptor.sol";
 import { IPool } from "src/interfaces/external/IPool.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
-import { ERC4626SharePriceOracle } from "src/base/ERC4626SharePriceOracle.sol";
+import { ERC4626SharePriceOracle, IRegistry, IRegistrar } from "src/base/ERC4626SharePriceOracle.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -34,7 +34,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 16869780;
+        uint256 blockNumber = 18364794;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -94,7 +94,9 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         uint64 _deviationTrigger = 0.0005e4;
         uint64 _gracePeriod = 60 * 60; // 1 hr
         uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-        address _automationRegistry = address(this);
+        address _automationRegistry = automationRegistryV2;
+        address _automationRegistrar = automationRegistrarV2;
+        address _automationAdmin = address(this);
 
         // Setup share price oracle.
         sharePriceOracle = new ERC4626SharePriceOracle(
@@ -104,9 +106,22 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             _gracePeriod,
             _observationsToUse,
             _automationRegistry,
+            _automationRegistrar,
+            _automationAdmin,
+            address(LINK),
             1e18,
             0.01e4,
             10e4
+        );
+
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        // Write storage to change forwarder to address this.
+        stdstore.target(address(sharePriceOracle)).sig(sharePriceOracle.automationForwarder.selector).checked_write(
+            address(this)
         );
     }
 
@@ -856,7 +871,7 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         vm.expectRevert(
             bytes(
                 abi.encodeWithSelector(
-                    ERC4626SharePriceOracle.ERC4626SharePriceOracle__OnlyCallableByAutomationRegistry.selector
+                    ERC4626SharePriceOracle.ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder.selector
                 )
             )
         );
@@ -1005,7 +1020,9 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
             uint64 _deviationTrigger = 0.0005e4;
             uint64 _gracePeriod = 60 * 60; // 1 hr
             uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
-            address _automationRegistry = address(this);
+            address _automationRegistry = automationRegistryV2;
+            address _automationRegistrar = automationRegistrarV2;
+            address _automationAdmin = address(this);
 
             // Setup share price oracle.
             sharePriceOracle = new ERC4626SharePriceOracle(
@@ -1015,11 +1032,24 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
                 _gracePeriod,
                 _observationsToUse,
                 _automationRegistry,
+                _automationRegistrar,
+                _automationAdmin,
+                address(LINK),
                 1e18,
                 0,
                 1_000_000_000_000_000_000e4
             );
         }
+
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        // Write storage to change forwarder to address this.
+        stdstore.target(address(sharePriceOracle)).sig(sharePriceOracle.automationForwarder.selector).checked_write(
+            address(this)
+        );
 
         // Call first performUpkeep on Cellar.
         {
@@ -1059,6 +1089,274 @@ contract ERC4626SharePriceOracleTest is MainnetStarterTest, AdaptorHelperFunctio
         WETH.approve(address(cellar), assets);
         cellar.deposit(assets, address(this));
         cellar.withdraw(assets, address(this), address(this));
+    }
+
+    function testInitialization() external {
+        ERC4626 _target = ERC4626(address(cellar));
+        uint64 _heartbeat = 1 days;
+        uint64 _deviationTrigger = 0.0005e4;
+        uint64 _gracePeriod = 60 * 60; // 1 hr
+        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+        address _automationRegistry = automationRegistryV2;
+        address _automationRegistrar = automationRegistrarV2;
+        address _automationAdmin = address(this);
+
+        // Setup share price oracle.
+        sharePriceOracle = new ERC4626SharePriceOracle(
+            _target,
+            _heartbeat,
+            _deviationTrigger,
+            _gracePeriod,
+            _observationsToUse,
+            _automationRegistry,
+            _automationRegistrar,
+            _automationAdmin,
+            address(LINK),
+            1e18,
+            0.01e4,
+            10e4
+        );
+
+        assertTrue(sharePriceOracle.automationForwarder() == address(0), "Automation Forwarder should not be set.");
+
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        assertTrue(sharePriceOracle.automationForwarder() != address(0), "Automation Forwarder should be set.");
+
+        // Trying to inialtize again should revert.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__AlreadyInitialized.selector))
+        );
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        //Make sure only forwarder can call perform upkeep.
+        bool upkeepNeeded;
+        bytes memory performData;
+        (upkeepNeeded, performData) = sharePriceOracle.checkUpkeep(abi.encode(0));
+        assertTrue(upkeepNeeded, "Upkeep should be needed.");
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    ERC4626SharePriceOracle.ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder.selector
+                )
+            )
+        );
+        sharePriceOracle.performUpkeep(performData);
+
+        vm.prank(sharePriceOracle.automationForwarder());
+        sharePriceOracle.performUpkeep(performData);
+    }
+
+    function testCallingHandlePendingUpkeepWithNothingPending() external {
+        ERC4626 _target = ERC4626(address(cellar));
+        uint64 _heartbeat = 1 days;
+        uint64 _deviationTrigger = 0.0005e4;
+        uint64 _gracePeriod = 60 * 60; // 1 hr
+        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+        address _automationRegistry = automationRegistryV2;
+        address _automationRegistrar = automationRegistrarV2;
+        address _automationAdmin = address(this);
+
+        // Setup share price oracle.
+        sharePriceOracle = new ERC4626SharePriceOracle(
+            _target,
+            _heartbeat,
+            _deviationTrigger,
+            _gracePeriod,
+            _observationsToUse,
+            _automationRegistry,
+            _automationRegistrar,
+            _automationAdmin,
+            address(LINK),
+            1e18,
+            0.01e4,
+            10e4
+        );
+
+        // Try calling `handlePendingUpkeep` before calling `initialize`.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    ERC4626SharePriceOracle.ERC4626SharePriceOracle__NoPendingUpkeepToHandle.selector
+                )
+            )
+        );
+        sharePriceOracle.handlePendingUpkeep(0);
+
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        // Try calling `handlePendingUpkeep` after successfully calling `initialize`.
+        // Try calling `handlePendingUpkeep` before calling `initialize`.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    ERC4626SharePriceOracle.ERC4626SharePriceOracle__NoPendingUpkeepToHandle.selector
+                )
+            )
+        );
+        sharePriceOracle.handlePendingUpkeep(0);
+    }
+
+    function testAuotmationDDOSAttackMakingNewUpkeepsPending() external {
+        IRegistrar registrarV2 = IRegistrar(automationRegistrarV2);
+        IRegistry registryV2 = IRegistry(automationRegistryV2);
+
+        ERC4626 _target = ERC4626(address(cellar));
+        uint64 _heartbeat = 1 days;
+        uint64 _deviationTrigger = 0.0005e4;
+        uint64 _gracePeriod = 60 * 60; // 1 hr
+        uint16 _observationsToUse = 4; // TWAA duration is heartbeat * (observationsToUse - 1), so ~3 days.
+        address _automationRegistry = automationRegistryV2;
+        address _automationRegistrar = automationRegistrarV2;
+        address _automationAdmin = address(this);
+
+        // Setup share price oracle.
+        sharePriceOracle = new ERC4626SharePriceOracle(
+            _target,
+            _heartbeat,
+            _deviationTrigger,
+            _gracePeriod,
+            _observationsToUse,
+            _automationRegistry,
+            _automationRegistrar,
+            _automationAdmin,
+            address(LINK),
+            1e18,
+            0.01e4,
+            10e4
+        );
+
+        IRegistrar.RegistrationParams memory params = IRegistrar.RegistrationParams({
+            name: "Share Price Oracle",
+            encryptedEmail: hex"",
+            upkeepContract: address(sharePriceOracle),
+            gasLimit: sharePriceOracle.UPKEEP_GAS_LIMIT(),
+            adminAddress: address(this),
+            triggerType: 0,
+            checkData: hex"",
+            triggerConfig: hex"",
+            offchainConfig: hex"",
+            amount: 10e18
+        });
+        LINK.safeApprove(automationRegistrarV2, type(uint256).max);
+        deal(address(LINK), address(this), type(uint128).max);
+
+        // Create 6 phony upkeeps we will try to use in `handlePendingUpkeep`
+        uint256[] memory phonyIds = new uint256[](6);
+        params.upkeepContract = address(this);
+        phonyIds[0] = registrarV2.registerUpkeep(params);
+
+        params.upkeepContract = address(sharePriceOracle);
+        params.gasLimit = 100_000;
+        phonyIds[1] = registrarV2.registerUpkeep(params);
+
+        params.gasLimit = sharePriceOracle.UPKEEP_GAS_LIMIT();
+        params.adminAddress = address(1);
+        phonyIds[2] = registrarV2.registerUpkeep(params);
+
+        params.adminAddress = address(this);
+        params.triggerType = 1;
+        phonyIds[3] = registrarV2.registerUpkeep(params);
+
+        params.triggerType = 0;
+        params.checkData = hex"01";
+        phonyIds[4] = registrarV2.registerUpkeep(params);
+
+        params.checkData = hex"";
+        params.offchainConfig = hex"01";
+        phonyIds[5] = registrarV2.registerUpkeep(params);
+
+        params.offchainConfig = hex"";
+
+        // Set auto-approval to false, so our share price oracle upkeep is made pending.
+        vm.startPrank(registrarV2.owner());
+        registrarV2.setTriggerConfig(0, IRegistrar.AutoApproveType.DISABLED, 500);
+        vm.stopPrank();
+
+        // Now try creating our share price oracle upkeep.
+        uint96 initialUpkeepFunds = 10e18;
+        deal(address(LINK), address(this), initialUpkeepFunds);
+        LINK.safeApprove(address(sharePriceOracle), initialUpkeepFunds);
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        assertTrue(sharePriceOracle.pendingUpkeepParamHash() != bytes32(0), "Pending param hash should be set");
+
+        // Trying to call initialize again should fail.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__AlreadyInitialized.selector))
+        );
+        sharePriceOracle.initialize(initialUpkeepFunds);
+
+        // Try using the phony upkeeps to call `handlePendingUpkeep`.
+        for (uint256 i; i < phonyIds.length; ++i) {
+            vm.expectRevert(
+                bytes(
+                    abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__ParamHashDiffers.selector)
+                )
+            );
+            sharePriceOracle.handlePendingUpkeep(phonyIds[i]);
+        }
+
+        // Approve pending upkeep.
+        bytes32 hash = keccak256(
+            abi.encode(
+                address(sharePriceOracle),
+                sharePriceOracle.UPKEEP_GAS_LIMIT(),
+                address(this),
+                0,
+                hex"",
+                hex"",
+                hex""
+            )
+        );
+        vm.startPrank(registrarV2.owner());
+
+        registrarV2.approve(
+            "Simple Aave Cellar V0.0 Share Price Oracle",
+            address(sharePriceOracle),
+            sharePriceOracle.UPKEEP_GAS_LIMIT(),
+            address(this),
+            0,
+            hex"",
+            hex"",
+            hex"",
+            hash
+        );
+        vm.stopPrank();
+
+        // This can be pulled from stack trace, if you intentionally add a failing require statement right after the approve call.
+        uint256 approvedUpkeepId = 28590879878797250925087462897928979949870272636475581605666189596973513302011;
+
+        // Call `handlePendingUpkeep` with it.
+        sharePriceOracle.handlePendingUpkeep(approvedUpkeepId);
+
+        assertTrue(
+            sharePriceOracle.automationForwarder() == registryV2.getForwarder(approvedUpkeepId),
+            "Automation forwarder should be set."
+        );
+
+        // Make sure we can not call `handlePendingUpkeep` again.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    ERC4626SharePriceOracle.ERC4626SharePriceOracle__NoPendingUpkeepToHandle.selector
+                )
+            )
+        );
+        sharePriceOracle.handlePendingUpkeep(approvedUpkeepId);
+
+        // Make sure we can't call initialize again.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(ERC4626SharePriceOracle.ERC4626SharePriceOracle__AlreadyInitialized.selector))
+        );
+        sharePriceOracle.initialize(initialUpkeepFunds);
     }
 
     function _passTimeAlterSharePriceAndUpkeepForWethCellar(uint256 timeToPass, uint256 sharePriceMultiplier) internal {

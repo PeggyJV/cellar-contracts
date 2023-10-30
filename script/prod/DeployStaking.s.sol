@@ -39,7 +39,7 @@ contract DeployStakingScript is Script, MainnetAddresses {
         bytes memory creationCode;
         bytes memory constructorArgs;
 
-        address _owner = testStrategist;
+        address _owner = devStrategist;
         ERC20 _stakingToken = stakingToken;
         ERC20 _distributionToken = ERC20(0xa670d7237398238DE01267472C6f13e5B8010FD1); // somm
         uint256 _epochDuration = 3 days;
