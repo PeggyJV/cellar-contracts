@@ -71,6 +71,12 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     address public automationForwarder;
 
+    /**
+     * @notice keccak256 hash of the parameters used to create this upkeep.
+     * @dev Only set if `initialize` leads to a pending upkeep.
+     */
+    bytes32 public pendingUpkeepParamHash;
+
     //============================== ERRORS ===============================
 
     error ERC4626SharePriceOracle__OnlyCallableByAutomationForwarder();
@@ -80,7 +86,9 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
     error ERC4626SharePriceOracle__SharePriceTooLarge();
     error ERC4626SharePriceOracle__FuturePerformData();
     error ERC4626SharePriceOracle__ContractKillSwitch();
-    error ERC4626SharePriceOracle__ForwarderAlreadySet();
+    error ERC4626SharePriceOracle__AlreadyInitialized();
+    error ERC4626SharePriceOracle__ParamHashDiffers();
+    error ERC4626SharePriceOracle__NoPendingUpkeepToHandle();
 
     //============================== EVENTS ===============================
 
@@ -102,7 +110,15 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
         bool isNotSafeToUse
     );
 
+    /**
+     * @notice Emitted when the oracles kill switch is activated.
+     * @dev If this happens, then the proposed performData lead to extremely volatile share price,
+     *      so we need to investigate why that happened, mitigate it, then launch a new share price oracle.
+     */
     event KillSwitchActivated(uint256 reportedAnswer, uint256 minAnswer, uint256 maxAnswer);
+
+    event UpkeepRegistered(uint256 upkeepId, address forwarder);
+    event UpkeepPending(bytes32 upkeepParamHash);
 
     //============================== IMMUTABLES ===============================
 
@@ -240,7 +256,8 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
      */
     function initialize(uint96 initialUpkeepFunds) external {
         // This function is only callable once.
-        if (automationForwarder != address(0)) revert ERC4626SharePriceOracle__ForwarderAlreadySet();
+        if (automationForwarder != address(0) || pendingUpkeepParamHash != bytes32(0))
+            revert ERC4626SharePriceOracle__AlreadyInitialized();
 
         link.safeTransferFrom(msg.sender, address(this), initialUpkeepFunds);
 
@@ -262,7 +279,58 @@ contract ERC4626SharePriceOracle is AutomationCompatibleInterface {
 
         link.safeApprove(automationRegistrar, initialUpkeepFunds);
         uint256 upkeepID = registrar.registerUpkeep(params);
-        automationForwarder = registry.getForwarder(upkeepID);
+        if (upkeepID > 0) {
+            // Upkeep was successfully registered.
+            address forwarder = registry.getForwarder(upkeepID);
+            automationForwarder = forwarder;
+            emit UpkeepRegistered(upkeepID, forwarder);
+        } else {
+            // Upkeep is pending.
+            bytes32 paramHash = keccak256(
+                abi.encode(
+                    params.upkeepContract,
+                    params.gasLimit,
+                    params.adminAddress,
+                    params.triggerType,
+                    params.checkData,
+                    params.offchainConfig
+                )
+            );
+            pendingUpkeepParamHash = paramHash;
+            emit UpkeepPending(paramHash);
+        }
+    }
+
+    /**
+     * @notice Finish setting forwarder address if `initialize` did not get an auto-approved upkeep.
+     */
+    function handlePendingUpkeep(uint256 _upkeepId) external {
+        if (pendingUpkeepParamHash == bytes32(0) || automationForwarder != address(0))
+            revert ERC4626SharePriceOracle__NoPendingUpkeepToHandle();
+
+        IRegistry registry = IRegistry(automationRegistry);
+
+        IRegistry.UpkeepInfo memory upkeepInfo = registry.getUpkeep(_upkeepId);
+        // Build the param hash using upkeepInfo.
+        // The upkeep id has 16 bytes of entropy, that need to be shifted out(16*8=128).
+        // Then take the resulting number and only take the last byte of it to get the trigger type.
+        uint8 triggerType = uint8(_upkeepId >> 128);
+        bytes32 proposedParamHash = keccak256(
+            abi.encode(
+                upkeepInfo.target,
+                upkeepInfo.executeGas,
+                upkeepInfo.admin,
+                triggerType,
+                upkeepInfo.checkData,
+                upkeepInfo.offchainConfig
+            )
+        );
+        if (pendingUpkeepParamHash != proposedParamHash) revert ERC4626SharePriceOracle__ParamHashDiffers();
+
+        // Hashes match, so finish initialization.
+        address forwarder = registry.getForwarder(_upkeepId);
+        automationForwarder = forwarder;
+        emit UpkeepRegistered(_upkeepId, forwarder);
     }
 
     //============================== CHAINLINK AUTOMATION ===============================

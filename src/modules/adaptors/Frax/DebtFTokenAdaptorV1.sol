@@ -68,7 +68,7 @@ contract DebtFTokenAdaptorV1 is DebtFTokenAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("FraxLend debtTokenV1 Adaptor V 1.0"));
+        return keccak256(abi.encode("FraxLend debtTokenV1 Adaptor V 1.1"));
     }
 
     /**
