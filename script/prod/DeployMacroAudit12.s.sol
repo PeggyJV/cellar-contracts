@@ -79,7 +79,7 @@ contract DeployMacroAudit12Script is Script, MainnetAddresses {
             creationCode = type(WstEthExtension).creationCode;
             constructorArgs = abi.encode(priceRouter);
             wstEthExtension = WstEthExtension(
-                deployer.deployContract("WstEthExtension V 0.2", creationCode, constructorArgs, 0)
+                deployer.deployContract("WstEthExtension V 0.1", creationCode, constructorArgs, 0)
             );
         }
 
@@ -93,13 +93,13 @@ contract DeployMacroAudit12Script is Script, MainnetAddresses {
         // }
 
         // Deploy balancer stable extension.
-        {
-            creationCode = type(BalancerStablePoolExtension).creationCode;
-            constructorArgs = abi.encode(priceRouter, vault);
-            balancerStablePoolExtension = BalancerStablePoolExtension(
-                deployer.deployContract("Balancer Stable Pool Extension V0.0", creationCode, constructorArgs, 0)
-            );
-        }
+        // {
+        //     creationCode = type(BalancerStablePoolExtension).creationCode;
+        //     constructorArgs = abi.encode(priceRouter, vault);
+        //     balancerStablePoolExtension = BalancerStablePoolExtension(
+        //         deployer.deployContract("Balancer Stable Pool Extension V0.0", creationCode, constructorArgs, 0)
+        //     );
+        // }
 
         // Add Chainlink USD assets.
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -108,6 +108,10 @@ contract DeployMacroAudit12Script is Script, MainnetAddresses {
         uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
 
         // Intentionally use WETH_USD_FEED for steth price, to peg it 1:1 with WETH.
         price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
@@ -135,7 +139,8 @@ contract DeployMacroAudit12Script is Script, MainnetAddresses {
 
         // Add wstEth.
         uint256 wstethToStethConversion = wstEthExtension.stEth().getPooledEthByShares(1e18);
-        price = price.mulDivDown(wstethToStethConversion, 1e18);
+        price = priceRouter.getValue(WETH, wstethToStethConversion, USDC);
+        price = price.changeDecimals(6, 8);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstEthExtension));
         priceRouter.addAsset(WSTETH, settings, abi.encode(0), price);
 
