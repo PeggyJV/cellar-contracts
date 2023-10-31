@@ -53,7 +53,8 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
         sommCellar = _createCellar("Turbo SOMM", "TurboSOMM", SOMM, sommPositionId, abi.encode(0), 1e6, 0.8e6);
 
         uint64 heartbeat = 1 days;
-        uint64 deviationTrigger = 0.0010e4;
+        uint64 deviationTrigger = 0.0050e4;
+        uint64 deviationTrigger2 = 0.0100e4;
         uint64 gracePeriod = 1 days / 6;
         uint16 observationsToUse = 6;
         uint216 startingAnswer = 1e6;
@@ -65,6 +66,20 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
             address(sommCellar),
             heartbeat,
             deviationTrigger,
+            gracePeriod,
+            observationsToUse,
+            automationAdmin,
+            startingAnswer,
+            allowedAnswerChangeLower,
+            allowedAnswerChangeUpper
+        );
+
+        // higher deviation trigger oracle
+        _createSharePriceOracle(
+            "Turbo SOMM Share Price Oracle V0.1",
+            address(sommCellar),
+            heartbeat,
+            deviationTrigger2,
             gracePeriod,
             observationsToUse,
             automationAdmin,
