@@ -30,12 +30,12 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
     uint8 public constant TWAP_DERIVATIVE = 2;
     uint8 public constant EXTENSION_DERIVATIVE = 3;
 
-    address uniswapV3Adaptor = 0xC74fFa211A8148949a77ec1070Df7013C8D5Ce92; // v1.4
-    address balancerPoolAdaptor = 0x2750348A897059C45683d33A1742a3989454F7d6; // v1.1
-    address oneInchAdaptor = 0xB8952ce4010CFF3C74586d712a4402285A3a3AFb; // already trusted
-    address zeroXAdaptor = 0x1039a9b61DFF6A3fb8dbF4e924AA749E5cFE35ef; // already trusted
+    address uniswapV3Adaptor = 0xC74fFa211A8148949a77ec1070Df7013C8D5Ce92;
+    address balancerPoolAdaptor = 0x2750348A897059C45683d33A1742a3989454F7d6;
+    address oneInchAdaptor = 0xB8952ce4010CFF3C74586d712a4402285A3a3AFb;
+    address zeroXAdaptor = 0x1039a9b61DFF6A3fb8dbF4e924AA749E5cFE35ef;
     address feesAndReservesAdaptor = 0x647d264d800A2461E594796af61a39b7735d8933;
-    address vestingSimpleAdaptor = 0x3b98BA00f981342664969e609Fb88280704ac479; // already trusted
+    address vestingSimpleAdaptor = 0x3b98BA00f981342664969e609Fb88280704ac479;
 
     CellarWithOracleWithBalancerFlashLoans public sommCellar;
 
@@ -47,9 +47,6 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
     uint32 SOMM_wETH_PositionId = 1_000_008;
 
     function run() external {
-        bytes memory creationCode;
-        bytes memory constructorArgs;
-
         vm.startBroadcast();
 
         // Create Cellars and Share Price Oracles.
@@ -58,7 +55,7 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
         uint64 heartbeat = 1 days;
         uint64 deviationTrigger = 0.0010e4;
         uint64 gracePeriod = 1 days / 6;
-        uint16 observationsToUse = 4;
+        uint16 observationsToUse = 6;
         uint216 startingAnswer = 1e6;
         uint256 allowedAnswerChangeLower = 0.8e4;
         uint256 allowedAnswerChangeUpper = 2e4;
@@ -75,10 +72,6 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
             allowedAnswerChangeLower,
             allowedAnswerChangeUpper
         );
-
-        registry.trustAdaptor(address(uniswapV3Adaptor));
-        registry.trustAdaptor(address(balancerPoolAdaptor));
-        registry.trustAdaptor(address(feesAndReservesAdaptor));
 
         sommCellar.addAdaptorToCatalogue(uniswapV3Adaptor);
         sommCellar.addAdaptorToCatalogue(balancerPoolAdaptor);
@@ -104,7 +97,8 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
         uint64 platformCut
     ) internal returns (CellarWithOracleWithBalancerFlashLoans) {
         // Approve new cellar to spend assets.
-        address cellarAddress = deployer.getAddress(cellarName);
+        string memory nameToUse = string.concat(cellarName, " V0.0");
+        address cellarAddress = deployer.getAddress(nameToUse);
         holdingAsset.approve(cellarAddress, initialDeposit);
 
         bytes memory creationCode;
@@ -126,7 +120,7 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
 
         return
             CellarWithOracleWithBalancerFlashLoans(
-                deployer.deployContract(string.concat(cellarName, " V0.0"), creationCode, constructorArgs, 0)
+                deployer.deployContract(nameToUse, creationCode, constructorArgs, 0)
             );
     }
 
@@ -162,5 +156,4 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
 
         return ERC4626SharePriceOracle(deployer.deployContract(_name, creationCode, constructorArgs, 0));
     }
-    //0x3E4c7185084Fc38666ada1209E2b7a369457D99C
 }
