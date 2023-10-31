@@ -19,7 +19,8 @@ import "forge-std/Script.sol";
 contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
     using Math for uint256;
 
-    address public sommDev = 0x552acA1343A6383aF32ce1B7c7B1b47959F7ad90;
+    address public sommDev = 0x6d3655EE04820f4385a910FD1898d4Ec6241F520;
+    address public automationAdmin = 0xeeF7b7205CAF2Bcd71437D9acDE3874C3388c138;
 
     Deployer public deployer = Deployer(deployerAddress);
 
@@ -52,16 +53,15 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
         vm.startBroadcast();
 
         // Create Cellars and Share Price Oracles.
-        sommCellar = _createCellar("Turbo SOMM", "TurboSOMM", SOMM, sommPositionId, abi.encode(0), 1e18, 0.8e18);
+        sommCellar = _createCellar("Turbo SOMM", "TurboSOMM", SOMM, sommPositionId, abi.encode(0), 1e6, 0.8e6);
 
         uint64 heartbeat = 1 days;
         uint64 deviationTrigger = 0.0010e4;
         uint64 gracePeriod = 1 days / 6;
         uint16 observationsToUse = 4;
-        address automationRegistry = 0xd746F3601eA520Baf3498D61e1B7d976DbB33310;
-        uint216 startingAnswer = 1e18;
+        uint216 startingAnswer = 1e6;
         uint256 allowedAnswerChangeLower = 0.8e4;
-        uint256 allowedAnswerChangeUpper = 10e4;
+        uint256 allowedAnswerChangeUpper = 2e4;
 
         _createSharePriceOracle(
             "Turbo SOMM Share Price Oracle V0.0",
@@ -70,7 +70,7 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
             deviationTrigger,
             gracePeriod,
             observationsToUse,
-            automationRegistry,
+            automationAdmin,
             startingAnswer,
             allowedAnswerChangeLower,
             allowedAnswerChangeUpper
@@ -82,8 +82,8 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
 
         sommCellar.addAdaptorToCatalogue(uniswapV3Adaptor);
         sommCellar.addAdaptorToCatalogue(balancerPoolAdaptor);
-        sommCellar.addAdaptorToCatalogue(oneInchAdaptor); 
-        sommCellar.addAdaptorToCatalogue(zeroXAdaptor); 
+        sommCellar.addAdaptorToCatalogue(oneInchAdaptor);
+        sommCellar.addAdaptorToCatalogue(zeroXAdaptor);
         sommCellar.addAdaptorToCatalogue(feesAndReservesAdaptor);
         sommCellar.addAdaptorToCatalogue(vestingSimpleAdaptor);
 
@@ -137,7 +137,7 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
         uint64 _deviationTrigger,
         uint64 _gracePeriod,
         uint16 _observationsToUse,
-        address _automationRegistry,
+        address _automationAdmin,
         uint216 _startingAnswer,
         uint256 _allowedAnswerChangeLower,
         uint256 _allowedAnswerChangeUpper
@@ -146,12 +146,15 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
         bytes memory constructorArgs;
         creationCode = type(ERC4626SharePriceOracle).creationCode;
         constructorArgs = abi.encode(
-            _target,
+            ERC4626(_target),
             _heartbeat,
             _deviationTrigger,
             _gracePeriod,
             _observationsToUse,
-            _automationRegistry,
+            automationRegistryV2,
+            automationRegistrarV2,
+            _automationAdmin,
+            address(LINK),
             _startingAnswer,
             _allowedAnswerChangeLower,
             _allowedAnswerChangeUpper
@@ -159,4 +162,5 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
 
         return ERC4626SharePriceOracle(deployer.deployContract(_name, creationCode, constructorArgs, 0));
     }
+    //0x3E4c7185084Fc38666ada1209E2b7a369457D99C
 }
