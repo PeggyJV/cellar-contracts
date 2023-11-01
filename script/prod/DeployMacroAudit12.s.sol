@@ -14,6 +14,7 @@ import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEth
 import { RedstonePriceFeedExtension } from "src/modules/price-router/Extensions/Redstone/RedstonePriceFeedExtension.sol";
 import { IRedstoneAdapter } from "src/interfaces/external/Redstone/IRedstoneAdapter.sol";
 import { BalancerStablePoolExtension } from "src/modules/price-router/Extensions/Balancer/BalancerStablePoolExtension.sol";
+import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor.sol";
 
 import { MorphoAaveV2ATokenAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV2ATokenAdaptor.sol";
 import { MorphoAaveV3ATokenP2PAdaptor } from "src/modules/adaptors/Morpho/MorphoAaveV3ATokenP2PAdaptor.sol";
@@ -39,27 +40,12 @@ contract DeployMacroAudit12Script is Script, MainnetAddresses {
     Registry public registry = Registry(0xEED68C267E9313a6ED6ee08de08c9F68dee44476);
     PriceRouter public priceRouter = PriceRouter(0xA1A0bc3D59e4ee5840c9530e49Bdc2d1f88AaF92);
 
-    address private morphoV2 = 0x777777c9898D384F785Ee44Acfe945efDFf5f3E0;
-    address private morphoLens = 0x507fA343d0A90786d86C7cd885f5C49263A91FF4;
-    address private rewardHandler = 0x3B14E5C73e0A56D607A8688098326fD4b4292135;
-
-    address private morphoV3 = 0x33333aea097c193e66081E930c33020272b33333;
-
     uint8 public constant CHAINLINK_DERIVATIVE = 1;
     uint8 public constant TWAP_DERIVATIVE = 2;
     uint8 public constant EXTENSION_DERIVATIVE = 3;
 
-    StEthExtension public stEthExtension;
     WstEthExtension public wstEthExtension;
-    RedstonePriceFeedExtension public redstonePriceFeedExtension;
-    BalancerStablePoolExtension public balancerStablePoolExtension;
-    MorphoAaveV2ATokenAdaptor public morphoAaveV2ATokenAdaptor;
-    MorphoAaveV3ATokenP2PAdaptor public morphoAaveV3ATokenP2PAdaptor;
-
-    DebtFTokenAdaptorV1 public debtFTokenAdaptorV1;
-
-    uint32 public morphoAaveV2AWeth = 5_000_001;
-    uint32 public morphoAaveV3AWeth = 5_000_002;
+    AuraERC4626Adaptor public auraERC4626Adaptor;
 
     function run() external {
         bytes memory creationCode;
@@ -84,22 +70,13 @@ contract DeployMacroAudit12Script is Script, MainnetAddresses {
         }
 
         // Deploy Aura Adaptor.
-        // {
-        //     creationCode = type(MorphoAaveV2ATokenAdaptor).creationCode;
-        //     constructorArgs = abi.encode(morphoV2, morphoLens, 1.05e18, rewardHandler);
-        //     morphoAaveV2ATokenAdaptor = MorphoAaveV2ATokenAdaptor(
-        //         deployer.deployContract("Morpho Aave V2 AToken Adaptor V0.0", creationCode, constructorArgs, 0)
-        //     );
-        // }
-
-        // Deploy balancer stable extension.
-        // {
-        //     creationCode = type(BalancerStablePoolExtension).creationCode;
-        //     constructorArgs = abi.encode(priceRouter, vault);
-        //     balancerStablePoolExtension = BalancerStablePoolExtension(
-        //         deployer.deployContract("Balancer Stable Pool Extension V0.0", creationCode, constructorArgs, 0)
-        //     );
-        // }
+        {
+            creationCode = type(AuraERC4626Adaptor).creationCode;
+            constructorArgs = hex"";
+            auraERC4626Adaptor = AuraERC4626Adaptor(
+                deployer.deployContract("Aura ERC4626 Adaptor V0.0", creationCode, constructorArgs, 0)
+            );
+        }
 
         // Add Chainlink USD assets.
         PriceRouter.ChainlinkDerivativeStorage memory stor;
@@ -112,6 +89,18 @@ contract DeployMacroAudit12Script is Script, MainnetAddresses {
         price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
         settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
         priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(USDT_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDT_USD_FEED);
+        priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(DAI_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, DAI_USD_FEED);
+        priceRouter.addAsset(DAI, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(FRAX_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, FRAX_USD_FEED);
+        priceRouter.addAsset(FRAX, settings, abi.encode(stor), price);
 
         // Intentionally use WETH_USD_FEED for steth price, to peg it 1:1 with WETH.
         price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
