@@ -23,43 +23,25 @@ contract AffectsOf1to1StethWethTest is MainnetStarterTest, AdaptorHelperFunction
     using stdStorage for StdStorage;
 
     Cellar public rye = Cellar(0xb5b29320d2Dde5BA5BAFA1EbcD270052070483ec);
+    Cellar public rybtc = Cellar(0x0274a704a6D9129F90A62dDC6f6024b33EcDad36);
     Cellar public turboSteth = Cellar(0xfd6db5011b171B05E1Ea3b92f9EAcaEEb055e971);
 
-    PriceRouter public isolatedPriceRouter;
+    PriceRouter public isolatedPriceRouter = PriceRouter(0x8E46F30b09fDFAe6C97Db27FEcF3304f86dD88c2);
     WstEthExtension private wstethExtension;
 
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 18443373;
+        uint256 blockNumber = 18478001;
         _startFork(rpcKey, blockNumber);
 
-        isolatedPriceRouter = new PriceRouter(address(this), turboSteth.registry(), WETH);
-        wstethExtension = new WstEthExtension(isolatedPriceRouter);
-
         priceRouter = PriceRouter(address(rye.priceRouter()));
-
-        // Add assets to isolated price router.
-        _addChainlinkAsset(isolatedPriceRouter, WETH, WETH_USD_FEED, false);
-        // Make STETH 1:1 with WETH by making it use the WETH USD Chainlink Feed.
-        _addChainlinkAsset(isolatedPriceRouter, STETH, WETH_USD_FEED, false);
-        _addChainlinkAsset(isolatedPriceRouter, rETH, RETH_ETH_FEED, true);
-        _addChainlinkAsset(isolatedPriceRouter, cbETH, CBETH_ETH_FEED, true);
-
-        PriceRouter.AssetSettings memory settings;
-        PriceRouter.ChainlinkDerivativeStorage memory stor;
-        uint256 price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
-
-        // Add wstEth.
-        uint256 wstethToStethConversion = wstethExtension.stEth().getPooledEthByShares(1e18);
-        price = price.mulDivDown(wstethToStethConversion, 1e18);
-        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(wstethExtension));
-        isolatedPriceRouter.addAsset(WSTETH, settings, abi.encode(0), price);
     }
 
     function testImmediateAffectsOfChange() external {
         // make the change, and see how much share price changes.
         uint256 ryeTotalAssetsBefore = rye.totalAssets();
+        uint256 rybtcTotalAssetsBefore = rybtc.totalAssets();
         uint256 turboStethTotalAssetsBefore = turboSteth.totalAssets();
 
         // Update both registries price routers to point to isolated one.
@@ -70,8 +52,9 @@ contract AffectsOf1to1StethWethTest is MainnetStarterTest, AdaptorHelperFunction
 
         // Have both cellars cache the new price router.
         vm.startPrank(gravityBridgeAddress);
-        RYECachePriceRouter(address(rye)).cachePriceRouter(true, 16);
-        turboSteth.cachePriceRouter(true, 16, address(isolatedPriceRouter));
+        RYECachePriceRouter(address(rye)).cachePriceRouter(true, 14);
+        RYECachePriceRouter(address(rybtc)).cachePriceRouter(true, 14);
+        turboSteth.cachePriceRouter(true, 20, address(isolatedPriceRouter));
         vm.stopPrank();
 
         // Update both registries price routers to point to old one.
@@ -81,14 +64,22 @@ contract AffectsOf1to1StethWethTest is MainnetStarterTest, AdaptorHelperFunction
         vm.stopPrank();
 
         uint256 ryeTotalAssetsAfter = rye.totalAssets();
+        uint256 rybtcTotalAssetsAfter = rybtc.totalAssets();
         uint256 turboStethTotalAssetsAfter = turboSteth.totalAssets();
 
         assertGt(ryeTotalAssetsAfter, ryeTotalAssetsBefore, "Total assets should have increased.");
+        assertGt(rybtcTotalAssetsAfter, rybtcTotalAssetsBefore, "Total assets should have increased.");
         assertGt(turboStethTotalAssetsAfter, turboStethTotalAssetsBefore, "Total assets should have increased.");
 
         assertApproxEqRel(
             ryeTotalAssetsAfter,
             ryeTotalAssetsBefore,
+            0.002e18,
+            "Total Assets should have changed, but not drastically."
+        );
+        assertApproxEqRel(
+            rybtcTotalAssetsAfter,
+            rybtcTotalAssetsBefore,
             0.002e18,
             "Total Assets should have changed, but not drastically."
         );
@@ -102,23 +93,20 @@ contract AffectsOf1to1StethWethTest is MainnetStarterTest, AdaptorHelperFunction
 
     function testBlackSwanAffectsOfChange() external {
         // Update both registries price routers to point to isolated one.
-        vm.startPrank(multisig);
-        Registry(rye.registry()).setAddress(2, address(isolatedPriceRouter));
-        Registry(turboSteth.registry()).setAddress(2, address(isolatedPriceRouter));
-        vm.stopPrank();
-
-        // Have both cellars cache the new price router.
-        vm.startPrank(gravityBridgeAddress);
-        RYECachePriceRouter(address(rye)).cachePriceRouter(true, 16);
-        turboSteth.cachePriceRouter(true, 16, address(isolatedPriceRouter));
-        vm.stopPrank();
-
-        // Update both registries price routers to point to old one.
-        vm.startPrank(multisig);
-        Registry(rye.registry()).setAddress(2, address(priceRouter));
-        Registry(turboSteth.registry()).setAddress(2, address(priceRouter));
-        vm.stopPrank();
-
+        // vm.startPrank(multisig);
+        // Registry(rye.registry()).setAddress(2, address(isolatedPriceRouter));
+        // Registry(turboSteth.registry()).setAddress(2, address(isolatedPriceRouter));
+        // vm.stopPrank();
+        // // Have both cellars cache the new price router.
+        // vm.startPrank(gravityBridgeAddress);
+        // RYECachePriceRouter(address(rye)).cachePriceRouter(true, 16);
+        // turboSteth.cachePriceRouter(true, 16, address(isolatedPriceRouter));
+        // vm.stopPrank();
+        // // Update both registries price routers to point to old one.
+        // vm.startPrank(multisig);
+        // Registry(rye.registry()).setAddress(2, address(priceRouter));
+        // Registry(turboSteth.registry()).setAddress(2, address(priceRouter));
+        // vm.stopPrank();
         // Now that Cellars have been updated to use new isolated price router, look at black swan affects.
         // Have steth depeg.
         // Uni positions woudl not be fully composed of steth, but cellar would evaluate them as fully composed of weth.
