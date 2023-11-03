@@ -148,7 +148,8 @@ contract CurveAdaptor is BaseAdaptor {
         uint256 balanceDelta = token.balanceOf(address(this));
 
         // Approve pool to spend amounts
-        for (uint256 i; i < tokens.length; ++i) tokens[i].safeApprove(pool, orderedTokenAmounts[i]);
+        for (uint256 i; i < tokens.length; ++i)
+            if (orderedTokenAmounts[i] > 0) tokens[i].safeApprove(pool, orderedTokenAmounts[i]);
 
         pool.functionCall(data);
 
@@ -158,7 +159,8 @@ contract CurveAdaptor is BaseAdaptor {
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
         if (balanceDelta < minValueOut) revert(":(");
 
-        for (uint256 i; i < tokens.length; ++i) _revokeExternalApproval(tokens[i], pool);
+        for (uint256 i; i < tokens.length; ++i)
+            if (orderedTokenAmounts[i] > 0) _revokeExternalApproval(tokens[i], pool);
     }
 
     // Add liquidity to a pool using native ETH.
@@ -214,9 +216,6 @@ contract CurveAdaptor is BaseAdaptor {
         uint256[] memory balanceDelta = new uint256[](tokens.length);
         for (uint256 i; i < tokens.length; ++i) balanceDelta[i] = ERC20(tokens[i]).balanceOf(address(this));
 
-        // TODO might not be needed
-        token.safeApprove(pool, lpTokenAmount);
-
         pool.functionCall(data);
 
         for (uint256 i; i < tokens.length; ++i)
@@ -242,7 +241,6 @@ contract CurveAdaptor is BaseAdaptor {
         uint256[] memory balanceDelta = new uint256[](tokens.length);
         for (uint256 i; i < tokens.length; ++i) balanceDelta[i] = ERC20(tokens[i]).balanceOf(address(this));
 
-        // TODO might not be needed
         token.safeApprove(addressThis, lpTokenAmount);
 
         uint256[] memory tokensOut = CurveAdaptor(addressThis).removeLiquidityETHViaProxy(
@@ -277,7 +275,7 @@ contract CurveAdaptor is BaseAdaptor {
 
         uint256 balanceDelta = tokenOut.balanceOf(address(this));
 
-        curvePool.remove_liquidity_one_coin(lpTokenAmount, i, minOut);
+        curvePool.remove_liquidity_one_coin(lpTokenAmount, int128(uint128(i)), minOut);
 
         balanceDelta = tokenOut.balanceOf(address(this)) - balanceDelta;
 
@@ -377,11 +375,11 @@ contract CurveAdaptor is BaseAdaptor {
         if (tokens.length != orderedTokenAmountsOut.length) revert("Bad data");
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(lpTokenAmount, orderedTokenAmountsOut, useUnderlying);
 
+        // Transfer token in.
+        token.safeTransferFrom(msg.sender, addressThis, lpTokenAmount);
+
         uint256[] memory balanceDelta = new uint256[](tokens.length);
         for (uint256 i; i < tokens.length; ++i) balanceDelta[i] = ERC20(tokens[i]).balanceOf(address(this));
-
-        // TODO might not be needed
-        token.safeApprove(pool, lpTokenAmount);
 
         pool.functionCall(data);
 
@@ -419,7 +417,7 @@ contract CurveAdaptor is BaseAdaptor {
 
         token.safeTransferFrom(msg.sender, addressThis, lpTokenAmount);
 
-        CurvePool(pool).remove_liquidity_one_coin(lpTokenAmount, i, minOut);
+        CurvePool(pool).remove_liquidity_one_coin(lpTokenAmount, int128(uint128(i)), minOut);
 
         ethOut = addressThis.balance;
 

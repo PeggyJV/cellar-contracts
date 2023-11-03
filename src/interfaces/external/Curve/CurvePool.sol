@@ -8,7 +8,7 @@ interface CurvePool {
 
     function coins(uint256 i) external view returns (address);
 
-    function remove_liquidity_one_coin(uint256 token_amount, uint256 i, uint256 min_amount) external;
+    function remove_liquidity_one_coin(uint256 token_amount, int128 i, uint256 min_amount) external;
 
     function lp_price() external view returns (uint256);
 

@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
+import { Cellar } from "src/base/Cellar.sol";
 import { CurveEMAExtension } from "src/modules/price-router/Extensions/Curve/CurveEMAExtension.sol";
 import { CurveAdaptor, CurvePool } from "src/modules/Adaptors/Curve/CurveAdaptor.sol";
 import { Curve2PoolExtension } from "src/modules/price-router/Extensions/Curve/Curve2PoolExtension.sol";
@@ -25,7 +26,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     CurveEMAExtension private curveEMAExtension;
     Curve2PoolExtension private curve2PoolExtension;
 
-    CellarWithOracle private cellar;
+    Cellar private cellar;
 
     uint32 private usdcPosition = 1;
     uint32 private crvusdPosition = 2;
@@ -245,7 +246,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(USDC), address(this), initialDeposit);
         USDC.approve(cellarAddress, initialDeposit);
 
-        bytes memory creationCode = type(CellarWithOracle).creationCode;
+        bytes memory creationCode = type(Cellar).creationCode;
         bytes memory constructorArgs = abi.encode(
             address(this),
             registry,
@@ -256,10 +257,9 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(0),
             initialDeposit,
             platformCut,
-            type(uint192).max,
-            vault
+            type(uint192).max
         );
-        cellar = CellarWithOracle(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
+        cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
 
         cellar.addAdaptorToCatalogue(address(curveAdaptor));
 
@@ -273,8 +273,96 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // ========================================= HAPPY PATH TESTS =========================================
 
-    function testAddAsset() external {
-        // _add2PoolAssetToPriceRouter(FraxUsdcPool, FraxUsdcToken, true, 1e8);
+    function testManagingLiquidityIn2PoolCorrelatedNoETH(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        ERC20[] memory tokens = new ERC20[](2);
+        tokens[0] = USDC;
+        tokens[1] = CRVUSD;
+
+        uint256[] memory orderedTokenAmounts = new uint256[](2);
+        orderedTokenAmounts[0] = assets / 2;
+        orderedTokenAmounts[1] = 0;
+
+        // Strategist rebalances into USDC CRVUSD LP , single asset.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                tokens,
+                orderedTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Strategist rebalances into USDC CRVUSD LP , dual asset.
+        // Simulate a swap by minting Cellar CRVUSD in exchange for USDC.
+        uint256 crvUsdAmount = priceRouter.getValue(USDC, assets / 4, CRVUSD);
+        orderedTokenAmounts[0] = assets / 4;
+        orderedTokenAmounts[1] = crvUsdAmount;
+        deal(address(USDC), address(cellar), initialAssets + assets / 4);
+        deal(address(CRVUSD), address(cellar), crvUsdAmount);
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                tokens,
+                orderedTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        assertGt(ERC20(UsdcCrvUsdToken).balanceOf(address(cellar)), 0, "Should have added liquidity");
+        // Zero out cellars USDC balance.
+        // deal(address(USDC), address(cellar), 0);
+
+        // Strategist pulls liquidity from USDC CRVUSD dual asset.
+        orderedTokenAmounts = new uint256[](2); // Specify zero for min amounts out.
+        uint256 amountToPull = ERC20(UsdcCrvUsdToken).balanceOf(address(cellar)) / 2;
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveLiquidityFromCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                amountToPull,
+                tokens,
+                orderedTokenAmounts
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Strategist pulls liquidity from USDC CRVUSD single asset.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveLiquidityFromCurveSingleCoin(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                amountToPull,
+                0,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        console.log("LP Tokens minted", ERC20(UsdcCrvUsdToken).balanceOf(address(cellar)));
     }
 
     function testTotalAssets() external {}

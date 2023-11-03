@@ -41,6 +41,9 @@ import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellar
 // Maker
 import { DSRAdaptor } from "src/modules/adaptors/Maker/DSRAdaptor.sol";
 
+// Curve
+import { CurveAdaptor, CurvePool } from "src/modules/Adaptors/Curve/CurveAdaptor.sol";
+
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
 import { AuraERC4626Adaptor } from "src/modules/adaptors/Aura/AuraERC4626Adaptor.sol";
@@ -561,5 +564,54 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToDrip() internal pure returns (bytes memory) {
         return abi.encodeWithSelector(DSRAdaptor.drip.selector);
+    }
+
+    // ========================================= Curve FUNCTIONS =========================================
+
+    function _createBytesDataToAddLiquidityToCurve(
+        address pool,
+        ERC20 token,
+        ERC20[] memory tokens,
+        uint256[] memory orderedTokenAmounts,
+        uint256 minLPAmount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.addLiquidity.selector,
+                pool,
+                token,
+                tokens,
+                orderedTokenAmounts,
+                minLPAmount
+            );
+    }
+
+    function _createBytesDataToRemoveLiquidityFromCurve(
+        address pool,
+        ERC20 token,
+        uint256 lpTokenAmount,
+        ERC20[] memory tokens,
+        uint256[] memory orderedTokenAmountsOut
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.removeLiquidity.selector,
+                pool,
+                token,
+                lpTokenAmount,
+                tokens,
+                orderedTokenAmountsOut
+            );
+    }
+
+    function _createBytesDataToRemoveLiquidityFromCurveSingleCoin(
+        address pool,
+        ERC20 token,
+        uint256 lpTokenAmount,
+        uint256 i,
+        uint256 minOut
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(CurveAdaptor.removeLiquidityOneCoin.selector, pool, token, lpTokenAmount, i, minOut);
     }
 }
