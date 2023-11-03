@@ -4,9 +4,11 @@ pragma solidity 0.8.21;
 import { BaseAdaptor, ERC20, SafeTransferLib, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IWETH9 } from "src/interfaces/external/IWETH9.sol";
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
+import { CurveGauge } from "src/interfaces/external/Curve/CurveGauge.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
+import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
 /**
  * @title ERC20 Adaptor
@@ -20,7 +22,7 @@ contract CurveAdaptor is BaseAdaptor {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address pool, address token, address gauge)
+    // adaptorData = abi.encode(address pool, address token, address gauge, bytes4)
     // Where:
     // TODO
     //================= Configuration Data Specification =================
@@ -56,8 +58,15 @@ contract CurveAdaptor is BaseAdaptor {
      * @notice Cellar already has possession of users Curve LP tokens by the time this function is called,
      *         so there is nothing to do.
      */
-    function deposit(uint256, bytes memory, bytes memory) public override {
-        // TODO this could optionally deposit to a gauge.
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
+        (, ERC20 token, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
+
+        if (address(gauge) != address(0)) {
+            // Deposit into gauge.
+            token.safeApprove(address(gauge), assets);
+            gauge.deposit(assets, address(this));
+            _revokeExternalApproval(token, address(gauge));
+        }
     }
 
     /**
@@ -70,35 +79,49 @@ contract CurveAdaptor is BaseAdaptor {
      */
     function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
         _externalReceiverCheck(receiver);
-        // TODO call re-entrancy mutative function on Curve LP to confirm LP token is not being re-entered.
-        // Check Cellar balance of LP tokens, if not sufficient pull from gauge, then send tokens to user
-        // token.safeTransfer(receiver, assets);
+        (CurvePool pool, ERC20 token, CurveGauge gauge, bytes4 selector) = abi.decode(
+            adaptorData,
+            (CurvePool, ERC20, CurveGauge, bytes4)
+        );
+        _callReentrancyFunction(pool, selector);
+
+        uint256 tokenBalance = token.balanceOf(address(this));
+        if (tokenBalance < assets) {
+            // Pull from gauge.
+            gauge.withdraw(assets - tokenBalance, false);
+        }
+
+        token.safeTransfer(receiver, assets);
     }
 
     /**
      * @notice Identical to `balanceOf`, if an asset is used with a non ERC20 standard locking logic,
      *         then a NEW adaptor contract is needed.
      */
-    function withdrawableFrom(bytes memory adaptorData, bytes memory) public view override returns (uint256) {
-        // TODO check isLiquid and if true, returns LP balance in wallet and gauge
-        ERC20 token = abi.decode(adaptorData, (ERC20));
-        return token.balanceOf(msg.sender);
+    function withdrawableFrom(
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public view override returns (uint256) {
+        (, ERC20 token, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
+        bool isLiquid = abi.decode(configurationData, (bool));
+        if (isLiquid) {
+            return token.balanceOf(msg.sender) + gauge.balanceOf(msg.sender);
+        } else return 0;
     }
 
     /**
      * @notice Returns the balance of `token`.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        // TODO returns LP balance in wallet and gauge
-        ERC20 token = abi.decode(adaptorData, (ERC20));
-        return token.balanceOf(msg.sender);
+        (, ERC20 token, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
+        return token.balanceOf(msg.sender) + gauge.balanceOf(msg.sender);
     }
 
     /**
      * @notice Returns `token`
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
-        (, ERC20 token) = abi.decode(adaptorData, (address, ERC20));
+        (, ERC20 token) = abi.decode(adaptorData, (CurvePool, ERC20));
         return token;
     }
 
@@ -490,5 +513,23 @@ contract CurveAdaptor is BaseAdaptor {
                     )
                 )
             );
+    }
+
+    // TODO can we add a check in this adaptor, that verifies the calling Cellar has `sharePriceOracle` in it?
+    // So if we put it in `balanceOf`, that would full stop all use of a non oracle cellar that adds it
+    // But recovering from this would require us to call forcePositionOut, otherwise the cellar is bricked
+    // I think in balance of if I can return zero before doing the check, then it would be fine.
+    // An attacker would be able to send Curve LP to the cellar to temporaily brick it, but
+    // if a lot of mistakes were made, and the position wasa added, then the second total assets call in callOnAdaptor would revert, and prevent
+    // a strategist from moving money into it
+    function _ensureCallerUsesOracle(address caller) internal view {
+        // Try calling `sharePriceOracle` on caller.
+        CellarWithOracle(caller).sharePriceOracle();
+    }
+
+    // TODO move into a seperate contract since convex adaptor would use this as well.
+    function _callReentrancyFunction(CurvePool pool, bytes4 selector) internal {
+        if (selector == CurvePool.claim_admin_fees.selector) pool.claim_admin_fees();
+        else if (selector == CurvePool.withdraw_admin_fees.selector) pool.withdraw_admin_fees();
     }
 }
