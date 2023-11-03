@@ -11,7 +11,7 @@ import { IMorpho } from "src/interfaces/external/Morpho/Morpho Blue/IMorpho.sol"
  * @author crispymangoes, 0xEinCodes
  * TODO: THIS IS A WIP AND HAS LOTS OF TODOS AND REFERENCE TO FRAXLEND. THE STRATEGIST FUNCTIONS (NOT COMMENTED OUT) HAVE BASIC DIRECTION FOR MORPHO BLUE LENDING MARKETS
  */
-contract MorphoBlueCollateralAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
+contract MorphoBlueCollateralAdaptor is BaseAdaptor, MorphoBlueHealthFactorLogic {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -34,7 +34,10 @@ contract MorphoBlueCollateralAdaptor is BaseAdaptor, FraxlendHealthFactorLogic {
      */
     error MorphoBlueCollateralAdaptor__HealthFactorTooLow(Id id);
 
-    IMorpho public morphoBlue;
+    /**
+     * @notice The Morpho Blue contract on current network.
+     */
+    IMorpho public immutable morphoBlue;
 
     /**
      * @notice Minimum Health Factor enforced after every removeCollateral() strategist function call.
