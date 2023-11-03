@@ -586,6 +586,26 @@ contract AdaptorHelperFunctions {
             );
     }
 
+    function _createBytesDataToAddETHLiquidityToCurve(
+        address pool,
+        ERC20 token,
+        ERC20[] memory tokens,
+        uint256[] memory orderedTokenAmounts,
+        uint256 minLPAmount,
+        bool useUnderlying
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.addLiquidityETH.selector,
+                pool,
+                token,
+                tokens,
+                orderedTokenAmounts,
+                minLPAmount,
+                useUnderlying
+            );
+    }
+
     function _createBytesDataToRemoveLiquidityFromCurve(
         address pool,
         ERC20 token,
@@ -604,6 +624,26 @@ contract AdaptorHelperFunctions {
             );
     }
 
+    function _createBytesDataToRemoveETHLiquidityFromCurve(
+        address pool,
+        ERC20 token,
+        uint256 lpTokenAmount,
+        ERC20[] memory tokens,
+        uint256[] memory orderedTokenAmountsOut,
+        bool useUnderlying
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.removeLiquidityETH.selector,
+                pool,
+                token,
+                lpTokenAmount,
+                tokens,
+                orderedTokenAmountsOut,
+                useUnderlying
+            );
+    }
+
     function _createBytesDataToRemoveLiquidityFromCurveSingleCoin(
         address pool,
         ERC20 token,
@@ -613,5 +653,23 @@ contract AdaptorHelperFunctions {
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(CurveAdaptor.removeLiquidityOneCoin.selector, pool, token, lpTokenAmount, i, minOut);
+    }
+
+    function _createBytesDataToRemoveETHLiquidityFromCurveSingleCoin(
+        address pool,
+        ERC20 token,
+        uint256 lpTokenAmount,
+        uint256 i,
+        uint256 minOut
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                CurveAdaptor.removeLiquidityOneCoinETH.selector,
+                pool,
+                token,
+                lpTokenAmount,
+                i,
+                minOut
+            );
     }
 }

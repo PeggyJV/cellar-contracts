@@ -268,6 +268,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         for (uint32 i = 2; i < 19; ++i) cellar.addPositionToCatalogue(i);
         for (uint32 i = 2; i < 19; ++i) cellar.addPosition(0, i, abi.encode(false), false);
 
+        cellar.setRebalanceDeviation(0.030e18);
+
         initialAssets = cellar.totalAssets();
     }
 
@@ -365,7 +367,106 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         console.log("LP Tokens minted", ERC20(UsdcCrvUsdToken).balanceOf(address(cellar)));
     }
 
-    function testTotalAssets() external {}
+    function testManagingLiquidityIn2PoolCorrelatedWithETH(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // Convert the assets from USDC to WETH.
+        assets = priceRouter.getValue(USDC, assets, WETH);
+        deal(address(USDC), address(cellar), 0);
+        deal(address(WETH), address(cellar), assets);
+
+        ERC20[] memory tokens = new ERC20[](2);
+        tokens[0] = ERC20(curveAdaptor.CURVE_ETH());
+        tokens[1] = STETH;
+
+        uint256[] memory orderedTokenAmounts = new uint256[](2);
+        orderedTokenAmounts[0] = assets / 2;
+        orderedTokenAmounts[1] = 0;
+
+        // Strategist rebalances into ETH stETH LP , single asset.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
+                EthStethPool,
+                ERC20(EthStethToken),
+                tokens,
+                orderedTokenAmounts,
+                0,
+                false
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Strategist rebalances into ETH stETH LP , dual asset.
+        // Simulate a swap by minting Cellar CRVUSD in exchange for USDC.
+        uint256 stethAmount = priceRouter.getValue(WETH, assets / 4, STETH);
+        orderedTokenAmounts[0] = assets / 4;
+        orderedTokenAmounts[1] = stethAmount;
+        deal(address(WETH), address(cellar), initialAssets + assets / 4);
+        _takeSteth(stethAmount, address(cellar));
+        // deal(address(STETH), address(cellar), stethAmount);
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
+                EthStethPool,
+                ERC20(EthStethToken),
+                tokens,
+                orderedTokenAmounts,
+                0,
+                false
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        assertGt(ERC20(EthStethToken).balanceOf(address(cellar)), 0, "Should have added liquidity");
+        // Zero out cellars WETH balance.
+        deal(address(WETH), address(cellar), 0);
+
+        // Strategist pulls liquidity from ETH stETH LP dual asset.
+        orderedTokenAmounts = new uint256[](2); // Specify zero for min amounts out.
+        uint256 amountToPull = ERC20(EthStethToken).balanceOf(address(cellar)) / 2;
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveETHLiquidityFromCurve(
+                EthStethPool,
+                ERC20(EthStethToken),
+                amountToPull,
+                tokens,
+                orderedTokenAmounts,
+                false
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Strategist pulls liquidity from ETH stETH LP single asset.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveETHLiquidityFromCurveSingleCoin(
+                EthStethPool,
+                ERC20(EthStethToken),
+                amountToPull,
+                0,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // console.log("LP Tokens minted", ERC20(UsdcCrvUsdToken).balanceOf(address(cellar)));
+    }
 
     // ========================================= Reverts =========================================
     // ========================================= Helpers =========================================
@@ -383,5 +484,12 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         settings.source = address(curve2PoolExtension);
 
         priceRouter.addAsset(ERC20(token), settings, abi.encode(stor), expectedPrice);
+    }
+
+    function _takeSteth(uint256 amount, address to) internal {
+        // STETH does not work with DEAL, so steal STETH from a whale.
+        address stethWhale = 0x18709E89BD403F470088aBDAcEbE86CC60dda12e;
+        vm.prank(stethWhale);
+        STETH.safeTransfer(to, amount);
     }
 }

@@ -193,6 +193,7 @@ contract CurveAdaptor is BaseAdaptor {
             useUnderlying
         );
 
+        for (uint256 i; i < tokens.length; ++i) if (address(tokens[i]) == CURVE_ETH) tokens[i] = ERC20(nativeWrapper);
         uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(tokens, orderedTokenAmounts, token);
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
         if (lpOut < minValueOut) revert(":(");
@@ -238,9 +239,6 @@ contract CurveAdaptor is BaseAdaptor {
     ) external {
         if (tokens.length != orderedTokenAmountsOut.length) revert("Bad data");
 
-        uint256[] memory balanceDelta = new uint256[](tokens.length);
-        for (uint256 i; i < tokens.length; ++i) balanceDelta[i] = ERC20(tokens[i]).balanceOf(address(this));
-
         token.safeApprove(addressThis, lpTokenAmount);
 
         uint256[] memory tokensOut = CurveAdaptor(addressThis).removeLiquidityETHViaProxy(
@@ -252,6 +250,7 @@ contract CurveAdaptor is BaseAdaptor {
             useUnderlying
         );
 
+        for (uint256 i; i < tokens.length; ++i) if (address(tokens[i]) == CURVE_ETH) tokens[i] = ERC20(nativeWrapper);
         uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(tokens, tokensOut, token);
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert(":(");
@@ -328,7 +327,8 @@ contract CurveAdaptor is BaseAdaptor {
         uint256 minLPAmount,
         bool useUnderlying
     ) external returns (uint256 lpOut) {
-        if (Cellar(address(this)).blockExternalReceiver()) revert("Not callable by strategist");
+        // if (Cellar(msg.sender).blockExternalReceiver()) revert("Not callable by strategist");
+        // TODO above check is probs not needed as long as I confirm that if a cellar calls this function direclty it reverts when it tries to unwrap the ETH
 
         uint256 nativeEthAmount;
 
@@ -370,16 +370,13 @@ contract CurveAdaptor is BaseAdaptor {
         uint256[] memory orderedTokenAmountsOut,
         bool useUnderlying
     ) external returns (uint256[] memory tokensOut) {
-        if (Cellar(address(this)).blockExternalReceiver()) revert("Not callable by strategist");
+        // if (Cellar(msg.sender).blockExternalReceiver()) revert("Not callable by strategist");
 
         if (tokens.length != orderedTokenAmountsOut.length) revert("Bad data");
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(lpTokenAmount, orderedTokenAmountsOut, useUnderlying);
 
         // Transfer token in.
         token.safeTransferFrom(msg.sender, addressThis, lpTokenAmount);
-
-        uint256[] memory balanceDelta = new uint256[](tokens.length);
-        for (uint256 i; i < tokens.length; ++i) balanceDelta[i] = ERC20(tokens[i]).balanceOf(address(this));
 
         pool.functionCall(data);
 
@@ -413,7 +410,7 @@ contract CurveAdaptor is BaseAdaptor {
         uint256 i,
         uint256 minOut
     ) external returns (uint256 ethOut) {
-        if (Cellar(address(this)).blockExternalReceiver()) revert("Not callable by strategist");
+        // if (Cellar(msg.sender).blockExternalReceiver()) revert("Not callable by strategist");
 
         token.safeTransferFrom(msg.sender, addressThis, lpTokenAmount);
 
