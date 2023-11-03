@@ -55,9 +55,9 @@ contract DeployTurboSOMMCellarScript is Script, MainnetAddresses {
         uint64 heartbeat = 1 days;
         uint64 deviationTrigger = 0.0050e4;
         uint64 deviationTrigger2 = 0.0100e4;
-        uint64 gracePeriod = 1 days / 6;
+        uint64 gracePeriod = 1 days / 4;
         uint16 observationsToUse = 6;
-        uint216 startingAnswer = 1e6;
+        uint216 startingAnswer = 1e18;
         uint256 allowedAnswerChangeLower = 0.8e4;
         uint256 allowedAnswerChangeUpper = 2e4;
 
