@@ -37,7 +37,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
         uint256 lltv;
     }
 
-    IMorpho morphoBlue;
+    IMorpho public morphoBlue;
 
     /**
      * @notice Attempted to interact with a Morpho Blue Lending Market that the Cellar is not using.
@@ -129,7 +129,7 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
     // }
 
     /**
-     * @notice Returns the cellar's balance of the FRAX position.
+     * @notice Returns the cellar's balance of the loanToken position.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         // IFToken fToken = abi.decode(adaptorData, (IFToken));
@@ -139,8 +139,8 @@ contract MorphoBlueSupplyAdaptor is BaseAdaptor {
     /**
      * @notice Returns loanToken.
      */
-    function assetOf(bytes _id) public view override returns (ERC20) {
-        MarketParams memory market = morphoBlue.idToMarketParams(id);
+    function assetOf(bytes memory _id) public view override returns (ERC20) {
+        MarketParams memory market = morphoBlue.idToMarketParams(_id);
         return ERC20(market.loanToken);
     }
 
