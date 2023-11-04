@@ -10,6 +10,9 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
+import { console } from "@forge-std/Test.sol";
+
+// TODO remove
 /**
  * @title ERC20 Adaptor
  * @notice Allows Cellars to interact with Curve LP positions.
@@ -157,7 +160,7 @@ contract CurveAdaptor is BaseAdaptor {
 
         uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(tokens, orderedTokenAmounts, token);
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
-        if (balanceDelta < minValueOut) revert(":(");
+        if (balanceDelta < minValueOut) revert(":(0");
 
         for (uint256 i; i < tokens.length; ++i)
             if (orderedTokenAmounts[i] > 0) _revokeExternalApproval(tokens[i], pool);
@@ -196,7 +199,7 @@ contract CurveAdaptor is BaseAdaptor {
         for (uint256 i; i < tokens.length; ++i) if (address(tokens[i]) == CURVE_ETH) tokens[i] = ERC20(nativeWrapper);
         uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(tokens, orderedTokenAmounts, token);
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
-        if (lpOut < minValueOut) revert(":(");
+        if (lpOut < minValueOut) revert(":(1");
 
         for (uint256 i; i < tokens.length; ++i) {
             if (address(tokens[i]) == CURVE_ETH) _revokeExternalApproval(ERC20(nativeWrapper), addressThis);
@@ -212,6 +215,7 @@ contract CurveAdaptor is BaseAdaptor {
         uint256[] memory orderedTokenAmountsOut
     ) external {
         if (tokens.length != orderedTokenAmountsOut.length) revert("Bad data");
+        lpTokenAmount = _maxAvailable(token, lpTokenAmount);
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(lpTokenAmount, orderedTokenAmountsOut, false);
 
         uint256[] memory balanceDelta = new uint256[](tokens.length);
@@ -224,7 +228,7 @@ contract CurveAdaptor is BaseAdaptor {
 
         uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(tokens, balanceDelta, token);
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
-        if (lpValueOut < minValueOut) revert(":(");
+        if (lpValueOut < minValueOut) revert(":(2");
 
         _revokeExternalApproval(token, pool);
     }
@@ -238,6 +242,7 @@ contract CurveAdaptor is BaseAdaptor {
         bool useUnderlying
     ) external {
         if (tokens.length != orderedTokenAmountsOut.length) revert("Bad data");
+        lpTokenAmount = _maxAvailable(token, lpTokenAmount);
 
         token.safeApprove(addressThis, lpTokenAmount);
 
@@ -253,62 +258,7 @@ contract CurveAdaptor is BaseAdaptor {
         for (uint256 i; i < tokens.length; ++i) if (address(tokens[i]) == CURVE_ETH) tokens[i] = ERC20(nativeWrapper);
         uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(tokens, tokensOut, token);
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
-        if (lpValueOut < minValueOut) revert(":(");
-
-        _revokeExternalApproval(token, addressThis);
-    }
-
-    // TODO remove_liquidity_one_coin
-    function removeLiquidityOneCoin(
-        address pool,
-        ERC20 token,
-        uint256 lpTokenAmount,
-        uint256 i,
-        uint256 minOut
-    ) external {
-        CurvePool curvePool = CurvePool(pool);
-
-        ERC20 tokenOut = ERC20(curvePool.coins(i));
-
-        if (address(tokenOut) == CURVE_ETH) revert("no no no");
-
-        uint256 balanceDelta = tokenOut.balanceOf(address(this));
-
-        curvePool.remove_liquidity_one_coin(lpTokenAmount, int128(uint128(i)), minOut);
-
-        balanceDelta = tokenOut.balanceOf(address(this)) - balanceDelta;
-
-        uint256 valueOut = Cellar(address(this)).priceRouter().getValue(tokenOut, balanceDelta, token);
-        uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
-        if (valueOut < minValueOut) revert(":(");
-    }
-
-    function removeLiquidityOneCoinETH(
-        address pool,
-        ERC20 token,
-        uint256 lpTokenAmount,
-        uint256 i,
-        uint256 minOut
-    ) external {
-        CurvePool curvePool = CurvePool(pool);
-
-        ERC20 tokenOut = ERC20(curvePool.coins(i));
-
-        if (address(tokenOut) != CURVE_ETH) revert("no no no");
-
-        token.safeApprove(addressThis, lpTokenAmount);
-
-        uint256 wethOut = CurveAdaptor(addressThis).removeLiquidityOneCoinETHViaProxy(
-            pool,
-            token,
-            lpTokenAmount,
-            i,
-            minOut
-        );
-
-        uint256 valueOut = Cellar(address(this)).priceRouter().getValue(ERC20(nativeWrapper), wethOut, token);
-        uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
-        if (valueOut < minValueOut) revert(":(");
+        if (lpValueOut < minValueOut) revert(":(3");
 
         _revokeExternalApproval(token, addressThis);
     }
@@ -401,26 +351,6 @@ contract CurveAdaptor is BaseAdaptor {
         }
 
         _revokeExternalApproval(token, pool);
-    }
-
-    function removeLiquidityOneCoinETHViaProxy(
-        address pool,
-        ERC20 token,
-        uint256 lpTokenAmount,
-        uint256 i,
-        uint256 minOut
-    ) external returns (uint256 ethOut) {
-        // if (Cellar(msg.sender).blockExternalReceiver()) revert("Not callable by strategist");
-
-        token.safeTransferFrom(msg.sender, addressThis, lpTokenAmount);
-
-        CurvePool(pool).remove_liquidity_one_coin(lpTokenAmount, int128(uint128(i)), minOut);
-
-        ethOut = addressThis.balance;
-
-        IWETH9(nativeWrapper).deposit{ value: ethOut }();
-
-        ERC20(nativeWrapper).safeTransfer(msg.sender, ethOut);
     }
 
     //============================================ Helper Functions ===========================================

@@ -643,33 +643,4 @@ contract AdaptorHelperFunctions {
                 useUnderlying
             );
     }
-
-    function _createBytesDataToRemoveLiquidityFromCurveSingleCoin(
-        address pool,
-        ERC20 token,
-        uint256 lpTokenAmount,
-        uint256 i,
-        uint256 minOut
-    ) internal pure returns (bytes memory) {
-        return
-            abi.encodeWithSelector(CurveAdaptor.removeLiquidityOneCoin.selector, pool, token, lpTokenAmount, i, minOut);
-    }
-
-    function _createBytesDataToRemoveETHLiquidityFromCurveSingleCoin(
-        address pool,
-        ERC20 token,
-        uint256 lpTokenAmount,
-        uint256 i,
-        uint256 minOut
-    ) internal pure returns (bytes memory) {
-        return
-            abi.encodeWithSelector(
-                CurveAdaptor.removeLiquidityOneCoinETH.selector,
-                pool,
-                token,
-                lpTokenAmount,
-                i,
-                minOut
-            );
-    }
 }

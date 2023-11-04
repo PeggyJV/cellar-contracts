@@ -36,6 +36,7 @@ contract Curve2PoolExtension is Extension {
     struct ExtensionStorage {
         address pool;
         bool isCorrelated;
+        // TODO if we store the coins0 and coins1 here then we can store the underlying or constituent, and or rate provider contracts too.
     }
 
     /**
