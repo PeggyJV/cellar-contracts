@@ -231,6 +231,9 @@ contract MainnetAddresses {
     address public CrvUsdSdaiPool = 0x1539c2461d7432cc114b0903f1824079BfCA2C92;
     address public CrvUsdSdaiToken = 0x1539c2461d7432cc114b0903f1824079BfCA2C92;
     address public CrvUsdSdaiGauge = 0x2B5a5e182768a18C70EDd265240578a72Ca475ae;
+    address public CrvUsdSfraxPool = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
+    address public CrvUsdSfraxToken = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
+    address public CrvUsdSfraxGauge = 0x62B8DA8f1546a092500c457452fC2d45fa1777c4;
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 

@@ -40,6 +40,9 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private oethPosition = 21;
     uint32 private mkUsdPosition = 23;
     uint32 private yethPosition = 25;
+    uint32 private ethXPosition = 26;
+    uint32 private sDaiPosition = 27;
+    uint32 private sFraxPosition = 28;
     uint32 private UsdcCrvUsdPoolPosition = 10;
     uint32 private WethRethPoolPosition = 11;
     uint32 private UsdtCrvUsdPoolPosition = 12;
@@ -53,7 +56,10 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private EthOethPoolPosition = 20;
     uint32 private fraxCrvUsdPoolPosition = 22;
     uint32 private mkUsdFraxUsdcPoolPosition = 24;
-    uint32 private WethYethPoolPosition = 26;
+    uint32 private WethYethPoolPosition = 29;
+    uint32 private EthEthxPoolPosition = 30;
+    uint32 private CrvUsdSdaiPoolPosition = 31;
+    uint32 private CrvUsdSfraxPoolPosition = 32;
 
     uint32 private slippage = 0.9e4;
     uint256 public initialAssets;
@@ -211,63 +217,136 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
         priceRouter.addAsset(YETH, settings, abi.encode(cStor), price);
 
+        // Add ETHx
+        cStor.pool = EthEthxPool;
+        cStor.index = 0;
+        cStor.needIndex = false;
+        cStor.handleRate = true;
+        cStor.rateIndex = 1;
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
+        price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+        priceRouter.addAsset(ETHX, settings, abi.encode(cStor), price);
+
+        // Add sDAI
+        cStor.pool = CrvUsdSdaiPool;
+        cStor.index = 0;
+        cStor.needIndex = false;
+        cStor.handleRate = true;
+        cStor.rateIndex = 1;
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
+        price = price.mulDivDown(priceRouter.getPriceInUSD(DAI), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+        priceRouter.addAsset(ERC20(sDAI), settings, abi.encode(cStor), price);
+
+        // Add sFRAX
+        cStor.pool = CrvUsdSfraxPool;
+        cStor.index = 0;
+        cStor.needIndex = false;
+        cStor.handleRate = true;
+        cStor.rateIndex = 1;
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
+        price = price.mulDivDown(priceRouter.getPriceInUSD(FRAX), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+        priceRouter.addAsset(ERC20(sFRAX), settings, abi.encode(cStor), price);
+
         // Add 2pools.
         // UsdcCrvUsdPool
         // UsdcCrvUsdToken
         // UsdcCrvUsdGauge
-        _add2PoolAssetToPriceRouter(UsdcCrvUsdPool, UsdcCrvUsdToken, true, 1e8);
+        _add2PoolAssetToPriceRouter(UsdcCrvUsdPool, UsdcCrvUsdToken, true, 1e8, USDC, CRVUSD, false, false);
         // WethRethPool
         // WethRethToken
         // WethRethGauge
-        _add2PoolAssetToPriceRouter(WethRethPool, WethRethToken, false, 3_863e8);
+        _add2PoolAssetToPriceRouter(WethRethPool, WethRethToken, false, 3_863e8, WETH, rETH, false, false);
         // UsdtCrvUsdPool
         // UsdtCrvUsdToken
         // UsdtCrvUsdGauge
-        _add2PoolAssetToPriceRouter(UsdtCrvUsdPool, UsdtCrvUsdToken, true, 1e8);
+        _add2PoolAssetToPriceRouter(UsdtCrvUsdPool, UsdtCrvUsdToken, true, 1e8, USDT, CRVUSD, false, false);
         // EthStethPool
         // EthStethToken
         // EthStethGauge
-        _add2PoolAssetToPriceRouter(EthStethPool, EthStethToken, true, 1956e8);
+        _add2PoolAssetToPriceRouter(EthStethPool, EthStethToken, true, 1956e8, WETH, STETH, false, false);
         // FraxUsdcPool
         // FraxUsdcToken
         // FraxUsdcGauge
-        _add2PoolAssetToPriceRouter(FraxUsdcPool, FraxUsdcToken, true, 1e8);
+        _add2PoolAssetToPriceRouter(FraxUsdcPool, FraxUsdcToken, true, 1e8, FRAX, USDC, false, false);
         // WethFrxethPool
         // WethFrxethToken
         // WethFrxethGauge
-        _add2PoolAssetToPriceRouter(WethFrxethPool, WethFrxethToken, true, 1800e8);
+        _add2PoolAssetToPriceRouter(WethFrxethPool, WethFrxethToken, true, 1800e8, WETH, FRXETH, false, false);
         // EthFrxethPool
         // EthFrxethToken
         // EthFrxethGauge
-        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, true, 1800e8);
+        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, true, 1800e8, WETH, FRXETH, false, false);
         // StethFrxethPool
         // StethFrxethToken
         // StethFrxethGauge
-        _add2PoolAssetToPriceRouter(StethFrxethPool, StethFrxethToken, true, 1825e8);
+        _add2PoolAssetToPriceRouter(StethFrxethPool, StethFrxethToken, true, 1825e8, STETH, FRXETH, false, false);
         // WethCvxPool
         // WethCvxToken
         // WethCvxGauge
-        _add2PoolAssetToPriceRouter(WethCvxPool, WethCvxToken, false, 154e8);
+        _add2PoolAssetToPriceRouter(WethCvxPool, WethCvxToken, false, 154e8, WETH, CVX, false, false);
         // EthStethNgPool
         // EthStethNgToken
         // EthStethNgGauge
-        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 1_800e8);
+        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 1_800e8, WETH, STETH, false, false);
         // EthOethPool
         // EthOethToken
         // EthOethGauge
-        _add2PoolAssetToPriceRouter(EthOethPool, EthOethToken, true, 1_800e8);
+        _add2PoolAssetToPriceRouter(EthOethPool, EthOethToken, true, 1_800e8, WETH, OETH, false, false);
         // FraxCrvUsdPool
         // FraxCrvUsdToken
         // FraxCrvUsdGauge
-        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8);
+        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8, FRAX, CRVUSD, false, false);
         // mkUsdFraxUsdcPool
         // mkUsdFraxUsdcToken
         // mkUsdFraxUsdcGauge
-        _add2PoolAssetToPriceRouter(mkUsdFraxUsdcPool, mkUsdFraxUsdcToken, true, 1e8);
+        _add2PoolAssetToPriceRouter(
+            mkUsdFraxUsdcPool,
+            mkUsdFraxUsdcToken,
+            true,
+            1e8,
+            MKUSD,
+            ERC20(FraxUsdcToken),
+            false,
+            false
+        );
         // WethYethPool
         // WethYethToken
         // WethYethGauge
-        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 1_800e8);
+        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 1_800e8, WETH, YETH, false, false);
+        // EthEthxPool
+        // EthEthxToken
+        // EthEthxGauge
+        _add2PoolAssetToPriceRouter(EthEthxPool, EthEthxToken, true, 1_800e8, WETH, ETHX, false, true);
+
+        // CrvUsdSdaiPool
+        // CrvUsdSdaiToken
+        // CrvUsdSdaiGauge
+        _add2PoolAssetToPriceRouter(CrvUsdSdaiPool, CrvUsdSdaiToken, true, 1e8, CRVUSD, DAI, false, false);
+        // CrvUsdSfraxPool
+        // CrvUsdSfraxToken
+        // CrvUsdSfraxGauge
+        _add2PoolAssetToPriceRouter(CrvUsdSfraxPool, CrvUsdSfraxToken, true, 1e8, CRVUSD, FRAX, false, false);
 
         // Add positions to registry.
         registry.trustAdaptor(address(curveAdaptor));
@@ -284,6 +363,9 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(oethPosition, address(erc20Adaptor), abi.encode(OETH));
         registry.trustPosition(mkUsdPosition, address(erc20Adaptor), abi.encode(MKUSD));
         registry.trustPosition(yethPosition, address(erc20Adaptor), abi.encode(YETH));
+        registry.trustPosition(ethXPosition, address(erc20Adaptor), abi.encode(ETHX));
+        registry.trustPosition(sDaiPosition, address(erc20Adaptor), abi.encode(sDAI));
+        registry.trustPosition(sFraxPosition, address(erc20Adaptor), abi.encode(sFRAX));
 
         registry.trustPosition(
             UsdcCrvUsdPoolPosition,
@@ -366,6 +448,24 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(WethYethPool, WethYethToken, WethYethGauge, CurvePool.withdraw_admin_fees.selector)
         );
 
+        registry.trustPosition(
+            EthEthxPoolPosition,
+            address(curveAdaptor),
+            abi.encode(EthEthxPool, EthEthxToken, EthEthxGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
+        registry.trustPosition(
+            CrvUsdSdaiPoolPosition,
+            address(curveAdaptor),
+            abi.encode(CrvUsdSdaiPool, CrvUsdSdaiToken, CrvUsdSdaiGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
+        registry.trustPosition(
+            CrvUsdSfraxPoolPosition,
+            address(curveAdaptor),
+            abi.encode(CrvUsdSfraxPool, CrvUsdSfraxToken, CrvUsdSfraxGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
         string memory cellarName = "Curve Cellar V0.0";
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
@@ -394,8 +494,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
-        for (uint32 i = 2; i < 27; ++i) cellar.addPositionToCatalogue(i);
-        for (uint32 i = 2; i < 27; ++i) cellar.addPosition(0, i, abi.encode(false), false);
+        for (uint32 i = 2; i < 33; ++i) cellar.addPositionToCatalogue(i);
+        for (uint32 i = 2; i < 33; ++i) cellar.addPosition(0, i, abi.encode(false), false);
 
         cellar.setRebalanceDeviation(0.030e18);
 
@@ -456,6 +556,16 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _manageLiquidityIn2PoolNoETH(assets, WethYethPool, WethYethToken, 0.0050e18);
     }
 
+    function testManagingLiquidityIn2PoolNoETH10(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _manageLiquidityIn2PoolNoETH(assets, CrvUsdSdaiPool, CrvUsdSdaiToken, 0.0010e18);
+    }
+
+    function testManagingLiquidityIn2PoolNoETH11(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _manageLiquidityIn2PoolNoETH(assets, CrvUsdSfraxPool, CrvUsdSfraxToken, 0.0010e18);
+    }
+
     function testManagingLiquidityIn2PoolWithETH0(uint256 assets) external {
         assets = bound(assets, 1e6, 1_000_000e6);
         _manageLiquidityIn2PoolWithETH(assets, EthStethPool, EthStethToken, 0.0030e18);
@@ -474,6 +584,11 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function testManagingLiquidityIn2PoolWithETH3(uint256 assets) external {
         assets = bound(assets, 1e6, 1_000_000e6);
         _manageLiquidityIn2PoolWithETH(assets, EthOethPool, EthOethToken, 0.0010e18);
+    }
+
+    function testManagingLiquidityIn2PoolWithETH4(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _manageLiquidityIn2PoolWithETH(assets, EthEthxPool, EthEthxToken, 0.0020e18);
     }
 
     // TODO for sDAI and sFRAX pools, I think that they are a special pool type, where there is no LP price,
@@ -747,11 +862,19 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         address pool,
         address token,
         bool isCorrelated,
-        uint256 expectedPrice
+        uint256 expectedPrice,
+        ERC20 underlyingOrConstituent0,
+        ERC20 underlyingOrConstituent1,
+        bool divideRate0,
+        bool divideRate1
     ) internal {
         Curve2PoolExtension.ExtensionStorage memory stor;
         stor.pool = pool;
         stor.isCorrelated = isCorrelated;
+        stor.underlyingOrConstituent0 = address(underlyingOrConstituent0);
+        stor.underlyingOrConstituent1 = address(underlyingOrConstituent1);
+        stor.divideRate0 = divideRate0;
+        stor.divideRate1 = divideRate1;
         PriceRouter.AssetSettings memory settings;
         settings.derivative = EXTENSION_DERIVATIVE;
         settings.source = address(curve2PoolExtension);

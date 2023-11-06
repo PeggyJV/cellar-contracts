@@ -35,20 +35,11 @@ contract Curve2PoolExtension is Extension {
      */
     struct ExtensionStorage {
         address pool;
-        bool isCorrelated;
-        // TODO if we store the coins0 and coins1 here then we can store the underlying or constituent, and or rate provider contracts too.
-        // kinda like the above idea of saving the underlying or constituent in here....
-    }
-
-    struct NewExtensionStorage {
-        address pool;
         address underlyingOrConstituent0;
         address underlyingOrConstituent1;
         bool divideRate0; // If we only have the market price of the underlying, and there is a rate with the underlying, then divide out the rate
         bool divideRate1; // If we only new the safe price of sDAI, then we need to divide out the rate stored in the curve pool
         bool isCorrelated; // but if we know the safe market price of DAI then we can just use that.
-        // TODO if we store the coins0 and coins1 here then we can store the underlying or constituent, and or rate provider contracts too.
-        // kinda like the above idea of saving the underlying or constituent in here....
     }
 
     /**
@@ -77,13 +68,15 @@ contract Curve2PoolExtension is Extension {
 
         if (coinsLength > 2) revert("3pool not supported");
 
-        // Make sure coins[0] is supported.
-        if (!priceRouter.isSupported(getCoins(pool, 0))) revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
+        // Make sure underlyingOrConstituent0 is supported.
+        if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent0)))
+            revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
 
         if (stor.isCorrelated) {
             // pool.lp_price() not available
             // Make sure coins[1] is also supported.
-            if (!priceRouter.isSupported(getCoins(pool, 1))) revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
+            if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent1)))
+                revert Curve2PoolExtension_ASSET_NOT_SUPPORTED();
         } else {
             // Make sure pool.lp_price() is available.
             try pool.lp_price() {} catch {
@@ -104,8 +97,17 @@ contract Curve2PoolExtension is Extension {
 
         if (stor.isCorrelated) {
             // Find the minimum price of coins.
-            uint256 price0 = priceRouter.getPriceInUSD(getCoins(pool, 0));
-            uint256 price1 = priceRouter.getPriceInUSD(getCoins(pool, 1));
+            uint256 price0 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent0));
+            uint256 price1 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent1));
+            if (stor.divideRate0 || stor.divideRate1) {
+                uint256[2] memory rates = pool.stored_rates();
+                if (stor.divideRate0) {
+                    price0 = price0.mulDivDown(10 ** curveDecimals, rates[0]);
+                }
+                if (stor.divideRate1) {
+                    price1 = price1.mulDivDown(10 ** curveDecimals, rates[1]);
+                }
+            }
             uint256 minPrice = price0 < price1 ? price0 : price1;
             price = minPrice.mulDivDown(pool.get_virtual_price(), 10 ** curveDecimals);
             // TODO add in new underlying or constituent logic here with rates.
