@@ -125,7 +125,13 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = UsdcCrvUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
         price = price.mulDivDown(priceRouter.getPriceInUSD(USDC), 1e18);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
         priceRouter.addAsset(CRVUSD, settings, abi.encode(cStor), price);
@@ -134,7 +140,13 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethFrxethPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
         price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
         priceRouter.addAsset(FRXETH, settings, abi.encode(cStor), price);
@@ -143,7 +155,13 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethCvxPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
         price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
         priceRouter.addAsset(CVX, settings, abi.encode(cStor), price);
@@ -152,7 +170,13 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = EthOethPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
         price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
         priceRouter.addAsset(OETH, settings, abi.encode(cStor), price);
@@ -161,7 +185,13 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethMkUsdPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
         price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
         priceRouter.addAsset(MKUSD, settings, abi.encode(cStor), price);
@@ -170,7 +200,13 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cStor.pool = WethYethPool;
         cStor.index = 0;
         cStor.needIndex = false;
-        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = curveEMAExtension.getPriceFromCurvePool(
+            CurvePool(cStor.pool),
+            cStor.index,
+            cStor.needIndex,
+            cStor.rateIndex,
+            cStor.handleRate
+        );
         price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
         priceRouter.addAsset(YETH, settings, abi.encode(cStor), price);

@@ -54,6 +54,7 @@ contract MainnetAddresses {
     ERC20 public OETH = ERC20(0x856c4Efb76C1D1AE02e20CEB03A2A6a08b0b8dC3);
     ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
     ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
+    ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -224,6 +225,12 @@ contract MainnetAddresses {
     address public WethYethPool = 0x69ACcb968B19a53790f43e57558F5E443A91aF22;
     address public WethYethToken = 0x69ACcb968B19a53790f43e57558F5E443A91aF22;
     address public WethYethGauge = 0x138cC21D15b7A06F929Fc6CFC88d2b830796F4f1;
+    address public EthEthxPool = 0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492;
+    address public EthEthxToken = 0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492;
+    address public EthEthxGauge = 0x7671299eA7B4bbE4f3fD305A994e6443b4be680E;
+    address public CrvUsdSdaiPool = 0x1539c2461d7432cc114b0903f1824079BfCA2C92;
+    address public CrvUsdSdaiToken = 0x1539c2461d7432cc114b0903f1824079BfCA2C92;
+    address public CrvUsdSdaiGauge = 0x2B5a5e182768a18C70EDd265240578a72Ca475ae;
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 
@@ -244,6 +251,7 @@ contract MainnetAddresses {
 
     // Maker
     address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
+    address public sDAI = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
 
     // Frax
     address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;
