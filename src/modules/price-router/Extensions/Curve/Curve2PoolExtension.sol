@@ -37,6 +37,18 @@ contract Curve2PoolExtension is Extension {
         address pool;
         bool isCorrelated;
         // TODO if we store the coins0 and coins1 here then we can store the underlying or constituent, and or rate provider contracts too.
+        // kinda like the above idea of saving the underlying or constituent in here....
+    }
+
+    struct NewExtensionStorage {
+        address pool;
+        address underlyingOrConstituent0;
+        address underlyingOrConstituent1;
+        bool divideRate0; // If we only have the market price of the underlying, and there is a rate with the underlying, then divide out the rate
+        bool divideRate1; // If we only new the safe price of sDAI, then we need to divide out the rate stored in the curve pool
+        bool isCorrelated; // but if we know the safe market price of DAI then we can just use that.
+        // TODO if we store the coins0 and coins1 here then we can store the underlying or constituent, and or rate provider contracts too.
+        // kinda like the above idea of saving the underlying or constituent in here....
     }
 
     /**
@@ -96,7 +108,11 @@ contract Curve2PoolExtension is Extension {
             uint256 price1 = priceRouter.getPriceInUSD(getCoins(pool, 1));
             uint256 minPrice = price0 < price1 ? price0 : price1;
             price = minPrice.mulDivDown(pool.get_virtual_price(), 10 ** curveDecimals);
+            // TODO add in new underlying or constituent logic here with rates.
         } else {
+            // TODO I wonder if rates would also need to come up here, like if this new pool ever gave the lp_price without adjusting for the rate, then we would need to?
+            // TODO ^^^ I dont think this makes sense cuz the point of it acconting for the rate is to keep the liquidity concentrated at that rate
+            // but you can only do that with correlated pairs.
             price = pool.lp_price().mulDivDown(priceRouter.getPriceInUSD(getCoins(pool, 0)), 10 ** curveDecimals);
         }
     }

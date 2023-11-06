@@ -37,6 +37,9 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private fraxPosition = 7;
     uint32 private frxethPosition = 8;
     uint32 private cvxPosition = 9;
+    uint32 private oethPosition = 21;
+    uint32 private mkUsdPosition = 23;
+    uint32 private yethPosition = 25;
     uint32 private UsdcCrvUsdPoolPosition = 10;
     uint32 private WethRethPoolPosition = 11;
     uint32 private UsdtCrvUsdPoolPosition = 12;
@@ -46,6 +49,11 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private EthFrxethPoolPosition = 16;
     uint32 private StethFrxethPoolPosition = 17;
     uint32 private WethCvxPoolPosition = 18;
+    uint32 private EthStethNgPoolPosition = 19;
+    uint32 private EthOethPoolPosition = 20;
+    uint32 private fraxCrvUsdPoolPosition = 22;
+    uint32 private mkUsdFraxUsdcPoolPosition = 24;
+    uint32 private WethYethPoolPosition = 26;
 
     uint32 private slippage = 0.9e4;
     uint256 public initialAssets;
@@ -140,6 +148,33 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
         priceRouter.addAsset(CVX, settings, abi.encode(cStor), price);
 
+        // Add OETH
+        cStor.pool = EthOethPool;
+        cStor.index = 0;
+        cStor.needIndex = false;
+        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+        priceRouter.addAsset(OETH, settings, abi.encode(cStor), price);
+
+        // Add mkUsd
+        cStor.pool = WethMkUsdPool;
+        cStor.index = 0;
+        cStor.needIndex = false;
+        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+        priceRouter.addAsset(MKUSD, settings, abi.encode(cStor), price);
+
+        // Add yETH
+        cStor.pool = WethYethPool;
+        cStor.index = 0;
+        cStor.needIndex = false;
+        price = curveEMAExtension.getPriceFromCurvePool(CurvePool(cStor.pool), cStor.index, cStor.needIndex);
+        price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
+        settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
+        priceRouter.addAsset(YETH, settings, abi.encode(cStor), price);
+
         // Add 2pools.
         // UsdcCrvUsdPool
         // UsdcCrvUsdToken
@@ -177,6 +212,26 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // WethCvxToken
         // WethCvxGauge
         _add2PoolAssetToPriceRouter(WethCvxPool, WethCvxToken, false, 154e8);
+        // EthStethNgPool
+        // EthStethNgToken
+        // EthStethNgGauge
+        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 1_800e8);
+        // EthOethPool
+        // EthOethToken
+        // EthOethGauge
+        _add2PoolAssetToPriceRouter(EthOethPool, EthOethToken, true, 1_800e8);
+        // FraxCrvUsdPool
+        // FraxCrvUsdToken
+        // FraxCrvUsdGauge
+        _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8);
+        // mkUsdFraxUsdcPool
+        // mkUsdFraxUsdcToken
+        // mkUsdFraxUsdcGauge
+        _add2PoolAssetToPriceRouter(mkUsdFraxUsdcPool, mkUsdFraxUsdcToken, true, 1e8);
+        // WethYethPool
+        // WethYethToken
+        // WethYethGauge
+        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 1_800e8);
 
         // Add positions to registry.
         registry.trustAdaptor(address(curveAdaptor));
@@ -190,6 +245,9 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(fraxPosition, address(erc20Adaptor), abi.encode(FRAX));
         registry.trustPosition(frxethPosition, address(erc20Adaptor), abi.encode(FRXETH));
         registry.trustPosition(cvxPosition, address(erc20Adaptor), abi.encode(CVX));
+        registry.trustPosition(oethPosition, address(erc20Adaptor), abi.encode(OETH));
+        registry.trustPosition(mkUsdPosition, address(erc20Adaptor), abi.encode(MKUSD));
+        registry.trustPosition(yethPosition, address(erc20Adaptor), abi.encode(YETH));
 
         registry.trustPosition(
             UsdcCrvUsdPoolPosition,
@@ -237,6 +295,41 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(WethCvxPool, WethCvxToken, WethCvxGauge, CurvePool.claim_admin_fees.selector)
         );
 
+        registry.trustPosition(
+            EthStethNgPoolPosition,
+            address(curveAdaptor),
+            abi.encode(EthStethNgPool, EthStethNgToken, EthStethNgGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
+        registry.trustPosition(
+            EthOethPoolPosition,
+            address(curveAdaptor),
+            abi.encode(EthOethPool, EthOethToken, EthOethGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
+        registry.trustPosition(
+            fraxCrvUsdPoolPosition,
+            address(curveAdaptor),
+            abi.encode(FraxCrvUsdPool, FraxCrvUsdToken, FraxCrvUsdGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
+        registry.trustPosition(
+            mkUsdFraxUsdcPoolPosition,
+            address(curveAdaptor),
+            abi.encode(
+                mkUsdFraxUsdcPool,
+                mkUsdFraxUsdcToken,
+                mkUsdFraxUsdcGauge,
+                CurvePool.withdraw_admin_fees.selector
+            )
+        );
+
+        registry.trustPosition(
+            WethYethPoolPosition,
+            address(curveAdaptor),
+            abi.encode(WethYethPool, WethYethToken, WethYethGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
         string memory cellarName = "Curve Cellar V0.0";
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
@@ -265,8 +358,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
-        for (uint32 i = 2; i < 19; ++i) cellar.addPositionToCatalogue(i);
-        for (uint32 i = 2; i < 19; ++i) cellar.addPosition(0, i, abi.encode(false), false);
+        for (uint32 i = 2; i < 27; ++i) cellar.addPositionToCatalogue(i);
+        for (uint32 i = 2; i < 27; ++i) cellar.addPosition(0, i, abi.encode(false), false);
 
         cellar.setRebalanceDeviation(0.030e18);
 
@@ -312,14 +405,39 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _manageLiquidityIn2PoolNoETH(assets, WethCvxPool, WethCvxToken, 0.0050e18);
     }
 
-    function testManagingLiquidityIn2PoolCorrelatedWithETH0(uint256 assets) external {
+    function testManagingLiquidityIn2PoolNoETH7(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _manageLiquidityIn2PoolNoETH(assets, FraxCrvUsdPool, FraxCrvUsdToken, 0.0005e18);
+    }
+
+    function testManagingLiquidityIn2PoolNoETH8(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _manageLiquidityIn2PoolNoETH(assets, mkUsdFraxUsdcPool, mkUsdFraxUsdcToken, 0.0050e18);
+    }
+
+    function testManagingLiquidityIn2PoolNoETH9(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _manageLiquidityIn2PoolNoETH(assets, WethYethPool, WethYethToken, 0.0050e18);
+    }
+
+    function testManagingLiquidityIn2PoolWithETH0(uint256 assets) external {
         assets = bound(assets, 1e6, 1_000_000e6);
         _manageLiquidityIn2PoolWithETH(assets, EthStethPool, EthStethToken, 0.0030e18);
     }
 
-    function testManagingLiquidityIn2PoolCorrelatedWithETH1(uint256 assets) external {
+    function testManagingLiquidityIn2PoolWithETH1(uint256 assets) external {
         assets = bound(assets, 1e6, 1_000_000e6);
         _manageLiquidityIn2PoolWithETH(assets, EthFrxethPool, EthFrxethToken, 0.0010e18);
+    }
+
+    function testManagingLiquidityIn2PoolWithETH2(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        _manageLiquidityIn2PoolWithETH(assets, EthStethNgPool, EthStethNgToken, 0.0025e18);
+    }
+
+    function testManagingLiquidityIn2PoolWithETH3(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        _manageLiquidityIn2PoolWithETH(assets, EthOethPool, EthOethToken, 0.0010e18);
     }
 
     // TODO for sDAI and sFRAX pools, I think that they are a special pool type, where there is no LP price,
@@ -343,6 +461,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             } else {
                 assets = priceRouter.getValue(USDC, assets, coins0);
                 if (coins0 == STETH) _takeSteth(assets, address(cellar));
+                else if (coins0 == OETH) _takeOeth(assets, address(cellar));
                 else deal(address(coins0), address(cellar), assets);
             }
             deal(address(USDC), address(cellar), 0);
@@ -383,8 +502,10 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             orderedTokenAmounts[0] = assets / 4;
             orderedTokenAmounts[1] = coins1Amount;
             if (coins0 == STETH) _takeSteth(assets / 4, address(cellar));
+            else if (coins0 == OETH) _takeOeth(assets / 4, address(cellar));
             else deal(address(coins0), address(cellar), assets / 4);
             if (coins1 == STETH) _takeSteth(coins1Amount, address(cellar));
+            else if (coins1 == OETH) _takeOeth(coins1Amount, address(cellar));
             else deal(address(coins1), address(cellar), coins1Amount);
         }
         {
@@ -454,6 +575,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             } else {
                 assets = priceRouter.getValue(USDC, assets, coins0);
                 if (coins0 == STETH) _takeSteth(assets, address(cellar));
+                else if (coins0 == OETH) _takeOeth(assets, address(cellar));
                 else deal(address(coins0), address(cellar), assets);
             }
             deal(address(USDC), address(cellar), 0);
@@ -504,8 +626,10 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             orderedTokenAmounts[0] = assets / 4;
             orderedTokenAmounts[1] = coins1Amount;
             if (coins0 == STETH) _takeSteth(assets / 4, address(cellar));
+            else if (coins0 == OETH) _takeOeth(assets / 4, address(cellar));
             else deal(address(coins0), address(cellar), assets / 4);
             if (coins1 == STETH) _takeSteth(coins1Amount, address(cellar));
+            else if (coins1 == OETH) _takeOeth(coins1Amount, address(cellar));
             else deal(address(coins1), address(cellar), coins1Amount);
         }
         {
@@ -604,5 +728,12 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         address stethWhale = 0x18709E89BD403F470088aBDAcEbE86CC60dda12e;
         vm.prank(stethWhale);
         STETH.safeTransfer(to, amount);
+    }
+
+    function _takeOeth(uint256 amount, address to) internal {
+        // STETH does not work with DEAL, so steal STETH from a whale.
+        address oethWhale = 0xEADB3840596cabF312F2bC88A4Bb0b93A4E1FF5F;
+        vm.prank(oethWhale);
+        OETH.safeTransfer(to, amount);
     }
 }

@@ -51,6 +51,9 @@ contract MainnetAddresses {
     ERC20 public CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     ERC20 public FRXETH = ERC20(0x5E8422345238F34275888049021821E8E08CAa1f);
     ERC20 public CRVUSD = ERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
+    ERC20 public OETH = ERC20(0x856c4Efb76C1D1AE02e20CEB03A2A6a08b0b8dC3);
+    ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
+    ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -206,6 +209,23 @@ contract MainnetAddresses {
     address public WethCvxPool = 0xB576491F1E6e5E62f1d8F26062Ee822B40B0E0d4;
     address public WethCvxToken = 0x3A283D9c08E8b55966afb64C515f5143cf907611;
     address public WethCvxGauge = 0x7E1444BA99dcdFfE8fBdb42C02F0005D14f13BE1;
+    address public EthStethNgPool = 0x21E27a5E5513D6e65C4f830167390997aA84843a;
+    address public EthStethNgToken = 0x21E27a5E5513D6e65C4f830167390997aA84843a;
+    address public EthStethNgGauge = 0x79F21BC30632cd40d2aF8134B469a0EB4C9574AA;
+    address public EthOethPool = 0x94B17476A93b3262d87B9a326965D1E91f9c13E7;
+    address public EthOethToken = 0x94B17476A93b3262d87B9a326965D1E91f9c13E7;
+    address public EthOethGauge = 0xd03BE91b1932715709e18021734fcB91BB431715;
+    address public FraxCrvUsdPool = 0x0CD6f267b2086bea681E922E19D40512511BE538;
+    address public FraxCrvUsdToken = 0x0CD6f267b2086bea681E922E19D40512511BE538;
+    address public FraxCrvUsdGauge = 0x96424E6b5eaafe0c3B36CA82068d574D44BE4e3c;
+    address public mkUsdFraxUsdcPool = 0x0CFe5C777A7438C9Dd8Add53ed671cEc7A5FAeE5;
+    address public mkUsdFraxUsdcToken = 0x0CFe5C777A7438C9Dd8Add53ed671cEc7A5FAeE5;
+    address public mkUsdFraxUsdcGauge = 0xF184d80915Ba7d835D941BA70cDdf93DE36517ee;
+    address public WethYethPool = 0x69ACcb968B19a53790f43e57558F5E443A91aF22;
+    address public WethYethToken = 0x69ACcb968B19a53790f43e57558F5E443A91aF22;
+    address public WethYethGauge = 0x138cC21D15b7A06F929Fc6CFC88d2b830796F4f1;
+
+    address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 
     // Uniswap V3
     address public WSTETH_WETH_100 = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;
