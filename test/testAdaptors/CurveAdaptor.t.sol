@@ -608,11 +608,11 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _manageLiquidityIn2PoolWithETH(assets, EthEthxPool, EthEthxToken, EthEthxGauge, 0.0020e18);
     }
 
-    // TODO for sDAI and sFRAX pools, I think that they are a special pool type, where there is no LP price,
-    // so in pricing we need to either use the price of the underlying, or take the sDAI price, and divide out the rate.
-
     // ========================================= Reverts =========================================
+
+    // TODO Add in tests where we check the reverts that are in the adaptor themselves. I think it is best if we just pick some LP token and use it
     // ========================================= Helpers =========================================
+    // TODO I think every test should also check and make sure the reentrancy check works as expected.
     function _manageLiquidityIn2PoolNoETH(
         uint256 assets,
         address pool,
