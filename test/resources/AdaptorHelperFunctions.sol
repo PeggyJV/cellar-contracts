@@ -643,4 +643,20 @@ contract AdaptorHelperFunctions {
                 useUnderlying
             );
     }
+
+    function _createBytesDataToStakeCurveLP(
+        address token,
+        address gauge,
+        uint256 amount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CurveAdaptor.stakeInGauge.selector, token, gauge, amount);
+    }
+
+    function _createBytesDataToUnStakeCurveLP(address gauge, uint256 amount) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CurveAdaptor.unStakeFromGauge.selector, gauge, amount);
+    }
+
+    function _createBytesDataToClaimRewardsForCurveLP(address gauge) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(CurveAdaptor.getRewards.selector, gauge);
+    }
 }

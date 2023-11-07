@@ -6,7 +6,9 @@ interface CurveGauge {
 
     function withdraw(uint256 amount, bool claimRewards) external;
 
-    function claim_rewards(address to) external;
+    function withdraw(uint256 amount) external;
+
+    function claim_rewards() external;
 
     function balanceOf(address user) external view returns (uint256);
 }

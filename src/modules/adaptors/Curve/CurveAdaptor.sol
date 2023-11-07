@@ -9,16 +9,18 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
+import { CurveHelper } from "src/modules/adaptors/Curve/CurveHelper.sol";
 
 import { console } from "@forge-std/Test.sol";
 
+// TODO Curve Gauges can TECHNICALLY have a non 18 decimal value :(
 // TODO remove
 /**
  * @title ERC20 Adaptor
  * @notice Allows Cellars to interact with Curve LP positions.
  * @author crispymangoes
  */
-contract CurveAdaptor is BaseAdaptor {
+contract CurveAdaptor is BaseAdaptor, CurveHelper {
     using SafeTransferLib for ERC20;
     using Address for address;
     using Strings for uint256;
@@ -44,14 +46,10 @@ contract CurveAdaptor is BaseAdaptor {
         return keccak256(abi.encode("Curve Adaptor V 0.0"));
     }
 
-    address public constant CURVE_ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-
-    address public immutable nativeWrapper;
     address payable public immutable addressThis;
     uint32 public immutable curveSlippage;
 
-    constructor(address _nativeWrapper, uint32 _curveSlippage) {
-        nativeWrapper = _nativeWrapper;
+    constructor(address _nativeWrapper, uint32 _curveSlippage) CurveHelper(_nativeWrapper) {
         addressThis = payable(address(this));
         curveSlippage = _curveSlippage;
     }
@@ -177,7 +175,7 @@ contract CurveAdaptor is BaseAdaptor {
     ) external {
         if (tokens.length != orderedTokenAmounts.length) revert("Bad data");
 
-        // Approve pool to spend amounts
+        // Approve adaptor to spend amounts
         for (uint256 i; i < tokens.length; ++i) {
             if (address(tokens[i]) == CURVE_ETH) {
                 // If token is CURVE_ETH, then approve adaptor to spend native wrapper.
@@ -187,7 +185,7 @@ contract CurveAdaptor is BaseAdaptor {
             }
         }
 
-        uint256 lpOut = CurveAdaptor(addressThis).addLiquidityETHViaProxy(
+        uint256 lpOut = CurveHelper(addressThis).addLiquidityETHViaProxy(
             pool,
             token,
             tokens,
@@ -246,7 +244,7 @@ contract CurveAdaptor is BaseAdaptor {
 
         token.safeApprove(addressThis, lpTokenAmount);
 
-        uint256[] memory tokensOut = CurveAdaptor(addressThis).removeLiquidityETHViaProxy(
+        uint256[] memory tokensOut = CurveHelper(addressThis).removeLiquidityETHViaProxy(
             pool,
             token,
             lpTokenAmount,
@@ -263,198 +261,19 @@ contract CurveAdaptor is BaseAdaptor {
         _revokeExternalApproval(token, addressThis);
     }
 
-    // TODO remove liquidity imbalance?
-
-    //========================================= Native Helper Functions =======================================
-    // Cellars do not natively use ETH, so to support interacting with native ETH curve pools, this adaptor will serve as a proxy to wrap and unwrap ETH.
-    receive() external payable {}
-
-    function addLiquidityETHViaProxy(
-        address pool,
-        ERC20 token,
-        ERC20[] memory tokens,
-        uint256[] memory orderedTokenAmounts,
-        uint256 minLPAmount,
-        bool useUnderlying
-    ) external returns (uint256 lpOut) {
-        // if (Cellar(msg.sender).blockExternalReceiver()) revert("Not callable by strategist");
-        // TODO above check is probs not needed as long as I confirm that if a cellar calls this function direclty it reverts when it tries to unwrap the ETH
-
-        uint256 nativeEthAmount;
-
-        // Transfer assets to the adaptor.
-        for (uint256 i; i < tokens.length; ++i) {
-            if (address(tokens[i]) == CURVE_ETH) {
-                // If token is CURVE_ETH, then approve adaptor to spend native wrapper.
-                ERC20(nativeWrapper).safeTransferFrom(msg.sender, addressThis, orderedTokenAmounts[i]);
-                // Unwrap native.
-                IWETH9(nativeWrapper).withdraw(orderedTokenAmounts[i]);
-
-                nativeEthAmount = orderedTokenAmounts[i];
-            } else {
-                tokens[i].safeTransferFrom(msg.sender, addressThis, orderedTokenAmounts[i]);
-                // Approve pool to spend ERC20 assets.
-                tokens[i].safeApprove(pool, orderedTokenAmounts[i]);
-            }
-        }
-
-        bytes memory data = _curveAddLiquidityEncodedCallData(orderedTokenAmounts, minLPAmount, useUnderlying);
-
-        pool.functionCallWithValue(data, nativeEthAmount);
-
-        // Send LP tokens back to caller.
-        ERC20 lpToken = ERC20(token);
-        lpOut = lpToken.balanceOf(addressThis);
-        lpToken.safeTransfer(msg.sender, lpOut);
-
-        for (uint256 i; i < tokens.length; ++i) {
-            if (address(tokens[i]) != CURVE_ETH) _revokeExternalApproval(tokens[i], addressThis);
-        }
+    function stakeInGauge(ERC20 token, CurveGauge gauge, uint256 amount) external {
+        amount = _maxAvailable(token, amount);
+        token.safeApprove(address(gauge), amount);
+        gauge.deposit(amount, address(this));
+        _revokeExternalApproval(token, address(gauge));
     }
 
-    function removeLiquidityETHViaProxy(
-        address pool,
-        ERC20 token,
-        uint256 lpTokenAmount,
-        ERC20[] memory tokens,
-        uint256[] memory orderedTokenAmountsOut,
-        bool useUnderlying
-    ) external returns (uint256[] memory tokensOut) {
-        // if (Cellar(msg.sender).blockExternalReceiver()) revert("Not callable by strategist");
-
-        if (tokens.length != orderedTokenAmountsOut.length) revert("Bad data");
-        bytes memory data = _curveRemoveLiquidityEncodedCalldata(lpTokenAmount, orderedTokenAmountsOut, useUnderlying);
-
-        // Transfer token in.
-        token.safeTransferFrom(msg.sender, addressThis, lpTokenAmount);
-
-        pool.functionCall(data);
-
-        // Iterate through tokens, update tokensOut.
-        tokensOut = new uint256[](tokens.length);
-
-        for (uint256 i; i < tokens.length; ++i) {
-            if (address(tokens[i]) == CURVE_ETH) {
-                // Wrap any ETH we have.
-                uint256 ethBalance = addressThis.balance;
-                IWETH9(nativeWrapper).deposit{ value: ethBalance }();
-                // Send WETH back to caller.
-                ERC20(nativeWrapper).safeTransfer(msg.sender, ethBalance);
-                tokensOut[i] = ethBalance;
-            } else {
-                // Send ERC20 back to caller
-                ERC20 t = ERC20(tokens[i]);
-                uint256 tBalance = t.balanceOf(addressThis);
-                t.safeTransfer(msg.sender, tBalance);
-                tokensOut[i] = tBalance;
-            }
-        }
-
-        _revokeExternalApproval(token, pool);
+    function unStakeFromGauge(CurveGauge gauge, uint256 amount) external {
+        if (amount == type(uint256).max) amount = gauge.balanceOf(address(this));
+        gauge.withdraw(amount);
     }
 
-    //============================================ Helper Functions ===========================================
-    function _curveAddLiquidityEncodedCallData(
-        uint256[] memory orderedTokenAmounts,
-        uint256 minLPAmount,
-        bool useUnderlying
-    ) internal pure returns (bytes memory data) {
-        bytes memory finalEncodedArgOrEmpty;
-        if (useUnderlying) {
-            finalEncodedArgOrEmpty = abi.encode(true);
-        }
-
-        data = abi.encodePacked(
-            _curveAddLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlying),
-            abi.encodePacked(orderedTokenAmounts),
-            minLPAmount,
-            finalEncodedArgOrEmpty
-        );
-    }
-
-    function _curveAddLiquidityEncodeSelector(
-        uint256 numberOfCoins,
-        bool useUnderlying
-    ) internal pure returns (bytes4 selector_) {
-        string memory finalArgOrEmpty;
-        if (useUnderlying) {
-            finalArgOrEmpty = ",bool";
-        }
-
-        return
-            bytes4(
-                keccak256(
-                    abi.encodePacked(
-                        "add_liquidity(uint256[",
-                        numberOfCoins.toString(),
-                        "],",
-                        "uint256",
-                        finalArgOrEmpty,
-                        ")"
-                    )
-                )
-            );
-    }
-
-    function _curveRemoveLiquidityEncodedCalldata(
-        uint256 lpTokenAmount,
-        uint256[] memory orderedTokenAmounts,
-        bool useUnderlyings
-    ) private pure returns (bytes memory callData_) {
-        bytes memory finalEncodedArgOrEmpty;
-        if (useUnderlyings) {
-            finalEncodedArgOrEmpty = abi.encode(true);
-        }
-
-        return
-            abi.encodePacked(
-                _curveRemoveLiquidityEncodeSelector(orderedTokenAmounts.length, useUnderlyings),
-                lpTokenAmount,
-                abi.encodePacked(orderedTokenAmounts),
-                finalEncodedArgOrEmpty
-            );
-    }
-
-    /// @dev Helper to encode selector for a call to remove liquidity on Curve
-    function _curveRemoveLiquidityEncodeSelector(
-        uint256 numberOfCoins,
-        bool useUnderlyings
-    ) private pure returns (bytes4 selector_) {
-        string memory finalArgOrEmpty;
-        if (useUnderlyings) {
-            finalArgOrEmpty = ",bool";
-        }
-
-        return
-            bytes4(
-                keccak256(
-                    abi.encodePacked(
-                        "remove_liquidity(uint256,",
-                        "uint256[",
-                        numberOfCoins.toString(),
-                        "]",
-                        finalArgOrEmpty,
-                        ")"
-                    )
-                )
-            );
-    }
-
-    // TODO can we add a check in this adaptor, that verifies the calling Cellar has `sharePriceOracle` in it?
-    // So if we put it in `balanceOf`, that would full stop all use of a non oracle cellar that adds it
-    // But recovering from this would require us to call forcePositionOut, otherwise the cellar is bricked
-    // I think in balance of if I can return zero before doing the check, then it would be fine.
-    // An attacker would be able to send Curve LP to the cellar to temporaily brick it, but
-    // if a lot of mistakes were made, and the position wasa added, then the second total assets call in callOnAdaptor would revert, and prevent
-    // a strategist from moving money into it
-    function _ensureCallerUsesOracle(address caller) internal view {
-        // Try calling `sharePriceOracle` on caller.
-        CellarWithOracle(caller).sharePriceOracle();
-    }
-
-    // TODO move into a seperate contract since convex adaptor would use this as well.
-    function _callReentrancyFunction(CurvePool pool, bytes4 selector) internal {
-        if (selector == CurvePool.claim_admin_fees.selector) pool.claim_admin_fees();
-        else if (selector == CurvePool.withdraw_admin_fees.selector) pool.withdraw_admin_fees();
+    function getRewards(CurveGauge gauge) external {
+        gauge.claim_rewards();
     }
 }
