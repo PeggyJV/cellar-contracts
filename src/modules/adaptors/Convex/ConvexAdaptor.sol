@@ -9,7 +9,7 @@ import { IBaseRewardPool } from "src/interfaces/external/Convex/IBaseRewardPool.
  * @dev This adaptor is specifically for Convex contracts.
  * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex markets.
  * @author crispymangoes, 0xEinCodes
- * @dev TODO: this may not work for Convex with other protocols (FRAX, Prisma, etc.).
+ * @dev TODO: this may not work for Convex with other protocols (FRAX, Prisma, etc.). FRAX contract architecture shows some discrepancies (need to confirm). Side-Chain implementations for convex markets showcase other discrepancies too in external function signatures, etc.
  */
 contract ConvexAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
@@ -108,7 +108,10 @@ contract ConvexAdaptor is BaseAdaptor {
         (uint256 _pid, address _rewardsPool) = abi.decode(adaptorData, (uint256, address));
         _validatePositionIsUsed(_pid, _rewardsPool);
 
+        //TODO: logic that checks if there is enough liquid curveLPT,and if not it does withdrawAndUnwrap(). If this logic is in place, withdrawableFrom() can report staked amount too.
+
         booster.withdraw(_pid, _amount);
+
         IBaseRewardsPool rewardsPool = IBaseRewardsPool(_rewardsPool);
         rewardsPool.withdrawAndUnwrap(amount, _claim); // TODO: not sure if we just always set this to true (might be gas intensive), or if we allow this as a param somehow.
     }
@@ -117,8 +120,6 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice Functions Cellars use to determine the withdrawable balance from an adaptor position.
      * @dev Accounts for LPTs in the Cellar's wallet, and staked in Convex Market.
      * @dev See `balanceOf`.
-     * TODO: get Crispy's thoughts on when we are considering these positions liquid (does staked LPTs count?)
-     * TODO: EIN THIS IS WHERE YOU LEFT OFF.
      */
     function withdrawableFrom(
         bytes memory _adaptorData,
@@ -126,8 +127,11 @@ contract ConvexAdaptor is BaseAdaptor {
     ) public view override returns (uint256) {
         bool isLiquid = abi.decode(configurationData, (bool));
         if (isLiquid) {
-            ERC4626 erc4626Vault = abi.decode(adaptorData, (ERC4626));
-            return erc4626Vault.maxWithdraw(msg.sender);
+            (uint256 _pid, address _rewardsPool) = abi.decode(adaptorData, (uint256, address));
+            _validatePositionIsUsed(_pid, _rewardsPool); // TODO: not sure if we need to validate
+            IBaseRewardsPool rewardsPool = IBaseRewardsPool(_rewardsPool);
+            ERC20 stakingToken = ERC(rewardsPool.stakingToken());
+            return (stakingToken.balanceof(msg.sender) + rewardsPool.balanceOf(msg.sender));
         } else return 0;
     }
 
@@ -135,14 +139,13 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice Calculates the Cellar's balance of the positions creditAsset, a specific underlying LPT.
      * @param _adaptorData encoded data for trusted adaptor position detailing the LPT and poolId for the convex market that holds any of the Cellar's staked LPTs
      * @return total balance of LPT for Cellar, including liquid and staked
+     * TODO: This assumes that no rewards are given back as accrual of more curveLPT. I believe that to be the case because BaseRewardPool has its own rewardsToken, and extraRewards has specific reward contracts specific to respective convex markets.
      */
     function balanceOf(bytes memory _adaptorData) public view override returns (uint256) {
-        // TODO: EIN - use below balancer implementation as reference.
-        // (ERC20 bpt, address liquidityGauge) = abi.decode(_adaptorData, (ERC20, address));
-        // if (liquidityGauge == address(0)) return ERC20(bpt).balanceOf(msg.sender);
-        // ERC20 liquidityGaugeToken = ERC20(liquidityGauge);
-        // uint256 stakedBPT = liquidityGaugeToken.balanceOf(msg.sender);
-        // return ERC20(bpt).balanceOf(msg.sender) + stakedBPT;
+        (uint256 _pid, address _rewardsPool) = abi.decode(adaptorData, (uint256, address));
+        IBaseRewardsPool rewardsPool = IBaseRewardsPool(_rewardsPool);
+        ERC20 stakingToken = ERC(rewardsPool.stakingToken());
+        return (stakingToken.balanceof(msg.sender) + rewardsPool.balanceOf(msg.sender));
     }
 
     /**
@@ -151,8 +154,12 @@ contract ConvexAdaptor is BaseAdaptor {
      * @return Underlying LPT for Cellar's respective Convex market position
      */
     function assetOf(bytes memory _adaptorData) public pure override returns (ERC20) {
-        // TODO: EIN
-        // return ERC20(abi.decode(_adaptorData, (address)));
+        (uint256 _pid, ) = abi.decode(adaptorData, (uint256, address));
+        ERC20 lpt = ERC20(booster.PoolInfo(pid).lpToken());
+
+        // TODO: decide to use above or alternative way to get lpt below
+        // IBaseRewardsPool rewardsPool = IBaseRewardsPool(_rewardsPool);
+        // return ERC(rewardsPool.stakingToken());
     }
 
     /**
@@ -163,9 +170,8 @@ contract ConvexAdaptor is BaseAdaptor {
      * @dev all breakdowns of LPT pricing and its underlying assets are done through the PriceRouter extension (in accordance to PriceRouterv2 architecture)
      */
     function assetsUsed(bytes memory _adaptorData) public pure override returns (ERC20[] memory assets) {
-        // TODO: EIN
-        // assets = new ERC20[](1);
-        // assets[0] = assetOf(_adaptorData);
+        assets = new ERC20[](1);
+        assets[0] = assetOf(_adaptorData);
     }
 
     /**
@@ -193,9 +199,8 @@ contract ConvexAdaptor is BaseAdaptor {
     /**
      * @notice Allows strategists to withdraw from Convex markets via Booster contract
      * NOTE: this adaptor will always unwrap to CRV LPTs if possible. It will not keep the position in convex wrapped LPT position.
-     * // TODO: not sure if we just always set this to true (might be gas intensive), or if we allow this as a param somehow.
      */
-    function withdrawFromBoosterNoRewards(uint256 _pid, uint256 _amount, bool _claim) public {
+    function withdrawFromBoosterNoRewards(uint256 _pid, uint256 _amount) public {
         _validatePositionIsUsed(_pid);
         booster.withdraw(_pid, _amount);
     }
@@ -224,7 +229,6 @@ contract ConvexAdaptor is BaseAdaptor {
     /**
      * @notice Validates that a given booster is set up as a position in the calling Cellar.
      * @dev This function uses `address(this)` as the address of the calling Cellar.
-     * TODO: possibly add address _rewardsPool to the adaptorData etc.
      */
     function _validatePositionIsUsed(uint256 _pid, address _baseRewardsPool) internal view {
         bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_pid, _baseRewardsPool)));
