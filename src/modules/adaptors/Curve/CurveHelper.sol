@@ -218,10 +218,13 @@ contract CurveHelper {
         CellarWithOracle(caller).sharePriceOracle();
     }
 
-    // TODO move into a seperate contract since convex adaptor would use this as well.
+    // TODO should this really restrict what can be called?
     function _callReentrancyFunction(CurvePool pool, bytes4 selector) internal {
         if (selector == CurvePool.claim_admin_fees.selector) pool.claim_admin_fees();
         else if (selector == CurvePool.withdraw_admin_fees.selector) pool.withdraw_admin_fees();
+        else if (selector == bytes4(keccak256(abi.encodePacked("price_oracle()")))) pool.price_oracle();
+        else if (selector == bytes4(CurvePool.get_virtual_price.selector)) pool.get_virtual_price();
+        else revert("unknown selector");
     }
 
     /**

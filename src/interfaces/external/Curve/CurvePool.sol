@@ -12,6 +12,8 @@ interface CurvePool {
 
     function remove_liquidity_one_coin(uint256 token_amount, int128 i, uint256 min_amount) external;
 
+    function remove_liquidity(uint256 token_amount, uint256[2] memory min_amounts) external;
+
     function lp_price() external view returns (uint256);
 
     function get_virtual_price() external view returns (uint256);

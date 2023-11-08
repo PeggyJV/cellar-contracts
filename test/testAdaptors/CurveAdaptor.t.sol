@@ -73,6 +73,12 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private slippage = 0.9e4;
     uint256 public initialAssets;
 
+    bool public attackCellar;
+    bool public blockExternalReceiver;
+    ERC20[] public slippageCoins;
+    uint256 public slippageToCharge;
+    address public slippageToken;
+
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
@@ -402,7 +408,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(
             EthStethPoolPosition,
             address(curveAdaptor),
-            abi.encode(EthStethPool, EthStethToken, EthStethGauge, CurvePool.withdraw_admin_fees.selector)
+            abi.encode(EthStethPool, EthStethToken, EthStethGauge, bytes4(0))
         );
         registry.trustPosition(
             FraxUsdcPoolPosition,
@@ -417,7 +423,12 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(
             EthFrxethPoolPosition,
             address(curveAdaptor),
-            abi.encode(EthFrxethPool, EthFrxethToken, EthFrxethGauge, CurvePool.withdraw_admin_fees.selector)
+            abi.encode(
+                EthFrxethPool,
+                EthFrxethToken,
+                EthFrxethGauge,
+                bytes4(keccak256(abi.encodePacked("price_oracle()")))
+            )
         );
         registry.trustPosition(
             StethFrxethPoolPosition,
@@ -512,11 +523,14 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         USDC.safeApprove(address(cellar), type(uint256).max);
 
         for (uint32 i = 2; i < 33; ++i) cellar.addPositionToCatalogue(i);
-        for (uint32 i = 2; i < 33; ++i) cellar.addPosition(0, i, abi.encode(false), false);
+        for (uint32 i = 2; i < 33; ++i) cellar.addPosition(0, i, abi.encode(true), false);
 
         cellar.setRebalanceDeviation(0.030e18);
 
         initialAssets = cellar.totalAssets();
+
+        slippageCoins.push(ERC20(address(0)));
+        slippageCoins.push(ERC20(address(0)));
     }
 
     // ========================================= HAPPY PATH TESTS =========================================
@@ -608,11 +622,488 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _manageLiquidityIn2PoolWithETH(assets, EthEthxPool, EthEthxToken, EthEthxGauge, 0.0020e18);
     }
 
+    function testDepositAndWithdrawFromCurveLP0(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(UsdcCrvUsdToken), UsdcCrvUsdPoolPosition, UsdcCrvUsdGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP1(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(WethRethToken), WethRethPoolPosition, WethRethGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP2(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(UsdtCrvUsdToken), UsdtCrvUsdPoolPosition, UsdtCrvUsdGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP3(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(StethFrxethToken), StethFrxethPoolPosition, StethFrxethGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP4(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(WethFrxethToken), WethFrxethPoolPosition, WethFrxethGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP5(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(WethCvxToken), WethCvxPoolPosition, WethCvxGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP6(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(EthFrxethToken), EthFrxethPoolPosition, EthFrxethGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP7(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(EthOethToken), EthOethPoolPosition, EthOethGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP8(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(EthStethNgToken), EthStethNgPoolPosition, EthStethNgGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP9(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(FraxCrvUsdToken), fraxCrvUsdPoolPosition, FraxCrvUsdGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP10(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(mkUsdFraxUsdcToken), mkUsdFraxUsdcPoolPosition, mkUsdFraxUsdcGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP11(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(WethYethToken), WethYethPoolPosition, WethYethGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP12(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(EthEthxToken), EthEthxPoolPosition, EthEthxGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP13(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(CrvUsdSdaiToken), CrvUsdSdaiPoolPosition, CrvUsdSdaiGauge);
+    }
+
+    function testDepositAndWithdrawFromCurveLP14(uint256 assets) external {
+        assets = bound(assets, 1e18, 1_000_000e18);
+        _curveLPAsAccountingAsset(assets, ERC20(CrvUsdSfraxToken), CrvUsdSfraxPoolPosition, CrvUsdSfraxGauge);
+    }
+
+    function testWithdrawLogic(uint256 assets) external {
+        assets = bound(assets, 100e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        // Remove CrvUsdSfraxPoolPosition, and re-add it as illiquid.
+        cellar.removePosition(0, false);
+        cellar.addPosition(0, CrvUsdSfraxPoolPosition, abi.encode(false), false);
+
+        // Split assets in half
+        assets = assets / 2;
+
+        // NOTE vanilla USDC is already at the end of the queue.
+
+        // Deposit 1/2 of the assets in the cellar.
+        cellar.deposit(assets, address(this));
+
+        // Simulate liquidity addition into UsdcCrvUsd Pool.
+        uint256 lpAmount = priceRouter.getValue(USDC, assets, ERC20(UsdcCrvUsdToken));
+        deal(address(USDC), address(cellar), initialAssets);
+        deal(UsdcCrvUsdToken, address(cellar), lpAmount);
+
+        uint256 totalAssetsWithdrawable = cellar.totalAssetsWithdrawable();
+        uint256 totalAssets = cellar.totalAssets();
+        assertEq(totalAssetsWithdrawable, totalAssets, "All assets should be liquid.");
+
+        // Have user withdraw all their assets.
+        uint256 sharesToRedeem = cellar.maxRedeem(address(this));
+        cellar.redeem(sharesToRedeem, address(this), address(this));
+        uint256 lpTokensReceived = ERC20(UsdcCrvUsdToken).balanceOf(address(this));
+        uint256 valueReceived = priceRouter.getValue(ERC20(UsdcCrvUsdToken), lpTokensReceived, USDC);
+        assertApproxEqAbs(valueReceived, assets, 3, "User should have received assets worth of value out.");
+
+        // Deposit 1/2 of the assets in the cellar.
+        cellar.deposit(assets, address(this));
+
+        // Simulate liquidity addition into CrvUsdSfrax Pool.
+        lpAmount = priceRouter.getValue(USDC, assets, ERC20(CrvUsdSfraxToken));
+        deal(address(USDC), address(cellar), initialAssets);
+        deal(CrvUsdSfraxToken, address(cellar), lpAmount);
+
+        totalAssetsWithdrawable = cellar.totalAssetsWithdrawable();
+        assertApproxEqAbs(totalAssetsWithdrawable, initialAssets, 3, "Only initial assets should be liquid.");
+
+        // If a cellar tried to withdraw from the Curve Position it would revert.
+        bytes memory data = abi.encodeWithSelector(
+            CurveAdaptor.withdraw.selector,
+            lpAmount,
+            address(1),
+            abi.encode(CrvUsdSfraxPool, CrvUsdSfraxToken, CrvUsdSfraxGauge, CurvePool.get_virtual_price.selector),
+            abi.encode(false)
+        );
+
+        vm.expectRevert();
+        address(curveAdaptor).functionDelegateCall(data);
+
+        // Simulate liquidity addition into EthSteth Pool.
+        lpAmount = priceRouter.getValue(USDC, assets, ERC20(EthStethToken));
+        deal(CrvUsdSfraxToken, address(cellar), 0);
+        deal(EthStethToken, address(cellar), lpAmount);
+
+        totalAssetsWithdrawable = cellar.totalAssetsWithdrawable();
+        assertApproxEqAbs(totalAssetsWithdrawable, initialAssets, 3, "Only initial assets should be liquid.");
+
+        // If a cellar tried to withdraw from the Curve Position it would revert.
+        data = abi.encodeWithSelector(
+            CurveAdaptor.withdraw.selector,
+            lpAmount,
+            address(1),
+            abi.encode(EthStethPool, EthStethToken, EthStethGauge, bytes4(0)),
+            abi.encode(true)
+        );
+
+        vm.expectRevert();
+        address(curveAdaptor).functionDelegateCall(data);
+    }
+
     // ========================================= Reverts =========================================
 
-    // TODO Add in tests where we check the reverts that are in the adaptor themselves. I think it is best if we just pick some LP token and use it
+    // function testWithdrawWithReentrancy0(uint256 assets) external {
+    //     assets = bound(assets, 1e6, 1_000_000e6);
+    //     _checkForReentrancyOnWithdraw(assets, EthStethPool, EthStethToken);
+    // }
+
+    function testWithdrawWithReentrancy1(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        _checkForReentrancyOnWithdraw(assets, EthFrxethPool, EthFrxethToken);
+    }
+
+    function testWithdrawWithReentrancy2(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        _checkForReentrancyOnWithdraw(assets, EthStethNgPool, EthStethNgToken);
+    }
+
+    function testWithdrawWithReentrancy3(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        _checkForReentrancyOnWithdraw(assets, EthOethPool, EthOethToken);
+    }
+
+    function testWithdrawWithReentrancy4(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _checkForReentrancyOnWithdraw(assets, EthEthxPool, EthEthxToken);
+    }
+
+    function testSlippageRevertsNoETH(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+
+        // WethFrxethPoolPosition
+
+        // Add new Curve LP position where pool is set to this address.
+        uint32 newWethFrxethPoolPosition = 777;
+        registry.trustPosition(
+            newWethFrxethPoolPosition,
+            address(curveAdaptor),
+            abi.encode(address(this), WethFrxethToken, WethFrxethGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        cellar.addPositionToCatalogue(newWethFrxethPoolPosition);
+        cellar.removePosition(0, false);
+        cellar.addPosition(0, newWethFrxethPoolPosition, abi.encode(true), false);
+
+        ERC20 coins0 = ERC20(CurvePool(WethFrxethPool).coins(0));
+        ERC20 coins1 = ERC20(CurvePool(WethFrxethPool).coins(1));
+
+        // Convert cellars USDC balance into coins0.
+        if (coins0 != USDC) {
+            if (address(coins0) == curveAdaptor.CURVE_ETH()) {
+                assets = priceRouter.getValue(USDC, assets, WETH);
+                deal(address(WETH), address(cellar), assets);
+            } else {
+                assets = priceRouter.getValue(USDC, assets, coins0);
+                if (coins0 == STETH) _takeSteth(assets, address(cellar));
+                else if (coins0 == OETH) _takeOeth(assets, address(cellar));
+                else deal(address(coins0), address(cellar), assets);
+            }
+            deal(address(USDC), address(cellar), assets);
+        }
+
+        // Set up slippage variables needed to run the test
+        slippageCoins[0] = coins0;
+        slippageCoins[1] = coins1;
+        slippageToCharge = 0.8e4;
+        slippageToken = WethFrxethToken;
+
+        uint256[] memory orderedTokenAmounts = new uint256[](2);
+        orderedTokenAmounts[0] = assets / 2;
+        orderedTokenAmounts[1] = 0;
+
+        // Strategist rebalances into LP , single asset.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                address(this),
+                ERC20(WethFrxethToken),
+                slippageCoins,
+                orderedTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+
+            // Call reverts because of slippage.
+            vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___Slippage.selector)));
+            cellar.callOnAdaptor(data);
+
+            // But if slippage is reduced, call is successful.
+            slippageToCharge = 0.95e4;
+            cellar.callOnAdaptor(data);
+        }
+
+        // Strategist pulls liquidity.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            orderedTokenAmounts[0] = 0;
+
+            uint256 amountToPull = ERC20(WethFrxethToken).balanceOf(address(cellar));
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveLiquidityFromCurve(
+                address(this),
+                ERC20(WethFrxethToken),
+                amountToPull,
+                slippageCoins,
+                orderedTokenAmounts
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+
+            slippageToCharge = 0.8e4;
+
+            // Call reverts because of slippage.
+            vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___Slippage.selector)));
+            cellar.callOnAdaptor(data);
+
+            slippageToCharge = 0.95e4;
+            cellar.callOnAdaptor(data);
+        }
+    }
+
+    function testSlippageRevertsWithETH(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+
+        // WethFrxethPoolPosition
+        // EthFrxethPoolPosition
+
+        // Add new Curve LP positions where pool is set to this address.
+        uint32 newEthFrxethPoolPosition = 7777;
+        registry.trustPosition(
+            newEthFrxethPoolPosition,
+            address(curveAdaptor),
+            abi.encode(
+                address(this),
+                EthFrxethToken,
+                EthFrxethGauge,
+                bytes4(keccak256(abi.encodePacked("price_oracle()")))
+            )
+        );
+
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        cellar.addPositionToCatalogue(newEthFrxethPoolPosition);
+        cellar.removePosition(0, false);
+        cellar.addPosition(0, newEthFrxethPoolPosition, abi.encode(true), false);
+
+        ERC20 coins0 = ERC20(CurvePool(EthFrxethPool).coins(0));
+        ERC20 coins1 = ERC20(CurvePool(EthFrxethPool).coins(1));
+
+        // Convert cellars USDC balance into coins0.
+        if (coins0 != USDC) {
+            if (address(coins0) == curveAdaptor.CURVE_ETH()) {
+                assets = priceRouter.getValue(USDC, assets, WETH);
+                deal(address(WETH), address(cellar), assets);
+            } else {
+                assets = priceRouter.getValue(USDC, assets, coins0);
+                if (coins0 == STETH) _takeSteth(assets, address(cellar));
+                else if (coins0 == OETH) _takeOeth(assets, address(cellar));
+                else deal(address(coins0), address(cellar), assets);
+            }
+            deal(address(USDC), address(cellar), assets);
+        }
+
+        // Set up slippage variables needed to run the test
+        slippageCoins[0] = coins0;
+        slippageCoins[1] = coins1;
+        slippageToCharge = 0.8e4;
+        slippageToken = EthFrxethToken;
+
+        uint256[] memory orderedTokenAmounts = new uint256[](2);
+        orderedTokenAmounts[0] = assets / 2;
+        orderedTokenAmounts[1] = 0;
+
+        // Strategist rebalances into LP , single asset.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
+                address(this),
+                ERC20(EthFrxethToken),
+                slippageCoins,
+                orderedTokenAmounts,
+                0,
+                false
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+
+            // Call reverts because of slippage.
+            vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___Slippage.selector)));
+            cellar.callOnAdaptor(data);
+
+            // But if slippage is reduced, call is successful.
+            slippageToCharge = 0.95e4;
+            cellar.callOnAdaptor(data);
+        }
+
+        // Reset these jsut in case they were changed in add_liquidity.
+        slippageCoins[0] = coins0;
+        slippageCoins[1] = coins1;
+
+        // Strategist pulls liquidity.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+            orderedTokenAmounts[0] = 0;
+
+            uint256 amountToPull = ERC20(EthFrxethToken).balanceOf(address(cellar));
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveETHLiquidityFromCurve(
+                address(this),
+                ERC20(EthFrxethToken),
+                amountToPull,
+                slippageCoins,
+                orderedTokenAmounts,
+                false
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+
+            slippageToCharge = 0.8e4;
+
+            // Call reverts because of slippage.
+            vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___Slippage.selector)));
+            cellar.callOnAdaptor(data);
+
+            slippageToCharge = 0.95e4;
+            cellar.callOnAdaptor(data);
+        }
+    }
+
+    function add_liquidity(uint256[2] memory amounts, uint256) external payable {
+        // Remove amounts from caller.
+        if (address(slippageCoins[0]) != curveAdaptor.CURVE_ETH()) {
+            uint256 coins0Balance = slippageCoins[0].balanceOf(msg.sender);
+            deal(address(slippageCoins[0]), msg.sender, coins0Balance - amounts[0]);
+        } else slippageCoins[0] = WETH;
+        if (address(slippageCoins[1]) != curveAdaptor.CURVE_ETH()) {
+            uint256 coins1Balance = slippageCoins[1].balanceOf(msg.sender);
+            deal(address(slippageCoins[1]), msg.sender, coins1Balance - amounts[1]);
+        } else slippageCoins[1] = WETH;
+
+        // Get value out.
+        uint256[] memory coinAmounts = new uint256[](2);
+        coinAmounts[0] = amounts[0];
+        coinAmounts[1] = amounts[1];
+        uint256 valueOut = priceRouter.getValues(slippageCoins, coinAmounts, ERC20(slippageToken));
+
+        // Apply slippage.
+        valueOut = valueOut.mulDivDown(slippageToCharge, 1e4);
+
+        uint256 startingTokenBalance = ERC20(slippageToken).balanceOf(msg.sender);
+        deal(slippageToken, msg.sender, startingTokenBalance + valueOut);
+    }
+
+    function remove_liquidity(uint256 lpAmount, uint256[2] memory) external {
+        // Remove lpAmounts from caller.
+        uint256 startingTokenBalance = ERC20(slippageToken).balanceOf(msg.sender);
+        deal(slippageToken, msg.sender, startingTokenBalance - lpAmount);
+        // Get value out.
+        uint256 valueOut;
+        if (address(slippageCoins[0]) == curveAdaptor.CURVE_ETH())
+            valueOut = priceRouter.getValue(ERC20(slippageToken), lpAmount, WETH);
+        else valueOut = priceRouter.getValue(ERC20(slippageToken), lpAmount, slippageCoins[0]);
+
+        // Apply slippage.
+        valueOut = valueOut.mulDivDown(slippageToCharge, 1e4);
+
+        if (address(slippageCoins[0]) != curveAdaptor.CURVE_ETH()) {
+            uint256 coins0Balance = slippageCoins[0].balanceOf(msg.sender);
+            deal(address(slippageCoins[0]), msg.sender, coins0Balance + valueOut);
+        } else {
+            uint256 coins0Balance = msg.sender.balance;
+            deal(msg.sender, coins0Balance + valueOut);
+        }
+    }
+
     // ========================================= Helpers =========================================
-    // TODO I think every test should also check and make sure the reentrancy check works as expected.
+
+    function _curveLPAsAccountingAsset(uint256 assets, ERC20 token, uint32 positionId, address gauge) internal {
+        string memory cellarName = "Curve LP Cellar V0.0";
+        // Approve new cellar to spend assets.
+        initialAssets = 1e18;
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(address(token), address(this), initialAssets);
+        token.approve(cellarAddress, initialAssets);
+
+        bytes memory creationCode = type(Cellar).creationCode;
+        bytes memory constructorArgs = abi.encode(
+            address(this),
+            registry,
+            token,
+            cellarName,
+            cellarName,
+            positionId,
+            abi.encode(true),
+            initialAssets,
+            0.75e18,
+            type(uint192).max
+        );
+        cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
+        cellar.addAdaptorToCatalogue(address(curveAdaptor));
+        cellar.setRebalanceDeviation(0.030e18);
+
+        token.safeApprove(address(cellar), assets);
+        deal(address(token), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        uint256 balanceInGauge = CurveGauge(gauge).balanceOf(address(cellar));
+        assertEq(assets + initialAssets, balanceInGauge, "Should have deposited assets into gauge.");
+
+        // Strategist rebalances to pull half of assets from gauge.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToUnStakeCurveLP(gauge, balanceInGauge / 2);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Make sure when we redeem we pull from gauge and cellar wallet.
+        uint256 sharesToRedeem = cellar.balanceOf(address(this));
+        cellar.redeem(sharesToRedeem, address(this), address(this));
+
+        assertEq(token.balanceOf(address(this)), assets);
+    }
+
     function _manageLiquidityIn2PoolNoETH(
         uint256 assets,
         address pool,
@@ -720,7 +1211,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             assertEq(CurveGauge(gauge).balanceOf(address(cellar)), expectedLPStaked, "Should have staked LP in gauge.");
         }
         // Pass time.
-        _skip(7 days);
+        _skip(1 days);
 
         // Strategist unstakes half the LP.
         {
@@ -745,7 +1236,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(CRV), address(cellar), 0);
 
         // Pass time.
-        _skip(7 days);
+        _skip(1 days);
 
         // Unstake remaining LP, and call getRewards.
         {
@@ -914,7 +1405,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             assertEq(CurveGauge(gauge).balanceOf(address(cellar)), expectedLPStaked, "Should have staked LP in gauge.");
         }
         // Pass time.
-        _skip(7 days);
+        _skip(1 days);
 
         // Strategist unstakes half the LP, claiming rewards.
         {
@@ -939,7 +1430,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(CRV), address(cellar), 0);
 
         // Pass time.
-        _skip(7 days);
+        _skip(1 days);
 
         // Unstake remaining LP, and call getRewards.
         {
@@ -987,6 +1478,81 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         assertTrue(ERC20(token).balanceOf(address(cellar)) == 0, "Should have redeemed all of cellars Curve LP Token.");
+    }
+
+    function _checkForReentrancyOnWithdraw(uint256 assets, address pool, address token) internal {
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        ERC20[] memory coins = new ERC20[](2);
+        coins[0] = ERC20(CurvePool(pool).coins(0));
+        coins[1] = ERC20(CurvePool(pool).coins(1));
+
+        // Convert cellars USDC balance into coins0.
+        if (coins[0] != USDC) {
+            if (address(coins[0]) == curveAdaptor.CURVE_ETH()) {
+                assets = priceRouter.getValue(USDC, assets, WETH);
+                deal(address(WETH), address(cellar), assets);
+            } else {
+                assets = priceRouter.getValue(USDC, assets, coins[0]);
+                if (coins[0] == STETH) _takeSteth(assets, address(cellar));
+                else if (coins[0] == OETH) _takeOeth(assets, address(cellar));
+                else deal(address(coins[0]), address(cellar), assets);
+            }
+            deal(address(USDC), address(cellar), 0);
+        }
+
+        ERC20[] memory tokens = new ERC20[](2);
+        tokens[0] = coins[0];
+        tokens[1] = coins[1];
+
+        if (address(coins[0]) == curveAdaptor.CURVE_ETH()) coins[0] = WETH;
+        if (address(coins[1]) == curveAdaptor.CURVE_ETH()) coins[1] = WETH;
+
+        uint256[] memory orderedTokenAmounts = new uint256[](2);
+        orderedTokenAmounts[0] = assets;
+        orderedTokenAmounts[1] = 0;
+
+        // Strategist rebalances into LP , single asset.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
+                pool,
+                ERC20(token),
+                tokens,
+                orderedTokenAmounts,
+                0,
+                false
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+
+        // Mint attacker Curve LP so they can withdraw liquidity and re-enter.
+        deal(token, address(this), 1e18);
+
+        CurvePool curvePool = CurvePool(pool);
+
+        // Attacker tries en-entering into Cellar on ETH recieve but redeem reverts.
+        attackCellar = true;
+        vm.expectRevert();
+        curvePool.remove_liquidity(1e18, [uint256(0), 0]);
+
+        // But if there is no re-entrancy attackers remove_liquidity calls is successful, and they can redeem.
+        attackCellar = false;
+        curvePool.remove_liquidity(1e18, [uint256(0), 0]);
+
+        uint256 maxRedeem = cellar.maxRedeem(address(this));
+        cellar.redeem(maxRedeem, address(this), address(this));
+    }
+
+    receive() external payable {
+        if (attackCellar) {
+            uint256 maxRedeem = cellar.maxRedeem(address(this));
+            cellar.redeem(maxRedeem, address(this), address(this));
+        }
     }
 
     function _add2PoolAssetToPriceRouter(

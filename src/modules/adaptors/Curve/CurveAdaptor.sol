@@ -35,6 +35,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     // Also maybe a bool indicating whether you want to deposit into the gauge or nah
     //====================================================================
 
+    error CurveAdaptor___Slippage();
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -60,7 +62,13 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      *         so there is nothing to do.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
-        (, ERC20 token, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
+        (CurvePool pool, ERC20 token, CurveGauge gauge, bytes4 selector) = abi.decode(
+            adaptorData,
+            (CurvePool, ERC20, CurveGauge, bytes4)
+        );
+
+        if (selector != bytes4(0)) _callReentrancyFunction(pool, selector);
+        else revert BaseAdaptor__UserDepositsNotAllowed();
 
         if (address(gauge) != address(0)) {
             // Deposit into gauge.
@@ -78,13 +86,21 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @param adaptorData data needed to withdraw from this position
      * @dev configurationData is NOT used
      */
-    function withdraw(uint256 assets, address receiver, bytes memory adaptorData, bytes memory) public override {
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        bytes memory adaptorData,
+        bytes memory configurationData
+    ) public override {
         _externalReceiverCheck(receiver);
         (CurvePool pool, ERC20 token, CurveGauge gauge, bytes4 selector) = abi.decode(
             adaptorData,
             (CurvePool, ERC20, CurveGauge, bytes4)
         );
-        _callReentrancyFunction(pool, selector);
+        bool isLiquid = abi.decode(configurationData, (bool));
+
+        if (isLiquid && selector != bytes4(0)) _callReentrancyFunction(pool, selector);
+        else revert BaseAdaptor__UserWithdrawsNotAllowed();
 
         uint256 tokenBalance = token.balanceOf(address(this));
         if (tokenBalance < assets) {
@@ -103,10 +119,14 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         bytes memory adaptorData,
         bytes memory configurationData
     ) public view override returns (uint256) {
-        (, ERC20 token, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
+        (, ERC20 token, CurveGauge gauge, bytes4 selector) = abi.decode(
+            adaptorData,
+            (CurvePool, ERC20, CurveGauge, bytes4)
+        );
         bool isLiquid = abi.decode(configurationData, (bool));
-        if (isLiquid) {
-            return token.balanceOf(msg.sender) + gauge.balanceOf(msg.sender);
+        if (isLiquid && selector != bytes4(0)) {
+            uint256 gaugeBalance = address(gauge) != address(0) ? gauge.balanceOf(msg.sender) : 0;
+            return token.balanceOf(msg.sender) + gaugeBalance;
         } else return 0;
     }
 
@@ -115,7 +135,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (, ERC20 token, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
-        return token.balanceOf(msg.sender) + gauge.balanceOf(msg.sender);
+        uint256 gaugeBalance = address(gauge) != address(0) ? gauge.balanceOf(msg.sender) : 0;
+        return token.balanceOf(msg.sender) + gaugeBalance;
     }
 
     /**
@@ -158,7 +179,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
 
         uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(tokens, orderedTokenAmounts, token);
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
-        if (balanceDelta < minValueOut) revert(":(0");
+        if (balanceDelta < minValueOut) revert CurveAdaptor___Slippage();
 
         for (uint256 i; i < tokens.length; ++i)
             if (orderedTokenAmounts[i] > 0) _revokeExternalApproval(tokens[i], pool);
@@ -197,7 +218,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         for (uint256 i; i < tokens.length; ++i) if (address(tokens[i]) == CURVE_ETH) tokens[i] = ERC20(nativeWrapper);
         uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(tokens, orderedTokenAmounts, token);
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
-        if (lpOut < minValueOut) revert(":(1");
+        if (lpOut < minValueOut) revert CurveAdaptor___Slippage();
 
         for (uint256 i; i < tokens.length; ++i) {
             if (address(tokens[i]) == CURVE_ETH) _revokeExternalApproval(ERC20(nativeWrapper), addressThis);
@@ -226,7 +247,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
 
         uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(tokens, balanceDelta, token);
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
-        if (lpValueOut < minValueOut) revert(":(2");
+        if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
 
         _revokeExternalApproval(token, pool);
     }
@@ -256,7 +277,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         for (uint256 i; i < tokens.length; ++i) if (address(tokens[i]) == CURVE_ETH) tokens[i] = ERC20(nativeWrapper);
         uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(tokens, tokensOut, token);
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
-        if (lpValueOut < minValueOut) revert(":(3");
+        if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
 
         _revokeExternalApproval(token, addressThis);
     }
