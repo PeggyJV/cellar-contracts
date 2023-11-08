@@ -11,12 +11,10 @@ import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 import { CurveHelper } from "src/modules/adaptors/Curve/CurveHelper.sol";
 
-import { console } from "@forge-std/Test.sol";
-
 // TODO Curve Gauges can TECHNICALLY have a non 18 decimal value :(
-// TODO remove
+// TODO should this validate positions are used?
 /**
- * @title ERC20 Adaptor
+ * @title Curve Adaptor
  * @notice Allows Cellars to interact with Curve LP positions.
  * @author crispymangoes
  */
@@ -27,14 +25,20 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     using Math for uint256;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(address pool, address token, address gauge, bytes4)
+    // adaptorData = abi.encode(address pool, address token, address gauge, bytes4 selector)
     // Where:
-    // TODO
+    // pool is the Curve Pool address
+    // token is the Curve LP token address(can be the same as pool)
+    // gauge is the Curve Gauge(can be zero address)
+    // selector is the pool function to call when checking for re-rentrancy during user deposit/withdraws(can be bytes4(0), but then withdraws and deposits are not supported).
     //================= Configuration Data Specification =================
-    // TODO will probs be an isLiquid bool
-    // Also maybe a bool indicating whether you want to deposit into the gauge or nah
+    // isLiquid bool
+    // Indicates whether the position is liquid or not.
     //====================================================================
 
+    /**
+     * @notice Attempted add/remove liquidity from Curve resulted in excess slippage.
+     */
     error CurveAdaptor___Slippage();
 
     //============================================ Global Functions ===========================================
@@ -48,7 +52,17 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         return keccak256(abi.encode("Curve Adaptor V 0.0"));
     }
 
+    /**
+     * @notice Store the adaptor address in bytecode, so that Cellars can use it during delegate call operations.
+     */
     address payable public immutable addressThis;
+
+    /**
+     * @notice Number between 0.9e4, and 1e4 representing the amount of slippage that can be
+     *         tolerated when entering/exiting a pool.
+     *         - 0.90e4: 10% slippage
+     *         - 0.95e4: 5% slippage
+     */
     uint32 public immutable curveSlippage;
 
     constructor(address _nativeWrapper, uint32 _curveSlippage) CurveHelper(_nativeWrapper) {
@@ -59,7 +73,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     //============================================ Implement Base Functions ===========================================
     /**
      * @notice Cellar already has possession of users Curve LP tokens by the time this function is called,
-     *         so there is nothing to do.
+     *         so if gauge is zero address, do nothing.
+     * @dev Check for reentrancy by calling a pool function that checks for reentrancy.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         (CurvePool pool, ERC20 token, CurveGauge gauge, bytes4 selector) = abi.decode(
@@ -79,12 +94,12 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     }
 
     /**
-     * @notice Cellar just needs to transfer ERC20 token to `receiver`.
+     * @notice Withdraws from Curve Gauge if tokens in Cellar are not enough to handle withdraw.
      * @dev Important to verify that external receivers are allowed if receiver is not Cellar address.
      * @param assets amount of `token` to send to receiver
      * @param receiver address to send assets to
      * @param adaptorData data needed to withdraw from this position
-     * @dev configurationData is NOT used
+     * @dev configurationData used to check if position is liquid
      */
     function withdraw(
         uint256 assets,
@@ -112,8 +127,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     }
 
     /**
-     * @notice Identical to `balanceOf`, if an asset is used with a non ERC20 standard locking logic,
-     *         then a NEW adaptor contract is needed.
+     * @notice Identical to `balanceOf`
+     * @dev Strategists can make the position illiquid using configuration data.
      */
     function withdrawableFrom(
         bytes memory adaptorData,
@@ -131,7 +146,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     }
 
     /**
-     * @notice Returns the balance of `token`.
+     * @notice Returns the balance of Curve LP token.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (, ERC20 token, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
@@ -140,7 +155,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     }
 
     /**
-     * @notice Returns `token`
+     * @notice Returns Curve LP token
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
         (, ERC20 token) = abi.decode(adaptorData, (CurvePool, ERC20));
@@ -155,6 +170,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     }
 
     //============================================ Strategist Functions ===========================================
+
+    // TODO add in maxAvailable logic where possible
 
     // TODO so use underlying is also used for aToken pools, where if it is true it will give you the vanilla ERC20 on withdraw vs the aToken...... :(((((((((
     function addLiquidity(
@@ -294,7 +311,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         gauge.withdraw(amount);
     }
 
-    function getRewards(CurveGauge gauge) external {
+    function claimRewards(CurveGauge gauge) external {
         gauge.claim_rewards();
     }
 }

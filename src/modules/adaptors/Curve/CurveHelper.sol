@@ -10,12 +10,9 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
-import { console } from "@forge-std/Test.sol";
-
-// TODO remove
 /**
- * @title ERC20 Adaptor
- * @notice Allows Cellars to interact with Curve LP positions.
+ * @title Curve Helper
+ * @notice Contains logic needed for safely interacting with multiple different Curve Pool implementations.
  * @author crispymangoes
  */
 contract CurveHelper {

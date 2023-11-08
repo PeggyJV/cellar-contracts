@@ -657,6 +657,6 @@ contract AdaptorHelperFunctions {
     }
 
     function _createBytesDataToClaimRewardsForCurveLP(address gauge) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(CurveAdaptor.getRewards.selector, gauge);
+        return abi.encodeWithSelector(CurveAdaptor.claimRewards.selector, gauge);
     }
 }
