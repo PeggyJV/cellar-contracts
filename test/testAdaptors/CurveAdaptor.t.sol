@@ -6,7 +6,7 @@ import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEth
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CurveEMAExtension } from "src/modules/price-router/Extensions/Curve/CurveEMAExtension.sol";
-import { CurveAdaptor, CurvePool, CurveGauge } from "src/modules/Adaptors/Curve/CurveAdaptor.sol";
+import { CurveAdaptor, CurvePool, CurveGauge } from "src/modules/adaptors/Curve/CurveAdaptor.sol";
 import { Curve2PoolExtension } from "src/modules/price-router/Extensions/Curve/Curve2PoolExtension.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 

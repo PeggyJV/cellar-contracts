@@ -42,7 +42,7 @@ import { LegacyCellarAdaptor } from "src/modules/adaptors/Sommelier/LegacyCellar
 import { DSRAdaptor } from "src/modules/adaptors/Maker/DSRAdaptor.sol";
 
 // Curve
-import { CurveAdaptor, CurvePool } from "src/modules/Adaptors/Curve/CurveAdaptor.sol";
+import { CurveAdaptor, CurvePool } from "src/modules/adaptors/Curve/CurveAdaptor.sol";
 
 import { SwapWithUniswapAdaptor } from "src/modules/adaptors/Uniswap/SwapWithUniswapAdaptor.sol";
 
