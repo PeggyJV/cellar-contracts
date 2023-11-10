@@ -153,9 +153,12 @@ contract FixTurboSommTest is MainnetStarterTest, AdaptorHelperFunctions, ERC721H
         // During these 9 days we change the cellar to use the real oracle.
         skip(9 days);
 
-        (, , notSafeToUse) = temp.getLatest();
+        (uint256 ans, uint256 a, bool notSafeToUse0) = temp.getLatest();
 
-        assertTrue(!notSafeToUse, "Oracle should be safe to use.");
+        console.log(ans);
+        console.log(a);
+
+        assertTrue(!notSafeToUse0, "Oracle should be safe to use.");
     }
 
     function _createSharePriceOracle(

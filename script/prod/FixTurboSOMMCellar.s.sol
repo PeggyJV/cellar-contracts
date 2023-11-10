@@ -24,8 +24,6 @@ contract FixTurboSOMMCellarScript is Script, MainnetAddresses {
 
     Deployer public deployer = Deployer(deployerAddress);
 
-    Registry public registry = Registry(0xEED68C267E9313a6ED6ee08de08c9F68dee44476);
-
     address turboSommCellar = 0x5195222f69c5821f8095ec565E71e18aB6A2298f;
 
     function run() external {
@@ -36,11 +34,11 @@ contract FixTurboSOMMCellarScript is Script, MainnetAddresses {
         bytes memory constructorArgs;
         creationCode = type(VestingSimpleAdaptor).creationCode;
         // constructorArgs = abi.encode(0); // None
-        deployer.deployContract("VestingSimpleAdaptor V 1.1", creationCode, constructorArgs, 0);
+        deployer.deployContract("VestingSimpleAdaptor V1.1", creationCode, constructorArgs, 0);
 
         uint64 heartbeat = 1 days / 24;
         uint64 deviationTrigger = 0.0050e4;
-        uint64 gracePeriod = 10 days;
+        uint64 gracePeriod = 30 days;
         uint16 observationsToUse = 2;
         uint216 startingAnswer = 1e18;
         uint256 allowedAnswerChangeLower = 0.5e4;
