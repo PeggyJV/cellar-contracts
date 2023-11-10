@@ -76,24 +76,18 @@ contract ConvexAdaptor is BaseAdaptor {
     /**
      * @notice Deposit & Stakes LPT from the cellar into Convex Market at the end of the user deposit sequence.
      * @param assets amount of LPT to deposit and stake
-     * @param recepient see baseAdaptor.sol
      * @param adaptorData see adaptorData info at top of this smart contract
-     * @param configurationData see configurationData at top of this smart contract
      */
-    function deposit(
-        uint256 assets,
-        address recipient,
-        bytes memory adaptorData,
-        bytes memory configurationData
-    ) public pure override {
-        (uint256 _pid, address _rewardsPool) = abi.decode(adaptorData, (uint256, address));
-        _validatePositionIsUsed(_pid, _rewardsPool);
-        ERC20 lpt = ERC20(booster.PoolInfo(pid).lpToken()); // TODO: double check that struct object is coming out of this properly
+    function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
+        (uint256 pid, address rewardsPool) = abi.decode(adaptorData, (uint256, address));
+        _validatePositionIsUsed(pid, rewardsPool);
+        (address lpToken, , , , , ) = booster.poolInfo(pid);
+        ERC20 lpt = ERC20(lpToken); // TODO: double check that struct object is coming out of this properly
         lpt.safeApprove(address(booster), assets);
-        booster.deposit(_pid, _amount, true);
+        booster.deposit(pid, assets, true);
 
         // Zero out approvals if necessary.
-        _revokeExternalApproval(asset, address(booster));
+        _revokeExternalApproval(lpt, address(booster));
     }
 
     /**
@@ -116,15 +110,15 @@ contract ConvexAdaptor is BaseAdaptor {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        (uint256 _pid, address _rewardsPool) = abi.decode(adaptorData, (uint256, address));
-        _validatePositionIsUsed(_pid, _rewardsPool);
+        (uint256 pid, address rewardPool) = abi.decode(adaptorData, (uint256, address));
+        _validatePositionIsUsed(pid, rewardPool);
 
         //TODO: logic that checks if there is enough liquid curveLPT,and if not it does withdrawAndUnwrap(). If this logic is in place, withdrawableFrom() can report staked amount too.
 
-        booster.withdraw(_pid, _amount);
+        // booster.withdraw(pid, amount);
 
-        IBaseRewardPool rewardsPool = IBaseRewardPool(_rewardsPool);
-        rewardsPool.withdrawAndUnwrap(amount, _claim); // TODO: not sure if we just always set this to true (might be gas intensive), or if we allow this as a param somehow.
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
+        baseRewardPool.withdrawAndUnwrap(amount, true); // TODO: not sure if we just always set this to true (might be gas intensive), or if we allow this as a param somehow.
     }
 
     /**
@@ -139,10 +133,10 @@ contract ConvexAdaptor is BaseAdaptor {
     ) public view override returns (uint256) {
         bool isLiquid = abi.decode(configurationData, (bool));
         if (isLiquid) {
-            (uint256 _pid, address _rewardsPool) = abi.decode(adaptorData, (uint256, address));
-            IBaseRewardPool rewardsPool = IBaseRewardPool(_rewardsPool);
-            ERC20 stakingToken = ERC(rewardsPool.stakingToken());
-            return (stakingToken.balanceof(msg.sender) + rewardsPool.balanceOf(msg.sender));
+            (, address rewardPool) = abi.decode(adaptorData, (uint256, address));
+            IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
+            ERC20 stakingToken = ERC20(baseRewardPool.stakingToken());
+            return (stakingToken.balanceOf(msg.sender) + baseRewardPool.balanceOf(msg.sender));
         } else return 0;
     }
 
@@ -153,10 +147,10 @@ contract ConvexAdaptor is BaseAdaptor {
      * TODO: This assumes that no rewards are given back as accrual of more curveLPT. I believe that to be the case because BaseRewardPool has its own rewardsToken, and extraRewards has specific reward contracts specific to respective convex markets.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (uint256 _pid, address _rewardsPool) = abi.decode(adaptorData, (uint256, address));
-        IBaseRewardPool rewardsPool = IBaseRewardPool(_rewardsPool);
-        ERC20 stakingToken = ERC(rewardsPool.stakingToken());
-        return (stakingToken.balanceof(msg.sender) + rewardsPool.balanceOf(msg.sender));
+        (, address rewardPool) = abi.decode(adaptorData, (uint256, address));
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
+        ERC20 stakingToken = ERC20(baseRewardPool.stakingToken());
+        return (stakingToken.balanceOf(msg.sender) + baseRewardPool.balanceOf(msg.sender));
     }
 
     /**
@@ -164,12 +158,13 @@ contract ConvexAdaptor is BaseAdaptor {
      * @param adaptorData see adaptorData info at top of this smart contract
      * @return Underlying LPT for Cellar's respective Convex market position
      */
-    function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
-        (uint256 _pid, ) = abi.decode(adaptorData, (uint256, address));
-        ERC20 lpt = ERC20(booster.PoolInfo(pid).lpToken());
-
+    function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
+        (uint256 pid, ) = abi.decode(adaptorData, (uint256, address));
+        (address lpToken, , , , , ) = booster.poolInfo(pid);
+        ERC20 lpt = ERC20(lpToken);
+        return lpt;
         // TODO: decide to use above or alternative way to get lpt below
-        // IBaseRewardPool rewardsPool = IBaseRewardPool(_rewardsPool);
+        // IBaseRewardPool rewardsPool = IBaseRewardPool(rewardsPool);
         // return ERC(rewardsPool.stakingToken());
     }
 
@@ -177,10 +172,10 @@ contract ConvexAdaptor is BaseAdaptor {
      * @notice When positions are added to the Registry, this function can be used in order to figure out
      *         what assets this adaptor needs to price, and confirm pricing is properly setup.
      * @param adaptorData see adaptorData info at top of this smart contract
-     * @return Underlying assets for Cellar's respective Convex market position
+     * @return assets Underlying assets for Cellar's respective Convex market position
      * @dev all breakdowns of LPT pricing and its underlying assets are done through the PriceRouter extension (in accordance to PriceRouterv2 architecture)
      */
-    function assetsUsed(bytes memory adaptorData) public pure override returns (ERC20[] memory assets) {
+    function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
         assets = new ERC20[](1);
         assets[0] = assetOf(adaptorData);
     }
@@ -202,8 +197,8 @@ contract ConvexAdaptor is BaseAdaptor {
      * @param _stake whether or not to stake Convex wrapped LPTs (into respective BaseRewardPool) after depositing LPTs into Convex Market
      * TODO: stake bool: not sure if we just always set this to true (might be gas intensive), or if we allow this as a param somehow.
      */
-    function deposit(uint256 _pid, uint256 _amount, bool _stake) public {
-        _validatePositionIsUsed(_pid); // validate pid representing convex market within respective booster
+    function deposit(uint256 _pid, address _baseRewardPool, uint256 _amount, bool _stake) public {
+        _validatePositionIsUsed(_pid, _baseRewardPool); // validate pid representing convex market within respective booster
         booster.deposit(_pid, _amount, _stake);
     }
 
@@ -214,8 +209,8 @@ contract ConvexAdaptor is BaseAdaptor {
      * @param _pid specified pool ID corresponding to LPT convex market
      * @param _amount amount of cvxLPT to unstake, and withdraw (TODO: can't recall if this unwraps to LPT)
      */
-    function withdrawFromBoosterNoRewards(uint256 _pid, uint256 _amount) public {
-        _validatePositionIsUsed(_pid);
+    function withdrawFromBoosterNoRewards(uint256 _pid, address _baseRewardPool, uint256 _amount) public {
+        _validatePositionIsUsed(_pid, _baseRewardPool);
         booster.withdraw(_pid, _amount);
     }
 
@@ -224,23 +219,24 @@ contract ConvexAdaptor is BaseAdaptor {
      * NOTE: this adaptor will always unwrap to CRV LPTs if possible. It will not keep the position in convex wrapped LPT position.
      * TODO: if _claim is true, this claims all rewards associated to a cellar interacting w/ Convex markets. The BaseRewardPool contract has the function for withdrawing and unwrapping whilst also claiming all rewards. NOTE: if it does not claim all extra rewards (say another reward contract is linked to it somehow), then we can just make other adaptors that handle that.
      * TODO: decide which function to use for withdrawing based on gas consumption for adaptor calls? Either: withdrawFromBoosterNoRewards() && getRewards() OR withdrawFromBaseRewardPoolAsLPT() && getRewards()
-     * @param _rewardsPool for respective convex market (w/ trusted poolId)
+     * @param _baseRewardPool for respective convex market (w/ trusted poolId)
      * @param _amount of LPTs to unstake, unwrap, and withdraw from convex market to calling cellar
      * @param _claim whether or not to claim all rewards from BaseRewardPool
      */
-    function withdrawFromBaseRewardPoolAsLPT(address _rewardsPool, uint256 _amount, bool _claim) public {
-        IBaseRewardPool rewardsPool = IBaseRewardPool(_rewardsPool);
-        rewardsPool.withdrawAndUnwrap(_amount, _claim);
+    function withdrawFromBaseRewardPoolAsLPT(address _baseRewardPool, uint256 _amount, bool _claim) public {
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
+        baseRewardPool.withdrawAndUnwrap(_amount, _claim);
     }
 
     /**
      * @notice Allows strategists to get rewards for an Convex Booster without withdrawing/unwrapping from Convex market
-     * @param _booster the specified booster
+     * @param _pid specified pool ID corresponding to LPT convex market
+     * @param _baseRewardPool for respective convex market (w/ trusted poolId)
      * @param _claimExtras Whether or not to claim extra rewards associated to the Convex booster (outside of rewardToken for Convex booster)
      */
-    function getRewards(IBaseRewardPool _booster, bool _claimExtras) public {
-        _validatePositionIsUsed(address(_booster));
-        _getRewards(_booster, _claimExtras);
+    function getRewards(uint256 _pid, address _baseRewardPool, bool _claimExtras) public {
+        _validatePositionIsUsed(_pid, _baseRewardPool);
+        _getRewards(_baseRewardPool, _claimExtras);
     }
 
     /**
@@ -265,7 +261,8 @@ contract ConvexAdaptor is BaseAdaptor {
     /**
      * @dev Uses baseRewardPool.getReward() to claim rewards for your address or an arbitrary address.  There is a getRewards() function option where there is a bool as an option to also claim extra incentive tokens (ex. snx) which is defaulted to true in the non-parametrized version.
      */
-    function _getRewards(IBaseRewardPool _booster, bool _claimExtras) internal virtual {
-        _booster.getReward(address(this), _claimExtras);
+    function _getRewards(address _baseRewardPool, bool _claimExtras) internal virtual {
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
+        baseRewardPool.getReward(address(this), _claimExtras);
     }
 }

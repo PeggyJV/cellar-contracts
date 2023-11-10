@@ -48,7 +48,7 @@ contract ConvexAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private cvxPool_mkUSDFraxBP_Position = 3;
     uint32 private cvxPool_STETH_CRVLPT_Position = 4;
 
-    uint256 publit initialAssets;
+    uint256 public initialAssets;
     
     function setUp() external {
         // Setup forked environment.
