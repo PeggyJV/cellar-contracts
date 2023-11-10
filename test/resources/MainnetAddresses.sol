@@ -176,6 +176,18 @@ contract MainnetAddresses {
     ERC20 public CRV_AAVE_3CRV = ERC20(0xFd2a8fA60Abd58Efe3EeE34dd494cD491dC14900);
     address public stETHWethNg = 0x21E27a5E5513D6e65C4f830167390997aA84843a;
 
+    // Convex markets
+    address public convexCurveMainnetBooster = 0xF403C135812408BFbE8713b5A23a04b3D48AAE31;
+
+    uint256 public mkUSDFraxBPT_ConvexPID = 225;
+    ERC20 public mkUSDFraxBP_CRVLPT = ERC20(0x0CFe5C777A7438C9Dd8Add53ed671cEc7A5FAeE5);
+    address public cvx_mkUSDFraxBP_CRVLPT = 0x187601595F6D5746566BC0361a48d13066F11C71;
+    address public mkUSDFraxBP_cvxBaseRewardContract = 0x35FbE5520E70768DCD6E3215Ed54E14CBccA10D2; // TODO: maybe delete these if I just query the PoolInfo struct using poolId.
+    uint256 public eth_STETH_ConvexPID = 25;
+    ERC20 public eth_STETH_CRVLPT = ERC20(0x06325440D014e39736583c165C2963BA99fAf14E);
+    address public cvx_eth_STETH_CRVLPT = 0x9518c9063eB0262D791f38d8d6Eb0aca33c63ed0;
+    address public eth_STETH_cvxBaseRewardContract = 0x0A760466E1B4621579a82a39CB56Dda2F4E70f03;
+
     // Uniswap V3
     address public WSTETH_WETH_100 = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;
     address public WSTETH_WETH_500 = 0xD340B57AAcDD10F96FC1CF10e15921936F41E29c;
