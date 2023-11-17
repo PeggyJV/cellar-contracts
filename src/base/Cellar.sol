@@ -1071,6 +1071,7 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
      * @notice Simulate the effects of depositing assets at the current block, given current on-chain conditions.
      * @param assets amount of assets to deposit
      * @return shares that will be minted
+     * 
      */
     function previewDeposit(uint256 assets) public view override returns (uint256 shares) {
         (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(true);
@@ -1085,6 +1086,16 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
     function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
         (uint256 _totalAssets, uint256 _totalSupply) = _getTotalAssetsAndTotalSupply(false);
         assets = _convertToAssets(shares, _totalAssets, _totalSupply);
+    }
+
+    function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
+        uint256 _totalAssets = totalAssets();
+        assets = _convertToAssets(shares, _totalAssets);
+    }
+
+         */
+    function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
+        assets = _convertToAssets(shares, totalAssets());
     }
 
     /**

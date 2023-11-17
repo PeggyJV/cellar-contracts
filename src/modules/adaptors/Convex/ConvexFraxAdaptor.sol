@@ -2,17 +2,20 @@
 pragma solidity 0.8.21;
 
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
-import { IBaseRewardPool } from "src/interfaces/external/Convex/IBaseRewardPool.sol";
-import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
+import { IProxyVault } from "src/interfaces/external/Convex/Convex-Frax-Platform/IProxyVault.sol";
+import { IPoolRegistry } from "src/interfaces/external/Convex/Convex-Frax-Platform/IPoolRegistry.sol";
+import { IBooster } from "src/interfaces/external/Convex/Convex-Frax-Platform/IBooster.sol";
+impot {IVoterProxy} from "src/interfaces/external/Convex/Convex-Frax-Platform/IVoterProxy.sol";
 
 /**
- * @title Convex Adaptor
- * @dev This adaptor is specifically for Convex contracts.
- * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex markets.
+ * @title Convex-Frax Platform Adaptor
+ * @dev This adaptor is specifically for Convex-Frax Platform Markets.
+ * @notice Allows cellars to have positions where they are supplying, staking Frax Yield Bearing Tokens (YBT), and claiming rewards to Convex markets.
  * @author crispymangoes, 0xEinCodes
- * @dev TODO: this may not work for Convex with other protocols (FRAX, Prisma, etc.). FRAX contract architecture shows some discrepancies (need to confirm). Side-Chain implementations for convex markets showcase other discrepancies too in external function signatures, etc.
+ * @dev This is a different architecture to the Curve-Frax Platform Markets. The primary difference is that a very different Booster.sol contract is used to create personal staking proxy vaults for users (Cellars in this case). The proxy vaults are what users (cellars) interact with to ultimately interact with the underlying FRAX-related logic. Socialized boosted rewards are turned on for the vault and its respective staked FraxYBT.
+ * NOTE: Convex-FRAX platform markets typically require a time-lock. So positions are illiquid for varying time-frames based on specifications from Strategists (see Strategist Functions). Thus positions with this adaptor will be illiquid from User standpoint.
  */
-contract ConvexAdaptor is BaseAdaptor {
+contract ConvexFraxAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -26,38 +29,41 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The booster for the respective network
-     * @dev For mainnet, use 0xF403C135812408BFbE8713b5A23a04b3D48AAE31
+     * @notice The booster for the Convex-Frax Platform on this respective network
+     * @dev For mainnet, use 0x569f5B842B5006eC17Be02B8b94510BA8e79FbCa
+     * TODO: confirm that there aren't more than one booster for Convex-Frax Platform on mainnet / other networks
      */
     IBooster public immutable booster;
 
+    /**
+     * @notice The poolRegistry for the Convex-Frax Platform on this respective network
+     */
+    IPoolRegistry public immutable poolRegistry;
+
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(uint256 pid, address baseRewardPool)
+    // adaptorData = abi.encode(uint256 pid, address booster)
     // Where:
-    // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with, and `baseRewardPool` is the isolated base reward pool for the respective convex market --> baseRewardPool has extraReward Child Contracts associated to it. So cellar puts CRVLPT into Convex Booster, which then stakes it into Curve. 
-    // NOTE that there can be multiple market addresses associated with the same Curve LPT, thus it is important to focus on the market pid  itself, and not constituent assets / LPTs.
+    // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with. `pid` is used w/ `booster` and `priceRegistry` to obtain the cellar's `vault` where all mutative functionality is done through.
+    // NOTE We are currently assuming that the `Booster.sol` and `PoolRegistry.sol` are the same across all Convex-Frax Platform markets.
 
     //================= Configuration Data Specification =================
-    // configurationData = abi.encode(bool isLiquid)
-    // Where:
-    // `isLiquid` dictates whether the position is liquid or not
-    // If true:
-    //      position can support user withdraws
-    // else:
-    //      position can not support user withdraws
+    // N/A
     //====================================================================
 
     /**
-     * @notice Attempted to interact with a Convex market pid & baseRewardPool that the Cellar is not using.
+     * @notice Attempted to interact with a Convex-Frax Platform market pid that the Cellar is not using.
      */
-    error ConvexAdaptor__ConvexBoosterPositionsMustBeTracked(uint256 pid, address baseRewardPool);
+    error ConvexFraxAdaptor__ConvexPIDPositionsMustBeTracked(uint256 pid);
 
     /**
-     * @param _booster the Convex booster contract for the network/market (different booster for Curve, FRAX, Prisma, etc.)
-     * @dev Booster.sol serves as the primary contract that accounts for markets via poolIds. PoolInfo structs can be queried w/ poolIds, where baseRewardPool contracts, and other info can be obtained.
+     * @param _booster the Convex-Frax Platform booster contract for the network.
+     * @param _poolRegistry the Convex-Frax Platform poolRegistry contract for the network.
+     * @dev Booster.sol serves as the primary contract that creates staking proxy vaults that are registered within the `PoolRegistry`. Vault addresses can be queried w/ poolIds, and user address (in this case the Cellar itself).
+     * TODO: decided to keep `address poolRegistry` to the adaptor storage if it is used a lot throughout adaptor implementation or not.
      */
-    constructor(address _booster) {
+    constructor(address _booster, address _poolRegistry) {
         booster = IBooster(_booster);
+        poolRegistry = IPoolRegistry(_poolRegistry);
     }
 
     //============================================ Global Functions ===========================================
@@ -68,19 +74,23 @@ contract ConvexAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Convex Curve Adaptor V 0.1"));
+        return keccak256(abi.encode("Convex Frax Adaptor V 0.0"));
     }
 
-    //============================================ Implement Base Functions ===========================================
+    //============================================ Implement Base Functions =========================================== TODO: EIN still gotta do base functions
 
     /**
-     * @notice Deposit & Stakes LPT from the cellar into Convex Market at the end of the user deposit sequence.
-     * @param assets amount of LPT to deposit and stake
+     * TODO: EIN
+     * @notice Deposit & Stakes Frax YBT from the cellar into Convex-Frax Platform Market at the end of the user deposit sequence.
+     * @param assets amount of YBT to deposit and stake
      * @param adaptorData see adaptorData info at top of this smart contract
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
-        (uint256 pid, address rewardsPool) = abi.decode(adaptorData, (uint256, address));
-        _validatePositionIsUsed(pid, rewardsPool);
+        uint256 pid = abi.decode(adaptorData, (uint256, address));
+        _validatePositionIsUsed(pid);
+
+        // TODO:
+
         (address lpToken, , , , , ) = booster.poolInfo(pid);
         ERC20 lpt = ERC20(lpToken); // TODO: double check that struct object is coming out of this properly
         lpt.safeApprove(address(booster), assets);
@@ -91,6 +101,7 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
+     * TODO: EIN
      * @notice If a user withdraw needs more LPTs than what is in the Cellar's wallet, then the Cellar will unstake, unwrap cvxLPTs, and withdraw LPTs from Convex
      * @param amount of LPT to unstake, unwrap, and withdraw from Convex market
      * @param receiver see baseAdaptor.sol
@@ -122,6 +133,7 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
+     * TODO: EIN
      * @notice Functions Cellars use to determine the withdrawable balance from an adaptor position.
      * @dev Accounts for LPTs in the Cellar's wallet, and staked in Convex Market.
      * @param adaptorData see adaptorData info at top of this smart contract
@@ -141,6 +153,7 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
+     * TODO: EIN
      * @notice Calculates the Cellar's balance of the positions creditAsset, a specific underlying LPT.
      * @param adaptorData see adaptorData info at top of this smart contract
      * @return total balance of LPT for Cellar, including liquid and staked
@@ -154,6 +167,7 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
+     * TODO: EIN
      * @notice Returns the positions underlying assets.
      * @param adaptorData see adaptorData info at top of this smart contract
      * @return Underlying LPT for Cellar's respective Convex market position
@@ -191,44 +205,59 @@ contract ConvexAdaptor is BaseAdaptor {
     //============================================ Strategist Functions ===========================================
 
     /**
-     * @notice Allows strategists to deposit and stake LPTs into Convex markets via the respective Convex market Booster contract
+     * @notice Allows strategists to create a personal staking proxy vault for the cellar, and then deposit and stake LPTs into Convex-Frax markets via the respective Convex market Booster contract.
+     * @param _pid specified pool ID corresponding to Frax YBT convex market
+     * @param _liquidity amount of Frax YBT to deposit and stake
+     * @param _secs amount of seconds to lock cvxFrax YBT for cellar to recei ve max rewards.
+     * NOTE: PoolRegistry can be upgraded / changed so Convex protocol must be monitored in the case that this happens. This would be a more convoluted upgrade though so it would go through governance first presumably. TODO: confirm this.
+     */
+    function deposit(uint256 _pid, uint256 _liquidity, uint256 _secs) public {
+        _validatePositionIsUsed(_pid); // TODO: validate pid representing convex market within respective booster
+        address vault;
+        // check if vault has been created
+        if (poolRegistry.vaultMap(_pid, msg.sender) == address(0)) {
+            vault = booster.createVault(_pid); // even if createVault(pid) was called somehow by calling cellar, and it already had one, it would revert within `Booster.sol`
+        } else {
+            vault = poolRegistry.vaultMap(_pid, msg.sender);
+        }
+        IProxyVault proxyVault = IProxyVault(vault);
+        proxyVault.stakeLockedCurveLp(_liquidity, _secs); // deposits LPT and stakes it, generating a bytes _kek_id within a mapping of struct arrays associated to msg.sender (this cellar)
+    }
+
+    /// TODO: EIN THIS IS WHERE YOU LEFT OFF
+
+    /**
+     * @notice Allows strategists to withdraw from Convex-Frax markets via vault contract without claiming rewards
+     * NOTE: this adaptor will always unwrap to underlying Yield Bearing Tokens (YBTs) if possible. It will not keep the position in convex wrapped LPT position.
      * @param _pid specified pool ID corresponding to LPT convex market
-     * @param _amount amount of LPT to deposit and stake
-     * @param _stake whether or not to stake Convex wrapped LPTs (into respective BaseRewardPool) after depositing LPTs into Convex Market
-     * TODO: stake bool: not sure if we just always set this to true (might be gas intensive), or if we allow this as a param somehow.
+     * @param _amount amount of cvxLPT to unstake, unwrap and withdraw
+     * NOTE: _kek_id is a bytes ID stored within a struct array:         lockedStakes[staker_address].LockedStake[i].kek_id
+     * where:
+     *      struct LockedStake {
+     *          bytes32 kek_id;
+     *          uint256 start_timestamp;
+     *          uint256 liquidity;
+     *          uint256 ending_timestamp;
+     *          uint256 lock_multiplier; // 6 decimals of precision. 1x = 1000000
+     * }
      */
-    function deposit(uint256 _pid, address _baseRewardPool, uint256 _amount, bool _stake) public {
-        _validatePositionIsUsed(_pid, _baseRewardPool); // validate pid representing convex market within respective booster
-        booster.deposit(_pid, _amount, _stake);
+    function withdrawNoRewards(uint256 _pid, uint256 _amount) public {
+        _validatePositionIsUsed(_pid);
+        if (poolRegistry.vaultMap(_pid, msg.sender) == address(0)) {
+            revert; // TODO: error statement
+        }
+
+        IProxyVault proxyVault = IProxyVault(vault);
+
+        // TODO: get stakingAddress from proxyVault. Import an appropriate interface to interact with the stakingAddress, to specifically access:     mapping(address => LockedStake[]) public lockedStakes;
+        // From there, we access the lockedStakes[address(this)] for this vault proxy. TODO: I guess we could keep things simple and just allow one-element-sized LockedStake array for a cellar per staking address. Otherwise we have multiple LockedStake positions to keep track of.
+        // TODO: get _kek_id
+        // bytes kek_id = lockedStakes(address(this))[0].kek_id;
+        proxyVault.withdrawLockedAndUnwrap(bytes32 _kek_id); // NOTE: this does not claim rewards to owner, it does claim rewards to this vault though. So Strategist will need to claim rewards via separate strategist function. 
     }
 
     /**
-     * @notice Allows strategists to withdraw from Convex markets via Booster contract without claiming rewards
-     * NOTE: this adaptor will always unwrap to CRV LPTs if possible. It will not keep the position in convex wrapped LPT position.
-     * TODO: likely removing this functionality since unless gas is so expensive to withdrawFromBaseRewardPoolAsLPT() where we can specify to get w/ rewards or w/o
-     * @param _pid specified pool ID corresponding to LPT convex market
-     * @param _amount amount of cvxLPT to unstake, and withdraw (TODO: can't recall if this unwraps to LPT)
-     */
-    function withdrawFromBoosterNoRewards(uint256 _pid, address _baseRewardPool, uint256 _amount) public {
-        _validatePositionIsUsed(_pid, _baseRewardPool);
-        booster.withdraw(_pid, _amount);
-    }
-
-    /**
-     * @notice Allows strategists to withdraw from Convex markets via Booster contract w/ or w/o claiming rewards
-     * NOTE: this adaptor will always unwrap to CRV LPTs if possible. It will not keep the position in convex wrapped LPT position.
-     * TODO: if _claim is true, this claims all rewards associated to a cellar interacting w/ Convex markets. The BaseRewardPool contract has the function for withdrawing and unwrapping whilst also claiming all rewards. NOTE: if it does not claim all extra rewards (say another reward contract is linked to it somehow), then we can just make other adaptors that handle that.
-     * TODO: decide which function to use for withdrawing based on gas consumption for adaptor calls? Either: withdrawFromBoosterNoRewards() && getRewards() OR withdrawFromBaseRewardPoolAsLPT() && getRewards()
-     * @param _baseRewardPool for respective convex market (w/ trusted poolId)
-     * @param _amount of LPTs to unstake, unwrap, and withdraw from convex market to calling cellar
-     * @param _claim whether or not to claim all rewards from BaseRewardPool
-     */
-    function withdrawFromBaseRewardPoolAsLPT(address _baseRewardPool, uint256 _amount, bool _claim) public {
-        IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
-        baseRewardPool.withdrawAndUnwrap(_amount, _claim);
-    }
-
-    /**
+     * TODO: EIN
      * @notice Allows strategists to get rewards for an Convex Booster without withdrawing/unwrapping from Convex market
      * @param _pid specified pool ID corresponding to LPT convex market
      * @param _baseRewardPool for respective convex market (w/ trusted poolId)
@@ -240,14 +269,15 @@ contract ConvexAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice Validates that a given pid (poolId), and baseRewardPool are set up as a position with this adaptor in the calling Cellar.
+     * TODO: EIN
+     * @notice Validates that a given pid (poolId) are set up as a position with this adaptor in the calling Cellar.
      * @dev This function uses `address(this)` as the address of the calling Cellar.
      */
-    function _validatePositionIsUsed(uint256 _pid, address _baseRewardPool) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_pid, _baseRewardPool)));
+    function _validatePositionIsUsed(uint256 _pid) internal view {
+        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_pid)));
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert ConvexAdaptor__ConvexBoosterPositionsMustBeTracked(_pid, _baseRewardPool);
+            revert ConvexFraxAdaptor__ConvexPIDPositionsMustBeTracked(_pid);
     }
 
     //============================================ Interface Helper Functions ===========================================
@@ -259,6 +289,7 @@ contract ConvexAdaptor is BaseAdaptor {
     //===============================================================================
 
     /**
+     * TODO: EIN
      * @dev Uses baseRewardPool.getReward() to claim rewards for your address or an arbitrary address.  There is a getRewards() function option where there is a bool as an option to also claim extra incentive tokens (ex. snx) which is defaulted to true in the non-parametrized version.
      */
     function _getRewards(address _baseRewardPool, bool _claimExtras) internal virtual {
