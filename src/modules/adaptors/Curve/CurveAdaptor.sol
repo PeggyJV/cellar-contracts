@@ -11,8 +11,6 @@ import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 import { CurveHelper } from "src/modules/adaptors/Curve/CurveHelper.sol";
 
-// TODO Curve Gauges can TECHNICALLY have a non 18 decimal value :(
-// TODO should this validate positions are used?
 /**
  * @title Curve Adaptor
  * @notice Allows Cellars to interact with Curve LP positions.
@@ -40,6 +38,17 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @notice Attempted add/remove liquidity from Curve resulted in excess slippage.
      */
     error CurveAdaptor___Slippage();
+
+    /**
+     * @notice Provided arrays have mismatched lengths.
+     */
+    error CurveAdaptor___MismatchedLengths();
+
+    /**
+     * @notice Much of the adaptor, and pricing logic relies on Curve sticking to using 18 decimals, but since that
+     *         is not guaranteed when position is being trusted in registry, we verify 18 decimals is used.
+     */
+    error CurveAdaptor___NonStandardDecimals();
 
     //============================================ Global Functions ===========================================
     /**
@@ -108,7 +117,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         bytes memory configurationData
     ) public override {
         _externalReceiverCheck(receiver);
-        (CurvePool pool, ERC20 token, CurveGauge gauge, bytes4 selector) = abi.decode(
+        (CurvePool pool, ERC20 lpToken, CurveGauge gauge, bytes4 selector) = abi.decode(
             adaptorData,
             (CurvePool, ERC20, CurveGauge, bytes4)
         );
@@ -117,13 +126,13 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         if (isLiquid && selector != bytes4(0)) _callReentrancyFunction(pool, selector);
         else revert BaseAdaptor__UserWithdrawsNotAllowed();
 
-        uint256 tokenBalance = token.balanceOf(address(this));
+        uint256 tokenBalance = lpToken.balanceOf(address(this));
         if (tokenBalance < assets) {
             // Pull from gauge.
             gauge.withdraw(assets - tokenBalance, false);
         }
 
-        token.safeTransfer(receiver, assets);
+        lpToken.safeTransfer(receiver, assets);
     }
 
     /**
@@ -134,14 +143,14 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         bytes memory adaptorData,
         bytes memory configurationData
     ) public view override returns (uint256) {
-        (, ERC20 token, CurveGauge gauge, bytes4 selector) = abi.decode(
+        (, ERC20 lpToken, CurveGauge gauge, bytes4 selector) = abi.decode(
             adaptorData,
             (CurvePool, ERC20, CurveGauge, bytes4)
         );
         bool isLiquid = abi.decode(configurationData, (bool));
         if (isLiquid && selector != bytes4(0)) {
             uint256 gaugeBalance = address(gauge) != address(0) ? gauge.balanceOf(msg.sender) : 0;
-            return token.balanceOf(msg.sender) + gaugeBalance;
+            return lpToken.balanceOf(msg.sender) + gaugeBalance;
         } else return 0;
     }
 
@@ -149,17 +158,17 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @notice Returns the balance of Curve LP token.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (, ERC20 token, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
+        (, ERC20 lpToken, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
         uint256 gaugeBalance = address(gauge) != address(0) ? gauge.balanceOf(msg.sender) : 0;
-        return token.balanceOf(msg.sender) + gaugeBalance;
+        return lpToken.balanceOf(msg.sender) + gaugeBalance;
     }
 
     /**
      * @notice Returns Curve LP token
      */
     function assetOf(bytes memory adaptorData) public pure override returns (ERC20) {
-        (, ERC20 token) = abi.decode(adaptorData, (CurvePool, ERC20));
-        return token;
+        (, ERC20 lpToken) = abi.decode(adaptorData, (CurvePool, ERC20));
+        return lpToken;
     }
 
     /**
@@ -169,148 +178,233 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         return false;
     }
 
+    /**
+     * @notice This function is called when the position is being set up in the registry, functionally `assetsUsed` is the same as in the `BaseAdaptor`,
+     *         but since this is called while trusting the position, we also validate decimals are 18.
+     */
+    function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
+        // Make sure token, and gauge have 18 decimals.
+        (, ERC20 lpToken, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
+        if (lpToken.decimals() != 18 || gauge.decimals() != 18) revert CurveAdaptor___NonStandardDecimals();
+        return super.assetsUsed(adaptorData);
+    }
+
     //============================================ Strategist Functions ===========================================
 
-    // TODO add in maxAvailable logic where possible
-
-    // TODO so use underlying is also used for aToken pools, where if it is true it will give you the vanilla ERC20 on withdraw vs the aToken...... :(((((((((
+    /**
+     * @notice Allows strategist to add liquidity to Curve pairs that do NOT use the native asset.
+     * @param pool the curve pool address
+     * @param lpToken the curve pool token
+     * @param underlyingTokens array of ERC20 tokens that make up the curve pool, in order of `pool.coins`
+     * @param orderedUnderlyingTokenAmounts array of token amounts, in order of `pool.coins`
+     * @param minLPAmount the minimum amount of LP out
+     */
     function addLiquidity(
         address pool,
-        ERC20 token,
-        ERC20[] memory tokens,
-        uint256[] memory orderedTokenAmounts,
+        ERC20 lpToken,
+        ERC20[] memory underlyingTokens,
+        uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount
     ) external {
-        if (tokens.length != orderedTokenAmounts.length) revert("Bad data");
-        bytes memory data = _curveAddLiquidityEncodedCallData(orderedTokenAmounts, minLPAmount, false);
+        if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveAdaptor___MismatchedLengths();
+        bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false);
 
-        uint256 balanceDelta = token.balanceOf(address(this));
+        uint256 balanceDelta = lpToken.balanceOf(address(this));
 
-        // Approve pool to spend amounts
-        for (uint256 i; i < tokens.length; ++i)
-            if (orderedTokenAmounts[i] > 0) tokens[i].safeApprove(pool, orderedTokenAmounts[i]);
+        // Approve pool to spend amounts, and check for max available.
+        for (uint256 i; i < underlyingTokens.length; ++i)
+            if (orderedUnderlyingTokenAmounts[i] > 0) {
+                orderedUnderlyingTokenAmounts[i] = _maxAvailable(underlyingTokens[i], orderedUnderlyingTokenAmounts[i]);
+                underlyingTokens[i].safeApprove(pool, orderedUnderlyingTokenAmounts[i]);
+            }
 
         pool.functionCall(data);
 
-        balanceDelta = token.balanceOf(address(this)) - balanceDelta;
+        balanceDelta = lpToken.balanceOf(address(this)) - balanceDelta;
 
-        uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(tokens, orderedTokenAmounts, token);
+        uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(
+            underlyingTokens,
+            orderedUnderlyingTokenAmounts,
+            lpToken
+        );
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
         if (balanceDelta < minValueOut) revert CurveAdaptor___Slippage();
 
-        for (uint256 i; i < tokens.length; ++i)
-            if (orderedTokenAmounts[i] > 0) _revokeExternalApproval(tokens[i], pool);
+        for (uint256 i; i < underlyingTokens.length; ++i)
+            if (orderedUnderlyingTokenAmounts[i] > 0) _revokeExternalApproval(underlyingTokens[i], pool);
     }
 
-    // Add liquidity to a pool using native ETH.
+    /**
+     * @notice Allows strategist to add liquidity to Curve pairs that use the native asset.
+     * @param pool the curve pool address
+     * @param lpToken the curve pool token
+     * @param underlyingTokens array of ERC20 tokens that make up the curve pool, in order of `pool.coins`
+     * @param orderedUnderlyingTokenAmounts array of token amounts, in order of `pool.coins`
+     * @param minLPAmount the minimum amount of LP out
+     * @param useUnderlying bool indicating whether or not to add a true bool to the end of abi.encoded `addLiquidity` call
+     */
     function addLiquidityETH(
         address pool,
-        ERC20 token,
-        ERC20[] memory tokens,
-        uint256[] memory orderedTokenAmounts,
+        ERC20 lpToken,
+        ERC20[] memory underlyingTokens,
+        uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
         bool useUnderlying
     ) external {
-        if (tokens.length != orderedTokenAmounts.length) revert("Bad data");
+        if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveAdaptor___MismatchedLengths();
 
         // Approve adaptor to spend amounts
-        for (uint256 i; i < tokens.length; ++i) {
-            if (address(tokens[i]) == CURVE_ETH) {
+        for (uint256 i; i < underlyingTokens.length; ++i) {
+            if (address(underlyingTokens[i]) == CURVE_ETH) {
                 // If token is CURVE_ETH, then approve adaptor to spend native wrapper.
-                ERC20(nativeWrapper).safeApprove(addressThis, orderedTokenAmounts[i]);
+                orderedUnderlyingTokenAmounts[i] = _maxAvailable(
+                    ERC20(nativeWrapper),
+                    orderedUnderlyingTokenAmounts[i]
+                );
+                ERC20(nativeWrapper).safeApprove(addressThis, orderedUnderlyingTokenAmounts[i]);
             } else {
-                tokens[i].safeApprove(addressThis, orderedTokenAmounts[i]);
+                orderedUnderlyingTokenAmounts[i] = _maxAvailable(underlyingTokens[i], orderedUnderlyingTokenAmounts[i]);
+                underlyingTokens[i].safeApprove(addressThis, orderedUnderlyingTokenAmounts[i]);
             }
         }
 
         uint256 lpOut = CurveHelper(addressThis).addLiquidityETHViaProxy(
             pool,
-            token,
-            tokens,
-            orderedTokenAmounts,
+            lpToken,
+            underlyingTokens,
+            orderedUnderlyingTokenAmounts,
             minLPAmount,
             useUnderlying
         );
 
-        for (uint256 i; i < tokens.length; ++i) if (address(tokens[i]) == CURVE_ETH) tokens[i] = ERC20(nativeWrapper);
-        uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(tokens, orderedTokenAmounts, token);
+        for (uint256 i; i < underlyingTokens.length; ++i)
+            if (address(underlyingTokens[i]) == CURVE_ETH) underlyingTokens[i] = ERC20(nativeWrapper);
+        uint256 lpValueIn = Cellar(address(this)).priceRouter().getValues(
+            underlyingTokens,
+            orderedUnderlyingTokenAmounts,
+            lpToken
+        );
         uint256 minValueOut = lpValueIn.mulDivDown(curveSlippage, 1e4);
         if (lpOut < minValueOut) revert CurveAdaptor___Slippage();
 
-        for (uint256 i; i < tokens.length; ++i) {
-            if (address(tokens[i]) == CURVE_ETH) _revokeExternalApproval(ERC20(nativeWrapper), addressThis);
-            else _revokeExternalApproval(tokens[i], addressThis);
+        for (uint256 i; i < underlyingTokens.length; ++i) {
+            if (address(underlyingTokens[i]) == CURVE_ETH) _revokeExternalApproval(ERC20(nativeWrapper), addressThis);
+            else _revokeExternalApproval(underlyingTokens[i], addressThis);
         }
     }
 
+    /**
+     * @notice Allows strategist to remove liquidity from Curve pairs that do NOT use the native asset.
+     * @param pool the curve pool address
+     * @param lpToken the curve pool token
+     * @param lpTokenAmount the amount of LP token
+     * @param underlyingTokens array of ERC20 tokens that make up the curve pool, in order of `pool.coins`
+     * @param orderedMinimumUnderlyingTokenAmountsOut array of minimum token amounts out, in order of `pool.coins`
+     */
     function removeLiquidity(
         address pool,
-        ERC20 token,
+        ERC20 lpToken,
         uint256 lpTokenAmount,
-        ERC20[] memory tokens,
-        uint256[] memory orderedTokenAmountsOut
+        ERC20[] memory underlyingTokens,
+        uint256[] memory orderedMinimumUnderlyingTokenAmountsOut
     ) external {
-        if (tokens.length != orderedTokenAmountsOut.length) revert("Bad data");
-        lpTokenAmount = _maxAvailable(token, lpTokenAmount);
-        bytes memory data = _curveRemoveLiquidityEncodedCalldata(lpTokenAmount, orderedTokenAmountsOut, false);
+        if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
+            revert CurveAdaptor___MismatchedLengths();
+        lpTokenAmount = _maxAvailable(lpToken, lpTokenAmount);
+        bytes memory data = _curveRemoveLiquidityEncodedCalldata(
+            lpTokenAmount,
+            orderedMinimumUnderlyingTokenAmountsOut,
+            false
+        );
 
-        uint256[] memory balanceDelta = new uint256[](tokens.length);
-        for (uint256 i; i < tokens.length; ++i) balanceDelta[i] = ERC20(tokens[i]).balanceOf(address(this));
+        uint256[] memory balanceDelta = new uint256[](underlyingTokens.length);
+        for (uint256 i; i < underlyingTokens.length; ++i)
+            balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this));
 
         pool.functionCall(data);
 
-        for (uint256 i; i < tokens.length; ++i)
-            balanceDelta[i] = ERC20(tokens[i]).balanceOf(address(this)) - balanceDelta[i];
+        for (uint256 i; i < underlyingTokens.length; ++i)
+            balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this)) - balanceDelta[i];
 
-        uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(tokens, balanceDelta, token);
+        uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(underlyingTokens, balanceDelta, lpToken);
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
 
-        _revokeExternalApproval(token, pool);
+        _revokeExternalApproval(lpToken, pool);
     }
 
+    /**
+     * @notice Allows strategist to remove liquidity from Curve pairs that use the native asset.
+     * @param pool the curve pool address
+     * @param lpToken the curve pool token
+     * @param lpTokenAmount the amount of LP token
+     * @param underlyingTokens array of ERC20 tokens that make up the curve pool, in order of `pool.coins`
+     * @param orderedMinimumUnderlyingTokenAmountsOut array of minimum token amounts out, in order of `pool.coins`
+     * @param useUnderlying bool indicating whether or not to add a true bool to the end of abi.encoded `removeLiquidity` call
+     */
     function removeLiquidityETH(
         address pool,
-        ERC20 token,
+        ERC20 lpToken,
         uint256 lpTokenAmount,
-        ERC20[] memory tokens,
-        uint256[] memory orderedTokenAmountsOut,
+        ERC20[] memory underlyingTokens,
+        uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         bool useUnderlying
     ) external {
-        if (tokens.length != orderedTokenAmountsOut.length) revert("Bad data");
-        lpTokenAmount = _maxAvailable(token, lpTokenAmount);
+        if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
+            revert CurveAdaptor___MismatchedLengths();
+        lpTokenAmount = _maxAvailable(lpToken, lpTokenAmount);
 
-        token.safeApprove(addressThis, lpTokenAmount);
+        lpToken.safeApprove(addressThis, lpTokenAmount);
 
-        uint256[] memory tokensOut = CurveHelper(addressThis).removeLiquidityETHViaProxy(
+        uint256[] memory underlyingTokensOut = CurveHelper(addressThis).removeLiquidityETHViaProxy(
             pool,
-            token,
+            lpToken,
             lpTokenAmount,
-            tokens,
-            orderedTokenAmountsOut,
+            underlyingTokens,
+            orderedMinimumUnderlyingTokenAmountsOut,
             useUnderlying
         );
 
-        for (uint256 i; i < tokens.length; ++i) if (address(tokens[i]) == CURVE_ETH) tokens[i] = ERC20(nativeWrapper);
-        uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(tokens, tokensOut, token);
+        for (uint256 i; i < underlyingTokens.length; ++i)
+            if (address(underlyingTokens[i]) == CURVE_ETH) underlyingTokens[i] = ERC20(nativeWrapper);
+        uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(
+            underlyingTokens,
+            underlyingTokensOut,
+            lpToken
+        );
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
 
-        _revokeExternalApproval(token, addressThis);
+        _revokeExternalApproval(lpToken, addressThis);
     }
 
-    function stakeInGauge(ERC20 token, CurveGauge gauge, uint256 amount) external {
-        amount = _maxAvailable(token, amount);
-        token.safeApprove(address(gauge), amount);
+    /**
+     * @notice Allows strategist to stake Curve LP tokens in their gauge.
+     * @param lpToken the curve pool token
+     * @param gauge the gauge for `lpToken`
+     * @param amount the amount of `lpToken` to stake
+     */
+    function stakeInGauge(ERC20 lpToken, CurveGauge gauge, uint256 amount) external {
+        amount = _maxAvailable(lpToken, amount);
+        lpToken.safeApprove(address(gauge), amount);
         gauge.deposit(amount, address(this));
-        _revokeExternalApproval(token, address(gauge));
+        _revokeExternalApproval(lpToken, address(gauge));
     }
 
+    /**
+     * @notice Allows strategist to unstake Curve LP tokens from their gauge.
+     * @param gauge the gauge for `lpToken`
+     * @param amount the amount of `lpToken` to unstake
+     */
     function unStakeFromGauge(CurveGauge gauge, uint256 amount) external {
         if (amount == type(uint256).max) amount = gauge.balanceOf(address(this));
         gauge.withdraw(amount);
     }
 
+    /**
+     * @notice Allows strategist to claim rewards from a gauge.
+     * @param gauge the gauge for `lpToken`
+     */
     function claimRewards(CurveGauge gauge) external {
         gauge.claim_rewards();
     }

@@ -1053,6 +1053,13 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
     }
 
+    // ========================================= Reverts =========================================
+    // TODO mismatched underlyingTokens and orderedUnderlyingTokenAmounts lengths.
+    // TODO try using normal functions with an ETH based pool
+    // TODO try having adaptor itself make calls to Adaptor helper functions
+    // TODO adding curve positions with weird decimals
+    // TODO test where strategist messes up order of underlyingTokens.
+
     // ========================================= Helpers =========================================
 
     function _curveLPAsAccountingAsset(uint256 assets, ERC20 token, uint32 positionId, address gauge) internal {

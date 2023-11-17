@@ -11,4 +11,6 @@ interface CurveGauge {
     function claim_rewards() external;
 
     function balanceOf(address user) external view returns (uint256);
+
+    function decimals() external view returns (uint8);
 }
