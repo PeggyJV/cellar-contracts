@@ -12,9 +12,19 @@ import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 contract Curve2PoolExtension is Extension {
     using Math for uint256;
 
+    /**
+     * @notice Address Curve uses to represent native asset.
+     */
     address public constant CURVE_ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+
+    /**
+     * @notice Decimals curve uses for their pools.
+     */
     uint8 public immutable curveDecimals;
 
+    /**
+     * @notice Native Wrapper address.
+     */
     ERC20 public immutable WETH;
 
     constructor(PriceRouter _priceRouter, address _weth, uint8 _curveDecimals) Extension(_priceRouter) {
@@ -26,6 +36,11 @@ contract Curve2PoolExtension is Extension {
      * @notice Curve pool coins[0] is not supported by price router.
      */
     error Curve2PoolExtension_ASSET_NOT_SUPPORTED();
+
+    /**
+     * @notice Curve pool is not supported by extension.
+     */
+    error Curve2PoolExtension_POOL_NOT_SUPPORTED();
 
     /**
      * @notice Extension storage
@@ -52,11 +67,10 @@ contract Curve2PoolExtension is Extension {
      * @param asset the ERC20 asset to price using a Curve EMA
      */
     function setupSource(ERC20 asset, bytes memory _storage) external override onlyPriceRouter {
-        // From what I can tell there are 2 types of curve 2Pools.
-        // 1) uncorrelated coins, call pool.lp_price() and multiply by coins[0] price
-        // 2) correlated coins, query both underlyings prices from price router, find the min price, and multiply by virtual price.
         ExtensionStorage memory stor = abi.decode(_storage, (ExtensionStorage));
         CurvePool pool = CurvePool(stor.pool);
+
+        // Figure out how long `coins` is.
         uint256 coinsLength;
         while (true) {
             try pool.coins(coinsLength) {
@@ -66,7 +80,8 @@ contract Curve2PoolExtension is Extension {
             }
         }
 
-        if (coinsLength > 2) revert("3pool not supported");
+        // Revert if we are not dealing with a 2 coin pool.
+        if (coinsLength > 2) revert Curve2PoolExtension_POOL_NOT_SUPPORTED();
 
         // Make sure underlyingOrConstituent0 is supported.
         if (!priceRouter.isSupported(ERC20(stor.underlyingOrConstituent0)))
@@ -80,7 +95,7 @@ contract Curve2PoolExtension is Extension {
         } else {
             // Make sure pool.lp_price() is available.
             try pool.lp_price() {} catch {
-                revert("Unsupported pool");
+                revert Curve2PoolExtension_POOL_NOT_SUPPORTED();
             }
         }
 
@@ -99,6 +114,8 @@ contract Curve2PoolExtension is Extension {
             // Find the minimum price of coins.
             uint256 price0 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent0));
             uint256 price1 = priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent1));
+
+            // Handle rates if needed.
             if (stor.divideRate0 || stor.divideRate1) {
                 uint256[2] memory rates = pool.stored_rates();
                 if (stor.divideRate0) {
@@ -110,11 +127,7 @@ contract Curve2PoolExtension is Extension {
             }
             uint256 minPrice = price0 < price1 ? price0 : price1;
             price = minPrice.mulDivDown(pool.get_virtual_price(), 10 ** curveDecimals);
-            // TODO add in new underlying or constituent logic here with rates.
         } else {
-            // TODO I wonder if rates would also need to come up here, like if this new pool ever gave the lp_price without adjusting for the rate, then we would need to?
-            // TODO ^^^ I dont think this makes sense cuz the point of it acconting for the rate is to keep the liquidity concentrated at that rate
-            // but you can only do that with correlated pairs.
             price = pool.lp_price().mulDivDown(priceRouter.getPriceInUSD(getCoins(pool, 0)), 10 ** curveDecimals);
         }
     }
