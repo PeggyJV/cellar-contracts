@@ -178,6 +178,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         return false;
     }
 
+    // TODO make sure this logic works with zero gauge.
     /**
      * @notice This function is called when the position is being set up in the registry, functionally `assetsUsed` is the same as in the `BaseAdaptor`,
      *         but since this is called while trusting the position, we also validate decimals are 18.
@@ -185,7 +186,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
         // Make sure token, and gauge have 18 decimals.
         (, ERC20 lpToken, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
-        if (lpToken.decimals() != 18 || gauge.decimals() != 18) revert CurveAdaptor___NonStandardDecimals();
+        if (lpToken.decimals() != 18 || (address(gauge) != address(0) && gauge.decimals() != 18))
+            revert CurveAdaptor___NonStandardDecimals();
         return super.assetsUsed(adaptorData);
     }
 

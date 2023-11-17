@@ -1059,6 +1059,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     // TODO try having adaptor itself make calls to Adaptor helper functions
     // TODO adding curve positions with weird decimals
     // TODO test where strategist messes up order of underlyingTokens.
+    // TODO add test to make sure we revert if doing some ETH Thing and repeat ETH in underlyingToken array.
 
     // ========================================= Helpers =========================================
 
