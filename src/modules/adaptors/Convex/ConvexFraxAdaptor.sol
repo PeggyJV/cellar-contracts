@@ -5,8 +5,8 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "
 import { IProxyVault } from "src/interfaces/external/Convex/Convex-Frax-Platform/IProxyVault.sol";
 import { IPoolRegistry } from "src/interfaces/external/Convex/Convex-Frax-Platform/IPoolRegistry.sol";
 import { IBooster } from "src/interfaces/external/Convex/Convex-Frax-Platform/IBooster.sol";
-impot {IVoterProxy} from "src/interfaces/external/Convex/Convex-Frax-Platform/IVoterProxy.sol";
-
+import {IVoterProxy} from "src/interfaces/external/Convex/Convex-Frax-Platform/IVoterProxy.sol";
+import {IFraxFarmERC20_V2} from "src/interfaces/external/Convex/IFraxFarmERC20_V2.sol";
 /**
  * @title Convex-Frax Platform Adaptor
  * @dev This adaptor is specifically for Convex-Frax Platform Markets.
@@ -228,7 +228,7 @@ contract ConvexFraxAdaptor is BaseAdaptor {
     /// TODO: EIN THIS IS WHERE YOU LEFT OFF
 
     /**
-     * @notice Allows strategists to withdraw from Convex-Frax markets via vault contract without claiming rewards
+     * @notice Allows strategists to withdraw from Convex-Frax markets via vault contract without claiming rewards to cellar.
      * NOTE: this adaptor will always unwrap to underlying Yield Bearing Tokens (YBTs) if possible. It will not keep the position in convex wrapped LPT position.
      * @param _pid specified pool ID corresponding to LPT convex market
      * @param _amount amount of cvxLPT to unstake, unwrap and withdraw
@@ -249,12 +249,11 @@ contract ConvexFraxAdaptor is BaseAdaptor {
         }
 
         IProxyVault proxyVault = IProxyVault(vault);
+        address _stakingAddress = proxyVault.stakingAddress(); // get stakingAddress from proxyVault. Import an appropriate interface to interact with the stakingAddress, to specifically access:     mapping(address => LockedStake[]) public lockedStakes;
 
-        // TODO: EIN WHERE YOU SPECIFICALLY LEFT OFF AND NEED TO PICK UP FROM TOMORROW MORNING.
-        // TODO: get stakingAddress from proxyVault. Import an appropriate interface to interact with the stakingAddress, to specifically access:     mapping(address => LockedStake[]) public lockedStakes;
-        // From there, we access the lockedStakes[address(this)] for this vault proxy. TODO: I guess we could keep things simple and just allow one-element-sized LockedStake array for a cellar per staking address. Otherwise we have multiple LockedStake positions to keep track of.
-        // TODO: get _kek_id
-        // bytes kek_id = lockedStakes(address(this))[0].kek_id;
+        IFraxFarmERC20_V2 stakingAddress = IFraxFarmERC20_V2(_stakingAddress);
+        if(stakingAddress.lockedStakesOfLength(msg.sender) > 1) revert; // TODO: unsure if we want to allow more than one time-locked position per Frax YBT. For now, we keep things simple and just allow one-element-sized LockedStake array for a cellar per staking address. Otherwise we have multiple LockedStake positions to keep track of.
+        bytes kek_id = stakingAddress.lockedStakes(address(this),0).kek_id; // Now, we access the lockedStakes[address(this)] for this vault proxy.
         proxyVault.withdrawLockedAndUnwrap(bytes32 _kek_id); // NOTE: this does not claim rewards to owner, it does claim rewards to this vault though. So Strategist will need to claim rewards via separate strategist function. 
     }
 
