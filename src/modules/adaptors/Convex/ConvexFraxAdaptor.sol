@@ -29,11 +29,10 @@ contract ConvexFraxAdaptor is BaseAdaptor {
     }
 
     /**
-     * @notice The booster for the Convex-Frax Platform on this respective network
-     * @dev For mainnet, use 0x569f5B842B5006eC17Be02B8b94510BA8e79FbCa
-     * TODO: confirm that there aren't more than one booster for Convex-Frax Platform on mainnet / other networks
+     * @notice The VoteProxy where all the vefxs is locked and thus immutable
+     * @dev For mainnet, use 0x59CFCD384746ec3035299D90782Be065e466800B
      */
-    IBooster public immutable booster;
+    IVoterProxy public immutable voterProxy;
 
     /**
      * @notice The poolRegistry for the Convex-Frax Platform on this respective network
@@ -41,10 +40,11 @@ contract ConvexFraxAdaptor is BaseAdaptor {
     IPoolRegistry public immutable poolRegistry;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(uint256 pid, address booster)
+    // adaptorData = abi.encode(uint256 pid)
     // Where:
-    // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with. `pid` is used w/ `booster` and `priceRegistry` to obtain the cellar's `vault` where all mutative functionality is done through.
+    // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with. `pid` is used w/ `booster` and `poolRegistry` to obtain the cellar's `vault` where all mutative functionality is done through.
     // NOTE We are currently assuming that the `Booster.sol` and `PoolRegistry.sol` are the same across all Convex-Frax Platform markets.
+    // NOTE: `voteProxy` is to be used to find out which `Booster` is the current one. getter `operator()` is used to find the current `Booster` within `voteProxy`
 
     //================= Configuration Data Specification =================
     // N/A
@@ -56,13 +56,14 @@ contract ConvexFraxAdaptor is BaseAdaptor {
     error ConvexFraxAdaptor__ConvexPIDPositionsMustBeTracked(uint256 pid);
 
     /**
-     * @param _booster the Convex-Frax Platform booster contract for the network.
+     * @param _voteProxy the Convex-Frax voteProxy for the network.
      * @param _poolRegistry the Convex-Frax Platform poolRegistry contract for the network.
      * @dev Booster.sol serves as the primary contract that creates staking proxy vaults that are registered within the `PoolRegistry`. Vault addresses can be queried w/ poolIds, and user address (in this case the Cellar itself).
      * TODO: decided to keep `address poolRegistry` to the adaptor storage if it is used a lot throughout adaptor implementation or not.
+     * TODO: maybe make poolRegistry a permissioned setter so we can change it if they decide to upgrade poolRegistry. Otherwise, need new adaptor deployment for new poolRegistries.
      */
-    constructor(address _booster, address _poolRegistry) {
-        booster = IBooster(_booster);
+    constructor(address _voteProxy, address _poolRegistry) {
+        voterProxy = IVoterProxy(_voteProxy);
         poolRegistry = IPoolRegistry(_poolRegistry);
     }
 
@@ -216,7 +217,7 @@ contract ConvexFraxAdaptor is BaseAdaptor {
         address vault;
         // check if vault has been created
         if (poolRegistry.vaultMap(_pid, msg.sender) == address(0)) {
-            vault = booster.createVault(_pid); // even if createVault(pid) was called somehow by calling cellar, and it already had one, it would revert within `Booster.sol`
+            vault = IBooster(voterProxy.operator()).createVault(_pid); // even if createVault(pid) was called somehow by calling cellar, and it already had one, it would revert within `Booster.sol`
         } else {
             vault = poolRegistry.vaultMap(_pid, msg.sender);
         }
@@ -241,7 +242,7 @@ contract ConvexFraxAdaptor is BaseAdaptor {
      *          uint256 lock_multiplier; // 6 decimals of precision. 1x = 1000000
      * }
      */
-    function withdrawNoRewards(uint256 _pid, uint256 _amount) public {
+    function withdrawLockedAndUnwrap(uint256 _pid, uint256 _amount) public {
         _validatePositionIsUsed(_pid);
         if (poolRegistry.vaultMap(_pid, msg.sender) == address(0)) {
             revert; // TODO: error statement
@@ -249,6 +250,7 @@ contract ConvexFraxAdaptor is BaseAdaptor {
 
         IProxyVault proxyVault = IProxyVault(vault);
 
+        // TODO: EIN WHERE YOU SPECIFICALLY LEFT OFF AND NEED TO PICK UP FROM TOMORROW MORNING.
         // TODO: get stakingAddress from proxyVault. Import an appropriate interface to interact with the stakingAddress, to specifically access:     mapping(address => LockedStake[]) public lockedStakes;
         // From there, we access the lockedStakes[address(this)] for this vault proxy. TODO: I guess we could keep things simple and just allow one-element-sized LockedStake array for a cellar per staking address. Otherwise we have multiple LockedStake positions to keep track of.
         // TODO: get _kek_id
