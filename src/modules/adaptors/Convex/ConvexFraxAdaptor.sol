@@ -258,13 +258,15 @@ contract ConvexFraxAdaptor is BaseAdaptor {
     }
 
     /**
-     * TODO: EIN
-     * @notice Allows strategists to get rewards for an Convex Booster without withdrawing/unwrapping from Convex market
+     * TODO: EIN WHERE YOU LEFT OFF
+     * @notice Allows strategists to get rewards for Convex-Frax platform from their own staking proxy vault without withdrawing/unwrapping from Convex market
      * @param _pid specified pool ID corresponding to LPT convex market
-     * @param _baseRewardPool for respective convex market (w/ trusted poolId)
-     * @param _claimExtras Whether or not to claim extra rewards associated to the Convex booster (outside of rewardToken for Convex booster)
+     * @param _claimExtras TODO: not sure if there are bools for claiming ExtraRewards or not. 
+     * NOTE: according to C2tP, it's best to use this helper bc `earned()` does not incl. fees and some pools might be slightly off: https://etherscan.io/address/0x9Ce7c648244F111CCd338Cc5e269C5961ad9B308#code
      */
     function getRewards(uint256 _pid, address _baseRewardPool, bool _claimExtras) public {
+        // TODO: EIN - see helper contract as per comment above, current understanding is that rewards are distributed to the vault whenever deposits or withdraws happen from the Cellar to the proxy vault. This needs to be confirmed though.
+
         _validatePositionIsUsed(_pid, _baseRewardPool);
         _getRewards(_baseRewardPool, _claimExtras);
     }
