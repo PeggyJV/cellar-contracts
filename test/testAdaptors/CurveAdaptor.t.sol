@@ -1314,8 +1314,158 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
-    // TODO test where strategist messes up order of underlyingTokens.
-    // TODO add test to make sure we revert if doing some ETH Thing and repeat ETH in underlyingToken array.
+    function testStrategistMessingUpInputTokenArray(uint256 assets) external {
+        assets = bound(assets, 1e6, 1_000_000e6);
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        uint256[] memory orderedUnderlyingTokenAmounts = new uint256[](3);
+        orderedUnderlyingTokenAmounts[0] = assets;
+
+        // Making it too long
+        ERC20[] memory underlyingTokens = new ERC20[](3);
+        underlyingTokens[0] = USDC;
+        underlyingTokens[1] = CRVUSD;
+        underlyingTokens[2] = FRAX;
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            vm.expectRevert();
+            cellar.callOnAdaptor(data);
+        }
+
+        // Getting order wrong
+        deal(address(CRVUSD), address(cellar), assets);
+        underlyingTokens = new ERC20[](2);
+        underlyingTokens[0] = CRVUSD;
+        underlyingTokens[1] = USDC;
+        orderedUnderlyingTokenAmounts = new uint256[](2);
+        orderedUnderlyingTokenAmounts[0] = assets;
+
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            vm.expectRevert();
+            cellar.callOnAdaptor(data);
+        }
+
+        // Repeating a value.
+        // NOTE kinda weird but Curve allows this TX to work as long as
+        // orderedUnderlyingTokenAmounts[1] is zero.
+        uint256 totalAssetsBefore = cellar.totalAssets();
+        underlyingTokens = new ERC20[](2);
+        underlyingTokens[0] = USDC;
+        underlyingTokens[1] = USDC;
+
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
+        uint256 totalAssetsAfter = cellar.totalAssets();
+
+        assertApproxEqRel(
+            totalAssetsAfter,
+            totalAssetsBefore,
+            0.003e18,
+            "Total assets should approximately be unchanged."
+        );
+
+        // Check liquidity withdraws.
+        uint256 lpTokenAmount = ERC20(UsdcCrvUsdToken).balanceOf(address(cellar));
+        underlyingTokens = new ERC20[](3);
+        underlyingTokens[0] = USDC;
+        underlyingTokens[1] = CRVUSD;
+        underlyingTokens[2] = FRAX;
+        orderedUnderlyingTokenAmounts = new uint256[](3);
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveLiquidityFromCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                lpTokenAmount,
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            vm.expectRevert();
+            cellar.callOnAdaptor(data);
+        }
+
+        // Repeating a value.
+        underlyingTokens = new ERC20[](2);
+        underlyingTokens[0] = USDC;
+        underlyingTokens[1] = USDC;
+        orderedUnderlyingTokenAmounts = new uint256[](2);
+
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            vm.expectRevert();
+            cellar.callOnAdaptor(data);
+        }
+
+        // Getting order wrong
+        // NOTE kinda weird but Curve allows this TX to work
+        deal(address(CRVUSD), address(cellar), assets);
+        underlyingTokens = new ERC20[](2);
+        underlyingTokens[0] = CRVUSD;
+        underlyingTokens[1] = USDC;
+
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveLiquidityFromCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                lpTokenAmount,
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            // vm.expectRevert();
+            cellar.callOnAdaptor(data);
+        }
+    }
 
     function testCellarWithoutOracleTryingToUseCurvePosition() external {
         // Deploy new Cellar.
