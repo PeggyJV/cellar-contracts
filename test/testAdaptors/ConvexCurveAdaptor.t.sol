@@ -78,15 +78,15 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private mkUsdPosition = 8;
     uint32 private yethPosition = 9;
     uint32 private ethXPosition = 10;
-    uint32 private sFraxPosition = 28;
+    uint32 private sFraxPosition = 11;
 
-    uint32 private EthFrxethPoolPosition = 11; // https://www.convexfinance.com/stake/ethereum/128
-    uint32 private EthStethNgPoolPosition = 12;
-    uint32 private fraxCrvUsdPoolPosition = 13;
-    uint32 private mkUsdFraxUsdcPoolPosition = 14;
-    uint32 private WethYethPoolPosition = 15;
-    uint32 private EthEthxPoolPosition = 16;
-    uint32 private CrvUsdSfraxPoolPosition = 17;
+    uint32 private EthFrxethPoolPosition = 12; // https://www.convexfinance.com/stake/ethereum/128
+    uint32 private EthStethNgPoolPosition = 13;
+    uint32 private fraxCrvUsdPoolPosition = 14;
+    uint32 private mkUsdFraxUsdcPoolPosition = 15;
+    uint32 private WethYethPoolPosition = 16;
+    uint32 private EthEthxPoolPosition = 17;
+    uint32 private CrvUsdSfraxPoolPosition = 18;
 
     uint32 private slippage = 0.9e4;
     uint256 public initialAssets;
@@ -388,39 +388,33 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Set up Cellar which will have all LPTs dealt to it for the tests w/ a baseAsset of USDC or something?
         // TODO: EIN THIS IS WHERE YOU LEFT OFF
 
-        string memory cellarName = "mkUSDFraxBP CRVLPT Cellar V0.1";
-        uint256 initialDeposit = 1e18;
+        string memory cellarName = "Convex Cellar V0.0";
+        uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
+        // baseAsset is USDC, but we will deal out LPTs within the helper test function similar to CurveAdaptor.t.sol 
         cellar = _createCellar(
             cellarName,
-            mkUSDFraxBP_CRVLPT,
-            mkUSDFraxBP_CRVLPT_Position,
+            USDC,
+            usdcPosition,
             abi.encode(0),
             initialDeposit,
             platformCut
         );
 
+        USDC.safeApprove(address(cellar), type(uint256).max);
+
+        for (uint32 i = 2; i < 19; ++i) cellar.addPositionToCatalogue(i);
+        for (uint32 i = 2; i < 19; ++i) cellar.addPosition(0, i, abi.encode(true), false);
+
         cellar.setRebalanceDeviation(0.01e18);
 
         cellar.addAdaptorToCatalogue(address(convexCurveAdaptor));
-        cellar.addPositionToCatalogue(cvxPool_mkUSDFraxBP_Position); // cvxPool for mkUSDFraxBP
 
-        cellar.addPosition(
-            0,
-            cvxPool_mkUSDFraxBP_Position,
-            abi.encode(mkUSDFraxBPT_ConvexPID, mkUSDFraxBP_cvxBaseRewardContract),
-            false
-        );
-
-        cellar.setHoldingPosition(cvxPool_mkUSDFraxBP_Position);
-
-        mkUSDFraxBP_CRVLPT.safeApprove(address(cellar), type(uint256).max);
-
-        // TODO: possibly add eth_STETH_CRVLPT details to the cellar as well
         initialAssets = cellar.totalAssets();
     }
 
+    
     /**
      * THINGS TO TEST (not exhaustive):
      * Deposit Tests
