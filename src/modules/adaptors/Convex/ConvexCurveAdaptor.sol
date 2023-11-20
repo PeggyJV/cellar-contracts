@@ -6,13 +6,13 @@ import { IBaseRewardPool } from "src/interfaces/external/Convex/IBaseRewardPool.
 import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
 
 /**
- * @title Convex Adaptor
+ * @title Convex-Curve Platform Adaptor
  * @dev This adaptor is specifically for Convex contracts.
  * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex markets.
  * @author crispymangoes, 0xEinCodes
  * @dev TODO: this may not work for Convex with other protocols (FRAX, Prisma, etc.). FRAX contract architecture shows some discrepancies (need to confirm). Side-Chain implementations for convex markets showcase other discrepancies too in external function signatures, etc.
  */
-contract ConvexAdaptor is BaseAdaptor {
+contract ConvexCurveAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
