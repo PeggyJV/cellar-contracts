@@ -12,7 +12,7 @@ import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
 /**
  * @title Curve Helper
- * @notice Contains logic needed for safely interacting with multiple different Curve Pool implementations.
+ * @notice Contains helper logic needed for safely interacting with multiple different Curve Pool implementations.
  * @author crispymangoes
  */
 contract CurveHelper {
