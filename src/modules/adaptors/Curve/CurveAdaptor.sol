@@ -109,6 +109,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @param receiver address to send assets to
      * @param adaptorData data needed to withdraw from this position
      * @dev configurationData used to check if position is liquid
+     * @dev Does not check that gauge address is non-zero, but if gauge is zero, then `withdrawableFrom` only reports
+     *      the lpToken balance in the cellar, so assets will never be greater than `tokenBalance`.
      */
     function withdraw(
         uint256 assets,

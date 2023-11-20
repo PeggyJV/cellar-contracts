@@ -1317,10 +1317,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     // TODO test where strategist messes up order of underlyingTokens.
     // TODO add test to make sure we revert if doing some ETH Thing and repeat ETH in underlyingToken array.
 
-    function testHunch() external {
-        revert(":)");
-    }
-
     function testCellarWithoutOracleTryingToUseCurvePosition() external {
         // Deploy new Cellar.
         string memory cellarName = "Curve Cellar V0.1";
