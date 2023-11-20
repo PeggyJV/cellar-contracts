@@ -4,9 +4,9 @@ pragma solidity 0.8.21;
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
-import { Cellar } from "src/base/Cellar.sol";
+import { MockCellarWithOracle } from "src/mocks/MockCellarWithOracle.sol";
 import { CurveEMAExtension } from "src/modules/price-router/Extensions/Curve/CurveEMAExtension.sol";
-import { CurveAdaptor, CurvePool, CurveGauge } from "src/modules/adaptors/Curve/CurveAdaptor.sol";
+import { CurveAdaptor, CurvePool, CurveGauge, CurveHelper } from "src/modules/adaptors/Curve/CurveAdaptor.sol";
 import { Curve2PoolExtension } from "src/modules/price-router/Extensions/Curve/Curve2PoolExtension.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 
@@ -78,6 +78,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     ERC20[] public slippageCoins;
     uint256 public slippageToCharge;
     address public slippageToken;
+
+    uint8 public decimals;
 
     function setUp() external {
         // Setup forked environment.
@@ -390,6 +392,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(sDaiPosition, address(erc20Adaptor), abi.encode(sDAI));
         registry.trustPosition(sFraxPosition, address(erc20Adaptor), abi.encode(sFRAX));
 
+        // Below position shoudl technically be illiquid bc the re-entrancy function doesnt actually check for
+        // re-entrancy, but for the sake of not refactoring a large test, it has been left alone.
         registry.trustPosition(
             UsdcCrvUsdPoolPosition,
             address(curveAdaptor),
@@ -400,21 +404,25 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             address(curveAdaptor),
             abi.encode(WethRethPool, WethRethToken, WethRethGauge, CurvePool.claim_admin_fees.selector)
         );
+        // Does not check for re-entrancy.
         registry.trustPosition(
             UsdtCrvUsdPoolPosition,
             address(curveAdaptor),
             abi.encode(UsdtCrvUsdPool, UsdtCrvUsdToken, UsdtCrvUsdGauge, CurvePool.withdraw_admin_fees.selector)
         );
+        // No valid functions to call to check for re-entrancy.
         registry.trustPosition(
             EthStethPoolPosition,
             address(curveAdaptor),
             abi.encode(EthStethPool, EthStethToken, EthStethGauge, bytes4(0))
         );
+        // Does not check for re-entrancy.
         registry.trustPosition(
             FraxUsdcPoolPosition,
             address(curveAdaptor),
             abi.encode(FraxUsdcPool, FraxUsdcToken, FraxUsdcGauge, CurvePool.withdraw_admin_fees.selector)
         );
+        // No valid functions to call to check for re-entrancy.
         registry.trustPosition(
             WethFrxethPoolPosition,
             address(curveAdaptor),
@@ -430,6 +438,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 bytes4(keccak256(abi.encodePacked("price_oracle()")))
             )
         );
+        // Does not check for re-entrancy.
         registry.trustPosition(
             StethFrxethPoolPosition,
             address(curveAdaptor),
@@ -453,12 +462,14 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(EthOethPool, EthOethToken, EthOethGauge, CurvePool.withdraw_admin_fees.selector)
         );
 
+        // Does not check for re-entrancy.
         registry.trustPosition(
             fraxCrvUsdPoolPosition,
             address(curveAdaptor),
             abi.encode(FraxCrvUsdPool, FraxCrvUsdToken, FraxCrvUsdGauge, CurvePool.withdraw_admin_fees.selector)
         );
 
+        // Does not check for re-entrancy.
         registry.trustPosition(
             mkUsdFraxUsdcPoolPosition,
             address(curveAdaptor),
@@ -482,12 +493,14 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(EthEthxPool, EthEthxToken, EthEthxGauge, CurvePool.withdraw_admin_fees.selector)
         );
 
+        // Does not check for re-entrancy.
         registry.trustPosition(
             CrvUsdSdaiPoolPosition,
             address(curveAdaptor),
             abi.encode(CrvUsdSdaiPool, CrvUsdSdaiToken, CrvUsdSdaiGauge, CurvePool.withdraw_admin_fees.selector)
         );
 
+        // Does not check for re-entrancy.
         registry.trustPosition(
             CrvUsdSfraxPoolPosition,
             address(curveAdaptor),
@@ -503,7 +516,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(USDC), address(this), initialDeposit);
         USDC.approve(cellarAddress, initialDeposit);
 
-        bytes memory creationCode = type(Cellar).creationCode;
+        bytes memory creationCode = type(MockCellarWithOracle).creationCode;
         bytes memory constructorArgs = abi.encode(
             address(this),
             registry,
@@ -622,10 +635,11 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _manageLiquidityIn2PoolWithETH(assets, EthEthxPool, EthEthxToken, EthEthxGauge, 0.0020e18);
     }
 
-    function testDepositAndWithdrawFromCurveLP0(uint256 assets) external {
-        assets = bound(assets, 1e18, 1_000_000e18);
-        _curveLPAsAccountingAsset(assets, ERC20(UsdcCrvUsdToken), UsdcCrvUsdPoolPosition, UsdcCrvUsdGauge);
-    }
+    // `withdraw_admin_fees` does not perform a re-entrancy check :(
+    // function testDepositAndWithdrawFromCurveLP0(uint256 assets) external {
+    //     assets = bound(assets, 1e18, 1_000_000e18);
+    //     _curveLPAsAccountingAsset(assets, ERC20(UsdcCrvUsdToken), UsdcCrvUsdPoolPosition, UsdcCrvUsdGauge);
+    // }
 
     function testDepositAndWithdrawFromCurveLP1(uint256 assets) external {
         assets = bound(assets, 1e18, 1_000_000e18);
@@ -1053,15 +1067,441 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
     }
 
+    function testReentrancyProtection0(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(WethRethPool, WethRethToken, WethRethPoolPosition, assets);
+    }
+
+    function testReentrancyProtection1(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(EthFrxethPool, EthFrxethToken, EthFrxethPoolPosition, assets);
+    }
+
+    function testReentrancyProtection2(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(WethCvxPool, WethCvxToken, WethCvxPoolPosition, assets);
+    }
+
+    function testReentrancyProtection3(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(EthStethNgPool, EthStethNgToken, EthStethNgPoolPosition, assets);
+    }
+
+    function testReentrancyProtection4(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(EthOethPool, EthOethToken, EthOethPoolPosition, assets);
+    }
+
+    function testReentrancyProtection5(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(WethYethPool, WethYethToken, WethYethPoolPosition, assets);
+    }
+
+    function testReentrancyProtection6(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(EthEthxPool, EthEthxToken, EthEthxPoolPosition, assets);
+    }
+
     // ========================================= Reverts =========================================
-    // TODO mismatched underlyingTokens and orderedUnderlyingTokenAmounts lengths.
-    // TODO try using normal functions with an ETH based pool
-    // TODO try having adaptor itself make calls to Adaptor helper functions
-    // TODO adding curve positions with weird decimals
+    function testMismatchedArrayLengths() external {
+        ERC20[] memory underlyingTokens = new ERC20[](3);
+        uint256[] memory orderedUnderlyingTokenAmounts = new uint256[](2);
+        bytes memory data = abi.encodeWithSelector(
+            CurveAdaptor.addLiquidity.selector,
+            address(0),
+            ERC20(address(0)),
+            underlyingTokens,
+            orderedUnderlyingTokenAmounts,
+            0
+        );
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___MismatchedLengths.selector)));
+        address(curveAdaptor).functionDelegateCall(data);
+
+        data = abi.encodeWithSelector(
+            CurveAdaptor.addLiquidityETH.selector,
+            address(0),
+            ERC20(address(0)),
+            underlyingTokens,
+            orderedUnderlyingTokenAmounts,
+            0,
+            false
+        );
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___MismatchedLengths.selector)));
+        address(curveAdaptor).functionDelegateCall(data);
+
+        data = abi.encodeWithSelector(
+            CurveAdaptor.removeLiquidity.selector,
+            address(0),
+            ERC20(address(0)),
+            0,
+            underlyingTokens,
+            orderedUnderlyingTokenAmounts
+        );
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___MismatchedLengths.selector)));
+        address(curveAdaptor).functionDelegateCall(data);
+
+        data = abi.encodeWithSelector(
+            CurveAdaptor.removeLiquidityETH.selector,
+            address(0),
+            ERC20(address(0)),
+            0,
+            underlyingTokens,
+            orderedUnderlyingTokenAmounts,
+            false
+        );
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___MismatchedLengths.selector)));
+        address(curveAdaptor).functionDelegateCall(data);
+    }
+
+    function testUsingNormalFunctionsToInteractWithETHCurvePool() external {
+        ERC20[] memory underlyingTokens = new ERC20[](2);
+        underlyingTokens[0] = ERC20(curveAdaptor.CURVE_ETH());
+        underlyingTokens[1] = STETH;
+        uint256[] memory orderedUnderlyingTokenAmounts = new uint256[](2);
+        deal(address(WETH), address(cellar), 1e18);
+        orderedUnderlyingTokenAmounts[0] = 1e18;
+        orderedUnderlyingTokenAmounts[1] = 0;
+
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                EthStethPool,
+                ERC20(EthStethToken),
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            vm.expectRevert();
+            cellar.callOnAdaptor(data);
+        }
+
+        _takeSteth(10e18, address(cellar));
+        orderedUnderlyingTokenAmounts[0] = 0;
+        orderedUnderlyingTokenAmounts[1] = 1e18;
+        underlyingTokens[0] = WETH;
+
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                EthStethPool,
+                ERC20(EthStethToken),
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            // It is technically possible to add liquidity to an ETH pair with a non ETH function.
+            cellar.callOnAdaptor(data);
+        }
+
+        // But removal fails because cellar can not accept ETH.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToRemoveLiquidityFromCurve(
+                EthStethPool,
+                ERC20(EthStethToken),
+                ERC20(EthStethToken).balanceOf(address(cellar)),
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            vm.expectRevert();
+            cellar.callOnAdaptor(data);
+        }
+    }
+
+    function testCellarMakingCallsToProxyFunctions() external {
+        cellar.transferOwnership(gravityBridgeAddress);
+        vm.startPrank(gravityBridgeAddress);
+        ERC20[] memory underlyingTokens = new ERC20[](2);
+        uint256[] memory orderedUnderlyingTokenAmounts = new uint256[](2);
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = abi.encodeWithSelector(
+                CurveHelper.addLiquidityETHViaProxy.selector,
+                address(0),
+                address(0),
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts,
+                0,
+                false
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            vm.expectRevert(
+                bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___CallerMustImplementDecimals.selector))
+            );
+            cellar.callOnAdaptor(data);
+        }
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = abi.encodeWithSelector(
+                CurveHelper.removeLiquidityETHViaProxy.selector,
+                address(0),
+                address(0),
+                0,
+                underlyingTokens,
+                orderedUnderlyingTokenAmounts,
+                false
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            vm.expectRevert(
+                bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___CallerMustImplementDecimals.selector))
+            );
+            cellar.callOnAdaptor(data);
+        }
+        vm.stopPrank();
+    }
+
+    function testAddingCurvePositionsWithWeirdDecimals() external {
+        // We will use the test address, as the Curve token/gauge with weird decimals.
+        decimals = 8;
+
+        // First try trsuting a postion where both token and gague have weird decimals.
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___NonStandardDecimals.selector)));
+        registry.trustPosition(
+            777,
+            address(curveAdaptor),
+            abi.encode(address(0), address(this), address(this), CurvePool.withdraw_admin_fees.selector)
+        );
+
+        // Now try adding a position where only the token has weird decimals.
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___NonStandardDecimals.selector)));
+        registry.trustPosition(
+            777,
+            address(curveAdaptor),
+            abi.encode(address(0), address(this), EthStethGauge, CurvePool.withdraw_admin_fees.selector)
+        );
+
+        // Now try adding a position where only the gauge has weird decimals.
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___NonStandardDecimals.selector)));
+        registry.trustPosition(
+            777,
+            address(curveAdaptor),
+            abi.encode(address(0), EthStethToken, address(this), CurvePool.withdraw_admin_fees.selector)
+        );
+
+        // Make sure CurveAdaptor___NonStandardDecimals() check can handle zero address gauges.
+        registry.trustPosition(
+            777,
+            address(curveAdaptor),
+            abi.encode(address(0), EthStethToken, address(0), CurvePool.withdraw_admin_fees.selector)
+        );
+
+        // If token and gauge have 18 decimals, then trustPosition should revert in registry.
+        decimals = 18;
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(Registry.Registry__PositionPricingNotSetUp.selector, address(this)))
+        );
+        registry.trustPosition(
+            778,
+            address(curveAdaptor),
+            abi.encode(address(0), address(this), address(this), CurvePool.withdraw_admin_fees.selector)
+        );
+    }
+
     // TODO test where strategist messes up order of underlyingTokens.
     // TODO add test to make sure we revert if doing some ETH Thing and repeat ETH in underlyingToken array.
 
+    function testHunch() external {
+        revert(":)");
+    }
+
+    function testCellarWithoutOracleTryingToUseCurvePosition() external {
+        // Deploy new Cellar.
+        string memory cellarName = "Curve Cellar V0.1";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
+
+        // Approve new cellar to spend assets.
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(address(USDC), address(this), initialDeposit);
+        USDC.approve(cellarAddress, initialDeposit);
+
+        bytes memory creationCode = type(Cellar).creationCode;
+        bytes memory constructorArgs = abi.encode(
+            address(this),
+            registry,
+            USDC,
+            cellarName,
+            cellarName,
+            usdcPosition,
+            abi.encode(0),
+            initialDeposit,
+            platformCut,
+            type(uint192).max
+        );
+        cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
+
+        uint256 assets = 1_000e6;
+        deal(address(USDC), address(this), 3 * assets);
+        USDC.approve(address(cellar), 3 * assets);
+        cellar.deposit(assets, address(this));
+
+        cellar.addPositionToCatalogue(UsdcCrvUsdPoolPosition);
+        cellar.addAdaptorToCatalogue(address(curveAdaptor));
+
+        // Scenario 1 (the most likely scenario) strategist adds the position, and rebalances in a single call.
+
+        // Strategist tries to add the curve position.
+        bytes[] memory strategistData = new bytes[](2);
+        strategistData[0] = abi.encodeWithSelector(
+            Cellar.addPosition.selector,
+            0,
+            UsdcCrvUsdPoolPosition,
+            abi.encode(false),
+            false
+        );
+
+        ERC20 coins0 = ERC20(CurvePool(UsdcCrvUsdPool).coins(0));
+        ERC20 coins1 = ERC20(CurvePool(UsdcCrvUsdPool).coins(1));
+
+        ERC20[] memory tokens = new ERC20[](2);
+        tokens[0] = coins0;
+        tokens[1] = coins1;
+
+        uint256[] memory orderedTokenAmounts = new uint256[](2);
+        orderedTokenAmounts[0] = assets;
+        orderedTokenAmounts[1] = 0;
+
+        // Strategist rebalances into LP , single asset.
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
+                UsdcCrvUsdPool,
+                ERC20(UsdcCrvUsdToken),
+                tokens,
+                orderedTokenAmounts,
+                0
+            );
+            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+            strategistData[1] = abi.encodeWithSelector(Cellar.callOnAdaptor.selector, data);
+        }
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___CallerDoesNotUseOracle.selector)));
+        cellar.multicall(strategistData);
+
+        // Scenario 2 (very unlikely but could happen) strategist adds the postiion in a single call.
+        cellar.addPosition(0, UsdcCrvUsdPoolPosition, abi.encode(false), false);
+
+        // Cellar totalAssets still works, and position can be removed.
+        cellar.totalAssets();
+        cellar.deposit(assets, address(this));
+
+        cellar.removePosition(0, false);
+
+        // But if position is added
+        cellar.addPosition(0, UsdcCrvUsdPoolPosition, abi.encode(false), false);
+
+        // and an attacker sends LP to the Cellar
+        deal(UsdcCrvUsdToken, address(cellar), 1);
+
+        // the Cellar is bricked
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___CallerDoesNotUseOracle.selector)));
+        cellar.totalAssets();
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___CallerDoesNotUseOracle.selector)));
+        cellar.deposit(assets, address(this));
+
+        // until forcePositionOut is called
+        registry.distrustPosition(UsdcCrvUsdPoolPosition);
+        cellar.forcePositionOut(0, UsdcCrvUsdPoolPosition, false);
+
+        // Now cellar is unbricked.
+        cellar.totalAssets();
+        cellar.deposit(assets, address(this));
+    }
+
     // ========================================= Helpers =========================================
+
+    // NOTE Some curve pools use 2 to indicate locked, and 3 to indicate unlocked, others use 1, and 0 respectively
+    // But ones that use 1 or 0, are just checking if the slot is truthy or not, so setting it to 2 should still trigger re-entrancy reverts.
+    function _verifyReentrancyProtectionWorks(
+        address poolAddress,
+        address lpToken,
+        uint32 position,
+        uint256 assets
+    ) internal {
+        // Create a cellar that uses the curve token as the asset.
+        cellar = _createCellarWithCurveLPAsAsset(position, lpToken);
+
+        deal(lpToken, address(this), assets);
+        ERC20(lpToken).safeApprove(address(cellar), assets);
+
+        CurvePool pool = CurvePool(poolAddress);
+        bytes32 slot0 = bytes32(uint256(0));
+
+        // Get the original slot value;
+        bytes32 originalValue = vm.load(address(pool), slot0);
+
+        // Set lock slot to 2 to lock it. Then try to deposit while pool is "re-entered".
+        vm.store(address(pool), slot0, bytes32(uint256(2)));
+        vm.expectRevert();
+        cellar.deposit(assets, address(this));
+
+        // Change lock back to unlocked state
+        vm.store(address(pool), slot0, originalValue);
+
+        // Deposit should work now.
+        cellar.deposit(assets, address(this));
+
+        // Set lock slot to 2 to lock it. Then try to withdraw while pool is "re-entered".
+        vm.store(address(pool), slot0, bytes32(uint256(2)));
+        vm.expectRevert();
+        cellar.withdraw(assets / 2, address(this), address(this));
+
+        // Change lock back to unlocked state
+        vm.store(address(pool), slot0, originalValue);
+
+        // Withdraw should work now.
+        cellar.withdraw(assets / 2, address(this), address(this));
+    }
+
+    function _createCellarWithCurveLPAsAsset(uint32 position, address lpToken) internal returns (Cellar newCellar) {
+        string memory cellarName = "Test Curve Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
+
+        ERC20 erc20LpToken = ERC20(lpToken);
+
+        // Approve new cellar to spend assets.
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(lpToken, address(this), initialDeposit);
+        erc20LpToken.approve(cellarAddress, initialDeposit);
+
+        bytes memory creationCode = type(MockCellarWithOracle).creationCode;
+        bytes memory constructorArgs = abi.encode(
+            address(this),
+            registry,
+            erc20LpToken,
+            cellarName,
+            cellarName,
+            position,
+            abi.encode(true),
+            initialDeposit,
+            platformCut,
+            type(uint192).max
+        );
+        newCellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
+
+        newCellar.addAdaptorToCatalogue(address(curveAdaptor));
+    }
 
     function _curveLPAsAccountingAsset(uint256 assets, ERC20 token, uint32 positionId, address gauge) internal {
         string memory cellarName = "Curve LP Cellar V0.0";
@@ -1071,7 +1511,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(token), address(this), initialAssets);
         token.approve(cellarAddress, initialAssets);
 
-        bytes memory creationCode = type(Cellar).creationCode;
+        bytes memory creationCode = type(MockCellarWithOracle).creationCode;
         bytes memory constructorArgs = abi.encode(
             address(this),
             registry,

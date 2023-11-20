@@ -157,10 +157,15 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     /**
      * @notice Returns the balance of Curve LP token.
      */
-    function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
+    function balanceOf(bytes memory adaptorData) public view override returns (uint256 balance) {
         (, ERC20 lpToken, CurveGauge gauge) = abi.decode(adaptorData, (CurvePool, ERC20, CurveGauge));
         uint256 gaugeBalance = address(gauge) != address(0) ? gauge.balanceOf(msg.sender) : 0;
-        return lpToken.balanceOf(msg.sender) + gaugeBalance;
+        balance = lpToken.balanceOf(msg.sender) + gaugeBalance;
+
+        if (balance > 0) {
+            // Run check to make sure Cellar uses an oracle.
+            _ensureCallerUsesOracle(msg.sender);
+        }
     }
 
     /**
@@ -178,7 +183,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         return false;
     }
 
-    // TODO make sure this logic works with zero gauge.
     /**
      * @notice This function is called when the position is being set up in the registry, functionally `assetsUsed` is the same as in the `BaseAdaptor`,
      *         but since this is called while trusting the position, we also validate decimals are 18.

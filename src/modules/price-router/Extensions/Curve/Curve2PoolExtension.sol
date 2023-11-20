@@ -45,8 +45,11 @@ contract Curve2PoolExtension is Extension {
     /**
      * @notice Extension storage
      * @param pool address of the curve pool to use as an oracle
-     * @param index what index to use when querying the price
-     * @param needIndex bool indicating whether or not price_oracle should or should not be called with an index variable
+     * @param underlyingOrConstituent0 the underlying or constituent for coins 0
+     * @param underlyingOrConstituent1 the underlying or constituent for coins 1
+     * @param divideRate0 bool indicating whether or not we need to divide out the pool stored rate
+     * @param divideRate1 bool indicating whether or not we need to divide out the pool stored rate
+     * @param isCorrelated bool indicating whether the pool has correlated assets or not
      */
     struct ExtensionStorage {
         address pool;
