@@ -5,39 +5,24 @@ import { ReentrancyERC4626 } from "src/mocks/ReentrancyERC4626.sol";
 import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol";
 import { ERC20DebtAdaptor } from "src/mocks/ERC20DebtAdaptor.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
+import { WithdrawQueue, ISolver } from "src/modules/withdraw-queue/WithdrawQueue.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
 
 import { AdaptorHelperFunctions } from "test/resources/AdaptorHelperFunctions.sol";
 
-contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions {
+contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolver {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
 
     Cellar private cellar;
-    Cellar private usdcCLR;
-    Cellar private wethCLR;
-    Cellar private wbtcCLR;
+    WithdrawQueue private queue;
 
-    CellarAdaptor private cellarAdaptor;
+    uint32 public usdcPosition = 1;
 
-    MockDataFeed private mockUsdcUsd;
-    MockDataFeed private mockWethUsd;
-    MockDataFeed private mockWbtcUsd;
-    MockDataFeed private mockUsdtUsd;
-
-    uint32 private usdcPosition = 1;
-    uint32 private wethPosition = 2;
-    uint32 private wbtcPosition = 3;
-    uint32 private usdcCLRPosition = 4;
-    uint32 private wethCLRPosition = 5;
-    uint32 private wbtcCLRPosition = 6;
-    uint32 private usdtPosition = 7;
-
-    uint256 private initialAssets;
-    uint256 private initialShares;
+    address public user = vm.addr(34);
 
     function setUp() external {
         // Setup forked environment.
@@ -48,113 +33,107 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Run Starter setUp code.
         _setUp();
 
-        mockUsdcUsd = new MockDataFeed(USDC_USD_FEED);
-        mockWethUsd = new MockDataFeed(WETH_USD_FEED);
-        mockWbtcUsd = new MockDataFeed(WBTC_USD_FEED);
-        mockUsdtUsd = new MockDataFeed(USDT_USD_FEED);
-        cellarAdaptor = new CellarAdaptor();
+        queue = new WithdrawQueue(0.1e6);
 
-        // Setup pricing
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
         PriceRouter.AssetSettings memory settings;
 
-        uint256 price = uint256(mockUsdcUsd.latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockUsdcUsd));
-        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
-
-        price = uint256(mockWethUsd.latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockWethUsd));
+        uint256 price = uint256(IChainlinkAggregator(WETH_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WETH_USD_FEED);
         priceRouter.addAsset(WETH, settings, abi.encode(stor), price);
 
-        price = uint256(mockWbtcUsd.latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockWbtcUsd));
+        price = uint256(IChainlinkAggregator(USDC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, USDC_USD_FEED);
+        priceRouter.addAsset(USDC, settings, abi.encode(stor), price);
+
+        price = uint256(IChainlinkAggregator(WBTC_USD_FEED).latestAnswer());
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, WBTC_USD_FEED);
         priceRouter.addAsset(WBTC, settings, abi.encode(stor), price);
 
-        price = uint256(mockUsdtUsd.latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockUsdtUsd));
-        priceRouter.addAsset(USDT, settings, abi.encode(stor), price);
-
-        // Setup exchange rates:
-        // USDC Simulated Price: $1
-        // WETH Simulated Price: $2000
-        // WBTC Simulated Price: $30,000
-        mockUsdcUsd.setMockAnswer(1e8);
-        mockWethUsd.setMockAnswer(2_000e8);
-        mockWbtcUsd.setMockAnswer(30_000e8);
-        mockUsdtUsd.setMockAnswer(1e8);
-
-        // Add adaptors and ERC20 positions to the registry.
-        registry.trustAdaptor(address(cellarAdaptor));
         registry.trustPosition(usdcPosition, address(erc20Adaptor), abi.encode(USDC));
-        registry.trustPosition(wethPosition, address(erc20Adaptor), abi.encode(WETH));
-        registry.trustPosition(wbtcPosition, address(erc20Adaptor), abi.encode(WBTC));
-        registry.trustPosition(usdtPosition, address(erc20Adaptor), abi.encode(USDT));
 
-        // Create Dummy Cellars.
-        string memory cellarName = "Dummy Cellar V0.0";
+        string memory cellarName = "Cellar V0.0";
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        usdcCLR = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
-        vm.label(address(usdcCLR), "usdcCLR");
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(address(USDC), address(this), initialDeposit);
+        USDC.approve(cellarAddress, initialDeposit);
 
-        cellarName = "Dummy Cellar V0.1";
-        initialDeposit = 1e12;
-        platformCut = 0.75e18;
-        wethCLR = _createCellar(cellarName, WETH, wethPosition, abi.encode(0), initialDeposit, platformCut);
-        vm.label(address(wethCLR), "wethCLR");
+        bytes memory creationCode = type(Cellar).creationCode;
+        bytes memory constructorArgs = abi.encode(
+            address(this),
+            registry,
+            USDC,
+            cellarName,
+            cellarName,
+            usdcPosition,
+            abi.encode(0),
+            initialDeposit,
+            platformCut,
+            type(uint192).max
+        );
 
-        cellarName = "Dummy Cellar V0.2";
-        initialDeposit = 1e4;
-        platformCut = 0.75e18;
-        wbtcCLR = _createCellar(cellarName, WBTC, wbtcPosition, abi.encode(0), initialDeposit, platformCut);
-        vm.label(address(wbtcCLR), "wbtcCLR");
+        cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
 
-        // Add Cellar Positions to the registry.
-        registry.trustPosition(usdcCLRPosition, address(cellarAdaptor), abi.encode(usdcCLR));
-        registry.trustPosition(wethCLRPosition, address(cellarAdaptor), abi.encode(wethCLR));
-        registry.trustPosition(wbtcCLRPosition, address(cellarAdaptor), abi.encode(wbtcCLR));
+        uint256 assets = 1_000e6;
+        deal(address(USDC), user, assets);
 
-        cellarName = "Cellar V0.0";
-        initialDeposit = 1e6;
-        platformCut = 0.75e18;
-        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        vm.startPrank(user);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        cellar.approve(address(queue), 1_000e6);
+        vm.stopPrank();
 
-        // Set up remaining cellar positions.
-        cellar.addPositionToCatalogue(usdcCLRPosition);
-        cellar.addPosition(1, usdcCLRPosition, abi.encode(true), false);
-        cellar.addPositionToCatalogue(wethCLRPosition);
-        cellar.addPosition(2, wethCLRPosition, abi.encode(true), false);
-        cellar.addPositionToCatalogue(wbtcCLRPosition);
-        cellar.addPosition(3, wbtcCLRPosition, abi.encode(true), false);
-        cellar.addPositionToCatalogue(wethPosition);
-        cellar.addPosition(4, wethPosition, abi.encode(0), false);
-        cellar.addPositionToCatalogue(wbtcPosition);
-        cellar.addPosition(5, wbtcPosition, abi.encode(0), false);
-        cellar.addAdaptorToCatalogue(address(cellarAdaptor));
-        cellar.addPositionToCatalogue(usdtPosition);
+        queue.addNewShare(cellar, 0.001e6);
+    }
 
-        cellar.setStrategistPayoutAddress(strategist);
-
-        vm.label(address(cellar), "cellar");
-        vm.label(strategist, "strategist");
-
-        // Approve cellar to spend all assets.
-        USDC.approve(address(cellar), type(uint256).max);
-
-        initialAssets = cellar.totalAssets();
-        initialShares = cellar.totalSupply();
-
-        deal(address(cellar), address(1), 1e6);
-        // deal(address(cellar), address(2), 1e6);
-        vm.prank(address(1));
-        cellar.approve(address(this), 1e6);
+    function testQueue(uint8 numberOfUsers, uint256 baseAssets) external {
+        numberOfUsers = uint8(bound(numberOfUsers, 1, 100));
+        baseAssets = bound(baseAssets, 1e6, 1_000_000e6);
+        address[] memory users = new address[](numberOfUsers);
+        uint256[] memory amountOfShares = new uint256[](numberOfUsers);
+        for (uint256 i; i < numberOfUsers; ++i) {
+            users[i] = vm.addr(i + 1);
+            amountOfShares[i] = baseAssets * (i + 1);
+            deal(address(USDC), users[i], amountOfShares[i]);
+            vm.startPrank(users[i]);
+            USDC.approve(address(cellar), amountOfShares[i]);
+            uint256 shares = cellar.deposit(amountOfShares[i], users[i]);
+            amountOfShares[i] = shares;
+            cellar.approve(address(queue), amountOfShares[i]);
+            vm.stopPrank();
+        }
     }
 
     function testHunch() external {
-        uint256 gas = gasleft();
-        cellar.transferFrom(address(1), address(2), 0.999999e6);
-        console.log("Gas used:", gas - gasleft());
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            maximumFee: 0.05e6,
+            inSolve: false,
+            minimumSharePrice: 0,
+            sharesToWithdraw: 1_000e6
+        });
+        vm.prank(user);
+        queue.updateWithdrawRequest(cellar, req);
+
+        bytes memory callData = abi.encode(cellar, USDC);
+        address[] memory users = new address[](1);
+        users[0] = user;
+        queue.solve(cellar, users, callData);
+
+        console.log("User USDC Balance", USDC.balanceOf(user));
+    }
+
+    // TODO test showing how solvers can only spend up to `sharesToWithdraw` even if the approval is for more
+    // TODO tests for malicious solvers that repeat users, or try to add a user who is not in there,
+    // basically check for all reverts in solve.
+    // TODO if user passes in a true for inSolve when setting up the request it should not write it.
+
+    function finishSolve(bytes calldata runData, uint256 sharesReceived, uint256 assetApprovalAmount) external {
+        (ERC4626 share, ERC20 asset) = abi.decode(runData, (ERC4626, ERC20));
+        deal(address(asset), address(this), assetApprovalAmount);
+        asset.approve(msg.sender, assetApprovalAmount);
     }
 }
