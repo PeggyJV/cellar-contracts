@@ -24,6 +24,8 @@ import { Curve2PoolExtension } from "src/modules/price-router/Extensions/Curve/C
  * TODO: write tests for pools of interest for ITB
  *  - Mock datafeeds to be used for underlying LPTs. Actual testing of the LPT pricing is carried out. Hash out which LPT pair to go with, and what mock datafeeds to use for constituent assets of the pair so we can warp forward to simulate reward accrual.
  * TODO: write tests for other pools of interest
+ * hmm, by design, should we have to specify baseRewardsPool or is pid enough... booster contract looks like it cannot change the crvRewards once a pool has been set. Therefore, all that is needed is the pid. TODO: Make the change in the ConvexCurveAdaptor.sol to not need baseRewaredsAddress and for them to get it from the crvRewards address. TODO: triple check that pid is all that you really need and that pools are immutable.
+
  */
 contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -44,20 +46,9 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     IBooster public immutable booster = IBooster(convexCurveMainnetBooster);
     IBaseRewardPool public rewardsPool; // varies per convex market
 
-    // Chainlink PriceFeeds
-    // MockDataFeed private mockMkUSDFraxBP_CRVLPT_USDFeed;
-    // MockDataFeed private mockEth_STETH_CRVLPT_USDFeed;
-
-    // TODO: add curve lpt pricing extension when it is ready. Likely just using 2Pool Pricing, or EMA pricing that Crispy has set up with his pools.
     WstEthExtension private wstethExtension;
     CurveEMAExtension private curveEMAExtension;
     Curve2PoolExtension private curve2PoolExtension;
-
-    // // base asset within cellars are the lpts, so we'll just deal lpts to the users to deposit into the cellar. So we need a position for that, and a position for the adaptors w/ pids & baseRewardPool specs.
-    // uint32 private mkUSDFraxBP_CRVLPT_Position = 1;
-    // uint32 private eth_STETH_CRVLPT_Position = 2;
-    // uint32 private cvxPool_mkUSDFraxBP_Position = 3;
-    // uint32 private cvxPool_STETH_CRVLPT_Position = 4;
 
     /// CRISPY Pricing start
     MockDataFeed public mockWETHdataFeed;
@@ -316,9 +307,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         /// CRISPY Pricing end
 
-        deal(address(EthStethNgToken), address(this), 10e18);
-        deal(address(mkUSDFraxBP_CRVLPT), address(this), 10e18);
-
         convexCurveAdaptor = new ConvexCurveAdaptor(convexCurveMainnetBooster);
 
         // Add adaptors and positions to the registry.
@@ -339,68 +327,49 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(
             EthFrxethPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(128, 0xbD5445402B0a287cbC77cb67B2a52e2FC635dce4)
+            abi.encode(128, ethFrxethBaseRewardPool)
         );
         registry.trustPosition(
             EthStethNgPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(177, 0x6B27D7BC63F1999D14fF9bA900069ee516669ee8)
+            abi.encode(177, ethStethNgBaseRewardPool)
         );
         registry.trustPosition(
             fraxCrvUsdPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(187, 0x3CfB4B26dc96B124D15A6f360503d028cF2a3c00)
+            abi.encode(187, fraxCrvUsdBaseRewardPool)
         );
         registry.trustPosition(
             mkUsdFraxUsdcPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(225, 0x35FbE5520E70768DCD6E3215Ed54E14CBccA10D2)
+            abi.encode(225, mkUsdFraxUsdcBaseRewardPool)
         );
         registry.trustPosition(
             WethYethPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(231, 0xB0867ADE998641Ab1Ff04cF5cA5e5773fA92AaE3)
+            abi.encode(231, wethYethBaseRewardPool)
         );
         registry.trustPosition(
             EthEthxPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(232, 0x399e111c7209a741B06F8F86Ef0Fdd88fC198D20)
+            abi.encode(232, ethEthxBaseRewardPool)
         );
         registry.trustPosition(
             CrvUsdSfraxPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(252, 0x73eA73C3a191bd05F3266eB2414609dC5Fe777a2)
+            abi.encode(252, crvUsdSFraxBaseRewardPool)
         );
 
-        registry.trustPosition(mkUSDFraxBP_CRVLPT_Position, address(erc20Adaptor), abi.encode(mkUSDFraxBP_CRVLPT));
-        registry.trustPosition(eth_STETH_CRVLPT_Position, address(erc20Adaptor), abi.encode(eth_STETH_CRVLPT));
-        registry.trustPosition(
-            cvxPool_mkUSDFraxBP_Position,
-            address(convexCurveAdaptor),
-            abi.encode(mkUSDFraxBPT_ConvexPID, mkUSDFraxBP_cvxBaseRewardContract)
-        );
-        registry.trustPosition(
-            cvxPool_STETH_CRVLPT_Position,
-            address(convexCurveAdaptor),
-            abi.encode(eth_STETH_ConvexPID, eth_STETH_cvxBaseRewardContract)
-        );
+        // TODO: might need to add erc20Adaptor positions for all of the LPTs so rebalances work in the tests.
 
         // Set up Cellar which will have all LPTs dealt to it for the tests w/ a baseAsset of USDC or something?
-        // TODO: EIN THIS IS WHERE YOU LEFT OFF
 
         string memory cellarName = "Convex Cellar V0.0";
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        // baseAsset is USDC, but we will deal out LPTs within the helper test function similar to CurveAdaptor.t.sol 
-        cellar = _createCellar(
-            cellarName,
-            USDC,
-            usdcPosition,
-            abi.encode(0),
-            initialDeposit,
-            platformCut
-        );
+        // baseAsset is USDC, but we will deal out LPTs within the helper test function similar to CurveAdaptor.t.sol
+        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
@@ -414,38 +383,380 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         initialAssets = cellar.totalAssets();
     }
 
-    
+    /// Happy Path Tests
+
+    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
+        _manageVanillaCurveLPTs(_assets, EthFrxethToken, 128, ethFrxethBaseRewardPool);
+    }
+
+    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
+        _manageVanillaCurveLPTs(_assets, EthStethNgToken, 177, ethStethNgBaseRewardPool);
+    }
+
+    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
+        _manageVanillaCurveLPTs(_assets, FraxCrvUsdToken, 187, fraxCrvUsdBaseRewardPool);
+    }
+
+    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
+        _manageVanillaCurveLPTs(_assets, mkUsdFraxUsdcToken, 225, mkUsdFraxUsdcBaseRewardPool);
+    }
+
+    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
+        _manageVanillaCurveLPTs(_assets, WethYethToken, 231, wethYethBaseRewardPool);
+    }
+
+    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
+        _manageVanillaCurveLPTs(_assets, EthEthxToken, 232, ethEthxBaseRewardPool);
+    }
+
+    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
+        _manageVanillaCurveLPTs(_assets, CrvUsdSfraxToken, 252, crvUsdSFraxBaseRewardPool);
+    }
+
+    /// Reversion tests
+
+    // revert when attempt to deposit w/o having the right curve lpt for respective pid
+    function testDepositWrongLPT(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // convert to coin of interest, but zero out usdc balance so cellar totalAssets doesn't deviate and revert
+        ERC20 lpt = ERC20(EthFrxethToken);
+        uint256 assets = priceRouter.getValue(USDC, assets, lpt);
+        deal(address(lpt), address(cellar), assets);
+        deal(address(USDC), address(cellar), 0);
+
+        (, , , address crvRewards, , ) = booster.poolInfo(128);
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid - 1, _baseRewardPool, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(); // TODO: actual revert statement stemming from Booster.sol likely.
+        cellar.callOnAdaptor(data);
+    }
+
+    // revert when attempt to interact with not enough of the curve lpt wrt to pid
+    function testDepositNotEnoughLPT(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // convert to coin of interest, but zero out usdc balance so cellar totalAssets doesn't deviate and revert
+        ERC20 lpt = ERC20(EthFrxethToken);
+        uint256 assets = priceRouter.getValue(USDC, assets + 1e6, lpt);
+        deal(address(lpt), address(cellar), assets);
+        deal(address(USDC), address(cellar), 0);
+
+        (, , , address crvRewards, , ) = booster.poolInfo(128);
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(); // TODO: actual revert statement stemming from Booster.sol likely for trying to deposit not enough lpt
+        cellar.callOnAdaptor(data);
+    }
+
+    // revert ConvexAdaptor__ConvexBoosterPositionsMustBeTracked
+    function testDepositNotEnoughLPT(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+
+        // convert to coin of interest, but zero out usdc balance so cellar totalAssets doesn't deviate and revert
+        ERC20 lpt = ERC20(EthFrxethToken);
+        uint256 assets = priceRouter.getValue(USDC, assets + 1e6, lpt);
+        deal(address(lpt), address(cellar), assets);
+        deal(address(USDC), address(cellar), 0);
+
+        (, , , address crvRewards, , ) = booster.poolInfo(128);
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid-1, _baseRewardPool, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(ConvexCurveAdaptor.ConvexAdaptor__ConvexBoosterPositionsMustBeTracked.selector))); // TODO: actual revert statement stemming from Booster.sol likely for trying to deposit not enough lpt
+
+        cellar.callOnAdaptor(data);
+    }
+
+    /// Test Helpers
+
     /**
-     * THINGS TO TEST (not exhaustive):
-     * Deposit Tests
+     * @notice helper function to carry out happy-path tests with convex pools of interest to ITB
+     * @dev this was created to minimize amount of code within this test file
+     */
+    function _manageVanillaCurveLPTs(uint256 _assets, address _lpt, uint256 _pid, address _baseRewardPool) internal {
+        deal(address(USDC), address(this), _assets);
+        cellar.deposit(_assets, address(this));
 
-- check that correct amount was deposited without staking (Cellar has cvxCRVLPT) (bool set to false)
+        // convert to coin of interest, but zero out usdc balance so cellar totalAssets doesn't deviate and revert
+        ERC20 lpt = ERC20(_lpt);
+        uint256 assets = priceRouter.getValue(USDC, _assets, lpt);
+        deal(address(lpt), address(cellar), assets);
+        deal(address(USDC), address(cellar), 0);
 
-- " and that it was all staked (bool set to true)
+        // IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool); // TODO: delete if you make changes that don't require the baseRewardAddress as a param
 
-- check that it reverts properly if attempting to deposit when not having any curve LPT
+        (, , , address crvRewards, , ) = booster.poolInfo(_pid);
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
 
-- check that depositing atop of pre-existing convex position for the cellar works
+        // now go through typical happy-path tests as the cellar has the LPT of interest for interacting with Convex
 
-- check that staking "
+        // TODO: implement interface within ConvexCurveAdaptor to use `ITokenMinter` or other interface to access the staking capacity within `Booster.sol`
 
-- check type(uint256).max works for deposit
+        ERC20 rewardToken = ERC20((baseRewardsPool).rewardToken());
+        uint256 rewardTokenBalance0 = rewardToken.balanceOf(address(cellar));
 
----
+        // Strategist deposits CurveLPT into Convex-Curve Platform Pools/Markets
+        {
+            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
 
-Withdraw Tests - NOTE: we are not worrying about withdrawing and NOT unwrapping. We always unwrap.
+            bytes[] memory adaptorCalls = new bytes[](1);
+            adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, assets);
+            data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+            cellar.callOnAdaptor(data);
+        }
 
-- check correct amount is withdrawn (1:1 as rewards should not be in curve LPT I think) (bool set to false)
+        //  TODO: do we need to ensure that the `baseRewardPool` trusted by the Strategist is actually the right one corresponding to the respective Convex market?
 
-  - Also check that, when time is rolled forward, that the CurveLPTs obtained have not changed from when cellar entered the position. Otherwise the assumption that 1 CurveLPT == 1cvxCurveLPT == 1StakedcvxCurveLPT is invalid and `withdrawableFrom()` and `balanceOf()` likely needs to be updated
+        uint256 stakedLPTBalance1 = baseRewardPool.balanceOf(address(cellar));
+        uint256 cellarLPTBalance1 = lpt.balanceOf(address(cellar));
+        uint256 rewardTokenBalance1 = rewardToken.balanceOf(address(cellar));
 
-- check correct amount is withdrawn and rewards are claimed (bool set to true)
+        // check that correct amount was deposited for cellar
+        assertEq(assets, stakedLPTBalance1, "All assets must be staked in proper baseRewardPool for Convex Market");
 
-- check type(uint256).max works for withdraw
+        assertEq(0, cellarLPTBalance1, "All assets must be transferred from cellar to Convex-Curve Market");
 
-- check that withdrawing partial amount works (bool set to false)
+        assertEq(initialAssets, USDC.balanceOf(address(cellar)), "Initial Cellar deposit should still be remaining.");
 
-- " (bool set to true with rewards)
+        assertEq(rewardTokenBalance0, rewardTokenBalance1, "No rewards should have been claimed.");
+
+        // Pass time.
+        _skip(1 days);
+
+        adaptorCalls[0] = _createBytesDataToWithdrawAndClaimConvexCurvePlatform(
+            _baseRewardPool,
+            stakedLPTBalance1 / 2,
+            true
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 stakedLPTBalance2 = baseRewardPool.balanceOf(address(cellar));
+        uint256 cellarLPTBalance2 = lpt.balanceOf(address(cellar));
+        uint256 rewardTokenBalance2 = rewardToken.balanceOf(address(cellar));
+
+        assertApproxEqAbs(
+            stakedLPTBalance2,
+            stakedLPTBalance1 / 2,
+            1,
+            "Should have half of the OG staked LPT in gauge."
+        );
+
+        assertApproxEqAbs(
+            cellarLPTBalance2,
+            stakedLPTBalance1 / 2,
+            1,
+            "Should have withdrawn and unwrapped back to Curve LPT and transferred back to Cellar"
+        );
+
+        assertGt(
+            rewardTokenBalance2,
+            rewardTokenBalance1,
+            "Should have claimed some more rewardToken; it will be specific to each Convex Platform Market."
+        );
+        // check for rewardToken, and any other token balances. TODO: might experience reversion if totalAssets is increased by too much. Talk to Crispy about this
+
+        uint256 rewardsTokenAccumulation1 = rewardTokenBalance2 - rewardTokenBalance1; // rewards accrued over 1 day w/ initial stake position (all assets from initial deposit).
+
+        // at this point we've withdrawn half, should have rewards. Now we deposit and stake more to ensure that it handles this correctly.
+
+        uint256 additionalDeposit = cellarLPTBalance2 / 2;
+        uint256 expectedNewStakedBalance = additionalDeposit + stakedLPTBalance2;
+
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, additionalDeposit);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 stakedLPTBalance3 = baseRewardPool.balanceOf(address(cellar));
+        uint256 cellarLPTBalance3 = lpt.balanceOf(address(cellar));
+        uint256 rewardTokenBalance3 = rewardToken.balanceOf(address(cellar));
+
+        assertApproxEqAbs(
+            stakedLPTBalance3,
+            expectedNewStakedBalance,
+            1,
+            "Should have half of the OG staked LPT PLUS the new additional deposit in gauge."
+        );
+
+        assertApproxEqAbs(
+            cellarLPTBalance3,
+            stakedLPTBalance2 / 2,
+            1,
+            "Should have half of cellarLPTBalance2 in the Cellar"
+        );
+
+        assertEq(
+            rewardTokenBalance3,
+            rewardTokenBalance2,
+            "should have the same amount of rewards as before since deposits do not claim rewards in same tx"
+        );
+
+        // test claiming without any time past to show that rewards should not be accruing / no transferrance should occur to cellar.
+
+        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(_pid, _baseRewardPool, true);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 rewardTokenBalance4 = rewardToken.balanceOf(address(cellar));
+
+        assertEq(rewardTokenBalance4, rewardTokenBalance3, "No time passed since last reward claim");
+
+        _skip(1 days);
+
+        // claim rewards and show that reward accrual is actually getting lesser due to lesser amount deposited/staked
+        cellar.callOnAdaptor(data); // repeat last getReward call
+
+        uint256 rewardTokenBalance5 = rewardToken.balanceOf(address(cellar));
+        uint256 rewardsTokenAccumulation2 = rewardTokenBalance5 - rewardTokenBalance4; // rewards accrued over 1 day w/ less than initial stake position.
+
+        assertGt(rewardTokenBalance5, rewardTokenBalance4, "Should have claimed some more rewardToken.");
+        assertLt(
+            rewardsTokenAccumulation2,
+            rewardsTokenAccumulation1,
+            "rewards accrued over 1 day w/ less than initial stake position should result in less reward accumulation."
+        );
+
+        // - check type(uint256).max works for deposit
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, type(uint256).max);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        // thus at this point, all LPT is now deposited and staked from the cellar.
+        uint256 stakedLPTBalance4 = baseRewardPool.balanceOf(address(cellar));
+        uint256 cellarLPTBalance4 = lpt.balanceOf(address(cellar));
+        uint256 rewardTokenBalance6 = rewardToken.balanceOf(address(cellar));
+
+        // TODO: EIN THIS IS WHERE YOU LEFT OFF - you were making asserts for the below aspects. Then you were going to write the reward accrual test to check the rates after that.
+        assertEq(stakedLPTBalance4, assets, "All lpt should be staked now again.");
+
+        assertEq(cellarLPTBalance4, 0, "No lpt should be in cellar again.");
+
+        assertEq(rewardTokenBalance6, rewardTokenBalance5, "No changes to rewards should have occurred.");
+
+        // Now we have the initialAssets amount of LPT in again, we can test that after MORE time with the same mount, more rewards are accrued.
+        _skip(10 days);
+
+        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(_pid, _baseRewardPool, true);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data); // repeat last getReward call
+
+        uint256 rewardTokenBalance7 = rewardToken.balanceOf(address(cellar));
+        uint256 rewardsTokenAccumulation3 = rewardTokenBalance7 - rewardTokenBalance6; // rewards accrued over 1 day w/ less than initial stake position.
+
+        assertGt(rewardTokenBalance6, rewardTokenBalance6, "Should have claimed some more rewardToken.");
+        assertGt(
+            rewardsTokenAccumulation3,
+            rewardsTokenAccumulation1,
+            "rewards accrued over 10 days should be more than initial award accrual over 1 day."
+        );
+
+        // TODO: do we want to test for the actual rate that we should be getting rewardTokens, or is the fact that the amounts are getting bigger and bigger when time and/or stakeAmount increases enough?
+
+        // TODO: withdraw and unwrap portion immediately
+        // up to this point we've tested: deposit x, deposit max, withdraw x (and claim rewards), claim rewards, claim rewards over more time, claim rewards over same time with less stake. Now we need to withdraw max and claim (do it with 11 days) to show that rewardAccrual got even more as expected with 11 days vs 10 days.
+        _skip(11 days);
+
+        adaptorCalls[0] = _createBytesDataToWithdrawAndClaimConvexCurvePlatform(
+            _baseRewardPool,
+            type(uint256).max,
+            true
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+
+        uint256 stakedLPTBalance5 = baseRewardPool.balanceOf(address(cellar));
+        uint256 cellarLPTBalance5 = lpt.balanceOf(address(cellar));
+        uint256 rewardTokenBalance8 = rewardToken.balanceOf(address(cellar));
+        uint256 rewardsTokenAccumulation4 = rewardTokenBalance8 - rewardTokenBalance7; // rewards accrued over 11 days w/ full assets amount of lpt staked
+
+        assertEq(stakedLPTBalance5, 0, "All staked lpt should have been unwrapped and withdrawn to cellar");
+        assertGt(assets, cellarLPTBalance5, "Cellar should have all lpt now");
+        assertGt(rewardTokenBalance8, rewardTokenBalance7, "Cellar Reward Balance should have increased.");
+        assertGt(
+            rewardsTokenAccumulation4,
+            rewardsTokenAccumulation3,
+            "Cellar Reward accrual rate should have been more because it accrued over 11 days vs 10 days."
+        );
+    }
+
+    /// TODO: test to check extra rewards --> need to test only on convex markets that have extra rewards associated to it.
+
+    /// TODO: test reward attainment within withdraw and getReward() where extra_reward bool is false, and then true.
+
+    /// Generic Helpers
+
+    function _add2PoolAssetToPriceRouter(
+        address pool,
+        address token,
+        bool isCorrelated,
+        uint256 expectedPrice,
+        ERC20 underlyingOrConstituent0,
+        ERC20 underlyingOrConstituent1,
+        bool divideRate0,
+        bool divideRate1
+    ) internal {
+        Curve2PoolExtension.ExtensionStorage memory stor;
+        stor.pool = pool;
+        stor.isCorrelated = isCorrelated;
+        stor.underlyingOrConstituent0 = address(underlyingOrConstituent0);
+        stor.underlyingOrConstituent1 = address(underlyingOrConstituent1);
+        stor.divideRate0 = divideRate0;
+        stor.divideRate1 = divideRate1;
+        PriceRouter.AssetSettings memory settings;
+        settings.derivative = EXTENSION_DERIVATIVE;
+        settings.source = address(curve2PoolExtension);
+
+        priceRouter.addAsset(ERC20(token), settings, abi.encode(stor), expectedPrice);
+    }
+
+    function _skip(uint256 time) internal {
+        uint256 blocksToRoll = time / 12; // Assumes an avg 12 second block time.
+        skip(time);
+        vm.roll(block.number + blocksToRoll);
+        mockWETHdataFeed.setMockUpdatedAt(block.timestamp);
+        mockUSDCdataFeed.setMockUpdatedAt(block.timestamp);
+        mockDAI_dataFeed.setMockUpdatedAt(block.timestamp);
+        mockUSDTdataFeed.setMockUpdatedAt(block.timestamp);
+        mockFRAXdataFeed.setMockUpdatedAt(block.timestamp);
+        mockSTETdataFeed.setMockUpdatedAt(block.timestamp);
+        mockRETHdataFeed.setMockUpdatedAt(block.timestamp);
+    }
+
+    /**
 
 ---
 

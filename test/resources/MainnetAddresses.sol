@@ -239,14 +239,14 @@ contract MainnetAddresses {
     // Convex markets TODO: remove duplicate LPTs
     address public convexCurveMainnetBooster = 0xF403C135812408BFbE8713b5A23a04b3D48AAE31;
 
-    uint256 public mkUSDFraxBPT_ConvexPID = 225;
-    ERC20 public mkUSDFraxBP_CRVLPT = ERC20(0x0CFe5C777A7438C9Dd8Add53ed671cEc7A5FAeE5);
-    address public cvx_mkUSDFraxBP_CRVLPT = 0x187601595F6D5746566BC0361a48d13066F11C71;
-    address public mkUSDFraxBP_cvxBaseRewardContract = 0x35FbE5520E70768DCD6E3215Ed54E14CBccA10D2; // TODO: maybe delete these if I just query the PoolInfo struct using poolId.
-    uint256 public eth_STETH_ConvexPID = 25;
-    ERC20 public eth_STETH_CRVLPT = ERC20(0x06325440D014e39736583c165C2963BA99fAf14E);
-    address public cvx_eth_STETH_CRVLPT = 0x9518c9063eB0262D791f38d8d6Eb0aca33c63ed0;
-    address public eth_STETH_cvxBaseRewardContract = 0x0A760466E1B4621579a82a39CB56Dda2F4E70f03;
+    // TODO: maybe remove these if we are going w/ just pids as the adaptorData with a ConvexCurveAdaptor position
+    address public ethFrxethBaseRewardPool = 0xbD5445402B0a287cbC77cb67B2a52e2FC635dce4;
+    address public ethStethNgBaseRewardPool = 0x6B27D7BC63F1999D14fF9bA900069ee516669ee8;
+    address public fraxCrvUsdBaseRewardPool = 0x3CfB4B26dc96B124D15A6f360503d028cF2a3c00;
+    address public mkUsdFraxUsdcBaseRewardPool = 0x35FbE5520E70768DCD6E3215Ed54E14CBccA10D2;
+    address public wethYethBaseRewardPool = 0xB0867ADE998641Ab1Ff04cF5cA5e5773fA92AaE3;
+    address public ethEthxBaseRewardPool = 0x399e111c7209a741B06F8F86Ef0Fdd88fC198D20;
+    address public crvUsdSFraxBaseRewardPool = 0x73eA73C3a191bd05F3266eB2414609dC5Fe777a2;
 
     // Uniswap V3
     address public WSTETH_WETH_100 = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;

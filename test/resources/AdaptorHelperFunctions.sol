@@ -54,6 +54,8 @@ import { CollateralFTokenAdaptorV1 } from "src/modules/adaptors/Frax/CollateralF
 
 import { DebtFTokenAdaptorV1 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV1.sol";
 
+import { ConvexCurveAdaptor } from "src/modules/adaptors/Convex/ConvexCurveAdaptor.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -561,5 +563,31 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToDrip() internal pure returns (bytes memory) {
         return abi.encodeWithSelector(DSRAdaptor.drip.selector);
+    }
+
+    // ========================================= Convex-Curve Platform FUNCTIONS =========================================
+
+    function _createBytesDataToDepositToConvexCurvePlatform(
+        uint256 _pid,
+        address _baseRewardPool,
+        uint256 _amount
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(depositLPTInConvexAndStake, _pid, _baseRewardPool, _amount);
+    }
+
+    function _createBytesDataToWithdrawAndClaimConvexCurvePlatform(
+        address _baseRewardPool,
+        uint256 _amount,
+        bool _claim
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(withdrawFromBaseRewardPoolAsLPT, _baseRewardPool, _amount, _claim);
+    }
+
+    function _createBytesDataToGetRewardsConvexCurvePlatform(
+        uint256 _pid,
+        address _baseRewardPool,
+        bool _claimExtras
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(getRewards, _pid, _baseRewardPool, _claimExtras);
     }
 }
