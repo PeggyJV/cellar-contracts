@@ -93,6 +93,7 @@ contract WithdrawQueue is Owned, ReentrancyGuard {
         settings.fee = fee;
     }
 
+    // TODO can users set a fee.
     // Stores users data based off ERC20 share
     // TODO does this really need to be reentrancy protected?
     function updateWithdrawRequest(ERC4626 share, WithdrawRequest calldata userRequest) external nonReentrant {
