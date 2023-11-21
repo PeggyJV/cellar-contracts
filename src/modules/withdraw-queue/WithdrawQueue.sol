@@ -69,7 +69,12 @@ contract WithdrawQueue is ReentrancyGuard {
         return true;
     }
 
-    // Stores users data based off ERC20 share
+    // TODO could test this with out reentrancy check, and have a malicious solver, call solve, then call this function
+    // on the callback to increase their amount of shares. It should work, but would fail at the end cuz the solver needs to
+    // provide more USDC than it has allowance for.
+    // TODO there is a front running attack like the ERC20 approval attack
+    // User already has a non zero request, they submit a TX to increase it
+    // Attacker sees it, front runs it, solves it, then lets users TX goes through and solves again.
     function updateWithdrawRequest(ERC4626 share, WithdrawRequest calldata userRequest) external nonReentrant {
         WithdrawRequest storage request = userWithdrawRequest[msg.sender][share];
 

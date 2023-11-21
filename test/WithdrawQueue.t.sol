@@ -130,7 +130,9 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
             sharesToWithdraw: 1_000e6
         });
         vm.prank(user);
+        uint256 gas = gasleft();
         queue.updateWithdrawRequest(cellar, req);
+        console.log("gas used", gas - gasleft());
 
         bytes memory callData = abi.encode(cellar, USDC);
         address[] memory users = new address[](1);
