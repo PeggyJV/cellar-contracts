@@ -33,7 +33,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         // Run Starter setUp code.
         _setUp();
 
-        queue = new WithdrawQueue(0.1e6);
+        queue = new WithdrawQueue();
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -85,8 +85,6 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         cellar.deposit(assets, user);
         cellar.approve(address(queue), 1_000e6);
         vm.stopPrank();
-
-        queue.addNewShare(cellar, 0.001e6);
     }
 
     function testQueue(uint8 numberOfUsers, uint256 baseAssets) external {
@@ -103,16 +101,32 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
             uint256 shares = cellar.deposit(amountOfShares[i], users[i]);
             amountOfShares[i] = shares;
             cellar.approve(address(queue), amountOfShares[i]);
+
+            WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+                deadline: uint64(block.timestamp + 100),
+                inSolve: false,
+                executionSharePrice: 0.999e18,
+                sharesToWithdraw: uint96(amountOfShares[i])
+            });
+
+            queue.updateWithdrawRequest(cellar, req);
             vm.stopPrank();
+        }
+
+        bytes memory callData = abi.encode(cellar, USDC);
+        queue.solve(cellar, users, callData, address(this));
+
+        for (uint256 i; i < numberOfUsers; ++i) {
+            uint256 expectedBalance = amountOfShares[i].mulDivDown(0.999e18, 1e18);
+            assertEq(USDC.balanceOf(users[i]), expectedBalance, "User received wrong amount of assets.");
         }
     }
 
     function testHunch() external {
         WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
             deadline: uint64(block.timestamp + 100),
-            maximumFee: 0.05e6,
             inSolve: false,
-            minimumSharePrice: 0,
+            executionSharePrice: 0.999e18,
             sharesToWithdraw: 1_000e6
         });
         vm.prank(user);
@@ -121,7 +135,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         bytes memory callData = abi.encode(cellar, USDC);
         address[] memory users = new address[](1);
         users[0] = user;
-        queue.solve(cellar, users, callData);
+        queue.solve(cellar, users, callData, address(this));
 
         console.log("User USDC Balance", USDC.balanceOf(user));
     }
@@ -131,8 +145,8 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
     // basically check for all reverts in solve.
     // TODO if user passes in a true for inSolve when setting up the request it should not write it.
 
-    function finishSolve(bytes calldata runData, uint256 sharesReceived, uint256 assetApprovalAmount) external {
-        (ERC4626 share, ERC20 asset) = abi.decode(runData, (ERC4626, ERC20));
+    function finishSolve(bytes calldata runData, uint256, uint256 assetApprovalAmount) external {
+        (, ERC20 asset) = abi.decode(runData, (ERC4626, ERC20));
         deal(address(asset), address(this), assetApprovalAmount);
         asset.approve(msg.sender, assetApprovalAmount);
     }
