@@ -1069,37 +1069,54 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function testReentrancyProtection0(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(WethRethPool, WethRethToken, WethRethPoolPosition, assets);
+        bytes memory expectedRevert = bytes(
+            abi.encodeWithSelector(CurveHelper.CurveHelper___PoolInReenteredState.selector)
+        );
+        _verifyReentrancyProtectionWorks(WethRethPool, WethRethToken, WethRethPoolPosition, assets, expectedRevert);
     }
 
     function testReentrancyProtection1(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(EthFrxethPool, EthFrxethToken, EthFrxethPoolPosition, assets);
+        bytes memory expectedRevert;
+        _verifyReentrancyProtectionWorks(EthFrxethPool, EthFrxethToken, EthFrxethPoolPosition, assets, expectedRevert);
     }
 
     function testReentrancyProtection2(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(WethCvxPool, WethCvxToken, WethCvxPoolPosition, assets);
+        bytes memory expectedRevert = bytes(
+            abi.encodeWithSelector(CurveHelper.CurveHelper___PoolInReenteredState.selector)
+        );
+        _verifyReentrancyProtectionWorks(WethCvxPool, WethCvxToken, WethCvxPoolPosition, assets, expectedRevert);
     }
 
     function testReentrancyProtection3(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(EthStethNgPool, EthStethNgToken, EthStethNgPoolPosition, assets);
+        bytes memory expectedRevert;
+        _verifyReentrancyProtectionWorks(
+            EthStethNgPool,
+            EthStethNgToken,
+            EthStethNgPoolPosition,
+            assets,
+            expectedRevert
+        );
     }
 
     function testReentrancyProtection4(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(EthOethPool, EthOethToken, EthOethPoolPosition, assets);
+        bytes memory expectedRevert;
+        _verifyReentrancyProtectionWorks(EthOethPool, EthOethToken, EthOethPoolPosition, assets, expectedRevert);
     }
 
     function testReentrancyProtection5(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(WethYethPool, WethYethToken, WethYethPoolPosition, assets);
+        bytes memory expectedRevert;
+        _verifyReentrancyProtectionWorks(WethYethPool, WethYethToken, WethYethPoolPosition, assets, expectedRevert);
     }
 
     function testReentrancyProtection6(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(EthEthxPool, EthEthxToken, EthEthxPoolPosition, assets);
+        bytes memory expectedRevert;
+        _verifyReentrancyProtectionWorks(EthEthxPool, EthEthxToken, EthEthxPoolPosition, assets, expectedRevert);
     }
 
     // ========================================= Reverts =========================================
@@ -1313,6 +1330,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(address(0), address(this), address(this), CurvePool.withdraw_admin_fees.selector)
         );
     }
+
+    // TODO add test where we repeat native ETH twice in input token array.
 
     function testStrategistMessingUpInputTokenArray(uint256 assets) external {
         assets = bound(assets, 1e6, 1_000_000e6);
@@ -1576,14 +1595,14 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // ========================================= Helpers =========================================
 
-    // TODO make it a function input for what revert msg to expect.
     // NOTE Some curve pools use 2 to indicate locked, and 3 to indicate unlocked, others use 1, and 0 respectively
     // But ones that use 1 or 0, are just checking if the slot is truthy or not, so setting it to 2 should still trigger re-entrancy reverts.
     function _verifyReentrancyProtectionWorks(
         address poolAddress,
         address lpToken,
         uint32 position,
-        uint256 assets
+        uint256 assets,
+        bytes memory expectedRevert
     ) internal {
         // Create a cellar that uses the curve token as the asset.
         cellar = _createCellarWithCurveLPAsAsset(position, lpToken);
@@ -1599,8 +1618,12 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Set lock slot to 2 to lock it. Then try to deposit while pool is "re-entered".
         vm.store(address(pool), slot0, bytes32(uint256(2)));
-        // TODO check for Curve Helper specific revert.
-        vm.expectRevert();
+
+        if (expectedRevert.length > 0) {
+            vm.expectRevert(expectedRevert);
+        } else {
+            vm.expectRevert();
+        }
         cellar.deposit(assets, address(this));
 
         // Change lock back to unlocked state
@@ -1611,7 +1634,11 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Set lock slot to 2 to lock it. Then try to withdraw while pool is "re-entered".
         vm.store(address(pool), slot0, bytes32(uint256(2)));
-        vm.expectRevert();
+        if (expectedRevert.length > 0) {
+            vm.expectRevert(expectedRevert);
+        } else {
+            vm.expectRevert();
+        }
         cellar.withdraw(assets / 2, address(this), address(this));
 
         // Change lock back to unlocked state
