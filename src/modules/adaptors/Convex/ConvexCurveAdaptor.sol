@@ -11,7 +11,6 @@ import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
  * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex markets.
  * @author crispymangoes, 0xEinCodes
  * @dev this may not work for Convex with other protocols / platforms / networks. It is important to keep these associated to Curve-Convex Platform on Mainnet
- * TODO: do we need to ensure that the `baseRewardPool` trusted by the Strategist is actually the right one corresponding to the respective Convex market? Make it so. We'll validate it within `assetsUsed()` as discussed w/ Crispy
  * TODO: add re-entrancy test as discussed w/ Crispy
  */
 contract ConvexCurveAdaptor is BaseAdaptor {
@@ -54,6 +53,11 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @notice Attempted to interact with a Convex market pid & baseRewardPool that the Cellar is not using.
      */
     error ConvexAdaptor__ConvexBoosterPositionsMustBeTracked(uint256 pid, address baseRewardPool, bytes lpt);
+
+    /**
+     * @notice Attempted to pass adaptorData that does not comply with the stored information within Convex Booster records.
+     */
+    error ConvexAdaptor__ConvexBoosterPositionsDoesNotMatchAdaptorData(uint256 pid, address baseRewardPool, bytes lpt);
 
     /**
      * @param _booster the Convex booster contract for the network/market (different booster for Curve, FRAX, Prisma, etc.)
@@ -159,7 +163,13 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @return Underlying LPT for Cellar's respective Convex market position
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        (uint256 pid, , ERC20 lpt) = abi.decode(adaptorData, (uint256, address, ERC20));
+        (uint256 pid, address rewardsPool, ERC20 lpt) = abi.decode(adaptorData, (uint256, address, ERC20));
+
+        // compare against booster (queried lpt (qlpt) & queried RewardsPool (qRewardsPool))
+        (address qlpt, , , address qRewardsPool, , ) = booster.poolInfo(pid);
+        if ((address(lpt) != qlpt) || (rewardsPool != qRewardsPool))
+            revert ConvexAdaptor__ConvexBoosterPositionsDoesNotMatchAdaptorData(pid, rewardsPool, lpt);
+
         return lpt;
     }
 
@@ -169,6 +179,7 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @param adaptorData see adaptorData info at top of this smart contract
      * @return assets Underlying assets for Cellar's respective Convex market position
      * @dev all breakdowns of LPT pricing and its underlying assets are done through the PriceRouter extension (in accordance to PriceRouterv2 architecture)
+     * TODO: check decoded adaptorData against what is queried within the booster.
      */
     function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
         assets = new ERC20[](1);
