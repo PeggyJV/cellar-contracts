@@ -47,8 +47,15 @@ contract WithdrawQueue is ReentrancyGuard {
 
     //============================== EVENTS ===============================
 
-    event RequestUpdated(uint256 timestamp, address user, uint256 amount, uint256 deadline, uint256 minPrice);
-    event RequestFulfilled(uint256 timestamp, address user, uint256 sharesSpent, uint256 assetsReceived);
+    event RequestUpdated(
+        address share,
+        uint256 timestamp,
+        address user,
+        uint256 amount,
+        uint256 deadline,
+        uint256 minPrice
+    );
+    event RequestFulfilled(address share, uint256 timestamp, address user, uint256 sharesSpent, uint256 assetsReceived);
 
     //============================== IMMUTABLES ===============================
 
@@ -69,9 +76,6 @@ contract WithdrawQueue is ReentrancyGuard {
         return true;
     }
 
-    // TODO could test this with out reentrancy check, and have a malicious solver, call solve, then call this function
-    // on the callback to increase their amount of shares. It should work, but would fail at the end cuz the solver needs to
-    // provide more USDC than it has allowance for.
     // TODO there is a front running attack like the ERC20 approval attack
     // User already has a non zero request, they submit a TX to increase it
     // Attacker sees it, front runs it, solves it, then lets users TX goes through and solves again.
@@ -84,6 +88,7 @@ contract WithdrawQueue is ReentrancyGuard {
 
         // Emit full amount user has.
         emit RequestUpdated(
+            address(share),
             block.timestamp,
             msg.sender,
             userRequest.sharesToWithdraw,
@@ -157,7 +162,13 @@ contract WithdrawQueue is ReentrancyGuard {
                 }
                 solveData.asset.safeTransferFrom(msg.sender, users[i], assetsToUser);
 
-                emit RequestFulfilled(block.timestamp, users[i], request.sharesToWithdraw, assetsToUser);
+                emit RequestFulfilled(
+                    address(share),
+                    block.timestamp,
+                    users[i],
+                    request.sharesToWithdraw,
+                    assetsToUser
+                );
 
                 // Set shares to withdraw to 0.
                 request.sharesToWithdraw = 0;
