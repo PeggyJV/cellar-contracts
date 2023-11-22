@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "src/modules/adaptors/BaseAdaptor.sol";
 import { IBaseRewardPool } from "src/interfaces/external/Convex/IBaseRewardPool.sol";
 import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
+import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 
 /**
  * @title Convex-Curve Platform Adaptor
@@ -12,6 +13,8 @@ import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
  * @author crispymangoes, 0xEinCodes
  * @dev this may not work for Convex with other protocols / platforms / networks. It is important to keep these associated to Curve-Convex Platform on Mainnet
  * TODO: add re-entrancy test as discussed w/ Crispy
+ * Add a re-entrancy test to make sure that the re-entrancy toggle will cause a revert within the curvepools that we are working with if it is ever in re-entrancy state.
+
  */
 contract ConvexCurveAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
@@ -33,10 +36,11 @@ contract ConvexCurveAdaptor is BaseAdaptor {
     IBooster public immutable booster;
 
     //==================== Adaptor Data Specification ====================
-    // adaptorData = abi.encode(uint256 pid, address baseRewardPool, ERC20 lpt)
+    // adaptorData = abi.encode(uint256 pid, address baseRewardPool, ERC20 lpt, CurvePool pool)
     // Where:
     // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with, and `baseRewardPool` is the isolated base reward pool for the respective convex market --> baseRewardPool has extraReward Child Contracts associated to it. So cellar puts CRVLPT into Convex Booster, which then stakes it into Curve.
     // `lpt` is the Curve LPT that is deposited into the respective Convex-Curve Platform market.
+    // `pool` is the Curve liquidity pool adhering to the CurvePool interface
     // NOTE that there can be multiple market addresses associated with the same Curve LPT, thus it is important to focus on the market pid  itself, and not constituent assets / LPTs.
 
     //================= Configuration Data Specification =================
@@ -75,7 +79,7 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * of the adaptor is more difficult.
      */
     function identifier() public pure virtual override returns (bytes32) {
-        return keccak256(abi.encode("Convex Curve Adaptor V 0.1"));
+        return keccak256(abi.encode("Convex Curve Adaptor V 0.0"));
     }
 
     //============================================ Implement Base Functions ===========================================
@@ -86,7 +90,14 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @param adaptorData see adaptorData info at top of this smart contract
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
-        (uint256 pid, address rewardsPool, ERC20 lpt) = abi.decode(adaptorData, (uint256, address, ERC20));
+        (uint256 pid, address rewardsPool, ERC20 lpt, CurvePool pool) = abi.decode(
+            adaptorData,
+            (uint256, address, ERC20, CurvePool)
+        );
+
+        if (selector != bytes4(0)) _callReentrancyFunction(pool, selector);
+        else revert BaseAdaptor__UserDepositsNotAllowed(); // TODO:
+
         _validatePositionIsUsed(pid, rewardsPool, lpt);
         lpt.safeApprove(address(booster), assets);
 
@@ -111,23 +122,33 @@ contract ConvexCurveAdaptor is BaseAdaptor {
     ) public override {
         // Check that position is setup to be liquid.
         bool isLiquid = abi.decode(configurationData, (bool));
-        if (!isLiquid) revert BaseAdaptor__UserWithdrawsNotAllowed();
 
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        (uint256 pid, address rewardPool, ERC20 lpt) = abi.decode(adaptorData, (uint256, address, ERC20));
+        (uint256 pid, address rewardPool, ERC20 lpt, CurvePool pool) = abi.decode(
+            adaptorData,
+            (uint256, address, ERC20, CurvePool)
+        );
+
+        if (isLiquid && selector != bytes4(0)) _callReentrancyFunction(pool, selector);
+        else revert BaseAdaptor__UserWithdrawsNotAllowed(); // TODO: lpt != CurvePool apparently according to Crispy. Need to discuss this with him.
+
         _validatePositionIsUsed(pid, rewardPool, lpt);
 
-        //TODO: logic that checks if there is enough liquid curveLPT,and if not it does withdrawAndUnwrap(). If this logic is in place, withdrawableFrom() can report staked amount too.
-
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
-        baseRewardPool.withdrawAndUnwrap(amount, false);
+        ERC20 stakingToken = ERC20(baseRewardPool.stakingToken());
+
+        if (amount <= stakingToken.balanceOf(address(cellar))) {
+            stakingToken.safeTransfer(receiver, amount);
+        } else {
+            baseRewardPool.withdrawAndUnwrap(amount, false);
+        }
     }
 
     /**
      * @notice Functions Cellars use to determine the withdrawable balance from an adaptor position.
-     * @dev Accounts for LPTs in the Cellar's wallet, and staked in Convex Market.
+     * @dev Accounts for LPTs staked in Convex Market from calling Cellar.
      * @param adaptorData see adaptorData info at top of this smart contract
      * @param configurationData see configurationData at top of this smart contract
      */
@@ -137,24 +158,22 @@ contract ConvexCurveAdaptor is BaseAdaptor {
     ) public view override returns (uint256) {
         bool isLiquid = abi.decode(configurationData, (bool));
         if (isLiquid) {
-            (, address rewardPool, ) = abi.decode(adaptorData, (uint256, address, ERC20));
+            (, address rewardPool, , ) = abi.decode(adaptorData, (uint256, address, ERC20, CurvePool));
             IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
-            ERC20 stakingToken = ERC20(baseRewardPool.stakingToken());
-            return (stakingToken.balanceOf(msg.sender) + baseRewardPool.balanceOf(msg.sender));
+            return (baseRewardPool.balanceOf(msg.sender));
         } else return 0;
     }
 
     /**
      * @notice Calculates the Cellar's balance of the positions creditAsset, a specific underlying LPT.
      * @param adaptorData see adaptorData info at top of this smart contract
-     * @return total balance of LPT for Cellar, including liquid and staked
+     * @return total balance of LPT staked in Convex-Curve Platform for Cellar
      * NOTE: This assumes that no rewards are given back as accrual of more curveLPT. I believe that to be the case because BaseRewardPool has its own rewardsToken, and extraRewards has specific reward contracts specific to respective convex markets.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (, address rewardPool, ) = abi.decode(adaptorData, (uint256, address, ERC20));
+        (, address rewardPool, , ) = abi.decode(adaptorData, (uint256, address, ERC20, CurvePool));
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
-        ERC20 stakingToken = ERC20(baseRewardPool.stakingToken());
-        return (stakingToken.balanceOf(msg.sender) + baseRewardPool.balanceOf(msg.sender));
+        return (baseRewardPool.balanceOf(msg.sender));
     }
 
     /**
@@ -163,7 +182,10 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @return Underlying LPT for Cellar's respective Convex market position
      */
     function assetOf(bytes memory adaptorData) public view override returns (ERC20) {
-        (uint256 pid, address rewardsPool, ERC20 lpt) = abi.decode(adaptorData, (uint256, address, ERC20));
+        (uint256 pid, address rewardsPool, ERC20 lpt, CurvePool pool) = abi.decode(
+            adaptorData,
+            (uint256, address, ERC20, CurvePool)
+        );
 
         // compare against booster (queried lpt (qlpt) & queried RewardsPool (qRewardsPool))
         (address qlpt, , , address qRewardsPool, , ) = booster.poolInfo(pid);
@@ -171,19 +193,6 @@ contract ConvexCurveAdaptor is BaseAdaptor {
             revert ConvexAdaptor__ConvexBoosterPositionsDoesNotMatchAdaptorData(pid, rewardsPool, lpt);
 
         return lpt;
-    }
-
-    /**
-     * @notice When positions are added to the Registry, this function can be used in order to figure out
-     *         what assets this adaptor needs to price, and confirm pricing is properly setup.
-     * @param adaptorData see adaptorData info at top of this smart contract
-     * @return assets Underlying assets for Cellar's respective Convex market position
-     * @dev all breakdowns of LPT pricing and its underlying assets are done through the PriceRouter extension (in accordance to PriceRouterv2 architecture)
-     * TODO: check decoded adaptorData against what is queried within the booster.
-     */
-    function assetsUsed(bytes memory adaptorData) public view override returns (ERC20[] memory assets) {
-        assets = new ERC20[](1);
-        assets[0] = assetOf(adaptorData);
     }
 
     /**
@@ -235,11 +244,26 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @notice Validates that a given pid (poolId), and baseRewardPool are set up as a position with this adaptor in the calling Cellar.
      * @dev This function uses `address(this)` as the address of the calling Cellar.
      */
-    function _validatePositionIsUsed(uint256 _pid, address _baseRewardPool, bytes _lpt) internal view {
-        bytes32 positionHash = keccak256(abi.encode(identifier(), false, abi.encode(_pid, _baseRewardPool, _lpt)));
+    function _validatePositionIsUsed(
+        uint256 _pid,
+        address _baseRewardPool,
+        ERC20 _lpt,
+        CurvePool _curvepool
+    ) internal view {
+        bytes32 positionHash = keccak256(
+            abi.encode(identifier(), false, abi.encode(_pid, _baseRewardPool, _lpt, _curvePool))
+        );
         uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
         if (!Cellar(address(this)).isPositionUsed(positionId))
             revert ConvexAdaptor__ConvexBoosterPositionsMustBeTracked(_pid, _baseRewardPool, _lpt);
+    }
+
+    /**
+     * @notice Call a reentrancy protected function in `pool`.
+     * @dev Used to insure `pool` is not in a manipulated state.
+     */
+    function _callReentrancyFunction(CurvePool pool, bytes4 selector) internal {
+        address(pool).functionCall(abi.encodePacked(selector));
     }
 
     //============================================ Interface Helper Functions ===========================================

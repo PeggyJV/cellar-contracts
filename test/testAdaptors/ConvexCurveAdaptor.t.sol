@@ -15,6 +15,7 @@ import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEth
 import { CurveEMAExtension } from "src/modules/price-router/Extensions/Curve/CurveEMAExtension.sol";
 import { Curve2PoolExtension } from "src/modules/price-router/Extensions/Curve/Curve2PoolExtension.sol";
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
+import { MockCellarWithOracle } from "src/mocks/MockCellarWithOracle.sol";
 
 /// CRISPY Pricing imports above copied over (TODO: delete your copy of his imported files (`WstEthExtension.sol, CurveEMAExtension.sol, Curve2PoolExtension.sol`) and `git pull` his actual files from dev branch ONCE he's merged his changes to it).
 
@@ -315,37 +316,37 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(
             EthFrxethPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(128, ethFrxethBaseRewardPool)
+            abi.encode(128, ethFrxethBaseRewardPool, EthFrxethToken, CurvePool(EthFrxethPool))
         );
         registry.trustPosition(
             EthStethNgPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(177, ethStethNgBaseRewardPool)
+            abi.encode(177, ethStethNgBaseRewardPool, EthStethNgToken, CurvePool(EthStethNgPool))
         );
         registry.trustPosition(
             fraxCrvUsdPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(187, fraxCrvUsdBaseRewardPool)
+            abi.encode(187, fraxCrvUsdBaseRewardPool, FraxCrvUsdToken, CurvePool(FraxCrvUsdPool))
         );
         registry.trustPosition(
             mkUsdFraxUsdcPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(225, mkUsdFraxUsdcBaseRewardPool)
+            abi.encode(225, mkUsdFraxUsdcBaseRewardPool, mkUsdFraxUsdcToken, CurvePool(mkUsdFraxUsdcPool))
         );
         registry.trustPosition(
             WethYethPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(231, wethYethBaseRewardPool)
+            abi.encode(231, wethYethBaseRewardPool, WethYethToken, CurvePool(WethYethPool))
         );
         registry.trustPosition(
             EthEthxPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(232, ethEthxBaseRewardPool)
+            abi.encode(232, ethEthxBaseRewardPool, EthEthxToken, CurvePool(EthEthxPool))
         );
         registry.trustPosition(
             CrvUsdSfraxPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(252, crvUsdSFraxBaseRewardPool)
+            abi.encode(252, crvUsdSFraxBaseRewardPool, CrvUsdSfraxToken, CurvePool(CrvUsdSfraxPool))
         );
 
         // TODO: might need to add erc20Adaptor positions for all of the LPTs so rebalances work in the tests.
@@ -494,7 +495,32 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
     }
 
-    /// TODO: re-entrancy tests: we're worried about the curve LPT being re-entered.
+    /// re-entrancy tests: where curve LPT is re-entered.
+
+    function testReentrancyProtection1(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(EthFrxethPool, EthFrxethToken, EthFrxethPoolPosition, assets);
+    }
+
+    function testReentrancyProtection3(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(EthStethNgPool, EthStethNgToken, EthStethNgPoolPosition, assets);
+    }
+
+    function testReentrancyProtection5(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(WethYethPool, WethYethToken, WethYethPoolPosition, assets);
+    }
+
+    function testReentrancyProtection6(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(EthEthxPool, EthEthxToken, EthEthxPoolPosition, assets);
+    }
+
+    // TODO: re-entrancy tests for remaining ITB pools of interest:
+    // mkUSD-FRAXbp --> mkUsdFraxUsdcPool
+    // frxETH-WETH
+    // FRAX-crvUSD
 
     /// TODO: balanceOf() tests
 
@@ -749,5 +775,134 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         mockFRAXdataFeed.setMockUpdatedAt(block.timestamp);
         mockSTETHdataFeed.setMockUpdatedAt(block.timestamp);
         mockRETHdataFeed.setMockUpdatedAt(block.timestamp);
+    }
+
+    function _setupCellarWithConvexDeposit(
+        uint256 _assets,
+        address _lpt,
+        uint256 _pid,
+        address _baseRewardPool
+    ) internal {
+        deal(address(USDC), address(this), _assets);
+        cellar.deposit(_assets, address(this));
+
+        // convert to coin of interest, but zero out usdc balance so cellar totalAssets doesn't deviate and revert
+        ERC20 lpt = ERC20(_lpt);
+        uint256 assets = priceRouter.getValue(USDC, _assets, lpt);
+        deal(address(lpt), address(cellar), assets);
+        deal(address(USDC), address(cellar), 0);
+
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
+
+        // TODO: implement interface within ConvexCurveAdaptor to use `ITokenMinter` or other interface to access the staking capacity within `Booster.sol`
+
+        ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
+        uint256 rewardTokenBalance0 = rewardToken.balanceOf(address(cellar));
+
+        // Strategist deposits CurveLPT into Convex-Curve Platform Pools/Markets
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
+    }
+
+    // NOTE Some curve pools use 2 to indicate locked, and 3 to indicate unlocked, others use 1, and 0 respectively
+    // But ones that use 1 or 0, are just checking if the slot is truthy or not, so setting it to 2 should still trigger re-entrancy reverts.
+    // NOTE: inspired by Crispy's test code with `CurveAdaptor.t.sol`, except here we have a cellar w/ a convex adaptor position (deposit) and are checking that we would not be able to move the convex position if Curve was in a re-entrancy state.
+    function _verifyReentrancyProtectionWorks(
+        address poolAddress,
+        address lpToken,
+        uint32 position,
+        uint256 assets
+    ) internal {
+        // Create a cellar with a convex position (deposit)
+        _setupCellarWithConvexDeposit(assets, EthFrxethToken, 128, ethFrxethBaseRewardPool);
+
+        // Create a cellar that uses the curve token as the asset.
+        cellar2 = _createCellarWithCurveLPAsAsset(position, lpToken);
+
+        deal(lpToken, address(this), assets);
+        ERC20(lpToken).safeApprove(address(cellar2), assets);
+
+        CurvePool pool = CurvePool(poolAddress);
+        bytes32 slot0 = bytes32(uint256(0));
+
+        // Get the original slot value;
+        bytes32 originalValue = vm.load(address(pool), slot0);
+
+        // Set lock slot to 2 to lock it. Then try to deposit while pool is "re-entered".
+        vm.store(address(pool), slot0, bytes32(uint256(2)));
+        vm.expectRevert();
+        cellar2.deposit(assets, address(this));
+
+        uint256 newAssets = priceRouter.getValue(USDC, assets, EthFrxethToken);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToWithdrawAndClaimConvexCurvePlatform(_baseRewardPool, newAssets / 2, true);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+        vm.expectRevert(); // should revert because of being in re-entrancy state
+        cellar.callOnAdaptor(data);
+
+        // Change lock back to unlocked state
+        vm.store(address(pool), slot0, originalValue);
+
+        // Deposit should work now.
+        cellar2.deposit(assets, address(this));
+
+        // Withdraw on other Convex Cellar should work now.
+        cellar.callOnAdaptor(data);
+
+        // Set lock slot to 2 to lock it. Then try to withdraw while pool is "re-entered".
+        vm.store(address(pool), slot0, bytes32(uint256(2)));
+        vm.expectRevert();
+        cellar2.withdraw(assets / 2, address(this), address(this));
+
+        // Try depositing more into the convex cellar except it should revert
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, newAssets / 3);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+        vm.expectRevert();
+        cellar.callOnAdaptor(data);
+
+        // Change lock back to unlocked state
+        vm.store(address(pool), slot0, originalValue);
+
+        // Withdraw should work now.
+        cellar2.withdraw(assets / 2, address(this), address(this));
+        // additional deposit on the convex cellar should work now too.
+        cellar.callOnAdaptor(data);
+    }
+
+    function _createCellarWithCurveLPAsAsset(uint32 position, address lpToken) internal returns (Cellar newCellar) {
+        string memory cellarName = "Test Curve Cellar V0.0";
+        uint256 initialDeposit = 1e6;
+        uint64 platformCut = 0.75e18;
+
+        ERC20 erc20LpToken = ERC20(lpToken);
+
+        // Approve new cellar to spend assets.
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(lpToken, address(this), initialDeposit);
+        erc20LpToken.approve(cellarAddress, initialDeposit);
+
+        bytes memory creationCode = type(MockCellarWithOracle).creationCode;
+        bytes memory constructorArgs = abi.encode(
+            address(this),
+            registry,
+            erc20LpToken,
+            cellarName,
+            cellarName,
+            position,
+            abi.encode(true),
+            initialDeposit,
+            platformCut,
+            type(uint192).max
+        );
+        newCellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
+
+        newCellar.addAdaptorToCatalogue(address(curveAdaptor));
     }
 }
