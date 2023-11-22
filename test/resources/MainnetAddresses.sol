@@ -50,6 +50,11 @@ contract MainnetAddresses {
     ERC20 public CRV = ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
     ERC20 public CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     ERC20 public FRXETH = ERC20(0x5E8422345238F34275888049021821E8E08CAa1f);
+    ERC20 public CRVUSD = ERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
+    ERC20 public OETH = ERC20(0x856c4Efb76C1D1AE02e20CEB03A2A6a08b0b8dC3);
+    ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
+    ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
+    ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -175,6 +180,62 @@ contract MainnetAddresses {
     address public aave3Pool = 0xDeBF20617708857ebe4F679508E7b7863a8A8EeE;
     ERC20 public CRV_AAVE_3CRV = ERC20(0xFd2a8fA60Abd58Efe3EeE34dd494cD491dC14900);
     address public stETHWethNg = 0x21E27a5E5513D6e65C4f830167390997aA84843a;
+    address public EthFrxEthCurvePool = 0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577;
+    address public triCrypto2 = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
+
+    address public UsdcCrvUsdPool = 0x4DEcE678ceceb27446b35C672dC7d61F30bAD69E;
+    address public UsdcCrvUsdToken = 0x4DEcE678ceceb27446b35C672dC7d61F30bAD69E;
+    address public UsdcCrvUsdGauge = 0x95f00391cB5EebCd190EB58728B4CE23DbFa6ac1;
+    address public WethRethPool = 0x0f3159811670c117c372428D4E69AC32325e4D0F;
+    address public WethRethToken = 0x6c38cE8984a890F5e46e6dF6117C26b3F1EcfC9C;
+    address public WethRethGauge = 0x9d4D981d8a9066f5db8532A5816543dE8819d4A8;
+    address public UsdtCrvUsdPool = 0x390f3595bCa2Df7d23783dFd126427CCeb997BF4;
+    address public UsdtCrvUsdToken = 0x390f3595bCa2Df7d23783dFd126427CCeb997BF4;
+    address public UsdtCrvUsdGauge = 0x4e6bB6B7447B7B2Aa268C16AB87F4Bb48BF57939;
+    address public EthStethPool = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
+    address public EthStethToken = 0x06325440D014e39736583c165C2963BA99fAf14E;
+    address public EthStethGauge = 0x182B723a58739a9c974cFDB385ceaDb237453c28;
+    address public FraxUsdcPool = 0xDcEF968d416a41Cdac0ED8702fAC8128A64241A2;
+    address public FraxUsdcToken = 0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC;
+    address public FraxUsdcGauge = 0xCFc25170633581Bf896CB6CDeE170e3E3Aa59503;
+    address public WethFrxethPool = 0x9c3B46C0Ceb5B9e304FCd6D88Fc50f7DD24B31Bc;
+    address public WethFrxethToken = 0x9c3B46C0Ceb5B9e304FCd6D88Fc50f7DD24B31Bc;
+    address public WethFrxethGauge = 0x4E21418095d32d15c6e2B96A9910772613A50d50;
+    address public EthFrxethPool = 0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577;
+    address public EthFrxethToken = 0xf43211935C781D5ca1a41d2041F397B8A7366C7A;
+    address public EthFrxethGauge = 0x2932a86df44Fe8D2A706d8e9c5d51c24883423F5;
+    address public StethFrxethPool = 0x4d9f9D15101EEC665F77210cB999639f760F831E;
+    address public StethFrxethToken = 0x4d9f9D15101EEC665F77210cB999639f760F831E;
+    address public StethFrxethGauge = 0x821529Bb07c83803C9CC7763e5974386e9eFEdC7;
+    address public WethCvxPool = 0xB576491F1E6e5E62f1d8F26062Ee822B40B0E0d4;
+    address public WethCvxToken = 0x3A283D9c08E8b55966afb64C515f5143cf907611;
+    address public WethCvxGauge = 0x7E1444BA99dcdFfE8fBdb42C02F0005D14f13BE1;
+    address public EthStethNgPool = 0x21E27a5E5513D6e65C4f830167390997aA84843a;
+    address public EthStethNgToken = 0x21E27a5E5513D6e65C4f830167390997aA84843a;
+    address public EthStethNgGauge = 0x79F21BC30632cd40d2aF8134B469a0EB4C9574AA;
+    address public EthOethPool = 0x94B17476A93b3262d87B9a326965D1E91f9c13E7;
+    address public EthOethToken = 0x94B17476A93b3262d87B9a326965D1E91f9c13E7;
+    address public EthOethGauge = 0xd03BE91b1932715709e18021734fcB91BB431715;
+    address public FraxCrvUsdPool = 0x0CD6f267b2086bea681E922E19D40512511BE538;
+    address public FraxCrvUsdToken = 0x0CD6f267b2086bea681E922E19D40512511BE538;
+    address public FraxCrvUsdGauge = 0x96424E6b5eaafe0c3B36CA82068d574D44BE4e3c;
+    address public mkUsdFraxUsdcPool = 0x0CFe5C777A7438C9Dd8Add53ed671cEc7A5FAeE5;
+    address public mkUsdFraxUsdcToken = 0x0CFe5C777A7438C9Dd8Add53ed671cEc7A5FAeE5;
+    address public mkUsdFraxUsdcGauge = 0xF184d80915Ba7d835D941BA70cDdf93DE36517ee;
+    address public WethYethPool = 0x69ACcb968B19a53790f43e57558F5E443A91aF22;
+    address public WethYethToken = 0x69ACcb968B19a53790f43e57558F5E443A91aF22;
+    address public WethYethGauge = 0x138cC21D15b7A06F929Fc6CFC88d2b830796F4f1;
+    address public EthEthxPool = 0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492;
+    address public EthEthxToken = 0x59Ab5a5b5d617E478a2479B0cAD80DA7e2831492;
+    address public EthEthxGauge = 0x7671299eA7B4bbE4f3fD305A994e6443b4be680E;
+    address public CrvUsdSdaiPool = 0x1539c2461d7432cc114b0903f1824079BfCA2C92;
+    address public CrvUsdSdaiToken = 0x1539c2461d7432cc114b0903f1824079BfCA2C92;
+    address public CrvUsdSdaiGauge = 0x2B5a5e182768a18C70EDd265240578a72Ca475ae;
+    address public CrvUsdSfraxPool = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
+    address public CrvUsdSfraxToken = 0xfEF79304C80A694dFd9e603D624567D470e1a0e7;
+    address public CrvUsdSfraxGauge = 0x62B8DA8f1546a092500c457452fC2d45fa1777c4;
+
+    address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 
     // Uniswap V3
     address public WSTETH_WETH_100 = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;
@@ -193,10 +254,7 @@ contract MainnetAddresses {
 
     // Maker
     address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
-
-    // Curve
-    address public EthFrxEthCurvePool = 0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577;
-    address public triCrypto2 = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
+    address public sDAI = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
 
     // Frax
     address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;
