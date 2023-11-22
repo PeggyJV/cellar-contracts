@@ -10,10 +10,9 @@ import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
  * @dev This adaptor is specifically for Convex contracts.
  * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex markets.
  * @author crispymangoes, 0xEinCodes
- * @dev TODO: this may not work for Convex with other protocols (FRAX, Prisma, etc.). FRAX contract architecture shows some discrepancies (need to confirm). Side-Chain implementations for convex markets showcase other discrepancies too in external function signatures, etc.
- * TODO: do we need to ensure that the `baseRewardPool` trusted by the Strategist is actually the right one corresponding to the respective Convex market?
- * NOTE: re-entrancy revert --> cellar already has reentrancy checks and tests on it. We are not receiving native ETH like how the curve adaptor positions can end up sending ETH to receiver upon redemptions. The only way would be if rewards were native ETH, but that would be odd and the ConvexCurveAdaptor does not implement the wrapper setup that Crispy uses within the CurveAdaptor.sol
-
+ * @dev this may not work for Convex with other protocols / platforms / networks. It is important to keep these associated to Curve-Convex Platform on Mainnet
+ * TODO: do we need to ensure that the `baseRewardPool` trusted by the Strategist is actually the right one corresponding to the respective Convex market? Make it so. We'll validate it within `assetsUsed()` as discussed w/ Crispy
+ * TODO: add re-entrancy test as discussed w/ Crispy
  */
 contract ConvexCurveAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
@@ -118,10 +117,8 @@ contract ConvexCurveAdaptor is BaseAdaptor {
 
         //TODO: logic that checks if there is enough liquid curveLPT,and if not it does withdrawAndUnwrap(). If this logic is in place, withdrawableFrom() can report staked amount too.
 
-        // booster.withdraw(pid, amount);
-
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
-        baseRewardPool.withdrawAndUnwrap(amount, true); // TODO: not sure if we just always set this to true (might be gas intensive), or if we allow this as a param somehow.
+        baseRewardPool.withdrawAndUnwrap(amount, false);
     }
 
     /**
@@ -147,7 +144,7 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @notice Calculates the Cellar's balance of the positions creditAsset, a specific underlying LPT.
      * @param adaptorData see adaptorData info at top of this smart contract
      * @return total balance of LPT for Cellar, including liquid and staked
-     * TODO: This assumes that no rewards are given back as accrual of more curveLPT. I believe that to be the case because BaseRewardPool has its own rewardsToken, and extraRewards has specific reward contracts specific to respective convex markets.
+     * NOTE: This assumes that no rewards are given back as accrual of more curveLPT. I believe that to be the case because BaseRewardPool has its own rewardsToken, and extraRewards has specific reward contracts specific to respective convex markets.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (, address rewardPool, ) = abi.decode(adaptorData, (uint256, address, ERC20));
@@ -192,7 +189,7 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @notice Allows strategists to deposit and stake LPTs into Convex markets via the respective Convex market Booster contract
      * @param _pid specified pool ID corresponding to LPT convex market
      * @param _amount amount of LPT to deposit and stake
-     * TODO: stake bool in `boosted.deposit()` function: not sure if we just always set this to true (might be gas intensive), or if we allow this as a param somehow.
+     * NOTE: stake bool in `boosted.deposit()` function to stake assets is set to always true for strategist calls
      */
     function depositLPTInConvexAndStake(uint256 _pid, address _baseRewardPool, uint256 _amount) public {
         _validatePositionIsUsed(_pid, _baseRewardPool); // validate pid representing convex market within respective booster
@@ -202,8 +199,7 @@ contract ConvexCurveAdaptor is BaseAdaptor {
     /**
      * @notice Allows strategists to withdraw from Convex markets via Booster contract w/ or w/o claiming rewards
      * NOTE: this adaptor will always unwrap to CRV LPTs if possible. It will not keep the position in convex wrapped LPT position.
-     * TODO: if _claim is true, this claims all rewards associated to a cellar interacting w/ Convex markets. The BaseRewardPool contract has the function for withdrawing and unwrapping whilst also claiming all rewards. NOTE: if it does not claim all extra rewards (say another reward contract is linked to it somehow), then we can just make other adaptors that handle that.
-     * TODO: decide which function to use for withdrawing based on gas consumption for adaptor calls? Either: withdrawFromBoosterNoRewards() && getRewards() OR withdrawFromBaseRewardPoolAsLPT() && getRewards()
+     * NOTE: If _claim is true, this claims all rewards associated to a cellar interacting w/ Convex markets. The BaseRewardPool contract has the function for withdrawing and unwrapping whilst also claiming all rewards. NOTE: if it does not claim all extra rewards (say another reward contract is linked to it somehow), then we can just make other adaptors that handle that.
      * @param _baseRewardPool for respective convex market (w/ trusted poolId)
      * @param _amount of LPTs to unstake, unwrap, and withdraw from convex market to calling cellar
      * @param _claim whether or not to claim all rewards from BaseRewardPool

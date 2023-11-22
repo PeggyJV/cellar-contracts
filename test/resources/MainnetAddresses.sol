@@ -239,7 +239,6 @@ contract MainnetAddresses {
     ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
     ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
 
-
     /// End of stuff from Crispy's curve tests
 
     // Convex markets TODO: remove duplicate LPTs

@@ -22,11 +22,6 @@ import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
  * @title ConvexCurveAdaptorTest
  * @author crispymangoes, 0xEinCodes
  * @notice Cellar Adaptor tests with Convex-Curve markets
- * TODO: write tests for pools of interest for ITB
- *  - Mock datafeeds to be used for underlying LPTs. Actual testing of the LPT pricing is carried out. Hash out which LPT pair to go with, and what mock datafeeds to use for constituent assets of the pair so we can warp forward to simulate reward accrual.
- * TODO: write tests for other pools of interest
- * hmm, by design, should we have to specify baseRewardsPool or is pid enough... booster contract looks like it cannot change the crvRewards once a pool has been set. Therefore, all that is needed is the pid. TODO: Make the change in the ConvexCurveAdaptor.sol to not need baseRewaredsAddress and for them to get it from the crvRewards address. TODO: triple check that pid is all that you really need and that pools are immutable.
-
  */
 contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -52,7 +47,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     CurveEMAExtension private curveEMAExtension;
     Curve2PoolExtension private curve2PoolExtension;
 
-    /// CRISPY Pricing start
     MockDataFeed public mockWETHdataFeed;
     MockDataFeed public mockUSDCdataFeed;
     MockDataFeed public mockDAI_dataFeed;
@@ -84,8 +78,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private slippage = 0.9e4;
     uint256 public initialAssets;
 
-    /// CRISPY Pricing end
-
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
@@ -94,8 +86,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Run Starter setUp code.
         _setUp();
-
-        /// CRISPY Pricing start
 
         mockWETHdataFeed = new MockDataFeed(WETH_USD_FEED);
         mockUSDCdataFeed = new MockDataFeed(USDC_USD_FEED);
@@ -305,10 +295,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // FraxCrvUsdGauge
         _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8, FRAX, CRVUSD, false, false);
 
-        // Add positions to registry.
-
-        /// CRISPY Pricing end
-
         convexCurveAdaptor = new ConvexCurveAdaptor(convexCurveMainnetBooster);
 
         // Add adaptors and positions to the registry.
@@ -363,8 +349,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
 
         // TODO: might need to add erc20Adaptor positions for all of the LPTs so rebalances work in the tests.
-
-        // Set up Cellar which will have all LPTs dealt to it for the tests w/ a baseAsset of USDC or something?
 
         string memory cellarName = "Convex Cellar V0.0";
         uint256 initialDeposit = 1e6;
@@ -510,13 +494,24 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
     }
 
-    /// re-entrancy: we're worried about the curve LPT being re-entered.
+    /// TODO: re-entrancy tests: we're worried about the curve LPT being re-entered.
+
+    /// TODO: balanceOf() tests
+
+    // - Check that the right amount of curve LPTs are being accounted for (during phases where cellar has deposit and stake positions, and phases where it does not, and phases where it has a mix)
+
+    /// TODO: claimRewards() tests
+
+    // - Check that we get all the CRV, CVX, 3CRV rewards we're supposed to get --> this will require testing a couple convex markets that are currently giving said rewards. **Will need to specify the block number we're starting at**
+
+    // TODO: From looking over Cellar.sol, withdrawableFrom() can include staked cvxCurveLPTs. For now I am assuming that they are 1:1 w/ curveLPTs but the tests will show that or not. \* withdrawInOrder() goes through positions and ultimately calls `withdraw()` for the respective position. \_calculateTotalAssetsOrTotalAssetsWithdrawable() uses withdrawableFrom() to calculate the amount of assets there are available to withdraw from the cellar.
 
     /// Test Helpers
 
     /**
      * @notice helper function to carry out happy-path tests with convex pools of interest to ITB
      * @dev this was created to minimize amount of code within this test file
+     * Here we've tested: deposit x, deposit max, withdraw x (and claim rewards), claim rewards, claim rewards over more time, claim rewards over same time with less stake, withdraw max and claim w/ longer time span fast forwarded to show more reward accrual rate.
      */
     function _manageVanillaCurveLPTs(uint256 _assets, address _lpt, uint256 _pid, address _baseRewardPool) internal {
         deal(address(USDC), address(this), _assets);
@@ -528,12 +523,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(address(lpt), address(cellar), assets);
         deal(address(USDC), address(cellar), 0);
 
-        // IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool); // TODO: delete if you make changes that don't require the baseRewardAddress as a param
-
-        (, , , address crvRewards, , ) = booster.poolInfo(_pid);
-        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
-
-        // now go through typical happy-path tests as the cellar has the LPT of interest for interacting with Convex
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
 
         // TODO: implement interface within ConvexCurveAdaptor to use `ITokenMinter` or other interface to access the staking capacity within `Booster.sol`
 
@@ -548,8 +538,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
-
-        //  TODO: do we need to ensure that the `baseRewardPool` trusted by the Strategist is actually the right one corresponding to the respective Convex market?
 
         uint256 stakedLPTBalance1 = baseRewardPool.balanceOf(address(cellar));
         uint256 cellarLPTBalance1 = lpt.balanceOf(address(cellar));
@@ -598,7 +586,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             rewardTokenBalance1,
             "Should have claimed some more rewardToken; it will be specific to each Convex Platform Market."
         );
-        // check for rewardToken, and any other token balances. TODO: might experience reversion if totalAssets is increased by too much. Talk to Crispy about this
 
         uint256 rewardsTokenAccumulation1 = rewardTokenBalance2 - rewardTokenBalance1; // rewards accrued over 1 day w/ initial stake position (all assets from initial deposit).
 
@@ -660,7 +647,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             "rewards accrued over 1 day w/ less than initial stake position should result in less reward accumulation."
         );
 
-        // - check type(uint256).max works for deposit
+        // check type(uint256).max works for deposit
         adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, type(uint256).max);
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
@@ -670,7 +657,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 cellarLPTBalance4 = lpt.balanceOf(address(cellar));
         uint256 rewardTokenBalance6 = rewardToken.balanceOf(address(cellar));
 
-        // TODO: EIN THIS IS WHERE YOU LEFT OFF - you were making asserts for the below aspects. Then you were going to write the reward accrual test to check the rates after that.
         assertEq(stakedLPTBalance4, assets, "All lpt should be staked now again.");
 
         assertEq(cellarLPTBalance4, 0, "No lpt should be in cellar again.");
@@ -696,8 +682,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // TODO: do we want to test for the actual rate that we should be getting rewardTokens, or is the fact that the amounts are getting bigger and bigger when time and/or stakeAmount increases enough?
 
-        // TODO: withdraw and unwrap portion immediately
-        // up to this point we've tested: deposit x, deposit max, withdraw x (and claim rewards), claim rewards, claim rewards over more time, claim rewards over same time with less stake. Now we need to withdraw max and claim (do it with 11 days) to show that rewardAccrual got even more as expected with 11 days vs 10 days.
+        // withdraw and unwrap portion immediately
         _skip(11 days);
 
         adaptorCalls[0] = _createBytesDataToWithdrawAndClaimConvexCurvePlatform(
@@ -765,156 +750,4 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         mockSTETHdataFeed.setMockUpdatedAt(block.timestamp);
         mockRETHdataFeed.setMockUpdatedAt(block.timestamp);
     }
-
-    /**
-
----
-
-balanceOf() tests
-
-- Check that the right amount of curve LPTs are being accounted for (during phases where cellar has deposit and stake positions, and phases where it does not, and phases where it has a mix)
-
----
-
-claimRewards() tests
-
-- Check that we get all the CRV, CVX, 3CRV rewards we're supposed to get --> this will require testing a couple convex markets that are currently giving said rewards. **Will need to specify the block number we're starting at**
-
-From looking over Cellar.sol, withdrawableFrom() can include staked cvxCurveLPTs. For now I am assuming that they are 1:1 w/ curveLPTs but the tests will show that or not. \* withdrawInOrder() goes through positions and ultimately calls `withdraw()` for the respective position. \_calculateTotalAssetsOrTotalAssetsWithdrawable() uses withdrawableFrom() to calculate the amount of assets there are available to withdraw from the cellar.
-
-     */
-
-    /// Extra pricing code that I commented out from Crispy's curve tests for now
-
-    // uint32 private usdtPosition = 4;
-    // uint32 private rethPosition = 4;
-    // uint32 private oethPosition = 21;
-    // uint32 private sDaiPosition = 27;
-    // uint32 private sFraxPosition = 28;
-    // uint32 private UsdcCrvUsdPoolPosition = 10;
-    // uint32 private WethRethPoolPosition = 11;
-    // uint32 private UsdtCrvUsdPoolPosition = 12;
-    // uint32 private EthStethPoolPosition = 13;
-    // uint32 private FraxUsdcPoolPosition = 14;
-    // uint32 private WethFrxethPoolPosition = 15;
-    // uint32 private StethFrxethPoolPosition = 17;
-    // uint32 private WethCvxPoolPosition = 18;
-    // uint32 private EthOethPoolPosition = 20;
-    // uint32 private CrvUsdSdaiPoolPosition = 31;
-
-    // // Add rETH pricing.
-    // stor.inETH = true;
-    // price = uint256(IChainlinkAggregator(RETH_ETH_FEED).latestAnswer());
-    // price = priceRouter.getValue(WETH, price, USDC);
-    // price = price.changeDecimals(6, 8);
-    // settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockRETHdataFeed));
-    // priceRouter.addAsset(rETH, settings, abi.encode(stor), price);
-
-    // // Add CVX
-    // cStor.pool = WethCvxPool;
-    // cStor.index = 0;
-    // cStor.needIndex = false;
-    // price = curveEMAExtension.getPriceFromCurvePool(
-    //     CurvePool(cStor.pool),
-    //     cStor.index,
-    //     cStor.needIndex,
-    //     cStor.rateIndex,
-    //     cStor.handleRate
-    // );
-    // price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
-    // settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
-    // priceRouter.addAsset(CVX, settings, abi.encode(cStor), price);
-
-    // // Add OETH
-    // cStor.pool = EthOethPool;
-    // cStor.index = 0;
-    // cStor.needIndex = false;
-    // price = curveEMAExtension.getPriceFromCurvePool(
-    //     CurvePool(cStor.pool),
-    //     cStor.index,
-    //     cStor.needIndex,
-    //     cStor.rateIndex,
-    //     cStor.handleRate
-    // );
-    // price = price.mulDivDown(priceRouter.getPriceInUSD(WETH), 1e18);
-    // settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
-    // priceRouter.addAsset(OETH, settings, abi.encode(cStor), price);
-
-    // // Add sDAI
-    // cStor.pool = CrvUsdSdaiPool;
-    // cStor.index = 0;
-    // cStor.needIndex = false;
-    // cStor.handleRate = true;
-    // cStor.rateIndex = 1;
-    // price = curveEMAExtension.getPriceFromCurvePool(
-    //     CurvePool(cStor.pool),
-    //     cStor.index,
-    //     cStor.needIndex,
-    //     cStor.rateIndex,
-    //     cStor.handleRate
-    // );
-    // price = price.mulDivDown(priceRouter.getPriceInUSD(DAI), 1e18);
-    // settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
-    // priceRouter.addAsset(ERC20(sDAI), settings, abi.encode(cStor), price);
-
-    // // Add sFRAX
-    // cStor.pool = CrvUsdSfraxPool;
-    // cStor.index = 0;
-    // cStor.needIndex = false;
-    // cStor.handleRate = true;
-    // cStor.rateIndex = 1;
-    // price = curveEMAExtension.getPriceFromCurvePool(
-    //     CurvePool(cStor.pool),
-    //     cStor.index,
-    //     cStor.needIndex,
-    //     cStor.rateIndex,
-    //     cStor.handleRate
-    // );
-    // price = price.mulDivDown(priceRouter.getPriceInUSD(FRAX), 1e18);
-    // settings = PriceRouter.AssetSettings(EXTENSION_DERIVATIVE, address(curveEMAExtension));
-    // priceRouter.addAsset(ERC20(sFRAX), settings, abi.encode(cStor), price);
-
-    // // Add 2pools.
-    // // UsdcCrvUsdPool
-    // // UsdcCrvUsdToken
-    // // UsdcCrvUsdGauge
-    // _add2PoolAssetToPriceRouter(UsdcCrvUsdPool, UsdcCrvUsdToken, true, 1e8, USDC, CRVUSD, false, false);
-    // // WethRethPool
-    // // WethRethToken
-    // // WethRethGauge
-    // _add2PoolAssetToPriceRouter(WethRethPool, WethRethToken, false, 3_863e8, WETH, rETH, false, false);
-    // // UsdtCrvUsdPool
-    // // UsdtCrvUsdToken
-    // // UsdtCrvUsdGauge
-    // _add2PoolAssetToPriceRouter(UsdtCrvUsdPool, UsdtCrvUsdToken, true, 1e8, USDT, CRVUSD, false, false);
-    // // EthStethPool
-    // // EthStethToken
-    // // EthStethGauge
-    // _add2PoolAssetToPriceRouter(EthStethPool, EthStethToken, true, 1956e8, WETH, STETH, false, false);
-    // // FraxUsdcPool
-    // // FraxUsdcToken
-    // // FraxUsdcGauge
-    // _add2PoolAssetToPriceRouter(FraxUsdcPool, FraxUsdcToken, true, 1e8, FRAX, USDC, false, false);
-
-    // // StethFrxethPool
-    // // StethFrxethToken
-    // // StethFrxethGauge
-    // _add2PoolAssetToPriceRouter(StethFrxethPool, StethFrxethToken, true, 1825e8, STETH, FRXETH, false, false);
-    // // WethCvxPool
-    // // WethCvxToken
-    // // WethCvxGauge
-    // _add2PoolAssetToPriceRouter(WethCvxPool, WethCvxToken, false, 154e8, WETH, CVX, false, false);
-    // // EthOethPool
-    // // EthOethToken
-    // // EthOethGauge
-    // _add2PoolAssetToPriceRouter(EthOethPool, EthOethToken, true, 1_800e8, WETH, OETH, false, false);
-
-    // // CrvUsdSdaiPool
-    // // CrvUsdSdaiToken
-    // // CrvUsdSdaiGauge
-    // _add2PoolAssetToPriceRouter(CrvUsdSdaiPool, CrvUsdSdaiToken, true, 1e8, CRVUSD, DAI, false, false);
-    // // CrvUsdSfraxPool
-    // // CrvUsdSfraxToken
-    // // CrvUsdSfraxGauge
-    // _add2PoolAssetToPriceRouter(CrvUsdSfraxPool, CrvUsdSfraxToken, true, 1e8, CRVUSD, FRAX, false, false);
 }
