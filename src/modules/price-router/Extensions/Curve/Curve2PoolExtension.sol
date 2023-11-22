@@ -131,7 +131,10 @@ contract Curve2PoolExtension is Extension {
             uint256 minPrice = price0 < price1 ? price0 : price1;
             price = minPrice.mulDivDown(pool.get_virtual_price(), 10 ** curveDecimals);
         } else {
-            price = pool.lp_price().mulDivDown(priceRouter.getPriceInUSD(getCoins(pool, 0)), 10 ** curveDecimals);
+            price = pool.lp_price().mulDivDown(
+                priceRouter.getPriceInUSD(ERC20(stor.underlyingOrConstituent0)),
+                10 ** curveDecimals
+            );
         }
     }
 

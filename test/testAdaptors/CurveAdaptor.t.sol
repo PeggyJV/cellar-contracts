@@ -1576,6 +1576,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     // ========================================= Helpers =========================================
 
+    // TODO make it a function input for what revert msg to expect.
     // NOTE Some curve pools use 2 to indicate locked, and 3 to indicate unlocked, others use 1, and 0 respectively
     // But ones that use 1 or 0, are just checking if the slot is truthy or not, so setting it to 2 should still trigger re-entrancy reverts.
     function _verifyReentrancyProtectionWorks(
@@ -1598,6 +1599,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Set lock slot to 2 to lock it. Then try to deposit while pool is "re-entered".
         vm.store(address(pool), slot0, bytes32(uint256(2)));
+        // TODO check for Curve Helper specific revert.
         vm.expectRevert();
         cellar.deposit(assets, address(this));
 

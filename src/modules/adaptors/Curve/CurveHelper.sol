@@ -9,17 +9,20 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
+import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 /**
  * @title Curve Helper
  * @notice Contains helper logic needed for safely interacting with multiple different Curve Pool implementations.
  * @author crispymangoes
  */
-contract CurveHelper {
+contract CurveHelper is ReentrancyGuard {
     using SafeTransferLib for ERC20;
     using Address for address;
     using Strings for uint256;
     using Math for uint256;
+
+    // TODO add mapping of address to bool to validate gauge and pool addresses. Only would be multisig.
 
     /**
      * @notice Attempted to call a function that requires caller implements `sharePriceOracle`.
@@ -35,6 +38,8 @@ contract CurveHelper {
      * @notice Provided arrays have mismatched lengths.
      */
     error CurveHelper___MismatchedLengths();
+
+    error CurveHelper___PoolInReenteredState();
 
     /**
      * @notice Native ETH(or token) address on current chain.
@@ -57,6 +62,7 @@ contract CurveHelper {
      */
     receive() external payable {}
 
+    // TODO add nonReentrant
     /**
      * @notice Allows Cellars to interact with Curve pools that use native ETH, by using the adaptor as a middle man.
      * @param pool the curve pool address
@@ -72,7 +78,7 @@ contract CurveHelper {
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
-        bool useUnderlying
+        bool useUnderlying /**onReentrant*/
     ) external returns (uint256 lpOut) {
         _verifyCallerIsNotGravity();
 
@@ -128,7 +134,7 @@ contract CurveHelper {
         uint256 lpTokenAmount,
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
-        bool useUnderlying
+        bool useUnderlying /**onReentrant*/
     ) external returns (uint256[] memory tokensOut) {
         _verifyCallerIsNotGravity();
 
@@ -293,7 +299,10 @@ contract CurveHelper {
      * @dev Used to insure `pool` is not in a manipulated state.
      */
     function _callReentrancyFunction(CurvePool pool, bytes4 selector) internal {
-        address(pool).functionCall(abi.encodePacked(selector));
+        // address(pool).functionCall(abi.encodePacked(selector));
+        (bool success, ) = address(pool).call(abi.encodePacked(selector));
+
+        if (!success) revert CurveHelper___PoolInReenteredState();
     }
 
     /**
