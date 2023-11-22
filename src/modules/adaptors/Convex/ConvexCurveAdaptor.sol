@@ -80,6 +80,7 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @notice Deposit & Stakes LPT from the cellar into Convex Market at the end of the user deposit sequence.
      * @param assets amount of LPT to deposit and stake
      * @param adaptorData see adaptorData info at top of this smart contract
+     * TODO: save lpt into adaptorData instead of querying poolInfo with 5 storage slots which is very gas intensive.
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
         (uint256 pid, address rewardsPool) = abi.decode(adaptorData, (uint256, address));
@@ -87,6 +88,7 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         (address lpToken, , , , , ) = booster.poolInfo(pid);
         ERC20 lpt = ERC20(lpToken); // TODO: double check that struct object is coming out of this properly
         lpt.safeApprove(address(booster), assets);
+        
         booster.deposit(pid, assets, true);
 
         // Zero out approvals if necessary.

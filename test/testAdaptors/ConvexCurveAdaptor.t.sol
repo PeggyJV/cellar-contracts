@@ -14,6 +14,7 @@ import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 import { CurveEMAExtension } from "src/modules/price-router/Extensions/Curve/CurveEMAExtension.sol";
 import { Curve2PoolExtension } from "src/modules/price-router/Extensions/Curve/Curve2PoolExtension.sol";
+import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 
 /// CRISPY Pricing imports above copied over (TODO: delete your copy of his imported files (`WstEthExtension.sol, CurveEMAExtension.sol, Curve2PoolExtension.sol`) and `git pull` his actual files from dev branch ONCE he's merged his changes to it).
 
@@ -31,6 +32,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using stdStorage for StdStorage;
+    Cellar public cellar;
 
     // from convex (for curve markets)
     struct PoolInfo {
@@ -137,7 +139,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // Add stETH pricing.
         price = uint256(IChainlinkAggregator(STETH_USD_FEED).latestAnswer());
-        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockSTETdataFeed));
+        settings = PriceRouter.AssetSettings(CHAINLINK_DERIVATIVE, address(mockSTETHdataFeed));
         priceRouter.addAsset(STETH, settings, abi.encode(stor), price);
 
         // Add wstEth pricing.
@@ -385,37 +387,37 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     /// Happy Path Tests
 
-    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+    function testManagingVanillaCurveLPTs1(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         _manageVanillaCurveLPTs(_assets, EthFrxethToken, 128, ethFrxethBaseRewardPool);
     }
 
-    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+    function testManagingVanillaCurveLPTs2(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         _manageVanillaCurveLPTs(_assets, EthStethNgToken, 177, ethStethNgBaseRewardPool);
     }
 
-    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+    function testManagingVanillaCurveLPTs3(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         _manageVanillaCurveLPTs(_assets, FraxCrvUsdToken, 187, fraxCrvUsdBaseRewardPool);
     }
 
-    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+    function testManagingVanillaCurveLPTs4(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         _manageVanillaCurveLPTs(_assets, mkUsdFraxUsdcToken, 225, mkUsdFraxUsdcBaseRewardPool);
     }
 
-    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+    function testManagingVanillaCurveLPTs5(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         _manageVanillaCurveLPTs(_assets, WethYethToken, 231, wethYethBaseRewardPool);
     }
 
-    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+    function testManagingVanillaCurveLPTs6(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         _manageVanillaCurveLPTs(_assets, EthEthxToken, 232, ethEthxBaseRewardPool);
     }
 
-    function testManagingVanillaCurveLPTs(uint256 _assets) external {
+    function testManagingVanillaCurveLPTs7(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         _manageVanillaCurveLPTs(_assets, CrvUsdSfraxToken, 252, crvUsdSFraxBaseRewardPool);
     }
@@ -423,25 +425,26 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     /// Reversion tests
 
     // revert when attempt to deposit w/o having the right curve lpt for respective pid
-    function testDepositWrongLPT(uint256 assets) external {
-        assets = bound(assets, 1e6, 100_000e6);
+    function testDepositWrongLPT(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
 
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
+        deal(address(USDC), address(this), _assets);
+        cellar.deposit(_assets, address(this));
 
         // convert to coin of interest, but zero out usdc balance so cellar totalAssets doesn't deviate and revert
         ERC20 lpt = ERC20(EthFrxethToken);
-        uint256 assets = priceRouter.getValue(USDC, assets, lpt);
+        uint256 assets = priceRouter.getValue(USDC, _assets, lpt);
         deal(address(lpt), address(cellar), assets);
         deal(address(USDC), address(cellar), 0);
 
-        (, , , address crvRewards, , ) = booster.poolInfo(128);
-        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
+        uint256 pid = 128;
+        (, , , address crvRewards, , ) = booster.poolInfo(pid);
+        // IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
 
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
 
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid - 1, _baseRewardPool, assets);
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(pid - 1, crvRewards, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(); // TODO: actual revert statement stemming from Booster.sol likely.
@@ -449,25 +452,26 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     // revert when attempt to interact with not enough of the curve lpt wrt to pid
-    function testDepositNotEnoughLPT(uint256 assets) external {
-        assets = bound(assets, 1e6, 100_000e6);
+    function testDepositNotEnoughLPT(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
 
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
+        deal(address(USDC), address(this), _assets);
+        cellar.deposit(_assets, address(this));
 
         // convert to coin of interest, but zero out usdc balance so cellar totalAssets doesn't deviate and revert
         ERC20 lpt = ERC20(EthFrxethToken);
-        uint256 assets = priceRouter.getValue(USDC, assets + 1e6, lpt);
+        uint256 assets = priceRouter.getValue(USDC, _assets + 1e6, lpt);
         deal(address(lpt), address(cellar), assets);
         deal(address(USDC), address(cellar), 0);
 
-        (, , , address crvRewards, , ) = booster.poolInfo(128);
-        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
+        uint256 pid = 128;
+        (, , , address crvRewards, , ) = booster.poolInfo(pid);
+        // IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
 
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
 
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, assets);
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(pid, crvRewards, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
 
         vm.expectRevert(); // TODO: actual revert statement stemming from Booster.sol likely for trying to deposit not enough lpt
@@ -475,31 +479,38 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     // revert ConvexAdaptor__ConvexBoosterPositionsMustBeTracked
-    function testDepositNotEnoughLPT(uint256 assets) external {
-        assets = bound(assets, 1e6, 100_000e6);
+    function testDepositUntrackedPosition(uint256 _assets) external {
+        _assets = bound(_assets, 1e6, 100_000e6);
 
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
+        deal(address(USDC), address(this), _assets);
+        cellar.deposit(_assets, address(this));
 
         // convert to coin of interest, but zero out usdc balance so cellar totalAssets doesn't deviate and revert
         ERC20 lpt = ERC20(EthFrxethToken);
-        uint256 assets = priceRouter.getValue(USDC, assets + 1e6, lpt);
+        uint256 assets = priceRouter.getValue(USDC, _assets + 1e6, lpt);
         deal(address(lpt), address(cellar), assets);
         deal(address(USDC), address(cellar), 0);
 
-        (, , , address crvRewards, , ) = booster.poolInfo(128);
+        uint256 pid = 128;
+        (, , , address crvRewards, , ) = booster.poolInfo(pid);
         IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
 
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
 
         bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid-1, _baseRewardPool, assets);
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(pid - 1, crvRewards, assets);
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(ConvexCurveAdaptor.ConvexAdaptor__ConvexBoosterPositionsMustBeTracked.selector))); // TODO: actual revert statement stemming from Booster.sol likely for trying to deposit not enough lpt
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(ConvexCurveAdaptor.ConvexAdaptor__ConvexBoosterPositionsMustBeTracked.selector)
+            )
+        ); // TODO: actual revert statement stemming from Booster.sol likely for trying to deposit not enough lpt
 
         cellar.callOnAdaptor(data);
     }
+
+    /// re-entrancy: we're worried about the curve LPT being re-entered.
 
     /// Test Helpers
 
@@ -526,18 +537,17 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // TODO: implement interface within ConvexCurveAdaptor to use `ITokenMinter` or other interface to access the staking capacity within `Booster.sol`
 
-        ERC20 rewardToken = ERC20((baseRewardsPool).rewardToken());
+        ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
         uint256 rewardTokenBalance0 = rewardToken.balanceOf(address(cellar));
 
         // Strategist deposits CurveLPT into Convex-Curve Platform Pools/Markets
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
 
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, assets);
-            data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
-            cellar.callOnAdaptor(data);
-        }
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, assets);
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
+        cellar.callOnAdaptor(data);
 
         //  TODO: do we need to ensure that the `baseRewardPool` trusted by the Strategist is actually the right one corresponding to the respective Convex market?
 
@@ -562,7 +572,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             stakedLPTBalance1 / 2,
             true
         );
-        data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         uint256 stakedLPTBalance2 = baseRewardPool.balanceOf(address(cellar));
@@ -695,7 +705,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             type(uint256).max,
             true
         );
-        data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
         uint256 stakedLPTBalance5 = baseRewardPool.balanceOf(address(cellar));
@@ -752,7 +762,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         mockDAI_dataFeed.setMockUpdatedAt(block.timestamp);
         mockUSDTdataFeed.setMockUpdatedAt(block.timestamp);
         mockFRAXdataFeed.setMockUpdatedAt(block.timestamp);
-        mockSTETdataFeed.setMockUpdatedAt(block.timestamp);
+        mockSTETHdataFeed.setMockUpdatedAt(block.timestamp);
         mockRETHdataFeed.setMockUpdatedAt(block.timestamp);
     }
 

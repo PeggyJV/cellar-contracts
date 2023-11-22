@@ -572,7 +572,13 @@ contract AdaptorHelperFunctions {
         address _baseRewardPool,
         uint256 _amount
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(depositLPTInConvexAndStake, _pid, _baseRewardPool, _amount);
+        return
+            abi.encodeWithSelector(
+                ConvexCurveAdaptor.depositLPTInConvexAndStake.selector,
+                _pid,
+                _baseRewardPool,
+                _amount
+            );
     }
 
     function _createBytesDataToWithdrawAndClaimConvexCurvePlatform(
@@ -580,7 +586,7 @@ contract AdaptorHelperFunctions {
         uint256 _amount,
         bool _claim
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(withdrawFromBaseRewardPoolAsLPT, _baseRewardPool, _amount, _claim);
+        return abi.encodeWithSelector(ConvexCurveAdaptor.withdrawFromBaseRewardPoolAsLPT.selector, _baseRewardPool, _amount, _claim);
     }
 
     function _createBytesDataToGetRewardsConvexCurvePlatform(
@@ -588,6 +594,6 @@ contract AdaptorHelperFunctions {
         address _baseRewardPool,
         bool _claimExtras
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(getRewards, _pid, _baseRewardPool, _claimExtras);
+        return abi.encodeWithSelector(ConvexCurveAdaptor.getRewards.selector, _pid, _baseRewardPool, _claimExtras);
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.10;
+pragma solidity 0.8.21;
 
 interface IBooster {
     function addPool(address _implementation, address _stakingAddress, address _stakingToken) external;

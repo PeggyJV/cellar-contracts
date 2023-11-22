@@ -11,7 +11,7 @@ interface IBooster {
         bool shutdown;
     }
 
-    function poolInfo(uint256) external view returns (PoolInfo memory); // tuple(address,address,address,address,address,bool) returned
+    // function poolInfo(uint256) external view returns (PoolInfo memory); // tuple(address,address,address,address,address,bool) returned
 
     function owner() external view returns (address);
 

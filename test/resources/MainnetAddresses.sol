@@ -234,6 +234,12 @@ contract MainnetAddresses {
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 
+    ERC20 public CRVUSD = ERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
+    ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
+    ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
+    ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
+
+
     /// End of stuff from Crispy's curve tests
 
     // Convex markets TODO: remove duplicate LPTs
@@ -265,10 +271,6 @@ contract MainnetAddresses {
 
     // Maker
     address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
-
-    // Curve
-    address public EthFrxEthCurvePool = 0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577;
-    address public triCrypto2 = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
 
     // Frax
     address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;

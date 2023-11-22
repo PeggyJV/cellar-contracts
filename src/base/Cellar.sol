@@ -1088,16 +1088,6 @@ contract Cellar is ERC4626, Owned, ERC721Holder {
         assets = _convertToAssets(shares, _totalAssets, _totalSupply);
     }
 
-    function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
-        uint256 _totalAssets = totalAssets();
-        assets = _convertToAssets(shares, _totalAssets);
-    }
-
-         */
-    function convertToAssets(uint256 shares) public view override returns (uint256 assets) {
-        assets = _convertToAssets(shares, totalAssets());
-    }
-
     /**
      * @notice Finds the max amount of value an `owner` can remove from the cellar.
      * @param owner address of the user to find max value.

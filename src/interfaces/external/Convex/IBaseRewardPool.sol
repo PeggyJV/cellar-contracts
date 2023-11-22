@@ -14,4 +14,6 @@ interface IBaseRewardPool {
     function balanceOf(address account) external view returns (uint256);
 
     function getReward(address _account, bool _claimExtras) external returns (bool);
+
+    function rewardToken() external view returns (address);
 }
