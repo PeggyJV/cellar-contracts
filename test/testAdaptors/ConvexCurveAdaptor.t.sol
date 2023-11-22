@@ -56,6 +56,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     MockDataFeed public mockSTETHdataFeed;
     MockDataFeed public mockRETHdataFeed;
 
+    // erc20 positions for base constituent ERC20s
     uint32 private usdcPosition = 1;
     uint32 private crvusdPosition = 2;
     uint32 private wethPosition = 3;
@@ -68,6 +69,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private ethXPosition = 10;
     uint32 private sFraxPosition = 11;
 
+    // ConvexCurveAdaptor Positions
     uint32 private EthFrxethPoolPosition = 12; // https://www.convexfinance.com/stake/ethereum/128
     uint32 private EthStethNgPoolPosition = 13;
     uint32 private fraxCrvUsdPoolPosition = 14;
@@ -76,13 +78,22 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private EthEthxPoolPosition = 17;
     uint32 private CrvUsdSfraxPoolPosition = 18;
 
+    // erc20 positions for Curve LPTs
+    uint32 private EthFrxethERC20Position = 19;
+    uint32 private EthStethNgERC20Position = 20;
+    uint32 private fraxCrvUsdERC20Position = 21;
+    uint32 private mkUsdFraxUsdcERC20Position = 22;
+    uint32 private WethYethERC20Position = 23;
+    uint32 private EthEthxERC20Position = 24;
+    uint32 private CrvUsdSfraxERC20Position = 25;
+
     uint32 private slippage = 0.9e4;
     uint256 public initialAssets;
 
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 18538479; // TODO: change or delete this comment. Crispy tests has blockNumber = 18492720
+        uint256 blockNumber = 18538479;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -349,7 +360,18 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             abi.encode(252, crvUsdSFraxBaseRewardPool, CrvUsdSfraxToken, CurvePool(CrvUsdSfraxPool))
         );
 
-        // TODO: might need to add erc20Adaptor positions for all of the LPTs so rebalances work in the tests.
+        // trust erc20 positions for curve lpts for this test file, although in actual implementation of the cellar there would be usage of a `CurveAdaptor` position for each respective curveLPT to track liquid LPTs that are not staked into Convex.
+        registry.trustPosition(EthFrxethERC20Position, address(erc20Adaptor), abi.encode(ERC20(EthFrxethToken)));
+        registry.trustPosition(EthStethNgERC20Position, address(erc20Adaptor), abi.encode(ERC20(EthStethNgToken)));
+        registry.trustPosition(fraxCrvUsdERC20Position, address(erc20Adaptor), abi.encode(ERC20(FraxCrvUsdToken)));
+        registry.trustPosition(
+            mkUsdFraxUsdcERC20Position,
+            address(erc20Adaptor),
+            abi.encode(ERC20(mkUsdFraxUsdcToken))
+        );
+        registry.trustPosition(WethYethERC20Position, address(erc20Adaptor), abi.encode(ERC20(WethYethToken)));
+        registry.trustPosition(EthEthxERC20Position, address(erc20Adaptor), abi.encode(ERC20(EthEthxToken)));
+        registry.trustPosition(CrvUsdSfraxERC20Position, address(erc20Adaptor), abi.encode(ERC20(CrvUsdSfraxToken)));
 
         string memory cellarName = "Convex Cellar V0.0";
         uint256 initialDeposit = 1e6;
@@ -370,7 +392,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         initialAssets = cellar.totalAssets();
     }
 
-    /// Happy Path Tests
+    //============================================ Happy Path Tests ===========================================
 
     function testManagingVanillaCurveLPTs1(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
@@ -407,7 +429,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _manageVanillaCurveLPTs(_assets, CrvUsdSfraxToken, 252, crvUsdSFraxBaseRewardPool);
     }
 
-    /// Reversion tests
+    //============================================ Reversion Tests ===========================================
 
     // revert when attempt to deposit w/o having the right curve lpt for respective pid
     function testDepositWrongLPT(uint256 _assets) external {
@@ -499,22 +521,40 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function testReentrancyProtection1(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(EthFrxethPool, EthFrxethToken, EthFrxethPoolPosition, assets);
+        _verifyReentrancyProtectionWorks(
+            EthFrxethPool,
+            EthFrxethToken,
+            EthFrxethPoolPosition,
+            assets,
+            EthFrxethPoolPosition
+        );
+    }
+
+    function testReentrancyProtection2(uint256 assets) external {
+        assets = bound(assets, 1e6, 100_000e6);
+        _verifyReentrancyProtectionWorks(
+            EthStethNgPool,
+            EthStethNgToken,
+            EthStethNgPoolPosition,
+            assets,
+            EthStethNgPoolPosition
+        );
     }
 
     function testReentrancyProtection3(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(EthStethNgPool, EthStethNgToken, EthStethNgPoolPosition, assets);
+        _verifyReentrancyProtectionWorks(
+            WethYethPool,
+            WethYethToken,
+            WethYethPoolPosition,
+            assets,
+            WethYethPoolPosition
+        );
     }
 
-    function testReentrancyProtection5(uint256 assets) external {
+    function testReentrancyProtection4(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(WethYethPool, WethYethToken, WethYethPoolPosition, assets);
-    }
-
-    function testReentrancyProtection6(uint256 assets) external {
-        assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(EthEthxPool, EthEthxToken, EthEthxPoolPosition, assets);
+        _verifyReentrancyProtectionWorks(EthEthxPool, EthEthxToken, EthEthxPoolPosition, assets, EthEthxPoolPosition);
     }
 
     // TODO: re-entrancy tests for remaining ITB pools of interest:
@@ -522,15 +562,103 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     // frxETH-WETH
     // FRAX-crvUSD
 
-    /// TODO: balanceOf() tests
+    //============================================ Base Functions Tests ===========================================
 
-    // - Check that the right amount of curve LPTs are being accounted for (during phases where cellar has deposit and stake positions, and phases where it does not, and phases where it has a mix)
+    // setup() to be used && then we also make the cellar in it to have the holdingPosition as convex.
+    /// TODO: could expand this by making base tests for all ITB of-interest curvePools
+    // testing w/ EthFrxethPool for now
+
+    function testDeposit(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+
+        // make a new cellar w/ initialDeposit of 1e18 for the lpt. TODO: confirm that all the test pools have decimals of 1e18.
+        Cellar newCellar = _createCellarWithCurveLPAsAsset(
+            EthFrxethPoolERC20Position,
+            EthFrxethPoolPosition,
+            EthFrxethToken
+        ); // TODO: make erc20Position & trust it within Registry. Usually we'd have curve positions too (w/ curveAdaptor) but this test file just bypasses that since it is not in the scope of the Convex-Curve Platform development.
+
+        // TODO: do we need to create a new cellar or can just changing holdingPosition within setup() cellar work? For now, just going with this newCellar.
+        deal((EthFrxethToken), address(this), assets);
+        newCellar.deposit(assets, address(this));
+
+        // asserts, and make sure that rewardToken hasn't been claimed.
+    }
+
+    // TODO: same as within testDeposit
+    function testWithdraw(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+
+        Cellar newCellar = _createCellarWithCurveLPAsAsset(
+            EthFrxethPoolERC20Position,
+            EthFrxethPoolPosition,
+            EthFrxethToken
+        );
+
+        deal((EthFrxethToken), address(this), assets);
+        newCellar.deposit(assets, address(this));
+        newCellar.withdraw(assets - 2, address(this), address(this));
+
+        // asserts, and make sure that rewardToken hasn't been claimed.
+    }
+
+    // TODO: same as within testDeposit
+    function testTotalAssets(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+
+        Cellar newCellar = _createCellarWithCurveLPAsAsset(
+            EthFrxethPoolERC20Position,
+            EthFrxethPoolPosition,
+            EthFrxethToken
+        );
+        uint256 newCellarInitialAssets = newCellar.totalAssets();
+
+        deal((EthFrxethToken), address(this), assets);
+        newCellar.deposit(assets, address(this));
+
+        assertApproxEqAbs(
+            cellar.totalAssets(),
+            assets + newCellarInitialAssets,
+            2,
+            "Total assets should equal assets deposited/staked."
+        );
+    }
+
+    /// balanceOf() tests
+
+    function testBalanceOf(uint256 assets) external {
+        assets = bound(assets, 0.1e18, 100_000e18);
+        Cellar newCellar = _createCellarWithCurveLPAsAsset(
+            EthFrxethPoolERC20Position,
+            EthFrxethPoolPosition,
+            EthFrxethToken
+        );
+        uint256 newCellarInitialAssets = newCellar.totalAssets();
+
+        deal((EthFrxethToken), address(this), assets);
+        newCellar.deposit(assets, address(this));
+
+        assertApproxEqAbs(
+            cellar.balanceOf(address(this)),
+            assets,
+            2,
+            "Total assets should equal assets deposited/staked, and not include the initialAssets (this would be accounted for via other adaptors (ERC20 or CurveAdaptor) for liquid LPTs in cellar)."
+        );
+
+        newCellar.withdraw(assets / 2, address(this), address(this));
+        assertApproxEqAbs(
+            cellar.balanceOf(address(this)),
+            assets / 2,
+            2,
+            "New balanceOf should reflect withdrawn staked LPTs from Convex-Curve Platform."
+        );
+    }
 
     /// TODO: claimRewards() tests
 
     // - Check that we get all the CRV, CVX, 3CRV rewards we're supposed to get --> this will require testing a couple convex markets that are currently giving said rewards. **Will need to specify the block number we're starting at**
 
-    // TODO: From looking over Cellar.sol, withdrawableFrom() can include staked cvxCurveLPTs. For now I am assuming that they are 1:1 w/ curveLPTs but the tests will show that or not. \* withdrawInOrder() goes through positions and ultimately calls `withdraw()` for the respective position. \_calculateTotalAssetsOrTotalAssetsWithdrawable() uses withdrawableFrom() to calculate the amount of assets there are available to withdraw from the cellar.
+    // TODO: DELETE THIS IF 1:1 assumption is true. --> From looking over Cellar.sol, withdrawableFrom() can include staked cvxCurveLPTs. For now I am assuming that they are 1:1 w/ curveLPTs but the tests will show that or not. \* withdrawInOrder() goes through positions and ultimately calls `withdraw()` for the respective position. \_calculateTotalAssetsOrTotalAssetsWithdrawable() uses withdrawableFrom() to calculate the amount of assets there are available to withdraw from the cellar.
 
     /// Test Helpers
 
@@ -538,6 +666,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
      * @notice helper function to carry out happy-path tests with convex pools of interest to ITB
      * @dev this was created to minimize amount of code within this test file
      * Here we've tested: deposit x, deposit max, withdraw x (and claim rewards), claim rewards, claim rewards over more time, claim rewards over same time with less stake, withdraw max and claim w/ longer time span fast forwarded to show more reward accrual rate.
+     * TODO: stack too deep error: declare vars within global scope if using it a ton. Or make helper structs that hold data in them.
      */
     function _manageVanillaCurveLPTs(uint256 _assets, address _lpt, uint256 _pid, address _baseRewardPool) internal {
         deal(address(USDC), address(this), _assets);
@@ -809,23 +938,18 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
     }
 
-    // NOTE Some curve pools use 2 to indicate locked, and 3 to indicate unlocked, others use 1, and 0 respectively
-    // But ones that use 1 or 0, are just checking if the slot is truthy or not, so setting it to 2 should still trigger re-entrancy reverts.
-    // NOTE: inspired by Crispy's test code with `CurveAdaptor.t.sol`, except here we have a cellar w/ a convex adaptor position (deposit) and are checking that we would not be able to move the convex position if Curve was in a re-entrancy state.
     function _verifyReentrancyProtectionWorks(
         address poolAddress,
         address lpToken,
         uint32 position,
-        uint256 assets
+        uint256 assets,
+        uint32 convexPosition
     ) internal {
-        // Create a cellar with a convex position (deposit)
-        _setupCellarWithConvexDeposit(assets, EthFrxethToken, 128, ethFrxethBaseRewardPool);
-
         // Create a cellar that uses the curve token as the asset.
-        cellar2 = _createCellarWithCurveLPAsAsset(position, lpToken);
+        cellar = _createCellarWithCurveLPAsAsset(position, convexPosition, lpToken);
 
         deal(lpToken, address(this), assets);
-        ERC20(lpToken).safeApprove(address(cellar2), assets);
+        ERC20(lpToken).safeApprove(address(cellar), assets);
 
         CurvePool pool = CurvePool(poolAddress);
         bytes32 slot0 = bytes32(uint256(0));
@@ -836,49 +960,36 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // Set lock slot to 2 to lock it. Then try to deposit while pool is "re-entered".
         vm.store(address(pool), slot0, bytes32(uint256(2)));
         vm.expectRevert();
-        cellar2.deposit(assets, address(this));
-
-        uint256 newAssets = priceRouter.getValue(USDC, assets, EthFrxethToken);
-
-        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-        bytes[] memory adaptorCalls = new bytes[](1);
-        adaptorCalls[0] = _createBytesDataToWithdrawAndClaimConvexCurvePlatform(_baseRewardPool, newAssets / 2, true);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
-        vm.expectRevert(); // should revert because of being in re-entrancy state
-        cellar.callOnAdaptor(data);
+        cellar.deposit(assets, address(this)); // holdingPosition is convex staking, but make sure it reverts when re-entrancy toggle is on. Rest of the test does similar checks.
 
         // Change lock back to unlocked state
         vm.store(address(pool), slot0, originalValue);
 
         // Deposit should work now.
-        cellar2.deposit(assets, address(this));
-
-        // Withdraw on other Convex Cellar should work now.
-        cellar.callOnAdaptor(data);
+        cellar.deposit(assets, address(this));
 
         // Set lock slot to 2 to lock it. Then try to withdraw while pool is "re-entered".
         vm.store(address(pool), slot0, bytes32(uint256(2)));
         vm.expectRevert();
-        cellar2.withdraw(assets / 2, address(this), address(this));
-
-        // Try depositing more into the convex cellar except it should revert
-        adaptorCalls[0] = _createBytesDataToDepositToConvexCurvePlatform(_pid, _baseRewardPool, newAssets / 3);
-        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
-        vm.expectRevert();
-        cellar.callOnAdaptor(data);
+        cellar.withdraw(assets / 2, address(this), address(this));
 
         // Change lock back to unlocked state
         vm.store(address(pool), slot0, originalValue);
 
         // Withdraw should work now.
-        cellar2.withdraw(assets / 2, address(this), address(this));
-        // additional deposit on the convex cellar should work now too.
-        cellar.callOnAdaptor(data);
+        cellar.withdraw(assets / 2, address(this), address(this));
     }
 
-    function _createCellarWithCurveLPAsAsset(uint32 position, address lpToken) internal returns (Cellar newCellar) {
-        string memory cellarName = "Test Curve Cellar V0.0";
-        uint256 initialDeposit = 1e6;
+    /**
+     * @notice Creates cellar w/ Curve LPT as baseAsset, and holdingPosition as ConvexCurveAdaptor Position.
+     */
+    function _createCellarWithCurveLPAsAsset(
+        uint32 position,
+        uint32 convexPosition,
+        address lpToken
+    ) internal returns (Cellar newCellar) {
+        string memory cellarName = "Test Convex Cellar V0.0";
+        uint256 initialDeposit = 1e18;
         uint64 platformCut = 0.75e18;
 
         ERC20 erc20LpToken = ERC20(lpToken);
@@ -903,6 +1014,9 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
         newCellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
 
-        newCellar.addAdaptorToCatalogue(address(curveAdaptor));
+        newCellar.addAdaptorToCatalogue(address(convexCurveAdaptor));
+        newCellar.addPositionToCatalogue(convexPosition);
+        newCellar.addPosition(0, convexPosition, abi.encode(true), false);
+        newCellar.setHoldingPosition(convexPosition);
     }
 }

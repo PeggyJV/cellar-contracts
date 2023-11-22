@@ -12,9 +12,7 @@ import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
  * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex markets.
  * @author crispymangoes, 0xEinCodes
  * @dev this may not work for Convex with other protocols / platforms / networks. It is important to keep these associated to Curve-Convex Platform on Mainnet
- * TODO: add re-entrancy test as discussed w/ Crispy
- * Add a re-entrancy test to make sure that the re-entrancy toggle will cause a revert within the curvepools that we are working with if it is ever in re-entrancy state.
-
+ * TODO: refine adaptorData now that there is bytes4 with it too.
  */
 contract ConvexCurveAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
@@ -90,13 +88,13 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * @param adaptorData see adaptorData info at top of this smart contract
      */
     function deposit(uint256 assets, bytes memory adaptorData, bytes memory) public override {
-        (uint256 pid, address rewardsPool, ERC20 lpt, CurvePool pool) = abi.decode(
+        (uint256 pid, address rewardsPool, ERC20 lpt, CurvePool pool, bytes4 selector) = abi.decode(
             adaptorData,
-            (uint256, address, ERC20, CurvePool)
+            (uint256, address, ERC20, CurvePool, bytes4)
         );
 
         if (selector != bytes4(0)) _callReentrancyFunction(pool, selector);
-        else revert BaseAdaptor__UserDepositsNotAllowed(); // TODO:
+        else revert BaseAdaptor__UserDepositsNotAllowed();
 
         _validatePositionIsUsed(pid, rewardsPool, lpt);
         lpt.safeApprove(address(booster), assets);
@@ -126,13 +124,13 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         // Run external receiver check.
         _externalReceiverCheck(receiver);
 
-        (uint256 pid, address rewardPool, ERC20 lpt, CurvePool pool) = abi.decode(
+        (uint256 pid, address rewardPool, ERC20 lpt, CurvePool pool, bytes4 selector) = abi.decode(
             adaptorData,
-            (uint256, address, ERC20, CurvePool)
+            (uint256, address, ERC20, CurvePool, bytes4)
         );
 
         if (isLiquid && selector != bytes4(0)) _callReentrancyFunction(pool, selector);
-        else revert BaseAdaptor__UserWithdrawsNotAllowed(); // TODO: lpt != CurvePool apparently according to Crispy. Need to discuss this with him.
+        else revert BaseAdaptor__UserWithdrawsNotAllowed();
 
         _validatePositionIsUsed(pid, rewardPool, lpt);
 
@@ -171,7 +169,7 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      * NOTE: This assumes that no rewards are given back as accrual of more curveLPT. I believe that to be the case because BaseRewardPool has its own rewardsToken, and extraRewards has specific reward contracts specific to respective convex markets.
      */
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
-        (, address rewardPool, , ) = abi.decode(adaptorData, (uint256, address, ERC20, CurvePool));
+        (, address rewardPool) = abi.decode(adaptorData, (uint256, address));
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
         return (baseRewardPool.balanceOf(msg.sender));
     }
