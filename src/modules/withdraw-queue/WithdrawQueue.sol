@@ -28,13 +28,11 @@ contract WithdrawQueue is ReentrancyGuard {
     struct WithdrawRequest {
         uint64 deadline; // deadline to fulfill request
         bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
-        uint88 executionSharePrice; // With 18 decimals of precision
+        uint88 executionSharePrice; // In terms of asset decimals
         uint96 sharesToWithdraw; // The amount of shares the user wants to redeem.
     }
 
     // ========================================= CONSTANTS =========================================
-
-    uint8 public constant EXECUTION_SHARE_PRICE_DECIMALS = 18;
 
     // ========================================= GLOBAL STATE =========================================
     mapping(address => mapping(ERC4626 => WithdrawRequest)) public userWithdrawRequest;
@@ -48,18 +46,24 @@ contract WithdrawQueue is ReentrancyGuard {
     //============================== EVENTS ===============================
 
     event RequestUpdated(
-        address share,
-        uint256 timestamp,
         address user,
+        address share,
         uint256 amount,
         uint256 deadline,
-        uint256 minPrice
+        uint256 minPrice,
+        uint256 timestamp
     );
-    event RequestFulfilled(address share, uint256 timestamp, address user, uint256 sharesSpent, uint256 assetsReceived);
+    event RequestFulfilled(address user, address share, uint256 sharesSpent, uint256 assetsReceived, uint256 timestamp);
 
     //============================== IMMUTABLES ===============================
 
     constructor() {}
+
+    //============================== USER FUNCTIONS ===============================
+
+    function getUserWithdrawRequest(address user, ERC4626 share) external view returns (WithdrawRequest memory) {
+        return userWithdrawRequest[user][share];
+    }
 
     function isWithdrawRequestValid(ERC4626 share, WithdrawRequest calldata userRequest) external view returns (bool) {
         // Validate amount.
@@ -88,14 +92,16 @@ contract WithdrawQueue is ReentrancyGuard {
 
         // Emit full amount user has.
         emit RequestUpdated(
-            address(share),
-            block.timestamp,
             msg.sender,
+            address(share),
             userRequest.sharesToWithdraw,
             userRequest.deadline,
-            userRequest.executionSharePrice
+            userRequest.executionSharePrice,
+            block.timestamp
         );
     }
+
+    //============================== SOLVER FUNCTIONS ===============================
 
     function solve(
         ERC4626 share,
@@ -119,17 +125,11 @@ contract WithdrawQueue is ReentrancyGuard {
             if (request.sharesToWithdraw == 0) revert WithdrawQueue__NoShares();
 
             // User gets whatever their execution share price is.
-            {
-                uint256 executionSharePrice = uint256(request.executionSharePrice).changeDecimals(
-                    EXECUTION_SHARE_PRICE_DECIMALS,
-                    solveData.assetDecimals
-                );
-                requiredAssets += _calculateAssetAmount(
-                    request.sharesToWithdraw,
-                    executionSharePrice,
-                    solveData.shareDecimals
-                );
-            }
+            requiredAssets += _calculateAssetAmount(
+                request.sharesToWithdraw,
+                request.executionSharePrice,
+                solveData.shareDecimals
+            );
 
             // If all checks above passed, the users request is valid and should be fulfilled.
             sharesToSolver += request.sharesToWithdraw;
@@ -148,33 +148,30 @@ contract WithdrawQueue is ReentrancyGuard {
                 // We know that the minimum price and deadline arguments are satisfied since this can only be true if they were.
 
                 // Send user their share of assets.
-                uint256 assetsToUser;
-                {
-                    uint256 executionSharePrice = uint256(request.executionSharePrice).changeDecimals(
-                        EXECUTION_SHARE_PRICE_DECIMALS,
-                        solveData.assetDecimals
-                    );
-                    assetsToUser = _calculateAssetAmount(
-                        request.sharesToWithdraw,
-                        executionSharePrice,
-                        solveData.shareDecimals
-                    );
-                }
+                uint256 assetsToUser = _calculateAssetAmount(
+                    request.sharesToWithdraw,
+                    request.executionSharePrice,
+                    solveData.shareDecimals
+                );
+
                 solveData.asset.safeTransferFrom(msg.sender, users[i], assetsToUser);
 
                 emit RequestFulfilled(
-                    address(share),
-                    block.timestamp,
                     users[i],
+                    address(share),
                     request.sharesToWithdraw,
-                    assetsToUser
+                    assetsToUser,
+                    block.timestamp
                 );
 
                 // Set shares to withdraw to 0.
                 request.sharesToWithdraw = 0;
+                request.inSolve = false;
             } else revert WithdrawQueue__UserNotInSolve();
         }
     }
+
+    //============================== INTERNAL FUNCTIONS ===============================
 
     function _calculateAssetAmount(uint256 shares, uint256 price, uint8 shareDecimals) internal pure returns (uint256) {
         return price.mulDivDown(shares, 10 ** shareDecimals);

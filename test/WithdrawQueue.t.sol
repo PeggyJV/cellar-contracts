@@ -22,7 +22,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
 
     uint32 public usdcPosition = 1;
 
-    address public user = vm.addr(34);
+    bool public solverIsCheapskate;
 
     function setUp() external {
         // Setup forked environment.
@@ -76,20 +76,12 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         );
 
         cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
-
-        uint256 assets = 1_000e6;
-        deal(address(USDC), user, assets);
-
-        vm.startPrank(user);
-        USDC.approve(address(cellar), assets);
-        cellar.deposit(assets, user);
-        cellar.approve(address(queue), 1_000e6);
-        vm.stopPrank();
     }
 
-    function testQueue(uint8 numberOfUsers, uint256 baseAssets) external {
+    function testQueue(uint8 numberOfUsers, uint256 baseAssets, uint256 executionPrice) external {
         numberOfUsers = uint8(bound(numberOfUsers, 1, 100));
         baseAssets = bound(baseAssets, 1e6, 1_000_000e6);
+        executionPrice = bound(executionPrice, 1, 1e6);
         address[] memory users = new address[](numberOfUsers);
         uint256[] memory amountOfShares = new uint256[](numberOfUsers);
         for (uint256 i; i < numberOfUsers; ++i) {
@@ -105,7 +97,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
             WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
                 deadline: uint64(block.timestamp + 100),
                 inSolve: false,
-                executionSharePrice: 0.999e18,
+                executionSharePrice: uint88(executionPrice),
                 sharesToWithdraw: uint96(amountOfShares[i])
             });
 
@@ -117,37 +109,135 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         queue.solve(cellar, users, callData, address(this));
 
         for (uint256 i; i < numberOfUsers; ++i) {
-            uint256 expectedBalance = amountOfShares[i].mulDivDown(0.999e18, 1e18);
+            uint256 expectedBalance = amountOfShares[i].mulDivDown(executionPrice, 1e6);
             assertEq(USDC.balanceOf(users[i]), expectedBalance, "User received wrong amount of assets.");
         }
     }
 
-    function testHunch() external {
+    function testSolverShareSpendingCappedByRequestAmount(uint256 assets, uint256 sharesToRedeem) external {
+        assets = bound(assets, 1.000001e6, 1_000_000e6);
+        sharesToRedeem = bound(sharesToRedeem, 1e6, assets - 1);
+        address user = vm.addr(77);
+
         WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
             deadline: uint64(block.timestamp + 100),
             inSolve: false,
-            executionSharePrice: 0.999e18,
-            sharesToWithdraw: 1_000e6
+            executionSharePrice: 1e6,
+            sharesToWithdraw: uint96(sharesToRedeem)
         });
-        vm.prank(user);
-        uint256 gas = gasleft();
-        queue.updateWithdrawRequest(cellar, req);
-        console.log("gas used", gas - gasleft());
 
-        bytes memory callData = abi.encode(cellar, USDC);
+        deal(address(USDC), user, assets);
+        vm.startPrank(user);
+        USDC.approve(address(cellar), assets);
+        cellar.deposit(assets, user);
+        cellar.approve(address(queue), assets);
+        queue.updateWithdrawRequest(cellar, req);
+        vm.stopPrank();
+
+        // Solver sovles initial request.
         address[] memory users = new address[](1);
         users[0] = user;
+        bytes memory callData = abi.encode(cellar, USDC);
         queue.solve(cellar, users, callData, address(this));
 
-        console.log("User USDC Balance", USDC.balanceOf(user));
+        uint256 remainingApproval = cellar.allowance(user, address(queue));
+        assertGt(remainingApproval, 0, "Queue should still have some approval.");
+
+        // Solver tries to use remaining approval.
+        vm.expectRevert(bytes(abi.encodeWithSelector(WithdrawQueue.WithdrawQueue__NoShares.selector)));
+        queue.solve(cellar, users, callData, address(this));
     }
 
-    // TODO test showing how solvers can only spend up to `sharesToWithdraw` even if the approval is for more
+    function testSolverIsCheapSkate() external {
+        address userA = vm.addr(1);
+        address userB = vm.addr(2);
+        address userC = vm.addr(3);
+        uint256 assetsA = 1e6;
+        uint256 assetsB = 1e6;
+        uint256 assetsC = 1e6;
+        deal(address(cellar), userA, assetsA);
+        deal(address(cellar), userB, assetsB);
+        deal(address(cellar), userC, assetsC);
+
+        {
+            vm.startPrank(userA);
+            WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+                deadline: uint64(block.timestamp + 100),
+                inSolve: false,
+                executionSharePrice: 1e6,
+                sharesToWithdraw: uint96(assetsA)
+            });
+            cellar.approve(address(queue), assetsA);
+            queue.updateWithdrawRequest(cellar, req);
+            vm.stopPrank();
+        }
+        {
+            vm.startPrank(userB);
+            WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+                deadline: uint64(block.timestamp + 100),
+                inSolve: false,
+                executionSharePrice: 1e6,
+                sharesToWithdraw: uint96(assetsB)
+            });
+            cellar.approve(address(queue), assetsB);
+            queue.updateWithdrawRequest(cellar, req);
+            vm.stopPrank();
+        }
+        {
+            vm.startPrank(userC);
+            WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+                deadline: uint64(block.timestamp + 100),
+                inSolve: false,
+                executionSharePrice: 1e6,
+                sharesToWithdraw: uint96(assetsC)
+            });
+            cellar.approve(address(queue), assetsC);
+            queue.updateWithdrawRequest(cellar, req);
+            vm.stopPrank();
+        }
+
+        solverIsCheapskate = true;
+
+        address[] memory users = new address[](3);
+        users[0] = userA;
+        users[1] = userB;
+        users[2] = userC;
+        bytes memory callData = abi.encode(cellar, USDC);
+
+        vm.expectRevert(bytes("TRANSFER_FROM_FAILED"));
+        queue.solve(cellar, users, callData, address(this));
+
+        // But if solver is not a cheapskate.
+        solverIsCheapskate = false;
+
+        // Solve is successful.
+        queue.solve(cellar, users, callData, address(this));
+    }
+
     // TODO tests for malicious solvers that repeat users, or try to add a user who is not in there,
     // basically check for all reverts in solve.
-    // TODO if user passes in a true for inSolve when setting up the request it should not write it.
+    function testUserRequestWithInSolveTrue() external {
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: true,
+            executionSharePrice: 1e6,
+            sharesToWithdraw: 1
+        });
+
+        queue.updateWithdrawRequest(cellar, req);
+
+        WithdrawQueue.WithdrawRequest memory savedReq = queue.getUserWithdrawRequest(address(this), cellar);
+
+        assertTrue(savedReq.inSolve == false, "inSolve should be false");
+    }
+
+    // TODO test showing how user originally wants 100 shares withdrawn, then changes it to 50, make sure only 50 can be withdrawn.
 
     function finishSolve(bytes calldata runData, uint256, uint256 assetApprovalAmount) external {
+        if (solverIsCheapskate) {
+            // Malicious solver only approves half the amount needed.
+            assetApprovalAmount /= 2;
+        }
         (, ERC20 asset) = abi.decode(runData, (ERC4626, ERC20));
         deal(address(asset), address(this), assetApprovalAmount);
         asset.approve(msg.sender, assetApprovalAmount);
