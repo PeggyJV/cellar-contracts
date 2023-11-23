@@ -23,6 +23,7 @@ import { MockCellarWithOracle } from "src/mocks/MockCellarWithOracle.sol";
  * @title ConvexCurveAdaptorTest
  * @author crispymangoes, 0xEinCodes
  * @notice Cellar Adaptor tests with Convex-Curve markets
+ *
  */
 contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     using SafeTransferLib for ERC20;
@@ -327,37 +328,79 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         registry.trustPosition(
             EthFrxethPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(128, ethFrxethBaseRewardPool, EthFrxethToken, CurvePool(EthFrxethPool))
+            abi.encode(
+                128,
+                ethFrxethBaseRewardPool,
+                EthFrxethToken,
+                CurvePool(EthFrxethPool),
+                CurvePool.withdraw_admin_fees.selector // TODO: Go over what the selector should be for these Curve Pools with Crispy.
+            )
         );
         registry.trustPosition(
             EthStethNgPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(177, ethStethNgBaseRewardPool, EthStethNgToken, CurvePool(EthStethNgPool))
+            abi.encode(
+                177,
+                ethStethNgBaseRewardPool,
+                EthStethNgToken,
+                CurvePool(EthStethNgPool),
+                CurvePool.withdraw_admin_fees.selector
+            )
         );
         registry.trustPosition(
             fraxCrvUsdPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(187, fraxCrvUsdBaseRewardPool, FraxCrvUsdToken, CurvePool(FraxCrvUsdPool))
+            abi.encode(
+                187,
+                fraxCrvUsdBaseRewardPool,
+                FraxCrvUsdToken,
+                CurvePool(FraxCrvUsdPool),
+                CurvePool.withdraw_admin_fees.selector
+            )
         );
         registry.trustPosition(
             mkUsdFraxUsdcPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(225, mkUsdFraxUsdcBaseRewardPool, mkUsdFraxUsdcToken, CurvePool(mkUsdFraxUsdcPool))
+            abi.encode(
+                225,
+                mkUsdFraxUsdcBaseRewardPool,
+                mkUsdFraxUsdcToken,
+                CurvePool(mkUsdFraxUsdcPool),
+                CurvePool.withdraw_admin_fees.selector
+            )
         );
         registry.trustPosition(
             WethYethPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(231, wethYethBaseRewardPool, WethYethToken, CurvePool(WethYethPool))
+            abi.encode(
+                231,
+                wethYethBaseRewardPool,
+                WethYethToken,
+                CurvePool(WethYethPool),
+                CurvePool.withdraw_admin_fees.selector
+            )
         );
         registry.trustPosition(
             EthEthxPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(232, ethEthxBaseRewardPool, EthEthxToken, CurvePool(EthEthxPool))
+            abi.encode(
+                232,
+                ethEthxBaseRewardPool,
+                EthEthxToken,
+                CurvePool(EthEthxPool),
+                CurvePool.withdraw_admin_fees.selector
+            )
         );
         registry.trustPosition(
             CrvUsdSfraxPoolPosition,
             address(convexCurveAdaptor),
-            abi.encode(252, crvUsdSFraxBaseRewardPool, CrvUsdSfraxToken, CurvePool(CrvUsdSfraxPool))
+            abi.encode(
+                252,
+                crvUsdSFraxBaseRewardPool,
+                CrvUsdSfraxToken,
+                CurvePool(CrvUsdSfraxPool),
+                CurvePool.withdraw_admin_fees.selector
+            )
         );
 
         // trust erc20 positions for curve lpts for this test file, although in actual implementation of the cellar there would be usage of a `CurveAdaptor` position for each respective curveLPT to track liquid LPTs that are not staked into Convex.
@@ -564,7 +607,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     //============================================ Base Functions Tests ===========================================
 
-    // setup() to be used && then we also make the cellar in it to have the holdingPosition as convex.
+    // In practice, usually cellars would have curve positions too (w/ curveAdaptor) but this test file just bypasses that since it is not in the scope of the Convex-Curve Platform development. You'll notice that in the `_createCellarWithCurveLPAsAsset()` helper paired w/ `sretup()`
     /// TODO: could expand this by making base tests for all ITB of-interest curvePools
     // testing w/ EthFrxethPool for now
 
@@ -573,24 +616,23 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // make a new cellar w/ initialDeposit of 1e18 for the lpt. TODO: confirm that all the test pools have decimals of 1e18.
         Cellar newCellar = _createCellarWithCurveLPAsAsset(
-            EthFrxethPoolERC20Position,
+            EthFrxethERC20Position,
             EthFrxethPoolPosition,
             EthFrxethToken
-        ); // TODO: make erc20Position & trust it within Registry. Usually we'd have curve positions too (w/ curveAdaptor) but this test file just bypasses that since it is not in the scope of the Convex-Curve Platform development.
+        );
 
-        // TODO: do we need to create a new cellar or can just changing holdingPosition within setup() cellar work? For now, just going with this newCellar.
         deal((EthFrxethToken), address(this), assets);
         newCellar.deposit(assets, address(this));
 
         // asserts, and make sure that rewardToken hasn't been claimed.
     }
 
-    // TODO: same as within testDeposit
+    // TODO: see comment at start of "Base Functions Tests"
     function testWithdraw(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
 
         Cellar newCellar = _createCellarWithCurveLPAsAsset(
-            EthFrxethPoolERC20Position,
+            EthFrxethERC20Position,
             EthFrxethPoolPosition,
             EthFrxethToken
         );
@@ -602,12 +644,12 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // asserts, and make sure that rewardToken hasn't been claimed.
     }
 
-    // TODO: same as within testDeposit
+    // TODO: see comment at start of "Base Functions Tests"
     function testTotalAssets(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
 
         Cellar newCellar = _createCellarWithCurveLPAsAsset(
-            EthFrxethPoolERC20Position,
+            EthFrxethERC20Position,
             EthFrxethPoolPosition,
             EthFrxethToken
         );
@@ -626,10 +668,11 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     /// balanceOf() tests
 
+    // TODO: see comment at start of "Base Functions Tests"
     function testBalanceOf(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
         Cellar newCellar = _createCellarWithCurveLPAsAsset(
-            EthFrxethPoolERC20Position,
+            EthFrxethERC20Position,
             EthFrxethPoolPosition,
             EthFrxethToken
         );
@@ -657,8 +700,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     /// TODO: claimRewards() tests
 
     // - Check that we get all the CRV, CVX, 3CRV rewards we're supposed to get --> this will require testing a couple convex markets that are currently giving said rewards. **Will need to specify the block number we're starting at**
-
-    // TODO: DELETE THIS IF 1:1 assumption is true. --> From looking over Cellar.sol, withdrawableFrom() can include staked cvxCurveLPTs. For now I am assuming that they are 1:1 w/ curveLPTs but the tests will show that or not. \* withdrawInOrder() goes through positions and ultimately calls `withdraw()` for the respective position. \_calculateTotalAssetsOrTotalAssetsWithdrawable() uses withdrawableFrom() to calculate the amount of assets there are available to withdraw from the cellar.
 
     /// Test Helpers
 
