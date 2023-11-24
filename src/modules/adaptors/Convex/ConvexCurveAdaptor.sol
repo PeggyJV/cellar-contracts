@@ -5,6 +5,7 @@ import { BaseAdaptor, ERC20, SafeTransferLib, Cellar, PriceRouter, Math } from "
 import { IBaseRewardPool } from "src/interfaces/external/Convex/IBaseRewardPool.sol";
 import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
+import { console } from "@forge-std/Test.sol";
 
 /**
  * @title Convex-Curve Platform Adaptor
@@ -236,7 +237,11 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         uint256 _amount
     ) public {
         _validatePositionIsUsed(_pid, _baseRewardPool, _lpt, _pool, _selector); // validate pid representing convex market within respective booster
+        _amount = _maxAvailable(_lpt, _amount);
+
+        _lpt.approve(address(booster), _amount);
         booster.deposit(_pid, _amount, true);
+        _revokeExternalApproval(_lpt, address(booster));
     }
 
     /**
@@ -249,6 +254,16 @@ contract ConvexCurveAdaptor is BaseAdaptor {
      */
     function withdrawFromBaseRewardPoolAsLPT(address _baseRewardPool, uint256 _amount, bool _claim) public {
         IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
+
+        if (_amount == type(uint256).max) {
+            _amount = baseRewardPool.balanceOf(address(this));
+        }
+        // console.log(
+        //     "From Adaptor ConsoleLogs: _amount: %s, msg.sender: %s, baseRewardPool.balanceOf()",
+        //     _amount,
+        //     address(this),
+        //     baseRewardPool.balanceOf(address(this))
+        // );
         baseRewardPool.withdrawAndUnwrap(_amount, _claim);
     }
 

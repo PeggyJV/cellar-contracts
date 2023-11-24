@@ -56,6 +56,8 @@ import { DebtFTokenAdaptorV1 } from "src/modules/adaptors/Frax/DebtFTokenAdaptor
 
 import { ConvexCurveAdaptor } from "src/modules/adaptors/Convex/ConvexCurveAdaptor.sol";
 
+import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -570,6 +572,9 @@ contract AdaptorHelperFunctions {
     function _createBytesDataToDepositToConvexCurvePlatform(
         uint256 _pid,
         address _baseRewardPool,
+        ERC20 _lpt,
+        CurvePool _pool,
+        bytes4 _selector,
         uint256 _amount
     ) internal pure returns (bytes memory) {
         return
@@ -577,6 +582,9 @@ contract AdaptorHelperFunctions {
                 ConvexCurveAdaptor.depositLPTInConvexAndStake.selector,
                 _pid,
                 _baseRewardPool,
+                _lpt,
+                _pool,
+                _selector,
                 _amount
             );
     }
@@ -586,14 +594,32 @@ contract AdaptorHelperFunctions {
         uint256 _amount,
         bool _claim
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(ConvexCurveAdaptor.withdrawFromBaseRewardPoolAsLPT.selector, _baseRewardPool, _amount, _claim);
+        return
+            abi.encodeWithSelector(
+                ConvexCurveAdaptor.withdrawFromBaseRewardPoolAsLPT.selector,
+                _baseRewardPool,
+                _amount,
+                _claim
+            );
     }
 
     function _createBytesDataToGetRewardsConvexCurvePlatform(
         uint256 _pid,
         address _baseRewardPool,
-        bool _claimExtras
+        bool _claimExtras,
+        ERC20 _lpt,
+        CurvePool _pool,
+        bytes4 _selector
     ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(ConvexCurveAdaptor.getRewards.selector, _pid, _baseRewardPool, _claimExtras);
+        return
+            abi.encodeWithSelector(
+                ConvexCurveAdaptor.getRewards.selector,
+                _pid,
+                _baseRewardPool,
+                _claimExtras,
+                _lpt,
+                _pool,
+                _selector
+            );
     }
 }
