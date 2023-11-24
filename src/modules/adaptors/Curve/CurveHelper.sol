@@ -9,20 +9,50 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
-import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 /**
  * @title Curve Helper
  * @notice Contains helper logic needed for safely interacting with multiple different Curve Pool implementations.
  * @author crispymangoes
  */
-contract CurveHelper is ReentrancyGuard {
+contract CurveHelper {
     using SafeTransferLib for ERC20;
     using Address for address;
     using Strings for uint256;
     using Math for uint256;
 
-    // TODO add mapping of address to bool to validate gauge and pool addresses. Only would be multisig.
+    //========================================= Reentrancy Guard Functions =======================================
+
+    function readLockedStorage() internal view returns (uint256 locked) {
+        bytes32 position = lockedStoragePosition;
+        assembly {
+            locked := sload(position)
+            // locked.slot := lockedStoragePosition
+        }
+    }
+
+    function setLockedStorage(uint256 state) internal {
+        bytes32 position = lockedStoragePosition;
+        assembly {
+            sstore(position, state)
+        }
+    }
+
+    error CurveHelper___DelegateCallNotSupported();
+    error CurveHelper___Reentrancy();
+
+    modifier nonReentrant() virtual {
+        uint256 locked = readLockedStorage();
+        // TODO rename error.
+        if (locked == 0) revert CurveHelper___DelegateCallNotSupported();
+        if (locked != 1) revert CurveHelper___Reentrancy();
+
+        setLockedStorage(2);
+
+        _;
+
+        setLockedStorage(1);
+    }
 
     /**
      * @notice Attempted to call a function that requires caller implements `sharePriceOracle`.
@@ -39,6 +69,7 @@ contract CurveHelper is ReentrancyGuard {
      */
     error CurveHelper___MismatchedLengths();
 
+    // TODO natspec
     error CurveHelper___PoolInReenteredState();
 
     /**
@@ -51,8 +82,17 @@ contract CurveHelper is ReentrancyGuard {
      */
     address public immutable nativeWrapper;
 
+    // TODO natspec
+    bytes32 public immutable lockedStoragePosition;
+
     constructor(address _nativeWrapper) {
         nativeWrapper = _nativeWrapper;
+        lockedStoragePosition =
+            keccak256(abi.encode(uint256(keccak256("curve.helper.storage")) - 1)) &
+            ~bytes32(uint256(0xff));
+
+        // Initialize locked storage to 1;
+        setLockedStorage(1);
     }
 
     //========================================= Native Helper Functions =======================================
@@ -79,7 +119,7 @@ contract CurveHelper is ReentrancyGuard {
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
         bool useUnderlying /**onReentrant*/
-    ) external returns (uint256 lpOut) {
+    ) external nonReentrant returns (uint256 lpOut) {
         _verifyCallerIsNotGravity();
 
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveHelper___MismatchedLengths();
@@ -135,7 +175,7 @@ contract CurveHelper is ReentrancyGuard {
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         bool useUnderlying /**onReentrant*/
-    ) external returns (uint256[] memory tokensOut) {
+    ) external nonReentrant returns (uint256[] memory tokensOut) {
         _verifyCallerIsNotGravity();
 
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
