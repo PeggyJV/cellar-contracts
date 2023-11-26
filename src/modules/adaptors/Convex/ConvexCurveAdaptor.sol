@@ -258,12 +258,6 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         if (_amount == type(uint256).max) {
             _amount = baseRewardPool.balanceOf(address(this));
         }
-        // console.log(
-        //     "From Adaptor ConsoleLogs: _amount: %s, msg.sender: %s, baseRewardPool.balanceOf()",
-        //     _amount,
-        //     address(this),
-        //     baseRewardPool.balanceOf(address(this))
-        // );
         baseRewardPool.withdrawAndUnwrap(_amount, _claim);
     }
 

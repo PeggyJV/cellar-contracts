@@ -115,7 +115,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     uint32 private EthEthxERC20Position = 22;
     uint32 private CrvUsdSfraxERC20Position = 23;
     // uint32 private sFraxPosition = 24;
-    // uint32 private CrvUsdSfraxPoolPosition = 25;
+    uint32 private CrvUsdSfraxPoolPosition = 24;
 
     uint32 private slippage = 0.9e4;
     uint256 public initialAssets;
@@ -123,7 +123,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function setUp() external {
         // Setup forked environment.
         string memory rpcKey = "MAINNET_RPC_URL";
-        uint256 blockNumber = 18492720;
+        uint256 blockNumber = 18643715;
         _startFork(rpcKey, blockNumber);
 
         // Run Starter setUp code.
@@ -310,16 +310,16 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // EthStethNgPool
         // EthStethNgToken
         // EthStethNgGauge
-        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 1_800e8, WETH, STETH, false, false);
+        _add2PoolAssetToPriceRouter(EthStethNgPool, EthStethNgToken, true, 2_100e8, WETH, STETH, false, false);
 
         // WethYethPool
         // WethYethToken
         // WethYethGauge
-        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 1_800e8, WETH, YETH, false, false);
+        _add2PoolAssetToPriceRouter(WethYethPool, WethYethToken, true, 2_100e8, WETH, YETH, false, false);
         // EthEthxPool
         // EthEthxToken
         // EthEthxGauge
-        _add2PoolAssetToPriceRouter(EthEthxPool, EthEthxToken, true, 1_800e8, WETH, ETHX, false, true);
+        _add2PoolAssetToPriceRouter(EthEthxPool, EthEthxToken, true, 2_100e8, WETH, ETHX, false, true);
 
         // CrvUsdSfraxPool
         // CrvUsdSfraxToken
@@ -335,11 +335,11 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // WethFrxethPool
         // WethFrxethToken
         // WethFrxethGauge
-        _add2PoolAssetToPriceRouter(WethFrxethPool, WethFrxethToken, true, 1800e8, WETH, FRXETH, false, false);
+        _add2PoolAssetToPriceRouter(WethFrxethPool, WethFrxethToken, true, 2100e8, WETH, FRXETH, false, false);
         // EthFrxethPool
         // EthFrxethToken
         // EthFrxethGauge
-        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, true, 1800e8, WETH, FRXETH, false, false);
+        _add2PoolAssetToPriceRouter(EthFrxethPool, EthFrxethToken, true, 2100e8, WETH, FRXETH, false, false);
         // FraxCrvUsdPool
         // FraxCrvUsdToken
         // FraxCrvUsdGauge
@@ -369,8 +369,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 128,
                 ethFrxethBaseRewardPool,
                 EthFrxethToken,
-                CurvePool(EthFrxethPool),
-                CurvePool.withdraw_admin_fees.selector // TODO: Go over what the selector should be for these Curve Pools with Crispy.
+                EthFrxethPool,
+                bytes4(keccak256(abi.encodePacked("price_oracle()")))
             )
         );
         registry.trustPosition(
@@ -431,17 +431,17 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // TODO: this reverted w/ "EvmError: InvalidFEOpcode" when booster was queried w/ its pid. I'm not sure why.
 
-        // registry.trustPosition(
-        //     CrvUsdSfraxPoolPosition,
-        //     address(convexCurveAdaptor),
-        //     abi.encode(
-        //         252,
-        //         crvUsdSFraxBaseRewardPool,
-        //         CrvUsdSfraxToken,
-        //         CurvePool(CrvUsdSfraxPool),
-        //         CurvePool.withdraw_admin_fees.selector
-        //     )
-        // );
+        registry.trustPosition(
+            CrvUsdSfraxPoolPosition,
+            address(convexCurveAdaptor),
+            abi.encode(
+                252,
+                crvUsdSFraxBaseRewardPool,
+                CrvUsdSfraxToken,
+                CurvePool(CrvUsdSfraxPool),
+                CurvePool.withdraw_admin_fees.selector
+            )
+        );
 
         // trust erc20 positions for curve lpts for this test file, although in actual implementation of the cellar there would be usage of a `CurveAdaptor` position for each respective curveLPT to track liquid LPTs that are not staked into Convex.
         registry.trustPosition(EthFrxethERC20Position, address(erc20Adaptor), abi.encode(ERC20(EthFrxethToken)));
@@ -454,7 +454,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
         registry.trustPosition(WethYethERC20Position, address(erc20Adaptor), abi.encode(ERC20(WethYethToken)));
         registry.trustPosition(EthEthxERC20Position, address(erc20Adaptor), abi.encode(ERC20(EthEthxToken)));
-        // registry.trustPosition(CrvUsdSfraxERC20Position, address(erc20Adaptor), abi.encode(ERC20(CrvUsdSfraxToken)));
+        registry.trustPosition(CrvUsdSfraxERC20Position, address(erc20Adaptor), abi.encode(ERC20(CrvUsdSfraxToken)));
 
         string memory cellarName = "Convex Cellar V0.0";
         uint256 initialDeposit = 1e6;
@@ -466,8 +466,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 
-        for (uint32 i = 2; i < 19; ++i) cellar.addPositionToCatalogue(i);
-        for (uint32 i = 2; i < 19; ++i) cellar.addPosition(0, i, abi.encode(true), false);
+        for (uint32 i = 2; i < 25; ++i) cellar.addPositionToCatalogue(i);
+        for (uint32 i = 2; i < 25; ++i) cellar.addPosition(0, i, abi.encode(true), false);
 
         cellar.setRebalanceDeviation(0.01e18);
 
@@ -478,6 +478,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     //============================================ Happy Path Tests ===========================================
 
+    // TODO: As per CRISPY call, fix validate() w/ this test... not sure why it is revertting.
     function testManagingVanillaCurveLPTs1(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         // uint256 _assets = 1000e6;
@@ -488,7 +489,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             128,
             ethFrxethBaseRewardPool,
             EthFrxethPool,
-            CurvePool.withdraw_admin_fees.selector
+            bytes4(keccak256(abi.encodePacked("price_oracle()")))
         );
     }
 
@@ -552,7 +553,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
-    // TODO: reverting not because of totalAssets deviation but for some other reason... when it tries to query `rewardToken()` from its baseRewardPool. When inspecting on etherscan, it shows it has a rewardToken() getter that is the same as the other ones so not sure why...
+    // TODO: need to fix block number we are dealing with. That means the price for 2poolAsset needs to be udpated too.
+    // CrvUsdSfraxPoolPosition
     function testManagingVanillaCurveLPTs7(uint256 _assets) external {
         _assets = bound(_assets, 1e6, 100_000e6);
         _manageVanillaCurveLPTs(
@@ -681,14 +683,13 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     // re-entrancy tests: where curve LPT is re-entered.
-    // TODO: go over these with Crispy :O
-
+    // TODO: as per convo w/ CRISPY, just confirm with his test code that I have selectors that make sense for these specific curve pools.
     function testReentrancyProtection1(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
         _verifyReentrancyProtectionWorks(
             EthFrxethPool,
             EthFrxethToken,
-            EthFrxethPoolPosition,
+            EthFrxethERC20Position,
             assets,
             EthFrxethPoolPosition
         );
@@ -699,7 +700,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _verifyReentrancyProtectionWorks(
             EthStethNgPool,
             EthStethNgToken,
-            EthStethNgPoolPosition,
+            EthStethNgERC20Position,
             assets,
             EthStethNgPoolPosition
         );
@@ -710,7 +711,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _verifyReentrancyProtectionWorks(
             WethYethPool,
             WethYethToken,
-            WethYethPoolPosition,
+            WethYethERC20Position,
             assets,
             WethYethPoolPosition
         );
@@ -718,13 +719,14 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function testReentrancyProtection4(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
-        _verifyReentrancyProtectionWorks(EthEthxPool, EthEthxToken, EthEthxPoolPosition, assets, EthEthxPoolPosition);
+        _verifyReentrancyProtectionWorks(EthEthxPool, EthEthxToken, EthEthxERC20Position, assets, EthEthxPoolPosition);
     }
 
-    // TODO: re-entrancy tests for remaining ITB pools of interest:
-    // mkUSD-FRAXbp --> mkUsdFraxUsdcPool
-    // frxETH-WETH
-    // FRAX-crvUSD
+    // TODO: re-entrancy tests for remaining ITB pools of interest --> go through a whitelist with CRISPY for which pools/positions to tell Strategist to use bytes4(0) or not (aka if they have reentrancy or not)
+
+    // mkUSD-FRAXbp --> mkUsdFraxUsdcPool // TODO: bytes4(0) for adaptor positions because there is no function we can call that has re-entrancy checks
+    // frxETH-WETH // TODO: bytes4(0) for adaptor positions because there is no function we can call that has re-entrancy checks
+    // FRAX-crvUSD // TODO: bytes4(0) for adaptor positions because there is no function we can call that has re-entrancy checks
 
     // //============================================ Base Functions Tests ===========================================
 
@@ -732,7 +734,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     /// TODO: could expand this by making base tests for all ITB of-interest curvePools
     // testing w/ EthFrxethPool for now
 
-    function testDeposit(uint256 assets) external {
+    function testDepositEIN(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
 
         // make a new cellar w/ initialDeposit of 1e18 for the lpt. TODO: confirm that all the test pools have decimals of 1e18.
@@ -743,9 +745,38 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
 
         deal((EthFrxethToken), address(this), assets);
-        newCellar.deposit(assets, address(this)); // TODO: CRISPY - why is this not showing up as trusted. Maybe I just need a break lol.
+        ERC20(EthFrxethToken).safeApprove(address(newCellar), assets);
 
-        // asserts, and make sure that rewardToken hasn't been claimed.
+        // (, , bytes memory adaptorData,) = registry.getPositionIdToPositionData(EthFrxethPoolPosition);
+        // (uint256 pid, address _baseRewardPool, ERC20 lpt, CurvePool pool, bytes4 selector) = abi.decode(
+        //     adaptorData,
+        //     (uint256, address, ERC20, CurvePool, bytes4)
+        // );
+        // IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
+        // ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
+
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(ethFrxethBaseRewardPool);
+        ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
+        uint256 rewardTokenBalance0 = rewardToken.balanceOf(address(newCellar));
+
+        uint256 initialAssets = ERC20(EthFrxethToken).balanceOf(address(newCellar));
+        // uint256 initialAssets = newCellar.balanceOf(address(this)); // TODO: why does this not work vs the above LoC? It should account for the initial asset from address(this) upon cellar creation.
+
+        newCellar.deposit(assets, address(this));
+
+        stakedLPTBalance1 = baseRewardPool.balanceOf(address(newCellar)); // not an erc20 balanceOf()
+        cellarLPTBalance1 = ERC20(EthFrxethToken).balanceOf(address(newCellar));
+        rewardTokenBalance1 = rewardToken.balanceOf(address(newCellar));
+        // check that correct amount was deposited for cellar
+        assertEq(assets, stakedLPTBalance1, "All assets must be staked in proper baseRewardPool for Convex Market");
+
+        assertEq(
+            initialAssets,
+            cellarLPTBalance1,
+            "All assets must be transferred from newCellar to Convex-Curve Market except initialAssets upon cellar creation."
+        );
+
+        assertEq(rewardTokenBalance0, rewardTokenBalance1, "No rewards should have been claimed.");
     }
 
     // TODO: EIN - all other base tests below are failing because of some transfer revert. Look into it.
@@ -761,6 +792,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
 
         deal((EthFrxethToken), address(this), assets);
+        ERC20(EthFrxethToken).safeApprove(address(newCellar), assets);
+
         newCellar.deposit(assets, address(this));
         newCellar.withdraw(assets - 2, address(this), address(this));
 
@@ -779,10 +812,12 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 newCellarInitialAssets = newCellar.totalAssets();
 
         deal((EthFrxethToken), address(this), assets);
+        ERC20(EthFrxethToken).safeApprove(address(newCellar), assets);
+
         newCellar.deposit(assets, address(this));
 
         assertApproxEqAbs(
-            cellar.totalAssets(),
+            newCellar.totalAssets(),
             assets + newCellarInitialAssets,
             2,
             "Total assets should equal assets deposited/staked."
@@ -801,10 +836,12 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
 
         deal((EthFrxethToken), address(this), assets);
-        newCellar.deposit(assets, address(this));
+        ERC20(EthFrxethToken).safeApprove(address(newCellar), assets);
+
+        newCellar.deposit(assets, address(this)); // should deposit, and stake into conve because it is holdingPosition.
 
         assertApproxEqAbs(
-            cellar.balanceOf(address(this)),
+            newCellar.balanceOf(address(this)),
             assets,
             2,
             "Total assets should equal assets deposited/staked, and not include the initialAssets (this would be accounted for via other adaptors (ERC20 or CurveAdaptor) for liquid LPTs in cellar)."
@@ -812,7 +849,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         newCellar.withdraw(assets / 2, address(this), address(this));
         assertApproxEqAbs(
-            cellar.balanceOf(address(this)),
+            newCellar.balanceOf(address(this)),
             assets / 2,
             2,
             "New balanceOf should reflect withdrawn staked LPTs from Convex-Curve Platform."
@@ -846,6 +883,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         CurvePool curvePool = CurvePool(_curvePool);
         uint256 assets = priceRouter.getValue(USDC, _assets, lpt);
         deal(address(lpt), address(cellar), assets);
+        // TODO: add in an erc20Position to track the LPT as an erc20adaptor position because the convexCurveAdaptor doesn't track!
         deal(address(USDC), address(cellar), 0);
 
         IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
@@ -874,7 +912,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         stakedLPTBalance1 = baseRewardPool.balanceOf(address(cellar));
         cellarLPTBalance1 = lpt.balanceOf(address(cellar));
         rewardTokenBalance1 = rewardToken.balanceOf(address(cellar));
-
         // check that correct amount was deposited for cellar
         assertEq(assets, stakedLPTBalance1, "All assets must be staked in proper baseRewardPool for Convex Market");
 
@@ -925,6 +962,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             "Should have withdrawn and unwrapped back to Curve LPT and transferred back to Cellar"
         );
 
+        // TODO: failing for testLPT4 (mkUsdFraxUsdcPool) where its rewards didn't change after the first reward claim, and then it didn't increase at all for LPT5 (WethYethPool) && LPT7 (CrvUsdSFraxToken)
+        // TODO: check convex markets to see if there are any rewards associated to these pools or what is going on.
         assertGt(
             rewardTokenBalance2,
             rewardTokenBalance1,
@@ -993,10 +1032,22 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _skip(1 days);
 
         // claim rewards and show that reward accrual is actually getting lesser due to lesser amount deposited/staked
+        adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(
+            _pid,
+            _baseRewardPool,
+            true,
+            lpt,
+            curvePool,
+            selector
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data); // repeat last getReward call
 
         rewardTokenBalance5 = rewardToken.balanceOf(address(cellar));
         rewardsTokenAccumulation2 = rewardTokenBalance5 - rewardTokenBalance4; // rewards accrued over 1 day w/ less than initial stake position.
+
+        // console.log("rewardTokenBalanace5: %s, rewardTokenBalance4: %s", rewardTokenBalance5, rewardTokenBalance4);
+        // revert();
 
         assertGt(rewardTokenBalance5, rewardTokenBalance4, "Should have claimed some more rewardToken.");
         assertLt(
@@ -1053,8 +1104,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         //     rewardsTokenAccumulation1,
         //     "rewards accrued over 10 days should be more than initial award accrual over 1 day."
         // ); // TODO: debug for testManagingVanillaCurveLPTs2 (works for LPTs1 test)
-
-        // TODO: do we want to test for the actual rate that we should be getting rewardTokens, or is the fact that the amounts are getting bigger and bigger when time and/or stakeAmount increases enough?
 
         // withdraw and unwrap portion immediately
         _skip(1 days);
