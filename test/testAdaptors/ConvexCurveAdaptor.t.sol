@@ -360,7 +360,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // FraxCrvUsdGauge
         _add2PoolAssetToPriceRouter(FraxCrvUsdPool, FraxCrvUsdToken, true, 1e8, FRAX, CRVUSD, false, false);
 
-        convexCurveAdaptor = new ConvexCurveAdaptor(convexCurveMainnetBooster);
+        convexCurveAdaptor = new ConvexCurveAdaptor(convexCurveMainnetBooster, address(WETH));
 
         // Add adaptors and positions to the registry.
         registry.trustAdaptor(address(convexCurveAdaptor));
@@ -473,8 +473,25 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 initialDeposit = 1e6;
         uint64 platformCut = 0.75e18;
 
-        // baseAsset is USDC, but we will deal out LPTs within the helper test function similar to CurveAdaptor.t.sol
-        cellar = _createCellar(cellarName, USDC, usdcPosition, abi.encode(0), initialDeposit, platformCut);
+        // Approve new cellar to spend assets.
+        address cellarAddress = deployer.getAddress(cellarName);
+        deal(address(USDC), address(this), initialDeposit);
+        USDC.approve(cellarAddress, initialDeposit);
+
+        bytes memory creationCode = type(MockCellarWithOracle).creationCode;
+        bytes memory constructorArgs = abi.encode(
+            address(this),
+            registry,
+            USDC,
+            cellarName,
+            cellarName,
+            usdcPosition,
+            abi.encode(0),
+            initialDeposit,
+            platformCut,
+            type(uint192).max
+        );
+        cellar = Cellar(deployer.deployContract(cellarName, creationCode, constructorArgs, 0));
 
         USDC.safeApprove(address(cellar), type(uint256).max);
 

@@ -6,6 +6,7 @@ import { IBaseRewardPool } from "src/interfaces/external/Convex/IBaseRewardPool.
 import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 import { console } from "@forge-std/Test.sol";
+import { CurveHelper } from "src/modules/adaptors/Curve/CurveHelper.sol";
 
 /**
  * @title Convex-Curve Platform Adaptor
@@ -14,7 +15,7 @@ import { console } from "@forge-std/Test.sol";
  * @author crispymangoes, 0xEinCodes
  * @dev this may not work for Convex with other protocols / platforms / networks. It is important to keep these associated to Curve-Convex Platform on Mainnet
  */
-contract ConvexCurveAdaptor is BaseAdaptor {
+contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
     using SafeTransferLib for ERC20;
     using Math for uint256;
 
@@ -65,16 +66,16 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         bytes4 selector
     );
 
-    /**
-     * @notice CurvePool is in a re-entered state.
-     */
-    error ConvexCurveAdaptor___PoolInReenteredState();
+    // /**
+    //  * @notice CurvePool is in a re-entered state.
+    //  */
+    // error ConvexCurveAdaptor___PoolInReenteredState();
 
     /**
      * @param _booster the Convex booster contract for the network/market (different booster for Curve, FRAX, Prisma, etc.)
      * @dev Booster.sol serves as the primary contract that accounts for markets via poolIds. PoolInfo structs can be queried w/ poolIds, where baseRewardPool contracts, and other info can be obtained.
      */
-    constructor(address _booster) {
+    constructor(address _booster, address _nativeWrapper) CurveHelper(_nativeWrapper) {
         booster = IBooster(_booster);
     }
 
@@ -182,10 +183,10 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
         uint256 balance = baseRewardPool.balanceOf(msg.sender);
         // TODO: uncomment below LoC when CurveHelper.sol is brough in from Crispy's dev branch
-        // if (balance > 0) {
-        //     // Run check to make sure Cellar uses an oracle.
-        //     _ensureCallerUsesOracle(msg.sender);
-        // }
+        if (balance > 0) {
+            // Run check to make sure Cellar uses an oracle.
+            _ensureCallerUsesOracle(msg.sender);
+        }
         return (baseRewardPool.balanceOf(msg.sender));
     }
 
@@ -307,16 +308,16 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         } // else do nothing. The cellar is currently being deployed so it has no bytecode, and trying to call `cellar.registry()` will revert.
     }
 
-    /**
-     * @notice Call a reentrancy protected function in `pool`.
-     * @dev Used to insure `pool` is not in a manipulated state.
-     */
-    function _callReentrancyFunction(CurvePool pool, bytes4 selector) internal {
-        // address(pool).functionCall(abi.encodePacked(selector));
-        (bool success, ) = address(pool).call(abi.encodePacked(selector));
+    // /**
+    //  * @notice Call a reentrancy protected function in `pool`.
+    //  * @dev Used to insure `pool` is not in a manipulated state.
+    //  */
+    // function _callReentrancyFunction(CurvePool pool, bytes4 selector) internal {
+    //     // address(pool).functionCall(abi.encodePacked(selector));
+    //     (bool success, ) = address(pool).call(abi.encodePacked(selector));
 
-        if (!success) revert ConvexCurveAdaptor___PoolInReenteredState();
-    }
+    //     if (!success) revert ConvexCurveAdaptor___PoolInReenteredState();
+    // }
 
     //============================================ Interface Helper Functions ===========================================
 
