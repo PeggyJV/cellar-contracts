@@ -24,8 +24,6 @@ import { MockCellarWithOracle } from "src/mocks/MockCellarWithOracle.sol";
  * @title ConvexCurveAdaptorTest
  * @author crispymangoes, 0xEinCodes
  * @notice Cellar Adaptor tests with Convex-Curve markets
- * TODO: re-entrancy tests for remaining ITB pools of interest --> go through a whitelist with CRISPY for which pools/positions to tell Strategist to use bytes4(0) or not (aka if they have reentrancy or not)
- * TODO: for BaseFunction tests: could expand this by making base tests for all ITB of-interest curvePools. Shold we?
  * LPT4, LPT5, LPT7 are the ones that we exclude from reward assert tests because they have reward streaming paused at the test blockNumber / currently
  */
 contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
@@ -446,7 +444,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             )
         );
 
-        // TODO: this wasn't on the ITB list as far as I can tell, but we have it just in case.
         registry.trustPosition(
             CrvUsdSfraxPoolPosition,
             address(convexCurveAdaptor),
@@ -764,7 +761,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         uint256 rewardTokenBalance0 = rewardToken.balanceOf(address(newCellar));
 
         uint256 initialAssets = ERC20(EthFrxethToken).balanceOf(address(newCellar));
-        // uint256 initialAssets = newCellar.balanceOf(address(this)); // TODO: why does this not work vs the above LoC? It should account for the initial asset from address(this) upon cellar creation.
 
         newCellar.deposit(assets, address(this));
 
@@ -1137,23 +1133,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         assertEq(stakedLPTBalance5, 0, "All staked lpt should have been unwrapped and withdrawn to cellar");
         assertEq(assets, cellarLPTBalance5, "Cellar should have all lpt now");
-
-        // TODO: CRISPY we gotta just quickly chat on this stuff below :)
-        // NOTE: I believe I understand what's going on. The rewards need to be streamed to the baseRewardPool for the respective PID. So we could kick the contract so it streams rewards, but it may not be worth it / out of scope.
-        // CONTEXT: I made the previous withdraw adaptor call work with type(uint256).max and it claimed more rewards, so I'm not sure why this call is not claiming more rewards! :( thus the below tests are failing.
-
-        // assertGt(rewardTokenBalance8, rewardTokenBalance7, "Cellar Reward Balance should have increased.");
-        // assertGt(
-        //     rewardsTokenAccumulation4,
-        //     rewardsTokenAccumulation3,
-        //     "Cellar Reward accrual rate should have been more because it accrued over 11 days vs 10 days."
-        // );
-
-        // assertGt(
-        //     cvxRewardAccumulationRate4,
-        //     cvxRewardAccumulationRate3,
-        //     "Cellar CVX Reward accrual rate should have been more because it accrued over 11 days vs 10 days."
-        // );
     }
 
     /// Generic Helpers
