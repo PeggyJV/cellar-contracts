@@ -27,7 +27,6 @@ contract CurveHelper {
         bytes32 position = lockedStoragePosition;
         assembly {
             locked := sload(position)
-            // locked.slot := lockedStoragePosition
         }
     }
 
@@ -38,13 +37,12 @@ contract CurveHelper {
         }
     }
 
-    error CurveHelper___DelegateCallNotSupported();
+    error CurveHelper___StorageSlotNotInitialized();
     error CurveHelper___Reentrancy();
 
     modifier nonReentrant() virtual {
         uint256 locked = readLockedStorage();
-        // TODO rename error.
-        if (locked == 0) revert CurveHelper___DelegateCallNotSupported();
+        if (locked == 0) revert CurveHelper___StorageSlotNotInitialized();
         if (locked != 1) revert CurveHelper___Reentrancy();
 
         setLockedStorage(2);
@@ -69,7 +67,9 @@ contract CurveHelper {
      */
     error CurveHelper___MismatchedLengths();
 
-    // TODO natspec
+    /**
+     * @notice Attempted to interact with Curve LP tokens while the pool is in a re-entered state.
+     */
     error CurveHelper___PoolInReenteredState();
 
     /**
@@ -82,7 +82,9 @@ contract CurveHelper {
      */
     address public immutable nativeWrapper;
 
-    // TODO natspec
+    /**
+     * @notice The slot to store value needed to check for re-entrancy.
+     */
     bytes32 public immutable lockedStoragePosition;
 
     constructor(address _nativeWrapper) {
@@ -102,7 +104,6 @@ contract CurveHelper {
      */
     receive() external payable {}
 
-    // TODO add nonReentrant
     /**
      * @notice Allows Cellars to interact with Curve pools that use native ETH, by using the adaptor as a middle man.
      * @param pool the curve pool address
@@ -120,8 +121,6 @@ contract CurveHelper {
         uint256 minLPAmount,
         bool useUnderlying /**onReentrant*/
     ) external nonReentrant returns (uint256 lpOut) {
-        _verifyCallerIsNotGravity();
-
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveHelper___MismatchedLengths();
 
         uint256 nativeEthAmount;
@@ -176,8 +175,6 @@ contract CurveHelper {
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         bool useUnderlying /**onReentrant*/
     ) external nonReentrant returns (uint256[] memory tokensOut) {
-        _verifyCallerIsNotGravity();
-
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveHelper___MismatchedLengths();
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(
@@ -310,17 +307,6 @@ contract CurveHelper {
                     )
                 )
             );
-    }
-
-    /**
-     * @notice If a strategist were somehow able to directly make calls to the proxy functions,
-     *         this internal function will revert, because `msg.sender` in such a scenario
-     *         would be gravity bridge, which does not implement `decimals()`.
-     */
-    function _verifyCallerIsNotGravity() internal view {
-        try Cellar(msg.sender).decimals() {} catch {
-            revert CurveHelper___CallerMustImplementDecimals();
-        }
     }
 
     /**

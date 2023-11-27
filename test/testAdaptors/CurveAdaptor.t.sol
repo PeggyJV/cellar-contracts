@@ -1258,7 +1258,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             );
             data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
             vm.expectRevert(
-                bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___CallerMustImplementDecimals.selector))
+                bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___StorageSlotNotInitialized.selector))
             );
             cellar.callOnAdaptor(data);
         }
@@ -1277,7 +1277,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             );
             data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
             vm.expectRevert(
-                bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___CallerMustImplementDecimals.selector))
+                bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___StorageSlotNotInitialized.selector))
             );
             cellar.callOnAdaptor(data);
         }
@@ -1332,6 +1332,23 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     // TODO add test where we repeat native ETH twice in input token array.
+
+    function testHelperReentrancyLock() external {
+        // Get reentrancy Slot.
+        bytes32 reentrancySlot = curveAdaptor.lockedStoragePosition();
+
+        // Set lock slot to 2 to lock it. Then interact with helper while it is "re-entered".
+        vm.store(address(curveAdaptor), reentrancySlot, bytes32(uint256(2)));
+
+        ERC20[] memory tokens;
+        uint256[] memory amounts;
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___Reentrancy.selector)));
+        curveAdaptor.addLiquidityETHViaProxy(address(0), ERC20(address(0)), tokens, amounts, 0, false);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___Reentrancy.selector)));
+        curveAdaptor.removeLiquidityETHViaProxy(address(0), ERC20(address(0)), 0, tokens, amounts, false);
+    }
 
     function testStrategistMessingUpInputTokenArray(uint256 assets) external {
         assets = bound(assets, 1e6, 1_000_000e6);
