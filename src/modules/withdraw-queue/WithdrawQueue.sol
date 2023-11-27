@@ -25,6 +25,7 @@ contract WithdrawQueue is ReentrancyGuard {
         uint8 shareDecimals;
     }
 
+    // TODO allow users to set a trusted solver?
     struct WithdrawRequest {
         uint64 deadline; // deadline to fulfill request
         bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
@@ -154,7 +155,7 @@ contract WithdrawQueue is ReentrancyGuard {
                     solveData.shareDecimals
                 );
 
-                solveData.asset.safeTransferFrom(msg.sender, users[i], assetsToUser);
+                solveData.asset.safeTransferFrom(solver, users[i], assetsToUser);
 
                 emit RequestFulfilled(
                     users[i],
