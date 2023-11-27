@@ -62,6 +62,11 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      */
     error CurveAdaptor___VerifyPositionRevertedWithNonZeroCodeSize();
 
+    /**
+     * @notice Attempted to use an invalid slippage in the structure.
+     */
+    error CurveAdaptor___InvalidConstructorSlippage();
+
     //============================================ Global Functions ===========================================
     /**
      * @dev Identifier unique to this adaptor for a shared registry.
@@ -87,6 +92,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     uint32 public immutable curveSlippage;
 
     constructor(address _nativeWrapper, uint32 _curveSlippage) CurveHelper(_nativeWrapper) {
+        if (_curveSlippage < 0.9e4 || _curveSlippage > 1e4) revert CurveAdaptor___InvalidConstructorSlippage();
         addressThis = payable(address(this));
         curveSlippage = _curveSlippage;
     }
@@ -236,12 +242,16 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveAdaptor___MismatchedLengths();
-        bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false);
+        bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false); // TODO build data after max available
 
         uint256 balanceDelta = lpToken.balanceOf(address(this));
 
         // Approve pool to spend amounts, and check for max available.
-        for (uint256 i; i < underlyingTokens.length; ++i)
+        for (
+            uint256 i;
+            i < underlyingTokens.length;
+            ++i // TODO curly braces
+        )
             if (orderedUnderlyingTokenAmounts[i] > 0) {
                 orderedUnderlyingTokenAmounts[i] = _maxAvailable(underlyingTokens[i], orderedUnderlyingTokenAmounts[i]);
                 underlyingTokens[i].safeApprove(pool, orderedUnderlyingTokenAmounts[i]);
@@ -367,7 +377,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
 
-        _revokeExternalApproval(lpToken, pool);
+        _revokeExternalApproval(lpToken, pool); // TODO remove this
     }
 
     /**
@@ -416,7 +426,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
 
-        _revokeExternalApproval(lpToken, addressThis);
+        _revokeExternalApproval(lpToken, addressThis); // TODO remove this
     }
 
     /**
@@ -433,6 +443,8 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         _revokeExternalApproval(lpToken, address(gauge));
     }
 
+    // TODO delta balance check to make sure we get out what we expect. POSSIBLY
+    // TODO ask teh strategsits about wanting to support
     /**
      * @notice Allows strategist to unstake Curve LP tokens from their gauge.
      * @param gauge the gauge for `lpToken`

@@ -10,6 +10,7 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
+// TODO can relayers send TXS via flash blots
 /**
  * @title Curve Helper
  * @notice Contains helper logic needed for safely interacting with multiple different Curve Pool implementations.
@@ -132,7 +133,7 @@ contract CurveHelper {
                 ERC20(nativeWrapper).safeTransferFrom(msg.sender, address(this), orderedUnderlyingTokenAmounts[i]);
                 // Unwrap native.
                 IWETH9(nativeWrapper).withdraw(orderedUnderlyingTokenAmounts[i]);
-
+                // TODO add in check to make sure this is zero before overriding
                 nativeEthAmount = orderedUnderlyingTokenAmounts[i];
             } else {
                 underlyingTokens[i].safeTransferFrom(msg.sender, address(this), orderedUnderlyingTokenAmounts[i]);
