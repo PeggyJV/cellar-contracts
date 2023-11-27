@@ -13,20 +13,10 @@ import { console } from "@forge-std/Test.sol";
  * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex markets.
  * @author crispymangoes, 0xEinCodes
  * @dev this may not work for Convex with other protocols / platforms / networks. It is important to keep these associated to Curve-Convex Platform on Mainnet
- * TODO: refine adaptorData now that there is bytes4 with it too.
  */
 contract ConvexCurveAdaptor is BaseAdaptor {
     using SafeTransferLib for ERC20;
     using Math for uint256;
-
-    struct PoolInfo {
-        address lptoken;
-        address token;
-        address gauge;
-        address crvRewards;
-        address stash;
-        bool shutdown;
-    }
 
     /**
      * @notice The booster for the respective network
@@ -111,15 +101,11 @@ contract ConvexCurveAdaptor is BaseAdaptor {
             adaptorData,
             (uint256, address, ERC20, CurvePool, bytes4)
         );
-
+        _validatePositionIsUsed(pid, rewardsPool, lpt, pool, selector);
         if (selector != bytes4(0)) _callReentrancyFunction(pool, selector);
         else revert BaseAdaptor__UserDepositsNotAllowed();
-
-        _validatePositionIsUsed(pid, rewardsPool, lpt, pool, selector);
         lpt.safeApprove(address(booster), assets);
-
         booster.deposit(pid, assets, true);
-
         // Zero out approvals if necessary.
         _revokeExternalApproval(lpt, address(booster));
     }
@@ -174,8 +160,12 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         bytes memory configurationData
     ) public view override returns (uint256) {
         bool isLiquid = abi.decode(configurationData, (bool));
-        if (isLiquid) {
-            (, address rewardPool) = abi.decode(adaptorData, (uint256, address));
+        (, address rewardPool, , , bytes4 selector) = abi.decode(
+            adaptorData,
+            (uint256, address, ERC20, CurvePool, bytes4)
+        );
+
+        if (isLiquid && selector != bytes4(0)) {
             IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
             return (baseRewardPool.balanceOf(msg.sender));
         } else return 0;
@@ -190,6 +180,12 @@ contract ConvexCurveAdaptor is BaseAdaptor {
     function balanceOf(bytes memory adaptorData) public view override returns (uint256) {
         (, address rewardPool) = abi.decode(adaptorData, (uint256, address));
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
+        uint256 balance = baseRewardPool.balanceOf(msg.sender);
+        // TODO: uncomment below LoC when CurveHelper.sol is brough in from Crispy's dev branch
+        // if (balance > 0) {
+        //     // Run check to make sure Cellar uses an oracle.
+        //     _ensureCallerUsesOracle(msg.sender);
+        // }
         return (baseRewardPool.balanceOf(msg.sender));
     }
 
@@ -275,7 +271,6 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         CurvePool _pool,
         bytes4 _selector
     ) public {
-        _validatePositionIsUsed(_pid, _baseRewardPool, _lpt, _pool, _selector);
         _getRewards(_baseRewardPool, _claimExtras);
     }
 
