@@ -1331,7 +1331,36 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
     }
 
-    // TODO add test where we repeat native ETH twice in input token array.
+    function testRepeatingNativeEthTwiceInInputArray() external {
+        // Give the cellar 2 WETH.
+        deal(address(WETH), address(cellar), 2e18);
+
+        ERC20[] memory tokens = new ERC20[](2);
+        tokens[0] = ERC20(curveAdaptor.CURVE_ETH());
+        tokens[1] = ERC20(curveAdaptor.CURVE_ETH());
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 1e18;
+        amounts[1] = 1e18;
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
+            EthFrxethPool,
+            ERC20(EthFrxethToken),
+            tokens,
+            amounts,
+            0,
+            false
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+
+        // We expect the call to revert because eventhough the Cellar owns 2 WETH, it has made 2 approvals for 1 WETH each, so
+        // the transfer from will fail from not having enough approval.
+        vm.expectRevert(bytes("TRANSFER_FROM_FAILED"));
+        cellar.callOnAdaptor(data);
+    }
 
     function testHelperReentrancyLock() external {
         // Get reentrancy Slot.
