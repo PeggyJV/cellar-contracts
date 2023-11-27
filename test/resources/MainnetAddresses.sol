@@ -50,6 +50,11 @@ contract MainnetAddresses {
     ERC20 public CRV = ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
     ERC20 public CVX = ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
     ERC20 public FRXETH = ERC20(0x5E8422345238F34275888049021821E8E08CAa1f);
+    ERC20 public CRVUSD = ERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
+    ERC20 public OETH = ERC20(0x856c4Efb76C1D1AE02e20CEB03A2A6a08b0b8dC3);
+    ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
+    ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
+    ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
 
     // Chainlink Datafeeds
     address public WETH_USD_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -234,17 +239,9 @@ contract MainnetAddresses {
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
 
-    ERC20 public CRVUSD = ERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
-    ERC20 public MKUSD = ERC20(0x4591DBfF62656E7859Afe5e45f6f47D3669fBB28);
-    ERC20 public YETH = ERC20(0x1BED97CBC3c24A4fb5C069C6E311a967386131f7);
-    ERC20 public ETHX = ERC20(0xA35b1B31Ce002FBF2058D22F30f95D405200A15b);
-
-    /// End of stuff from Crispy's curve tests
-
-    // Convex markets TODO: remove duplicate LPTs
+    // Convex-Curve Platform Specifics
     address public convexCurveMainnetBooster = 0xF403C135812408BFbE8713b5A23a04b3D48AAE31;
 
-    // TODO: maybe remove these if we are going w/ just pids as the adaptorData with a ConvexCurveAdaptor position
     address public ethFrxethBaseRewardPool = 0xbD5445402B0a287cbC77cb67B2a52e2FC635dce4;
     address public ethStethNgBaseRewardPool = 0x6B27D7BC63F1999D14fF9bA900069ee516669ee8;
     address public fraxCrvUsdBaseRewardPool = 0x3CfB4B26dc96B124D15A6f360503d028cF2a3c00;
@@ -270,6 +267,7 @@ contract MainnetAddresses {
 
     // Maker
     address public savingsDaiAddress = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
+    address public sDAI = 0x83F20F44975D03b1b09e64809B757c47f942BEeA;
 
     // Frax
     address public sFRAX = 0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32;
