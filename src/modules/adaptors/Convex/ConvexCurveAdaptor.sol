@@ -290,18 +290,26 @@ contract ConvexCurveAdaptor is BaseAdaptor {
         CurvePool _curvePool,
         bytes4 _selector
     ) internal view {
-        bytes32 positionHash = keccak256(
-            abi.encode(identifier(), false, abi.encode(_pid, _baseRewardPool, _lpt, _curvePool, _selector))
-        );
-        uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-        if (!Cellar(address(this)).isPositionUsed(positionId))
-            revert ConvexAdaptor__ConvexBoosterPositionsMustBeTracked(
-                _pid,
-                _baseRewardPool,
-                _lpt,
-                _curvePool,
-                _selector
+        uint256 cellarCodeSize;
+        address cellarAddress = address(this);
+        assembly {
+            cellarCodeSize := extcodesize(cellarAddress)
+        }
+
+        if (cellarCodeSize > 0) {
+            bytes32 positionHash = keccak256(
+                abi.encode(identifier(), false, abi.encode(_pid, _baseRewardPool, _lpt, _curvePool, _selector))
             );
+            uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
+            if (!Cellar(address(this)).isPositionUsed(positionId))
+                revert ConvexAdaptor__ConvexBoosterPositionsMustBeTracked(
+                    _pid,
+                    _baseRewardPool,
+                    _lpt,
+                    _curvePool,
+                    _selector
+                );
+        } // else do nothing. The cellar is currently being deployed so it has no bytecode, and trying to call `cellar.registry()` will revert.
     }
 
     /**

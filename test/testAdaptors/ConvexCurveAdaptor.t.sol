@@ -44,6 +44,21 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         bool shutdown;
     }
 
+    uint256 public cvxBalance0;
+    uint256 public cvxBalance1;
+    uint256 public cvxBalance2;
+    uint256 public cvxBalance3;
+    uint256 public cvxBalance4;
+    uint256 public cvxBalance5;
+    uint256 public cvxBalance6;
+    uint256 public cvxBalance7;
+    uint256 public cvxBalance8;
+
+    uint256 public cvxRewardAccumulationRate1;
+    uint256 public cvxRewardAccumulationRate2;
+    uint256 public cvxRewardAccumulationRate3;
+    uint256 public cvxRewardAccumulationRate4;
+
     uint256 public stakedLPTBalance1;
     uint256 public cellarLPTBalance1;
     uint256 public rewardTokenBalance1;
@@ -847,7 +862,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
      * @dev this was created to minimize amount of code within this test file
      * Here we've tested: deposit x, deposit max, withdraw x (and claim rewards), claim rewards, claim rewards over more time, claim rewards over same time with less stake, withdraw max and claim w/ longer time span fast forwarded to show more reward accrual rate.
      */
-
     function _manageVanillaCurveLPTs(
         uint256 _assets,
         address _lpt,
@@ -870,6 +884,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
         uint256 rewardTokenBalance0 = rewardToken.balanceOf(address(cellar));
+        cvxBalance0 = CVX.balanceOf(address(cellar));
 
         // Strategist deposits CurveLPT into Convex-Curve Platform Pools/Markets
 
@@ -890,12 +905,15 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         stakedLPTBalance1 = baseRewardPool.balanceOf(address(cellar));
         cellarLPTBalance1 = lpt.balanceOf(address(cellar));
         rewardTokenBalance1 = rewardToken.balanceOf(address(cellar));
+        cvxBalance1 = CVX.balanceOf(address(cellar));
+
         // check that correct amount was deposited for cellar
         assertEq(assets, stakedLPTBalance1, "All assets must be staked in proper baseRewardPool for Convex Market");
 
         assertEq(0, cellarLPTBalance1, "All assets must be transferred from cellar to Convex-Curve Market");
 
         assertEq(rewardTokenBalance0, rewardTokenBalance1, "No rewards should have been claimed.");
+        assertEq(cvxBalance0, cvxBalance1, "No CVX rewards should have been claimed.");
 
         // Pass time.
         _skip(1 days);
@@ -911,6 +929,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         stakedLPTBalance2 = baseRewardPool.balanceOf(address(cellar));
         cellarLPTBalance2 = lpt.balanceOf(address(cellar));
         rewardTokenBalance2 = rewardToken.balanceOf(address(cellar));
+        cvxBalance2 = CVX.balanceOf(address(cellar));
 
         assertApproxEqAbs(
             stakedLPTBalance2,
@@ -933,9 +952,11 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 rewardTokenBalance1,
                 "Should have claimed some more rewardToken; it will be specific to each Convex Platform Market."
             );
+            assertGt(cvxBalance2, cvxBalance1, "Should have claimed some CVX");
         }
 
         uint256 rewardsTokenAccumulation1 = rewardTokenBalance2 - rewardTokenBalance1; // rewards accrued over 1 day w/ initial stake position (all assets from initial deposit).
+        cvxRewardAccumulationRate1 = cvxBalance2 - cvxBalance1;
 
         // at this point we've withdrawn half, should have rewards. Now we deposit and stake more to ensure that it handles this correctly.
 
@@ -956,7 +977,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         stakedLPTBalance3 = baseRewardPool.balanceOf(address(cellar));
         cellarLPTBalance3 = lpt.balanceOf(address(cellar));
         rewardTokenBalance3 = rewardToken.balanceOf(address(cellar));
-
+        cvxBalance3 = CVX.balanceOf(address(cellar));
         assertApproxEqAbs(
             stakedLPTBalance3,
             expectedNewStakedBalance,
@@ -977,6 +998,12 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             "should have the same amount of rewards as before since deposits do not claim rewards in same tx"
         );
 
+        assertEq(
+            cvxBalance3,
+            cvxBalance2,
+            "should have the same amount of CVX rewards as before since deposits do not claim rewards in same tx"
+        );
+
         // test claiming without any time past to show that rewards should not be accruing / no transferrance should occur to cellar.
 
         adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(
@@ -991,8 +1018,11 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data);
 
         rewardTokenBalance4 = rewardToken.balanceOf(address(cellar));
+        cvxBalance4 = CVX.balanceOf(address(cellar));
 
         assertEq(rewardTokenBalance4, rewardTokenBalance3, "No time passed since last reward claim");
+
+        assertEq(cvxBalance4, cvxBalance3, "No time passed since last CVX claim");
 
         _skip(1 days);
 
@@ -1009,7 +1039,9 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.callOnAdaptor(data); // repeat last getReward call
 
         rewardTokenBalance5 = rewardToken.balanceOf(address(cellar));
+        cvxBalance5 = CVX.balanceOf(address(cellar));
         rewardsTokenAccumulation2 = rewardTokenBalance5 - rewardTokenBalance4; // rewards accrued over 1 day w/ less than initial stake position.
+        cvxRewardAccumulationRate2 = cvxBalance5 - cvxBalance4;
 
         if (_pid != 225 && _pid != 231 && _pid != 252) {
             assertGt(rewardTokenBalance5, rewardTokenBalance4, "CHECK 1: Should have claimed some more rewardToken.");
@@ -1017,6 +1049,13 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 rewardsTokenAccumulation2,
                 rewardsTokenAccumulation1,
                 "rewards accrued over 1 day w/ less than initial stake position should result in less reward accumulation."
+            );
+
+            assertGt(cvxBalance5, cvxBalance4, "CHECK 1: Should have claimed some more CVX.");
+            assertLt(
+                cvxRewardAccumulationRate2,
+                cvxRewardAccumulationRate1,
+                "CVX rewards accrued over 1 day w/ less than initial stake position should result in less reward accumulation."
             );
         }
 
@@ -1036,12 +1075,14 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         stakedLPTBalance4 = baseRewardPool.balanceOf(address(cellar));
         cellarLPTBalance4 = lpt.balanceOf(address(cellar));
         rewardTokenBalance6 = rewardToken.balanceOf(address(cellar));
+        cvxBalance6 = CVX.balanceOf(address(cellar));
 
         assertEq(stakedLPTBalance4, assets, "All lpt should be staked now again.");
 
         assertEq(cellarLPTBalance4, 0, "No lpt should be in cellar again.");
 
         assertEq(rewardTokenBalance6, rewardTokenBalance5, "No changes to rewards should have occurred.");
+        assertEq(cvxBalance6, cvxBalance5, "No changes to CVX rewards should have occurred.");
 
         // Now we have the initialAssets amount of LPT in again, we can test that after MORE time with the same mount, more rewards are accrued.
         _skip(10 days);
@@ -1059,7 +1100,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         rewardTokenBalance7 = rewardToken.balanceOf(address(cellar));
         rewardsTokenAccumulation3 = rewardTokenBalance7 - rewardTokenBalance6; // rewards accrued over 1 day w/ less than initial stake position.
-
+        cvxBalance7 = CVX.balanceOf(address(cellar));
+        cvxRewardAccumulationRate3 = cvxBalance7 - cvxBalance6;
         if (_pid != 225 && _pid != 231 && _pid != 252) {
             assertGt(rewardTokenBalance7, rewardTokenBalance6, "CHECK 2: Should have claimed some more rewardToken.");
 
@@ -1068,7 +1110,13 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 rewardsTokenAccumulation1,
                 "rewards accrued over 10 days should be more than initial award accrual over 1 day."
             );
+            assertGt(
+                cvxRewardAccumulationRate3,
+                cvxRewardAccumulationRate1,
+                "rewards accrued over 10 days should be more than initial award accrual over 1 day."
+            );
         }
+
         // withdraw and unwrap portion immediately
         _skip(11 days);
 
@@ -1084,18 +1132,27 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellarLPTBalance5 = lpt.balanceOf(address(cellar));
         rewardTokenBalance8 = rewardToken.balanceOf(address(cellar));
         rewardsTokenAccumulation4 = rewardTokenBalance8 - rewardTokenBalance7; // rewards accrued over 11 days w/ full assets amount of lpt staked
+        cvxBalance8 = CVX.balanceOf(address(cellar));
+        cvxRewardAccumulationRate4 = cvxBalance8 - cvxBalance7;
 
         assertEq(stakedLPTBalance5, 0, "All staked lpt should have been unwrapped and withdrawn to cellar");
         assertEq(assets, cellarLPTBalance5, "Cellar should have all lpt now");
 
-        // TODO: CRISPY any opinion on this? Not sure why the rewards are not accumulating here. Have they not been claimed? Do they need to be streamed on a periodic basis, as in do we need to stay up to date w/ when rewards are streamed from convex to the pools?
-        // NOTE:  I made the previous withdraw adaptor call work with type(uint256).max and it claimed more rewards, so I'm not sure why this call is not claiming more rewards! :( thus the below tests are failing.
-        // NOTE: I believe I understand what's going on. The rewards need to be streamed to the baseRewardPool for the respective PID.
+        // TODO: CRISPY we gotta just quickly chat on this stuff below :)
+        // NOTE: I believe I understand what's going on. The rewards need to be streamed to the baseRewardPool for the respective PID. So we could kick the contract so it streams rewards, but it may not be worth it / out of scope.
+        // CONTEXT: I made the previous withdraw adaptor call work with type(uint256).max and it claimed more rewards, so I'm not sure why this call is not claiming more rewards! :( thus the below tests are failing.
+
         // assertGt(rewardTokenBalance8, rewardTokenBalance7, "Cellar Reward Balance should have increased.");
         // assertGt(
         //     rewardsTokenAccumulation4,
         //     rewardsTokenAccumulation3,
         //     "Cellar Reward accrual rate should have been more because it accrued over 11 days vs 10 days."
+        // );
+
+        // assertGt(
+        //     cvxRewardAccumulationRate4,
+        //     cvxRewardAccumulationRate3,
+        //     "Cellar CVX Reward accrual rate should have been more because it accrued over 11 days vs 10 days."
         // );
     }
 
