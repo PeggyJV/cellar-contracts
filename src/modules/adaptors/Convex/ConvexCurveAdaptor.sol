@@ -129,12 +129,9 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
             adaptorData,
             (uint256, address, ERC20, CurvePool, bytes4)
         );
-
+        _validatePositionIsUsed(pid, rewardPool, lpt, pool, selector);
         if (isLiquid && selector != bytes4(0)) _callReentrancyFunction(pool, selector);
         else revert BaseAdaptor__UserWithdrawsNotAllowed();
-
-        _validatePositionIsUsed(pid, rewardPool, lpt, pool, selector);
-
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
         ERC20 stakingToken = ERC20(baseRewardPool.stakingToken());
 
@@ -179,9 +176,9 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 balance = baseRewardPool.balanceOf(msg.sender);
         if (balance > 0) {
             // Run check to make sure Cellar uses an oracle.
-            _ensureCallerUsesOracle(msg.sender);
+            _ensureCallerUsesOracle(msg.sender);.
         }
-        return (baseRewardPool.balanceOf(msg.sender));
+        return balance;
     }
 
     /**
