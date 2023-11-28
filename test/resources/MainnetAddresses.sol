@@ -168,6 +168,8 @@ contract MainnetAddresses {
     address public APE_FRAX_PAIR = 0x3a25B9aB8c07FfEFEe614531C75905E810d8A239; // FraxlendV2
     address public UNI_FRAX_PAIR = 0xc6CadA314389430d396C7b0C70c6281e99ca7fe8; // FraxlendV2
 
+    /// From Crispy's curve tests
+
     // Curve Pools and Tokens
     address public TriCryptoPool = 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46;
     ERC20 public CRV_3_CRYPTO = ERC20(0xc4AD29ba4B3c580e6D59105FFf484999997675Ff);
@@ -236,6 +238,17 @@ contract MainnetAddresses {
     address public CrvUsdSfraxGauge = 0x62B8DA8f1546a092500c457452fC2d45fa1777c4;
 
     address public WethMkUsdPool = 0xc89570207c5BA1B0E3cD372172cCaEFB173DB270;
+
+    // Convex-Curve Platform Specifics
+    address public convexCurveMainnetBooster = 0xF403C135812408BFbE8713b5A23a04b3D48AAE31;
+
+    address public ethFrxethBaseRewardPool = 0xbD5445402B0a287cbC77cb67B2a52e2FC635dce4;
+    address public ethStethNgBaseRewardPool = 0x6B27D7BC63F1999D14fF9bA900069ee516669ee8;
+    address public fraxCrvUsdBaseRewardPool = 0x3CfB4B26dc96B124D15A6f360503d028cF2a3c00;
+    address public mkUsdFraxUsdcBaseRewardPool = 0x35FbE5520E70768DCD6E3215Ed54E14CBccA10D2;
+    address public wethYethBaseRewardPool = 0xB0867ADE998641Ab1Ff04cF5cA5e5773fA92AaE3;
+    address public ethEthxBaseRewardPool = 0x399e111c7209a741B06F8F86Ef0Fdd88fC198D20;
+    address public crvUsdSFraxBaseRewardPool = 0x73eA73C3a191bd05F3266eB2414609dC5Fe777a2;
 
     // Uniswap V3
     address public WSTETH_WETH_100 = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;
