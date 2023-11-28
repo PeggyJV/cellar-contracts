@@ -19,18 +19,51 @@ contract WithdrawQueue is ReentrancyGuard {
 
     // ========================================= STRUCTS =========================================
 
+    // TODO allow users to set a trusted solver?
+    /**
+     * @notice Stores request information needed to fulfill a users withdraw request.
+     * @param deadline unix timestamp for when request is no longer valid
+     * @param executionSharePrice the share price in terms of share.asset() the user wants their shares "sold" at
+     * @param sharesToWithdraw the amount of shares the user wants withdrawn
+     * @param inSolve bool used during solves to prevent duplicate users, and to prevent redoing multiple checks
+     */
+    struct WithdrawRequest {
+        uint64 deadline; // deadline to fulfill request
+        uint88 executionSharePrice; // In terms of asset decimals
+        uint96 sharesToWithdraw; // The amount of shares the user wants to redeem.
+        bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
+    }
+
+    // TODO Instead of flags, it could be replaced with 5 distinct bools, whatever is easier for the solvers.
+    // TODO could also be an array of bools like bool[5]
+    /**
+     * @notice Used in `viewSolveMetaData` helper function to return data in a clean struct.
+     * @param user the address of the user
+     * @param flags 8 bits indicating the state of the user only the first 5 bits are used XXX00000
+     *              Only one flag should be true at a time.
+     *              From right to left
+     *              - indicates whether or not the user can be included in a call to `solve`
+     *              - only if first bit is zero, indicates user deadline has passed.
+     *              - only if first bit is zero, indicates user has zero shares in wallet.
+     *              - only if first bit is zero, indicates user has not given WithdrawQueue approval.
+     *              - only if first bit is zero, indicates user request has zero share amount.
+     * @param sharesToSolve the amount of shares to solve
+     * @param requiredAssets the amount of assets users wants for their shares
+     */
+    struct SolveMetaData {
+        address user;
+        uint8 flags;
+        uint256 sharesToSolve;
+        uint256 requiredAssets;
+    }
+
+    /**
+     * @notice Used to reduce the number of local variables in `solve`.
+     */
     struct SolveData {
         ERC20 asset;
         uint8 assetDecimals;
         uint8 shareDecimals;
-    }
-
-    // TODO allow users to set a trusted solver?
-    struct WithdrawRequest {
-        uint64 deadline; // deadline to fulfill request
-        bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
-        uint88 executionSharePrice; // In terms of asset decimals
-        uint96 sharesToWithdraw; // The amount of shares the user wants to redeem.
     }
 
     // ========================================= CONSTANTS =========================================
@@ -66,13 +99,17 @@ contract WithdrawQueue is ReentrancyGuard {
         return userWithdrawRequest[user][share];
     }
 
-    function isWithdrawRequestValid(ERC4626 share, WithdrawRequest calldata userRequest) external view returns (bool) {
+    function isWithdrawRequestValid(
+        ERC4626 share,
+        address user,
+        WithdrawRequest calldata userRequest
+    ) external view returns (bool) {
         // Validate amount.
-        if (userRequest.sharesToWithdraw > share.balanceOf(msg.sender)) return false;
+        if (userRequest.sharesToWithdraw > share.balanceOf(user)) return false;
         // Validate deadline.
         if (block.timestamp > userRequest.deadline) return false;
         // Validate approval.
-        if (share.allowance(msg.sender, address(this)) < userRequest.sharesToWithdraw) return false;
+        if (share.allowance(user, address(this)) < userRequest.sharesToWithdraw) return false;
 
         if (userRequest.sharesToWithdraw == 0) return false;
 
@@ -137,7 +174,6 @@ contract WithdrawQueue is ReentrancyGuard {
             request.inSolve = true;
             // Transfer shares from user to solver.
             share.safeTransferFrom(users[i], solver, request.sharesToWithdraw);
-            continue;
         }
 
         ISolver(solver).finishSolve(runData, sharesToSolver, requiredAssets);
@@ -169,6 +205,64 @@ contract WithdrawQueue is ReentrancyGuard {
                 request.sharesToWithdraw = 0;
                 request.inSolve = false;
             } else revert WithdrawQueue__UserNotInSolve();
+        }
+    }
+
+    /**
+     * @notice Helper function solvers can use to determine if users are solvable, and the required amounts to do so.
+     * @notice Repeated users are not accounted for in this setup, so if solvers have repeat users in their `users`
+     *         array the results can be wrong.
+     */
+    function viewSolveMetaData(
+        ERC4626 share,
+        address[] calldata users
+    ) external view returns (SolveMetaData[] memory metaData, uint256 totalRequiredAssets, uint256 totalSharesToSolve) {
+        // Get Solve Data.
+        SolveData memory solveData;
+        solveData.asset = share.asset();
+        solveData.assetDecimals = solveData.asset.decimals();
+        solveData.shareDecimals = share.decimals();
+
+        // Setup meta data.
+        metaData = new SolveMetaData[](users.length);
+
+        uint256 requiredAssets;
+        for (uint256 i; i < users.length; ++i) {
+            WithdrawRequest memory request = userWithdrawRequest[users[i]][share];
+
+            metaData[i].user = users[i];
+
+            if (block.timestamp > request.deadline) {
+                metaData[i].flags |= uint8(1) << 1;
+                continue;
+            }
+            if (request.sharesToWithdraw == 0) {
+                metaData[i].flags |= uint8(1) << 2;
+                continue;
+            }
+            if (share.balanceOf(users[i]) < request.sharesToWithdraw) {
+                metaData[i].flags |= uint8(1) << 3;
+                continue;
+            }
+            if (share.allowance(users[i], address(this)) < request.sharesToWithdraw) {
+                metaData[i].flags |= uint8(1) << 4;
+                continue;
+            }
+
+            metaData[i].sharesToSolve = request.sharesToWithdraw;
+
+            // User gets whatever their execution share price is.
+            uint256 userAssets = _calculateAssetAmount(
+                request.sharesToWithdraw,
+                request.executionSharePrice,
+                solveData.shareDecimals
+            );
+            metaData[i].requiredAssets = userAssets;
+            totalRequiredAssets += userAssets;
+            totalSharesToSolve += request.sharesToWithdraw;
+
+            // If all checks above passed, the users request is valid and is solvable.
+            metaData[i].flags |= uint8(1);
         }
     }
 
