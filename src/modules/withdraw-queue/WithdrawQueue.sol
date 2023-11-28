@@ -5,123 +5,176 @@ import { Math } from "src/utils/Math.sol";
 import { ERC4626 } from "@solmate/mixins/ERC4626.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
+import { ISolver } from "./ISolver.sol";
 
-interface ISolver {
-    function finishSolve(bytes calldata runData, uint256 sharesReceived, uint256 assetApprovalAmount) external;
-}
+// TODO remove
+import { console } from "@forge-std/Test.sol";
 
-contract WithdrawQueue {
+contract WithdrawQueue is ReentrancyGuard {
     using SafeTransferLib for ERC4626;
     using SafeTransferLib for ERC20;
     using Math for uint256;
     using Math for uint128;
 
-    bool public locked;
+    // ========================================= STRUCTS =========================================
 
-    modifier nonReentrant() {
-        require(!locked, "REENTRANCY");
-
-        locked = true;
-
-        _;
-
-        locked = false;
+    struct SolveData {
+        ERC20 asset;
+        uint8 assetDecimals;
+        uint8 shareDecimals;
     }
 
-    struct UserData {
-        uint64 deadline; // Once passed, users balance can be sent back to them by solvers, for a small fee.
-        uint128 amount;
-        uint64 minPrice; // In terms of hundredths of a bip 1e6 == 100%
+    // TODO allow users to set a trusted solver?
+    struct WithdrawRequest {
+        uint64 deadline; // deadline to fulfill request
+        bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
+        uint88 executionSharePrice; // In terms of asset decimals
+        uint96 sharesToWithdraw; // The amount of shares the user wants to redeem.
     }
 
-    // Stores users data based off ERC20 share
-    mapping(address => mapping(ERC4626 => UserData)) public userData;
+    // ========================================= CONSTANTS =========================================
 
-    // Stores fee based off ERC4626 share
-    mapping(ERC4626 => uint256) public shareFee;
+    // ========================================= GLOBAL STATE =========================================
+    mapping(address => mapping(ERC4626 => WithdrawRequest)) public userWithdrawRequest;
+    //============================== ERRORS ===============================
 
-    event NewDeposit(address user, uint256 amount, uint256 deadline, uint256 minPrice);
+    error WithdrawQueue__UserRepeated();
+    error WithdrawQueue__RequestDeadlineExceeded();
+    error WithdrawQueue__UserNotInSolve();
+    error WithdrawQueue__NoShares();
 
-    // This will overwrite existing setttings
-    function deposit(ERC4626 share, UserData calldata newData) external nonReentrant {
-        // Transfer shares in.
-        share.safeTransferFrom(msg.sender, address(this), newData.amount);
-        UserData storage data = userData[msg.sender][share];
+    //============================== EVENTS ===============================
 
-        data.deadline = newData.deadline;
-        data.minPrice = newData.minPrice;
+    event RequestUpdated(
+        address user,
+        address share,
+        uint256 amount,
+        uint256 deadline,
+        uint256 minPrice,
+        uint256 timestamp
+    );
+    event RequestFulfilled(address user, address share, uint256 sharesSpent, uint256 assetsReceived, uint256 timestamp);
 
-        data.amount += newData.amount;
+    //============================== IMMUTABLES ===============================
+
+    constructor() {}
+
+    //============================== USER FUNCTIONS ===============================
+
+    function getUserWithdrawRequest(address user, ERC4626 share) external view returns (WithdrawRequest memory) {
+        return userWithdrawRequest[user][share];
+    }
+
+    function isWithdrawRequestValid(ERC4626 share, WithdrawRequest calldata userRequest) external view returns (bool) {
+        // Validate amount.
+        if (userRequest.sharesToWithdraw > share.balanceOf(msg.sender)) return false;
+        // Validate deadline.
+        if (block.timestamp > userRequest.deadline) return false;
+        // Validate approval.
+        if (share.allowance(msg.sender, address(this)) < userRequest.sharesToWithdraw) return false;
+
+        if (userRequest.sharesToWithdraw == 0) return false;
+
+        if (userRequest.executionSharePrice == 0) return false;
+
+        return true;
+    }
+
+    // TODO there is a front running attack like the ERC20 approval attack
+    // User already has a non zero request, they submit a TX to increase it
+    // Attacker sees it, front runs it, solves it, then lets users TX goes through and solves again.
+    function updateWithdrawRequest(ERC4626 share, WithdrawRequest calldata userRequest) external nonReentrant {
+        WithdrawRequest storage request = userWithdrawRequest[msg.sender][share];
+
+        request.deadline = userRequest.deadline;
+        request.executionSharePrice = userRequest.executionSharePrice;
+        request.sharesToWithdraw = userRequest.sharesToWithdraw;
 
         // Emit full amount user has.
-        emit NewDeposit(msg.sender, data.amount, newData.deadline, newData.minPrice);
+        emit RequestUpdated(
+            msg.sender,
+            address(share),
+            userRequest.sharesToWithdraw,
+            userRequest.deadline,
+            userRequest.executionSharePrice,
+            block.timestamp
+        );
     }
 
-    // TODO need to check for reentrancy because I think if a solver were to re-enter and withdraw while solving, then
-    // they would be able to withdraw their shares, and also "redeem" someone elses shares but take them.
-    function withdraw(ERC4626 share, uint128 amount) external nonReentrant {
-        UserData storage data = userData[msg.sender][share];
+    //============================== SOLVER FUNCTIONS ===============================
 
-        // Underflow is desired.
-        data.amount -= amount;
+    function solve(
+        ERC4626 share,
+        address[] calldata users,
+        bytes calldata runData,
+        address solver
+    ) external nonReentrant {
+        // Get Solve Data.
+        SolveData memory solveData;
+        solveData.asset = share.asset();
+        solveData.assetDecimals = solveData.asset.decimals();
+        solveData.shareDecimals = share.decimals();
 
-        share.safeTransfer(msg.sender, amount);
-    }
-
-    function solve(ERC4626 share, address[] calldata users, bytes calldata runData) external nonReentrant {
-        // Determine the required amount of share.asset() solver must provide.
-        ERC20 asset = share.asset();
-        uint256 fee = shareFee[share];
-        uint256 minExecutionSharePrice = share.previewRedeem(10 ** share.decimals()).mulDivDown(1e6 - fee, 1e6);
-
-        // Determine how many shares should be sent to solver.
         uint256 sharesToSolver;
-        uint256 feeSharesToSolver;
+        uint256 requiredAssets;
         for (uint256 i; i < users.length; ++i) {
-            UserData memory data = userData[users[i]][share];
+            WithdrawRequest storage request = userWithdrawRequest[users[i]][share];
 
-            if (minExecutionSharePrice >= data.minPrice && (data.deadline == 0 || data.deadline > block.timestamp)) {
-                sharesToSolver += data.amount;
-            } else if (data.deadline < block.timestamp) {
-                // Add auto cancel fee to feeSharesToSolver.
-                feeSharesToSolver += data.amount.mulDivDown(fee, 1e6);
-            }
+            if (request.inSolve) revert WithdrawQueue__UserRepeated();
+            if (block.timestamp > request.deadline) revert WithdrawQueue__RequestDeadlineExceeded();
+            if (request.sharesToWithdraw == 0) revert WithdrawQueue__NoShares();
+
+            // User gets whatever their execution share price is.
+            requiredAssets += _calculateAssetAmount(
+                request.sharesToWithdraw,
+                request.executionSharePrice,
+                solveData.shareDecimals
+            );
+
+            // If all checks above passed, the users request is valid and should be fulfilled.
+            sharesToSolver += request.sharesToWithdraw;
+            request.inSolve = true;
+            // Transfer shares from user to solver.
+            share.safeTransferFrom(users[i], solver, request.sharesToWithdraw);
+            continue;
         }
 
-        uint256 requiredAssets = minExecutionSharePrice.mulDivDown(sharesToSolver, 10 ** share.decimals());
-
-        // Optimistically transfer shares to solver.
-        share.safeTransfer(msg.sender, sharesToSolver + feeSharesToSolver);
-
-        ISolver(msg.sender).finishSolve(runData, sharesToSolver + feeSharesToSolver, requiredAssets);
+        ISolver(solver).finishSolve(runData, sharesToSolver, requiredAssets);
 
         for (uint256 i; i < users.length; ++i) {
-            UserData storage data = userData[users[i]][share];
+            WithdrawRequest storage request = userWithdrawRequest[users[i]][share];
 
-            if (data.deadline != 0 && data.deadline < block.timestamp) {
-                // We have passed users deadline, so transfer their shares back to them minus the fee.
-                share.safeTransfer(users[i], data.amount.mulDivDown(1e6 - fee, 1e6));
-                // delete data; // gas refund
-                delete data.amount;
-                delete data.minPrice;
-                delete data.deadline;
+            if (request.inSolve) {
+                // We know that the minimum price and deadline arguments are satisfied since this can only be true if they were.
 
-                // TODO emit event
-            } else if (minExecutionSharePrice >= data.minPrice) {
                 // Send user their share of assets.
-                uint256 amount = requiredAssets.mulDivDown(data.amount, sharesToSolver);
-                asset.safeTransferFrom(msg.sender, users[i], amount);
-                // delete data;
-                delete data.amount;
-                delete data.minPrice;
-                delete data.deadline;
-                // TODO emit event
-            }
-            // Else there is nothing to do, this user deadline was not triggered, and the execution price was too low.
+                uint256 assetsToUser = _calculateAssetAmount(
+                    request.sharesToWithdraw,
+                    request.executionSharePrice,
+                    solveData.shareDecimals
+                );
 
-            if (minExecutionSharePrice >= data.minPrice && (data.deadline == 0 || data.deadline > block.timestamp)) {
-                sharesToSolver += data.amount;
-            }
+                solveData.asset.safeTransferFrom(solver, users[i], assetsToUser);
+
+                emit RequestFulfilled(
+                    users[i],
+                    address(share),
+                    request.sharesToWithdraw,
+                    assetsToUser,
+                    block.timestamp
+                );
+
+                // Set shares to withdraw to 0.
+                request.sharesToWithdraw = 0;
+                request.inSolve = false;
+            } else revert WithdrawQueue__UserNotInSolve();
         }
+    }
+
+    //============================== INTERNAL FUNCTIONS ===============================
+
+    function _calculateAssetAmount(uint256 shares, uint256 price, uint8 shareDecimals) internal pure returns (uint256) {
+        return price.mulDivDown(shares, 10 ** shareDecimals);
     }
 }
