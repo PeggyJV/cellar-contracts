@@ -176,7 +176,7 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 balance = baseRewardPool.balanceOf(msg.sender);
         if (balance > 0) {
             // Run check to make sure Cellar uses an oracle.
-            _ensureCallerUsesOracle(msg.sender);.
+            _ensureCallerUsesOracle(msg.sender);
         }
         return balance;
     }
