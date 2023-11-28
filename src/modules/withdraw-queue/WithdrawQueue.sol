@@ -8,9 +8,11 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 import { ISolver } from "./ISolver.sol";
 
-// TODO remove
-import { console } from "@forge-std/Test.sol";
-
+/**
+ * @title WithdrawQueue
+ * @notice Allows users to exit ERC4626 positions by offloading complex withdraws to 3rd party solvers.
+ * @author crispymangoes
+ */
 contract WithdrawQueue is ReentrancyGuard {
     using SafeTransferLib for ERC4626;
     using SafeTransferLib for ERC20;
@@ -19,7 +21,6 @@ contract WithdrawQueue is ReentrancyGuard {
 
     // ========================================= STRUCTS =========================================
 
-    // TODO allow users to set a trusted solver?
     /**
      * @notice Stores request information needed to fulfill a users withdraw request.
      * @param deadline unix timestamp for when request is no longer valid
@@ -34,19 +35,16 @@ contract WithdrawQueue is ReentrancyGuard {
         bool inSolve; // Inidicates whether this user is currently having their request fulfilled.
     }
 
-    // TODO Instead of flags, it could be replaced with 5 distinct bools, whatever is easier for the solvers.
-    // TODO could also be an array of bools like bool[5]
     /**
      * @notice Used in `viewSolveMetaData` helper function to return data in a clean struct.
      * @param user the address of the user
-     * @param flags 8 bits indicating the state of the user only the first 5 bits are used XXX00000
-     *              Only one flag should be true at a time.
+     * @param flags 8 bits indicating the state of the user only the first 4 bits are used XXXX0000
+     *              Either all flags are false(user is solvable) or only 1 is true(an error occurred).
      *              From right to left
-     *              - indicates whether or not the user can be included in a call to `solve`
-     *              - only if first bit is zero, indicates user deadline has passed.
-     *              - only if first bit is zero, indicates user has zero shares in wallet.
-     *              - only if first bit is zero, indicates user has not given WithdrawQueue approval.
-     *              - only if first bit is zero, indicates user request has zero share amount.
+     *              - 0: indicates user deadline has passed.
+     *              - 1: indicates user does not have enough shares in wallet.
+     *              - 2: indicates user has not given WithdrawQueue approval.
+     *              - 3: indicates user request has zero share amount.
      * @param sharesToSolve the amount of shares to solve
      * @param requiredAssets the amount of assets users wants for their shares
      */
@@ -69,6 +67,10 @@ contract WithdrawQueue is ReentrancyGuard {
     // ========================================= CONSTANTS =========================================
 
     // ========================================= GLOBAL STATE =========================================
+
+    /**
+     * @notice Maps user address to share to a WithdrawRequest struct.
+     */
     mapping(address => mapping(ERC4626 => WithdrawRequest)) public userWithdrawRequest;
     //============================== ERRORS ===============================
 
@@ -79,6 +81,9 @@ contract WithdrawQueue is ReentrancyGuard {
 
     //============================== EVENTS ===============================
 
+    /**
+     * @notice Emitted when `updateWithdrawRequest` is called.
+     */
     event RequestUpdated(
         address user,
         address share,
@@ -87,6 +92,10 @@ contract WithdrawQueue is ReentrancyGuard {
         uint256 minPrice,
         uint256 timestamp
     );
+
+    /**
+     * @notice Emitted when `solve` exchanges a users shares for the underlying asset.
+     */
     event RequestFulfilled(address user, address share, uint256 sharesSpent, uint256 assetsReceived, uint256 timestamp);
 
     //============================== IMMUTABLES ===============================
@@ -95,10 +104,21 @@ contract WithdrawQueue is ReentrancyGuard {
 
     //============================== USER FUNCTIONS ===============================
 
+    /**
+     * @notice Get a users Withdraw Request.
+     */
     function getUserWithdrawRequest(address user, ERC4626 share) external view returns (WithdrawRequest memory) {
         return userWithdrawRequest[user][share];
     }
 
+    /**
+     * @notice Helper function that returns either
+     *         true: Withdraw request is valid.
+     *         false: Withdraw request is not valid.
+     * @dev It is possible for a withdraw request to return false from this function, but using the
+     *      request in `updateWithdrawRequest` will succeed, but solvers will not be able to include
+     *      the user in `solve` unless some other state is changed.
+     */
     function isWithdrawRequestValid(
         ERC4626 share,
         address user,
@@ -118,9 +138,9 @@ contract WithdrawQueue is ReentrancyGuard {
         return true;
     }
 
-    // TODO there is a front running attack like the ERC20 approval attack
-    // User already has a non zero request, they submit a TX to increase it
-    // Attacker sees it, front runs it, solves it, then lets users TX goes through and solves again.
+    /**
+     * @notice Allows user to add/update their withdraw request.
+     */
     function updateWithdrawRequest(ERC4626 share, WithdrawRequest calldata userRequest) external nonReentrant {
         WithdrawRequest storage request = userWithdrawRequest[msg.sender][share];
 
@@ -141,6 +161,11 @@ contract WithdrawQueue is ReentrancyGuard {
 
     //============================== SOLVER FUNCTIONS ===============================
 
+    /**
+     * @notice Called by solvers in order to exchange shares for share.asset().
+     * @dev It is very likely `solve` TXs will be front run if broadcasted to public mem pools,
+     *      so solvers should use private mem pools.
+     */
     function solve(
         ERC4626 share,
         address[] calldata users,
@@ -226,26 +251,25 @@ contract WithdrawQueue is ReentrancyGuard {
         // Setup meta data.
         metaData = new SolveMetaData[](users.length);
 
-        uint256 requiredAssets;
         for (uint256 i; i < users.length; ++i) {
             WithdrawRequest memory request = userWithdrawRequest[users[i]][share];
 
             metaData[i].user = users[i];
 
             if (block.timestamp > request.deadline) {
-                metaData[i].flags |= uint8(1) << 1;
+                metaData[i].flags |= uint8(1);
                 continue;
             }
             if (request.sharesToWithdraw == 0) {
-                metaData[i].flags |= uint8(1) << 2;
+                metaData[i].flags |= uint8(1) << 1;
                 continue;
             }
             if (share.balanceOf(users[i]) < request.sharesToWithdraw) {
-                metaData[i].flags |= uint8(1) << 3;
+                metaData[i].flags |= uint8(1) << 2;
                 continue;
             }
             if (share.allowance(users[i], address(this)) < request.sharesToWithdraw) {
-                metaData[i].flags |= uint8(1) << 4;
+                metaData[i].flags |= uint8(1) << 3;
                 continue;
             }
 
@@ -268,6 +292,9 @@ contract WithdrawQueue is ReentrancyGuard {
 
     //============================== INTERNAL FUNCTIONS ===============================
 
+    /**
+     * @notice Helper function to calculate the amount of assets a user is owed based off their shares, and execution price.
+     */
     function _calculateAssetAmount(uint256 shares, uint256 price, uint8 shareDecimals) internal pure returns (uint256) {
         return price.mulDivDown(shares, 10 ** shareDecimals);
     }
