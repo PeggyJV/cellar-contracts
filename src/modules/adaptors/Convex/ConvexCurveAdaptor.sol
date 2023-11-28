@@ -10,8 +10,8 @@ import { CurveHelper } from "src/modules/adaptors/Curve/CurveHelper.sol";
 
 /**
  * @title Convex-Curve Platform Adaptor
- * @dev This adaptor is specifically for Convex contracts.
- * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex markets.
+ * @dev This adaptor is specifically for Convex-Curve Platform contracts.
+ * @notice Allows cellars to have positions where they are supplying, staking LPTs, and claiming rewards to Convex-Curve pools/markets.
  * @author crispymangoes, 0xEinCodes
  * @dev this may not work for Convex with other protocols / platforms / networks. It is important to keep these associated to Curve-Convex Platform on Mainnet
  */
@@ -28,7 +28,7 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
     //==================== Adaptor Data Specification ====================
     // adaptorData = abi.encode(uint256 pid, address baseRewardPool, ERC20 lpt, CurvePool pool, bytes4 selector)
     // Where:
-    // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with, and `baseRewardPool` is the isolated base reward pool for the respective convex market --> baseRewardPool has extraReward Child Contracts associated to it. So cellar puts CRVLPT into Convex Booster, which then stakes it into Curve.
+    // `pid` is the Convex market pool id that corresponds to a respective market within Convex protocol we are working with, and `baseRewardPool` is the main base reward pool for the respective convex market --> baseRewardPool has extraReward Child Contracts associated to it (that likely follow the same `BaseRewardPool` smart contract schematic). So cellar puts CRVLPT into Convex Booster, which then stakes it into Curve.
     // `lpt` is the Curve LPT that is deposited into the respective Convex-Curve Platform market.
     // `pool` is the Curve liquidity pool adhering to the CurvePool interface
     // `selector` is the function signature specified within adaptorData to be triggered within the callee contract
@@ -65,11 +65,6 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
         CurvePool pool,
         bytes4 selector
     );
-
-    // /**
-    //  * @notice CurvePool is in a re-entered state.
-    //  */
-    // error ConvexCurveAdaptor___PoolInReenteredState();
 
     /**
      * @param _booster the Convex booster contract for the network/market (different booster for Curve, FRAX, Prisma, etc.)
@@ -182,7 +177,6 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
         (, address rewardPool) = abi.decode(adaptorData, (uint256, address));
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
         uint256 balance = baseRewardPool.balanceOf(msg.sender);
-        // TODO: uncomment below LoC when CurveHelper.sol is brough in from Crispy's dev branch
         if (balance > 0) {
             // Run check to make sure Cellar uses an oracle.
             _ensureCallerUsesOracle(msg.sender);
@@ -307,17 +301,6 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
                 );
         } // else do nothing. The cellar is currently being deployed so it has no bytecode, and trying to call `cellar.registry()` will revert.
     }
-
-    // /**
-    //  * @notice Call a reentrancy protected function in `pool`.
-    //  * @dev Used to insure `pool` is not in a manipulated state.
-    //  */
-    // function _callReentrancyFunction(CurvePool pool, bytes4 selector) internal {
-    //     // address(pool).functionCall(abi.encodePacked(selector));
-    //     (bool success, ) = address(pool).call(abi.encodePacked(selector));
-
-    //     if (!success) revert ConvexCurveAdaptor___PoolInReenteredState();
-    // }
 
     //============================================ Interface Helper Functions ===========================================
 

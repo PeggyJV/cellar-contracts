@@ -9,16 +9,11 @@ import { IBaseRewardPool } from "src/interfaces/external/Convex/IBaseRewardPool.
 import { IBooster } from "src/interfaces/external/Convex/IBooster.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { console } from "@forge-std/Test.sol";
-
-/// CRISPY imports
-
 import { WstEthExtension } from "src/modules/price-router/Extensions/Lido/WstEthExtension.sol";
 import { CurveEMAExtension } from "src/modules/price-router/Extensions/Curve/CurveEMAExtension.sol";
 import { Curve2PoolExtension } from "src/modules/price-router/Extensions/Curve/Curve2PoolExtension.sol";
 import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
 import { MockCellarWithOracle } from "src/mocks/MockCellarWithOracle.sol";
-
-/// CRISPY Pricing imports above copied over (TODO: delete your copy of his imported files (`WstEthExtension.sol, CurveEMAExtension.sol, Curve2PoolExtension.sol`) and `git pull` his actual files from dev branch ONCE he's merged his changes to it).
 
 /**
  * @title ConvexCurveAdaptorTest
@@ -623,7 +618,18 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
 
-        vm.expectRevert(); // TODO: actual revert statement stemming from Booster.sol likely.
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    ConvexCurveAdaptor.ConvexAdaptor__ConvexBoosterPositionsMustBeTracked.selector,
+                    pid - 1,
+                    crvRewards,
+                    ERC20(EthFrxethToken),
+                    CurvePool(EthFrxethPool),
+                    curveWithdrawAdminFeesSelector
+                )
+            )
+        );
         cellar.callOnAdaptor(data);
     }
 
@@ -657,7 +663,18 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
 
-        vm.expectRevert(); // TODO: actual revert statement stemming from Booster.sol likely for trying to deposit not enough lpt
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    ConvexCurveAdaptor.ConvexAdaptor__ConvexBoosterPositionsMustBeTracked.selector,
+                    pid,
+                    crvRewards,
+                    ERC20(EthFrxethToken),
+                    CurvePool(EthFrxethPool),
+                    curveWithdrawAdminFeesSelector
+                )
+            )
+        );
         cellar.callOnAdaptor(data);
     }
 
@@ -701,13 +718,12 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                     curveWithdrawAdminFeesSelector
                 )
             )
-        ); // TODO: actual revert statement stemming from Booster.sol likely for trying to deposit not enough lpt
+        );
 
         cellar.callOnAdaptor(data);
     }
 
     // re-entrancy tests: where curve LPT is re-entered.
-    // TODO: as per convo w/ CRISPY, just confirm with his test code that I have selectors that make sense for these specific curve pools.
     function testReentrancyProtection1(uint256 assets) external {
         assets = bound(assets, 1e6, 100_000e6);
         _verifyReentrancyProtectionWorks(
@@ -754,7 +770,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     function testDepositEIN(uint256 assets) external {
         assets = bound(assets, 0.1e18, 100_000e18);
 
-        // make a new cellar w/ initialDeposit of 1e18 for the lpt. TODO: confirm that all the test pools have decimals of 1e18.
         Cellar newCellar = _createCellarWithCurveLPAsAsset(
             EthFrxethERC20Position,
             EthFrxethPoolPosition,
@@ -763,15 +778,6 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         deal((EthFrxethToken), address(this), assets);
         ERC20(EthFrxethToken).safeApprove(address(newCellar), assets);
-
-        // NOTE: generic coding in case we want to expand this test to other Convex-Curve Pools
-        // (, , bytes memory adaptorData,) = registry.getPositionIdToPositionData(EthFrxethPoolPosition);
-        // (uint256 pid, address _baseRewardPool, ERC20 lpt, CurvePool pool, bytes4 selector) = abi.decode(
-        //     adaptorData,
-        //     (uint256, address, ERC20, CurvePool, bytes4)
-        // );
-        // IBaseRewardPool baseRewardPool = IBaseRewardPool(_baseRewardPool);
-        // ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
 
         IBaseRewardPool baseRewardPool = IBaseRewardPool(ethFrxethBaseRewardPool);
         ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
