@@ -783,7 +783,7 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         ERC20 rewardToken = ERC20((baseRewardPool).rewardToken());
         uint256 rewardTokenBalance0 = rewardToken.balanceOf(address(newCellar));
 
-        uint256 initialAssets = ERC20(EthFrxethToken).balanceOf(address(newCellar));
+        uint256 oldAssets = ERC20(EthFrxethToken).balanceOf(address(newCellar));
 
         newCellar.deposit(assets, address(this));
 
@@ -794,9 +794,9 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         assertEq(assets, stakedLPTBalance1, "All assets must be staked in proper baseRewardPool for Convex Market");
 
         assertEq(
-            initialAssets,
+            oldAssets,
             cellarLPTBalance1,
-            "All assets must be transferred from newCellar to Convex-Curve Market except initialAssets upon cellar creation."
+            "All assets must be transferred from newCellar to Convex-Curve Market except oldAssets upon cellar creation."
         );
 
         assertEq(rewardTokenBalance0, rewardTokenBalance1, "No rewards should have been claimed.");
@@ -1026,13 +1026,8 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         // test claiming without any time past to show that rewards should not be accruing / no transferrance should occur to cellar.
 
         adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(
-            _pid,
             _baseRewardPool,
-            true,
-            lpt,
-            curvePool,
-            selector
-        );
+            true        );
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data);
 
@@ -1047,12 +1042,10 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // claim rewards and show that reward accrual is actually getting lesser due to lesser amount deposited/staked
         adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(
-            _pid,
+            
             _baseRewardPool,
-            true,
-            lpt,
-            curvePool,
-            selector
+            true
+            
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data); // repeat last getReward call
@@ -1107,12 +1100,10 @@ contract ConvexCurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         _skip(10 days);
 
         adaptorCalls[0] = _createBytesDataToGetRewardsConvexCurvePlatform(
-            _pid,
+            
             _baseRewardPool,
-            true,
-            lpt,
-            curvePool,
-            selector
+            true
+            
         );
         data[0] = Cellar.AdaptorCall({ adaptor: address(convexCurveAdaptor), callData: adaptorCalls });
         cellar.callOnAdaptor(data); // repeat last getReward call

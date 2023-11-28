@@ -701,22 +701,14 @@ contract AdaptorHelperFunctions {
     }
 
     function _createBytesDataToGetRewardsConvexCurvePlatform(
-        uint256 _pid,
         address _baseRewardPool,
-        bool _claimExtras,
-        ERC20 _lpt,
-        CurvePool _pool,
-        bytes4 _selector
+        bool _claimExtras
     ) internal pure returns (bytes memory) {
         return
             abi.encodeWithSelector(
                 ConvexCurveAdaptor.getRewards.selector,
-                _pid,
                 _baseRewardPool,
-                _claimExtras,
-                _lpt,
-                _pool,
-                _selector
+                _claimExtras
             );
     }
 }

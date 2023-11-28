@@ -251,17 +251,12 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
 
     /**
      * @notice Allows strategists to get rewards for an Convex Booster without withdrawing/unwrapping from Convex market
-     * @param _pid specified pool ID corresponding to LPT convex market
      * @param _baseRewardPool for respective convex market (w/ trusted poolId)
      * @param _claimExtras Whether or not to claim extra rewards associated to the Convex booster (outside of rewardToken for Convex booster)
      */
     function getRewards(
-        uint256 _pid,
         address _baseRewardPool,
-        bool _claimExtras,
-        ERC20 _lpt,
-        CurvePool _pool,
-        bytes4 _selector
+        bool _claimExtras
     ) public {
         _getRewards(_baseRewardPool, _claimExtras);
     }
