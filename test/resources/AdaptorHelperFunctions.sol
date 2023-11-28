@@ -57,6 +57,10 @@ import { CollateralFTokenAdaptorV1 } from "src/modules/adaptors/Frax/CollateralF
 
 import { DebtFTokenAdaptorV1 } from "src/modules/adaptors/Frax/DebtFTokenAdaptorV1.sol";
 
+import { ConvexCurveAdaptor } from "src/modules/adaptors/Convex/ConvexCurveAdaptor.sol";
+
+import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
+
 contract AdaptorHelperFunctions {
     // ========================================= General FUNCTIONS =========================================
 
@@ -676,5 +680,53 @@ contract AdaptorHelperFunctions {
 
     function _createBytesDataToClaimRewardsForCurveLP(address gauge) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(CurveAdaptor.claimRewards.selector, gauge);
+    }
+
+    // ========================================= Convex-Curve Platform FUNCTIONS =========================================
+
+    function _createBytesDataToDepositToConvexCurvePlatform(
+        uint256 _pid,
+        address _baseRewardPool,
+        ERC20 _lpt,
+        CurvePool _pool,
+        bytes4 _selector,
+        uint256 _amount
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                ConvexCurveAdaptor.depositLPTInConvexAndStake.selector,
+                _pid,
+                _baseRewardPool,
+                _lpt,
+                _pool,
+                _selector,
+                _amount
+            );
+    }
+
+    function _createBytesDataToWithdrawAndClaimConvexCurvePlatform(
+        address _baseRewardPool,
+        uint256 _amount,
+        bool _claim
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                ConvexCurveAdaptor.withdrawFromBaseRewardPoolAsLPT.selector,
+                _baseRewardPool,
+                _amount,
+                _claim
+            );
+    }
+
+    function _createBytesDataToGetRewardsConvexCurvePlatform(
+        address _baseRewardPool,
+        bool _claimExtras
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                ConvexCurveAdaptor.getRewards.selector,
+                _baseRewardPool,
+                _claimExtras
+            );
     }
 }
