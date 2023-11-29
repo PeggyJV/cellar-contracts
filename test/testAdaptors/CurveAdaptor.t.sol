@@ -75,7 +75,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     bool public attackCellar;
     bool public blockExternalReceiver;
-    ERC20[] public slippageCoins;
     uint256 public slippageToCharge;
     address public slippageToken;
 
@@ -84,7 +83,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     mapping(uint256 => bool) public isPositionUsed;
 
     // Variables were originally memory but changed to state, to prevent stack too deep errors.
-    ERC20[] coins = new ERC20[](2);
+    ERC20[] public coins = new ERC20[](2);
     ERC20[] tokens = new ERC20[](2);
     uint256[] balanceDelta = new uint256[](2);
     uint256[] orderedTokenAmounts = new uint256[](2);
@@ -551,9 +550,7 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         initialAssets = cellar.totalAssets();
 
-        slippageCoins.push(ERC20(address(0)));
-        slippageCoins.push(ERC20(address(0)));
-
+        // Used so that this address can be used as a "cellar" and spoof the validation check in adaptor.
         isPositionUsed[0] = true;
     }
 
@@ -998,8 +995,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         // Set up slippage variables needed to run the test
-        slippageCoins[0] = coins0;
-        slippageCoins[1] = coins1;
+        coins[0] = coins0;
+        coins[1] = coins1;
         slippageToCharge = 0.8e4;
         slippageToken = WethFrxethToken;
 
@@ -1015,7 +1012,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
                 address(this),
                 ERC20(WethFrxethToken),
-                slippageCoins,
                 orderedTokenAmounts,
                 0,
                 WethFrxethGauge,
@@ -1044,7 +1040,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 address(this),
                 ERC20(WethFrxethToken),
                 amountToPull,
-                slippageCoins,
                 orderedTokenAmounts,
                 WethFrxethGauge,
                 CurvePool.withdraw_admin_fees.selector
@@ -1106,8 +1101,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         // Set up slippage variables needed to run the test
-        slippageCoins[0] = coins0;
-        slippageCoins[1] = coins1;
+        coins[0] = coins0;
+        coins[1] = coins1;
         slippageToCharge = 0.8e4;
         slippageToken = EthFrxethToken;
 
@@ -1123,7 +1118,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
                 address(this),
                 ERC20(EthFrxethToken),
-                slippageCoins,
                 orderedTokenAmounts,
                 0,
                 false,
@@ -1142,8 +1136,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         }
 
         // Reset these jsut in case they were changed in add_liquidity.
-        slippageCoins[0] = coins0;
-        slippageCoins[1] = coins1;
+        coins[0] = coins0;
+        coins[1] = coins1;
 
         // Strategist pulls liquidity.
         {
@@ -1157,7 +1151,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 address(this),
                 ERC20(EthFrxethToken),
                 amountToPull,
-                slippageCoins,
                 orderedTokenAmounts,
                 false,
                 EthFrxethGauge,
@@ -1178,20 +1171,20 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
     function add_liquidity(uint256[2] memory amounts, uint256) external payable {
         // Remove amounts from caller.
-        if (address(slippageCoins[0]) != curveAdaptor.CURVE_ETH()) {
-            uint256 coins0Balance = slippageCoins[0].balanceOf(msg.sender);
-            deal(address(slippageCoins[0]), msg.sender, coins0Balance - amounts[0]);
-        } else slippageCoins[0] = WETH;
-        if (address(slippageCoins[1]) != curveAdaptor.CURVE_ETH()) {
-            uint256 coins1Balance = slippageCoins[1].balanceOf(msg.sender);
-            deal(address(slippageCoins[1]), msg.sender, coins1Balance - amounts[1]);
-        } else slippageCoins[1] = WETH;
+        if (address(coins[0]) != curveAdaptor.CURVE_ETH()) {
+            uint256 coins0Balance = coins[0].balanceOf(msg.sender);
+            deal(address(coins[0]), msg.sender, coins0Balance - amounts[0]);
+        } else coins[0] = WETH;
+        if (address(coins[1]) != curveAdaptor.CURVE_ETH()) {
+            uint256 coins1Balance = coins[1].balanceOf(msg.sender);
+            deal(address(coins[1]), msg.sender, coins1Balance - amounts[1]);
+        } else coins[1] = WETH;
 
         // Get value out.
         uint256[] memory coinAmounts = new uint256[](2);
         coinAmounts[0] = amounts[0];
         coinAmounts[1] = amounts[1];
-        uint256 valueOut = priceRouter.getValues(slippageCoins, coinAmounts, ERC20(slippageToken));
+        uint256 valueOut = priceRouter.getValues(coins, coinAmounts, ERC20(slippageToken));
 
         // Apply slippage.
         valueOut = valueOut.mulDivDown(slippageToCharge, 1e4);
@@ -1206,16 +1199,16 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         deal(slippageToken, msg.sender, startingTokenBalance - lpAmount);
         // Get value out.
         uint256 valueOut;
-        if (address(slippageCoins[0]) == curveAdaptor.CURVE_ETH())
+        if (address(coins[0]) == curveAdaptor.CURVE_ETH())
             valueOut = priceRouter.getValue(ERC20(slippageToken), lpAmount, WETH);
-        else valueOut = priceRouter.getValue(ERC20(slippageToken), lpAmount, slippageCoins[0]);
+        else valueOut = priceRouter.getValue(ERC20(slippageToken), lpAmount, coins[0]);
 
         // Apply slippage.
         valueOut = valueOut.mulDivDown(slippageToCharge, 1e4);
 
-        if (address(slippageCoins[0]) != curveAdaptor.CURVE_ETH()) {
-            uint256 coins0Balance = slippageCoins[0].balanceOf(msg.sender);
-            deal(address(slippageCoins[0]), msg.sender, coins0Balance + valueOut);
+        if (address(coins[0]) != curveAdaptor.CURVE_ETH()) {
+            uint256 coins0Balance = coins[0].balanceOf(msg.sender);
+            deal(address(coins[0]), msg.sender, coins0Balance + valueOut);
         } else {
             uint256 coins0Balance = msg.sender.balance;
             deal(msg.sender, coins0Balance + valueOut);
@@ -1299,56 +1292,106 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
     }
 
     function testMismatchedArrayLengths() external {
-        ERC20[] memory underlyingTokens = new ERC20[](3);
-        uint256[] memory orderedUnderlyingTokenAmounts = new uint256[](2);
+        uint256[] memory orderedUnderlyingTokenAmounts = new uint256[](3);
         bytes memory data = abi.encodeWithSelector(
             CurveAdaptor.addLiquidity.selector,
-            address(0),
+            address(UsdcCrvUsdPool),
             ERC20(address(0)),
-            underlyingTokens,
             orderedUnderlyingTokenAmounts,
             0
         );
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___MismatchedLengths.selector)));
+        vm.expectRevert();
         address(curveAdaptor).functionDelegateCall(data);
 
         data = abi.encodeWithSelector(
             CurveAdaptor.addLiquidityETH.selector,
-            address(0),
+            address(UsdcCrvUsdPool),
             ERC20(address(0)),
-            underlyingTokens,
             orderedUnderlyingTokenAmounts,
             0,
             false
         );
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___MismatchedLengths.selector)));
+        vm.expectRevert();
         address(curveAdaptor).functionDelegateCall(data);
 
         data = abi.encodeWithSelector(
             CurveAdaptor.removeLiquidity.selector,
-            address(0),
+            address(UsdcCrvUsdPool),
             ERC20(address(0)),
             0,
-            underlyingTokens,
             orderedUnderlyingTokenAmounts
         );
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___MismatchedLengths.selector)));
+        vm.expectRevert();
         address(curveAdaptor).functionDelegateCall(data);
 
         data = abi.encodeWithSelector(
             CurveAdaptor.removeLiquidityETH.selector,
-            address(0),
+            address(UsdcCrvUsdPool),
             ERC20(address(0)),
             0,
-            underlyingTokens,
             orderedUnderlyingTokenAmounts,
             false
         );
 
-        vm.expectRevert(bytes(abi.encodeWithSelector(CurveAdaptor.CurveAdaptor___MismatchedLengths.selector)));
+        vm.expectRevert();
+        address(curveAdaptor).functionDelegateCall(data);
+
+        orderedUnderlyingTokenAmounts = new uint256[](1);
+        data = abi.encodeWithSelector(
+            CurveAdaptor.addLiquidity.selector,
+            address(UsdcCrvUsdPool),
+            ERC20(address(0)),
+            orderedUnderlyingTokenAmounts,
+            0
+        );
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___PoolHasMoreTokensThanExpected.selector))
+        );
+        address(curveAdaptor).functionDelegateCall(data);
+
+        data = abi.encodeWithSelector(
+            CurveAdaptor.addLiquidityETH.selector,
+            address(UsdcCrvUsdPool),
+            ERC20(address(0)),
+            orderedUnderlyingTokenAmounts,
+            0,
+            false
+        );
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___PoolHasMoreTokensThanExpected.selector))
+        );
+        address(curveAdaptor).functionDelegateCall(data);
+
+        data = abi.encodeWithSelector(
+            CurveAdaptor.removeLiquidity.selector,
+            address(UsdcCrvUsdPool),
+            ERC20(address(0)),
+            0,
+            orderedUnderlyingTokenAmounts
+        );
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___PoolHasMoreTokensThanExpected.selector))
+        );
+        address(curveAdaptor).functionDelegateCall(data);
+
+        data = abi.encodeWithSelector(
+            CurveAdaptor.removeLiquidityETH.selector,
+            address(UsdcCrvUsdPool),
+            ERC20(address(0)),
+            0,
+            orderedUnderlyingTokenAmounts,
+            false
+        );
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___PoolHasMoreTokensThanExpected.selector))
+        );
         address(curveAdaptor).functionDelegateCall(data);
     }
 
@@ -1368,7 +1411,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
                 EthStethPool,
                 ERC20(EthStethToken),
-                underlyingTokens,
                 orderedUnderlyingTokenAmounts,
                 0,
                 EthStethGauge,
@@ -1391,7 +1433,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
                 EthStethPool,
                 ERC20(EthStethToken),
-                underlyingTokens,
                 orderedUnderlyingTokenAmounts,
                 0,
                 EthStethGauge,
@@ -1411,7 +1452,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 EthStethPool,
                 ERC20(EthStethToken),
                 ERC20(EthStethToken).balanceOf(address(cellar)),
-                underlyingTokens,
                 orderedUnderlyingTokenAmounts,
                 EthStethGauge,
                 bytes4(0)
@@ -1533,7 +1573,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
             EthFrxethPool,
             ERC20(EthFrxethToken),
-            tokens,
             amounts,
             0,
             false,
@@ -1563,171 +1602,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         vm.expectRevert(bytes(abi.encodeWithSelector(CurveHelper.CurveHelper___Reentrancy.selector)));
         curveAdaptor.removeLiquidityETHViaProxy(address(0), ERC20(address(0)), 0, emptyTokens, amounts, false);
-    }
-
-    function testStrategistMessingUpInputTokenArray(uint256 assets) external {
-        assets = bound(assets, 1e6, 1_000_000e6);
-        deal(address(USDC), address(this), assets);
-        cellar.deposit(assets, address(this));
-
-        uint256[] memory orderedUnderlyingTokenAmounts = new uint256[](3);
-        orderedUnderlyingTokenAmounts[0] = assets;
-
-        // Making it too long
-        ERC20[] memory underlyingTokens = new ERC20[](3);
-        underlyingTokens[0] = USDC;
-        underlyingTokens[1] = CRVUSD;
-        underlyingTokens[2] = FRAX;
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
-                UsdcCrvUsdPool,
-                ERC20(UsdcCrvUsdToken),
-                underlyingTokens,
-                orderedUnderlyingTokenAmounts,
-                0,
-                UsdcCrvUsdGauge,
-                CurvePool.withdraw_admin_fees.selector
-            );
-            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
-            vm.expectRevert();
-            cellar.callOnAdaptor(data);
-        }
-
-        // Getting order wrong
-        deal(address(CRVUSD), address(cellar), assets);
-        underlyingTokens = new ERC20[](2);
-        underlyingTokens[0] = CRVUSD;
-        underlyingTokens[1] = USDC;
-        orderedUnderlyingTokenAmounts = new uint256[](2);
-        orderedUnderlyingTokenAmounts[0] = assets;
-
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
-                UsdcCrvUsdPool,
-                ERC20(UsdcCrvUsdToken),
-                underlyingTokens,
-                orderedUnderlyingTokenAmounts,
-                0,
-                UsdcCrvUsdGauge,
-                CurvePool.withdraw_admin_fees.selector
-            );
-            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
-            vm.expectRevert();
-            cellar.callOnAdaptor(data);
-        }
-
-        // Repeating a value.
-        // NOTE kinda weird but Curve allows this TX to work as long as
-        // orderedUnderlyingTokenAmounts[1] is zero.
-        uint256 totalAssetsBefore = cellar.totalAssets();
-        underlyingTokens = new ERC20[](2);
-        underlyingTokens[0] = USDC;
-        underlyingTokens[1] = USDC;
-
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
-                UsdcCrvUsdPool,
-                ERC20(UsdcCrvUsdToken),
-                underlyingTokens,
-                orderedUnderlyingTokenAmounts,
-                0,
-                UsdcCrvUsdGauge,
-                CurvePool.withdraw_admin_fees.selector
-            );
-            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
-            cellar.callOnAdaptor(data);
-        }
-        uint256 totalAssetsAfter = cellar.totalAssets();
-
-        assertApproxEqRel(
-            totalAssetsAfter,
-            totalAssetsBefore,
-            0.003e18,
-            "Total assets should approximately be unchanged."
-        );
-
-        // Check liquidity withdraws.
-        uint256 lpTokenAmount = ERC20(UsdcCrvUsdToken).balanceOf(address(cellar));
-        underlyingTokens = new ERC20[](3);
-        underlyingTokens[0] = USDC;
-        underlyingTokens[1] = CRVUSD;
-        underlyingTokens[2] = FRAX;
-        orderedUnderlyingTokenAmounts = new uint256[](3);
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToRemoveLiquidityFromCurve(
-                UsdcCrvUsdPool,
-                ERC20(UsdcCrvUsdToken),
-                lpTokenAmount,
-                underlyingTokens,
-                orderedUnderlyingTokenAmounts,
-                UsdcCrvUsdGauge,
-                CurvePool.withdraw_admin_fees.selector
-            );
-            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
-            vm.expectRevert();
-            cellar.callOnAdaptor(data);
-        }
-
-        // Repeating a value.
-        underlyingTokens = new ERC20[](2);
-        underlyingTokens[0] = USDC;
-        underlyingTokens[1] = USDC;
-        orderedUnderlyingTokenAmounts = new uint256[](2);
-
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
-                UsdcCrvUsdPool,
-                ERC20(UsdcCrvUsdToken),
-                underlyingTokens,
-                orderedUnderlyingTokenAmounts,
-                0,
-                UsdcCrvUsdGauge,
-                CurvePool.withdraw_admin_fees.selector
-            );
-            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
-            vm.expectRevert();
-            cellar.callOnAdaptor(data);
-        }
-
-        // Getting order wrong
-        // NOTE kinda weird but Curve allows this TX to work
-        deal(address(CRVUSD), address(cellar), assets);
-        underlyingTokens = new ERC20[](2);
-        underlyingTokens[0] = CRVUSD;
-        underlyingTokens[1] = USDC;
-
-        {
-            Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
-
-            bytes[] memory adaptorCalls = new bytes[](1);
-            adaptorCalls[0] = _createBytesDataToRemoveLiquidityFromCurve(
-                UsdcCrvUsdPool,
-                ERC20(UsdcCrvUsdToken),
-                lpTokenAmount,
-                underlyingTokens,
-                orderedUnderlyingTokenAmounts,
-                UsdcCrvUsdGauge,
-                CurvePool.withdraw_admin_fees.selector
-            );
-            data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
-            // vm.expectRevert();
-            cellar.callOnAdaptor(data);
-        }
     }
 
     function testCellarWithoutOracleTryingToUseCurvePosition() external {
@@ -1795,7 +1669,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
                 UsdcCrvUsdPool,
                 ERC20(UsdcCrvUsdToken),
-                tokens,
                 orderedTokenAmounts,
                 0,
                 UsdcCrvUsdGauge,
@@ -1855,10 +1728,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
 
-        ERC20[] memory underlyingTokens = new ERC20[](2);
-        underlyingTokens[0] = ERC20(curveAdaptor.CURVE_ETH());
-        // Malicious strategist intentionally sets coins[1] to be USDC when it should be FRXETH.
-        underlyingTokens[1] = USDC;
         uint256[] memory orderedTokenAmountsOut = new uint256[](2);
 
         bytes[] memory adaptorCalls = new bytes[](1);
@@ -1866,7 +1735,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             EthFrxethPool,
             ERC20(EthFrxethToken),
             valueInLp,
-            underlyingTokens,
             orderedTokenAmountsOut,
             false,
             EthFrxethGauge,
@@ -1876,50 +1744,12 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
 
         // A normal liquidity redemption would give about $33 ETH and $66 FRXETH.
 
-        // Before making call, strategist sends 65 USDC worth of value of ETH to Curve Adaptor, and 1 wei USDC.
-        uint256 valueStrategistAdded = 57e6;
-        uint256 ethValue = priceRouter.getValue(USDC, valueStrategistAdded, WETH);
-        deal(address(curveAdaptor), ethValue);
-        deal(address(USDC), address(curveAdaptor), 1);
-
         // Strategist rebalances but sandwiches their TXs around it.
         cellar.callOnAdaptor(data);
 
-        // FRXETH should have been left behind in the adaptor.
+        // No FRXETH should have been left behind in the adaptor.
         uint256 frxEthInAdaptor = FRXETH.balanceOf(address(curveAdaptor));
-        uint256 valueLeftInAdaptor = priceRouter.getValue(FRXETH, frxEthInAdaptor, USDC);
-        assertApproxEqRel(valueLeftInAdaptor, 66e6, 0.01e18, "Curve Adaptor should have ~$66 of FRXETH in it.");
-
-        // Strategist from their EOA interacts with Curve Adaptor to get FRXETH sitting in Adaptor.
-        address strategistEoa = vm.addr(0xDEAD1);
-        vm.startPrank(strategistEoa);
-        // Strategist previsouly added liquidity to ETH FrxETH pool.
-        deal(EthFrxethToken, strategistEoa, valueInLp);
-        // Stratestgist properly sets token array.
-        underlyingTokens[1] = FRXETH;
-
-        ERC20(EthFrxethToken).approve(address(curveAdaptor), valueInLp);
-        curveAdaptor.removeLiquidityETHViaProxy(
-            EthFrxethPool,
-            ERC20(EthFrxethToken),
-            valueInLp,
-            underlyingTokens,
-            orderedTokenAmountsOut,
-            false
-        );
-        vm.stopPrank();
-        uint256[] memory balances = new uint256[](2);
-        balances[0] = WETH.balanceOf(strategistEoa);
-        balances[1] = FRXETH.balanceOf(strategistEoa);
-        underlyingTokens[0] = WETH;
-        uint256 valueStrategistHolds = priceRouter.getValues(underlyingTokens, balances, USDC);
-        uint256 attackProfit = valueStrategistHolds - (valueStrategistAdded + 100e6);
-        assertApproxEqRel(
-            attackProfit,
-            10e6,
-            0.05e18,
-            "Attack should have profitted ~valueInLp * allowed slippage(10%)."
-        );
+        assertEq(frxEthInAdaptor, 0, "Curve Adaptor should have no FRXETH in it.");
     }
 
     // ========================================= Helpers =========================================
@@ -2100,7 +1930,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
                 pool,
                 ERC20(token),
-                tokens,
                 orderedTokenAmounts,
                 0,
                 gauge,
@@ -2140,7 +1969,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddLiquidityToCurve(
                 pool,
                 ERC20(token),
-                tokens,
                 orderedTokenAmounts,
                 0,
                 gauge,
@@ -2231,7 +2059,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 pool,
                 ERC20(token),
                 amountToPull,
-                tokens,
                 new uint256[](2),
                 gauge,
                 selector
@@ -2297,7 +2124,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
                 pool,
                 ERC20(token),
-                tokens,
                 orderedTokenAmounts,
                 0,
                 false,
@@ -2338,7 +2164,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
                 pool,
                 ERC20(token),
-                tokens,
                 orderedTokenAmounts,
                 0,
                 false,
@@ -2432,7 +2257,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
                 pool,
                 ERC20(token),
                 amountToPull,
-                tokens,
                 orderedTokenAmounts,
                 false,
                 gauge,
@@ -2505,7 +2329,6 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             adaptorCalls[0] = _createBytesDataToAddETHLiquidityToCurve(
                 pool,
                 ERC20(token),
-                tokens,
                 orderedTokenAmounts,
                 0,
                 false,

@@ -226,20 +226,23 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @notice Allows strategist to add liquidity to Curve pairs that do NOT use the native asset.
      * @param pool the curve pool address
      * @param lpToken the curve pool token
-     * @param underlyingTokens array of ERC20 tokens that make up the curve pool, in order of `pool.coins`
      * @param orderedUnderlyingTokenAmounts array of token amounts, in order of `pool.coins`
      * @param minLPAmount the minimum amount of LP out
      */
     function addLiquidity(
         address pool,
         ERC20 lpToken,
-        ERC20[] memory underlyingTokens,
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
         CurveGauge gauge,
         bytes4 selector
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
+
+        ERC20[] memory underlyingTokens = _getPoolUnderlyingTokens(
+            CurvePool(pool),
+            orderedUnderlyingTokenAmounts.length
+        );
 
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveAdaptor___MismatchedLengths();
         bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false); // TODO build data after max available
@@ -277,7 +280,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @notice Allows strategist to add liquidity to Curve pairs that use the native asset.
      * @param pool the curve pool address
      * @param lpToken the curve pool token
-     * @param underlyingTokens array of ERC20 tokens that make up the curve pool, in order of `pool.coins`
      * @param orderedUnderlyingTokenAmounts array of token amounts, in order of `pool.coins`
      * @param minLPAmount the minimum amount of LP out
      * @param useUnderlying bool indicating whether or not to add a true bool to the end of abi.encoded `addLiquidity` call
@@ -285,7 +287,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     function addLiquidityETH(
         address pool,
         ERC20 lpToken,
-        ERC20[] memory underlyingTokens,
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
         bool useUnderlying,
@@ -293,6 +294,11 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         bytes4 selector
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
+
+        ERC20[] memory underlyingTokens = _getPoolUnderlyingTokens(
+            CurvePool(pool),
+            orderedUnderlyingTokenAmounts.length
+        );
 
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveAdaptor___MismatchedLengths();
 
@@ -341,19 +347,22 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @param pool the curve pool address
      * @param lpToken the curve pool token
      * @param lpTokenAmount the amount of LP token
-     * @param underlyingTokens array of ERC20 tokens that make up the curve pool, in order of `pool.coins`
      * @param orderedMinimumUnderlyingTokenAmountsOut array of minimum token amounts out, in order of `pool.coins`
      */
     function removeLiquidity(
         address pool,
         ERC20 lpToken,
         uint256 lpTokenAmount,
-        ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         CurveGauge gauge,
         bytes4 selector
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
+
+        ERC20[] memory underlyingTokens = _getPoolUnderlyingTokens(
+            CurvePool(pool),
+            orderedMinimumUnderlyingTokenAmountsOut.length
+        );
 
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveAdaptor___MismatchedLengths();
@@ -385,7 +394,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
      * @param pool the curve pool address
      * @param lpToken the curve pool token
      * @param lpTokenAmount the amount of LP token
-     * @param underlyingTokens array of ERC20 tokens that make up the curve pool, in order of `pool.coins`
      * @param orderedMinimumUnderlyingTokenAmountsOut array of minimum token amounts out, in order of `pool.coins`
      * @param useUnderlying bool indicating whether or not to add a true bool to the end of abi.encoded `removeLiquidity` call
      */
@@ -393,13 +401,17 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         address pool,
         ERC20 lpToken,
         uint256 lpTokenAmount,
-        ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         bool useUnderlying,
         CurveGauge gauge,
         bytes4 selector
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
+
+        ERC20[] memory underlyingTokens = _getPoolUnderlyingTokens(
+            CurvePool(pool),
+            orderedMinimumUnderlyingTokenAmountsOut.length
+        );
 
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveAdaptor___MismatchedLengths();

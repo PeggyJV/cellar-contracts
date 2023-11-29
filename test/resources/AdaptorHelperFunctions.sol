@@ -575,7 +575,6 @@ contract AdaptorHelperFunctions {
     function _createBytesDataToAddLiquidityToCurve(
         address pool,
         ERC20 token,
-        ERC20[] memory tokens,
         uint256[] memory orderedTokenAmounts,
         uint256 minLPAmount,
         address gauge,
@@ -586,7 +585,6 @@ contract AdaptorHelperFunctions {
                 CurveAdaptor.addLiquidity.selector,
                 pool,
                 token,
-                tokens,
                 orderedTokenAmounts,
                 minLPAmount,
                 gauge,
@@ -597,7 +595,6 @@ contract AdaptorHelperFunctions {
     function _createBytesDataToAddETHLiquidityToCurve(
         address pool,
         ERC20 token,
-        ERC20[] memory tokens,
         uint256[] memory orderedTokenAmounts,
         uint256 minLPAmount,
         bool useUnderlying,
@@ -609,7 +606,6 @@ contract AdaptorHelperFunctions {
                 CurveAdaptor.addLiquidityETH.selector,
                 pool,
                 token,
-                tokens,
                 orderedTokenAmounts,
                 minLPAmount,
                 useUnderlying,
@@ -622,7 +618,6 @@ contract AdaptorHelperFunctions {
         address pool,
         ERC20 token,
         uint256 lpTokenAmount,
-        ERC20[] memory tokens,
         uint256[] memory orderedTokenAmountsOut,
         address gauge,
         bytes4 selector
@@ -633,7 +628,6 @@ contract AdaptorHelperFunctions {
                 pool,
                 token,
                 lpTokenAmount,
-                tokens,
                 orderedTokenAmountsOut,
                 gauge,
                 selector
@@ -644,7 +638,6 @@ contract AdaptorHelperFunctions {
         address pool,
         ERC20 token,
         uint256 lpTokenAmount,
-        ERC20[] memory tokens,
         uint256[] memory orderedTokenAmountsOut,
         bool useUnderlying,
         address gauge,
@@ -656,7 +649,6 @@ contract AdaptorHelperFunctions {
                 pool,
                 token,
                 lpTokenAmount,
-                tokens,
                 orderedTokenAmountsOut,
                 useUnderlying,
                 gauge,
@@ -722,11 +714,6 @@ contract AdaptorHelperFunctions {
         address _baseRewardPool,
         bool _claimExtras
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodeWithSelector(
-                ConvexCurveAdaptor.getRewards.selector,
-                _baseRewardPool,
-                _claimExtras
-            );
+        return abi.encodeWithSelector(ConvexCurveAdaptor.getRewards.selector, _baseRewardPool, _claimExtras);
     }
 }
