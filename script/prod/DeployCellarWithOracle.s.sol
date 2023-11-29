@@ -77,7 +77,7 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
             stethPositionId,
             abi.encode(0),
             0.001e18,
-            0.8e18
+            0.85e18
         );
 
         uint64 heartbeat = 1 days;
@@ -118,7 +118,8 @@ contract DeployCellarWithOracleScript is Script, MainnetAddresses {
         // Approve new cellar to spend assets.
         string memory nameToUse = string.concat(cellarName, " V0.0");
         address cellarAddress = deployer.getAddress(nameToUse);
-        holdingAsset.approve(cellarAddress, initialDeposit);
+        require(false, "is this needed anymore");
+        // holdingAsset.approve(cellarAddress, initialDeposit);
 
         bytes memory creationCode;
         bytes memory constructorArgs;
