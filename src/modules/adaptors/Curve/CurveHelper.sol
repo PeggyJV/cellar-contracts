@@ -74,6 +74,11 @@ contract CurveHelper {
     error CurveHelper___PoolInReenteredState();
 
     /**
+     * @notice While getting pool underlying tokens, more tokens were found than expected.
+     */
+    error CurveHelper___PoolHasMoreTokensThanExpected();
+
+    /**
      * @notice Native ETH(or token) address on current chain.
      */
     address public constant CURVE_ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
@@ -337,5 +342,25 @@ contract CurveHelper {
      */
     function _zeroExternalApproval(ERC20 asset, address spender) private {
         if (asset.allowance(address(this), spender) > 0) asset.safeApprove(spender, 0);
+    }
+
+    /**
+     * @notice Helper function to get the underlying tokens in a Curve pool.
+     */
+    function _getPoolUnderlyingTokens(
+        CurvePool pool,
+        uint256 expectedTokenCount
+    ) internal view returns (ERC20[] memory underlyingTokens) {
+        underlyingTokens = new ERC20[](expectedTokenCount);
+
+        // It is expected behavior that if expectedTokenCount is > than the actual token count, this will revert.
+        for (uint256 i; i < expectedTokenCount; ++i) underlyingTokens[i] = ERC20(pool.coins(i));
+
+        // Make sure expectedTokenCount is correct, and that there are not more tokens.
+        try pool.coins(expectedTokenCount) {
+            revert CurveHelper___PoolHasMoreTokensThanExpected();
+        } catch {
+            // Do nothing we expect this to revert here.
+        }
     }
 }
