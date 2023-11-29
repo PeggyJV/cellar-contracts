@@ -130,16 +130,14 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
             (uint256, address, ERC20, CurvePool, bytes4)
         );
         _validatePositionIsUsed(pid, rewardPool, lpt, pool, selector);
-        if (isLiquid && selector != bytes4(0)) _callReentrancyFunction(pool, selector);
-        else revert BaseAdaptor__UserWithdrawsNotAllowed();
+        if (isLiquid && selector != bytes4(0)) {
+            _callReentrancyFunction(pool, selector);
+        } else revert BaseAdaptor__UserWithdrawsNotAllowed();
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
-        ERC20 stakingToken = ERC20(baseRewardPool.stakingToken());
-
-        if (amount <= stakingToken.balanceOf(msg.sender)) {
-            stakingToken.safeTransfer(receiver, amount);
-        } else {
-            baseRewardPool.withdrawAndUnwrap(amount, false);
-        }
+        baseRewardPool.withdrawAndUnwrap(amount, false);
+        uint256 stakedInConvexBalance = baseRewardPool.balanceOf(address(this));
+        lpt.safeApprove(address(this), amount);
+        lpt.safeTransfer(receiver, amount);
     }
 
     /**
@@ -194,9 +192,9 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
 
         // compare against booster (queried lpt (qlpt) & queried RewardsPool (qRewardsPool))
         (address qlpt, , , address qRewardsPool, , ) = booster.poolInfo(pid);
-        if ((address(lpt) != qlpt) || (rewardsPool != qRewardsPool))
+        if ((address(lpt) != qlpt) || (rewardsPool != qRewardsPool)) {
             revert ConvexAdaptor__ConvexBoosterPositionsDoesNotMatchAdaptorData(pid, rewardsPool, lpt, pool, selector);
-
+        }
         return lpt;
     }
 
@@ -254,10 +252,7 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
      * @param _baseRewardPool for respective convex market (w/ trusted poolId)
      * @param _claimExtras Whether or not to claim extra rewards associated to the Convex booster (outside of rewardToken for Convex booster)
      */
-    function getRewards(
-        address _baseRewardPool,
-        bool _claimExtras
-    ) public {
+    function getRewards(address _baseRewardPool, bool _claimExtras) public {
         _getRewards(_baseRewardPool, _claimExtras);
     }
 
@@ -283,7 +278,7 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
                 abi.encode(identifier(), false, abi.encode(_pid, _baseRewardPool, _lpt, _curvePool, _selector))
             );
             uint32 positionId = Cellar(address(this)).registry().getPositionHashToPositionId(positionHash);
-            if (!Cellar(address(this)).isPositionUsed(positionId))
+            if (!Cellar(address(this)).isPositionUsed(positionId)) {
                 revert ConvexAdaptor__ConvexBoosterPositionsMustBeTracked(
                     _pid,
                     _baseRewardPool,
@@ -291,6 +286,7 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
                     _curvePool,
                     _selector
                 );
+            }
         } // else do nothing. The cellar is currently being deployed so it has no bytecode, and trying to call `cellar.registry()` will revert.
     }
 
