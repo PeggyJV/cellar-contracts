@@ -120,7 +120,7 @@ contract CurveHelper {
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
-        bool useUnderlying /**onReentrant*/
+        bool useUnderlying
     ) external nonReentrant returns (uint256 lpOut) {
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveHelper___MismatchedLengths();
 
@@ -174,7 +174,7 @@ contract CurveHelper {
         uint256 lpTokenAmount,
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
-        bool useUnderlying /**onReentrant*/
+        bool useUnderlying
     ) external nonReentrant returns (uint256[] memory tokensOut) {
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveHelper___MismatchedLengths();

