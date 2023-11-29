@@ -10,7 +10,6 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { Cellar } from "src/base/Cellar.sol";
 import { CellarWithOracle } from "src/base/permutations/CellarWithOracle.sol";
 
-// TODO can relayers send TXS via flash blots
 /**
  * @title Curve Helper
  * @notice Contains helper logic needed for safely interacting with multiple different Curve Pool implementations.
@@ -79,6 +78,16 @@ contract CurveHelper {
     error CurveHelper___PoolHasMoreTokensThanExpected();
 
     /**
+     * @notice Native asset repeated twice in add liquidity function.
+     */
+    error CurveHelper___NativeAssetRepeated();
+
+    /**
+     * @notice Attempted a token transfer with zero tokens.
+     */
+    error CurveHelper___ZeroTransferAmount();
+
+    /**
      * @notice Native ETH(or token) address on current chain.
      */
     address public constant CURVE_ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
@@ -126,7 +135,7 @@ contract CurveHelper {
         uint256[] memory orderedUnderlyingTokenAmounts,
         uint256 minLPAmount,
         bool useUnderlying
-    ) external nonReentrant returns (uint256 lpOut) {
+    ) external nonReentrant returns (uint256 lpTokenDeltaBalance) {
         if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveHelper___MismatchedLengths();
 
         uint256 nativeEthAmount;
@@ -134,11 +143,13 @@ contract CurveHelper {
         // Transfer assets to the adaptor.
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) == CURVE_ETH) {
+                if (nativeEthAmount != 0) revert CurveHelper___NativeAssetRepeated();
+
                 // If token is CURVE_ETH, then approve adaptor to spend native wrapper.
                 ERC20(nativeWrapper).safeTransferFrom(msg.sender, address(this), orderedUnderlyingTokenAmounts[i]);
                 // Unwrap native.
                 IWETH9(nativeWrapper).withdraw(orderedUnderlyingTokenAmounts[i]);
-                // TODO add in check to make sure this is zero before overriding
+
                 nativeEthAmount = orderedUnderlyingTokenAmounts[i];
             } else {
                 underlyingTokens[i].safeTransferFrom(msg.sender, address(this), orderedUnderlyingTokenAmounts[i]);
@@ -153,11 +164,14 @@ contract CurveHelper {
             useUnderlying
         );
 
+        lpTokenDeltaBalance = lpToken.balanceOf(address(this));
+
         pool.functionCallWithValue(data, nativeEthAmount);
 
         // Send LP tokens back to caller.
-        lpOut = lpToken.balanceOf(address(this));
-        lpToken.safeTransfer(msg.sender, lpOut);
+        lpTokenDeltaBalance = lpToken.balanceOf(address(this)) - lpTokenDeltaBalance;
+        if (lpTokenDeltaBalance == 0) revert CurveHelper___ZeroTransferAmount();
+        lpToken.safeTransfer(msg.sender, lpTokenDeltaBalance);
 
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) != CURVE_ETH) _zeroExternalApproval(underlyingTokens[i], address(this));
@@ -180,7 +194,7 @@ contract CurveHelper {
         ERC20[] memory underlyingTokens,
         uint256[] memory orderedMinimumUnderlyingTokenAmountsOut,
         bool useUnderlying
-    ) external nonReentrant returns (uint256[] memory tokensOut) {
+    ) external nonReentrant returns (uint256[] memory balanceDelta) {
         if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
             revert CurveHelper___MismatchedLengths();
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(
@@ -192,25 +206,31 @@ contract CurveHelper {
         // Transfer token in.
         lpToken.safeTransferFrom(msg.sender, address(this), lpTokenAmount);
 
-        pool.functionCall(data);
+        balanceDelta = new uint256[](underlyingTokens.length);
+        for (uint256 i; i < underlyingTokens.length; ++i) {
+            if (address(underlyingTokens[i]) == CURVE_ETH) {
+                balanceDelta[i] = address(this).balance;
+            } else {
+                balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this));
+            }
+        }
 
-        // Iterate through tokens, update tokensOut.
-        tokensOut = new uint256[](underlyingTokens.length);
+        pool.functionCall(data);
 
         for (uint256 i; i < underlyingTokens.length; ++i) {
             if (address(underlyingTokens[i]) == CURVE_ETH) {
+                balanceDelta[i] = address(this).balance - balanceDelta[i];
+                if (balanceDelta[i] == 0) revert CurveHelper___ZeroTransferAmount();
                 // Wrap any ETH we have.
-                uint256 ethBalance = address(this).balance;
-                IWETH9(nativeWrapper).deposit{ value: ethBalance }();
+                IWETH9(nativeWrapper).deposit{ value: balanceDelta[i] }();
                 // Send WETH back to caller.
-                ERC20(nativeWrapper).safeTransfer(msg.sender, ethBalance);
-                tokensOut[i] = ethBalance;
+                ERC20(nativeWrapper).safeTransfer(msg.sender, balanceDelta[i]);
             } else {
+                balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this)) - balanceDelta[i];
+                if (balanceDelta[i] == 0) revert CurveHelper___ZeroTransferAmount();
                 // Send ERC20 back to caller
-                ERC20 t = ERC20(underlyingTokens[i]);
-                uint256 tBalance = t.balanceOf(address(this));
-                t.safeTransfer(msg.sender, tBalance);
-                tokensOut[i] = tBalance;
+                ERC20 token = ERC20(underlyingTokens[i]);
+                token.safeTransfer(msg.sender, balanceDelta[i]);
             }
         }
 

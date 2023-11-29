@@ -239,26 +239,23 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
+        // Internal function also validates array lengths are the same.
         ERC20[] memory underlyingTokens = _getPoolUnderlyingTokens(
             CurvePool(pool),
             orderedUnderlyingTokenAmounts.length
         );
 
-        if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveAdaptor___MismatchedLengths();
-        bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false); // TODO build data after max available
-
         uint256 balanceDelta = lpToken.balanceOf(address(this));
 
         // Approve pool to spend amounts, and check for max available.
-        for (
-            uint256 i;
-            i < underlyingTokens.length;
-            ++i // TODO curly braces
-        )
+        for (uint256 i; i < underlyingTokens.length; ++i) {
             if (orderedUnderlyingTokenAmounts[i] > 0) {
                 orderedUnderlyingTokenAmounts[i] = _maxAvailable(underlyingTokens[i], orderedUnderlyingTokenAmounts[i]);
                 underlyingTokens[i].safeApprove(pool, orderedUnderlyingTokenAmounts[i]);
             }
+        }
+
+        bytes memory data = _curveAddLiquidityEncodedCallData(orderedUnderlyingTokenAmounts, minLPAmount, false);
 
         pool.functionCall(data);
 
@@ -295,12 +292,11 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
+        // Internal function also validates array lengths are the same.
         ERC20[] memory underlyingTokens = _getPoolUnderlyingTokens(
             CurvePool(pool),
             orderedUnderlyingTokenAmounts.length
         );
-
-        if (underlyingTokens.length != orderedUnderlyingTokenAmounts.length) revert CurveAdaptor___MismatchedLengths();
 
         // Approve adaptor to spend amounts
         for (uint256 i; i < underlyingTokens.length; ++i) {
@@ -359,14 +355,14 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
+        // Internal function also validates array lengths are the same.
         ERC20[] memory underlyingTokens = _getPoolUnderlyingTokens(
             CurvePool(pool),
             orderedMinimumUnderlyingTokenAmountsOut.length
         );
 
-        if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
-            revert CurveAdaptor___MismatchedLengths();
         lpTokenAmount = _maxAvailable(lpToken, lpTokenAmount);
+
         bytes memory data = _curveRemoveLiquidityEncodedCalldata(
             lpTokenAmount,
             orderedMinimumUnderlyingTokenAmountsOut,
@@ -379,14 +375,13 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
 
         pool.functionCall(data);
 
-        for (uint256 i; i < underlyingTokens.length; ++i)
+        for (uint256 i; i < underlyingTokens.length; ++i) {
             balanceDelta[i] = ERC20(underlyingTokens[i]).balanceOf(address(this)) - balanceDelta[i];
+        }
 
         uint256 lpValueOut = Cellar(address(this)).priceRouter().getValues(underlyingTokens, balanceDelta, lpToken);
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
-
-        _revokeExternalApproval(lpToken, pool); // TODO remove this
     }
 
     /**
@@ -408,13 +403,12 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
     ) external {
         _verifyCurvePositionIsUsed(CurvePool(pool), lpToken, gauge, selector);
 
+        // Internal function also validates array lengths are the same.
         ERC20[] memory underlyingTokens = _getPoolUnderlyingTokens(
             CurvePool(pool),
             orderedMinimumUnderlyingTokenAmountsOut.length
         );
 
-        if (underlyingTokens.length != orderedMinimumUnderlyingTokenAmountsOut.length)
-            revert CurveAdaptor___MismatchedLengths();
         lpTokenAmount = _maxAvailable(lpToken, lpTokenAmount);
 
         lpToken.safeApprove(addressThis, lpTokenAmount);
@@ -438,7 +432,7 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         uint256 minValueOut = lpTokenAmount.mulDivDown(curveSlippage, 1e4);
         if (lpValueOut < minValueOut) revert CurveAdaptor___Slippage();
 
-        _revokeExternalApproval(lpToken, addressThis); // TODO remove this
+        _revokeExternalApproval(lpToken, addressThis);
     }
 
     /**
@@ -455,8 +449,6 @@ contract CurveAdaptor is BaseAdaptor, CurveHelper {
         _revokeExternalApproval(lpToken, address(gauge));
     }
 
-    // TODO delta balance check to make sure we get out what we expect. POSSIBLY
-    // TODO ask teh strategsits about wanting to support
     /**
      * @notice Allows strategist to unstake Curve LP tokens from their gauge.
      * @param gauge the gauge for `lpToken`

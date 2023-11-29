@@ -1213,6 +1213,8 @@ contract CurveAdaptorTest is MainnetStarterTest, AdaptorHelperFunctions {
             uint256 coins0Balance = msg.sender.balance;
             deal(msg.sender, coins0Balance + valueOut);
         }
+
+        deal(address(coins[1]), msg.sender, 1);
     }
 
     function testReentrancyProtection0(uint256 assets) external {
