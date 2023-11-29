@@ -135,8 +135,6 @@ contract ConvexCurveAdaptor is BaseAdaptor, CurveHelper {
         } else revert BaseAdaptor__UserWithdrawsNotAllowed();
         IBaseRewardPool baseRewardPool = IBaseRewardPool(rewardPool);
         baseRewardPool.withdrawAndUnwrap(amount, false);
-        uint256 stakedInConvexBalance = baseRewardPool.balanceOf(address(this));
-        lpt.safeApprove(address(this), amount);
         lpt.safeTransfer(receiver, amount);
     }
 
