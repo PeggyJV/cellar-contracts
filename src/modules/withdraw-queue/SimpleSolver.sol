@@ -114,6 +114,9 @@ contract SimpleSolver is ISolver {
 
     //============================== HELPER FUNCTIONS ===============================
 
+    /**
+     * @notice Helper function containing the logic to handle p2p solves.
+     */
     function _p2pSolve(bytes memory runData, uint256 sharesReceived, uint256 assetApprovalAmount) internal {
         (, address solver, address queue, ERC4626 share, uint256 minSharesReceived, uint256 maxAssets) = abi.decode(
             runData,
@@ -140,6 +143,9 @@ contract SimpleSolver is ISolver {
         asset.safeApprove(queue, assetApprovalAmount);
     }
 
+    /**
+     * @notice Helper function containing the logic to handle redeem solves.
+     */
     function _redeemSolve(bytes memory runData, uint256 sharesReceived, uint256 assetApprovalAmount) internal {
         (, address solver, address queue, ERC4626 share, uint256 minAssetDelta, uint256 maxAssets) = abi.decode(
             runData,
