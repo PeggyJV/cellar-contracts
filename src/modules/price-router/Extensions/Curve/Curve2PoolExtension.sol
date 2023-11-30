@@ -8,6 +8,17 @@ import { CurvePool } from "src/interfaces/external/Curve/CurvePool.sol";
  * @title Sommelier Price Router Curve 2Pool Extension
  * @notice Allows the Price Router to price Curve LP with 2 underlying coins.
  * @author crispymangoes
+ * @notice IMPORTANT
+ *         Historically Curve Finance has had numerous exploits associated with attackers
+ *         manipulating the valuation of Curve Liquidity Provider tokens. The below methodology
+ *         is only safe for 2 major reasons.
+ *         1) Only Cellars that use an `ERC4626SharePriceOracle.sol`
+ *         for pricing their shares will take positions in Curve. This is important because this
+ *         approach is both resistant to attacks where Cellars are interacted with while the Curve Pool
+ *         is in some bad state(single block reentrancy), and it also puts a hard limit as to how fast the
+ *         share price of a Cellar can change over time(multiple block attacks).
+ *         2) The `CurveAdaptor.sol` will always check if the underlying Curve Pool is in a re-entered state
+ *         while performing any user deposit/withdraws, and revert if it is.
  */
 contract Curve2PoolExtension is Extension {
     using Math for uint256;
