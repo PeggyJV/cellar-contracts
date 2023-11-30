@@ -6,6 +6,7 @@ import { CellarAdaptor } from "src/modules/adaptors/Sommelier/CellarAdaptor.sol"
 import { ERC20DebtAdaptor } from "src/mocks/ERC20DebtAdaptor.sol";
 import { MockDataFeed } from "src/mocks/MockDataFeed.sol";
 import { WithdrawQueue, ISolver } from "src/modules/withdraw-queue/WithdrawQueue.sol";
+import { SimpleSolver } from "src/modules/withdraw-queue/SimpleSolver.sol";
 
 // Import Everything from Starter file.
 import "test/resources/MainnetStarter.t.sol";
@@ -19,6 +20,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
 
     Cellar private cellar;
     WithdrawQueue private queue;
+    SimpleSolver private simpleSolver;
 
     uint32 public usdcPosition = 1;
 
@@ -34,6 +36,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         _setUp();
 
         queue = new WithdrawQueue();
+        simpleSolver = new SimpleSolver();
 
         PriceRouter.ChainlinkDerivativeStorage memory stor;
 
@@ -144,7 +147,7 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         assertGt(remainingApproval, 0, "Queue should still have some approval.");
 
         // Solver tries to use remaining approval.
-        vm.expectRevert(bytes(abi.encodeWithSelector(WithdrawQueue.WithdrawQueue__NoShares.selector)));
+        vm.expectRevert(bytes(abi.encodeWithSelector(WithdrawQueue.WithdrawQueue__NoShares.selector, user)));
         queue.solve(cellar, users, callData, address(this));
     }
 
@@ -214,8 +217,106 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         queue.solve(cellar, users, callData, address(this));
     }
 
-    // TODO tests for malicious solvers that repeat users, or try to add a user who is not in there,
-    // basically check for all reverts in solve.
+    function testSolverReverts(uint256 sharesToWithdraw) external {
+        sharesToWithdraw = bound(sharesToWithdraw, 1e6, type(uint96).max);
+        // user A wants to withdraw `sharesToWithdraw` but then changes their mind to only withdraw half.
+        // NOTE shares and assets are 1:1.
+
+        address userA = vm.addr(0xA);
+        address userB = vm.addr(0xB);
+        address userC = vm.addr(0xC);
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+        deal(address(USDC), userB, sharesToWithdraw);
+        deal(address(USDC), userC, sharesToWithdraw);
+
+        // user A deposits into cellar, and joins queue.
+        vm.startPrank(userA);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory reqA = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 1e6,
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, reqA);
+        vm.stopPrank();
+
+        // user B deposits into cellar, and joins queue.
+        vm.startPrank(userB);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userB);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory reqB = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 50),
+            inSolve: false,
+            executionSharePrice: 1e6,
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, reqB);
+        vm.stopPrank();
+
+        // user C deposits into cellar, and joins queue.
+        vm.startPrank(userC);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userC);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory reqC = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 1e6,
+            sharesToWithdraw: 0
+        });
+        queue.updateWithdrawRequest(cellar, reqC);
+        vm.stopPrank();
+
+        address[] memory users = new address[](3);
+        users[0] = userA;
+        users[1] = userA;
+        users[2] = userC;
+        bytes memory callData = abi.encode(cellar, USDC);
+
+        // Solve is not successful.
+        vm.expectRevert(bytes(abi.encodeWithSelector(WithdrawQueue.WithdrawQueue__UserRepeated.selector, userA)));
+        queue.solve(cellar, users, callData, address(this));
+
+        users[1] = userB;
+
+        // Time passes, so userBs deadline is passed.
+        skip(51);
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(WithdrawQueue.WithdrawQueue__RequestDeadlineExceeded.selector, userB))
+        );
+        queue.solve(cellar, users, callData, address(this));
+
+        // User B updates their deadline
+        reqB.deadline = uint64(block.timestamp + 100);
+        vm.prank(userB);
+        queue.updateWithdrawRequest(cellar, reqB);
+
+        vm.expectRevert(bytes(abi.encodeWithSelector(WithdrawQueue.WithdrawQueue__NoShares.selector, userC)));
+        queue.solve(cellar, users, callData, address(this));
+
+        // User C updates the amount, so solve is successful.
+        reqC.sharesToWithdraw = uint96(sharesToWithdraw);
+        vm.prank(userC);
+        queue.updateWithdrawRequest(cellar, reqC);
+
+        queue.solve(cellar, users, callData, address(this));
+
+        // Solver tries to solve using a zero address.
+        users = new address[](1);
+
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(WithdrawQueue.WithdrawQueue__RequestDeadlineExceeded.selector, address(0)))
+        );
+        queue.solve(cellar, users, callData, address(this));
+    }
+
     function testUserRequestWithInSolveTrue() external {
         WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
             deadline: uint64(block.timestamp + 100),
@@ -231,7 +332,421 @@ contract WithdrawQueueTest is MainnetStarterTest, AdaptorHelperFunctions, ISolve
         assertTrue(savedReq.inSolve == false, "inSolve should be false");
     }
 
-    // TODO test showing how user originally wants 100 shares withdrawn, then changes it to 50, make sure only 50 can be withdrawn.
+    function testUserUpdatingWithdrawRequest(uint256 sharesToWithdraw) external {
+        sharesToWithdraw = bound(sharesToWithdraw, 1e6, type(uint96).max);
+        // user A wants to withdraw `sharesToWithdraw` but then changes their mind to only withdraw half.
+        // NOTE shares and assets are 1:1.
+
+        address userA = vm.addr(0xA);
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+
+        // user A deposits into cellar, and joins queue.
+        vm.startPrank(userA);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 1e6,
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, req);
+        vm.stopPrank();
+
+        // User changes their mind.
+        req.sharesToWithdraw /= 2;
+        vm.prank(userA);
+        queue.updateWithdrawRequest(cellar, req);
+
+        // Solver solves for user A.
+        address[] memory users = new address[](1);
+        users[0] = userA;
+        bytes memory callData = abi.encode(cellar, USDC);
+
+        // Solve is successful.
+        queue.solve(cellar, users, callData, address(this));
+
+        assertApproxEqAbs(
+            cellar.balanceOf(userA),
+            sharesToWithdraw / 2,
+            1,
+            "User A should still have half of their shares."
+        );
+
+        // Trying to solve again reverts.
+        vm.expectRevert(bytes(abi.encodeWithSelector(WithdrawQueue.WithdrawQueue__NoShares.selector, userA)));
+        queue.solve(cellar, users, callData, address(this));
+    }
+
+    function testIsWithdrawRequestValid() external {
+        uint256 sharesToWithdraw = 100e6;
+        address userA = vm.addr(0xA);
+
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp - 1),
+            inSolve: false,
+            executionSharePrice: 0,
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, req);
+        assertTrue(
+            !queue.isWithdrawRequestValid(cellar, userA, req),
+            "Request should not be valid because user has no shares."
+        );
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+
+        vm.startPrank(userA);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        vm.stopPrank();
+        assertTrue(
+            !queue.isWithdrawRequestValid(cellar, userA, req),
+            "Request should not be valid because deadline is bad."
+        );
+
+        req.deadline = uint64(block.timestamp + 100);
+        queue.updateWithdrawRequest(cellar, req);
+        assertTrue(
+            !queue.isWithdrawRequestValid(cellar, userA, req),
+            "Request should not be valid because user has not given queue approval."
+        );
+
+        vm.startPrank(userA);
+        cellar.approve(address(queue), sharesToWithdraw);
+        vm.stopPrank();
+
+        // Change sharesToWithdraw to 0.
+        req.sharesToWithdraw = 0;
+        queue.updateWithdrawRequest(cellar, req);
+        assertTrue(
+            !queue.isWithdrawRequestValid(cellar, userA, req),
+            "Request should not be valid because shares to withdraw is zero."
+        );
+
+        req.sharesToWithdraw = uint96(sharesToWithdraw);
+        queue.updateWithdrawRequest(cellar, req);
+        assertTrue(
+            !queue.isWithdrawRequestValid(cellar, userA, req),
+            "Request should not be valid because execution share price is zero."
+        );
+
+        req.executionSharePrice = 1e6;
+        queue.updateWithdrawRequest(cellar, req);
+
+        assertTrue(queue.isWithdrawRequestValid(cellar, userA, req), "Request should be valid.");
+    }
+
+    function _validateViewSolveMetaData(
+        ERC4626 share,
+        address[] memory users,
+        uint8[] memory expectedFlags,
+        uint256[] memory expectedSharesToSolve,
+        uint256[] memory expectedRequiredAssets
+    ) internal {
+        (WithdrawQueue.SolveMetaData[] memory metaData, , ) = queue.viewSolveMetaData(share, users);
+
+        for (uint256 i; i < metaData.length; ++i) {
+            assertEq(expectedSharesToSolve[i], metaData[i].sharesToSolve, "sharesToSolve does not equal expected.");
+            assertEq(expectedRequiredAssets[i], metaData[i].requiredAssets, "requiredAssets does not equal expected.");
+            assertEq(expectedFlags[i], metaData[i].flags, "flags does not equal expected.");
+        }
+    }
+
+    function testViewSolveMetaData() external {
+        uint256 sharesToWithdraw = 100e6;
+        address userA = vm.addr(0xA);
+        address[] memory users = new address[](1);
+        uint8[] memory expectedFlags = new uint8[](1);
+        uint256[] memory expectedSharesToSolve = new uint256[](1);
+        uint256[] memory expectedRequiredAssets = new uint256[](1);
+        users[0] = userA;
+        vm.startPrank(userA);
+
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp - 1),
+            inSolve: false,
+            executionSharePrice: 0,
+            sharesToWithdraw: 0
+        });
+        queue.updateWithdrawRequest(cellar, req);
+        expectedFlags[0] = uint8(1);
+        _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
+
+        req.deadline = uint64(block.timestamp + 1);
+        queue.updateWithdrawRequest(cellar, req);
+        expectedFlags[0] = uint8(1) << 1;
+        _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
+
+        req.sharesToWithdraw = uint96(sharesToWithdraw);
+        queue.updateWithdrawRequest(cellar, req);
+        expectedFlags[0] = uint8(1) << 2;
+        _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        expectedFlags[0] = uint8(1) << 3;
+        _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
+
+        cellar.approve(address(queue), sharesToWithdraw);
+        expectedFlags[0] = 0;
+        expectedSharesToSolve[0] = sharesToWithdraw;
+        expectedRequiredAssets[0] = sharesToWithdraw.mulDivDown(req.executionSharePrice, 1e6);
+        _validateViewSolveMetaData(cellar, users, expectedFlags, expectedSharesToSolve, expectedRequiredAssets);
+
+        vm.stopPrank();
+    }
+
+    // -------------------------------- SimpleSolverTests --------------------------------------
+
+    function testP2PSolve(uint256 sharesToWithdraw) external {
+        sharesToWithdraw = bound(sharesToWithdraw, 1, type(uint96).max);
+        // Scenario
+        // user A wants to withdraw `sharesToWithdraw`.
+        // user B wants `sharesToWithdraw` amount of shares.
+        // NOTE shares and assets are 1:1.
+
+        address userA = vm.addr(0xA);
+        address userB = vm.addr(0xB);
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+        deal(address(USDC), userB, sharesToWithdraw);
+
+        // user A deposits into cellar, and joins queue.
+        vm.startPrank(userA);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 1e6,
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, req);
+        vm.stopPrank();
+
+        //  user B sees user As withdraw request, and wants to buy their shares.
+        vm.startPrank(userB);
+        USDC.approve(address(simpleSolver), sharesToWithdraw);
+        address[] memory users = new address[](1);
+        users[0] = userA;
+        simpleSolver.p2pSolve(queue, cellar, users, sharesToWithdraw, sharesToWithdraw);
+        vm.stopPrank();
+
+        assertEq(USDC.balanceOf(userA), sharesToWithdraw, "User A should have received sharesToWithdraw of USDC.");
+        assertEq(cellar.balanceOf(userB), sharesToWithdraw, "User B should have received sharesToWithdraw of shares.");
+        assertEq(cellar.balanceOf(userA), 0, "User A should have zero shares.");
+        assertEq(USDC.balanceOf(userB), 0, "User B should have zero USDC.");
+    }
+
+    function testP2PReverts(uint256 sharesToWithdraw) external {
+        sharesToWithdraw = bound(sharesToWithdraw, 1, type(uint96).max);
+        // NOTE shares and assets are 1:1.
+
+        address userA = vm.addr(0xA);
+        address userB = vm.addr(0xB);
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+        deal(address(USDC), userB, sharesToWithdraw);
+
+        // user A deposits into cellar, and joins queue.
+        vm.startPrank(userA);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 1e6,
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, req);
+        vm.stopPrank();
+
+        //  user B sees user As withdraw request, and wants to buy their shares.
+        vm.startPrank(userB);
+        USDC.approve(address(simpleSolver), sharesToWithdraw);
+        address[] memory users = new address[](1);
+        users[0] = userA;
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    SimpleSolver.SimpleSolver___P2PSolveMinSharesNotMet.selector,
+                    sharesToWithdraw,
+                    type(uint256).max
+                )
+            )
+        );
+        simpleSolver.p2pSolve(queue, cellar, users, type(uint256).max, sharesToWithdraw);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(SimpleSolver.SimpleSolver___SolveMaxAssetsExceeded.selector, sharesToWithdraw, 0)
+            )
+        );
+        simpleSolver.p2pSolve(queue, cellar, users, sharesToWithdraw, 0);
+        vm.stopPrank();
+    }
+
+    function testRedeemSolve(uint256 sharesToWithdraw) external {
+        sharesToWithdraw = bound(sharesToWithdraw, 1e6, type(uint96).max);
+        // Scenario
+        // user A wants to withdraw `sharesToWithdraw`.
+        // user B will redeem `sharesToWithdraw` amount of shares on behalf of user A.
+        // NOTE shares and assets are 1:1.
+
+        address userA = vm.addr(0xA);
+        address userB = vm.addr(0xB);
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+
+        // user A deposits into cellar, and joins queue.
+        vm.startPrank(userA);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 0.9990e6, // user A is willing to pay a 10 bps fee for a solver to redeem their shares
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, req);
+        vm.stopPrank();
+
+        //  user B sees user As withdraw request, and wants to buy their shares.
+        vm.startPrank(userB);
+        USDC.approve(address(simpleSolver), sharesToWithdraw);
+        address[] memory users = new address[](1);
+        users[0] = userA;
+        simpleSolver.redeemSolve(queue, cellar, users, 0, sharesToWithdraw);
+        vm.stopPrank();
+
+        uint256 expectedUserABalance = sharesToWithdraw.mulDivDown(req.executionSharePrice, 1e6);
+        assertEq(
+            USDC.balanceOf(userA),
+            expectedUserABalance,
+            "User A should have received expectedUserABalance of USDC."
+        );
+        uint256 expectedUserBBalance = sharesToWithdraw - expectedUserABalance;
+        assertEq(USDC.balanceOf(userB), expectedUserBBalance, "User B should have expected USDC balance.");
+        assertEq(cellar.balanceOf(userB), 0, "User B should have zero shares.");
+        assertEq(cellar.balanceOf(userA), 0, "User A should have zero shares.");
+    }
+
+    function testRedeemReverts(uint256 sharesToWithdraw) external {
+        sharesToWithdraw = bound(sharesToWithdraw, 1e6, type(uint96).max);
+        // NOTE shares and assets are 1:1.
+
+        address userA = vm.addr(0xA);
+        address userB = vm.addr(0xB);
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+
+        // user A deposits into cellar, and joins queue.
+        vm.startPrank(userA);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 0.9990e6, // user A is willing to pay a 10 bps fee for a solver to redeem their shares
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, req);
+        vm.stopPrank();
+
+        uint256 userARequestedAssets = sharesToWithdraw.mulDivDown(req.executionSharePrice, 1e6);
+
+        //  user B sees user As withdraw request, and wants to buy their shares.
+        vm.startPrank(userB);
+        USDC.approve(address(simpleSolver), sharesToWithdraw);
+        address[] memory users = new address[](1);
+        users[0] = userA;
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    SimpleSolver.SimpleSolver___SolveMaxAssetsExceeded.selector,
+                    userARequestedAssets,
+                    0
+                )
+            )
+        );
+        simpleSolver.redeemSolve(queue, cellar, users, 0, 0);
+
+        vm.expectRevert(
+            bytes(
+                abi.encodeWithSelector(
+                    SimpleSolver.SimpleSolver___RedeemSolveMinAssetDeltaNotMet.selector,
+                    sharesToWithdraw - userARequestedAssets,
+                    type(uint256).max
+                )
+            )
+        );
+        simpleSolver.redeemSolve(queue, cellar, users, type(uint256).max, type(uint256).max);
+        vm.stopPrank();
+    }
+
+    function testOnlyActiveSolver() external {
+        uint256 sharesToWithdraw = 1_000_000e6;
+        bytes memory bareBonesData = abi.encode(1, address(0));
+
+        // Calling `finishSolve` on SimpleSolver directly should revert.
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SimpleSolver.SimpleSolver___NotInSolveContextOrNotActiveSolver.selector))
+        );
+        simpleSolver.finishSolve(bareBonesData, 0, 0);
+
+        // Malicious user targets user B who has a large asset approval for Simple Solver.
+        address userA = vm.addr(0xA);
+        address userB = vm.addr(0xB);
+
+        // Give both users enough USDC to cover their actions.
+        deal(address(USDC), userA, sharesToWithdraw);
+        deal(address(USDC), userB, 10 * sharesToWithdraw);
+
+        // user A deposits into cellar, and joins queue.
+        vm.startPrank(userA);
+        USDC.approve(address(cellar), sharesToWithdraw);
+        cellar.mint(sharesToWithdraw, userA);
+        cellar.approve(address(queue), sharesToWithdraw);
+        WithdrawQueue.WithdrawRequest memory req = WithdrawQueue.WithdrawRequest({
+            deadline: uint64(block.timestamp + 100),
+            inSolve: false,
+            executionSharePrice: 10e6, // user A sets a ridiculous execution share price.
+            sharesToWithdraw: uint96(sharesToWithdraw)
+        });
+        queue.updateWithdrawRequest(cellar, req);
+        vm.stopPrank();
+
+        // User B does an infinite approval so they don't need to approve in the future for other solves.
+        vm.prank(userB);
+        USDC.approve(address(simpleSolver), type(uint256).max);
+
+        // User A calls solve on the WithdrawQueue, and tries to get user B to pay 10x the real share price.
+        bytes memory runData = abi.encode(1, userB, queue, cellar, 0, type(uint256).max);
+        address[] memory users = new address[](1);
+        users[0] = userA;
+        vm.startPrank(userA);
+        vm.expectRevert(
+            bytes(abi.encodeWithSelector(SimpleSolver.SimpleSolver___NotInSolveContextOrNotActiveSolver.selector))
+        );
+        queue.solve(cellar, users, runData, address(simpleSolver));
+        vm.stopPrank();
+    }
 
     function finishSolve(bytes calldata runData, uint256, uint256 assetApprovalAmount) external {
         if (solverIsCheapskate) {

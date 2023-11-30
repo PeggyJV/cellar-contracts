@@ -64,20 +64,19 @@ contract WithdrawQueue is ReentrancyGuard {
         uint8 shareDecimals;
     }
 
-    // ========================================= CONSTANTS =========================================
-
     // ========================================= GLOBAL STATE =========================================
 
     /**
      * @notice Maps user address to share to a WithdrawRequest struct.
      */
     mapping(address => mapping(ERC4626 => WithdrawRequest)) public userWithdrawRequest;
+
     //============================== ERRORS ===============================
 
-    error WithdrawQueue__UserRepeated();
-    error WithdrawQueue__RequestDeadlineExceeded();
-    error WithdrawQueue__UserNotInSolve();
-    error WithdrawQueue__NoShares();
+    error WithdrawQueue__UserRepeated(address user);
+    error WithdrawQueue__RequestDeadlineExceeded(address user);
+    error WithdrawQueue__UserNotInSolve(address user);
+    error WithdrawQueue__NoShares(address user);
 
     //============================== EVENTS ===============================
 
@@ -183,9 +182,9 @@ contract WithdrawQueue is ReentrancyGuard {
         for (uint256 i; i < users.length; ++i) {
             WithdrawRequest storage request = userWithdrawRequest[users[i]][share];
 
-            if (request.inSolve) revert WithdrawQueue__UserRepeated();
-            if (block.timestamp > request.deadline) revert WithdrawQueue__RequestDeadlineExceeded();
-            if (request.sharesToWithdraw == 0) revert WithdrawQueue__NoShares();
+            if (request.inSolve) revert WithdrawQueue__UserRepeated(users[i]);
+            if (block.timestamp > request.deadline) revert WithdrawQueue__RequestDeadlineExceeded(users[i]);
+            if (request.sharesToWithdraw == 0) revert WithdrawQueue__NoShares(users[i]);
 
             // User gets whatever their execution share price is.
             requiredAssets += _calculateAssetAmount(
@@ -229,7 +228,7 @@ contract WithdrawQueue is ReentrancyGuard {
                 // Set shares to withdraw to 0.
                 request.sharesToWithdraw = 0;
                 request.inSolve = false;
-            } else revert WithdrawQueue__UserNotInSolve();
+            } else revert WithdrawQueue__UserNotInSolve(users[i]);
         }
     }
 
@@ -284,9 +283,6 @@ contract WithdrawQueue is ReentrancyGuard {
             metaData[i].requiredAssets = userAssets;
             totalRequiredAssets += userAssets;
             totalSharesToSolve += request.sharesToWithdraw;
-
-            // If all checks above passed, the users request is valid and is solvable.
-            metaData[i].flags |= uint8(1);
         }
     }
 
